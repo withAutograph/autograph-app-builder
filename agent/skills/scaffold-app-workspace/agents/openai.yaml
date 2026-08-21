@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scaffold App Workspace"
+  short_description: "Scaffold a local Next.js app workspace"
+  default_prompt: "Use $scaffold-app-workspace to create a new local Next.js app workspace."

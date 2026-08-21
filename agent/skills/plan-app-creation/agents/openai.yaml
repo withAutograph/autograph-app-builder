@@ -1,0 +1,7 @@
+interface:
+  display_name: "Plan App Creation"
+  short_description: "Validate a read-only app creation proposal"
+  default_prompt: "Use $plan-app-creation to validate an accepted AppSpec and return a canonical read-only creation proposal."
+
+policy:
+  allow_implicit_invocation: false

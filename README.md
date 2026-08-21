@@ -1,59 +1,91 @@
-# Eve Agent Plugin
+# Autograph App Builder
 
-A public, template-only TypeScript starter for exposing a durable [Eve](https://github.com/vercel/eve) agent as a portable [Agent Plugin](https://agent-plugins.org/) with a standards-first MCP surface.
+Autograph App Builder is a durable [Eve](https://github.com/vercel/eve) agent
+and portable Agent Plugin for designing and creating apps in explicitly
+supported repositories. Codex is the first user-facing entrypoint.
 
-The repository deliberately ships fail-closed. It gives project authors the package shape, five-tool public contract, event allowlist, database schema, configuration scripts, tests, and CI foundation without pretending that OAuth, tenant ownership, cross-system idempotency, or the production Eve adapter have been completed.
+The project is based on
+[`jasonmorganson/eve-agent-plugin`](https://github.com/jasonmorganson/eve-agent-plugin)
+without changing that source repository.
 
-## What is included
+## Current supported workflow
 
-- Next.js 16 App Router hosting shell with Eve `0.38.3` mounted through `withEve()`.
-- Portable Agent Plugins 1.0.0 manifests as the source of truth.
-- Generated current Codex/OpenAI compatibility package.
-- Stateless `/mcp` handler with `eve_start`, `eve_get`, `eve_send`, `eve_respond`, and `eve_cancel`.
-- Public result schemas and allowlist-only event projection tests.
-- Drizzle ownership/idempotency table definitions.
-- Generic Eve instructions and an outer orchestration skill.
-- Minimal `/healthz`; the root route returns `404`.
-- Pinned dependencies, frozen lockfile, CI, and weekly Dependabot groups.
+The agent uses one workflow for a new-template source or an existing repository:
 
-## Start locally
+1. inspect the source with the versioned, non-executing V0 adapter;
+2. obtain approval before creating an isolated workspace at the exact source SHA;
+3. design and prototype the app, then obtain explicit AppSpec acceptance;
+4. obtain separate source/topology approval before applying the canonical target command;
+5. produce one reviewed change set; and
+6. publish only after a separate destination-specific approval.
 
-Use Node.js 24 and pnpm 11.7.0.
+The initial adapter supports the known `withAutograph/arrusted-development`
+repository family and fails closed on drift. It deliberately does not infer
+workflows for arbitrary repositories and does not use a target-owned repository
+template manifest.
+
+## Included surfaces
+
+- Eve `0.38.3` with durable sessions and human-in-the-loop approvals.
+- The four app-creation skills: `create-app`, `design-app`,
+  `plan-app-creation`, and `scaffold-app-workspace`.
+- A purpose-built supported-template eligibility adapter.
+- An approval-gated isolated Git worktree tool.
+- Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
+  `eve_respond`, and `eve_cancel`.
+- A loopback-only local MCP-to-Eve adapter.
+- Deterministic unit tests and an Eve eval that drives the real HTTP session
+  surface with a fixture model.
+
+## Run the Eve agent locally
+
+Use Node.js 24 and pnpm 11.7.0:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm check
-pnpm dev
-```
-
-Eve's interactive development REPL is available separately:
-
-```bash
+pnpm test:agent
 pnpm exec eve dev
 ```
 
-## Configure the package
-
-Replace the generic agent instructions and add domain tools before release. Then set the literal production MCP origin:
+For a non-interactive smoke test through Eve itself:
 
 ```bash
-pnpm configure --origin https://agent.example.com
-pnpm validate:plugin
+APP_BUILDER_TEST_MODEL=1 pnpm exec eve invoke \
+  "What are your app builder capabilities?"
 ```
 
-After registering the remote MCP connection with OpenAI, generate its adapter:
+For local repository access, set `REPOSITORY_LOCAL_ROOTS` to a
+platform-delimited allowlist of absolute roots. `REPOSITORY_WORKSPACE_ROOT` may
+name the directory that owns isolated worktrees; otherwise the operating-system
+temporary directory is used.
+
+## Use the local MCP façade
+
+Run Eve and the Next.js host on separate loopback ports. Set
+`APP_BUILDER_LOCAL_ADAPTER=1` and `EVE_AGENT_HOST` on the Next.js host so its
+five MCP operations call the local Eve channel. The adapter rejects non-loopback
+hosts and is never enabled implicitly.
+
+The portable manifest keeps a placeholder HTTPS endpoint until a separately
+approved deployment exists:
 
 ```bash
-pnpm build:openai-package --connection-id your_registered_connection_id
+pnpm configure --origin https://your-approved-deployment.example
+pnpm validate:release
 ```
 
 Never put bearer tokens or secrets in `mcp.json` or `.app.json`.
 
-## Production boundary
+## Authority boundary
 
-`lib/eve/service.ts` intentionally rejects every operation until it is replaced by an ownership-scoped, idempotent, authenticated adapter. Read [the implementation gates](docs/implementation-gates.md) before doing that work.
+AppSpec acceptance, target command execution, source/topology mutation,
+publication, release activation, provider provisioning, deployment, tenant
+activation, and Production readiness are distinct authorities. A valid proposal
+or isolated-workspace receipt proves none of the later outcomes.
 
-The installed Eve documentation in `node_modules/eve/docs/` governs the pinned runtime. Eve now includes its own four-tool MCP channel, but this template retains the plan's five-tool application contract because it also owns the public event envelope, UI resource, idempotency records, and follow-up semantics.
+Hosted identity, durable cross-process idempotency, and provider resources are
+still gated by [the implementation gates](docs/implementation-gates.md).
 
 ## License
 

@@ -19,7 +19,7 @@ for (const [name, value, schema] of [
   if (!validate(value))
     throw new Error(`${name} is invalid: ${ajv.errorsText(validate.errors)}`);
 }
-const url = new URL(mcp.mcpServers["eve-agent"].url);
+const url = new URL(mcp.mcpServers["autograph-app-builder"].url);
 if (url.protocol !== "https:" || url.username || url.password)
   throw new Error("The MCP URL must be credential-free HTTPS.");
 if (

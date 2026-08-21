@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "eve-agent-plugin",
+  "name": "autograph-app-builder",
   "version": "0.1.0",
-  "description": "Run and interact with a durable Eve agent.",
+  "description": "Design and create apps in supported repositories through a durable Eve agent.",
   "author": {
-    "name": "Jason Morganson",
-    "url": "https://github.com/jasonmorganson"
+    "name": "Autograph",
+    "url": "https://github.com/withAutograph"
   },
-  "homepage": "https://github.com/jasonmorganson/eve-agent-plugin",
-  "repository": "https://github.com/jasonmorganson/eve-agent-plugin",
+  "homepage": "https://github.com/withAutograph/autograph-app-builder",
+  "repository": "https://github.com/withAutograph/autograph-app-builder",
   "license": "MIT",
-  "keywords": ["eve", "agent", "mcp", "chatgpt"]
+  "keywords": ["eve", "agent", "mcp", "codex", "app-builder"]
 }

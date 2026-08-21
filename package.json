@@ -1,7 +1,7 @@
 {
-  "name": "eve-agent-plugin",
+  "name": "autograph-app-builder",
   "version": "0.1.0",
-  "description": "Template for exposing a durable Eve agent as a portable Agent Plugin and MCP App.",
+  "description": "Autograph App Builder: a durable Eve agent for designing and creating supported applications.",
   "private": true,
   "license": "MIT",
   "scripts": {
@@ -13,6 +13,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:agent": "APP_BUILDER_TEST_MODEL=1 eve eval --strict --skip-report",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm validate:plugin",
     "configure": "node --import tsx scripts/configure-template.mts",
     "validate:plugin": "node --import tsx scripts/validate-plugin.mts",

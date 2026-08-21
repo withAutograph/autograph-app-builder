@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create App"
+  short_description: "Create and route-configure a local app"
+  default_prompt: "Use $create-app to design, plan, approve, and create a route-owned local application."

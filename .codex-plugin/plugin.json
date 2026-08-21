@@ -1,29 +1,29 @@
 {
-  "name": "eve-agent-plugin",
+  "name": "autograph-app-builder",
   "version": "0.1.0",
-  "description": "Run and interact with a durable Eve agent.",
+  "description": "Design and create apps in supported repositories through a durable Eve agent.",
   "author": {
-    "name": "Jason Morganson",
-    "url": "https://github.com/jasonmorganson"
+    "name": "Autograph",
+    "url": "https://github.com/withAutograph"
   },
-  "homepage": "https://github.com/jasonmorganson/eve-agent-plugin",
-  "repository": "https://github.com/jasonmorganson/eve-agent-plugin",
+  "homepage": "https://github.com/withAutograph/autograph-app-builder",
+  "repository": "https://github.com/withAutograph/autograph-app-builder",
   "license": "MIT",
-  "keywords": ["eve", "agent", "mcp", "chatgpt"],
+  "keywords": ["eve", "agent", "mcp", "codex", "app-builder"],
   "skills": "./skills/",
   "apps": "./.app.json",
   "interface": {
-    "displayName": "Eve Agent",
-    "shortDescription": "Durable agent sessions inside ChatGPT",
-    "longDescription": "Start, monitor, continue, and safely respond to durable Eve agent sessions through an authenticated MCP server.",
-    "developerName": "Jason Morganson",
+    "displayName": "Autograph App Builder",
+    "shortDescription": "Design and create supported Autograph apps",
+    "longDescription": "Use a durable Eve agent to design, plan, create, validate, and separately publish apps in supported repositories.",
+    "developerName": "Autograph",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Read", "Write"],
-    "websiteURL": "https://github.com/jasonmorganson/eve-agent-plugin",
+    "websiteURL": "https://github.com/withAutograph/autograph-app-builder",
     "defaultPrompt": [
-      "Start a durable agent session for this objective.",
-      "Check the latest state of my Eve session.",
-      "Open the Eve session controls."
+      "Design a new app with me.",
+      "Create an app in a supported repository.",
+      "Continue my app-building session."
     ],
     "brandColor": "#111827",
     "screenshots": []

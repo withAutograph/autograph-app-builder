@@ -12,6 +12,6 @@ if (origin.protocol !== "https:" || origin.pathname !== "/")
 
 const path = resolve("mcp.json");
 const manifest = JSON.parse(await readFile(path, "utf8"));
-manifest.mcpServers["eve-agent"].url = `${origin.origin}/mcp`;
+manifest.mcpServers["autograph-app-builder"].url = `${origin.origin}/mcp`;
 await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Configured MCP endpoint: ${origin.origin}/mcp`);
