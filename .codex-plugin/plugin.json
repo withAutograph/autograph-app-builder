@@ -2,10 +2,7 @@
   "name": "autograph-app-builder",
   "version": "0.1.0",
   "description": "Design and create apps in supported repositories through a durable Eve agent.",
-  "author": {
-    "name": "Autograph",
-    "url": "https://github.com/withAutograph"
-  },
+  "author": { "name": "Autograph", "url": "https://github.com/withAutograph" },
   "homepage": "https://github.com/withAutograph/autograph-app-builder",
   "repository": "https://github.com/withAutograph/autograph-app-builder",
   "license": "MIT",
