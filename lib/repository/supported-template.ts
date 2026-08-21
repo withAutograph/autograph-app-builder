@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -130,22 +130,17 @@ export async function inspectSupportedRepository(
   if (!mise.includes('[tasks."repository:preflight"]'))
     failures.push("repository:preflight command is missing");
 
-  let workflowText = "";
-  if (existsSync(resolve(sourcePath, ".github"))) {
-    try {
-      workflowText = execFileSync(
-        "rg",
-        ["-l", "REPOSITORY_RELEASE_ENABLED", ".github"],
-        {
-          cwd: sourcePath,
-          encoding: "utf8",
-        },
-      ).trim();
-    } catch {
-      workflowText = "";
-    }
-  }
-  if (workflowText === "")
+  const workflowsPath = resolve(sourcePath, ".github/workflows");
+  const declaresReleaseGate =
+    existsSync(workflowsPath) &&
+    readdirSync(workflowsPath, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.ya?ml$/u.test(entry.name))
+      .some((entry) =>
+        readFileSync(resolve(workflowsPath, entry.name), "utf8").includes(
+          "REPOSITORY_RELEASE_ENABLED",
+        ),
+      );
+  if (!declaresReleaseGate)
     failures.push("REPOSITORY_RELEASE_ENABLED gate is not declared");
 
   const normalized = {
