@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,12 +9,25 @@ export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
 const requiredPaths = [
   ".config/mise/config.toml",
+  ".github/workflows/cd.yml",
   "apps/shell/microfrontends.json",
-  "scripts/app-contract.ts",
-  "scripts/app-identity.ts",
-  "turbo/generators/create-app.ts",
-  "turbo/generators/templates/app/next.config.ts.hbs",
+  ".config/mise/scripts/repository/app-contract.ts",
+  ".config/mise/scripts/repository/app-identity.ts",
+  ".config/mise/scripts/repository/repository-preflight.ts",
+  ".config/mise/scripts/repository/repository-release-gate.sh",
+  ".config/turbo/generators/config.ts",
+  ".config/turbo/generators/create-app.ts",
+  ".config/turbo/generators/templates/app/next.config.ts.hbs",
 ] as const;
+
+const expectedCommands = {
+  appIdentity: "mise run repository:exec -- app-identity.ts --app <app-id>",
+  planning:
+    "mise run repository:exec -- app-contract.ts --contract <contract-file>",
+  apply: "mise run create:app -- --proposal <proposal-file>",
+  preflight: "mise run repository:preflight",
+  validation: ["mise run check", "mise run test"],
+} as const;
 
 export type EligibilityResult = {
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
@@ -26,10 +39,12 @@ export type EligibilityResult = {
   observed: {
     runtime: "nextjs" | "unsupported";
     packageScope: "@autograph" | "unsupported";
+    appIdentityCommand: string;
     planningCommand: string;
     applyCommand: string;
+    repositoryPreflightCommand: string;
     topologyOwner: string;
-    validationCommand: string;
+    validationCommands: readonly string[];
     releaseGate: string;
   };
   digest: string;
@@ -103,7 +118,10 @@ export async function inspectSupportedRepository(
     failures.push("V0 does not accept a repository-template manifest");
   }
 
-  const appContractPath = resolve(sourcePath, "scripts/app-contract.ts");
+  const appContractPath = resolve(
+    sourcePath,
+    ".config/mise/scripts/repository/app-contract.ts",
+  );
   const appContract = existsSync(appContractPath)
     ? readFileSync(appContractPath, "utf8")
     : "";
@@ -113,7 +131,10 @@ export async function inspectSupportedRepository(
   if (runtime === "unsupported")
     failures.push("app planner does not declare the Next.js runtime");
 
-  const generatorPath = resolve(sourcePath, "turbo/generators/config.ts");
+  const generatorPath = resolve(
+    sourcePath,
+    ".config/turbo/generators/config.ts",
+  );
   const generator = existsSync(generatorPath)
     ? readFileSync(generatorPath, "utf8")
     : "";
@@ -130,18 +151,51 @@ export async function inspectSupportedRepository(
   if (!mise.includes('[tasks."repository:preflight"]'))
     failures.push("repository:preflight command is missing");
 
-  const workflowsPath = resolve(sourcePath, ".github/workflows");
-  const declaresReleaseGate =
-    existsSync(workflowsPath) &&
-    readdirSync(workflowsPath, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && /\.ya?ml$/u.test(entry.name))
-      .some((entry) =>
-        readFileSync(resolve(workflowsPath, entry.name), "utf8").includes(
-          "REPOSITORY_RELEASE_ENABLED",
-        ),
-      );
-  if (!declaresReleaseGate)
-    failures.push("REPOSITORY_RELEASE_ENABLED gate is not declared");
+  const preflightPath = resolve(
+    sourcePath,
+    ".config/mise/scripts/repository/repository-preflight.ts",
+  );
+  const preflight = existsSync(preflightPath)
+    ? readFileSync(preflightPath, "utf8")
+    : "";
+  if (!preflight.includes('runtime: "nextjs"'))
+    failures.push("repository preflight does not declare the Next.js runtime");
+  for (const [name, command] of Object.entries({
+    "app identity": expectedCommands.appIdentity,
+    "app planning": expectedCommands.planning,
+    "app apply": expectedCommands.apply,
+    "repository preflight": expectedCommands.preflight,
+  })) {
+    if (!preflight.includes(command)) failures.push(`${name} command drifted`);
+  }
+  if (
+    !expectedCommands.validation.every((command) => preflight.includes(command))
+  )
+    failures.push("repository preflight validation commands drifted");
+
+  const cdPath = resolve(sourcePath, ".github/workflows/cd.yml");
+  const cd = existsSync(cdPath) ? readFileSync(cdPath, "utf8") : "";
+  const releaseGatePath = resolve(
+    sourcePath,
+    ".config/mise/scripts/repository/repository-release-gate.sh",
+  );
+  const releaseGate = existsSync(releaseGatePath)
+    ? readFileSync(releaseGatePath, "utf8")
+    : "";
+  const declaresReleaseGate = [
+    "name: Authorize (Repository release gate)",
+    "actions: read",
+    "REPOSITORY_RELEASE_ENABLED",
+    "needs.release-gate.outputs.enabled == 'true'",
+  ].every((expected) => cd.includes(expected));
+  const hasCaseSensitiveRepositoryGate = [
+    "repos/$GITHUB_REPOSITORY/actions/variables/REPOSITORY_RELEASE_ENABLED",
+    '[[ "$value" == "true" ]]',
+  ].every((expected) => releaseGate.includes(expected));
+  if (!declaresReleaseGate || !hasCaseSensitiveRepositoryGate)
+    failures.push(
+      "REPOSITORY_RELEASE_ENABLED gate is not the supported CD gate",
+    );
 
   const normalized = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
@@ -152,11 +206,12 @@ export async function inspectSupportedRepository(
     observed: {
       runtime,
       packageScope,
-      planningCommand:
-        "mise exec -- bun scripts/app-contract.ts --contract <file>",
-      applyCommand: "mise run create:app -- --proposal <file>",
+      appIdentityCommand: expectedCommands.appIdentity,
+      planningCommand: expectedCommands.planning,
+      applyCommand: expectedCommands.apply,
+      repositoryPreflightCommand: expectedCommands.preflight,
       topologyOwner: "apps/shell/microfrontends.json",
-      validationCommand: "mise run repository:preflight",
+      validationCommands: expectedCommands.validation,
       releaseGate: "REPOSITORY_RELEASE_ENABLED",
     },
   } as const;
