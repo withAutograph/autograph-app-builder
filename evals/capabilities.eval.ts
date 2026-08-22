@@ -7,7 +7,8 @@ export default defineEval({
   async test(t) {
     await t.send("What are your app builder capabilities?");
     t.succeeded();
-    t.check(t.reply, includes("isolated supported repository workspace"));
-    t.check(t.reply, includes("publish only after a separate approval"));
+    t.check(t.reply, includes("prepare its exact reviewed tree read-only"));
+    t.check(t.reply, includes("publication"));
+    t.check(t.reply, includes("not implemented yet"));
   },
 });

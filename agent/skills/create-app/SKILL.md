@@ -8,17 +8,20 @@ description: Guide complete creation of a route-owned Next.js app in a supported
 Create one validated local app without crossing provider or deployment authority.
 Keep product acceptance separate from approval to mutate source and topology.
 
+Use only discovered builder-owned tools. If the required identity, planning,
+prototype, apply, review, or publication operation is unavailable, stop at the
+last completed receipt and report that implementation gap. Never replace a
+missing operation with a raw shell command or generic file write.
+
 ## Workflow
 
 1. If the user explicitly requests only a bare Next.js workspace, follow
    [$scaffold-app-workspace](../scaffold-app-workspace/SKILL.md) and stop this
    route-owned flow. Do not interpret a generic “create an app” request as bare
    scaffolding.
-2. Collect one lowercase kebab-case app id and validate it without normalization:
-
-   ```sh
-   mise exec -- bun scripts/app-identity.ts --app <app-id>
-   ```
+2. Collect one lowercase kebab-case app id. Use the builder-owned identity
+   operation declared by the selected adapter; never construct or guess a
+   repository script path.
 
 3. Inspect the isolated target workspace, existing workspace identities, current topology,
    and `prototype/<app-id>/app-spec.md`. Preserve unrelated changes.
@@ -40,7 +43,7 @@ Keep product acceptance separate from approval to mutate source and topology.
 
 8. Return the structured receipt, inspect the resulting paths, and produce one
    reviewed change set. Request a separate publication approval before creating
-   a branch, draft pull request, new directory, or changing an existing checkout.
+   a commit, branch, draft pull request, or other named publication outcome.
    State exactly that the command created and route-configured validated state
    in the isolated workspace; it did not publish, provision providers, deploy
    the app, activate releases, or prove Production readiness.

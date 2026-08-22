@@ -1,12 +1,21 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+
+import type { SandboxSession } from "eve/sandbox";
 
 import {
   inspectSupportedRepository,
-  prepareSupportedWorkspace,
+  prepareSupportedSandboxWorkspace,
 } from "./supported-template";
 
 const previousRoots = process.env.REPOSITORY_LOCAL_ROOTS;
@@ -29,6 +38,9 @@ function fixture(): string {
       "",
       '[tasks."repository:preflight"]',
       'run = "mise run repository:exec -- repository-preflight.ts"',
+      "",
+      '[tasks."generate:app"]',
+      "run = 'turbo gen --config .config/turbo/generators/config.ts app --args \"$usage_app_id\"'",
       "",
       '[tasks."repository:exec"]',
       'run = "bun .config/mise/scripts/repository/$usage_script"',
@@ -93,28 +105,119 @@ function fixture(): string {
   return root;
 }
 
+function fakeSandbox(): SandboxSession {
+  const root = mkdtempSync(join(tmpdir(), "builder-sandbox-"));
+  return {
+    id: `sandbox-${root.split("-").at(-1)}`,
+    resolvePath: (path: string) => resolve(root, path),
+    readTextFile: async ({ path }: { path: string }) => {
+      try {
+        return readFileSync(resolve(root, path), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    writeTextFile: async ({
+      path,
+      content,
+    }: {
+      path: string;
+      content: string;
+    }) => {
+      const target = resolve(root, path);
+      mkdirSync(resolve(target, ".."), { recursive: true });
+      writeFileSync(target, content);
+    },
+    writeBinaryFile: async ({
+      path,
+      content,
+    }: {
+      path: string;
+      content: Uint8Array;
+    }) => {
+      const target = resolve(root, path);
+      mkdirSync(resolve(target, ".."), { recursive: true });
+      writeFileSync(target, content);
+    },
+    removePath: async ({ path }: { path: string }) => {
+      rmSync(resolve(root, path), { recursive: true, force: true });
+    },
+    run: async ({ command }: { command: string }) => {
+      try {
+        return {
+          exitCode: 0,
+          stdout: execFileSync("bash", ["-lc", command], {
+            cwd: root,
+            encoding: "utf8",
+          }),
+          stderr: "",
+        };
+      } catch (error) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  } as unknown as SandboxSession;
+}
+
 describe("supported-template adapter", () => {
   it("accepts only the closed V0 surface and prepares the exact SHA", async () => {
     const root = fixture();
     process.env.REPOSITORY_LOCAL_ROOTS = root;
-    process.env.REPOSITORY_WORKSPACE_ROOT = mkdtempSync(
-      join(tmpdir(), "builder-workspaces-"),
-    );
     const eligibility = await inspectSupportedRepository(root);
     expect(eligibility.eligible).toBe(true);
     expect(eligibility.observed.runtime).toBe("nextjs");
     expect(eligibility.observed.planningCommand).toBe(
       "mise run repository:exec -- app-contract.ts --contract <contract-file>",
     );
-    const prepared = await prepareSupportedWorkspace(
+    expect(eligibility.observed.scaffoldCommand).toBe(
+      "mise run generate:app <app-id>",
+    );
+    const sandbox = fakeSandbox();
+    const prepared = await prepareSupportedSandboxWorkspace(
       root,
       eligibility.sourceSha!,
+      eligibility.digest,
+      sandbox,
+      "call_prepare",
     );
     expect(
-      execFileSync("git", ["-C", prepared.workspacePath, "rev-parse", "HEAD"], {
-        encoding: "utf8",
-      }).trim(),
-    ).toBe(eligibility.sourceSha);
+      readFileSync(
+        resolve(
+          sandbox.resolvePath("repository"),
+          "apps/shell/microfrontends.json",
+        ),
+        "utf8",
+      ),
+    ).toBe("{}\n");
+    expect(prepared.sourceTree).toMatch(/^[0-9a-f]{40}$/u);
+    await expect(
+      prepareSupportedSandboxWorkspace(
+        root,
+        eligibility.sourceSha!,
+        eligibility.digest,
+        sandbox,
+        "call_replayed",
+      ),
+    ).resolves.toEqual(prepared);
+  });
+
+  it("rejects a workspace approval bound to a stale eligibility digest", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const eligibility = await inspectSupportedRepository(root);
+    await expect(
+      prepareSupportedSandboxWorkspace(
+        root,
+        eligibility.sourceSha!,
+        "0".repeat(64),
+        fakeSandbox(),
+        "call_prepare",
+      ),
+    ).rejects.toThrow("Repository eligibility changed after review.");
   });
 
   it("fails closed when the planner still declares Vite", async () => {

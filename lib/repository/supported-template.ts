@@ -1,9 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
+
+import type { SandboxSession } from "eve/sandbox";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
@@ -24,6 +26,7 @@ const expectedCommands = {
   appIdentity: "mise run repository:exec -- app-identity.ts --app <app-id>",
   planning:
     "mise run repository:exec -- app-contract.ts --contract <contract-file>",
+  scaffold: "mise run generate:app <app-id>",
   apply: "mise run create:app -- --proposal <proposal-file>",
   preflight: "mise run repository:preflight",
   validation: ["mise run check", "mise run test"],
@@ -41,6 +44,7 @@ export type EligibilityResult = {
     packageScope: "@autograph" | "unsupported";
     appIdentityCommand: string;
     planningCommand: string;
+    scaffoldCommand: string;
     applyCommand: string;
     repositoryPreflightCommand: string;
     topologyOwner: string;
@@ -63,6 +67,7 @@ function git(path: string, args: string[]): string {
 function allowedRoots(): string[] {
   const value = process.env.REPOSITORY_LOCAL_ROOTS;
   if (value === undefined || value.trim() === "") {
+    if (process.env.APP_BUILDER_TEST_MODEL === "1") return [tmpdir()];
     throw new Error(
       "REPOSITORY_LOCAL_ROOTS must name at least one allowed local source root.",
     );
@@ -150,6 +155,13 @@ export async function inspectSupportedRepository(
     failures.push("create:app command is missing");
   if (!mise.includes('[tasks."repository:preflight"]'))
     failures.push("repository:preflight command is missing");
+  if (
+    !mise.includes('[tasks."generate:app"]') ||
+    !mise.includes(
+      "turbo gen --config .config/turbo/generators/config.ts app --args",
+    )
+  )
+    failures.push("generate:app command drifted");
 
   const preflightPath = resolve(
     sourcePath,
@@ -208,6 +220,7 @@ export async function inspectSupportedRepository(
       packageScope,
       appIdentityCommand: expectedCommands.appIdentity,
       planningCommand: expectedCommands.planning,
+      scaffoldCommand: expectedCommands.scaffold,
       applyCommand: expectedCommands.apply,
       repositoryPreflightCommand: expectedCommands.preflight,
       topologyOwner: "apps/shell/microfrontends.json",
@@ -222,19 +235,45 @@ export async function inspectSupportedRepository(
   };
 }
 
-export type PreparedWorkspace = {
+export type PreparedSandboxWorkspace = {
   workspaceId: string;
-  workspacePath: string;
+  workspacePath: "/workspace/repository";
   sourcePath: string;
   sourceSha: string;
+  sourceTree: string;
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
   eligibilityDigest: string;
 };
 
-export async function prepareSupportedWorkspace(
+const sandboxRecordPath = ".app-builder/prepared-workspace.json";
+
+async function readSandboxRecord(
+  sandbox: SandboxSession,
+): Promise<PreparedSandboxWorkspace | undefined> {
+  try {
+    const content = await sandbox.readTextFile({ path: sandboxRecordPath });
+    return content === null
+      ? undefined
+      : (JSON.parse(content) as PreparedSandboxWorkspace);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Materialize the reviewed Git tree inside Eve's per-session sandbox.
+ *
+ * The fixed path is intentional: one Eve session owns one target workspace.
+ * The intent file and deterministic path make an interrupted tool retry
+ * converge on the same workspace instead of creating another host worktree.
+ */
+export async function prepareSupportedSandboxWorkspace(
   sourcePathInput: string,
   expectedSha: string,
-): Promise<PreparedWorkspace> {
+  expectedEligibilityDigest: string,
+  sandbox: SandboxSession,
+  callId: string,
+): Promise<PreparedSandboxWorkspace> {
   const eligibility = await inspectSupportedRepository(sourcePathInput);
   if (!eligibility.eligible || eligibility.sourceSha === undefined) {
     throw new Error(
@@ -243,48 +282,99 @@ export async function prepareSupportedWorkspace(
   }
   if (eligibility.sourceSha !== expectedSha)
     throw new Error("Source SHA changed after eligibility review.");
+  if (eligibility.digest !== expectedEligibilityDigest)
+    throw new Error("Repository eligibility changed after review.");
 
-  const stateRoot = resolve(
-    process.env.REPOSITORY_WORKSPACE_ROOT ?? tmpdir(),
-    "repository-app-builder",
-  );
-  const workspaceId = randomUUID();
-  const workspacePath = resolve(
-    stateRoot,
-    "workspaces",
-    workspaceId,
-    "repository",
-  );
-  await mkdir(resolve(workspacePath, ".."), { recursive: true });
-  execFileSync(
+  const existing = await readSandboxRecord(sandbox);
+  if (existing !== undefined) {
+    if (
+      existing.sourcePath !== eligibility.sourcePath ||
+      existing.sourceSha !== expectedSha ||
+      existing.eligibilityDigest !== expectedEligibilityDigest
+    ) {
+      throw new Error("This Eve session already owns a different workspace.");
+    }
+    return existing;
+  }
+
+  const sourceTree = git(eligibility.sourcePath, [
+    "rev-parse",
+    `${expectedSha}^{tree}`,
+  ]);
+  const treeEntries = execFileSync(
     "git",
     [
       "-C",
       eligibility.sourcePath,
-      "worktree",
-      "add",
-      "--detach",
-      workspacePath,
+      "ls-tree",
+      "-rz",
+      "--full-tree",
       expectedSha,
     ],
-    {
-      stdio: "pipe",
-    },
-  );
-  const record: PreparedWorkspace = {
-    workspaceId,
-    workspacePath,
+    { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+  )
+    .split("\0")
+    .filter(Boolean)
+    .map((entry) => {
+      const match = /^(\d+) (\w+) ([0-9a-f]{40})\t(.+)$/u.exec(entry);
+      if (match === null)
+        throw new Error("The reviewed Git tree contains an invalid entry.");
+      const [, mode, type, objectId, path] = match;
+      if (
+        type !== "blob" ||
+        !["100644", "100755"].includes(mode!) ||
+        path === undefined ||
+        objectId === undefined ||
+        isAbsolute(path) ||
+        path.includes("\\") ||
+        path.split("/").some((segment) => segment === "." || segment === "..")
+      ) {
+        throw new Error("The reviewed Git tree contains an unsupported entry.");
+      }
+      return { mode: mode!, objectId, path };
+    });
+  const intent = {
+    callId,
     sourcePath: eligibility.sourcePath,
     sourceSha: expectedSha,
-    adapter: SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: eligibility.digest,
+    sourceTree,
+    eligibilityDigest: expectedEligibilityDigest,
   };
-  await writeFile(
-    resolve(workspacePath, "..", "workspace.json"),
-    `${JSON.stringify(record, null, 2)}\n`,
-    {
-      flag: "wx",
-    },
-  );
+  await sandbox.writeTextFile({
+    path: ".app-builder/prepare-intent.json",
+    content: `${JSON.stringify(intent, null, 2)}\n`,
+  });
+  await sandbox.removePath({
+    path: "repository",
+    recursive: true,
+    force: true,
+  });
+  for (const entry of treeEntries) {
+    await sandbox.writeBinaryFile({
+      path: `repository/${entry.path}`,
+      content: execFileSync(
+        "git",
+        ["-C", eligibility.sourcePath, "cat-file", "blob", entry.objectId],
+        { maxBuffer: 128 * 1024 * 1024 },
+      ),
+    });
+  }
+  await sandbox.writeTextFile({
+    path: ".app-builder/source-files.json",
+    content: `${JSON.stringify(treeEntries, null, 2)}\n`,
+  });
+  const record: PreparedSandboxWorkspace = {
+    workspaceId: sandbox.id,
+    workspacePath: "/workspace/repository",
+    sourcePath: eligibility.sourcePath,
+    sourceSha: expectedSha,
+    sourceTree,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER,
+    eligibilityDigest: expectedEligibilityDigest,
+  };
+  await sandbox.writeTextFile({
+    path: sandboxRecordPath,
+    content: `${JSON.stringify(record, null, 2)}\n`,
+  });
   return record;
 }

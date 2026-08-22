@@ -10,6 +10,11 @@ handoff. Do not require a complete data model before showing the user something
 useful. Do not let provisional prototype assumptions silently become production
 decisions.
 
+Prototype files and previews require a discovered builder-owned artifact tool.
+If it is unavailable, stop after product discovery and report that prototype
+delivery is not implemented. Never substitute the generic file writer or claim
+that an HTML artifact was created or shown.
+
 ## Communication rule
 
 Explain every technical term the first time it appears with one short sentence
@@ -31,11 +36,9 @@ user confirms that development can begin.”
 
 Choose one lowercase kebab-case app id and maintain these together under
 `prototype/<app-id>/`. The prototype slug and future app id must be identical.
-Before creating the directory, validate the id without normalization:
-
-```sh
-mise exec -- bun scripts/app-identity.ts --app <app-id>
-```
+Before creating the directory, use the builder-owned identity operation
+declared by the selected adapter. Never construct or guess a repository script
+path.
 
 - `index.html` plus additional self-contained HTML pages when interfaces require
   them;

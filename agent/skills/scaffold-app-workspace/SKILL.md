@@ -8,6 +8,10 @@ description: Scaffold one new local Autograph Next.js app workspace. Use when as
 Create one bare local Next.js app workspace through the repository's canonical
 Turbo generator. Treat its output as local code only.
 
+Scaffolding requires the discovered builder-owned scaffold tool and its
+approval. If it is absent, report that the operation is not implemented; never
+execute the adapter command through a generic shell.
+
 ## Input
 
 Require exactly one app id. It must match `^[a-z][a-z0-9-]*$` and be one path
@@ -20,11 +24,8 @@ working-tree changes.
 
 ## Workflow
 
-1. Run exactly:
-
-   ```sh
-   mise exec -- turbo gen app --args <app-id>
-   ```
+1. Use the builder-owned scaffold operation declared by the selected adapter.
+   Never construct or guess a repository command.
 
 2. Verify the generated workspace contains:
 
