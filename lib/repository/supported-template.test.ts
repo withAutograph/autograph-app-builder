@@ -117,6 +117,13 @@ function fakeSandbox(): SandboxSession {
         return null;
       }
     },
+    readBinaryFile: async ({ path }: { path: string }) => {
+      try {
+        return readFileSync(resolve(root, path));
+      } catch {
+        return null;
+      }
+    },
     writeTextFile: async ({
       path,
       content,
@@ -194,6 +201,7 @@ describe("supported-template adapter", () => {
       ),
     ).toBe("{}\n");
     expect(prepared.sourceTree).toMatch(/^[0-9a-f]{40}$/u);
+    expect(prepared.workspaceDigest).toMatch(/^[0-9a-f]{64}$/u);
     await expect(
       prepareSupportedSandboxWorkspace(
         root,
@@ -203,6 +211,25 @@ describe("supported-template adapter", () => {
         "call_replayed",
       ),
     ).resolves.toEqual(prepared);
+
+    writeFileSync(
+      resolve(
+        sandbox.resolvePath("repository"),
+        "apps/shell/microfrontends.json",
+      ),
+      "tampered\n",
+    );
+    await expect(
+      prepareSupportedSandboxWorkspace(
+        root,
+        eligibility.sourceSha!,
+        eligibility.digest,
+        sandbox,
+        "call_lost_response",
+      ),
+    ).rejects.toThrow(
+      "Prepared workspace file drifted: apps/shell/microfrontends.json",
+    );
   });
 
   it("rejects a workspace approval bound to a stale eligibility digest", async () => {

@@ -54,7 +54,7 @@ export type EligibilityResult = {
   digest: string;
 };
 
-function sha256(value: string): string {
+function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
@@ -241,11 +241,20 @@ export type PreparedSandboxWorkspace = {
   sourcePath: string;
   sourceSha: string;
   sourceTree: string;
+  workspaceDigest: string;
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
   eligibilityDigest: string;
 };
 
 const sandboxRecordPath = ".app-builder/prepared-workspace.json";
+const sandboxSourceFilesPath = ".app-builder/source-files.json";
+
+type PreparedSourceFile = {
+  mode: "100644" | "100755";
+  objectId: string;
+  path: string;
+  sha256: string;
+};
 
 async function readSandboxRecord(
   sandbox: SandboxSession,
@@ -257,6 +266,43 @@ async function readSandboxRecord(
       : (JSON.parse(content) as PreparedSandboxWorkspace);
   } catch {
     return undefined;
+  }
+}
+
+async function verifyPreparedSandboxWorkspace(
+  sandbox: SandboxSession,
+  record: PreparedSandboxWorkspace,
+): Promise<void> {
+  const manifestContent = await sandbox.readTextFile({
+    path: sandboxSourceFilesPath,
+  });
+  if (manifestContent === null)
+    throw new Error("The prepared workspace manifest is missing.");
+  const files = JSON.parse(manifestContent) as PreparedSourceFile[];
+  if (
+    !Array.isArray(files) ||
+    sha256(JSON.stringify(files)) !== record.workspaceDigest
+  )
+    throw new Error(
+      "The prepared workspace manifest no longer matches its receipt.",
+    );
+  for (const file of files) {
+    if (
+      !["100644", "100755"].includes(file.mode) ||
+      !/^[0-9a-f]{40}$/u.test(file.objectId) ||
+      !/^[0-9a-f]{64}$/u.test(file.sha256) ||
+      isAbsolute(file.path) ||
+      file.path.includes("\\") ||
+      file.path
+        .split("/")
+        .some((segment) => segment === "." || segment === "..")
+    )
+      throw new Error("The prepared workspace manifest is invalid.");
+    const content = await sandbox.readBinaryFile({
+      path: `repository/${file.path}`,
+    });
+    if (content === null || sha256(content) !== file.sha256)
+      throw new Error(`Prepared workspace file drifted: ${file.path}`);
   }
 }
 
@@ -294,6 +340,7 @@ export async function prepareSupportedSandboxWorkspace(
     ) {
       throw new Error("This Eve session already owns a different workspace.");
     }
+    await verifyPreparedSandboxWorkspace(sandbox, existing);
     return existing;
   }
 
@@ -331,8 +378,16 @@ export async function prepareSupportedSandboxWorkspace(
       ) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
-      return { mode: mode!, objectId, path };
+      return { mode: mode as "100644" | "100755", objectId, path };
     });
+  const sourceFiles: PreparedSourceFile[] = treeEntries.map((entry) => {
+    const content = execFileSync(
+      "git",
+      ["-C", eligibility.sourcePath, "cat-file", "blob", entry.objectId],
+      { maxBuffer: 128 * 1024 * 1024 },
+    );
+    return { ...entry, sha256: sha256(content) };
+  });
   const intent = {
     callId,
     sourcePath: eligibility.sourcePath,
@@ -349,7 +404,7 @@ export async function prepareSupportedSandboxWorkspace(
     recursive: true,
     force: true,
   });
-  for (const entry of treeEntries) {
+  for (const entry of sourceFiles) {
     await sandbox.writeBinaryFile({
       path: `repository/${entry.path}`,
       content: execFileSync(
@@ -360,8 +415,8 @@ export async function prepareSupportedSandboxWorkspace(
     });
   }
   await sandbox.writeTextFile({
-    path: ".app-builder/source-files.json",
-    content: `${JSON.stringify(treeEntries, null, 2)}\n`,
+    path: sandboxSourceFilesPath,
+    content: `${JSON.stringify(sourceFiles, null, 2)}\n`,
   });
   const record: PreparedSandboxWorkspace = {
     workspaceId: sandbox.id,
@@ -369,6 +424,7 @@ export async function prepareSupportedSandboxWorkspace(
     sourcePath: eligibility.sourcePath,
     sourceSha: expectedSha,
     sourceTree,
+    workspaceDigest: sha256(JSON.stringify(sourceFiles)),
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
     eligibilityDigest: expectedEligibilityDigest,
   };
