@@ -3,6 +3,18 @@ import { mockModel } from "eve/evals";
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("inspect the sandbox toolchain")) {
+    const result = toolResults.find(
+      ({ name }) => name === "inspect_sandbox_toolchain",
+    );
+    if (result === undefined)
+      return {
+        toolCalls: [{ name: "inspect_sandbox_toolchain", input: {} }],
+      };
+    return result.isError
+      ? "Sandbox toolchain inspection failed."
+      : `Sandbox toolchain receipt: ${JSON.stringify(result.output)}`;
+  }
   const appSpecMatch =
     /^accept build-ready appspec for ([a-z0-9-]+):\n([\s\S]+)$/iu.exec(
       lastUserMessage ?? "",
