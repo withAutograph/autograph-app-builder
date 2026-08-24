@@ -21,8 +21,10 @@ Before enabling local repository mutation or publication:
    AppSpec/read-only proposal phases, which are bound to source SHA,
    eligibility digest, source tree, workspace digest, and AppSpec digest, with
    reviewed change-set phase and digest.
-3. Add typed identity, planning, prototype-artifact, apply, validation, and
-   change-review tools. Gate every mutating operation in code.
+3. Add typed identity, prototype-artifact, apply, validation, and change-review
+   tools. The implemented `target_execution_status` rechecks the exact planned
+   proposal, prepared workspace, and immutable toolchain receipt before any
+   future target command; gate every mutating operation in code.
 4. Add an approval-gated local publisher that verifies exact destination SHA,
    dirty-path overlap, approved paths, and change-set digest before applying.
 5. Prove denial, interruption/retry, stale-input, overlap, and lost-response

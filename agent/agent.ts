@@ -3,6 +3,44 @@ import { mockModel } from "eve/evals";
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("assess target command readiness")) {
+    const statusResult = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    if (statusResult === undefined)
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const status = statusResult.output as
+      { phase?: string; proposal?: { digest?: string } } | undefined;
+    if (status?.phase !== "planned")
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const readinessResult = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "target_execution_status");
+    const staleRequest = message.includes("stale proposal digest");
+    if (
+      readinessResult === undefined ||
+      (staleRequest && !readinessResult.isError)
+    ) {
+      const digest = staleRequest ? "0".repeat(64) : status?.proposal?.digest;
+      if (digest === undefined)
+        return "A canonical proposal is required before target command readiness can be checked.";
+      return {
+        toolCalls: [
+          {
+            name: "target_execution_status",
+            input: { expectedProposalDigest: digest },
+          },
+        ],
+      };
+    }
+    if (readinessResult.isError)
+      return "The target command readiness receipt rejected the stale proposal.";
+    const readiness = readinessResult.output as
+      { targetCommandReady?: boolean } | undefined;
+    return readiness?.targetCommandReady === true
+      ? "The exact proposal is ready for a future typed target command."
+      : "The exact proposal is not ready for a target command, and no target command was run.";
+  }
   if (message.includes("inspect the sandbox toolchain")) {
     const result = toolResults.find(
       ({ name }) => name === "inspect_sandbox_toolchain",
@@ -150,7 +188,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an existing supported local checkout and, after approval, prepare its exact reviewed tree read-only inside an isolated Eve workspace. I can also record a complete accepted AppSpec and derive a digest-bound read-only creation proposal. Prototype delivery, target mutation, change review, publication, and fresh-template acquisition are not implemented yet.";
+    return "I can inspect an existing supported local checkout and, after approval, prepare its exact reviewed tree read-only inside an isolated Eve workspace. I can also record a complete accepted AppSpec, derive a digest-bound read-only creation proposal, and report whether that exact proposal is blocked from target execution. Prototype delivery, target mutation, change review, publication, and fresh-template acquisition are not implemented yet.";
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });

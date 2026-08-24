@@ -15,7 +15,10 @@ isolated workspace.
 3. Design and prototype the product, then obtain explicit AppSpec acceptance
    bound to the prepared workspace receipt. Use the read-only planner to derive
    the exact AppSpec-bound proposal; do not run the listed target commands.
-4. Obtain a separate approval before running target-owned preflight or mutating
+4. Use `target_execution_status` to verify the exact proposal and prepared
+   workspace receipt. A not-ready receipt is a hard stop: do not substitute a
+   shell command or retry with altered inputs. Obtain a separate approval
+   before running target-owned preflight or mutating
    source and topology in the isolated workspace.
 5. Produce one reviewed change set.
 6. Obtain a separate publication approval naming the destination and outcome.
