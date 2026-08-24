@@ -8,11 +8,15 @@ fail-closed until the production identity and session gates below are complete.
 
 Before enabling local repository mutation or publication:
 
-1. Provide an immutable sandbox bootstrap or custom image that pins `mise` and
-   `bun`, then require the typed toolchain inspection receipt to report Git,
-   mise, and Bun before any target-owned command can run. The pinned
-   `microsandbox@0.6.14` default image was verified on 2026-08-24 with Git,
-   Node.js, and pnpm available, but mise and Bun absent.
+1. Build and pre-load an externally approved OCI image pinned by manifest
+   digest, containing Git, `mise 2026.8.12`, and `bun 1.2.20`. This repository
+   accepts it only through `APP_BUILDER_SANDBOX_IMAGE` as an `@sha256` digest,
+   with the microsandbox backend's `pullPolicy: "never"`, deny-all networking,
+   and an image-bound template revalidation key. Image build, publication, and
+   acquisition remain separate authority. Require the typed toolchain receipt
+   to match every pinned version before any target-owned command can run. With
+   no configured image, the agent selects just-bash and is deliberately not
+   toolchain-ready.
 2. Extend the implemented durable prepared phase and implemented accepted
    AppSpec/read-only proposal phases, which are bound to source SHA,
    eligibility digest, source tree, workspace digest, and AppSpec digest, with
