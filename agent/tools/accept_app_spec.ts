@@ -112,7 +112,9 @@ export default defineTool({
       artifactRevision: artifact.revision,
     };
     if (
-      (current.phase === "app_spec_accepted" || current.phase === "planned") &&
+      (current.phase === "app_spec_accepted" ||
+        current.phase === "identity_resolved" ||
+        current.phase === "planned") &&
       current.appSpec.digest === accepted.digest &&
       current.appSpec.appId === accepted.appId
     )

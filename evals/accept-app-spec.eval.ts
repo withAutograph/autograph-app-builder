@@ -6,7 +6,7 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "AppSpec acceptance is approval-bound and yields a durable read-only proposal without executing target commands.",
+    "AppSpec acceptance and fixed target identity/planning have distinct approvals and durable receipts.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
 
@@ -30,10 +30,37 @@ export default defineEval({
     t.requireInputRequest({ toolName: "accept_app_spec" });
     await t.respondAll("approve");
     t.succeeded();
+    t.check(t.reply, includes("separate explicit request and approval"));
+
+    await t.send("Run target identity and planning.");
+    t.requireInputRequest({ toolName: "plan_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
     t.calledTool("accept_app_spec", { count: 1 });
-    t.calledTool("plan_app_creation", { count: 1 });
-    t.check(t.reply, includes("digest-bound read-only creation proposal"));
-    t.check(t.reply, includes("No target command has run"));
+    t.calledTool("plan_app_creation", { count: 2 });
+    t.check(t.reply, includes("target identity and planning commands"));
+    t.check(t.reply, includes("no apply, validation, or target mutation"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Retry target planning after a lost response.");
+    t.requireInputRequest({ toolName: "plan_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(
+      t.reply,
+      includes("reused the exact durable target-planning receipt"),
+    );
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Retry target planning with a stale AppSpec digest.");
+    t.requireInputRequest({ toolName: "plan_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("stale target-planning retry was rejected"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
 
     await t.send("Read recorded prototype artifact.");
     t.succeeded();

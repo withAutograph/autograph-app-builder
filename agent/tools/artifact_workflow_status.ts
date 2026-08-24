@@ -30,7 +30,9 @@ export default defineTool({
         eligibilityDigest: state.workspace.eligibilityDigest,
         workspaceDigest: state.workspace.workspaceDigest,
       },
-      ...(state.phase === "app_spec_accepted" || state.phase === "planned"
+      ...(state.phase === "app_spec_accepted" ||
+      state.phase === "identity_resolved" ||
+      state.phase === "planned"
         ? {
             appSpec: {
               path: state.appSpec.artifactPath,
@@ -38,6 +40,9 @@ export default defineTool({
               artifactRevision: state.appSpec.artifactRevision,
             },
           }
+        : {}),
+      ...(state.phase === "identity_resolved" || state.phase === "planned"
+        ? { identity: { digest: state.identityReceipt.digest } }
         : {}),
       ...(state.phase === "planned"
         ? { proposal: { digest: state.proposal.digest } }

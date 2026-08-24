@@ -19,14 +19,18 @@ Before enabling local repository mutation or publication:
    to match every pinned version before any target-owned command can run. With
    no configured image, the agent selects just-bash and is deliberately not
    toolchain-ready.
-2. The implemented read-only pre-plan workspace readiness receipt binds the
+2. The implemented fixed target identity and planning operation uses a
+   builder-owned overlay, bounded execution, strict output schemas, and durable
+   receipts. Real execution still requires both the immutable image and a
+   matching offline dependency-cache digest; fixture tests execute no Arrusted
+   command. The read-only pre-plan workspace readiness receipt binds the
    prepared source/workspace receipts to the immutable toolchain observation.
    The implemented proposal-bound apply-readiness receipt adds the exact
    proposal digest. Neither executes a target command or authorizes apply.
 3. The implemented prototype-artifact tools allow only the three conventional
    files, bind AppSpec acceptance to an exact recorded revision, and invalidate
-   downstream receipts when artifact bytes or paths change. Add typed identity,
-   apply, validation, and change-review tools. The implemented
+   downstream receipts when artifact bytes or paths change. Add typed apply,
+   validation, and change-review tools. The implemented
    `target_execution_status` rechecks the exact planned proposal, prepared
    workspace, and immutable toolchain receipt before any future target command;
    gate every mutating operation in code.
