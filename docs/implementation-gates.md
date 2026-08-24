@@ -17,10 +17,10 @@ Before enabling local repository mutation or publication:
    to match every pinned version before any target-owned command can run. With
    no configured image, the agent selects just-bash and is deliberately not
    toolchain-ready.
-2. Extend the implemented durable prepared phase and implemented accepted
-   AppSpec/read-only proposal phases, which are bound to source SHA,
-   eligibility digest, source tree, workspace digest, and AppSpec digest, with
-   reviewed change-set phase and digest.
+2. The implemented read-only pre-plan workspace readiness receipt binds the
+   prepared source/workspace receipts to the immutable toolchain observation.
+   The implemented proposal-bound apply-readiness receipt adds the exact
+   proposal digest. Neither executes a target command or authorizes apply.
 3. Add typed identity, prototype-artifact, apply, validation, and change-review
    tools. The implemented `target_execution_status` rechecks the exact planned
    proposal, prepared workspace, and immutable toolchain receipt before any

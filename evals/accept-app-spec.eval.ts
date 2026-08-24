@@ -81,6 +81,13 @@ export default defineEval({
     await t.respondAll("approve");
     t.succeeded();
 
+    await t.send("Assess workspace readiness before planning.");
+    t.succeeded();
+    t.calledTool("workspace_readiness_status", { count: 1 });
+    t.check(t.reply, includes("not ready for target execution"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
     await t.send(`Accept build-ready AppSpec for expense-review:\n${appSpec}`);
     t.requireInputRequest({ toolName: "accept_app_spec" });
     await t.respondAll("approve");
