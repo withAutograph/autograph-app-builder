@@ -38,13 +38,19 @@ missing operation with a raw shell command or generic file write.
    bind the exact proposal and earlier receipts, and write only its fresh
    builder-owned overlay. If it records partial failure, stop in
    recovery-required state without automatic retry.
-8. Return the structured apply receipt. Stop until builder-owned validation and
-   reviewed-change-set tools exist. After those tools land, request a separate
+8. Return the structured apply receipt, then request a distinct approval for
+   `validate_app_creation`. The validation tool must persist its pending receipt
+   before execution, run only the fixed check and test commands in independent
+   copies of the exact applied tree, and stop on pending or failed state without
+   automatic redispatch.
+9. Return the structured validation receipt. Stop until a builder-owned
+   reviewed-change-set tool exists. After that tool lands, request a separate
    publication approval before creating
    a commit, branch, draft pull request, or other named publication outcome.
-   State exactly that the command created and route-configured unvalidated state
-   in the fresh apply overlay; it did not publish, provision providers, deploy
-   the app, activate releases, or prove Production readiness.
+   State exactly that apply created and route-configured state only in its fresh
+   overlay and validation used separate copies; neither operation published,
+   provisioned providers, deployed the app, activated releases, or proved
+   Production readiness.
 
 ## Boundaries
 

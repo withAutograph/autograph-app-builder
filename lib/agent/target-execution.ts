@@ -19,7 +19,15 @@ import { sha256 } from "./workflow-state";
 
 export type ProposalWorkflowState = Extract<
   AppBuilderWorkflowState,
-  { phase: "planned" | "apply_failed" | "applied" }
+  {
+    phase:
+      | "planned"
+      | "apply_failed"
+      | "applied"
+      | "validation_pending"
+      | "validation_failed"
+      | "validated";
+  }
 >;
 
 export function plannedProposalForExecution(
@@ -29,7 +37,10 @@ export function plannedProposalForExecution(
   if (
     state.phase !== "planned" &&
     state.phase !== "apply_failed" &&
-    state.phase !== "applied"
+    state.phase !== "applied" &&
+    state.phase !== "validation_pending" &&
+    state.phase !== "validation_failed" &&
+    state.phase !== "validated"
   )
     throw new Error(
       "Derive a canonical AppSpec-bound proposal before checking target command readiness.",

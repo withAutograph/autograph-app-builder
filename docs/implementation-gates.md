@@ -1,10 +1,11 @@
 # Implementation gates
 
 The loopback local adapter and approval-gated isolated workflow through target
-apply are usable for local development and testing. Apply remains confined to a
-fresh builder-owned overlay. Validation, reviewed change-set generation, local
-publication, and hosted operation remain fail-closed until their typed tools
-and receipts land; the generic shell and writer remain disabled. Hosted use also remains
+validation are usable for local development and testing. Apply remains confined
+to a fresh builder-owned overlay; validation uses independent copies of that
+exact tree. Reviewed change-set generation, local publication, and hosted
+operation remain fail-closed until their typed tools and receipts land; the
+generic shell and writer remain disabled. Hosted use also remains
 fail-closed until the production identity and session gates below are complete.
 
 Before enabling local repository mutation or publication:
@@ -42,7 +43,14 @@ Before enabling local repository mutation or publication:
    apply tool separately approves the exact proposal, reruns execution readiness,
    writes only a fresh builder-owned overlay, and stores pre/post tree,
    changed-content, strict command, and recovery-required partial-failure
-   receipts. Add typed validation and change-review tools. The implemented
+   receipts. The implemented validation tool persists pending state before
+   execution, rechecks readiness and the exact applied tree, and runs only the
+   adapter-owned `mise run check` and `mise run test` commands in independent
+   builder-owned copies. It records only bounded, digested output evidence and
+   durable pass or recovery-required failure state. It rechecks protected
+   source, cache, planning, and applied bindings after each command and records
+   drift instead of claiming success; validation overlays never supply files to
+   the future reviewed change set. Add the typed change-review tool. The implemented
    `target_execution_status` rechecks the exact planned proposal, prepared
    workspace, and immutable toolchain receipt before any future target command;
    gate every mutating operation in code.

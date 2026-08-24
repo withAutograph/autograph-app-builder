@@ -1,8 +1,9 @@
 # Autograph App Builder
 
 Autograph App Builder is a durable [Eve](https://github.com/vercel/eve) agent
-and portable [Agent Plugin](https://agent-plugins.org/) for designing and creating apps in explicitly
-supported repositories. Codex is the first user-facing entrypoint.
+and portable [Agent Plugin](https://agent-plugins.org/) for designing and
+creating apps in explicitly supported repositories. Codex is the first
+user-facing entrypoint.
 
 The project is based on
 [`jasonmorganson/eve-agent-plugin`](https://github.com/jasonmorganson/eve-agent-plugin)
@@ -34,14 +35,18 @@ allowlisted fresh-template checkout:
    parsed, digest-bound receipts; and
 10. after a separate apply approval and a fresh readiness check, invoke only the
     fixed target apply command in a fresh builder-owned overlay, recording exact
-    pre/post tree and normalized changed-content receipts without validation,
-    change-review, or publication claims.
+    pre/post tree and normalized changed-content receipts; and
+11. after a separate validation approval, persist a pending attempt before
+    execution, then run only the fixed check and test commands in independent
+    builder-owned copies of the exact applied tree and record a durable pass or
+    recovery-required failure receipt without change-review or publication
+    claims.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V4 state key so older, synthetic, or
+workspace. The durable workflow uses its V5 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
 planning receipts;
 an intact prepared sandbox can still be recovered and reviewed again.
@@ -52,7 +57,9 @@ verified inside the sandbox. No free-form cache digest is accepted. Tests use an
 injectable executor and never run Arrusted commands. Apply is proposal-bound,
 approval-gated, and limited to a fresh builder-owned overlay; a failed attempt
 persists recovery-required state and is never replayed automatically. Validation,
-reviewed change-set generation, local publication, GitHub
+is separately approved, runs each fixed command against an independent copy,
+and persists pending state before execution so an interrupted attempt is never
+redispatched automatically. Reviewed change-set generation, local publication, GitHub
 draft-PR publication, cloning, destination-repository creation, and remote
 template acquisition remain fail-closed until
 their typed tools and approval receipts land. The skills describe the intended
@@ -82,6 +89,10 @@ template manifest.
 - Proposal-bound target apply in a fresh builder-owned overlay, with a separate
   approval, a repeated readiness check, normalized pre/post tree evidence, and
   durable success or partial-failure receipts.
+- Approval-bound fixed target validation in independent exact-tree overlays,
+  with an atomic durable claim, protected source/cache/planning/apply drift
+  detection, passed or recovery-required failure receipts, and no
+  validation-generated files admitted to the future reviewed change set.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,

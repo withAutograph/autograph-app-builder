@@ -77,6 +77,10 @@ export default defineTool({
     if (!validAppId(appId))
       throw new Error("App id must be one lowercase kebab-case segment.");
     const current = appBuilderWorkflowState.get();
+    if (current.phase === "validation_pending")
+      throw new Error(
+        `Target validation attempt ${current.validationAttempt.digest} is pending; AppSpec mutation is disabled until it is recovered.`,
+      );
     if (current.phase === "empty")
       throw new Error(
         "Prepare an eligible repository before accepting an AppSpec.",
@@ -117,7 +121,9 @@ export default defineTool({
         current.phase === "identity_resolved" ||
         current.phase === "planned" ||
         current.phase === "apply_failed" ||
-        current.phase === "applied") &&
+        current.phase === "applied" ||
+        current.phase === "validation_failed" ||
+        current.phase === "validated") &&
       current.appSpec.digest === accepted.digest &&
       current.appSpec.appId === accepted.appId
     )
