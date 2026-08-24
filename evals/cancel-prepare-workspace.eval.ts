@@ -10,7 +10,7 @@ export default defineEval({
     const repository = createSupportedRepositoryFixture();
 
     await t.send(`Prepare supported repository at ${repository}`);
-    t.calledTool("inspect_repository", { count: 1 });
+    t.calledTool("inspect_source", { count: 1 });
     t.requireInputRequest({ toolName: "prepare_workspace" });
 
     await t.respondAll("cancel");

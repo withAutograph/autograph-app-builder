@@ -10,18 +10,22 @@ without changing that source repository.
 
 ## Current implemented workflow
 
-The current local slice supports an existing eligible checkout:
+The current local slice supports an existing eligible checkout or an explicitly
+allowlisted fresh-template checkout:
 
 1. inspect the source with the versioned, non-executing V0 adapter;
-2. bind the reviewed source SHA and eligibility digest to an approval request;
-3. materialize that exact Git tree at `/workspace/repository` inside the Eve
+2. emit a canonical receipt binding source kind, exact SHA, eligibility,
+   supported-template contract, and release-disabled state;
+3. for a fresh-template source, require a separate acquisition approval that
+   does not clone, copy, or create a destination repository;
+4. materialize that exact approved receipt at `/workspace/repository` inside the Eve
    session sandbox; and
-4. persist the prepared phase in durable Eve state and expose a verified,
+5. persist the prepared phase in durable Eve state and expose a verified,
    read-only workspace-status receipt while unrestricted shell and file writes
    remain disabled;
-5. record and exactly read approval-bound prototype artifact receipts without
+6. record and exactly read approval-bound prototype artifact receipts without
    writing the target workspace; and
-6. accept a recorded AppSpec revision against that receipt and derive a
+7. accept a recorded AppSpec revision against that receipt and derive a
    digest-bound, read-only creation proposal.
 
 Prototype artifacts are durable, session-scoped receipts under
@@ -33,7 +37,8 @@ acceptance or proposal state cannot be mistaken for an artifact-bound receipt;
 an intact prepared sandbox can still be recovered and reviewed again.
 
 Target apply, reviewed change-set generation, local publication, GitHub
-draft-PR publication, and fresh-template acquisition remain fail-closed until
+draft-PR publication, cloning, destination-repository creation, and remote
+template acquisition remain fail-closed until
 their typed tools and approval receipts land. The skills describe the intended
 workflow, but they must use builder-owned operations; they do not authorize raw
 target commands.
@@ -48,7 +53,8 @@ template manifest.
 - Eve `0.38.3` with durable sessions and human-in-the-loop approvals.
 - The four app-creation skills: `create-app`, `design-app`,
   `plan-app-creation`, and `scaffold-app-workspace`.
-- A purpose-built supported-template eligibility adapter.
+- A purpose-built supported-template eligibility adapter and canonical local
+  source receipt that distinguishes existing-repository from fresh-template.
 - An approval-gated, digest-bound Eve sandbox workspace tool.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
 - Approval-bound, session-scoped prototype artifact receipts with exact-digest
@@ -98,9 +104,11 @@ gates](docs/implementation-gates.md). The reproducible `linux/arm64` image
 source and its published digest are documented in
 [`containers/eve-sandbox`](containers/eve-sandbox/README.md).
 
-For local repository access, set `REPOSITORY_LOCAL_ROOTS` to a
-platform-delimited allowlist of absolute roots. The reviewed tree is copied into
-the durable Eve session sandbox; the source checkout is not mutated.
+For local source access, set `REPOSITORY_LOCAL_ROOTS` to a platform-delimited
+allowlist of absolute roots. Fresh-template acquisition means approving one
+exact local checkout receipt; it never means cloning or creating a destination
+repository. A separately approved preparation copies the reviewed tree into the
+durable Eve session sandbox; the source checkout is not mutated.
 
 ## Use the local MCP façade
 

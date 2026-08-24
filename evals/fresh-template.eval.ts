@@ -5,19 +5,19 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "The Eve agent binds approval to eligibility and prepares the reviewed tree inside its session sandbox.",
+    "A fresh local template requires acquisition approval before workspace preparation approval.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-
-    await t.send(`Prepare supported repository at ${repository}`);
+    await t.send(`Prepare fresh template at ${repository}`);
     t.calledTool("inspect_source", { count: 1 });
+    t.requireInputRequest({ toolName: "approve_source_acquisition" });
+    await t.respondAll("approve");
     t.requireInputRequest({ toolName: "prepare_workspace" });
-
     await t.respondAll("approve");
     t.succeeded();
     t.calledTool("prepare_workspace", { count: 1 });
-    t.calledTool("workspace_status", { count: 1 });
-    t.check(t.reply, includes("prepared inside the Eve session workspace"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
     t.check(t.reply, includes("confirms the prepared phase"));
   },
 });

@@ -7,18 +7,38 @@ import {
   appBuilderWorkflowState,
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
+import { sourceWorkflowState } from "@/lib/agent/source-state";
+import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
 
 export default defineTool({
   description:
-    "Materialize an already-reviewed eligible source tree inside this Eve session's isolated workspace. This starts workspace execution and requires approval bound to the source SHA and eligibility digest.",
+    "Materialize an already-reviewed eligible source tree inside this Eve session's isolated workspace. This requires its own approval bound to the exact canonical source receipt.",
   inputSchema: z.object({
-    path: z.string().min(1),
-    expectedSha: z.string().regex(/^[0-9a-f]{40}$/u),
-    expectedEligibilityDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
   approval: always(),
-  async execute({ path, expectedSha, expectedEligibilityDigest }, ctx) {
+  async execute({ expectedSourceReceiptDigest }, ctx) {
+    const source = sourceWorkflowState.get();
+    if (source.phase === "empty") throw new Error("No source was reviewed.");
+    if (source.receipt.digest !== expectedSourceReceiptDigest)
+      throw new Error("The source receipt does not match the reviewed source.");
+    if (
+      source.receipt.sourceKind === "fresh-template" &&
+      source.phase !== "acquisition_approved"
+    )
+      throw new Error("Fresh-template acquisition was not approved.");
+    const currentReceipt = await inspectSourceReceipt(
+      source.receipt.sourceKind,
+      source.receipt.sourcePath,
+    );
+    if (currentReceipt.digest !== expectedSourceReceiptDigest)
+      throw new Error("The source changed after review or approval.");
+    const {
+      sourcePath: path,
+      sourceSha: expectedSha,
+      eligibilityDigest: expectedEligibilityDigest,
+    } = currentReceipt;
     const current = appBuilderWorkflowState.get();
     const currentWorkspace = workflowWorkspace(current);
     if (
