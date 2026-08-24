@@ -23,7 +23,9 @@ Before enabling local repository mutation or publication:
 2. The implemented approval-gated dependency preparation verifies the fixed
    image-internal manifest and archive bytes, binds Arrusted commit/tree and
    contract/lock hashes, and extracts `node_modules` only into builder-owned
-   planning metadata under deny-all runtime networking. Its durable receipt is
+   planning metadata under deny-all runtime networking. It precreates the
+   archive's directories and preserves their metadata during extraction so the
+   verified cache remains reliable on the sandbox overlay filesystem. Its durable receipt is
    internally observed; `APP_BUILDER_DEPENDENCY_CACHE_DIGEST` is not accepted.
    The implemented fixed target identity and planning operation then uses a
    builder-owned overlay, bounded execution, strict output schemas, and durable

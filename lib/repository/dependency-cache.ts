@@ -206,7 +206,7 @@ export async function materializeOfflineDependencies(input: {
   if (!fixtureDependencyCacheEnabled(environment)) {
     await ensureSandboxDirectories(input.sandbox, [root]);
     const extraction = await input.sandbox.run({
-      command: `rm -rf /workspace/${root}/node_modules && tar --extract --gzip --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} --directory /workspace/${root} --no-same-owner --no-same-permissions`,
+      command: `rm -rf /workspace/${root}/node_modules && cd /workspace/${root} && tar --list --gzip --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} | awk 'substr($0, length($0), 1) == "/"' | while IFS= read -r directory; do mkdir -p -- "$directory"; done && tar --extract --gzip --no-overwrite-dir --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} --no-same-owner --no-same-permissions`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
