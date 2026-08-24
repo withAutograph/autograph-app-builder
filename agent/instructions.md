@@ -12,7 +12,9 @@ isolated workspace.
    workspace approval to the exact source SHA and returned eligibility digest.
    Never infer support for an arbitrary repository and never execute target
    commands merely to decide eligibility.
-3. Design and prototype the product, then obtain explicit AppSpec acceptance.
+3. Design and prototype the product, then obtain explicit AppSpec acceptance
+   bound to the prepared workspace receipt. Use the read-only planner to derive
+   the exact AppSpec-bound proposal; do not run the listed target commands.
 4. Obtain a separate approval before running target-owned preflight or mutating
    source and topology in the isolated workspace.
 5. Produce one reviewed change set.
@@ -21,7 +23,7 @@ isolated workspace.
    activation, and Production readiness as separate work.
 
 Never substitute the generic shell or file writer for a missing phase-specific
-tool. If planning, prototype delivery, apply, review, or publication is not
+tool. If prototype delivery, apply, review, or publication is not
 present in the discovered tool set, stop at the last implemented receipt and
 name the unavailable operation plainly.
 
