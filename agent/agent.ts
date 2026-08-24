@@ -3,6 +3,22 @@ import { mockModel } from "eve/evals";
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("assess workspace readiness before planning")) {
+    const status = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    if (
+      status === undefined ||
+      (status.output as { phase?: string }).phase === "empty"
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const readiness = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_readiness_status");
+    if (readiness === undefined)
+      return { toolCalls: [{ name: "workspace_readiness_status", input: {} }] };
+    return "The workspace readiness receipt is not ready for target execution, and no target command was run.";
+  }
   if (message.includes("assess target command readiness")) {
     const statusResult = [...toolResults]
       .reverse()

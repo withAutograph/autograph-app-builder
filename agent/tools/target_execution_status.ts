@@ -12,6 +12,7 @@ import {
   requiredToolVersions,
   toolVersionMatches,
 } from "@/lib/sandbox/toolchain";
+import { sha256 } from "@/lib/agent/workflow-state";
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
@@ -79,8 +80,17 @@ export default defineTool({
       imageConfigured: image !== undefined,
       toolchainReady,
     });
-    return {
+    const readiness = {
+      sourceSha: current.workspace.sourceSha,
+      eligibilityDigest: current.workspace.eligibilityDigest,
+      workspaceDigest: current.workspace.workspaceDigest,
       proposalDigest: proposal.digest,
+      imageDigest: image ?? "unconfigured",
+      required,
+    };
+    return {
+      ...readiness,
+      applyReadinessDigest: sha256(JSON.stringify(readiness)),
       targetCommandReady: blockers.length === 0,
       blockers,
       required,
