@@ -1,7 +1,10 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  appBuilderWorkflowState,
+  workflowWorkspace,
+} from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 
 export default defineTool({
@@ -33,7 +36,8 @@ export default defineTool({
         "The durable workflow receipt exists but its sandbox workspace is missing.",
       );
     if (
-      JSON.stringify(durable.workspace) !== JSON.stringify(observed.workspace)
+      JSON.stringify(workflowWorkspace(durable)) !==
+      JSON.stringify(observed.workspace)
     )
       throw new Error(
         "The durable workflow receipt does not match the sandbox workspace.",

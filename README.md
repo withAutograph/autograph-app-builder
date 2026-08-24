@@ -18,9 +18,11 @@ The current local slice supports an existing eligible checkout:
    session sandbox; and
 4. persist the prepared phase in durable Eve state and expose a verified,
    read-only workspace-status receipt while unrestricted shell and file writes
-   remain disabled.
+   remain disabled;
+5. accept a complete AppSpec against that receipt and derive a digest-bound,
+   read-only creation proposal.
 
-Planning, prototype artifact delivery, apply, reviewed change-set generation,
+Prototype artifact delivery, apply, reviewed change-set generation,
 local publication, GitHub draft-PR publication, and fresh-template acquisition
 remain fail-closed until their typed tools and approval receipts land. The
 skills describe the intended workflow, but they must use builder-owned
@@ -39,6 +41,8 @@ template manifest.
 - A purpose-built supported-template eligibility adapter.
 - An approval-gated, digest-bound Eve sandbox workspace tool.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
+- Approval-bound AppSpec acceptance and a read-only canonical proposal tool;
+  neither runs target-owned commands or writes the target repository.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
   `eve_respond`, and `eve_cancel`.
 - A loopback-only local MCP-to-Eve adapter.

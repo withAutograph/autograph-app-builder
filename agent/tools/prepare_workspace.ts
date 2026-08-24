@@ -2,7 +2,10 @@ import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  appBuilderWorkflowState,
+  workflowWorkspace,
+} from "@/lib/agent/workflow-state";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
 
 export default defineTool({
@@ -16,10 +19,11 @@ export default defineTool({
   approval: always(),
   async execute({ path, expectedSha, expectedEligibilityDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
+    const currentWorkspace = workflowWorkspace(current);
     if (
-      current.phase === "prepared" &&
-      (current.workspace.sourceSha !== expectedSha ||
-        current.workspace.eligibilityDigest !== expectedEligibilityDigest)
+      currentWorkspace !== undefined &&
+      (currentWorkspace.sourceSha !== expectedSha ||
+        currentWorkspace.eligibilityDigest !== expectedEligibilityDigest)
     )
       throw new Error("This Eve session already owns a different workspace.");
     const workspace = await prepareSupportedSandboxWorkspace(
@@ -29,12 +33,16 @@ export default defineTool({
       await ctx.getSandbox(),
       ctx.callId,
     );
-    appBuilderWorkflowState.update(() => ({
-      version: 1,
-      phase: "prepared",
-      preparedByCallId: ctx.callId,
-      workspace,
-    }));
+    appBuilderWorkflowState.update(() =>
+      current.phase === "empty" || current.phase === "prepared"
+        ? {
+            version: 1,
+            phase: "prepared",
+            preparedByCallId: ctx.callId,
+            workspace,
+          }
+        : current,
+    );
     return workspace;
   },
 });

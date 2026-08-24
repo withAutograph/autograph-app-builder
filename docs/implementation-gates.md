@@ -8,9 +8,10 @@ fail-closed until the production identity and session gates below are complete.
 
 Before enabling local repository mutation or publication:
 
-1. Extend the implemented durable prepared phase, which is bound to source SHA,
-   eligibility digest, source tree, and workspace digest, with AppSpec,
-   proposal, and reviewed change-set phases and digests.
+1. Extend the implemented durable prepared phase and implemented accepted
+   AppSpec/read-only proposal phases, which are bound to source SHA,
+   eligibility digest, source tree, workspace digest, and AppSpec digest, with
+   reviewed change-set phase and digest.
 2. Add typed identity, planning, prototype-artifact, apply, validation, and
    change-review tools. Gate every mutating operation in code.
 3. Add an approval-gated local publisher that verifies exact destination SHA,
