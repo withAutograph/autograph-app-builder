@@ -31,7 +31,11 @@ allowlisted fresh-template checkout:
    overlay; and
 9. after another distinct approval, run only the fixed target identity and planning
    commands against a builder-owned input overlay and record their strictly
-   parsed, digest-bound receipts.
+   parsed, digest-bound receipts; and
+10. after a separate apply approval and a fresh readiness check, invoke only the
+    fixed target apply command in a fresh builder-owned overlay, recording exact
+    pre/post tree and normalized changed-content receipts without validation,
+    change-review, or publication claims.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
@@ -45,7 +49,9 @@ an intact prepared sandbox can still be recovered and reviewed again.
 The real target commands remain fail-closed until an immutable cache-bearing
 sandbox image is configured and its fixed manifest and archive bytes are
 verified inside the sandbox. No free-form cache digest is accepted. Tests use an
-injectable executor and never run Arrusted commands. Target apply, validation,
+injectable executor and never run Arrusted commands. Apply is proposal-bound,
+approval-gated, and limited to a fresh builder-owned overlay; a failed attempt
+persists recovery-required state and is never replayed automatically. Validation,
 reviewed change-set generation, local publication, GitHub
 draft-PR publication, cloning, destination-repository creation, and remote
 template acquisition remain fail-closed until
@@ -60,7 +66,7 @@ template manifest.
 
 ## Included surfaces
 
-- Eve `0.38.3` with durable sessions and human-in-the-loop approvals.
+- Eve `0.43.0` with durable sessions and human-in-the-loop approvals.
 - The four app-creation skills: `create-app`, `design-app`,
   `plan-app-creation`, and `scaffold-app-workspace`.
 - A purpose-built supported-template eligibility adapter and canonical local
@@ -73,6 +79,9 @@ template manifest.
   and fixed bounded target identity/planning commands. Strict receipts bind
   source, workspace, toolchain, observed cache bytes, and artifact revision
   without writing the prepared target workspace.
+- Proposal-bound target apply in a fresh builder-owned overlay, with a separate
+  approval, a repeated readiness check, normalized pre/post tree evidence, and
+  durable success or partial-failure receipts.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,

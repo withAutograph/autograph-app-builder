@@ -1,24 +1,8 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  plannedProposalForExecution,
-  targetExecutionBlockers,
-} from "@/lib/agent/target-execution";
+import { inspectTargetExecutionReadiness } from "@/lib/agent/target-execution";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
-import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
-import {
-  dependencyCacheReceiptDigest,
-  inspectDependencyCache,
-} from "@/lib/repository/dependency-cache";
-import {
-  configuredToolchainImage,
-  requiredToolVersions,
-  toolVersionMatches,
-} from "@/lib/sandbox/toolchain";
-import { sha256 } from "@/lib/agent/workflow-state";
-
-const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
 export default defineTool({
   description:
@@ -28,89 +12,18 @@ export default defineTool({
   }),
   async execute({ expectedProposalDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
-    const proposal = plannedProposalForExecution(
-      current,
-      expectedProposalDigest,
-    );
-    if (current.phase !== "planned")
+    if (
+      current.phase !== "planned" &&
+      current.phase !== "apply_failed" &&
+      current.phase !== "applied"
+    )
       throw new Error(
         "Derive a canonical AppSpec-bound proposal before checking target command readiness.",
       );
-    const sandbox = await ctx.getSandbox();
-    const observed = await inspectPreparedSandboxWorkspace(sandbox);
-    if (
-      observed.state !== "prepared" ||
-      JSON.stringify(observed.workspace) !== JSON.stringify(current.workspace)
-    )
-      throw new Error(
-        "The prepared workspace receipt changed before execution readiness.",
-      );
-    const tools = await Promise.all(
-      commands.map(async (command) => {
-        const location = await sandbox.run({
-          command: `command -v ${command}`,
-        });
-        if (location.exitCode !== 0)
-          return { command, available: false as const, version: "" };
-        const version = await sandbox.run({ command: `${command} --version` });
-        return {
-          command,
-          available: true as const,
-          version:
-            (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ??
-            "",
-        };
-      }),
-    );
-    const image = configuredToolchainImage();
-    const cache =
-      image === undefined
-        ? undefined
-        : await inspectDependencyCache(sandbox).catch(() => undefined);
-    const required = (
-      Object.keys(requiredToolVersions) as Array<
-        keyof typeof requiredToolVersions
-      >
-    ).map((command) => {
-      const observedTool = tools.find((tool) => tool.command === command);
-      return {
-        command,
-        expected: requiredToolVersions[command].source,
-        version: observedTool?.version ?? "",
-        matches:
-          observedTool?.available === true &&
-          toolVersionMatches(command, observedTool.version),
-      };
+    return inspectTargetExecutionReadiness({
+      state: current,
+      sandbox: await ctx.getSandbox(),
+      expectedProposalDigest,
     });
-    const toolchainReady =
-      image !== undefined &&
-      cache !== undefined &&
-      current.dependencyReceipt.imageDigest === image &&
-      current.dependencyReceipt.dependencyCacheDigest ===
-        dependencyCacheReceiptDigest(cache) &&
-      required.every((tool) => tool.matches);
-    const blockers = targetExecutionBlockers({
-      imageConfigured: image !== undefined,
-      toolchainReady,
-    });
-    const readiness = {
-      sourceSha: current.workspace.sourceSha,
-      eligibilityDigest: current.workspace.eligibilityDigest,
-      workspaceDigest: current.workspace.workspaceDigest,
-      proposalDigest: proposal.digest,
-      imageDigest: image ?? "unconfigured",
-      dependencyCacheDigest:
-        cache === undefined
-          ? "unverified"
-          : dependencyCacheReceiptDigest(cache),
-      required,
-    };
-    return {
-      ...readiness,
-      applyReadinessDigest: sha256(JSON.stringify(readiness)),
-      targetCommandReady: blockers.length === 0,
-      blockers,
-      required,
-    };
   },
 });

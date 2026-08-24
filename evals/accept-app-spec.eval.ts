@@ -110,8 +110,7 @@ export default defineEval({
     );
     t.succeeded();
     t.calledTool("target_execution_status", { count: 1 });
-    t.check(t.reply, includes("not ready for a target command"));
-    t.check(t.reply, includes("no target command was run"));
+    t.check(t.reply, includes("ready for a future typed target command"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -119,6 +118,31 @@ export default defineEval({
     t.succeeded();
     t.calledTool("target_execution_status", { count: 1 });
     t.check(t.reply, includes("rejected the stale proposal"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Apply the current creation proposal.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("fresh builder-owned overlay"));
+    t.check(t.reply, includes("exact pre/post tree"));
+    t.check(t.reply, includes("Validation"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Retry target apply after a lost response.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("reused the exact durable target-apply receipt"));
+    t.check(t.reply, includes("command was not rerun"));
+
+    await t.send("Apply with a stale proposal digest.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("Stale target apply was rejected"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -132,7 +156,7 @@ export default defineEval({
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 1 });
+    t.calledTool("artifact_workflow_status", { count: 2 });
     t.check(t.reply, includes('"phase":"prepared"'));
     t.check(
       t.reply,

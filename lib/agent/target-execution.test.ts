@@ -6,6 +6,7 @@ import {
   type AppBuilderWorkflowState,
 } from "./workflow-state";
 import {
+  assertProposalExecutionBindings,
   plannedProposalForExecution,
   targetExecutionBlockers,
 } from "./target-execution";
@@ -106,6 +107,9 @@ describe("target command readiness", () => {
     );
     expect(() => plannedProposalForExecution(state, "0".repeat(64))).toThrow(
       "proposal changed",
+    );
+    expect(() => assertProposalExecutionBindings(state)).toThrow(
+      "durable execution bindings",
     );
   });
 

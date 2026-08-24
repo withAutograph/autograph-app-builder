@@ -26,7 +26,9 @@ function statusReceipt(
     ...(state.phase === "app_spec_accepted" ||
     state.phase === "dependencies_prepared" ||
     state.phase === "identity_resolved" ||
-    state.phase === "planned"
+    state.phase === "planned" ||
+    state.phase === "apply_failed" ||
+    state.phase === "applied"
       ? {
           appSpec: {
             appId: state.appSpec.appId,
@@ -39,14 +41,40 @@ function statusReceipt(
       : {}),
     ...(state.phase === "dependencies_prepared" ||
     state.phase === "identity_resolved" ||
-    state.phase === "planned"
+    state.phase === "planned" ||
+    state.phase === "apply_failed" ||
+    state.phase === "applied"
       ? { dependencies: { digest: state.dependencyReceipt.digest } }
       : {}),
-    ...(state.phase === "identity_resolved" || state.phase === "planned"
+    ...(state.phase === "identity_resolved" ||
+    state.phase === "planned" ||
+    state.phase === "apply_failed" ||
+    state.phase === "applied"
       ? { identity: { digest: state.identityReceipt.digest } }
       : {}),
-    ...(state.phase === "planned"
+    ...(state.phase === "planned" ||
+    state.phase === "apply_failed" ||
+    state.phase === "applied"
       ? { proposal: { digest: state.proposal.digest } }
+      : {}),
+    ...(state.phase === "apply_failed"
+      ? {
+          apply: {
+            status: state.applyFailure.status,
+            digest: state.applyFailure.digest,
+            reason: state.applyFailure.reason,
+            recoveryRequired: true,
+          },
+        }
+      : {}),
+    ...(state.phase === "applied"
+      ? {
+          apply: {
+            status: state.applyReceipt.status,
+            digest: state.applyReceipt.digest,
+            changedContentDigest: state.applyReceipt.changedContentDigest,
+          },
+        }
       : {}),
   };
 }
