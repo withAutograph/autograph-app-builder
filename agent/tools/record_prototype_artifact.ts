@@ -28,6 +28,10 @@ export default defineTool({
       throw new Error(
         "Prepare a workspace before recording prototype artifacts.",
       );
+    if (current.phase === "validation_pending")
+      throw new Error(
+        `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
+      );
     const recorded = recordPrototypeArtifactRevision({
       artifacts: current.artifacts,
       path,
@@ -41,7 +45,9 @@ export default defineTool({
         current.phase === "identity_resolved" ||
         current.phase === "planned" ||
         current.phase === "apply_failed" ||
-        current.phase === "applied"
+        current.phase === "applied" ||
+        current.phase === "validation_failed" ||
+        current.phase === "validated"
           ? current.appSpec.appId
           : undefined,
     });

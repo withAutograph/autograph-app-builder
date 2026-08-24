@@ -35,6 +35,8 @@ const expectedCommands = {
   validation: ["mise run check", "mise run test"],
 } as const;
 
+export const SUPPORTED_VALIDATION_COMMANDS = expectedCommands.validation;
+
 export type EligibilityResult = {
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
   eligible: boolean;

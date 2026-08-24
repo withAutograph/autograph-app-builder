@@ -35,7 +35,10 @@ export default defineTool({
       state.phase === "identity_resolved" ||
       state.phase === "planned" ||
       state.phase === "apply_failed" ||
-      state.phase === "applied"
+      state.phase === "applied" ||
+      state.phase === "validation_pending" ||
+      state.phase === "validation_failed" ||
+      state.phase === "validated"
         ? {
             appSpec: {
               path: state.appSpec.artifactPath,
@@ -48,18 +51,27 @@ export default defineTool({
       state.phase === "identity_resolved" ||
       state.phase === "planned" ||
       state.phase === "apply_failed" ||
-      state.phase === "applied"
+      state.phase === "applied" ||
+      state.phase === "validation_pending" ||
+      state.phase === "validation_failed" ||
+      state.phase === "validated"
         ? { dependencies: { digest: state.dependencyReceipt.digest } }
         : {}),
       ...(state.phase === "identity_resolved" ||
       state.phase === "planned" ||
       state.phase === "apply_failed" ||
-      state.phase === "applied"
+      state.phase === "applied" ||
+      state.phase === "validation_pending" ||
+      state.phase === "validation_failed" ||
+      state.phase === "validated"
         ? { identity: { digest: state.identityReceipt.digest } }
         : {}),
       ...(state.phase === "planned" ||
       state.phase === "apply_failed" ||
-      state.phase === "applied"
+      state.phase === "applied" ||
+      state.phase === "validation_pending" ||
+      state.phase === "validation_failed" ||
+      state.phase === "validated"
         ? { proposal: { digest: state.proposal.digest } }
         : {}),
       ...(state.phase === "apply_failed"
@@ -72,12 +84,42 @@ export default defineTool({
             },
           }
         : {}),
-      ...(state.phase === "applied"
+      ...(state.phase === "applied" ||
+      state.phase === "validation_pending" ||
+      state.phase === "validation_failed" ||
+      state.phase === "validated"
         ? {
             apply: {
               status: state.applyReceipt.status,
               digest: state.applyReceipt.digest,
               changedContentDigest: state.applyReceipt.changedContentDigest,
+            },
+          }
+        : {}),
+      ...(state.phase === "validation_pending"
+        ? {
+            validation: {
+              status: state.validationAttempt.status,
+              digest: state.validationAttempt.digest,
+              recoveryRequired: true,
+            },
+          }
+        : {}),
+      ...(state.phase === "validation_failed"
+        ? {
+            validation: {
+              status: state.validationFailure.status,
+              digest: state.validationFailure.digest,
+              reason: state.validationFailure.reason,
+              recoveryRequired: true,
+            },
+          }
+        : {}),
+      ...(state.phase === "validated"
+        ? {
+            validation: {
+              status: state.validationReceipt.status,
+              digest: state.validationReceipt.digest,
             },
           }
         : {}),

@@ -30,8 +30,14 @@ isolated workspace.
    builder-owned overlay. A partial failure is recovery-required and must not be
    retried automatically. This apply does not validate or mutate the prepared
    source.
-5. Stop after the apply receipt until typed validation and change-review tools
-   exist. Do not claim a reviewed change set.
+5. After a distinct validation approval, use only `validate_app_creation`. It
+   records pending state before execution and runs the fixed check and test
+   commands in independent builder-owned copies of the exact applied tree. A
+   pending or failed attempt is recovery-required and must not be redispatched
+   automatically. Treat any detected source, dependency-cache, planning, or
+   applied-tree drift as a recovery-required failure. Stop after the validation
+   receipt until a typed change-review tool exists. Do not claim a reviewed
+   change set.
 6. Obtain a separate publication approval naming the destination and outcome.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.

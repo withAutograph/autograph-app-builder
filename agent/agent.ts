@@ -255,6 +255,76 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ],
     };
   }
+  if (
+    message.includes("validate the applied creation") ||
+    message.includes("retry target validation") ||
+    message.includes("validate with a stale apply digest")
+  ) {
+    const stale = message.includes("stale apply digest");
+    const lostResponse = message.includes("lost response");
+    const validations = toolResults.filter(
+      ({ name }) => name === "validate_app_creation",
+    );
+    const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
+    const statusResults = toolResults.filter(
+      ({ name }) => name === "workspace_status",
+    );
+    const latestStatus = statusResults.at(-1);
+    const latestValidationIndex = toolResults.findLastIndex(
+      ({ name }) => name === "validate_app_creation",
+    );
+    const latestStatusIndex = toolResults.findLastIndex(
+      ({ name }) => name === "workspace_status",
+    );
+    if (
+      latestStatus === undefined ||
+      (validations.length >= requiredResults &&
+        latestValidationIndex > latestStatusIndex)
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const status = latestStatus.output as
+      | {
+          phase?: string;
+          apply?: { digest?: string };
+        }
+      | undefined;
+    if (
+      status?.phase !== "applied" &&
+      status?.phase !== "validation_pending" &&
+      status?.phase !== "validation_failed" &&
+      status?.phase !== "validated"
+    )
+      return "An exact applied receipt is required before validation.";
+    if (validations.length < requiredResults) {
+      const applyDigest = status.apply?.digest;
+      if (applyDigest === undefined)
+        return "The exact apply receipt digest is unavailable.";
+      return {
+        toolCalls: [
+          {
+            name: "validate_app_creation",
+            input: {
+              expectedApplyDigest: stale ? "0".repeat(64) : applyDigest,
+            },
+          },
+        ],
+      };
+    }
+    const result = validations.at(-1);
+    if (result?.isError) {
+      if (stale)
+        return "Stale target validation was rejected without creating a validation overlay.";
+      if (status.phase === "validation_pending")
+        return "The incomplete validation attempt is recovery-required and was not redispatched automatically.";
+      if (status.phase === "validation_failed")
+        return "Target validation recorded a recovery-required failure receipt and will not retry automatically.";
+      return "Target validation was canceled or rejected; the exact applied phase was preserved.";
+    }
+    const output = result?.output as { reused?: boolean } | undefined;
+    return output?.reused === true
+      ? "The lost-response retry reused the exact durable target-validation receipt after verifying the canonical applied tree; neither fixed command was rerun."
+      : "The separately approved fixed check and test commands passed in independent builder-owned copies of the exact applied tree. The applied overlay remained unchanged; change review and publication did not run.";
+  }
   if (message.includes("read recorded prototype artifact")) {
     const stale = message.includes("stale digest");
     const recorded = [...toolResults]
@@ -321,7 +391,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (
       status?.phase !== "planned" &&
       status?.phase !== "apply_failed" &&
-      status?.phase !== "applied"
+      status?.phase !== "applied" &&
+      status?.phase !== "validation_pending" &&
+      status?.phase !== "validation_failed" &&
+      status?.phase !== "validated"
     )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const readinessResult = [...toolResults]
@@ -525,7 +598,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, and separately apply the exact proposal only in a fresh builder-owned overlay. Validation, reviewed change-set generation, publication, cloning, and remote-template acquisition are not implemented yet.";
+    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays. Reviewed change-set generation, publication, cloning, and remote-template acquisition are not implemented yet.";
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });

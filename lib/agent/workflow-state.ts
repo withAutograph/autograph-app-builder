@@ -11,8 +11,13 @@ import type {
   TargetApplyFailureReceipt,
   TargetApplyReceipt,
 } from "@/lib/repository/target-apply";
+import type {
+  TargetValidationAttemptReceipt,
+  TargetValidationFailureReceipt,
+  TargetValidationReceipt,
+} from "@/lib/repository/target-validation";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 4 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 5 as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -125,6 +130,36 @@ export type AppBuilderWorkflowState =
       identityReceipt: TargetIdentityReceipt;
       proposal: AppCreationProposal;
       applyReceipt: TargetApplyReceipt;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "validation_pending";
+      appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
+      identityReceipt: TargetIdentityReceipt;
+      proposal: AppCreationProposal;
+      applyReceipt: TargetApplyReceipt;
+      validationAttempt: TargetValidationAttemptReceipt;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "validation_failed";
+      appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
+      identityReceipt: TargetIdentityReceipt;
+      proposal: AppCreationProposal;
+      applyReceipt: TargetApplyReceipt;
+      validationFailure: TargetValidationFailureReceipt;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "validated";
+      appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
+      identityReceipt: TargetIdentityReceipt;
+      proposal: AppCreationProposal;
+      applyReceipt: TargetApplyReceipt;
+      validationReceipt: TargetValidationReceipt;
     } & WorkspacePhase);
 
 export function workflowWorkspace(
@@ -142,6 +177,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v4",
+  "autograph-app-builder.workflow.v5",
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );

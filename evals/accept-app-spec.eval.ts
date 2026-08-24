@@ -146,6 +146,34 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
+    await t.send("Validate the applied creation.");
+    t.requireInputRequest({ toolName: "validate_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("fixed check and test commands passed"));
+    t.check(t.reply, includes("independent builder-owned copies"));
+    t.check(t.reply, includes("change review and publication did not run"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Retry target validation after a lost response.");
+    t.requireInputRequest({ toolName: "validate_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(
+      t.reply,
+      includes("reused the exact durable target-validation receipt"),
+    );
+    t.check(t.reply, includes("neither fixed command was rerun"));
+
+    await t.send("Validate with a stale apply digest.");
+    t.requireInputRequest({ toolName: "validate_app_creation" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("Stale target validation was rejected"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
     await t.send("Record a replacement prototype artifact.");
     t.requireInputRequest({ toolName: "record_prototype_artifact" });
     await t.respondAll("approve");
