@@ -89,5 +89,22 @@ export default defineEval({
     t.calledTool("plan_app_creation", { count: 1 });
     t.check(t.reply, includes("digest-bound read-only creation proposal"));
     t.check(t.reply, includes("No target command has run"));
+
+    await t.send(
+      "Assess target command readiness for the current creation proposal.",
+    );
+    t.succeeded();
+    t.calledTool("target_execution_status", { count: 1 });
+    t.check(t.reply, includes("not ready for a target command"));
+    t.check(t.reply, includes("no target command was run"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Assess target command readiness with stale proposal digest.");
+    t.succeeded();
+    t.calledTool("target_execution_status", { count: 1 });
+    t.check(t.reply, includes("rejected the stale proposal"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
   },
 });
