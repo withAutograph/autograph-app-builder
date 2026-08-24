@@ -115,7 +115,9 @@ export default defineTool({
       (current.phase === "app_spec_accepted" ||
         current.phase === "dependencies_prepared" ||
         current.phase === "identity_resolved" ||
-        current.phase === "planned") &&
+        current.phase === "planned" ||
+        current.phase === "apply_failed" ||
+        current.phase === "applied") &&
       current.appSpec.digest === accepted.digest &&
       current.appSpec.appId === accepted.appId
     )

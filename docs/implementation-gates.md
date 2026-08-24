@@ -1,9 +1,10 @@
 # Implementation gates
 
-The loopback local adapter and approval-gated read-only workspace preparation
-are usable for local development and testing. Local app execution and
-publication remain fail-closed until typed plan/apply/review/publication tools
-replace the disabled generic shell and writer. Hosted operation also remains
+The loopback local adapter and approval-gated isolated workflow through target
+apply are usable for local development and testing. Apply remains confined to a
+fresh builder-owned overlay. Validation, reviewed change-set generation, local
+publication, and hosted operation remain fail-closed until their typed tools
+and receipts land; the generic shell and writer remain disabled. Hosted use also remains
 fail-closed until the production identity and session gates below are complete.
 
 Before enabling local repository mutation or publication:
@@ -37,8 +38,11 @@ Before enabling local repository mutation or publication:
    proposal digest. Neither executes a target command or authorizes apply.
 3. The implemented prototype-artifact tools allow only the three conventional
    files, bind AppSpec acceptance to an exact recorded revision, and invalidate
-   downstream receipts when artifact bytes or paths change. Add typed apply,
-   validation, and change-review tools. The implemented
+   downstream receipts when artifact bytes or paths change. The implemented
+   apply tool separately approves the exact proposal, reruns execution readiness,
+   writes only a fresh builder-owned overlay, and stores pre/post tree,
+   changed-content, strict command, and recovery-required partial-failure
+   receipts. Add typed validation and change-review tools. The implemented
    `target_execution_status` rechecks the exact planned proposal, prepared
    workspace, and immutable toolchain receipt before any future target command;
    gate every mutating operation in code.
@@ -70,7 +74,7 @@ Before enabling real MCP mutations:
 4. Encrypt any cached continuation credential with versioned server-side keys.
 5. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
 6. Replace the loopback-only service in `lib/eve/service.ts` with the authenticated `eve/client` adapter using Vercel OIDC and manual redirects.
-7. Map only installed Eve `0.38.3` events through the public allowlist and prove cursor behavior.
+7. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
 8. Complete the MCP Apps host bridge. The iframe must invoke tools through the host, never call Eve or private endpoints directly.
 9. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
 

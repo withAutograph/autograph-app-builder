@@ -31,21 +31,19 @@ missing operation with a raw shell command or generic file write.
    acceptance does not authorize source or topology mutation.
 5. Follow [$plan-app-creation](../plan-app-creation/SKILL.md) to produce the
    canonical proposal. Return blockers without workarounds.
-6. Present the complete proposal and request a distinct, explicit approval to
-   persist `apps/<id>/app.contract.json`, create `apps/<id>`, and update
-   `apps/shell/microfrontends.json`. Do not apply on AppSpec acceptance alone.
-7. After approval, save the exact canonical proposal to a temporary file outside
-   the repository and run:
-
-   ```sh
-   mise run create:app -- --proposal <temporary-proposal-file>
-   ```
-
-8. Return the structured receipt, inspect the resulting paths, and produce one
-   reviewed change set. Request a separate publication approval before creating
+6. Present the complete proposal and request a distinct, explicit approval for
+   the builder-owned apply operation. Do not apply on AppSpec acceptance alone,
+   and never invoke the target command through generic shell access.
+7. Use only the discovered `apply_app_creation` tool. It must rerun readiness,
+   bind the exact proposal and earlier receipts, and write only its fresh
+   builder-owned overlay. If it records partial failure, stop in
+   recovery-required state without automatic retry.
+8. Return the structured apply receipt. Stop until builder-owned validation and
+   reviewed-change-set tools exist. After those tools land, request a separate
+   publication approval before creating
    a commit, branch, draft pull request, or other named publication outcome.
-   State exactly that the command created and route-configured validated state
-   in the isolated workspace; it did not publish, provision providers, deploy
+   State exactly that the command created and route-configured unvalidated state
+   in the fresh apply overlay; it did not publish, provision providers, deploy
    the app, activate releases, or prove Production readiness.
 
 ## Boundaries

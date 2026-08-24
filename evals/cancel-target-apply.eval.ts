@@ -6,15 +6,12 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "Artifact recording is approval-bound; cancellation cannot mutate durable artifact state.",
+    "Canceling target apply preserves the exact planned receipt and creates no apply overlay.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-
     await t.send(`Prepare supported repository at ${repository}`);
     t.requireInputRequest({ toolName: "prepare_workspace" });
     await t.respondAll("approve");
-    t.succeeded();
-
     await t.send(
       `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
     );
@@ -22,25 +19,30 @@ export default defineEval({
     await t.respondAll("approve");
     t.requireInputRequest({ toolName: "accept_app_spec" });
     await t.respondAll("approve");
+    await t.send("Prepare offline target dependencies.");
+    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
+    await t.respondAll("approve");
+    await t.send("Run target identity and planning.");
+    t.requireInputRequest({ toolName: "plan_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 2 });
-    const beforeCancellation = t.reply;
+    t.check(t.reply, includes('"phase":"planned"'));
+    const before = t.reply;
 
-    await t.send("Record a replacement prototype artifact.");
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
+    await t.send("Apply the current creation proposal.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
     await t.respondAll("cancel");
     t.succeeded();
+    t.check(t.reply, includes("planned phase was preserved"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
-    t.check(t.reply, includes("canceled"));
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 2 });
-    t.check(t.reply, equals(beforeCancellation));
+    t.check(t.reply, equals(before));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

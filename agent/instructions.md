@@ -25,10 +25,13 @@ isolated workspace.
    tools; changed artifact bytes invalidate later receipts.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
-   shell command or retry with altered inputs. Obtain a separate approval
-   before running target-owned apply, preflight, validation, or mutating
-   source and topology in the isolated workspace.
-5. Produce one reviewed change set.
+   shell command or retry with altered inputs. After a distinct approval, use
+   only `apply_app_creation` to apply the exact proposal in its fresh
+   builder-owned overlay. A partial failure is recovery-required and must not be
+   retried automatically. This apply does not validate or mutate the prepared
+   source.
+5. Stop after the apply receipt until typed validation and change-review tools
+   exist. Do not claim a reviewed change set.
 6. Obtain a separate publication approval naming the destination and outcome.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.

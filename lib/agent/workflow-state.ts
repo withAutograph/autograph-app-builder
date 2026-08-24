@@ -7,6 +7,10 @@ import type {
   TargetIdentity,
   TargetProposal,
 } from "@/lib/repository/target-planning";
+import type {
+  TargetApplyFailureReceipt,
+  TargetApplyReceipt,
+} from "@/lib/repository/target-apply";
 
 export const APP_BUILDER_WORKFLOW_VERSION = 4 as const;
 
@@ -103,6 +107,24 @@ export type AppBuilderWorkflowState =
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
       proposal: AppCreationProposal;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "apply_failed";
+      appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
+      identityReceipt: TargetIdentityReceipt;
+      proposal: AppCreationProposal;
+      applyFailure: TargetApplyFailureReceipt;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "applied";
+      appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
+      identityReceipt: TargetIdentityReceipt;
+      proposal: AppCreationProposal;
+      applyReceipt: TargetApplyReceipt;
     } & WorkspacePhase);
 
 export function workflowWorkspace(

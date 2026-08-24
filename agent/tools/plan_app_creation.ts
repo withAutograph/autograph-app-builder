@@ -55,7 +55,11 @@ export default defineTool({
       throw new Error(
         "The offline dependency cache changed after its durable receipt.",
       );
-    if (current.phase === "planned")
+    if (
+      current.phase === "planned" ||
+      current.phase === "apply_failed" ||
+      current.phase === "applied"
+    )
       return { ...current.proposal, reused: true };
 
     const binding = {

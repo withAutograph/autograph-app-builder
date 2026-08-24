@@ -6,10 +6,8 @@ import { sha256 } from "@/lib/agent/workflow-state";
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
   if (message.includes("report artifact workflow status")) {
-    const result = [...toolResults]
-      .reverse()
-      .find(({ name }) => name === "artifact_workflow_status");
-    if (result === undefined)
+    const result = toolResults.at(-1);
+    if (result?.name !== "artifact_workflow_status")
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
     return result.isError
       ? "The artifact workflow status could not be verified."
@@ -146,6 +144,78 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The approved fixed target identity and planning commands produced a digest-bound canonical proposal; no apply, validation, or target mutation ran.";
   }
   if (
+    message.includes("apply the current creation proposal") ||
+    message.includes("retry target apply") ||
+    message.includes("apply with a stale proposal digest")
+  ) {
+    const stale = message.includes("stale proposal digest");
+    const lostResponse = message.includes("lost response");
+    const applications = toolResults.filter(
+      ({ name }) => name === "apply_app_creation",
+    );
+    const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
+    const statusResults = toolResults.filter(
+      ({ name }) => name === "workspace_status",
+    );
+    const latestStatus = statusResults.at(-1);
+    const latestApplyIndex = toolResults.findLastIndex(
+      ({ name }) => name === "apply_app_creation",
+    );
+    const latestPlanIndex = toolResults.findLastIndex(
+      ({ name }) => name === "plan_app_creation",
+    );
+    const latestStatusIndex = toolResults.findLastIndex(
+      ({ name }) => name === "workspace_status",
+    );
+    if (
+      latestStatus === undefined ||
+      latestPlanIndex > latestStatusIndex ||
+      (applications.length >= requiredResults &&
+        latestApplyIndex > latestStatusIndex)
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const status = latestStatus.output as
+      | {
+          phase?: string;
+          proposal?: { digest?: string };
+          apply?: { status?: string };
+        }
+      | undefined;
+    if (
+      status?.phase !== "planned" &&
+      status?.phase !== "apply_failed" &&
+      status?.phase !== "applied"
+    )
+      return "A completed target plan is required before apply.";
+    if (applications.length < requiredResults) {
+      const proposalDigest = status.proposal?.digest;
+      if (proposalDigest === undefined)
+        return "The canonical proposal digest is unavailable.";
+      return {
+        toolCalls: [
+          {
+            name: "apply_app_creation",
+            input: {
+              expectedProposalDigest: stale ? "0".repeat(64) : proposalDigest,
+            },
+          },
+        ],
+      };
+    }
+    const result = applications.at(-1);
+    if (result?.isError) {
+      if (stale)
+        return "Stale target apply was rejected without creating or changing an apply overlay.";
+      if (status.phase === "apply_failed")
+        return "Target apply recorded a recovery-required partial-failure receipt and will not retry automatically.";
+      return "Target apply was canceled or rejected; the exact planned phase was preserved.";
+    }
+    const output = result?.output as { reused?: boolean } | undefined;
+    return output?.reused === true
+      ? "The lost-response retry reused the exact durable target-apply receipt after verifying the post-apply overlay tree; the command was not rerun."
+      : "The approved canonical proposal was applied only in a fresh builder-owned overlay and recorded with exact pre/post tree and changed-content digests. Validation, reviewed change-set generation, and publication did not run.";
+  }
+  if (
     message.includes("record a replacement prototype artifact") ||
     message.includes("retry recording the exact replacement prototype artifact")
   ) {
@@ -248,7 +318,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { phase?: string; proposal?: { digest?: string } } | undefined;
-    if (status?.phase !== "planned")
+    if (
+      status?.phase !== "planned" &&
+      status?.phase !== "apply_failed" &&
+      status?.phase !== "applied"
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const readinessResult = [...toolResults]
       .reverse()
@@ -451,7 +525,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, and—only with an immutable image plus offline cache—run the two fixed, approval-bound target identity and planning commands against builder-owned inputs. Apply, validation, target mutation, change review, publication, cloning, and remote-template acquisition are not implemented yet.";
+    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, and separately apply the exact proposal only in a fresh builder-owned overlay. Validation, reviewed change-set generation, publication, cloning, and remote-template acquisition are not implemented yet.";
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });
