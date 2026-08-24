@@ -115,6 +115,7 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(
       "bun install --frozen-lockfile --ignore-scripts",
     );
+    expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
     expect(dockerfile).toContain("RUN --network=none");
   });

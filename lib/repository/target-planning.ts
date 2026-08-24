@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
 
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
+import { safeSourcePath } from "./source-path";
 
 import {
   dependencyCacheReceiptDigest,
@@ -146,6 +146,10 @@ export function targetExecutionBinding(
 
 type SourceFile = { path: string };
 
+const fixturePlanningEnabled = () =>
+  process.env.APP_BUILDER_TEST_MODEL === "1" &&
+  process.env.APP_BUILDER_REAL_SANDBOX !== "1";
+
 export async function materializePlanningOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
@@ -164,27 +168,33 @@ export async function materializePlanningOverlay(input: {
   const files = parsed as SourceFile[];
   const root = planningOverlayRoot(input.artifactRevision);
   for (const file of files) {
-    if (
-      typeof file.path !== "string" ||
-      !repositoryPath.safeParse(file.path).success
-    )
+    if (typeof file.path !== "string" || !safeSourcePath(file.path))
       throw new Error("Prepared source manifest is invalid.");
   }
   await ensureSandboxDirectories(input.sandbox, [
     root,
-    ...files.map(({ path }) => `${root}/${dirname(path)}`),
     `${root}/prototype/${input.appId}`,
     `.app-builder/target-inputs/${input.artifactRevision}`,
   ]);
-  for (const file of files) {
-    const content = await input.sandbox.readBinaryFile({
-      path: `repository/${file.path}`,
+  if (fixturePlanningEnabled()) {
+    for (const file of files) {
+      const content = await input.sandbox.readBinaryFile({
+        path: `repository/${file.path}`,
+      });
+      if (content === null) throw new Error("Prepared source file is missing.");
+      await input.sandbox.writeBinaryFile({
+        path: `${root}/${file.path}`,
+        content,
+      });
+    }
+  } else {
+    const copy = await input.sandbox.run({
+      command: `cp -R repository/. ${root}/`,
+      workingDirectory: "/workspace",
+      abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
     });
-    if (content === null) throw new Error("Prepared source file is missing.");
-    await input.sandbox.writeBinaryFile({
-      path: `${root}/${file.path}`,
-      content,
-    });
+    if (copy.exitCode !== 0)
+      throw new Error("The prepared source could not be copied for planning.");
   }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;
   await input.sandbox.writeTextFile({

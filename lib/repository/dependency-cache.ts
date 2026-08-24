@@ -14,8 +14,9 @@ export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
 export const DEPENDENCY_CACHE_MANIFEST_PATH =
   "/opt/app-builder/dependency-cache/manifest.json";
 export const DEPENDENCY_CACHE_ARCHIVE_PATH =
-  "/opt/app-builder/dependency-cache/node-modules.tar";
+  "/opt/app-builder/dependency-cache/node-modules.tar.gz";
 export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
+export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 
 const sha256Digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -205,9 +206,9 @@ export async function materializeOfflineDependencies(input: {
   if (!fixtureDependencyCacheEnabled(environment)) {
     await ensureSandboxDirectories(input.sandbox, [root]);
     const extraction = await input.sandbox.run({
-      command: `rm -rf /workspace/${root}/node_modules && tar --extract --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} --directory /workspace/${root} --no-same-owner --no-same-permissions`,
+      command: `rm -rf /workspace/${root}/node_modules && tar --extract --gzip --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} --directory /workspace/${root} --no-same-owner --no-same-permissions`,
       workingDirectory: "/workspace",
-      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+      abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
     boundedOutput(
       extraction.stdout,

@@ -79,10 +79,10 @@ RUN set -eux; \
     install -d /opt/app-builder/dependency-cache; \
     tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime --create \
-      --file /opt/app-builder/dependency-cache/node-modules.tar \
-      --directory /tmp/arrusted-target node_modules; \
-    archive_sha="$(sha256sum /opt/app-builder/dependency-cache/node-modules.tar | cut -d' ' -f1)"; \
-    archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/node-modules.tar)"; \
+      --file - --directory /tmp/arrusted-target node_modules \
+      | gzip --no-name --best > /opt/app-builder/dependency-cache/node-modules.tar.gz; \
+    archive_sha="$(sha256sum /opt/app-builder/dependency-cache/node-modules.tar.gz | cut -d' ' -f1)"; \
+    archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/node-modules.tar.gz)"; \
     printf '%s\n' \
       '{' \
       '  "version": 1,' \
@@ -103,13 +103,13 @@ RUN set -eux; \
       '  "closure": {' \
       '    "package": "@vercel/microfrontends",' \
       '    "version": "2.4.0",' \
-      '    "archivePath": "/opt/app-builder/dependency-cache/node-modules.tar",' \
+      '    "archivePath": "/opt/app-builder/dependency-cache/node-modules.tar.gz",' \
       "    \"archiveSha256\": \"${archive_sha}\"," \
       "    \"archiveBytes\": ${archive_bytes}" \
       '  }' \
       '}' > /opt/app-builder/dependency-cache/manifest.json; \
     chmod 0444 /opt/app-builder/dependency-cache/manifest.json \
-      /opt/app-builder/dependency-cache/node-modules.tar; \
+      /opt/app-builder/dependency-cache/node-modules.tar.gz; \
     chmod 0555 /opt/app-builder/dependency-cache
 
 FROM toolchain
