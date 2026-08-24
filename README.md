@@ -26,7 +26,10 @@ allowlisted fresh-template checkout:
 6. record and exactly read approval-bound prototype artifact receipts without
    writing the target workspace; and
 7. accept a recorded AppSpec revision against that receipt; and
-8. after a distinct approval, run only the fixed target identity and planning
+8. after a distinct approval, verify and materialize the image-internal,
+   target-bound offline dependency closure only in the builder-owned planning
+   overlay; and
+9. after another distinct approval, run only the fixed target identity and planning
    commands against a builder-owned input overlay and record their strictly
    parsed, digest-bound receipts.
 
@@ -34,12 +37,14 @@ Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V3 state key so older, synthetic
-planning state cannot be mistaken for target identity or planning receipts;
+workspace. The durable workflow uses its V4 state key so older, synthetic, or
+unverified-cache planning state cannot be mistaken for target identity or
+planning receipts;
 an intact prepared sandbox can still be recovered and reviewed again.
 
-The real target commands remain fail-closed until both an immutable sandbox
-image and matching offline dependency-cache digest are configured. Tests use an
+The real target commands remain fail-closed until an immutable cache-bearing
+sandbox image is configured and its fixed manifest and archive bytes are
+verified inside the sandbox. No free-form cache digest is accepted. Tests use an
 injectable executor and never run Arrusted commands. Target apply, validation,
 reviewed change-set generation, local publication, GitHub
 draft-PR publication, cloning, destination-repository creation, and remote
@@ -64,9 +69,10 @@ template manifest.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
 - Approval-bound, session-scoped prototype artifact receipts with exact-digest
   readback and a content-free workflow-status receipt.
-- Approval-bound AppSpec acceptance plus fixed, bounded target identity and
-  planning commands. Strict receipts bind source, workspace, toolchain, cache,
-  and artifact revision without writing the prepared target workspace.
+- Approval-bound AppSpec acceptance, separate offline dependency preparation,
+  and fixed bounded target identity/planning commands. Strict receipts bind
+  source, workspace, toolchain, observed cache bytes, and artifact revision
+  without writing the prepared target workspace.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
@@ -104,10 +110,11 @@ built, preloaded OCI image is configured through
 `APP_BUILDER_SANDBOX_IMAGE=<image>@sha256:<digest>`. The agent never pulls,
 builds, or publishes that image: its pinned microsandbox backend uses
 `pullPolicy: "never"` and deny-all network policy. The image must contain Git,
-`mise 2026.8.12`, and `bun 1.2.20`; the receipt verifies the exact versions
+`mise 2026.8.12`, `bun 1.3.14`, and the target-bound external dependency
+closure; the receipt verifies the exact versions and cache bytes
 before any future typed target command can be enabled. See [the implementation
 gates](docs/implementation-gates.md). The reproducible `linux/arm64` image
-source and its published digest are documented in
+source and its digest-resolution procedure are documented in
 [`containers/eve-sandbox`](containers/eve-sandbox/README.md).
 
 For local source access, set `REPOSITORY_LOCAL_ROOTS` to a platform-delimited

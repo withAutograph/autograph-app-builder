@@ -6,6 +6,10 @@ import {
   requiredToolVersions,
   toolVersionMatches,
 } from "@/lib/sandbox/toolchain";
+import {
+  dependencyCacheReceiptDigest,
+  inspectDependencyCache,
+} from "@/lib/repository/dependency-cache";
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
@@ -34,6 +38,10 @@ export default defineTool({
       }),
     );
     const image = configuredToolchainImage();
+    const cache =
+      image === undefined
+        ? undefined
+        : await inspectDependencyCache(sandbox).catch(() => undefined);
     const required = (
       Object.keys(requiredToolVersions) as Array<
         keyof typeof requiredToolVersions
@@ -54,7 +62,13 @@ export default defineTool({
       sandboxId: sandbox.id,
       imageConfiguration: image === undefined ? "unconfigured" : "configured",
       toolchainReady:
-        image !== undefined && required.every((tool) => tool.matches),
+        image !== undefined &&
+        cache !== undefined &&
+        required.every((tool) => tool.matches),
+      dependencyCacheDigest:
+        cache === undefined
+          ? "unverified"
+          : dependencyCacheReceiptDigest(cache),
       required,
       tools,
     };

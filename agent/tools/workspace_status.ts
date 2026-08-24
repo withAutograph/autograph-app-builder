@@ -24,6 +24,7 @@ function statusReceipt(
     workspace: state.workspace,
     artifacts: state.artifacts.map(prototypeArtifactReceipt),
     ...(state.phase === "app_spec_accepted" ||
+    state.phase === "dependencies_prepared" ||
     state.phase === "identity_resolved" ||
     state.phase === "planned"
       ? {
@@ -35,6 +36,11 @@ function statusReceipt(
             acceptedByCallId: state.appSpec.acceptedByCallId,
           },
         }
+      : {}),
+    ...(state.phase === "dependencies_prepared" ||
+    state.phase === "identity_resolved" ||
+    state.phase === "planned"
+      ? { dependencies: { digest: state.dependencyReceipt.digest } }
       : {}),
     ...(state.phase === "identity_resolved" || state.phase === "planned"
       ? { identity: { digest: state.identityReceipt.digest } }

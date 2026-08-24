@@ -32,6 +32,35 @@ export default defineEval({
     t.succeeded();
     t.check(t.reply, includes("separate explicit request and approval"));
 
+    await t.send("Prepare offline target dependencies.");
+    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("target-bound offline dependency closure"));
+    t.check(t.reply, includes("builder-owned planning metadata"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Prepare offline target dependencies after a lost response.");
+    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(
+      t.reply,
+      includes("reused the exact durable dependency-preparation receipt"),
+    );
+
+    await t.send(
+      "Prepare offline target dependencies with a stale AppSpec digest.",
+    );
+    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(
+      t.reply,
+      includes("Stale offline dependency preparation was rejected"),
+    );
+
     await t.send("Run target identity and planning.");
     t.requireInputRequest({ toolName: "plan_app_creation" });
     await t.respondAll("approve");
@@ -111,8 +140,9 @@ export default defineEval({
         (reply) =>
           typeof reply === "string" &&
           !reply.includes('"appSpec"') &&
+          !reply.includes('"dependencies"') &&
           !reply.includes('"proposal"'),
-        "downstream AppSpec and proposal receipts were invalidated",
+        "downstream AppSpec, dependency, and proposal receipts were invalidated",
       ),
     );
     const afterRevision = t.reply;

@@ -37,6 +37,7 @@ export default defineTool({
       callId: ctx.callId,
       expectedAppId:
         current.phase === "app_spec_accepted" ||
+        current.phase === "dependencies_prepared" ||
         current.phase === "identity_resolved" ||
         current.phase === "planned"
           ? current.appSpec.appId

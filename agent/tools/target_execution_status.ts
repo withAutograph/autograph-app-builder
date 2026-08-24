@@ -8,6 +8,10 @@ import {
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import {
+  dependencyCacheReceiptDigest,
+  inspectDependencyCache,
+} from "@/lib/repository/dependency-cache";
+import {
   configuredToolchainImage,
   requiredToolVersions,
   toolVersionMatches,
@@ -59,6 +63,10 @@ export default defineTool({
       }),
     );
     const image = configuredToolchainImage();
+    const cache =
+      image === undefined
+        ? undefined
+        : await inspectDependencyCache(sandbox).catch(() => undefined);
     const required = (
       Object.keys(requiredToolVersions) as Array<
         keyof typeof requiredToolVersions
@@ -75,7 +83,12 @@ export default defineTool({
       };
     });
     const toolchainReady =
-      image !== undefined && required.every((tool) => tool.matches);
+      image !== undefined &&
+      cache !== undefined &&
+      current.dependencyReceipt.imageDigest === image &&
+      current.dependencyReceipt.dependencyCacheDigest ===
+        dependencyCacheReceiptDigest(cache) &&
+      required.every((tool) => tool.matches);
     const blockers = targetExecutionBlockers({
       imageConfigured: image !== undefined,
       toolchainReady,
@@ -86,6 +99,10 @@ export default defineTool({
       workspaceDigest: current.workspace.workspaceDigest,
       proposalDigest: proposal.digest,
       imageDigest: image ?? "unconfigured",
+      dependencyCacheDigest:
+        cache === undefined
+          ? "unverified"
+          : dependencyCacheReceiptDigest(cache),
       required,
     };
     return {

@@ -8,7 +8,7 @@ import type {
   TargetProposal,
 } from "@/lib/repository/target-planning";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 3 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 4 as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -38,6 +38,16 @@ type TargetExecutionBinding = {
   dependencyCacheDigest: string;
   appSpecDigest: string;
   artifactRevision: string;
+};
+
+export type DependencyPreparationReceipt = TargetExecutionBinding & {
+  version: 1;
+  targetSha: string;
+  targetTree: string;
+  cacheManifestDigest: string;
+  cacheContentDigest: string;
+  preparedByCallId: string;
+  digest: string;
 };
 
 export type TargetIdentityReceipt = TargetExecutionBinding & {
@@ -75,14 +85,22 @@ export type AppBuilderWorkflowState =
     } & WorkspacePhase)
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "dependencies_prepared";
+      appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "identity_resolved";
       appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
     } & WorkspacePhase)
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "planned";
       appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
       proposal: AppCreationProposal;
     } & WorkspacePhase);
@@ -102,6 +120,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v3",
+  "autograph-app-builder.workflow.v4",
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );

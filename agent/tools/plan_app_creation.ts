@@ -9,6 +9,7 @@ import {
   sha256,
   type TargetIdentityReceipt,
 } from "@/lib/agent/workflow-state";
+import { inspectDependencyCache } from "@/lib/repository/dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -25,9 +26,13 @@ export default defineTool({
   approval: always(),
   async execute({ expectedAppSpecDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
-    if (current.phase === "empty" || current.phase === "prepared")
+    if (
+      current.phase === "empty" ||
+      current.phase === "prepared" ||
+      current.phase === "app_spec_accepted"
+    )
       throw new Error(
-        "Accept a build-ready AppSpec before running target planning.",
+        "Prepare the approved offline dependency closure before running target planning.",
       );
     if (current.appSpec.digest !== expectedAppSpecDigest)
       throw new Error("The accepted AppSpec changed before target planning.");
@@ -37,10 +42,22 @@ export default defineTool({
       revision: current.appSpec.artifactRevision,
       sessionId: ctx.session.id,
     });
+    const sandbox = await ctx.getSandbox();
+    const cache = await inspectDependencyCache(sandbox);
+    const execution = targetExecutionBinding(cache);
+    if (
+      current.dependencyReceipt.imageDigest !== execution.imageDigest ||
+      current.dependencyReceipt.dependencyCacheDigest !==
+        execution.dependencyCacheDigest ||
+      current.dependencyReceipt.cacheManifestDigest !== cache.manifestDigest ||
+      current.dependencyReceipt.cacheContentDigest !== cache.contentDigest
+    )
+      throw new Error(
+        "The offline dependency cache changed after its durable receipt.",
+      );
     if (current.phase === "planned")
       return { ...current.proposal, reused: true };
 
-    const execution = targetExecutionBinding();
     const binding = {
       sourceSha: current.workspace.sourceSha,
       eligibilityDigest: current.workspace.eligibilityDigest,
@@ -50,7 +67,6 @@ export default defineTool({
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
     };
-    const sandbox = await ctx.getSandbox();
     let identityReceipt: TargetIdentityReceipt | undefined =
       current.phase === "identity_resolved"
         ? current.identityReceipt
@@ -92,6 +108,7 @@ export default defineTool({
           workspace: current.workspace,
           artifacts: current.artifacts,
           appSpec: current.appSpec,
+          dependencyReceipt: current.dependencyReceipt,
           identityReceipt: identityReceipt!,
         }));
       },
@@ -115,6 +132,7 @@ export default defineTool({
       workspace: current.workspace,
       artifacts: current.artifacts,
       appSpec: current.appSpec,
+      dependencyReceipt: current.dependencyReceipt,
       identityReceipt: recordedIdentity,
       proposal,
     }));

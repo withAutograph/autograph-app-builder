@@ -6,7 +6,7 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "Canceling target identity/planning preserves accepted AppSpec state and performs no target mutation.",
+    "Canceling offline dependency preparation preserves exact accepted AppSpec state and runs no target command.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare supported repository at ${repository}`);
@@ -20,19 +20,18 @@ export default defineEval({
     t.requireInputRequest({ toolName: "accept_app_spec" });
     await t.respondAll("approve");
     t.succeeded();
+
     await t.send("Prepare offline target dependencies.");
     t.requireInputRequest({ toolName: "prepare_target_dependencies" });
-    await t.respondAll("approve");
-    t.succeeded();
-    await t.send("Run target identity and planning.");
-    t.requireInputRequest({ toolName: "plan_app_creation" });
     await t.respondAll("cancel");
     t.succeeded();
-    t.check(t.reply, includes("no target mutation occurred"));
+    t.check(t.reply, includes("accepted AppSpec state was preserved"));
+    t.notCalledTool("plan_app_creation");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
+
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"dependencies_prepared"'));
+    t.check(t.reply, includes('"phase":"app_spec_accepted"'));
   },
 });

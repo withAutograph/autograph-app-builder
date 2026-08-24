@@ -26,14 +26,14 @@ describe("sandbox toolchain contract", () => {
   it("requires the pinned mise and Bun versions", () => {
     expect(toolVersionMatches("git", "git version 2.50.1")).toBe(true);
     expect(toolVersionMatches("mise", "2026.8.12 macos-arm64")).toBe(true);
-    expect(toolVersionMatches("bun", "1.2.20")).toBe(true);
+    expect(toolVersionMatches("bun", "1.3.14")).toBe(true);
     expect(toolVersionMatches("mise", "2026.8.13")).toBe(false);
-    expect(toolVersionMatches("bun", "1.2.21")).toBe(false);
+    expect(toolVersionMatches("bun", "1.3.15")).toBe(false);
   });
 
   it("changes the template key when the configured immutable image changes", () => {
     expect(sandboxRevalidationKey(undefined)).toBe(
-      "autograph-app-builder-toolchain-v1:unconfigured",
+      "autograph-app-builder-toolchain-v2:unconfigured",
     );
     expect(sandboxRevalidationKey(image)).toContain(image);
   });
