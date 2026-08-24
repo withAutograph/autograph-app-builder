@@ -39,14 +39,15 @@ allowlisted fresh-template checkout:
 11. after a separate validation approval, persist a pending attempt before
     execution, then run only the fixed check and test commands in independent
     builder-owned copies of the exact applied tree and record a durable pass or
-    recovery-required failure receipt without change-review or publication
-    claims.
+    recovery-required failure receipt without publication claims. A passed
+    validation can then produce a read-only normalized change-set proposal and,
+    after separate approval, a durable reviewed receipt.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V5 state key so older, synthetic, or
+workspace. The durable workflow uses its V6 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
 planning receipts;
 an intact prepared sandbox can still be recovered and reviewed again.
@@ -56,12 +57,12 @@ sandbox image is configured and its fixed manifest and archive bytes are
 verified inside the sandbox. No free-form cache digest is accepted. Tests use an
 injectable executor and never run Arrusted commands. Apply is proposal-bound,
 approval-gated, and limited to a fresh builder-owned overlay; a failed attempt
-persists recovery-required state and is never replayed automatically. Validation,
+persists recovery-required state and is never replayed automatically. Validation
 is separately approved, runs each fixed command against an independent copy,
 and persists pending state before execution so an interrupted attempt is never
-redispatched automatically. Reviewed change-set generation, local publication, GitHub
-draft-PR publication, cloning, destination-repository creation, and remote
-template acquisition remain fail-closed until
+redispatched automatically. Local publication, GitHub draft-PR publication,
+cloning, destination-repository creation, and remote template acquisition
+remain fail-closed until
 their typed tools and approval receipts land. The skills describe the intended
 workflow, but they must use builder-owned operations; they do not authorize raw
 target commands.
@@ -92,7 +93,7 @@ template manifest.
 - Approval-bound fixed target validation in independent exact-tree overlays,
   with an atomic durable claim, protected source/cache/planning/apply drift
   detection, passed or recovery-required failure receipts, and no
-  validation-generated files admitted to the future reviewed change set.
+  validation-generated files admitted to reviewed change sets.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,

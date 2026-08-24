@@ -43,8 +43,11 @@ missing operation with a raw shell command or generic file write.
    before execution, run only the fixed check and test commands in independent
    copies of the exact applied tree, and stop on pending or failed state without
    automatic redispatch.
-9. Return the structured validation receipt. Stop until a builder-owned
-   reviewed-change-set tool exists. After that tool lands, request a separate
+9. Return the structured validation receipt. Use `change_set_status` to show
+   the complete ordered normalized changes, before/after digests, and approved
+   path set from the canonical applied overlay. Then request separate approval
+   for `accept_change_set`, carrying that exact payload; it recomputes the
+   proposal and records the durable reviewed receipt. Request a separate
    publication approval before creating
    a commit, branch, draft pull request, or other named publication outcome.
    State exactly that apply created and route-configured state only in its fresh

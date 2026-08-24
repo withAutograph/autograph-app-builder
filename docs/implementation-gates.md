@@ -50,7 +50,12 @@ Before enabling local repository mutation or publication:
    durable pass or recovery-required failure state. It rechecks protected
    source, cache, planning, and applied bindings after each command and records
    drift instead of claiming success; validation overlays never supply files to
-   the future reviewed change set. Add the typed change-review tool. The implemented
+   the future reviewed change set. The implemented typed change-review tools
+   derive an ordered, path-safe normalized proposal only from the exact canonical
+   applied overlay and passed validation receipt. `change_set_status` is
+   read-only; `accept_change_set` separately approves its digest and rechecks
+   the same overlay before recording the durable reviewed receipt. Neither
+   validates, executes a target command, or publishes. The implemented
    `target_execution_status` rechecks the exact planned proposal, prepared
    workspace, and immutable toolchain receipt before any future target command;
    gate every mutating operation in code.

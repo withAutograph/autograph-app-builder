@@ -18,7 +18,8 @@ export default defineTool({
       current.phase !== "applied" &&
       current.phase !== "validation_pending" &&
       current.phase !== "validation_failed" &&
-      current.phase !== "validated"
+      current.phase !== "validated" &&
+      current.phase !== "reviewed"
     )
       throw new Error(
         "Derive a canonical AppSpec-bound proposal before checking target command readiness.",

@@ -325,6 +325,88 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The lost-response retry reused the exact durable target-validation receipt after verifying the canonical applied tree; neither fixed command was rerun."
       : "The separately approved fixed check and test commands passed in independent builder-owned copies of the exact applied tree. The applied overlay remained unchanged; change review and publication did not run.";
   }
+  if (
+    message.includes("inspect the validated change set") ||
+    message.includes("accept the displayed change set") ||
+    message.includes("retry change-set acceptance") ||
+    message.includes("accept a stale change set")
+  ) {
+    const stale = message.includes("stale change set");
+    const retry = message.includes("retry change-set acceptance");
+    const accepted = toolResults.filter(
+      ({ name }) => name === "accept_change_set",
+    );
+    const requiredAccepts = stale ? 3 : retry ? 2 : 1;
+    const status = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    const latestStatus = status?.output as
+      { phase?: string; validation?: { digest?: string } } | undefined;
+    if (
+      status === undefined ||
+      (latestStatus?.phase !== "validated" &&
+        latestStatus?.phase !== "reviewed")
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const proposal = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "change_set_status");
+    if (proposal === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "change_set_status",
+            input: {
+              expectedValidationDigest: latestStatus.validation?.digest,
+            },
+          },
+        ],
+      };
+    if (message.includes("inspect the validated change set")) {
+      if (proposal.isError)
+        return "The exact validated change set could not be read.";
+      const output = proposal.output as
+        | {
+            digest?: string;
+            changes?: readonly unknown[];
+            approvedPaths?: readonly string[];
+          }
+        | undefined;
+      return `Validated change-set proposal: ${JSON.stringify({ digest: output?.digest, changes: output?.changes, approvedPaths: output?.approvedPaths })}. Review this exact ordered declarative change summary before requesting separate acceptance.`;
+    }
+    if (accepted.length < requiredAccepts) {
+      const output = proposal.output as
+        | {
+            digest?: string;
+            approvedPaths?: readonly string[];
+            changes?: readonly unknown[];
+          }
+        | undefined;
+      return {
+        toolCalls: [
+          {
+            name: "accept_change_set",
+            input: {
+              changeSet: {
+                digest: stale ? "0".repeat(64) : output?.digest,
+                approvedPaths: output?.approvedPaths,
+                changes: output?.changes,
+              },
+            },
+          },
+        ],
+      };
+    }
+    const result = accepted.at(-1);
+    if (result?.isError)
+      return stale
+        ? "The stale change-set proposal was rejected without changing the validated receipt."
+        : "Change-set acceptance was canceled or rejected; the validated receipt was preserved.";
+    const output = result?.output as { reused?: boolean } | undefined;
+    return output?.reused === true
+      ? "The lost-response retry reused the exact durable reviewed change-set receipt without any target command, validation, or publication."
+      : "The separately approved normalized change set was recorded from the exact canonical applied overlay. Publication did not run.";
+  }
   if (message.includes("read recorded prototype artifact")) {
     const stale = message.includes("stale digest");
     const recorded = [...toolResults]
@@ -598,7 +680,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays. Reviewed change-set generation, publication, cloning, and remote-template acquisition are not implemented yet.";
+    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set. Publication, cloning, and remote-template acquisition are not implemented yet.";
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });

@@ -7,6 +7,7 @@ import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
   sandboxTargetCommandExecutor,
+  targetContractDigest,
   targetExecutionBinding,
   type TargetCommandExecutor,
 } from "./target-planning";
@@ -87,6 +88,9 @@ describe("typed target identity and planning", () => {
     expect(calls).toEqual(["identity", "planning"]);
     expect(result.identity.packageName).toBe("@autograph/expense-review");
     expect(result.proposal.contract.appSpec.sha256).toBe("a".repeat(64));
+    expect(result.contractDigest).toBe(
+      targetContractDigest(result.proposal.contract),
+    );
     expect(
       files.has(
         `.app-builder/target-inputs/${"b".repeat(64)}/app-contract.json`,

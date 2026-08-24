@@ -47,7 +47,8 @@ export default defineTool({
         current.phase === "apply_failed" ||
         current.phase === "applied" ||
         current.phase === "validation_failed" ||
-        current.phase === "validated"
+        current.phase === "validated" ||
+        current.phase === "reviewed"
           ? current.appSpec.appId
           : undefined,
     });

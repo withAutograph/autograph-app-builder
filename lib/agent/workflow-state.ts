@@ -16,8 +16,9 @@ import type {
   TargetValidationFailureReceipt,
   TargetValidationReceipt,
 } from "@/lib/repository/target-validation";
+import type { ReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 5 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 6 as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -160,6 +161,17 @@ export type AppBuilderWorkflowState =
       proposal: AppCreationProposal;
       applyReceipt: TargetApplyReceipt;
       validationReceipt: TargetValidationReceipt;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "reviewed";
+      appSpec: AcceptedAppSpec;
+      dependencyReceipt: DependencyPreparationReceipt;
+      identityReceipt: TargetIdentityReceipt;
+      proposal: AppCreationProposal;
+      applyReceipt: TargetApplyReceipt;
+      validationReceipt: TargetValidationReceipt;
+      reviewReceipt: ReviewedChangeSetReceipt;
     } & WorkspacePhase);
 
 export function workflowWorkspace(
@@ -177,6 +189,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v5",
+  "autograph-app-builder.workflow.v6",
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );

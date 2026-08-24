@@ -14,7 +14,7 @@ export default defineEval({
     t.check(
       t.reply,
       includes(
-        "Reviewed change-set generation, publication, cloning, and remote-template acquisition are not implemented yet",
+        "show and separately accept an exact normalized reviewed change set",
       ),
     );
   },
