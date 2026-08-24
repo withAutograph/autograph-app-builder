@@ -3,7 +3,7 @@ export const TOOLCHAIN_IMAGE_ENV = "APP_BUILDER_SANDBOX_IMAGE";
 export const requiredToolVersions = {
   git: /^git version \d+\.\d+\.\d+/u,
   mise: /^2026\.8\.12(?:\s|$)/u,
-  bun: /^1\.2\.20(?:\s|$)/u,
+  bun: /^1\.3\.14(?:\s|$)/u,
 } as const;
 
 export type RequiredTool = keyof typeof requiredToolVersions;
@@ -35,5 +35,5 @@ export function toolVersionMatches(
 }
 
 export function sandboxRevalidationKey(image: string | undefined): string {
-  return `autograph-app-builder-toolchain-v1:${image ?? "unconfigured"}`;
+  return `autograph-app-builder-toolchain-v2:${image ?? "unconfigured"}`;
 }

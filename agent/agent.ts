@@ -57,6 +57,60 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
       : "The target-planning retry did not reuse its durable receipt.";
   }
+  if (message.includes("prepare offline target dependencies")) {
+    const stale = message.includes("stale appspec digest");
+    const lostResponse = message.includes("lost response");
+    const statusResult = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    const observedPhase = (
+      statusResult?.output as { phase?: string } | undefined
+    )?.phase;
+    if (
+      statusResult === undefined ||
+      (observedPhase !== "app_spec_accepted" &&
+        observedPhase !== "dependencies_prepared" &&
+        toolResults.at(-1)?.name !== "workspace_status")
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const status = statusResult.output as
+      { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (
+      status?.phase !== "app_spec_accepted" &&
+      status?.phase !== "dependencies_prepared"
+    )
+      return "An accepted AppSpec is required before dependency preparation.";
+    if (status.appSpec?.digest === undefined)
+      return "The accepted AppSpec digest is unavailable.";
+    const preparations = toolResults.filter(
+      ({ name }) => name === "prepare_target_dependencies",
+    );
+    const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
+    if (preparations.length < requiredResults)
+      return {
+        toolCalls: [
+          {
+            name: "prepare_target_dependencies",
+            input: {
+              expectedAppSpecDigest: stale
+                ? "0".repeat(64)
+                : status.appSpec.digest,
+            },
+          },
+        ],
+      };
+    const preparation = preparations.at(-1);
+    if (preparation === undefined)
+      return "The dependency-preparation result is unavailable.";
+    if (preparation.isError)
+      return stale
+        ? "Stale offline dependency preparation was rejected; the exact durable receipt was preserved."
+        : "Offline dependency preparation was canceled or rejected; accepted AppSpec state was preserved.";
+    const output = preparation.output as { reused?: boolean } | undefined;
+    return output?.reused === true
+      ? "The lost-response retry reused the exact durable dependency-preparation receipt after re-verifying the cache."
+      : "The approved target-bound offline dependency closure was verified and materialized only in builder-owned planning metadata; request target planning separately.";
+  }
   if (message.includes("run target identity and planning")) {
     const statusResult = [...toolResults]
       .reverse()
@@ -64,17 +118,17 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (
       statusResult === undefined ||
       ((statusResult.output as { phase?: string } | undefined)?.phase !==
-        "app_spec_accepted" &&
+        "dependencies_prepared" &&
         toolResults.at(-1)?.name !== "workspace_status")
     )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
     if (
-      status?.phase !== "app_spec_accepted" ||
+      status?.phase !== "dependencies_prepared" ||
       status.appSpec?.digest === undefined
     )
-      return "An accepted AppSpec is required before target planning.";
+      return "Approved offline dependency preparation is required before target planning.";
     const latestResult = toolResults.at(-1);
     const planResult =
       latestResult?.name === "plan_app_creation" ? latestResult : undefined;

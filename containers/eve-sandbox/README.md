@@ -1,50 +1,75 @@
 # Eve sandbox image (linux/arm64)
 
-This is the reproducible source for the App Builder's externally acquired Eve
-sandbox image. It pins the Eve base image and verifies the release-asset SHA-256
-for each added binary at build time. It intentionally contains no repository
-contents, credentials, target command, or network-policy changes.
+This image is the App Builder's externally built, target-bound execution
+environment. It pins the Eve base, Git, mise `2026.8.12`, and Bun `1.3.14`.
+It also builds the exact external dependency closure needed by Arrusted's
+read-only app planner, including `@vercel/microfrontends` `2.4.0`, from a clean
+checkout of Arrusted commit
+`e4e76f52a365c6b8da2f84698b38844f26a31750`.
 
-The published `linux/arm64` image is:
+The final image contains no Arrusted source tree, credentials, or provider
+configuration. It contains a normalized `node_modules` archive and a read-only
+manifest under `/opt/app-builder/dependency-cache/`. The manifest binds the
+target commit/tree, mise configuration and lock, Bun lock, target command
+implementations, runtime version, dependency version, archive size, and archive
+SHA-256. The App Builder derives the cache receipt from observed manifest and
+archive bytes; there is no operator-supplied cache digest.
 
-```text
-ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:c44a40777f2e2b1158a91a5bfc5075224a39573fe053d7b4ea3ef6f65b7484ec
-```
+## Build and publish boundary
 
-Build and locally verify it on an arm64 Docker host:
+Use a clean standalone Arrusted checkout whose `.git` directory is readable in
+the build context. Verify it is at the exact target commit with no dirty paths.
+From an exact App Builder checkout, build the transient tag:
 
 ```bash
-docker build --platform linux/arm64 \
-  --tag ghcr.io/withautograph/autograph-app-builder-sandbox:20260824-1 \
-  containers/eve-sandbox
-
-docker run --rm \
-  ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:c44a40777f2e2b1158a91a5bfc5075224a39573fe053d7b4ea3ef6f65b7484ec \
-  sh -lc 'id -un; git --version; mise --version; bun --version'
+docker buildx build \
+  --platform linux/arm64 \
+  --build-context arrusted-target=/absolute/path/to/clean-arrusted-checkout \
+  --file containers/eve-sandbox/Dockerfile \
+  --tag ghcr.io/withautograph/autograph-app-builder-sandbox:app-builder-747f536-arrusted-e4e76f52-arm64-v1 \
+  --load \
+  .
 ```
 
-The observed result on 2026-08-24 was user `vercel-sandbox`, Git `2.53.0`,
-mise `2026.8.12`, and Bun `1.2.20`.
+The build fails on target SHA/tree or contract/lock drift. It performs the
+networked `bun install --frozen-lockfile --ignore-scripts` only while building
+the immutable cache layer. The final self-check runs with BuildKit networking
+disabled.
 
-Eve's Microsandbox backend has its own OCI cache. A Docker pull does **not**
-preload that cache. On the intended host, preload the exact digest before
-running App Builder with `pullPolicy: "never"`:
+Build, registry publication, and local acquisition are separate approvals.
+After an approved push, resolve the registry manifest digest and use only:
+
+```text
+ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:<remote-manifest-digest>
+```
+
+The earlier published image ending in `c44a4077...` contains Bun `1.2.20` and
+no target dependency closure. It is intentionally ineligible for real target
+identity or planning.
+
+## Local Microsandbox preload
+
+A Docker pull does not populate Microsandbox's OCI cache. Preload the exact
+approved digest before starting Eve, whose backend uses `pullPolicy: "never"`
+and deny-all networking:
 
 ```bash
 pnpm exec msb pull \
-  ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:c44a40777f2e2b1158a91a5bfc5075224a39573fe053d7b4ea3ef6f65b7484ec \
+  ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:<remote-manifest-digest> \
   --materialize all
-```
 
-Then set the exact digest in the host environment and run the existing
-observational Eve eval:
-
-```bash
-APP_BUILDER_SANDBOX_IMAGE=ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:c44a40777f2e2b1158a91a5bfc5075224a39573fe053d7b4ea3ef6f65b7484ec \
+APP_BUILDER_SANDBOX_IMAGE=ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:<remote-manifest-digest> \
   pnpm test:sandbox-toolchain
 ```
 
-The agent is intentionally configured with `pullPolicy: "never"` and
-deny-all sandbox networking. It will not pull, build, publish, install, or
-execute target-owned commands. Building or publishing another image, including
-an image for another architecture, remains a separate approval.
+The observational eval verifies the fixed toolchain and image-internal cache.
+Real dependency preparation has its own approval and writes only the
+builder-owned planning overlay. It never installs over the network at runtime.
+Building another target, architecture, or dependency closure requires another
+reviewed image and separate approval.
+
+The first observational target proof is scoped to app id `builder-proof` and
+sanitized AppSpec owner `Autograph App Builder proof`. Those values do not grant
+apply, validation, publication, provider, deployment, release, or cleanup
+authority. Retain local proof artifacts until their sanitized receipts are
+accepted.

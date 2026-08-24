@@ -4,6 +4,11 @@ import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
+import {
+  dependencyCacheReceiptDigest,
+  planningOverlayRoot,
+  type ObservedDependencyCache,
+} from "./dependency-cache";
 import { configuredToolchainImage } from "../sandbox/toolchain";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -72,8 +77,6 @@ export type TargetProposal = z.infer<typeof targetProposalSchema>;
 
 export const TARGET_COMMAND_TIMEOUT_MS = 30_000;
 export const TARGET_COMMAND_OUTPUT_BYTES = 1_048_576;
-export const DEPENDENCY_CACHE_DIGEST_ENV =
-  "APP_BUILDER_DEPENDENCY_CACHE_DIGEST";
 
 export type TargetCommand = "identity" | "planning";
 export type TargetCommandResult = {
@@ -117,30 +120,30 @@ function parseOutput<T>(
 }
 
 export function targetExecutionBinding(
+  cache: ObservedDependencyCache,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   if (environment.APP_BUILDER_TEST_MODEL === "1")
     return {
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-      dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
+      dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
       fixture: true,
     } as const;
   const imageDigest = configuredToolchainImage(environment);
-  const dependencyCacheDigest = environment[DEPENDENCY_CACHE_DIGEST_ENV];
-  if (
-    imageDigest === undefined ||
-    dependencyCacheDigest === undefined ||
-    !/^sha256:[0-9a-f]{64}$/u.test(dependencyCacheDigest)
-  )
+  if (imageDigest === undefined)
     throw new Error(
       "The immutable sandbox image and offline dependency cache are not ready for target commands.",
     );
-  return { imageDigest, dependencyCacheDigest, fixture: false } as const;
+  return {
+    imageDigest,
+    dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
+    fixture: false,
+  } as const;
 }
 
 type SourceFile = { path: string };
 
-async function materializePlanningOverlay(input: {
+export async function materializePlanningOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
   appId: string;
@@ -156,7 +159,7 @@ async function materializePlanningOverlay(input: {
   if (!Array.isArray(parsed))
     throw new Error("Prepared source manifest is invalid.");
   const files = parsed as SourceFile[];
-  const root = `.app-builder/target-inputs/${input.artifactRevision}/repository`;
+  const root = planningOverlayRoot(input.artifactRevision);
   for (const file of files) {
     if (
       typeof file.path !== "string" ||

@@ -9,8 +9,9 @@ fail-closed until the production identity and session gates below are complete.
 Before enabling local repository mutation or publication:
 
 1. Build and pre-load an externally approved OCI image pinned by manifest
-   digest, containing Git, `mise 2026.8.12`, and `bun 1.2.20`. The committed
-   `linux/arm64` build definition and its published digest are in
+   digest, containing Git, `mise 2026.8.12`, `bun 1.3.14`, and the exact
+   target-bound external dependency closure. The committed `linux/arm64` build
+   definition and digest-resolution procedure are in
    [`containers/eve-sandbox`](../containers/eve-sandbox/README.md). This
    repository accepts an image only through `APP_BUILDER_SANDBOX_IMAGE` as an `@sha256` digest,
    with the microsandbox backend's `pullPolicy: "never"`, deny-all networking,
@@ -19,11 +20,16 @@ Before enabling local repository mutation or publication:
    to match every pinned version before any target-owned command can run. With
    no configured image, the agent selects just-bash and is deliberately not
    toolchain-ready.
-2. The implemented fixed target identity and planning operation uses a
+2. The implemented approval-gated dependency preparation verifies the fixed
+   image-internal manifest and archive bytes, binds Arrusted commit/tree and
+   contract/lock hashes, and extracts `node_modules` only into builder-owned
+   planning metadata under deny-all runtime networking. Its durable receipt is
+   internally observed; `APP_BUILDER_DEPENDENCY_CACHE_DIGEST` is not accepted.
+   The implemented fixed target identity and planning operation then uses a
    builder-owned overlay, bounded execution, strict output schemas, and durable
    receipts. Real execution still requires both the immutable image and a
-   matching offline dependency-cache digest; fixture tests execute no Arrusted
-   command. The read-only pre-plan workspace readiness receipt binds the
+   matching durable dependency-preparation receipt; fixture tests execute no
+   Arrusted command. The read-only pre-plan workspace readiness receipt binds the
    prepared source/workspace receipts to the immutable toolchain observation.
    The implemented proposal-bound apply-readiness receipt adds the exact
    proposal digest. Neither executes a target command or authorizes apply.

@@ -113,6 +113,7 @@ export default defineTool({
     };
     if (
       (current.phase === "app_spec_accepted" ||
+        current.phase === "dependencies_prepared" ||
         current.phase === "identity_resolved" ||
         current.phase === "planned") &&
       current.appSpec.digest === accepted.digest &&

@@ -15,9 +15,12 @@ isolated workspace.
    commands merely to decide eligibility.
 3. Design and prototype the product, then obtain explicit AppSpec acceptance
    bound to the prepared workspace receipt. After a distinct approval, use only
-   the fixed identity and planning operation to derive the exact target-produced
-   proposal. It must remain unavailable without the immutable image and offline
-   cache receipts. Never substitute arbitrary shell, arguments, cwd, or env.
+   `prepare_target_dependencies` to verify the immutable image's target-bound
+   cache and materialize its exact external dependency closure in builder-owned
+   planning metadata. After another distinct approval, use only the fixed
+   identity and planning operation to derive the exact target-produced proposal.
+   Never accept an operator-declared cache digest or substitute arbitrary shell,
+   arguments, cwd, env, or network access.
    Record prototype artifacts only through the typed session-scoped artifact
    tools; changed artifact bytes invalidate later receipts.
 4. Use `target_execution_status` to verify the exact proposal and prepared

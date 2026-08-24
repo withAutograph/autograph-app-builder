@@ -4,6 +4,10 @@ import { z } from "zod";
 import { sha256, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import {
+  dependencyCacheReceiptDigest,
+  inspectDependencyCache,
+} from "@/lib/repository/dependency-cache";
+import {
   configuredToolchainImage,
   requiredToolVersions,
   toolVersionMatches,
@@ -46,6 +50,10 @@ export default defineTool({
       }),
     );
     const image = configuredToolchainImage();
+    const cache =
+      image === undefined
+        ? undefined
+        : await inspectDependencyCache(sandbox).catch(() => undefined);
     const required = (
       Object.keys(requiredToolVersions) as Array<
         keyof typeof requiredToolVersions
@@ -61,12 +69,18 @@ export default defineTool({
       };
     });
     const toolchainReady =
-      image !== undefined && required.every((tool) => tool.matches);
+      image !== undefined &&
+      cache !== undefined &&
+      required.every((tool) => tool.matches);
     const receipt = {
       sourceSha: current.workspace.sourceSha,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: image ?? "unconfigured",
+      dependencyCacheDigest:
+        cache === undefined
+          ? "unverified"
+          : dependencyCacheReceiptDigest(cache),
       required,
     };
     return {

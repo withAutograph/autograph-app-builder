@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxSession } from "eve/sandbox";
 
+import { inspectDependencyCache } from "./dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -106,7 +107,10 @@ describe("typed target identity and planning", () => {
         artifactRevision: "b".repeat(64),
       }),
     ).rejects.toThrow("invalid shape");
-    expect(() => targetExecutionBinding({})).toThrow(
+    const cache = await inspectDependencyCache(sandbox, {
+      APP_BUILDER_TEST_MODEL: "1",
+    });
+    expect(() => targetExecutionBinding(cache, {})).toThrow(
       "offline dependency cache",
     );
   });

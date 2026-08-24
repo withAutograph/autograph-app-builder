@@ -31,6 +31,7 @@ export default defineTool({
         workspaceDigest: state.workspace.workspaceDigest,
       },
       ...(state.phase === "app_spec_accepted" ||
+      state.phase === "dependencies_prepared" ||
       state.phase === "identity_resolved" ||
       state.phase === "planned"
         ? {
@@ -40,6 +41,11 @@ export default defineTool({
               artifactRevision: state.appSpec.artifactRevision,
             },
           }
+        : {}),
+      ...(state.phase === "dependencies_prepared" ||
+      state.phase === "identity_resolved" ||
+      state.phase === "planned"
+        ? { dependencies: { digest: state.dependencyReceipt.digest } }
         : {}),
       ...(state.phase === "identity_resolved" || state.phase === "planned"
         ? { identity: { digest: state.identityReceipt.digest } }
