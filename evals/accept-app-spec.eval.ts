@@ -1,74 +1,8 @@
 import { defineEval } from "eve/evals";
-import { includes } from "eve/evals/expect";
+import { equals, includes, satisfies } from "eve/evals/expect";
 
+import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
-
-const appSpec = `## Status and prototype
-
-Accepted prototype.
-
-## User and outcome
-
-Confirmed outcome.
-
-## Interfaces and navigation
-
-Confirmed interface.
-
-## Controls and behavior
-
-Confirmed behavior.
-
-## Data model
-
-No owned data.
-
-## Integrations and reconciliation
-
-No integrations.
-
-## Temporal semantics
-
-No temporal behavior.
-
-## Writes, review, and authority
-
-No writes before separate approval.
-
-## Access and tenancy
-
-Confirmed tenancy.
-
-## Agent behavior
-
-Agent prepares proposals only.
-
-## Operational states
-
-Empty and error states are defined.
-
-## Defaults, non-goals, and risks
-
-No providers or deployment.
-
-## Acceptance walkthrough
-
-User accepted this AppSpec.
-
-## Build handoff
-
-\`\`\`json
-{
-  "status": "build-ready",
-  "owner": "finance-platform",
-  "schema": { "kind": "none" },
-  "additionalPublicRoutes": [],
-  "optionalCapabilities": {
-    "integrations": [],
-    "hostedResources": []
-  }
-}
-\`\`\``;
 
 export default defineEval({
   description:
@@ -88,7 +22,11 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send(`Accept build-ready AppSpec for expense-review:\n${appSpec}`);
+    await t.send(
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+    );
+    t.requireInputRequest({ toolName: "record_prototype_artifact" });
+    await t.respondAll("approve");
     t.requireInputRequest({ toolName: "accept_app_spec" });
     await t.respondAll("approve");
     t.succeeded();
@@ -96,6 +34,20 @@ export default defineEval({
     t.calledTool("plan_app_creation", { count: 1 });
     t.check(t.reply, includes("digest-bound read-only creation proposal"));
     t.check(t.reply, includes("No target command has run"));
+
+    await t.send("Read recorded prototype artifact.");
+    t.succeeded();
+    t.calledTool("get_prototype_artifact", { count: 1 });
+    t.check(t.reply, includes("content-addressed prototype artifact was read"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Read recorded prototype artifact with stale digest.");
+    t.succeeded();
+    t.calledTool("get_prototype_artifact", { count: 1 });
+    t.check(t.reply, includes("digest was rejected as stale"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
 
     await t.send(
       "Assess target command readiness for the current creation proposal.",
@@ -111,6 +63,42 @@ export default defineEval({
     t.succeeded();
     t.calledTool("target_execution_status", { count: 1 });
     t.check(t.reply, includes("rejected the stale proposal"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Record a replacement prototype artifact.");
+    t.requireInputRequest({ toolName: "record_prototype_artifact" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("invalidated the accepted AppSpec and proposal"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Report artifact workflow status.");
+    t.succeeded();
+    t.calledTool("artifact_workflow_status", { count: 1 });
+    t.check(t.reply, includes('"phase":"prepared"'));
+    t.check(
+      t.reply,
+      satisfies(
+        (reply) =>
+          typeof reply === "string" &&
+          !reply.includes('"appSpec"') &&
+          !reply.includes('"proposal"'),
+        "downstream AppSpec and proposal receipts were invalidated",
+      ),
+    );
+    const afterRevision = t.reply;
+
+    await t.send("Retry recording the exact replacement prototype artifact.");
+    t.requireInputRequest({ toolName: "record_prototype_artifact" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("reused the exact stored artifact revision"));
+
+    await t.send("Report artifact workflow status.");
+    t.succeeded();
+    t.check(t.reply, equals(afterRevision));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

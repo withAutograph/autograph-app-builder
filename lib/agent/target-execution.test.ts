@@ -1,14 +1,30 @@
 import { describe, expect, it } from "vitest";
 
-import type { AppBuilderWorkflowState } from "./workflow-state";
+import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  type AppBuilderWorkflowState,
+} from "./workflow-state";
 import {
   plannedProposalForExecution,
   targetExecutionBlockers,
 } from "./target-execution";
 
 const state: AppBuilderWorkflowState = {
-  version: 1,
+  version: APP_BUILDER_WORKFLOW_VERSION,
   phase: "planned",
+  preparedByCallId: "prepare-call",
+  artifacts: [
+    {
+      appId: "expense-review",
+      path: "prototype/expense-review/app-spec.md",
+      mediaType: "text/markdown",
+      content: "accepted",
+      digest: "e".repeat(64),
+      revision: "a".repeat(64),
+      sessionId: "sandbox",
+      recordedByCallId: "artifact-call",
+    },
+  ],
   workspace: {
     workspaceId: "sandbox",
     workspacePath: "/workspace/repository",
@@ -21,9 +37,11 @@ const state: AppBuilderWorkflowState = {
   },
   appSpec: {
     appId: "expense-review",
+    artifactPath: "prototype/expense-review/app-spec.md",
     content: "accepted",
     digest: "e".repeat(64),
     acceptedByCallId: "call",
+    artifactRevision: "a".repeat(64),
   },
   proposal: {
     version: 1,
@@ -32,6 +50,7 @@ const state: AppBuilderWorkflowState = {
       path: "prototype/expense-review/app-spec.md",
       sha256: "e".repeat(64),
     },
+    artifactRevision: "a".repeat(64),
     sourceSha: "a".repeat(40),
     eligibilityDigest: "d".repeat(64),
     workspaceDigest: "c".repeat(64),

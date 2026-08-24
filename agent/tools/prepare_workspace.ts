@@ -3,6 +3,7 @@ import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import {
+  APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
@@ -36,10 +37,11 @@ export default defineTool({
     appBuilderWorkflowState.update(() =>
       current.phase === "empty" || current.phase === "prepared"
         ? {
-            version: 1,
+            version: APP_BUILDER_WORKFLOW_VERSION,
             phase: "prepared",
             preparedByCallId: ctx.callId,
             workspace,
+            artifacts: [],
           }
         : current,
     );

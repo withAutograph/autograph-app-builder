@@ -1,7 +1,12 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { appBuilderWorkflowState, sha256 } from "@/lib/agent/workflow-state";
+import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
+import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  appBuilderWorkflowState,
+  sha256,
+} from "@/lib/agent/workflow-state";
 
 export default defineTool({
   description:
@@ -9,7 +14,7 @@ export default defineTool({
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  async execute({ expectedAppSpecDigest }) {
+  async execute({ expectedAppSpecDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty" || current.phase === "prepared")
       throw new Error(
@@ -17,6 +22,12 @@ export default defineTool({
       );
     if (current.appSpec.digest !== expectedAppSpecDigest)
       throw new Error("The accepted AppSpec changed before planning.");
+    exactPrototypeArtifact(current.artifacts, {
+      path: current.appSpec.artifactPath,
+      digest: current.appSpec.digest,
+      revision: current.appSpec.artifactRevision,
+      sessionId: ctx.session.id,
+    });
     if (current.phase === "planned") return current.proposal;
     const appSpec = {
       path: `prototype/${current.appSpec.appId}/app-spec.md`,
@@ -26,6 +37,7 @@ export default defineTool({
       version: 1 as const,
       appId: current.appSpec.appId,
       appSpec,
+      artifactRevision: current.appSpec.artifactRevision,
       sourceSha: current.workspace.sourceSha,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
@@ -40,9 +52,11 @@ export default defineTool({
     };
     const complete = { ...proposal, digest: sha256(JSON.stringify(proposal)) };
     appBuilderWorkflowState.update(() => ({
-      version: 1,
+      version: APP_BUILDER_WORKFLOW_VERSION,
       phase: "planned",
       workspace: current.workspace,
+      preparedByCallId: current.preparedByCallId,
+      artifacts: current.artifacts,
       appSpec: current.appSpec,
       proposal: complete,
     }));
