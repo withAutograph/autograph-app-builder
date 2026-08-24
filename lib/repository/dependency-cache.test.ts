@@ -91,6 +91,18 @@ describe("offline dependency cache", () => {
       }),
     );
     expect(run.mock.calls[3]?.[0]).not.toHaveProperty("env");
+    expect(run.mock.calls[3]?.[0]).toEqual(
+      expect.objectContaining({
+        command: expect.stringContaining("--no-overwrite-dir"),
+      }),
+    );
+    expect(run.mock.calls[3]?.[0]).toEqual(
+      expect.objectContaining({
+        command: expect.stringContaining(
+          'while IFS= read -r directory; do mkdir -p -- "$directory"; done',
+        ),
+      }),
+    );
   });
 
   it("rejects target drift and does not extract", async () => {
