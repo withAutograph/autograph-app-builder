@@ -43,6 +43,8 @@ template manifest.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
 - Approval-bound AppSpec acceptance and a read-only canonical proposal tool;
   neither runs target-owned commands or writes the target repository.
+- A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
+  commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
   `eve_respond`, and `eve_cancel`.
 - A loopback-only local MCP-to-Eve adapter.
@@ -66,6 +68,17 @@ For a non-interactive smoke test through Eve itself:
 APP_BUILDER_TEST_MODEL=1 pnpm exec eve invoke \
   "What are your app builder capabilities?"
 ```
+
+To inspect the fixed tool allowlist through Eve's real sandbox backend:
+
+```bash
+pnpm test:sandbox-toolchain
+```
+
+The inspection is observational and may report the sandbox as not ready. The
+currently pinned default image lacks mise and Bun, so target-owned planning,
+apply, and validation commands remain disabled pending an immutable bootstrap
+or custom image. See [the implementation gates](docs/implementation-gates.md).
 
 For local repository access, set `REPOSITORY_LOCAL_ROOTS` to a
 platform-delimited allowlist of absolute roots. The reviewed tree is copied into

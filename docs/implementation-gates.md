@@ -8,18 +8,34 @@ fail-closed until the production identity and session gates below are complete.
 
 Before enabling local repository mutation or publication:
 
-1. Extend the implemented durable prepared phase and implemented accepted
+1. Provide an immutable sandbox bootstrap or custom image that pins `mise` and
+   `bun`, then require the typed toolchain inspection receipt to report Git,
+   mise, and Bun before any target-owned command can run. The pinned
+   `microsandbox@0.6.14` default image was verified on 2026-08-24 with Git,
+   Node.js, and pnpm available, but mise and Bun absent.
+2. Extend the implemented durable prepared phase and implemented accepted
    AppSpec/read-only proposal phases, which are bound to source SHA,
    eligibility digest, source tree, workspace digest, and AppSpec digest, with
    reviewed change-set phase and digest.
-2. Add typed identity, planning, prototype-artifact, apply, validation, and
+3. Add typed identity, planning, prototype-artifact, apply, validation, and
    change-review tools. Gate every mutating operation in code.
-3. Add an approval-gated local publisher that verifies exact destination SHA,
+4. Add an approval-gated local publisher that verifies exact destination SHA,
    dirty-path overlap, approved paths, and change-set digest before applying.
-4. Prove denial, interruption/retry, stale-input, overlap, and lost-response
+5. Prove denial, interruption/retry, stale-input, overlap, and lost-response
    behavior through Eve evals.
-5. Add fresh-template acquisition and GitHub draft-PR publication only as
+6. Add fresh-template acquisition and GitHub draft-PR publication only as
    separate source/publication adapters with their own approvals.
+
+Re-run the observational real-backend receipt with:
+
+```bash
+pnpm test:sandbox-toolchain
+```
+
+This command does not install missing tools or authorize target command
+execution. It requires a host supported by Eve's microsandbox backend. The
+2026-08-24 proof passed every eval gate; Eve also emitted a non-fatal cleanup
+diagnostic (`configure is not a function`) after the sandbox had been stopped.
 
 Before enabling real MCP mutations:
 
