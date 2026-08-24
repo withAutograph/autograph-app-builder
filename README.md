@@ -1,7 +1,7 @@
 # Autograph App Builder
 
 Autograph App Builder is a durable [Eve](https://github.com/vercel/eve) agent
-and portable Agent Plugin for designing and creating apps in explicitly
+and portable [Agent Plugin](https://agent-plugins.org/) for designing and creating apps in explicitly
 supported repositories. Codex is the first user-facing entrypoint.
 
 The project is based on
@@ -89,6 +89,22 @@ template manifest.
 - A loopback-only local MCP-to-Eve adapter.
 - Deterministic unit tests and Eve evals that drive the real HTTP session
   surface with a fixture model, including approval and cancellation paths.
+
+## Portable plugin package
+
+The repository root is the cross-client Agent Plugins 1.0.0 package:
+
+- `plugin.json` is the canonical portable manifest;
+- `skills/` contains portable Agent Skills;
+- `mcp.json` declares the Streamable HTTP MCP server; and
+- `schemas/agent-plugins/1.0.0/` vendors the canonical versioned schemas used by
+  `pnpm validate:plugin`.
+
+Client adapters are additive. `.codex-plugin/plugin.json` and `.app.json` are
+generated Codex/OpenAI integration files; they do not replace or redefine the
+portable package. Other compatible clients can install the same root package
+and consume its skills and MCP declaration according to their own distribution,
+permission, and authentication model.
 
 ## Run the Eve agent locally
 
