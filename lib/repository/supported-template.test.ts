@@ -166,10 +166,24 @@ function fakeSandbox({
           stderr: "",
         };
       } catch (error) {
+        const stderr =
+          error instanceof Error &&
+          "stderr" in error &&
+          Buffer.isBuffer(error.stderr)
+            ? error.stderr.toString("utf8")
+            : error instanceof Error
+              ? error.message
+              : String(error);
+        const exitCode =
+          error instanceof Error &&
+          "status" in error &&
+          typeof error.status === "number"
+            ? error.status
+            : 1;
         return {
-          exitCode: 1,
+          exitCode,
           stdout: "",
-          stderr: error instanceof Error ? error.message : String(error),
+          stderr,
         };
       }
     },
@@ -266,9 +280,7 @@ describe("supported-template adapter", () => {
         sandbox,
         "call_lost_response",
       ),
-    ).rejects.toThrow(
-      "Prepared workspace file drifted: apps/shell/microfrontends.json",
-    );
+    ).rejects.toThrow("A prepared workspace file drifted or is missing.");
   });
 
   it("creates parent directories when sandbox writes do not", async () => {

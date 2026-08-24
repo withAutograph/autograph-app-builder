@@ -2,19 +2,13 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import {
-  delimiter,
-  dirname,
-  isAbsolute,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 
 import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
+import { safeSourcePath } from "./source-path";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
@@ -257,6 +251,14 @@ export type PreparedSandboxWorkspace = {
 
 const sandboxRecordPath = ".app-builder/prepared-workspace.json";
 const sandboxSourceFilesPath = ".app-builder/source-files.json";
+const sandboxSourceChecksumsPath = ".app-builder/source-checksums.sha256";
+const sandboxSourceArchivePath = ".app-builder/source-tree.tar";
+const sandboxOperationTimeoutMs = 120_000;
+const sandboxOperationOutputBytes = 262_144;
+
+const fixtureSandboxEnabled = () =>
+  process.env.APP_BUILDER_TEST_MODEL === "1" &&
+  process.env.APP_BUILDER_REAL_SANDBOX !== "1";
 
 type PreparedSourceFile = {
   mode: "100644" | "100755";
@@ -276,13 +278,10 @@ function exactKeys(
   );
 }
 
-function safeRepositoryPath(path: string): boolean {
-  return (
-    path !== "" &&
-    !isAbsolute(path) &&
-    !path.includes("\\") &&
-    !path.split("/").some((segment) => segment === "." || segment === "..")
-  );
+function preparedSourceChecksums(files: readonly PreparedSourceFile[]): string {
+  return `${files
+    .map(({ path, sha256: digest }) => `${digest}  repository/${path}`)
+    .join("\n")}\n`;
 }
 
 function parsePreparedWorkspace(input: unknown): PreparedSandboxWorkspace {
@@ -346,7 +345,7 @@ function parsePreparedSourceFiles(input: unknown): PreparedSourceFile[] {
       typeof file.objectId !== "string" ||
       !/^[0-9a-f]{40}$/u.test(file.objectId) ||
       typeof file.path !== "string" ||
-      !safeRepositoryPath(file.path) ||
+      !safeSourcePath(file.path) ||
       paths.has(file.path) ||
       typeof file.sha256 !== "string" ||
       !/^[0-9a-f]{64}$/u.test(file.sha256)
@@ -392,13 +391,33 @@ async function verifyPreparedSandboxWorkspace(
     throw new Error(
       "The prepared workspace manifest no longer matches its receipt.",
     );
-  for (const file of files) {
-    const content = await sandbox.readBinaryFile({
-      path: `repository/${file.path}`,
-    });
-    if (content === null || sha256(content) !== file.sha256)
-      throw new Error(`Prepared workspace file drifted: ${file.path}`);
+  const checksums = await sandbox.readTextFile({
+    path: sandboxSourceChecksumsPath,
+  });
+  if (checksums !== preparedSourceChecksums(files))
+    throw new Error("The prepared workspace checksum receipt drifted.");
+  if (fixtureSandboxEnabled()) {
+    for (const file of files) {
+      const content = await sandbox.readBinaryFile({
+        path: `repository/${file.path}`,
+      });
+      if (content === null || sha256(content) !== file.sha256)
+        throw new Error(`Prepared workspace file drifted: ${file.path}`);
+    }
+    return;
   }
+  const verification = await sandbox.run({
+    command: `sha256sum -c ${sandboxSourceChecksumsPath} >/dev/null 2>&1`,
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
+  });
+  if (
+    Buffer.byteLength(verification.stdout) > sandboxOperationOutputBytes ||
+    Buffer.byteLength(verification.stderr) > sandboxOperationOutputBytes
+  )
+    throw new Error("Prepared workspace verification output was too large.");
+  if (verification.exitCode !== 0)
+    throw new Error("A prepared workspace file drifted or is missing.");
 }
 
 export type PreparedSandboxWorkspaceStatus =
@@ -480,7 +499,7 @@ export async function prepareSupportedSandboxWorkspace(
         !["100644", "100755"].includes(mode!) ||
         path === undefined ||
         objectId === undefined ||
-        !safeRepositoryPath(path)
+        !safeSourcePath(path)
       ) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
@@ -511,23 +530,52 @@ export async function prepareSupportedSandboxWorkspace(
     recursive: true,
     force: true,
   });
-  await ensureSandboxDirectories(sandbox, [
-    "repository",
-    ...sourceFiles.map(({ path }) => `repository/${dirname(path)}`),
-  ]);
-  for (const entry of sourceFiles) {
+  if (fixtureSandboxEnabled()) {
+    for (const entry of sourceFiles) {
+      await sandbox.writeBinaryFile({
+        path: `repository/${entry.path}`,
+        content: execFileSync(
+          "git",
+          ["-C", eligibility.sourcePath, "cat-file", "blob", entry.objectId],
+          { maxBuffer: 128 * 1024 * 1024 },
+        ),
+      });
+    }
+  } else {
+    const sourceArchive = execFileSync(
+      "git",
+      ["-C", eligibility.sourcePath, "archive", "--format=tar", expectedSha],
+      { maxBuffer: 256 * 1024 * 1024 },
+    );
     await sandbox.writeBinaryFile({
-      path: `repository/${entry.path}`,
-      content: execFileSync(
-        "git",
-        ["-C", eligibility.sourcePath, "cat-file", "blob", entry.objectId],
-        { maxBuffer: 128 * 1024 * 1024 },
-      ),
+      path: sandboxSourceArchivePath,
+      content: sourceArchive,
     });
+    try {
+      const extraction = await sandbox.run({
+        command: `mkdir -p repository && tar --extract --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
+        workingDirectory: "/workspace",
+        abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
+      });
+      if (
+        Buffer.byteLength(extraction.stdout) > sandboxOperationOutputBytes ||
+        Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
+        extraction.exitCode !== 0
+      )
+        throw new Error(
+          "The reviewed source archive could not be materialized.",
+        );
+    } finally {
+      await sandbox.removePath({ path: sandboxSourceArchivePath, force: true });
+    }
   }
   await sandbox.writeTextFile({
     path: sandboxSourceFilesPath,
     content: `${JSON.stringify(sourceFiles, null, 2)}\n`,
+  });
+  await sandbox.writeTextFile({
+    path: sandboxSourceChecksumsPath,
+    content: preparedSourceChecksums(sourceFiles),
   });
   const record: PreparedSandboxWorkspace = {
     workspaceId: sandbox.id,
@@ -543,5 +591,6 @@ export async function prepareSupportedSandboxWorkspace(
     path: sandboxRecordPath,
     content: `${JSON.stringify(record, null, 2)}\n`,
   });
+  await verifyPreparedSandboxWorkspace(sandbox, record);
   return record;
 }

@@ -8,8 +8,9 @@ checkout of Arrusted commit
 `e4e76f52a365c6b8da2f84698b38844f26a31750`.
 
 The final image contains no Arrusted source tree, credentials, or provider
-configuration. It contains a normalized `node_modules` archive and a read-only
-manifest under `/opt/app-builder/dependency-cache/`. The manifest binds the
+configuration. It contains a normalized, deterministically gzip-compressed
+`node_modules` archive and a read-only manifest under
+`/opt/app-builder/dependency-cache/`. The manifest binds the
 target commit/tree, mise configuration and lock, Bun lock, target command
 implementations, runtime version, dependency version, archive size, and archive
 SHA-256. The App Builder derives the cache receipt from observed manifest and

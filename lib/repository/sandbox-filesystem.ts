@@ -3,7 +3,7 @@ import type { SandboxSession } from "eve/sandbox";
 const DIRECTORY_BATCH_SIZE = 256;
 const DIRECTORY_TIMEOUT_MS = 30_000;
 
-function shellQuote(value: string): string {
+function quoteSandboxArgument(value: string): string {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`;
 }
 
@@ -19,7 +19,7 @@ export async function ensureSandboxDirectories(
   ) {
     const batch = directories.slice(index, index + DIRECTORY_BATCH_SIZE);
     const result = await sandbox.run({
-      command: `mkdir -p ${batch.map(shellQuote).join(" ")}`,
+      command: `mkdir -p ${batch.map(quoteSandboxArgument).join(" ")}`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
     });
