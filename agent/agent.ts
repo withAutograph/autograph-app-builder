@@ -8,17 +8,26 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       /prepare supported repository at (\/\S+)/iu,
     )?.[1];
     if (path === undefined) return "The configured test repository is missing.";
-    if (toolResults.length === 0) {
+    const inspectionResult = toolResults.find(
+      ({ name }) => name === "inspect_repository",
+    );
+    if (inspectionResult === undefined) {
       return { toolCalls: [{ name: "inspect_repository", input: { path } }] };
     }
-    const inspected = toolResults[0]?.output as
+    const inspected = inspectionResult.output as
       | {
           eligible?: boolean;
           sourceSha?: string;
           digest?: string;
         }
       | undefined;
-    if (toolResults.length === 1) {
+    if (inspectionResult.isError) {
+      return "The configured repository could not be inspected.";
+    }
+    const preparationResult = toolResults.find(
+      ({ name }) => name === "prepare_workspace",
+    );
+    if (preparationResult === undefined) {
       if (
         inspected?.eligible !== true ||
         inspected.sourceSha === undefined ||
@@ -39,7 +48,24 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ],
       };
     }
-    return "The reviewed repository was prepared inside the Eve session workspace.";
+    const statusResult = toolResults.find(
+      ({ name }) => name === "workspace_status",
+    );
+    if (statusResult === undefined) {
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    }
+    if (statusResult.isError) {
+      return "The workspace status could not be verified.";
+    }
+    const status = statusResult.output as { phase?: string } | undefined;
+    if (preparationResult.isError) {
+      return status?.phase === "empty"
+        ? "Preparation was canceled, and the workspace phase remains empty."
+        : "Preparation was canceled, but the workspace phase could not be confirmed empty.";
+    }
+    return status?.phase === "prepared"
+      ? "The reviewed repository was prepared inside the Eve session workspace, and workspace status confirms the prepared phase."
+      : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
     return "I can inspect an existing supported local checkout and, after approval, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Planning, prototype delivery, mutation, change review, publication, and fresh-template acquisition are not implemented yet.";
