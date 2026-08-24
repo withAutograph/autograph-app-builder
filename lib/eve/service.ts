@@ -46,6 +46,25 @@ export interface EveSessionService {
   }): Promise<EveSessionResult>;
 }
 
+export function toEveInputResponse(
+  requestId: string,
+  response:
+    | { kind: "approve" }
+    | { kind: "deny" }
+    | { kind: "answer"; value: string; optionId?: string },
+): { requestId: string; optionId?: string; text?: string } {
+  return response.kind === "approve"
+    ? { requestId, optionId: "approve" }
+    : response.kind === "deny"
+      ? { requestId, optionId: "cancel" }
+      : {
+          requestId,
+          ...(response.optionId === undefined
+            ? { text: response.value }
+            : { optionId: response.optionId }),
+        };
+}
+
 const localRequests = new Map<string, string>();
 
 function inputRequest(request: {
@@ -213,17 +232,7 @@ function localService(host: string): EveSessionService {
     async respond({ sessionId, requestId, response, clientRequestId }) {
       const key = `respond:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
-        const input =
-          response.kind === "approve"
-            ? { requestId, optionId: "approve" }
-            : response.kind === "deny"
-              ? { requestId, optionId: "deny" }
-              : {
-                  requestId,
-                  ...(response.optionId === undefined
-                    ? { text: response.value }
-                    : { optionId: response.optionId }),
-                };
+        const input = toEveInputResponse(requestId, response);
         await client.sessions.attach(sessionId).respond([input]);
         localRequests.set(key, sessionId);
       }

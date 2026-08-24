@@ -256,16 +256,109 @@ type PreparedSourceFile = {
   sha256: string;
 };
 
+function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean {
+  const actual = Object.keys(value);
+  const allowed = new Set(expected);
+  return (
+    actual.length === allowed.size && actual.every((key) => allowed.has(key))
+  );
+}
+
+function safeRepositoryPath(path: string): boolean {
+  return (
+    path !== "" &&
+    !isAbsolute(path) &&
+    !path.includes("\\") &&
+    !path.split("/").some((segment) => segment === "." || segment === "..")
+  );
+}
+
+function parsePreparedWorkspace(input: unknown): PreparedSandboxWorkspace {
+  if (
+    typeof input !== "object" ||
+    input === null ||
+    Array.isArray(input) ||
+    !exactKeys(input as Record<string, unknown>, [
+      "workspaceId",
+      "workspacePath",
+      "sourcePath",
+      "sourceSha",
+      "sourceTree",
+      "workspaceDigest",
+      "adapter",
+      "eligibilityDigest",
+    ])
+  )
+    throw new Error("The prepared workspace record is invalid.");
+  const record = input as Partial<PreparedSandboxWorkspace>;
+  if (
+    typeof record.workspaceId !== "string" ||
+    record.workspaceId === "" ||
+    record.workspacePath !== "/workspace/repository" ||
+    typeof record.sourcePath !== "string" ||
+    !isAbsolute(record.sourcePath) ||
+    typeof record.sourceSha !== "string" ||
+    !/^[0-9a-f]{40}$/u.test(record.sourceSha) ||
+    typeof record.sourceTree !== "string" ||
+    !/^[0-9a-f]{40}$/u.test(record.sourceTree) ||
+    typeof record.workspaceDigest !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(record.workspaceDigest) ||
+    record.adapter !== SUPPORTED_TEMPLATE_ADAPTER ||
+    typeof record.eligibilityDigest !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(record.eligibilityDigest)
+  )
+    throw new Error("The prepared workspace record is invalid.");
+  return record as PreparedSandboxWorkspace;
+}
+
+function parsePreparedSourceFiles(input: unknown): PreparedSourceFile[] {
+  if (!Array.isArray(input) || input.length === 0)
+    throw new Error("The prepared workspace manifest is invalid.");
+  const paths = new Set<string>();
+  return input.map((candidate) => {
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      Array.isArray(candidate) ||
+      !exactKeys(candidate as Record<string, unknown>, [
+        "mode",
+        "objectId",
+        "path",
+        "sha256",
+      ])
+    )
+      throw new Error("The prepared workspace manifest is invalid.");
+    const file = candidate as Partial<PreparedSourceFile>;
+    if (
+      !["100644", "100755"].includes(file.mode ?? "") ||
+      typeof file.objectId !== "string" ||
+      !/^[0-9a-f]{40}$/u.test(file.objectId) ||
+      typeof file.path !== "string" ||
+      !safeRepositoryPath(file.path) ||
+      paths.has(file.path) ||
+      typeof file.sha256 !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(file.sha256)
+    )
+      throw new Error("The prepared workspace manifest is invalid.");
+    paths.add(file.path);
+    return file as PreparedSourceFile;
+  });
+}
+
 async function readSandboxRecord(
   sandbox: SandboxSession,
 ): Promise<PreparedSandboxWorkspace | undefined> {
+  const content = await sandbox.readTextFile({ path: sandboxRecordPath });
+  if (content === null) return undefined;
   try {
-    const content = await sandbox.readTextFile({ path: sandboxRecordPath });
-    return content === null
-      ? undefined
-      : (JSON.parse(content) as PreparedSandboxWorkspace);
-  } catch {
-    return undefined;
+    return parsePreparedWorkspace(JSON.parse(content) as unknown);
+  } catch (error) {
+    throw new Error("The prepared workspace record is invalid.", {
+      cause: error,
+    });
   }
 }
 
@@ -278,32 +371,38 @@ async function verifyPreparedSandboxWorkspace(
   });
   if (manifestContent === null)
     throw new Error("The prepared workspace manifest is missing.");
-  const files = JSON.parse(manifestContent) as PreparedSourceFile[];
-  if (
-    !Array.isArray(files) ||
-    sha256(JSON.stringify(files)) !== record.workspaceDigest
-  )
+  let files: PreparedSourceFile[];
+  try {
+    files = parsePreparedSourceFiles(JSON.parse(manifestContent) as unknown);
+  } catch (error) {
+    throw new Error("The prepared workspace manifest is invalid.", {
+      cause: error,
+    });
+  }
+  if (sha256(JSON.stringify(files)) !== record.workspaceDigest)
     throw new Error(
       "The prepared workspace manifest no longer matches its receipt.",
     );
   for (const file of files) {
-    if (
-      !["100644", "100755"].includes(file.mode) ||
-      !/^[0-9a-f]{40}$/u.test(file.objectId) ||
-      !/^[0-9a-f]{64}$/u.test(file.sha256) ||
-      isAbsolute(file.path) ||
-      file.path.includes("\\") ||
-      file.path
-        .split("/")
-        .some((segment) => segment === "." || segment === "..")
-    )
-      throw new Error("The prepared workspace manifest is invalid.");
     const content = await sandbox.readBinaryFile({
       path: `repository/${file.path}`,
     });
     if (content === null || sha256(content) !== file.sha256)
       throw new Error(`Prepared workspace file drifted: ${file.path}`);
   }
+}
+
+export type PreparedSandboxWorkspaceStatus =
+  | { state: "absent" }
+  | { state: "prepared"; workspace: PreparedSandboxWorkspace };
+
+export async function inspectPreparedSandboxWorkspace(
+  sandbox: SandboxSession,
+): Promise<PreparedSandboxWorkspaceStatus> {
+  const record = await readSandboxRecord(sandbox);
+  if (record === undefined) return { state: "absent" };
+  await verifyPreparedSandboxWorkspace(sandbox, record);
+  return { state: "prepared", workspace: record };
 }
 
 /**
@@ -372,9 +471,7 @@ export async function prepareSupportedSandboxWorkspace(
         !["100644", "100755"].includes(mode!) ||
         path === undefined ||
         objectId === undefined ||
-        isAbsolute(path) ||
-        path.includes("\\") ||
-        path.split("/").some((segment) => segment === "." || segment === "..")
+        !safeRepositoryPath(path)
       ) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
