@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
+import { dirname } from "node:path";
 
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
+
+import { ensureSandboxDirectories } from "./sandbox-filesystem";
 
 import {
   dependencyCacheReceiptDigest,
@@ -166,6 +169,14 @@ export async function materializePlanningOverlay(input: {
       !repositoryPath.safeParse(file.path).success
     )
       throw new Error("Prepared source manifest is invalid.");
+  }
+  await ensureSandboxDirectories(input.sandbox, [
+    root,
+    ...files.map(({ path }) => `${root}/${dirname(path)}`),
+    `${root}/prototype/${input.appId}`,
+    `.app-builder/target-inputs/${input.artifactRevision}`,
+  ]);
+  for (const file of files) {
     const content = await input.sandbox.readBinaryFile({
       path: `repository/${file.path}`,
     });

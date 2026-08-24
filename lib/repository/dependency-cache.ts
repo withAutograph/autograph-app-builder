@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
+import { ensureSandboxDirectories } from "./sandbox-filesystem";
+
 export const ARRUSTED_TARGET_SHA = "e4e76f52a365c6b8da2f84698b38844f26a31750";
 export const ARRUSTED_TARGET_TREE = "7244f79f2ec523d0269fda6a9b59a1067bd723f8";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
@@ -201,6 +203,7 @@ export async function materializeOfflineDependencies(input: {
   const observed = await inspectDependencyCache(input.sandbox, environment);
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
+    await ensureSandboxDirectories(input.sandbox, [root]);
     const extraction = await input.sandbox.run({
       command: `rm -rf /workspace/${root}/node_modules && tar --extract --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} --directory /workspace/${root} --no-same-owner --no-same-permissions`,
       workingDirectory: "/workspace",

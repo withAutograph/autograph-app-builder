@@ -2,10 +2,19 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  delimiter,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { tmpdir } from "node:os";
 
 import type { SandboxSession } from "eve/sandbox";
+
+import { ensureSandboxDirectories } from "./sandbox-filesystem";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
@@ -492,6 +501,7 @@ export async function prepareSupportedSandboxWorkspace(
     sourceTree,
     eligibilityDigest: expectedEligibilityDigest,
   };
+  await ensureSandboxDirectories(sandbox, [".app-builder"]);
   await sandbox.writeTextFile({
     path: ".app-builder/prepare-intent.json",
     content: `${JSON.stringify(intent, null, 2)}\n`,
@@ -501,6 +511,10 @@ export async function prepareSupportedSandboxWorkspace(
     recursive: true,
     force: true,
   });
+  await ensureSandboxDirectories(sandbox, [
+    "repository",
+    ...sourceFiles.map(({ path }) => `repository/${dirname(path)}`),
+  ]);
   for (const entry of sourceFiles) {
     await sandbox.writeBinaryFile({
       path: `repository/${entry.path}`,
