@@ -251,36 +251,61 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The canonical creation proposal could not be derived."
       : "The build-ready AppSpec was accepted and a digest-bound read-only creation proposal is ready. No target command has run.";
   }
-  if (message.includes("prepare supported repository at ")) {
+  if (
+    message.includes("prepare supported repository at ") ||
+    message.includes("prepare fresh template at ")
+  ) {
     const path = lastUserMessage?.match(
-      /prepare supported repository at (\/\S+)/iu,
+      /prepare (?:supported repository|fresh template) at (\/\S+)/iu,
     )?.[1];
     if (path === undefined) return "The configured test repository is missing.";
+    const sourceKind = message.includes("prepare fresh template at ")
+      ? "fresh-template"
+      : "existing-repository";
     const inspectionResult = toolResults.find(
-      ({ name }) => name === "inspect_repository",
+      ({ name }) => name === "inspect_source",
     );
     if (inspectionResult === undefined) {
-      return { toolCalls: [{ name: "inspect_repository", input: { path } }] };
+      return {
+        toolCalls: [{ name: "inspect_source", input: { path, sourceKind } }],
+      };
     }
     const inspected = inspectionResult.output as
       | {
-          eligible?: boolean;
-          sourceSha?: string;
           digest?: string;
         }
       | undefined;
     if (inspectionResult.isError) {
       return "The configured repository could not be inspected.";
     }
+    const acquisitionResult = toolResults.find(
+      ({ name }) => name === "approve_source_acquisition",
+    );
+    if (sourceKind === "fresh-template" && acquisitionResult === undefined) {
+      if (inspected?.digest === undefined)
+        return "The configured source receipt is incomplete.";
+      return {
+        toolCalls: [
+          {
+            name: "approve_source_acquisition",
+            input: { expectedSourceReceiptDigest: inspected.digest },
+          },
+        ],
+      };
+    }
+    if (acquisitionResult?.isError) {
+      const sourceStatus = toolResults.find(
+        ({ name }) => name === "source_status",
+      );
+      if (sourceStatus === undefined)
+        return { toolCalls: [{ name: "source_status", input: {} }] };
+      return "Fresh-template acquisition was canceled or became stale; no workspace was materialized.";
+    }
     const preparationResult = toolResults.find(
       ({ name }) => name === "prepare_workspace",
     );
     if (preparationResult === undefined) {
-      if (
-        inspected?.eligible !== true ||
-        inspected.sourceSha === undefined ||
-        inspected.digest === undefined
-      ) {
+      if (inspected?.digest === undefined) {
         return "The configured repository is not eligible.";
       }
       return {
@@ -288,9 +313,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             name: "prepare_workspace",
             input: {
-              path,
-              expectedSha: inspected.sourceSha,
-              expectedEligibilityDigest: inspected.digest,
+              expectedSourceReceiptDigest: inspected.digest,
             },
           },
         ],
@@ -316,7 +339,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an existing supported local checkout and, after approval, prepare its exact reviewed tree read-only inside an isolated Eve workspace. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, derive a digest-bound read-only creation proposal, and report whether that exact proposal is blocked from target execution. Target mutation, change review, publication, and fresh-template acquisition are not implemented yet.";
+    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, derive a digest-bound read-only creation proposal, and report whether that exact proposal is blocked from target execution. Target mutation, change review, publication, cloning, and remote-template acquisition are not implemented yet.";
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });

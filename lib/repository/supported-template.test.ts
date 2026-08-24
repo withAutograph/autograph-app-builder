@@ -18,6 +18,7 @@ import {
   inspectSupportedRepository,
   prepareSupportedSandboxWorkspace,
 } from "./supported-template";
+import { inspectSourceReceipt } from "./source-receipt";
 
 const previousRoots = process.env.REPOSITORY_LOCAL_ROOTS;
 const previousWorkspaceRoot = process.env.REPOSITORY_WORKSPACE_ROOT;
@@ -172,6 +173,35 @@ function fakeSandbox(): SandboxSession {
 }
 
 describe("supported-template adapter", () => {
+  it("emits kind-specific canonical release-disabled source receipts", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const existing = await inspectSourceReceipt("existing-repository", root);
+    const fresh = await inspectSourceReceipt("fresh-template", root);
+    expect(existing.sourceSha).toBe(fresh.sourceSha);
+    expect(existing.contractDigest).toBe(fresh.contractDigest);
+    expect(existing.digest).not.toBe(fresh.digest);
+    expect(fresh.releaseEnabled).toBe(false);
+    await expect(inspectSourceReceipt("fresh-template", root)).resolves.toEqual(
+      fresh,
+    );
+  });
+
+  it("changes the source receipt when the supported contract drifts", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const reviewed = await inspectSourceReceipt("fresh-template", root);
+    writeFileSync(
+      join(root, ".config/mise/config.toml"),
+      `${readFileSync(join(root, ".config/mise/config.toml"), "utf8")}\n# drift\n`,
+    );
+    const drifted = await inspectSourceReceipt("fresh-template", root);
+    expect(drifted.sourceSha).toBe(reviewed.sourceSha);
+    expect(drifted.eligibilityDigest).not.toBe(reviewed.eligibilityDigest);
+    expect(drifted.contractDigest).not.toBe(reviewed.contractDigest);
+    expect(drifted.digest).not.toBe(reviewed.digest);
+  });
+
   it("accepts only the closed V0 surface and prepares the exact SHA", async () => {
     const root = fixture();
     process.env.REPOSITORY_LOCAL_ROOTS = root;

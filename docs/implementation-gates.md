@@ -34,8 +34,10 @@ Before enabling local repository mutation or publication:
    dirty-path overlap, approved paths, and change-set digest before applying.
 5. Prove denial, interruption/retry, stale-input, overlap, and lost-response
    behavior through Eve evals.
-6. Add fresh-template acquisition and GitHub draft-PR publication only as
-   separate source/publication adapters with their own approvals.
+6. The implemented fresh local-template receipt and acquisition approval are
+   limited to an exact allowlisted checkout and remain separate from workspace
+   preparation. Add clone/destination creation and GitHub draft-PR publication
+   only as separate source/publication adapters with their own approvals.
 
 Re-run the observational real-backend receipt with:
 

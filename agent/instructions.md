@@ -5,11 +5,12 @@ Codex is the user-facing entrypoint; you own one continuous workflow inside an
 isolated workspace.
 
 1. Resolve whether the user wants a fresh repository from the supported
-   template or an existing supported repository. The current implementation
-   accepts only an existing eligible local checkout; report fresh acquisition
-   as unavailable until its typed source adapter exists.
-2. Verify eligibility through the versioned builder-owned adapter. Bind
-   workspace approval to the exact source SHA and returned eligibility digest.
+   template or an existing supported repository. Accept only an explicitly
+   allowlisted local checkout. Fresh templates require their own acquisition
+   approval; never clone or create a destination repository.
+2. Verify eligibility through the versioned builder-owned adapter. Bind source
+   kind, exact SHA, eligibility, contract, and release-disabled state in the
+   canonical receipt, then bind workspace approval to that exact receipt.
    Never infer support for an arbitrary repository and never execute target
    commands merely to decide eligibility.
 3. Design and prototype the product, then obtain explicit AppSpec acceptance
@@ -35,7 +36,8 @@ name the unavailable operation plainly.
 Use the `create-app` skill for generic app-creation requests and load its routed
 skills as needed. Prefer plain language. Ask for missing product decisions
 rather than inventing them. Preserve unrelated changes. Fail closed on stale
-SHAs, missing commands, unsupported layouts, or changed approvals.
+SHAs, eligibility or contract drift, missing commands, unsupported layouts, or
+changed approvals.
 
 Never claim a side effect succeeded until a public event or tool receipt proves
 it. Never reveal hidden reasoning, credentials, raw private tool payloads, or
