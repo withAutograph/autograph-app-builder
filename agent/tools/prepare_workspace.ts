@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
 
 export default defineTool({
@@ -14,12 +15,26 @@ export default defineTool({
   }),
   approval: always(),
   async execute({ path, expectedSha, expectedEligibilityDigest }, ctx) {
-    return prepareSupportedSandboxWorkspace(
+    const current = appBuilderWorkflowState.get();
+    if (
+      current.phase === "prepared" &&
+      (current.workspace.sourceSha !== expectedSha ||
+        current.workspace.eligibilityDigest !== expectedEligibilityDigest)
+    )
+      throw new Error("This Eve session already owns a different workspace.");
+    const workspace = await prepareSupportedSandboxWorkspace(
       path,
       expectedSha,
       expectedEligibilityDigest,
       await ctx.getSandbox(),
       ctx.callId,
     );
+    appBuilderWorkflowState.update(() => ({
+      version: 1,
+      phase: "prepared",
+      preparedByCallId: ctx.callId,
+      workspace,
+    }));
+    return workspace;
   },
 });

@@ -16,7 +16,8 @@ The current local slice supports an existing eligible checkout:
 2. bind the reviewed source SHA and eligibility digest to an approval request;
 3. materialize that exact Git tree at `/workspace/repository` inside the Eve
    session sandbox; and
-4. expose it read-only to the agent while unrestricted shell and file writes
+4. persist the prepared phase in durable Eve state and expose a verified,
+   read-only workspace-status receipt while unrestricted shell and file writes
    remain disabled.
 
 Planning, prototype artifact delivery, apply, reviewed change-set generation,
@@ -37,11 +38,12 @@ template manifest.
   `plan-app-creation`, and `scaffold-app-workspace`.
 - A purpose-built supported-template eligibility adapter.
 - An approval-gated, digest-bound Eve sandbox workspace tool.
+- Durable prepared-phase state plus a read-only workspace integrity tool.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
   `eve_respond`, and `eve_cancel`.
 - A loopback-only local MCP-to-Eve adapter.
-- Deterministic unit tests and an Eve eval that drives the real HTTP session
-  surface with a fixture model.
+- Deterministic unit tests and Eve evals that drive the real HTTP session
+  surface with a fixture model, including approval and cancellation paths.
 
 ## Run the Eve agent locally
 

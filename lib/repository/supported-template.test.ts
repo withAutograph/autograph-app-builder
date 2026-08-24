@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import {
+  inspectPreparedSandboxWorkspace,
   inspectSupportedRepository,
   prepareSupportedSandboxWorkspace,
 } from "./supported-template";
@@ -202,6 +203,10 @@ describe("supported-template adapter", () => {
     ).toBe("{}\n");
     expect(prepared.sourceTree).toMatch(/^[0-9a-f]{40}$/u);
     expect(prepared.workspaceDigest).toMatch(/^[0-9a-f]{64}$/u);
+    await expect(inspectPreparedSandboxWorkspace(sandbox)).resolves.toEqual({
+      state: "prepared",
+      workspace: prepared,
+    });
     await expect(
       prepareSupportedSandboxWorkspace(
         root,
@@ -230,6 +235,53 @@ describe("supported-template adapter", () => {
     ).rejects.toThrow(
       "Prepared workspace file drifted: apps/shell/microfrontends.json",
     );
+  });
+
+  it("reports an absent workspace and rejects a malformed durable record", async () => {
+    const sandbox = fakeSandbox();
+    await expect(inspectPreparedSandboxWorkspace(sandbox)).resolves.toEqual({
+      state: "absent",
+    });
+    mkdirSync(sandbox.resolvePath(".app-builder"), { recursive: true });
+    writeFileSync(
+      resolve(sandbox.resolvePath(".app-builder"), "prepared-workspace.json"),
+      '{"workspaceId":"partial"}\n',
+    );
+    await expect(inspectPreparedSandboxWorkspace(sandbox)).rejects.toThrow(
+      "The prepared workspace record is invalid.",
+    );
+  });
+
+  it("rejects a source SHA that changes while approval is pending", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const eligibility = await inspectSupportedRepository(root);
+    writeFileSync(join(root, "README.md"), "new commit\n");
+    execFileSync("git", ["add", "README.md"], { cwd: root });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-m",
+        "advance fixture",
+      ],
+      { cwd: root },
+    );
+    await expect(
+      prepareSupportedSandboxWorkspace(
+        root,
+        eligibility.sourceSha!,
+        eligibility.digest,
+        fakeSandbox(),
+        "call_prepare",
+      ),
+    ).rejects.toThrow("Source SHA changed after eligibility review.");
   });
 
   it("rejects a workspace approval bound to a stale eligibility digest", async () => {
