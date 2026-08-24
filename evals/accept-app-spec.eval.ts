@@ -174,6 +174,84 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
+    await t.send("Inspect the validated change set.");
+    t.succeeded();
+    t.calledTool("change_set_status", { count: 1 });
+    t.check(t.reply, includes("Validated change-set proposal"));
+    t.check(t.reply, includes("approvedPaths"));
+    t.check(t.reply, includes('"changes"'));
+    t.check(t.reply, includes('"kind"'));
+    t.check(t.reply, includes('"before"'));
+    t.check(t.reply, includes('"after"'));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Accept the displayed change set.");
+    t.requireInputRequest({
+      toolName: "accept_change_set",
+      input: (input) => {
+        const changeSet = (input as { changeSet?: unknown }).changeSet;
+        if (typeof changeSet !== "object" || changeSet === null) return false;
+        const value = changeSet as {
+          digest?: unknown;
+          approvedPaths?: unknown;
+          changes?: unknown;
+        };
+        if (
+          typeof value.digest !== "string" ||
+          !Array.isArray(value.approvedPaths) ||
+          !Array.isArray(value.changes)
+        )
+          return false;
+        const approvedPaths: unknown[] = value.approvedPaths;
+        const changes: unknown[] = value.changes;
+        return (
+          changes.length === approvedPaths.length &&
+          changes.every(
+            (change, index) =>
+              typeof change === "object" &&
+              change !== null &&
+              "path" in change &&
+              "kind" in change &&
+              approvedPaths[index] === change.path &&
+              (change.kind === "added" ||
+                change.kind === "modified" ||
+                change.kind === "deleted") &&
+              ((change.kind === "added" && "after" in change) ||
+                (change.kind === "deleted" && "before" in change) ||
+                (change.kind === "modified" &&
+                  "before" in change &&
+                  "after" in change)),
+          )
+        );
+      },
+    });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("separately approved normalized change set"));
+    t.check(t.reply, includes("Publication did not run"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Retry change-set acceptance after a lost response.");
+    t.requireInputRequest({ toolName: "accept_change_set" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(
+      t.reply,
+      includes("reused the exact durable reviewed change-set receipt"),
+    );
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Accept a stale change set.");
+    t.requireInputRequest({ toolName: "accept_change_set" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("stale change-set proposal was rejected"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
     await t.send("Record a replacement prototype artifact.");
     t.requireInputRequest({ toolName: "record_prototype_artifact" });
     await t.respondAll("approve");

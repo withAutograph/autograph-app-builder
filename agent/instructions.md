@@ -35,9 +35,11 @@ isolated workspace.
    commands in independent builder-owned copies of the exact applied tree. A
    pending or failed attempt is recovery-required and must not be redispatched
    automatically. Treat any detected source, dependency-cache, planning, or
-   applied-tree drift as a recovery-required failure. Stop after the validation
-   receipt until a typed change-review tool exists. Do not claim a reviewed
-   change set.
+   applied-tree drift as a recovery-required failure. Use `change_set_status`
+   to show the exact normalized ordered changes and approved paths from the
+   canonical applied overlay, then obtain separate approval through
+   `accept_change_set`. It recomputes the displayed digest and records a
+   reviewed receipt; it does not validate or publish.
 6. Obtain a separate publication approval naming the destination and outcome.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.

@@ -61,7 +61,8 @@ export default defineTool({
       current.phase === "applied" ||
       current.phase === "validation_pending" ||
       current.phase === "validation_failed" ||
-      current.phase === "validated"
+      current.phase === "validated" ||
+      current.phase === "reviewed"
     )
       return { ...current.proposal, reused: true };
 

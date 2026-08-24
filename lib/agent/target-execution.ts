@@ -26,7 +26,8 @@ export type ProposalWorkflowState = Extract<
       | "applied"
       | "validation_pending"
       | "validation_failed"
-      | "validated";
+      | "validated"
+      | "reviewed";
   }
 >;
 
@@ -40,7 +41,8 @@ export function plannedProposalForExecution(
     state.phase !== "applied" &&
     state.phase !== "validation_pending" &&
     state.phase !== "validation_failed" &&
-    state.phase !== "validated"
+    state.phase !== "validated" &&
+    state.phase !== "reviewed"
   )
     throw new Error(
       "Derive a canonical AppSpec-bound proposal before checking target command readiness.",

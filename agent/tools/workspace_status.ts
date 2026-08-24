@@ -31,7 +31,8 @@ function statusReceipt(
     state.phase === "applied" ||
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
-    state.phase === "validated"
+    state.phase === "validated" ||
+    state.phase === "reviewed"
       ? {
           appSpec: {
             appId: state.appSpec.appId,
@@ -49,7 +50,8 @@ function statusReceipt(
     state.phase === "applied" ||
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
-    state.phase === "validated"
+    state.phase === "validated" ||
+    state.phase === "reviewed"
       ? { dependencies: { digest: state.dependencyReceipt.digest } }
       : {}),
     ...(state.phase === "identity_resolved" ||
@@ -58,7 +60,8 @@ function statusReceipt(
     state.phase === "applied" ||
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
-    state.phase === "validated"
+    state.phase === "validated" ||
+    state.phase === "reviewed"
       ? { identity: { digest: state.identityReceipt.digest } }
       : {}),
     ...(state.phase === "planned" ||
@@ -66,7 +69,8 @@ function statusReceipt(
     state.phase === "applied" ||
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
-    state.phase === "validated"
+    state.phase === "validated" ||
+    state.phase === "reviewed"
       ? { proposal: { digest: state.proposal.digest } }
       : {}),
     ...(state.phase === "apply_failed"
@@ -82,7 +86,8 @@ function statusReceipt(
     ...(state.phase === "applied" ||
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
-    state.phase === "validated"
+    state.phase === "validated" ||
+    state.phase === "reviewed"
       ? {
           apply: {
             status: state.applyReceipt.status,
@@ -110,11 +115,19 @@ function statusReceipt(
           },
         }
       : {}),
-    ...(state.phase === "validated"
+    ...(state.phase === "validated" || state.phase === "reviewed"
       ? {
           validation: {
             status: state.validationReceipt.status,
             digest: state.validationReceipt.digest,
+          },
+        }
+      : {}),
+    ...(state.phase === "reviewed"
+      ? {
+          review: {
+            digest: state.reviewReceipt.digest,
+            changeSetDigest: state.reviewReceipt.changeSetDigest,
           },
         }
       : {}),
