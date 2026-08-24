@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APP_BUILDER_WORKFLOW_VERSION,
+  type AppCreationProposal,
   type AppBuilderWorkflowState,
 } from "./workflow-state";
 import {
@@ -43,24 +44,41 @@ const state: AppBuilderWorkflowState = {
     acceptedByCallId: "call",
     artifactRevision: "a".repeat(64),
   },
-  proposal: {
+  identityReceipt: {
     version: 1,
-    appId: "expense-review",
-    appSpec: {
-      path: "prototype/expense-review/app-spec.md",
-      sha256: "e".repeat(64),
-    },
-    artifactRevision: "a".repeat(64),
     sourceSha: "a".repeat(40),
     eligibilityDigest: "d".repeat(64),
     workspaceDigest: "c".repeat(64),
-    commands: {
-      planning: "mise run plan",
-      apply: "mise run apply",
-      preflight: "mise run preflight",
-      validation: ["mise run check"],
+    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
+    appSpecDigest: "e".repeat(64),
+    artifactRevision: "a".repeat(64),
+    identity: {
+      appId: "expense-review",
+      workspacePath: "apps/expense-review",
+      packageName: "@autograph/expense-review",
+      projectName: "apps-expense-review",
+      baseRoutes: ["/expense-review", "/expense-review/:path*"],
+      appSpecPath: "prototype/expense-review/app-spec.md",
+      contractPath: "apps/expense-review/app.contract.json",
+      kernelSchemaPath: "apps/expense-review/schema/expense-review-schema.json",
     },
-    mutations: [],
+    resolvedByCallId: "identity-call",
+    digest: "1".repeat(64),
+  },
+  proposal: {
+    version: 1,
+    sourceSha: "a".repeat(40),
+    eligibilityDigest: "d".repeat(64),
+    workspaceDigest: "c".repeat(64),
+    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
+    appSpecDigest: "e".repeat(64),
+    artifactRevision: "a".repeat(64),
+    identityDigest: "1".repeat(64),
+    contractDigest: "2".repeat(64),
+    target: {} as AppCreationProposal["target"],
+    plannedByCallId: "plan-call",
     digest: "f".repeat(64),
   },
 };

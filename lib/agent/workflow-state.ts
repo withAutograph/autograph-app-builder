@@ -3,8 +3,12 @@ import { createHash } from "node:crypto";
 import { defineState } from "eve/context";
 
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+import type {
+  TargetIdentity,
+  TargetProposal,
+} from "@/lib/repository/target-planning";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 2 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 3 as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -26,21 +30,29 @@ export type PrototypeArtifact = {
   recordedByCallId: string;
 };
 
-export type AppCreationProposal = {
-  version: 1;
-  appId: string;
-  appSpec: { path: string; sha256: string };
-  artifactRevision: string;
+type TargetExecutionBinding = {
   sourceSha: string;
   eligibilityDigest: string;
   workspaceDigest: string;
-  commands: {
-    planning: string;
-    apply: string;
-    preflight: string;
-    validation: readonly string[];
-  };
-  mutations: [];
+  imageDigest: string;
+  dependencyCacheDigest: string;
+  appSpecDigest: string;
+  artifactRevision: string;
+};
+
+export type TargetIdentityReceipt = TargetExecutionBinding & {
+  version: 1;
+  identity: TargetIdentity;
+  resolvedByCallId: string;
+  digest: string;
+};
+
+export type AppCreationProposal = TargetExecutionBinding & {
+  version: 1;
+  identityDigest: string;
+  contractDigest: string;
+  target: TargetProposal;
+  plannedByCallId: string;
   digest: string;
 };
 
@@ -63,8 +75,15 @@ export type AppBuilderWorkflowState =
     } & WorkspacePhase)
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "identity_resolved";
+      appSpec: AcceptedAppSpec;
+      identityReceipt: TargetIdentityReceipt;
+    } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "planned";
       appSpec: AcceptedAppSpec;
+      identityReceipt: TargetIdentityReceipt;
       proposal: AppCreationProposal;
     } & WorkspacePhase);
 
@@ -83,6 +102,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v2",
+  "autograph-app-builder.workflow.v3",
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );

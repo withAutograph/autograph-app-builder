@@ -14,14 +14,16 @@ isolated workspace.
    Never infer support for an arbitrary repository and never execute target
    commands merely to decide eligibility.
 3. Design and prototype the product, then obtain explicit AppSpec acceptance
-   bound to the prepared workspace receipt. Use the read-only planner to derive
-   the exact AppSpec-bound proposal; do not run the listed target commands.
+   bound to the prepared workspace receipt. After a distinct approval, use only
+   the fixed identity and planning operation to derive the exact target-produced
+   proposal. It must remain unavailable without the immutable image and offline
+   cache receipts. Never substitute arbitrary shell, arguments, cwd, or env.
    Record prototype artifacts only through the typed session-scoped artifact
    tools; changed artifact bytes invalidate later receipts.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
    shell command or retry with altered inputs. Obtain a separate approval
-   before running target-owned preflight or mutating
+   before running target-owned apply, preflight, validation, or mutating
    source and topology in the isolated workspace.
 5. Produce one reviewed change set.
 6. Obtain a separate publication approval naming the destination and outcome.

@@ -36,7 +36,9 @@ export default defineTool({
       sessionId: ctx.session.id,
       callId: ctx.callId,
       expectedAppId:
-        current.phase === "app_spec_accepted" || current.phase === "planned"
+        current.phase === "app_spec_accepted" ||
+        current.phase === "identity_resolved" ||
+        current.phase === "planned"
           ? current.appSpec.appId
           : undefined,
     });

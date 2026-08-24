@@ -25,18 +25,23 @@ allowlisted fresh-template checkout:
    remain disabled;
 6. record and exactly read approval-bound prototype artifact receipts without
    writing the target workspace; and
-7. accept a recorded AppSpec revision against that receipt and derive a
-   digest-bound, read-only creation proposal.
+7. accept a recorded AppSpec revision against that receipt; and
+8. after a distinct approval, run only the fixed target identity and planning
+   commands against a builder-owned input overlay and record their strictly
+   parsed, digest-bound receipts.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V2 state key so older, unbound
-acceptance or proposal state cannot be mistaken for an artifact-bound receipt;
+workspace. The durable workflow uses its V3 state key so older, synthetic
+planning state cannot be mistaken for target identity or planning receipts;
 an intact prepared sandbox can still be recovered and reviewed again.
 
-Target apply, reviewed change-set generation, local publication, GitHub
+The real target commands remain fail-closed until both an immutable sandbox
+image and matching offline dependency-cache digest are configured. Tests use an
+injectable executor and never run Arrusted commands. Target apply, validation,
+reviewed change-set generation, local publication, GitHub
 draft-PR publication, cloning, destination-repository creation, and remote
 template acquisition remain fail-closed until
 their typed tools and approval receipts land. The skills describe the intended
@@ -59,8 +64,9 @@ template manifest.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
 - Approval-bound, session-scoped prototype artifact receipts with exact-digest
   readback and a content-free workflow-status receipt.
-- Approval-bound AppSpec acceptance and a read-only canonical proposal tool;
-  neither runs target-owned commands or writes the target repository.
+- Approval-bound AppSpec acceptance plus fixed, bounded target identity and
+  planning commands. Strict receipts bind source, workspace, toolchain, cache,
+  and artifact revision without writing the prepared target workspace.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,

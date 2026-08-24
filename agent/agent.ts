@@ -15,6 +15,82 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The artifact workflow status could not be verified."
       : `Artifact workflow status: ${JSON.stringify(result.output)}`;
   }
+  if (message.includes("retry target planning")) {
+    const stale = message.includes("stale");
+    const planResults = toolResults.filter(
+      ({ name }) => name === "plan_app_creation",
+    );
+    const requiredResults = stale ? 3 : 2;
+    const statusResult = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    if (
+      statusResult === undefined ||
+      (planResults.length < requiredResults &&
+        toolResults.at(-1)?.name === "plan_app_creation")
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const status = statusResult.output as
+      { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase !== "planned" || status.appSpec?.digest === undefined)
+      return "A completed target plan is required before retry.";
+    const planResult = planResults.at(-1);
+    if (planResults.length < requiredResults)
+      return {
+        toolCalls: [
+          {
+            name: "plan_app_creation",
+            input: {
+              expectedAppSpecDigest: stale
+                ? "0".repeat(64)
+                : status.appSpec.digest,
+            },
+          },
+        ],
+      };
+    if (planResult === undefined)
+      return "The target-planning retry result is unavailable.";
+    if (planResult.isError)
+      return "The stale target-planning retry was rejected without changing its durable receipt.";
+    const output = planResult.output as { reused?: boolean } | undefined;
+    return output?.reused === true
+      ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
+      : "The target-planning retry did not reuse its durable receipt.";
+  }
+  if (message.includes("run target identity and planning")) {
+    const statusResult = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    if (
+      statusResult === undefined ||
+      ((statusResult.output as { phase?: string } | undefined)?.phase !==
+        "app_spec_accepted" &&
+        toolResults.at(-1)?.name !== "workspace_status")
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const status = statusResult.output as
+      { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (
+      status?.phase !== "app_spec_accepted" ||
+      status.appSpec?.digest === undefined
+    )
+      return "An accepted AppSpec is required before target planning.";
+    const latestResult = toolResults.at(-1);
+    const planResult =
+      latestResult?.name === "plan_app_creation" ? latestResult : undefined;
+    if (planResult === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "plan_app_creation",
+            input: { expectedAppSpecDigest: status.appSpec.digest },
+          },
+        ],
+      };
+    return planResult.isError
+      ? "Target identity and planning were canceled or rejected; no target mutation occurred."
+      : "The approved fixed target identity and planning commands produced a digest-bound canonical proposal; no apply, validation, or target mutation ran.";
+  }
   if (
     message.includes("record a replacement prototype artifact") ||
     message.includes("retry recording the exact replacement prototype artifact")
@@ -231,25 +307,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     if (acceptanceResult.isError)
       return "The AppSpec acceptance could not be recorded.";
-    const accepted = acceptanceResult.output as { digest?: string } | undefined;
-    const planResult = toolResults.find(
-      ({ name }) => name === "plan_app_creation",
-    );
-    if (planResult === undefined) {
-      if (accepted?.digest === undefined)
-        return "The accepted AppSpec receipt is incomplete.";
-      return {
-        toolCalls: [
-          {
-            name: "plan_app_creation",
-            input: { expectedAppSpecDigest: accepted.digest },
-          },
-        ],
-      };
-    }
-    return planResult.isError
-      ? "The canonical creation proposal could not be derived."
-      : "The build-ready AppSpec was accepted and a digest-bound read-only creation proposal is ready. No target command has run.";
+    return "The build-ready AppSpec was accepted. Target identity and planning require a separate explicit request and approval.";
   }
   if (
     message.includes("prepare supported repository at ") ||
@@ -339,7 +397,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, derive a digest-bound read-only creation proposal, and report whether that exact proposal is blocked from target execution. Target mutation, change review, publication, cloning, and remote-template acquisition are not implemented yet.";
+    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, and—only with an immutable image plus offline cache—run the two fixed, approval-bound target identity and planning commands against builder-owned inputs. Apply, validation, target mutation, change review, publication, cloning, and remote-template acquisition are not implemented yet.";
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });
