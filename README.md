@@ -8,16 +8,22 @@ The project is based on
 [`jasonmorganson/eve-agent-plugin`](https://github.com/jasonmorganson/eve-agent-plugin)
 without changing that source repository.
 
-## Current supported workflow
+## Current implemented workflow
 
-The agent uses one workflow for a new-template source or an existing repository:
+The current local slice supports an existing eligible checkout:
 
 1. inspect the source with the versioned, non-executing V0 adapter;
-2. obtain approval before creating an isolated workspace at the exact source SHA;
-3. design and prototype the app, then obtain explicit AppSpec acceptance;
-4. obtain separate source/topology approval before applying the canonical target command;
-5. produce one reviewed change set; and
-6. publish only after a separate destination-specific approval.
+2. bind the reviewed source SHA and eligibility digest to an approval request;
+3. materialize that exact Git tree at `/workspace/repository` inside the Eve
+   session sandbox; and
+4. expose it read-only to the agent while unrestricted shell and file writes
+   remain disabled.
+
+Planning, prototype artifact delivery, apply, reviewed change-set generation,
+local publication, GitHub draft-PR publication, and fresh-template acquisition
+remain fail-closed until their typed tools and approval receipts land. The
+skills describe the intended workflow, but they must use builder-owned
+operations; they do not authorize raw target commands.
 
 The initial adapter supports the known `withAutograph/arrusted-development`
 repository family and fails closed on drift. It deliberately does not infer
@@ -30,7 +36,7 @@ template manifest.
 - The four app-creation skills: `create-app`, `design-app`,
   `plan-app-creation`, and `scaffold-app-workspace`.
 - A purpose-built supported-template eligibility adapter.
-- An approval-gated isolated Git worktree tool.
+- An approval-gated, digest-bound Eve sandbox workspace tool.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
   `eve_respond`, and `eve_cancel`.
 - A loopback-only local MCP-to-Eve adapter.
@@ -56,9 +62,8 @@ APP_BUILDER_TEST_MODEL=1 pnpm exec eve invoke \
 ```
 
 For local repository access, set `REPOSITORY_LOCAL_ROOTS` to a
-platform-delimited allowlist of absolute roots. `REPOSITORY_WORKSPACE_ROOT` may
-name the directory that owns isolated worktrees; otherwise the operating-system
-temporary directory is used.
+platform-delimited allowlist of absolute roots. The reviewed tree is copied into
+the durable Eve session sandbox; the source checkout is not mutated.
 
 ## Use the local MCP façade
 

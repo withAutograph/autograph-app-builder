@@ -1,8 +1,23 @@
 # Implementation gates
 
-The loopback local adapter is usable for local development and testing. Hosted
-operation remains fail-closed until the production identity and session gates
-below are complete.
+The loopback local adapter and approval-gated read-only workspace preparation
+are usable for local development and testing. Local app execution and
+publication remain fail-closed until typed plan/apply/review/publication tools
+replace the disabled generic shell and writer. Hosted operation also remains
+fail-closed until the production identity and session gates below are complete.
+
+Before enabling local repository mutation or publication:
+
+1. Add durable phase state bound to source SHA, eligibility digest, AppSpec
+   digest, proposal digest, and reviewed change-set digest.
+2. Add typed identity, planning, prototype-artifact, apply, validation, and
+   change-review tools. Gate every mutating operation in code.
+3. Add an approval-gated local publisher that verifies exact destination SHA,
+   dirty-path overlap, approved paths, and change-set digest before applying.
+4. Prove denial, interruption/retry, stale-input, overlap, and lost-response
+   behavior through Eve evals.
+5. Add fresh-template acquisition and GitHub draft-PR publication only as
+   separate source/publication adapters with their own approvals.
 
 Before enabling real MCP mutations:
 

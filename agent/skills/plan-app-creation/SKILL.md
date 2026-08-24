@@ -10,6 +10,10 @@ product-acceptance and mutation authorities: do not create the app, persist its
 contract, register routes, materialize schemas, reconcile providers, or deploy
 anything.
 
+Planning requires the discovered builder-owned planning tool. If it is absent,
+report that the operation is not implemented; never execute the adapter command
+through a generic shell.
+
 ## Workflow
 
 1. If the user explicitly requests only a bare/local Next.js workspace, hand off
@@ -29,11 +33,9 @@ anything.
    workflow to [$design-app](../design-app/SKILL.md). When invoked directly,
    report the missing product authority and stop; never infer or silently repair
    product policy.
-6. Put `{ "version": 1, "appId": "<id>" }` in builder-owned temporary storage outside the target repository and use the target adapter's declared planning command:
-
-   ```sh
-   mise exec -- bun scripts/app-contract.ts --contract <temporary-contract-file>
-   ```
+6. Give `{ "version": 1, "appId": "<id>" }` to the builder-owned planning
+   operation. The selected adapter owns the exact target command; never
+   construct or guess a repository script path.
 
 7. If validation reports blockers, return them precisely. Do not work around
    AppSpec, identity, topology, or authority failures.
