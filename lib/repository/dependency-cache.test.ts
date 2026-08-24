@@ -59,6 +59,7 @@ function sandboxFixture(inputManifest: unknown = manifest) {
       stderr: "",
     })
     .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   const sandbox = {
     run,
     readTextFile: vi.fn(async () => JSON.stringify({ version: "2.4.0" })),
@@ -81,7 +82,7 @@ describe("offline dependency cache", () => {
       abortSignal: expect.any(AbortSignal),
     });
     expect(run).toHaveBeenNthCalledWith(
-      3,
+      4,
       expect.objectContaining({
         command: expect.stringContaining(
           `.app-builder/target-inputs/${"b".repeat(64)}/repository/node_modules`,
@@ -89,7 +90,7 @@ describe("offline dependency cache", () => {
         workingDirectory: "/workspace",
       }),
     );
-    expect(run.mock.calls[2]?.[0]).not.toHaveProperty("env");
+    expect(run.mock.calls[3]?.[0]).not.toHaveProperty("env");
   });
 
   it("rejects target drift and does not extract", async () => {

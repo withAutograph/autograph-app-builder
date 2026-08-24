@@ -107,7 +107,9 @@ function fixture(): string {
   return root;
 }
 
-function fakeSandbox(): SandboxSession {
+function fakeSandbox({
+  createParentsOnWrite = true,
+}: { createParentsOnWrite?: boolean } = {}): SandboxSession {
   const root = mkdtempSync(join(tmpdir(), "builder-sandbox-"));
   return {
     id: `sandbox-${root.split("-").at(-1)}`,
@@ -134,7 +136,8 @@ function fakeSandbox(): SandboxSession {
       content: string;
     }) => {
       const target = resolve(root, path);
-      mkdirSync(resolve(target, ".."), { recursive: true });
+      if (createParentsOnWrite)
+        mkdirSync(resolve(target, ".."), { recursive: true });
       writeFileSync(target, content);
     },
     writeBinaryFile: async ({
@@ -145,7 +148,8 @@ function fakeSandbox(): SandboxSession {
       content: Uint8Array;
     }) => {
       const target = resolve(root, path);
-      mkdirSync(resolve(target, ".."), { recursive: true });
+      if (createParentsOnWrite)
+        mkdirSync(resolve(target, ".."), { recursive: true });
       writeFileSync(target, content);
     },
     removePath: async ({ path }: { path: string }) => {
@@ -155,7 +159,7 @@ function fakeSandbox(): SandboxSession {
       try {
         return {
           exitCode: 0,
-          stdout: execFileSync("bash", ["-lc", command], {
+          stdout: execFileSync("sh", ["-c", command], {
             cwd: root,
             encoding: "utf8",
           }),
@@ -265,6 +269,35 @@ describe("supported-template adapter", () => {
     ).rejects.toThrow(
       "Prepared workspace file drifted: apps/shell/microfrontends.json",
     );
+  });
+
+  it("creates parent directories when sandbox writes do not", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const eligibility = await inspectSupportedRepository(root);
+    const sandbox = fakeSandbox({ createParentsOnWrite: false });
+
+    const prepared = await prepareSupportedSandboxWorkspace(
+      root,
+      eligibility.sourceSha!,
+      eligibility.digest,
+      sandbox,
+      "call_prepare",
+    );
+
+    expect(
+      readFileSync(
+        resolve(
+          sandbox.resolvePath("repository"),
+          "apps/shell/microfrontends.json",
+        ),
+        "utf8",
+      ),
+    ).toBe("{}\n");
+    await expect(inspectPreparedSandboxWorkspace(sandbox)).resolves.toEqual({
+      state: "prepared",
+      workspace: prepared,
+    });
   });
 
   it("reports an absent workspace and rejects a malformed durable record", async () => {
