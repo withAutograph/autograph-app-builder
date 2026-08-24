@@ -75,10 +75,14 @@ To inspect the fixed tool allowlist through Eve's real sandbox backend:
 pnpm test:sandbox-toolchain
 ```
 
-The inspection is observational and may report the sandbox as not ready. The
-currently pinned default image lacks mise and Bun, so target-owned planning,
-apply, and validation commands remain disabled pending an immutable bootstrap
-or custom image. See [the implementation gates](docs/implementation-gates.md).
+The inspection is observational and remains not-ready unless an externally
+built, preloaded OCI image is configured through
+`APP_BUILDER_SANDBOX_IMAGE=<image>@sha256:<digest>`. The agent never pulls,
+builds, or publishes that image: its pinned microsandbox backend uses
+`pullPolicy: "never"` and deny-all network policy. The image must contain Git,
+`mise 2026.8.12`, and `bun 1.2.20`; the receipt verifies the exact versions
+before any future typed target command can be enabled. See [the implementation
+gates](docs/implementation-gates.md).
 
 For local repository access, set `REPOSITORY_LOCAL_ROOTS` to a
 platform-delimited allowlist of absolute roots. The reviewed tree is copied into

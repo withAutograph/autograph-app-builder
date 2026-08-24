@@ -1,6 +1,12 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import {
+  configuredToolchainImage,
+  requiredToolVersions,
+  toolVersionMatches,
+} from "@/lib/sandbox/toolchain";
+
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
 export default defineTool({
@@ -27,14 +33,29 @@ export default defineTool({
         };
       }),
     );
-    const available = new Set(
-      tools.flatMap((tool) => (tool.available ? [tool.command] : [])),
-    );
+    const image = configuredToolchainImage();
+    const required = (
+      Object.keys(requiredToolVersions) as Array<
+        keyof typeof requiredToolVersions
+      >
+    ).map((command) => {
+      const observed = tools.find((tool) => tool.command === command);
+      return {
+        command,
+        expected: requiredToolVersions[command].source,
+        available: observed?.available === true,
+        version: observed?.available === true ? observed.version : "",
+        matches:
+          observed?.available === true &&
+          toolVersionMatches(command, observed.version),
+      };
+    });
     return {
       sandboxId: sandbox.id,
-      toolchainReady: (["git", "mise", "bun"] as const).every((command) =>
-        available.has(command),
-      ),
+      imageConfiguration: image === undefined ? "unconfigured" : "configured",
+      toolchainReady:
+        image !== undefined && required.every((tool) => tool.matches),
+      required,
       tools,
     };
   },

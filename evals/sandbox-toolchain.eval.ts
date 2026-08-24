@@ -9,6 +9,8 @@ export default defineEval({
     t.succeeded();
     t.calledTool("inspect_sandbox_toolchain", { count: 1 });
     t.check(t.reply, includes("Sandbox toolchain receipt"));
+    t.check(t.reply, includes("unconfigured"));
+    t.check(t.reply, includes('toolchainReady":false'));
     t.check(t.reply, includes("toolchainReady"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
