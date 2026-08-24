@@ -82,7 +82,9 @@ builds, or publishes that image: its pinned microsandbox backend uses
 `pullPolicy: "never"` and deny-all network policy. The image must contain Git,
 `mise 2026.8.12`, and `bun 1.2.20`; the receipt verifies the exact versions
 before any future typed target command can be enabled. See [the implementation
-gates](docs/implementation-gates.md).
+gates](docs/implementation-gates.md). The reproducible `linux/arm64` image
+source and its published digest are documented in
+[`containers/eve-sandbox`](containers/eve-sandbox/README.md).
 
 For local repository access, set `REPOSITORY_LOCAL_ROOTS` to a
 platform-delimited allowlist of absolute roots. The reviewed tree is copied into

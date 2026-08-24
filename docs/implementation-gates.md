@@ -9,8 +9,10 @@ fail-closed until the production identity and session gates below are complete.
 Before enabling local repository mutation or publication:
 
 1. Build and pre-load an externally approved OCI image pinned by manifest
-   digest, containing Git, `mise 2026.8.12`, and `bun 1.2.20`. This repository
-   accepts it only through `APP_BUILDER_SANDBOX_IMAGE` as an `@sha256` digest,
+   digest, containing Git, `mise 2026.8.12`, and `bun 1.2.20`. The committed
+   `linux/arm64` build definition and its published digest are in
+   [`containers/eve-sandbox`](../containers/eve-sandbox/README.md). This
+   repository accepts an image only through `APP_BUILDER_SANDBOX_IMAGE` as an `@sha256` digest,
    with the microsandbox backend's `pullPolicy: "never"`, deny-all networking,
    and an image-bound template revalidation key. Image build, publication, and
    acquisition remain separate authority. Require the typed toolchain receipt
