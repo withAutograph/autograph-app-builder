@@ -23,10 +23,13 @@ Before enabling local repository mutation or publication:
    prepared source/workspace receipts to the immutable toolchain observation.
    The implemented proposal-bound apply-readiness receipt adds the exact
    proposal digest. Neither executes a target command or authorizes apply.
-3. Add typed identity, prototype-artifact, apply, validation, and change-review
-   tools. The implemented `target_execution_status` rechecks the exact planned
-   proposal, prepared workspace, and immutable toolchain receipt before any
-   future target command; gate every mutating operation in code.
+3. The implemented prototype-artifact tools allow only the three conventional
+   files, bind AppSpec acceptance to an exact recorded revision, and invalidate
+   downstream receipts when artifact bytes or paths change. Add typed identity,
+   apply, validation, and change-review tools. The implemented
+   `target_execution_status` rechecks the exact planned proposal, prepared
+   workspace, and immutable toolchain receipt before any future target command;
+   gate every mutating operation in code.
 4. Add an approval-gated local publisher that verifies exact destination SHA,
    dirty-path overlap, approved paths, and change-set digest before applying.
 5. Prove denial, interruption/retry, stale-input, overlap, and lost-response

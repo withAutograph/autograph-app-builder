@@ -4,17 +4,33 @@ import { defineState } from "eve/context";
 
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 
+export const APP_BUILDER_WORKFLOW_VERSION = 2 as const;
+
 export type AcceptedAppSpec = {
   appId: string;
+  artifactPath: string;
   content: string;
   digest: string;
   acceptedByCallId: string;
+  artifactRevision: string;
+};
+
+export type PrototypeArtifact = {
+  appId: string;
+  path: string;
+  mediaType: "text/markdown" | "text/html";
+  content: string;
+  digest: string;
+  revision: string;
+  sessionId: string;
+  recordedByCallId: string;
 };
 
 export type AppCreationProposal = {
   version: 1;
   appId: string;
   appSpec: { path: string; sha256: string };
+  artifactRevision: string;
   sourceSha: string;
   eligibilityDigest: string;
   workspaceDigest: string;
@@ -30,22 +46,23 @@ export type AppCreationProposal = {
 
 type WorkspacePhase = {
   workspace: PreparedSandboxWorkspace;
+  preparedByCallId: string;
+  artifacts: readonly PrototypeArtifact[];
 };
 
 export type AppBuilderWorkflowState =
-  | { version: 1; phase: "empty" }
+  | { version: typeof APP_BUILDER_WORKFLOW_VERSION; phase: "empty" }
   | ({
-      version: 1;
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "prepared";
-      preparedByCallId: string;
     } & WorkspacePhase)
   | ({
-      version: 1;
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "app_spec_accepted";
       appSpec: AcceptedAppSpec;
     } & WorkspacePhase)
   | ({
-      version: 1;
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "planned";
       appSpec: AcceptedAppSpec;
       proposal: AppCreationProposal;
@@ -66,6 +83,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v1",
-  () => ({ version: 1, phase: "empty" }),
+  "autograph-app-builder.workflow.v2",
+  () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );

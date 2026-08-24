@@ -2,11 +2,11 @@ import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
+import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
+  APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  sha256,
   validAppId,
-  workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 
 function validBuildReadyAppSpec(content: string): boolean {
@@ -56,7 +56,8 @@ export default defineTool({
     "Record explicit acceptance of one complete build-ready AppSpec. The acceptance is bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
   inputSchema: z.object({
     appId: z.string().min(1),
-    appSpec: z.string().min(1),
+    expectedArtifactDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    expectedArtifactRevision: z.string().regex(/^[0-9a-f]{64}$/u),
     expectedSourceSha: z.string().regex(/^[0-9a-f]{40}$/u),
     expectedEligibilityDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     expectedWorkspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
@@ -65,7 +66,8 @@ export default defineTool({
   async execute(
     {
       appId,
-      appSpec,
+      expectedArtifactDigest,
+      expectedArtifactRevision,
       expectedSourceSha,
       expectedEligibilityDigest,
       expectedWorkspaceDigest,
@@ -74,13 +76,24 @@ export default defineTool({
   ) {
     if (!validAppId(appId))
       throw new Error("App id must be one lowercase kebab-case segment.");
-    if (!validBuildReadyAppSpec(appSpec))
-      throw new Error("AppSpec is not a complete build-ready AppSpec.");
     const current = appBuilderWorkflowState.get();
-    const workspace = workflowWorkspace(current);
-    if (workspace === undefined)
+    if (current.phase === "empty")
       throw new Error(
         "Prepare an eligible repository before accepting an AppSpec.",
+      );
+    const workspace = current.workspace;
+    const path = `prototype/${appId}/app-spec.md`;
+    const artifact = exactPrototypeArtifact(current.artifacts, {
+      path,
+      digest: expectedArtifactDigest,
+      revision: expectedArtifactRevision,
+      sessionId: ctx.session.id,
+    });
+    if (artifact.mediaType !== "text/markdown")
+      throw new Error("The accepted AppSpec artifact media type is invalid.");
+    if (!validBuildReadyAppSpec(artifact.content))
+      throw new Error(
+        "AppSpec artifact is not a complete build-ready AppSpec.",
       );
     if (
       workspace.sourceSha !== expectedSourceSha ||
@@ -92,9 +105,11 @@ export default defineTool({
       );
     const accepted = {
       appId,
-      content: appSpec,
-      digest: sha256(appSpec),
+      artifactPath: artifact.path,
+      content: artifact.content,
+      digest: artifact.digest,
       acceptedByCallId: ctx.callId,
+      artifactRevision: artifact.revision,
     };
     if (
       (current.phase === "app_spec_accepted" || current.phase === "planned") &&
@@ -103,9 +118,11 @@ export default defineTool({
     )
       return { ...current.appSpec, reused: true };
     appBuilderWorkflowState.update(() => ({
-      version: 1,
+      version: APP_BUILDER_WORKFLOW_VERSION,
       phase: "app_spec_accepted",
       workspace,
+      preparedByCallId: current.preparedByCallId,
+      artifacts: current.artifacts,
       appSpec: accepted,
     }));
     return { ...accepted, reused: false };

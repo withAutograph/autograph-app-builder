@@ -19,14 +19,24 @@ The current local slice supports an existing eligible checkout:
 4. persist the prepared phase in durable Eve state and expose a verified,
    read-only workspace-status receipt while unrestricted shell and file writes
    remain disabled;
-5. accept a complete AppSpec against that receipt and derive a digest-bound,
-   read-only creation proposal.
+5. record and exactly read approval-bound prototype artifact receipts without
+   writing the target workspace; and
+6. accept a recorded AppSpec revision against that receipt and derive a
+   digest-bound, read-only creation proposal.
 
-Prototype artifact delivery, apply, reviewed change-set generation,
-local publication, GitHub draft-PR publication, and fresh-template acquisition
-remain fail-closed until their typed tools and approval receipts land. The
-skills describe the intended workflow, but they must use builder-owned
-operations; they do not authorize raw target commands.
+Prototype artifacts are durable, session-scoped receipts under
+`prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
+are accepted. Recording a new artifact revision invalidates any accepted
+AppSpec and downstream proposal. Artifact recording never writes the target
+workspace. The durable workflow uses its V2 state key so older, unbound
+acceptance or proposal state cannot be mistaken for an artifact-bound receipt;
+an intact prepared sandbox can still be recovered and reviewed again.
+
+Target apply, reviewed change-set generation, local publication, GitHub
+draft-PR publication, and fresh-template acquisition remain fail-closed until
+their typed tools and approval receipts land. The skills describe the intended
+workflow, but they must use builder-owned operations; they do not authorize raw
+target commands.
 
 The initial adapter supports the known `withAutograph/arrusted-development`
 repository family and fails closed on drift. It deliberately does not infer
@@ -41,6 +51,8 @@ template manifest.
 - A purpose-built supported-template eligibility adapter.
 - An approval-gated, digest-bound Eve sandbox workspace tool.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
+- Approval-bound, session-scoped prototype artifact receipts with exact-digest
+  readback and a content-free workflow-status receipt.
 - Approval-bound AppSpec acceptance and a read-only canonical proposal tool;
   neither runs target-owned commands or writes the target repository.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept

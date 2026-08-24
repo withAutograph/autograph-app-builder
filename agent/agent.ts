@@ -1,8 +1,99 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
+import { sha256 } from "@/lib/agent/workflow-state";
+
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("report artifact workflow status")) {
+    const result = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "artifact_workflow_status");
+    if (result === undefined)
+      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+    return result.isError
+      ? "The artifact workflow status could not be verified."
+      : `Artifact workflow status: ${JSON.stringify(result.output)}`;
+  }
+  if (
+    message.includes("record a replacement prototype artifact") ||
+    message.includes("retry recording the exact replacement prototype artifact")
+  ) {
+    const content = "replacement artifact";
+    const digest = sha256(content);
+    const results = toolResults.filter(
+      ({ name }) => name === "record_prototype_artifact",
+    );
+    const latest = results.at(-1);
+    const matching = results.filter(
+      (result) =>
+        !result.isError &&
+        (result.output as { digest?: string } | undefined)?.digest === digest,
+    );
+    const requiredMatches = message.includes("retry recording") ? 2 : 1;
+    if (latest?.isError)
+      return "Prototype artifact recording was canceled; durable state was not changed.";
+    if (matching.length >= requiredMatches) {
+      const output = matching.at(-1)?.output as
+        { invalidated?: boolean; reused?: boolean } | undefined;
+      if (output?.reused === true)
+        return "The retry reused the exact stored artifact revision without changing durable state.";
+      return output?.invalidated === true
+        ? "The new artifact revision invalidated the accepted AppSpec and proposal."
+        : "The new artifact revision was recorded.";
+    }
+    return {
+      toolCalls: [
+        {
+          name: "record_prototype_artifact",
+          input: {
+            path: "prototype/expense-review/app-spec.md",
+            mediaType: "text/markdown",
+            content,
+          },
+        },
+      ],
+    };
+  }
+  if (message.includes("read recorded prototype artifact")) {
+    const stale = message.includes("stale digest");
+    const recorded = [...toolResults]
+      .reverse()
+      .find(
+        ({ name, isError }) => name === "record_prototype_artifact" && !isError,
+      );
+    if (recorded === undefined && !stale)
+      return "Record a prototype artifact before reading it.";
+    const artifact = recorded?.output as
+      { path?: string; digest?: string } | undefined;
+    const read = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "get_prototype_artifact");
+    if (read !== undefined && !(stale && !read.isError)) {
+      if (read.isError)
+        return "The prototype artifact digest was rejected as stale.";
+      const output = read.output as
+        { path?: string; digest?: string; content?: string } | undefined;
+      return output?.path === artifact?.path &&
+        output?.digest === artifact?.digest &&
+        typeof output?.content === "string"
+        ? "The exact content-addressed prototype artifact was read without a target command."
+        : "The prototype artifact readback did not match its recorded receipt.";
+    }
+    return {
+      toolCalls: [
+        {
+          name: "get_prototype_artifact",
+          input: {
+            path: stale
+              ? "prototype/expense-review/app-spec.md"
+              : artifact?.path,
+            digest: stale ? "0".repeat(64) : artifact?.digest,
+          },
+        },
+      ],
+    };
+  }
   if (message.includes("assess workspace readiness before planning")) {
     const status = [...toolResults]
       .reverse()
@@ -96,10 +187,30 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ({ name }) => name === "accept_app_spec",
     );
     if (acceptanceResult === undefined) {
+      const artifactResult = [...toolResults]
+        .reverse()
+        .find(({ name }) => name === "record_prototype_artifact");
+      if (artifactResult === undefined)
+        return {
+          toolCalls: [
+            {
+              name: "record_prototype_artifact",
+              input: {
+                path: `prototype/${appId}/app-spec.md`,
+                mediaType: "text/markdown",
+                content: appSpec,
+              },
+            },
+          ],
+        };
+      const artifact = artifactResult.output as
+        { digest?: string; revision?: string } | undefined;
       if (
         workspace?.sourceSha === undefined ||
         workspace.eligibilityDigest === undefined ||
-        workspace.workspaceDigest === undefined
+        workspace.workspaceDigest === undefined ||
+        artifact?.digest === undefined ||
+        artifact.revision === undefined
       )
         return "A verified prepared workspace is required before AppSpec acceptance.";
       return {
@@ -108,7 +219,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
             name: "accept_app_spec",
             input: {
               appId,
-              appSpec,
+              expectedArtifactDigest: artifact.digest,
+              expectedArtifactRevision: artifact.revision,
               expectedSourceSha: workspace.sourceSha,
               expectedEligibilityDigest: workspace.eligibilityDigest,
               expectedWorkspaceDigest: workspace.workspaceDigest,
@@ -204,7 +316,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an existing supported local checkout and, after approval, prepare its exact reviewed tree read-only inside an isolated Eve workspace. I can also record a complete accepted AppSpec, derive a digest-bound read-only creation proposal, and report whether that exact proposal is blocked from target execution. Prototype delivery, target mutation, change review, publication, and fresh-template acquisition are not implemented yet.";
+    return "I can inspect an existing supported local checkout and, after approval, prepare its exact reviewed tree read-only inside an isolated Eve workspace. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, derive a digest-bound read-only creation proposal, and report whether that exact proposal is blocked from target execution. Target mutation, change review, publication, and fresh-template acquisition are not implemented yet.";
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });
