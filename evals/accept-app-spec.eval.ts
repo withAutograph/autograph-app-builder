@@ -271,8 +271,9 @@ export default defineEval({
           typeof reply === "string" &&
           !reply.includes('"appSpec"') &&
           !reply.includes('"dependencies"') &&
-          !reply.includes('"proposal"'),
-        "downstream AppSpec, dependency, and proposal receipts were invalidated",
+          !reply.includes('"proposal"') &&
+          !reply.includes('"review"'),
+        "downstream AppSpec, dependency, proposal, and review receipts were invalidated",
       ),
     );
     const afterRevision = t.reply;

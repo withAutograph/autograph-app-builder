@@ -78,6 +78,12 @@ export const targetProposalSchema = z.strictObject({
 export type TargetIdentity = z.infer<typeof targetIdentitySchema>;
 export type TargetProposal = z.infer<typeof targetProposalSchema>;
 
+export function targetContractDigest(
+  contract: TargetProposal["contract"],
+): string {
+  return sha256(JSON.stringify(contract));
+}
+
 export const TARGET_COMMAND_TIMEOUT_MS = 30_000;
 export const TARGET_COMMAND_OUTPUT_BYTES = 1_048_576;
 
@@ -214,7 +220,7 @@ export async function materializePlanningOverlay(input: {
   return {
     planningRoot: `/workspace/${root}`,
     contractPath: `/workspace/${contractPath}`,
-    contractDigest: sha256(JSON.stringify(contract)),
+    contractDigest: targetContractDigest(contract),
   };
 }
 

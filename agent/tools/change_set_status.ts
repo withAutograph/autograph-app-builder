@@ -7,6 +7,7 @@ import {
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
 } from "@/lib/repository/target-apply";
+import { targetContractDigest } from "@/lib/repository/target-planning";
 import {
   createReviewedChangeSetReceipt,
   deriveNormalizedChangeSet,
@@ -23,7 +24,8 @@ export async function exactNormalizedChangeSet(input: {
   const { state } = input;
   if (
     state.proposal.digest !== state.applyReceipt.proposalDigest ||
-    state.proposal.contractDigest === "" ||
+    state.proposal.contractDigest !==
+      targetContractDigest(state.proposal.target.contract) ||
     state.workspace.sourceSha !== state.applyReceipt.sourceSha ||
     state.workspace.eligibilityDigest !==
       state.applyReceipt.eligibilityDigest ||

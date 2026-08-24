@@ -3,6 +3,7 @@ import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import { exactNormalizedChangeSet } from "./change_set_status";
+import { assertAtomicReviewedChangeSetReuse } from "@/lib/agent/reviewed-change-set-reuse";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -56,13 +57,24 @@ export default defineTool({
         changeSet,
         state.reviewReceipt.reviewedByCallId,
       );
-      if (
-        JSON.stringify(state.reviewReceipt) !== JSON.stringify(expectedReceipt)
-      )
-        throw new Error(
-          "The reviewed change-set receipt no longer matches the canonical overlay.",
-        );
-      return { ...state.reviewReceipt, reused: true };
+      appBuilderWorkflowState.update((latest) => {
+        assertAtomicReviewedChangeSetReuse({
+          latest:
+            latest.phase === "reviewed"
+              ? {
+                  phase: latest.phase,
+                  applyDigest: latest.applyReceipt.digest,
+                  validationDigest: latest.validationReceipt.digest,
+                  reviewReceipt: latest.reviewReceipt,
+                }
+              : { phase: latest.phase },
+          expectedApplyDigest: state.applyReceipt.digest,
+          expectedValidationDigest: state.validationReceipt.digest,
+          expectedReviewReceipt: expectedReceipt,
+        });
+        return latest;
+      });
+      return { ...expectedReceipt, reused: true };
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update((latest) => {
