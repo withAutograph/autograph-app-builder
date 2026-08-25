@@ -19,6 +19,7 @@
     "configure": "node --import tsx scripts/configure-template.mts",
     "validate:plugin": "node --import tsx scripts/validate-plugin.mts",
     "validate:release": "node --import tsx scripts/validate-plugin.mts --release",
+    "build:agent-plugin-package": "node --import tsx scripts/build-agent-plugin-package.mts",
     "build:openai-package": "node --import tsx scripts/build-openai-package.mts"
   },
   "dependencies": {
@@ -52,7 +53,8 @@
     "tailwindcss": "4.3.3",
     "tsx": "4.23.12",
     "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.10",
+    "yaml": "2.9.0"
   },
   "packageManager": "pnpm@11.7.0",
   "engines": {
