@@ -28,8 +28,10 @@ isolated workspace.
    shell command or retry with altered inputs. After a distinct approval, use
    only `apply_app_creation` to apply the exact proposal in its fresh
    builder-owned overlay. A partial failure is recovery-required and must not be
-   retried automatically. This apply does not validate or mutate the prepared
-   source.
+   retried automatically. A pre-dispatch overlay preparation failure is cleaned
+   up and remains retryable; a post-dispatch observation failure is recorded for
+   recovery. Reuse must re-observe the exact planning, prepared, and applied
+   trees. This apply does not validate or mutate the prepared source.
 5. After a distinct validation approval, use only `validate_app_creation`. It
    records pending state before execution and runs the fixed check and test
    commands in independent builder-owned copies of the exact applied tree. A

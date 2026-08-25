@@ -29,7 +29,9 @@ import type {
   BranchWorktreePublicationSuccessReceipt,
 } from "@/lib/repository/branch-worktree-publication";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 10 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 11 as const;
+export const APP_BUILDER_WORKFLOW_STATE_KEY =
+  "autograph-app-builder.workflow.v11" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -306,6 +308,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v9",
+  APP_BUILDER_WORKFLOW_STATE_KEY,
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );

@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  APP_BUILDER_WORKFLOW_STATE_KEY,
   assertExactWorkflowState,
   assertPublicationJournalStatus,
   assertUpstreamMutationAllowed,
@@ -11,9 +13,19 @@ import {
 } from "./workflow-state";
 
 const state = (phase: AppBuilderWorkflowState["phase"]) =>
-  ({ version: 10, phase }) as AppBuilderWorkflowState;
+  ({
+    version: APP_BUILDER_WORKFLOW_VERSION,
+    phase,
+  }) as AppBuilderWorkflowState;
 
-describe("workflow V10 aggregate boundary", () => {
+describe(`workflow V${APP_BUILDER_WORKFLOW_VERSION} aggregate boundary`, () => {
+  it("uses a new durable key so earlier aggregates cannot be reinterpreted", () => {
+    expect(APP_BUILDER_WORKFLOW_STATE_KEY).toBe(
+      `autograph-app-builder.workflow.v${APP_BUILDER_WORKFLOW_VERSION}`,
+    );
+    expect(APP_BUILDER_WORKFLOW_STATE_KEY).not.toMatch(/workflow\.v(?:9|10)$/u);
+  });
+
   it.each([
     "publication_pending",
     "publication_failed",

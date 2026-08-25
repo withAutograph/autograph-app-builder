@@ -181,6 +181,10 @@ export function createBranchWorktreePublicationProposal(input: {
 export function assertExactBranchWorktreeProposal(
   proposal: BranchWorktreePublicationProposal,
 ): void {
+  if (proposal.version !== BRANCH_WORKTREE_PUBLICATION_VERSION)
+    throw new Error(
+      "A canonical V2 branch-worktree publication proposal is required.",
+    );
   if (proposal.digest !== stableDigest(canonicalProposal(proposal)))
     throw new Error("The branch-worktree publication digest is malformed.");
   const identity = branchPublicationIdentity({

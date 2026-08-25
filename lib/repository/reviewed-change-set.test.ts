@@ -12,6 +12,10 @@ import {
 const digest = (character: string) => character.repeat(64).slice(0, 64);
 const sha256 = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const acceptedAppSpec = Buffer.from("# Accepted AppSpec\n");
+const acceptedAppSpecDigest = createHash("sha256")
+  .update(acceptedAppSpec)
+  .digest("hex");
 
 const preTree = [
   { path: "apps/a/package.json", mode: "644", digest: digest("e") },
@@ -19,6 +23,11 @@ const preTree = [
 const postTree = [
   { path: "apps/a/package.json", mode: "644", digest: digest("f") },
   { path: "apps/z/package.json", mode: "644", digest: digest("d") },
+  {
+    path: "prototype/example/app-spec.md",
+    mode: "644",
+    digest: acceptedAppSpecDigest,
+  },
 ];
 const changes = [
   {
@@ -32,13 +41,20 @@ const changes = [
     kind: "added" as const,
     after: { mode: "644", digest: digest("d") },
   },
+  {
+    path: "prototype/example/app-spec.md",
+    kind: "added" as const,
+    after: { mode: "644", digest: acceptedAppSpecDigest },
+  },
 ];
 
 const apply = {
+  version: 2,
   sourceSha: "1".repeat(40),
   eligibilityDigest: digest("2"),
   workspaceDigest: digest("3"),
-  appSpecDigest: digest("4"),
+  appSpecDigest: acceptedAppSpecDigest,
+  appSpecPath: "prototype/expense-review/app-spec.md",
   artifactRevision: digest("5"),
   dependencyReceiptDigest: digest("6"),
   identityDigest: digest("7"),
@@ -64,7 +80,19 @@ const apply = {
 } as unknown as TargetApplyReceipt;
 
 const validation = {
+  version: 2,
   status: "passed",
+  sourceSha: apply.sourceSha,
+  eligibilityDigest: apply.eligibilityDigest,
+  workspaceDigest: apply.workspaceDigest,
+  appSpecDigest: apply.appSpecDigest,
+  appSpecPath: apply.appSpecPath,
+  artifactRevision: apply.artifactRevision,
+  dependencyReceiptDigest: apply.dependencyReceiptDigest,
+  identityDigest: apply.identityDigest,
+  imageDigest: apply.imageDigest,
+  dependencyCacheDigest: apply.dependencyCacheDigest,
+  proposalDigest: apply.proposalDigest,
   applyDigest: apply.digest,
   appliedTreeDigest: apply.postTreeDigest,
   changedContentDigest: apply.changedContentDigest,
@@ -72,21 +100,68 @@ const validation = {
 } as unknown as TargetValidationReceipt;
 
 describe("reviewed change-set receipts", () => {
+  it("rejects historical and wrong-version runtime receipts before review", () => {
+    const historicalApply = { ...apply, version: 1 } as Record<string, unknown>;
+    delete historicalApply.appSpecPath;
+    expect(() =>
+      deriveNormalizedChangeSet(
+        historicalApply as never,
+        validation,
+        digest("2"),
+      ),
+    ).toThrow(/canonical V2 target apply receipt/u);
+    expect(() =>
+      deriveNormalizedChangeSet(
+        { ...apply, version: 1 } as never,
+        validation,
+        digest("2"),
+      ),
+    ).toThrow(/canonical V2 target apply receipt/u);
+    expect(() =>
+      deriveNormalizedChangeSet(
+        apply,
+        { ...validation, version: 1 } as never,
+        digest("2"),
+      ),
+    ).toThrow(/passed validation receipt/u);
+  });
+
+  it("rejects validation bindings that differ from the exact apply", () => {
+    expect(() =>
+      deriveNormalizedChangeSet(
+        apply,
+        { ...validation, appSpecPath: "prototype/other/app-spec.md" } as never,
+        digest("2"),
+      ),
+    ).toThrow(/bindings differ/u);
+  });
   it("normalizes the exact validated apply changes and its approved paths", () => {
     const proposal = deriveNormalizedChangeSet(apply, validation, digest("2"));
     expect(proposal.changes.map(({ path }) => path)).toEqual([
       "apps/a/package.json",
       "apps/z/package.json",
+      "prototype/example/app-spec.md",
     ]);
     expect(proposal.approvedPaths).toEqual([
       "apps/a/package.json",
       "apps/z/package.json",
+      "prototype/example/app-spec.md",
     ]);
     expect(proposal).toMatchObject({
       eligibilityDigest: apply.eligibilityDigest,
       appSpecDigest: apply.appSpecDigest,
+      appSpecPath: apply.appSpecPath,
       artifactRevision: apply.artifactRevision,
       targetReceipt: { contractPath: apply.targetReceipt.contractPath },
+    });
+    expect(
+      proposal.changes.find(
+        ({ path }) => path === "prototype/example/app-spec.md",
+      ),
+    ).toEqual({
+      path: "prototype/example/app-spec.md",
+      kind: "added",
+      after: { mode: "644", digest: acceptedAppSpecDigest },
     });
     const receipt = createReviewedChangeSetReceipt(proposal, "review-call");
     expect(receipt).toMatchObject({

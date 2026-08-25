@@ -11,12 +11,15 @@ import {
   assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
 import {
+  assertCurrentTargetApplyReceipt,
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
 } from "@/lib/repository/target-apply";
 import { planningOverlayRoot } from "@/lib/repository/dependency-cache";
 import {
   appliedOverlayDriftFailure,
+  assertReusableTargetValidationReceipt,
+  assertTargetValidationSourceBindings,
   createTargetValidationAttempt,
   executeProposalBoundValidation,
   fixtureValidationCommandExecutor,
@@ -44,6 +47,11 @@ export default defineTool({
       );
     if (current.applyReceipt.digest !== expectedApplyDigest)
       throw new Error("The target apply receipt changed before validation.");
+    assertCurrentTargetApplyReceipt(current.applyReceipt);
+    if (current.applyReceipt.appSpecPath !== current.appSpec.artifactPath)
+      throw new Error(
+        "The accepted AppSpec path changed before target validation.",
+      );
     exactPrototypeArtifact(current.artifacts, {
       path: current.appSpec.artifactPath,
       digest: current.appSpec.digest,
@@ -113,17 +121,25 @@ export default defineTool({
       );
     }
     if (current.phase === "validated") {
-      const applied = fixture
-        ? await inspectFixtureApplyOverlay(
-            sandbox,
-            current.applyReceipt.applyRoot,
-            current.appSpec.appId,
-          )
-        : await inspectApplyOverlay(sandbox, current.applyReceipt.applyRoot);
-      if (applied.treeDigest !== current.applyReceipt.postTreeDigest)
-        throw new Error(
-          "The applied overlay changed after its target-validation receipt.",
-        );
+      const inspect = (root: string) =>
+        fixture
+          ? inspectFixtureApplyOverlay(sandbox, root, current.appSpec.appId)
+          : inspectApplyOverlay(sandbox, root);
+      const [applied, planning, prepared] = await Promise.all([
+        inspect(current.applyReceipt.applyRoot),
+        inspect(
+          `/workspace/${planningOverlayRoot(current.appSpec.artifactRevision)}`,
+        ),
+        inspect(current.workspace.workspacePath),
+      ]);
+      assertReusableTargetValidationReceipt({
+        apply: current.applyReceipt,
+        validation: current.validationReceipt,
+        expectedAppSpecPath: current.appSpec.artifactPath,
+        appliedTreeDigest: applied.treeDigest,
+        planningTreeDigest: planning.treeDigest,
+        preparedTreeDigest: prepared.treeDigest,
+      });
       return { ...current.validationReceipt, reused: true };
     }
     const readiness = await inspectTargetExecutionReadiness({
@@ -154,11 +170,18 @@ export default defineTool({
           current.appSpec.appId,
         )
       : await inspectApplyOverlay(sandbox, planningRoot);
-    if (planning.treeDigest !== current.applyReceipt.preTreeDigest)
-      throw new Error("The planning overlay changed before target validation.");
     const prepared = fixture
-      ? undefined
+      ? await inspectFixtureApplyOverlay(
+          sandbox,
+          current.workspace.workspacePath,
+          current.appSpec.appId,
+        )
       : await inspectApplyOverlay(sandbox, current.workspace.workspacePath);
+    assertTargetValidationSourceBindings({
+      apply: current.applyReceipt,
+      planningTreeDigest: planning.treeDigest,
+      preparedTreeDigest: prepared.treeDigest,
+    });
     if (fixture && current.appSpec.appId === "validation-interruption")
       throw new Error(
         "Fixture validation interruption after the durable pending receipt.",
@@ -197,14 +220,13 @@ export default defineTool({
           throw new Error(
             "Target execution readiness drifted during validation.",
           );
-        if (prepared !== undefined) {
-          const preparedAfter = await inspectApplyOverlay(
-            sandbox,
-            current.workspace.workspacePath,
-          );
-          if (preparedAfter.treeDigest !== prepared.treeDigest)
-            throw new Error("The prepared source changed during validation.");
-        }
+        const preparedAfter = fixture
+          ? await inspectFixtureApplyOverlay(
+              sandbox,
+              current.workspace.workspacePath,
+              current.appSpec.appId,
+            )
+          : await inspectApplyOverlay(sandbox, current.workspace.workspacePath);
         const planningAfter = fixture
           ? await inspectFixtureApplyOverlay(
               sandbox,
@@ -212,8 +234,11 @@ export default defineTool({
               current.appSpec.appId,
             )
           : await inspectApplyOverlay(sandbox, planningRoot);
-        if (planningAfter.treeDigest !== current.applyReceipt.preTreeDigest)
-          throw new Error("The planning overlay changed during validation.");
+        assertTargetValidationSourceBindings({
+          apply: current.applyReceipt,
+          planningTreeDigest: planningAfter.treeDigest,
+          preparedTreeDigest: preparedAfter.treeDigest,
+        });
         const appliedDuring = fixture
           ? await inspectFixtureApplyOverlay(
               sandbox,
