@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Validate install-ready Agent Plugins release configuration"
+set -euo pipefail
+
+exec "$(mise which node)" --import tsx scripts/validate-plugin.mts --release

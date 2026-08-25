@@ -7,6 +7,7 @@ import {
   APP_BUILDER_WORKFLOW_VERSION,
   APP_BUILDER_WORKFLOW_STATE_KEY,
   assertExactWorkflowState,
+  assertFreshBootstrapJournalStatus,
   assertPublicationJournalStatus,
   assertUpstreamMutationAllowed,
   type AppBuilderWorkflowState,
@@ -23,7 +24,9 @@ describe(`workflow V${APP_BUILDER_WORKFLOW_VERSION} aggregate boundary`, () => {
     expect(APP_BUILDER_WORKFLOW_STATE_KEY).toBe(
       `autograph-app-builder.workflow.v${APP_BUILDER_WORKFLOW_VERSION}`,
     );
-    expect(APP_BUILDER_WORKFLOW_STATE_KEY).not.toMatch(/workflow\.v(?:9|10)$/u);
+    expect(APP_BUILDER_WORKFLOW_STATE_KEY).not.toMatch(
+      /workflow\.v(?:9|10|11)$/u,
+    );
   });
 
   it.each([
@@ -33,11 +36,37 @@ describe(`workflow V${APP_BUILDER_WORKFLOW_VERSION} aggregate boundary`, () => {
     "branch_publication_pending",
     "branch_publication_failed",
     "published_branch_worktree",
+    "fresh_bootstrap_pending",
+    "fresh_bootstrap_failed",
+    "published_fresh_bootstrap",
   ] as const)("rejects upstream mutation in %s", (phase) => {
     expect(() =>
       assertUpstreamMutationAllowed(state(phase), "test mutation"),
     ).toThrow(/permanently disabled/u);
   });
+
+  it.each([
+    ["reviewed", [undefined, "pending", "failed"]],
+    ["fresh_bootstrap_pending", ["pending", "failed", "succeeded"]],
+    ["fresh_bootstrap_failed", ["failed", "succeeded"]],
+    ["published_fresh_bootstrap", ["succeeded"]],
+  ] as const)(
+    "accepts canonical fresh-bootstrap %s windows",
+    (phase, allowed) => {
+      for (const journal of [
+        undefined,
+        "pending",
+        "failed",
+        "succeeded",
+      ] as const) {
+        const assertion = () =>
+          assertFreshBootstrapJournalStatus(phase, journal);
+        if ((allowed as readonly unknown[]).includes(journal))
+          expect(assertion).not.toThrow();
+        else expect(assertion).toThrow(/cannot be paired/u);
+      }
+    },
+  );
 
   it("rejects a stale update racing reviewed to publication pending", () => {
     expect(() =>

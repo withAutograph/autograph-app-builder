@@ -16,7 +16,10 @@ function isReviewedPhase(
       | "published_local"
       | "branch_publication_pending"
       | "branch_publication_failed"
-      | "published_branch_worktree";
+      | "published_branch_worktree"
+      | "fresh_bootstrap_pending"
+      | "fresh_bootstrap_failed"
+      | "published_fresh_bootstrap";
   }
 > {
   return (
@@ -26,7 +29,10 @@ function isReviewedPhase(
     state.phase === "published_local" ||
     state.phase === "branch_publication_pending" ||
     state.phase === "branch_publication_failed" ||
-    state.phase === "published_branch_worktree"
+    state.phase === "published_branch_worktree" ||
+    state.phase === "fresh_bootstrap_pending" ||
+    state.phase === "fresh_bootstrap_failed" ||
+    state.phase === "published_fresh_bootstrap"
   );
 }
 
@@ -198,6 +204,28 @@ export default defineTool({
                 worktreePath: state.branchPublicationReceipt.worktreePath,
                 recoveryRequired:
                   state.branchPublicationReceipt.recoveryRequired,
+              },
+            }
+          : {}),
+      ...(state.phase === "fresh_bootstrap_pending"
+        ? {
+            freshBootstrap: {
+              status: "pending",
+              proposalDigest: state.freshBootstrapProposal.digest,
+              callId: state.freshBootstrapCallId,
+              githubOutcome: "unavailable",
+            },
+          }
+        : state.phase === "fresh_bootstrap_failed" ||
+            state.phase === "published_fresh_bootstrap"
+          ? {
+              freshBootstrap: {
+                status: state.freshBootstrapReceipt.status,
+                digest: state.freshBootstrapReceipt.digest,
+                proposalDigest: state.freshBootstrapReceipt.proposalDigest,
+                destinationPath: state.freshBootstrapReceipt.destinationPath,
+                recoveryRequired: state.freshBootstrapReceipt.recoveryRequired,
+                githubOutcome: "unavailable",
               },
             }
           : {}),

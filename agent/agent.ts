@@ -412,6 +412,136 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The separately approved normalized change set was recorded from the exact canonical applied overlay. Publication did not run.";
   }
   if (
+    message.includes("inspect fresh repository bootstrap at ") ||
+    message.includes("publish fresh repository bootstrap at ")
+  ) {
+    const destinationPath = lastUserMessage?.match(
+      /(?:inspect|publish) fresh repository bootstrap at (\/\S+)/iu,
+    )?.[1];
+    if (destinationPath === undefined)
+      return "The fresh repository destination is missing.";
+    const review = [...toolResults]
+      .reverse()
+      .find(({ name, isError }) => name === "accept_change_set" && !isError)
+      ?.output as { digest?: string } | undefined;
+    if (review?.digest === undefined)
+      return "An exact accepted fresh-template change set is required.";
+    const statusResults = toolResults.filter(
+      ({ name }) => name === "fresh_bootstrap_status",
+    );
+    const status = statusResults.at(-1);
+    if (
+      status === undefined ||
+      (message.includes("stale review") && statusResults.length < 2)
+    )
+      return {
+        toolCalls: [
+          {
+            name: "fresh_bootstrap_status",
+            input: {
+              expectedReviewDigest: message.includes("stale review")
+                ? "0".repeat(64)
+                : review.digest,
+              destinationPath,
+              expectedPrestate: message.includes("exact-empty")
+                ? "empty-directory"
+                : "absent",
+              repositoryIdentity: {
+                initialBranch: "main",
+                authorName: "Autograph App Builder",
+                authorEmail: "app-builder@users.noreply.github.com",
+                commitMessage: "Bootstrap repository",
+                commitTimestamp: "2026-08-25T12:00:00-04:00",
+              },
+            },
+          },
+        ],
+      };
+    if (status.isError)
+      return "Fresh repository bootstrap status was rejected without target mutation.";
+    if (message.includes("inspect fresh repository bootstrap"))
+      return `Fresh repository bootstrap proposal: ${JSON.stringify(status.output)}. Publication requires a separate approval.`;
+    const publications = toolResults.filter(
+      ({ name }) => name === "publish_fresh_repository",
+    );
+    if (publications.length === 0) {
+      const publication = { ...(status.output as Record<string, unknown>) };
+      delete publication.workflowPhase;
+      delete publication.retryAllowed;
+      delete publication.recoveryAllowed;
+      delete publication.reused;
+      return {
+        toolCalls: [
+          {
+            name: "publish_fresh_repository",
+            input: { publication },
+          },
+        ],
+      };
+    }
+    const publication = publications.at(-1);
+    if (publication?.isError)
+      return "Fresh repository publication was canceled, stale, or recovery-required; no other publication tool was used.";
+    return "The exact approved fresh-template result was atomically published as one parentless SHA-1 local repository with no remotes and release disabled.";
+  }
+  if (
+    message.includes("recover fresh repository bootstrap") ||
+    message.includes("retry fresh repository recovery after a lost response")
+  ) {
+    const latestRecoveryIndex = toolResults.findLastIndex(
+      ({ name }) => name === "recover_fresh_repository",
+    );
+    const latestStatusIndex = toolResults.findLastIndex(
+      ({ name }) => name === "artifact_workflow_status",
+    );
+    if (
+      message.includes("lost response") &&
+      latestRecoveryIndex > latestStatusIndex
+    )
+      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+    const status = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "artifact_workflow_status");
+    if (status === undefined)
+      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+    const workflow = status.output as
+      | {
+          phase?: string;
+          freshBootstrap?: { digest?: string; proposalDigest?: string };
+        }
+      | undefined;
+    if (
+      workflow?.phase === "published_fresh_bootstrap" &&
+      message.includes("lost response")
+    )
+      return "The lost-response recovery retry reused the exact durable fresh-bootstrap success receipt without redispatching recovery or another publication tool.";
+    if (
+      workflow?.phase !== "fresh_bootstrap_failed" ||
+      workflow.freshBootstrap?.digest === undefined ||
+      workflow.freshBootstrap.proposalDigest === undefined
+    )
+      return "An exact recovery-required fresh-bootstrap receipt is required.";
+    const recoveries = toolResults.filter(
+      ({ name }) => name === "recover_fresh_repository",
+    );
+    if (recoveries.length === 0)
+      return {
+        toolCalls: [
+          {
+            name: "recover_fresh_repository",
+            input: {
+              expectedJournalDigest: workflow.freshBootstrap.digest,
+              expectedProposalDigest: workflow.freshBootstrap.proposalDigest,
+            },
+          },
+        ],
+      };
+    const recovery = recoveries.at(-1);
+    if (recovery?.isError)
+      return "Fresh repository recovery was canceled or rejected; the exact recovery-required receipt remains authoritative.";
+    return "The separately approved exact fresh-repository recovery completed without using another publication or mutation tool.";
+  }
+  if (
     message.includes("publish reviewed change set to a new branch worktree") ||
     message.includes(
       "publish reviewed change set with stale branch preconditions",

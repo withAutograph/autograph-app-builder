@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#MISE description="Start the local App Builder with an exact fresh-bootstrap capability"
+set -euo pipefail
+
+if (($# != 2)); then
+  echo "usage: mise run local:start -- <owner-only-state-root> <owner-only-destination-root>" >&2
+  exit 64
+fi
+
+export APP_BUILDER_FRESH_BOOTSTRAP_ENABLED=1
+export APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT="$1"
+export APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT="$2"
+
+node_bin="$(mise which node)"
+exec "$node_bin" node_modules/next/dist/bin/next dev

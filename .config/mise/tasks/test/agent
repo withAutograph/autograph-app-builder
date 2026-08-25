@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Run the complete deterministic Eve evaluation suite"
+set -euo pipefail
+
+node_bin="$(mise which node)"
+eve_entry="node_modules/eve/bin/eve.js"
+
+APP_BUILDER_TEST_MODEL=1 \
+APP_BUILDER_LOCAL_PUBLICATION=1 \
+APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1 \
+  "$node_bin" "$eve_entry" eval \
+    --exclude-tag disabled-local-publication fresh-bootstrap-publication \
+    --strict --skip-report
+
+mise run test:fresh-bootstrap-evals
+
+APP_BUILDER_TEST_MODEL=1 \
+APP_BUILDER_LOCAL_PUBLICATION=0 \
+APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1 \
+  exec "$node_bin" "$eve_entry" eval --tag disabled-local-publication --strict --skip-report

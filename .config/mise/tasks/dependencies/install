@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Install the frozen repository dependency graph"
+set -euo pipefail
+
+exec "$(mise which pnpm)" install --frozen-lockfile

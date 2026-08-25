@@ -100,7 +100,7 @@ Before enabling GitHub or hosted repository publication:
    restored to the prepared-source baseline for the pre-snapshot, and then
    staged as an allowed canonical apply change. The exact AppSpec path and
    digest remain receipt-bound by the V2 apply, validation, and normalized
-   change-set receipt shapes; the aggregate workflow remains V11. Every reuse,
+   change-set receipt shapes; the aggregate workflow remains V12. Every reuse,
    validation, review, and local or branch publication boundary checks literal
    V2 before accepting reconstructed digests, so JSON omission of the AppSpec
    path cannot recreate current authority. Failures
@@ -125,21 +125,39 @@ Before enabling GitHub or hosted repository publication:
    `target_execution_status` rechecks the exact planned proposal, prepared
    workspace, and immutable toolchain receipt before any future target command;
    gate every mutating operation in code.
-4. The exact-checkout and branch/worktree local publishers are separately
+4. The exact-checkout, branch/worktree, and fresh-repository local publishers are separately
    approval-gated and verify the destination/source SHA, index, remotes, full
    status, dirty-path overlap, approved paths, modes, and change-set digests.
 5. Eve evals prove approval, cancellation, stale input, dirty overlap,
    partial-failure, lost-response, no automatic redispatch, and separately
    approved recovery behavior without generic shell or writer use.
-6. The implemented fresh local-template receipt and acquisition approval are
-   limited to an exact allowlisted checkout and remain separate from workspace
-   preparation. Add clone/destination creation and GitHub draft-PR publication
-   only as separate source/publication adapters with their own approvals.
+6. The fresh local-template receipt and acquisition approval remain separate
+   from publication. Fresh local publication accepts only the exact reviewed
+   fresh-template tree, an absent or inode-bound exact-empty destination under
+   a configured owner-only root, and a separately approved deterministic Git
+   identity. It writes a fully verified same-filesystem sibling stage, creates
+   one parentless SHA-1/files-ref commit with fixed Git plumbing and no remotes,
+   and uses only the digest-bound native fd-relative NOREPLACE/EXCHANGE adapter.
+   There is no plain-rename or in-place fallback. Journal and kernel-managed
+   lease state are durable before repository mutation; exact partial and
+   swapped-empty layouts require separately approved recovery. A successful
+   exact-empty exchange retains the inode-bound old empty directory as a
+   receipt-bound tombstone; this slice never removes it through a path-based
+   cleanup race. An ACTIVE abandoned lease marker is never takeoverable. Only
+   after every bounded synchronous helper has returned and been reaped may the
+   still-running coordinator write an exact QUIESCED marker and recovery receipt;
+   recovery must name that exact digest under the kernel lock. Parent death
+   leaves ACTIVE state fail-closed, and a pre-journal abandoned marker has no
+   reset in this slice. GitHub
+   draft-PR publication and remote template acquisition remain unavailable.
+   Local operators expose this production capability only with `mise run
+local:start -- <owner-only-state-root> <owner-only-destination-root>`; direct
+   environment configuration is not a supported interface.
 
 Re-run the observational real-backend receipt with:
 
 ```bash
-pnpm test:sandbox-toolchain
+mise run test:sandbox-toolchain
 ```
 
 This command does not install missing tools or authorize target command

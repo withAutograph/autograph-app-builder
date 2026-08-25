@@ -6,8 +6,17 @@ export async function prepareReviewedWorkflow(
   t: EveEvalContext,
   repository: string,
   appId: string,
+  sourceKind: "existing-repository" | "fresh-template" = "existing-repository",
 ): Promise<void> {
-  await t.send(`Prepare supported repository at ${repository}`);
+  await t.send(
+    sourceKind === "fresh-template"
+      ? `Prepare fresh template at ${repository}`
+      : `Prepare supported repository at ${repository}`,
+  );
+  if (sourceKind === "fresh-template") {
+    t.requireInputRequest({ toolName: "approve_source_acquisition" });
+    await t.respondAll("approve");
+  }
   t.requireInputRequest({ toolName: "prepare_workspace" });
   await t.respondAll("approve");
 

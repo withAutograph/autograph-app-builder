@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#MISE description="Run the focused fresh-repository bootstrap Eve evaluations"
+set -euo pipefail
+
+export APP_BUILDER_TEST_MODEL=1
+export APP_BUILDER_LOCAL_PUBLICATION=1
+export APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1
+capability_root="$(mktemp -d "${TMPDIR:-/tmp}/app-builder-fresh-evals.XXXXXX")"
+trap 'rm -rf -- "$capability_root"' EXIT
+chmod 700 "$capability_root"
+mkdir -m 700 "$capability_root/state" "$capability_root/destinations"
+export APP_BUILDER_FRESH_BOOTSTRAP_ENABLED=1
+export APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT="$capability_root/state"
+export APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT="$capability_root/destinations"
+node_bin="$(mise which node)"
+eve_entry="node_modules/eve/bin/eve.js"
+
+if (($# > 0)); then
+  evaluations=("$@")
+else
+  evaluations=(
+    fresh-bootstrap-publication
+    fresh-bootstrap-empty-publication
+    fresh-bootstrap-negative
+    fresh-bootstrap-recovery
+    fresh-bootstrap-wrong-source
+  )
+fi
+
+for evaluation in "${evaluations[@]}"; do
+  if [[ "$evaluation" == "fresh-bootstrap-recovery" ]]; then
+    export APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT=after-stage
+  else
+    unset APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT || true
+  fi
+  "$node_bin" "$eve_entry" eval "$evaluation" --strict --skip-report
+done

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run Eve locally without repository publication capabilities"
+set -euo pipefail
+
+exec "$(mise which node)" node_modules/eve/bin/eve.js dev

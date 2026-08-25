@@ -41,7 +41,7 @@ allowlisted fresh-template checkout:
     an explicit reviewed and published path. Its exact repository path and
     digest remain bound through apply, validation, review, and publication. A
     V2 apply, validation, and normalized-change receipt boundary rejects the
-    earlier path-less receipt shape while the aggregate workflow remains V11.
+    earlier path-less receipt shape while the aggregate workflow remains V12.
     Literal V2 is checked again at apply reuse, validation, reviewed-change,
     local-publication, and branch-publication trust boundaries; recomputing a
     historical receipt digest cannot upgrade its authority. A
@@ -57,13 +57,15 @@ allowlisted fresh-template checkout:
 12. after choosing a publication outcome and granting another approval, either
     apply the reviewed set to the exact original checkout or create a
     deterministic builder-owned branch/worktree at the exact base and apply it
-    there without committing or mutating the original checkout.
+    there without committing or mutating the original checkout; or, for a
+    fresh-template source only, atomically install a fully built one-commit
+    repository at an approved absent or exact-empty local destination.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V11 state key so older, synthetic, or
+workspace. The durable workflow uses its V12 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
 planning receipts;
 an intact prepared sandbox can still be recovered and reviewed again.
@@ -118,8 +120,27 @@ deployment, or release action runs. Partial and lost-response states are never
 replayed automatically; a separate recovery approval must name the
 exact durable journal digest and fails closed on any conflicting bytes or Git
 identity. The original checkout's HEAD, index, and worktree state remain exact.
+
+Fresh local bootstrap is exposed only through the supported mise lifecycle
+entrypoint. Pre-create two disjoint canonical directories owned by the current
+user with mode `0700`, then start the local builder with:
+
+```bash
+mise run local:start -- /absolute/builder-state /absolute/destination-root
+```
+
+The task owns the runtime configuration boundary; do not export bootstrap
+environment variables directly. Every status, publish, and recovery tool
+re-reads the configured roots and fixed executable identities. Without this
+entrypoint—or after either root or helper changes—the capability is unavailable.
+Publication remains separately approval-bound. Restart recovery uses the same
+mise-owned host gate and exact journal digest. An abnormal ACTIVE lease cannot
+be taken over; only a still-running coordinator may mark it QUIESCED after all
+bounded helpers have returned. Exact-empty publication retains the swapped-out
+empty inode as a receipt-bound tombstone rather than deleting it by path.
+
 GitHub draft-PR publication,
-cloning, destination-repository creation, and remote template acquisition
+cloning and remote template acquisition
 remain fail-closed until
 their typed tools and approval receipts land. The skills describe the intended
 workflow, but they must use builder-owned operations; they do not authorize raw
@@ -155,9 +176,11 @@ template manifest.
   with an atomic durable claim, protected source/cache/planning/apply drift
   detection, passed or recovery-required failure receipts, and no
   validation-generated files admitted to reviewed change sets.
-- Two distinct local publication outcomes: exact-checkout apply, or creation of
-  an uncommitted deterministic branch/worktree with separate durable intent,
-  terminal, partial-failure, lost-response, and recovery receipts.
+- Three distinct local publication outcomes: exact-checkout apply, creation of
+  an uncommitted deterministic branch/worktree, or atomic fresh-template
+  bootstrap into an approved absent or exact-empty destination. Each has
+  separate durable intent, terminal, partial-failure, lost-response, and
+  recovery receipts.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
@@ -182,7 +205,7 @@ locations:
 Build the client-neutral installable directory with:
 
 ```bash
-pnpm build:agent-plugin-package
+mise run package:build
 ```
 
 The result is `.artifacts/agent-plugin/autograph-app-builder/`. It is validated
@@ -199,12 +222,12 @@ credentials to each client, and hosted OAuth, tenancy, durable storage, and
 non-Codex client proofs remain required before either claim. The standard also
 does not define client installation UX.
 
-`pnpm validate:plugin` verifies the source components against the vendored,
+`mise run package:validate` verifies the source components against the vendored,
 digest-pinned Agent Plugins 1.0.0 schemas and the specification's version,
 transport, public-header, path-containment, and Agent Skills discovery rules.
 The build command separately validates the generated clean artifact, so source
 files and client adapters cannot accidentally enter the portable package.
-`pnpm validate:release` additionally refuses the development MCP endpoint; it
+`mise run package:validate-release` additionally refuses the development MCP endpoint; it
 does not replace the hosted and cross-client proofs above.
 
 ## Run the Eve agent locally
@@ -212,23 +235,22 @@ does not replace the hosted and cross-client proofs above.
 Use Node.js 24 and pnpm 11.7.0:
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm check
-pnpm test:agent
-pnpm exec eve dev
+mise run dependencies:install
+mise run check
+mise run test:agent
+mise run local:dev
 ```
 
 For a non-interactive smoke test through Eve itself:
 
 ```bash
-APP_BUILDER_TEST_MODEL=1 pnpm exec eve invoke \
-  "What are your app builder capabilities?"
+mise run local:smoke
 ```
 
 To inspect the fixed tool allowlist through Eve's real sandbox backend:
 
 ```bash
-pnpm test:sandbox-toolchain
+mise run test:sandbox-toolchain
 ```
 
 The inspection is observational and remains not-ready unless an externally

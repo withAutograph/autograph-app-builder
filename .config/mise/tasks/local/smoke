@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run the deterministic local Eve capability smoke test"
+set -euo pipefail
+
+export APP_BUILDER_TEST_MODEL=1
+exec "$(mise which node)" node_modules/eve/bin/eve.js invoke \
+  "What are your app builder capabilities?"
