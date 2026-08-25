@@ -41,13 +41,17 @@ allowlisted fresh-template checkout:
     builder-owned copies of the exact applied tree and record a durable pass or
     recovery-required failure receipt without publication claims. A passed
     validation can then produce a read-only normalized change-set proposal and,
-    after separate approval, a durable reviewed receipt.
+    after separate approval, a durable reviewed receipt; and
+12. after choosing a publication outcome and granting another approval, either
+    apply the reviewed set to the exact original checkout or create a
+    deterministic builder-owned branch/worktree at the exact base and apply it
+    there without committing or mutating the original checkout.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V6 state key so older, synthetic, or
+workspace. The durable workflow uses its V10 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
 planning receipts;
 an intact prepared sandbox can still be recovered and reviewed again.
@@ -68,6 +72,38 @@ journal. The workflow records mutation intent before dispatch, verifies exact
 HEAD, index, remote, unrelated-work, and postimage state afterward, and uses a
 checked reverse patch after a reported post-dispatch failure. It does not claim
 multi-file crash atomicity and never changes Git state.
+Branch-worktree publication is a distinct outcome, separately enabled by
+`APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1`, with its canonical pre-created
+builder-owned root named by `APP_BUILDER_BRANCH_WORKTREE_ROOT`. That absolute
+root must be realpath-identical, owned by the current user, mode `0700`, and
+disjoint from the source checkout and Git directories; its lock, journal,
+staging, and worktree families reject links, foreign ownership, permissive
+modes, or filesystem changes. Its read-only
+proposal binds the exact source root/Git identity, base SHA/tree, index,
+remotes, full status, reviewed paths, modes, and content digests to a
+collision-safe branch/worktree identity. Approval records durable intent
+outside the target Git directory before an atomic branch ref creation and a
+filter- and hook-disabled `git worktree add --no-checkout`. Base blobs and
+reviewed postimages are fsynced in builder-owned staging and atomically renamed;
+only the new worktree receives them. An OS-managed `flock` or `lockf` excludes
+concurrent publication and is released by the kernel after process loss. No
+new side effect is dispatched after helper death is observed at a pre/post
+boundary; a synchronous operation already in flight may finish before that
+observation and is covered by the exact durable recovery state. The lock inode
+retains an abandoned-lease marker after abnormal helper or parent loss, so an
+immediate contender fails closed instead of overlapping that operation; this
+slice provides no automatic lease reset. The helper and Git subprocesses use
+fixed executables and minimal environments without ambient Node, Git,
+user-config, or dynamic-loader controls. A graceful hook failure or cancellation
+before durable journal creation explicitly releases the helper, clears the
+lease, and leaves the reviewed workflow retryable. Abnormal helper or parent
+loss before journal creation leaves no journal or branch but retains the
+abandoned lease and therefore requires a future separately authorized reset.
+Every post-journal retry is bound to the journal. No commit, push, remote publication, provider,
+deployment, or release action runs. Partial and lost-response states are never
+replayed automatically; a separate recovery approval must name the
+exact durable journal digest and fails closed on any conflicting bytes or Git
+identity. The original checkout's HEAD, index, and worktree state remain exact.
 GitHub draft-PR publication,
 cloning, destination-repository creation, and remote template acquisition
 remain fail-closed until
@@ -102,6 +138,9 @@ template manifest.
   with an atomic durable claim, protected source/cache/planning/apply drift
   detection, passed or recovery-required failure receipts, and no
   validation-generated files admitted to reviewed change sets.
+- Two distinct local publication outcomes: exact-checkout apply, or creation of
+  an uncommitted deterministic branch/worktree with separate durable intent,
+  terminal, partial-failure, lost-response, and recovery receipts.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
@@ -192,6 +231,14 @@ allowlist of absolute roots. Fresh-template acquisition means approving one
 exact local checkout receipt; it never means cloning or creating a destination
 repository. A separately approved preparation copies the reviewed tree into the
 durable Eve session sandbox; the source checkout is not mutated.
+
+To enable the branch/worktree publication outcome, pre-create a canonical
+builder-owned directory, set its absolute path in
+`APP_BUILDER_BRANCH_WORKTREE_ROOT`, and set
+`APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1`. This does not enable the distinct
+exact-checkout publisher, GitHub publication, commits, pushes, or deployment.
+The host must provide `/usr/bin/flock`, `/bin/flock`, or `/usr/bin/lockf`; the
+operation fails closed when no OS-managed advisory-lock helper exists.
 
 ## Use the local MCP façade
 

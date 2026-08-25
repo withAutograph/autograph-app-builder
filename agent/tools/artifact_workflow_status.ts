@@ -13,14 +13,20 @@ function isReviewedPhase(
       | "reviewed"
       | "publication_pending"
       | "publication_failed"
-      | "published_local";
+      | "published_local"
+      | "branch_publication_pending"
+      | "branch_publication_failed"
+      | "published_branch_worktree";
   }
 > {
   return (
     state.phase === "reviewed" ||
     state.phase === "publication_pending" ||
     state.phase === "publication_failed" ||
-    state.phase === "published_local"
+    state.phase === "published_local" ||
+    state.phase === "branch_publication_pending" ||
+    state.phase === "branch_publication_failed" ||
+    state.phase === "published_branch_worktree"
   );
 }
 
@@ -171,6 +177,27 @@ export default defineTool({
                 status: state.publicationReceipt.status,
                 digest: state.publicationReceipt.digest,
                 recoveryRequired: state.publicationReceipt.recoveryRequired,
+              },
+            }
+          : {}),
+      ...(state.phase === "branch_publication_pending"
+        ? {
+            branchPublication: {
+              status: "pending",
+              proposalDigest: state.branchPublicationProposal.digest,
+              callId: state.branchPublicationCallId,
+            },
+          }
+        : state.phase === "branch_publication_failed" ||
+            state.phase === "published_branch_worktree"
+          ? {
+              branchPublication: {
+                status: state.branchPublicationReceipt.status,
+                digest: state.branchPublicationReceipt.digest,
+                branchName: state.branchPublicationReceipt.branchName,
+                worktreePath: state.branchPublicationReceipt.worktreePath,
+                recoveryRequired:
+                  state.branchPublicationReceipt.recoveryRequired,
               },
             }
           : {}),

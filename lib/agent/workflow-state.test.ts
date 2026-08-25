@@ -11,13 +11,16 @@ import {
 } from "./workflow-state";
 
 const state = (phase: AppBuilderWorkflowState["phase"]) =>
-  ({ version: 8, phase }) as AppBuilderWorkflowState;
+  ({ version: 10, phase }) as AppBuilderWorkflowState;
 
-describe("workflow V8 aggregate boundary", () => {
+describe("workflow V10 aggregate boundary", () => {
   it.each([
     "publication_pending",
     "publication_failed",
     "published_local",
+    "branch_publication_pending",
+    "branch_publication_failed",
+    "published_branch_worktree",
   ] as const)("rejects upstream mutation in %s", (phase) => {
     expect(() =>
       assertUpstreamMutationAllowed(state(phase), "test mutation"),

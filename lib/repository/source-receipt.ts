@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
 import {
   inspectSupportedRepository,
@@ -20,15 +21,64 @@ const contractPaths = [
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
+function fixedGit(
+  path: string,
+  args: readonly string[],
+  encoding: "utf8",
+): string;
+function fixedGit(
+  path: string,
+  args: readonly string[],
+  encoding: "buffer",
+): Buffer;
+function fixedGit(
+  path: string,
+  args: readonly string[],
+  encoding: "utf8" | "buffer",
+): string | Buffer {
+  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+  return execFileSync(
+    executable,
+    [
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "core.attributesfile=/dev/null",
+      "-C",
+      path,
+      ...args,
+    ],
+    {
+      encoding,
+      env: {
+        NODE_ENV: process.env.NODE_ENV ?? "production",
+        PATH: "/usr/bin:/bin",
+        TMPDIR: "/tmp",
+        HOME: "/dev/null",
+        XDG_CONFIG_HOME: "/dev/null",
+        LANG: "C.UTF-8",
+        LC_ALL: "C.UTF-8",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_ATTR_NOSYSTEM: "1",
+      },
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+}
+
 export function inspectSourceContractDigest(
   sourcePath: string,
   sourceSha: string,
 ): string {
   const contract = contractPaths.map((contractPath) => {
-    const entry = execFileSync(
-      "git",
-      ["-C", sourcePath, "ls-tree", sourceSha, "--", contractPath],
-      { encoding: "utf8", maxBuffer: 1024 * 1024 },
+    const entry = fixedGit(
+      sourcePath,
+      ["ls-tree", sourceSha, "--", contractPath],
+      "utf8",
     ).trim();
     const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
     if (match === null || match[3] !== contractPath)
@@ -40,10 +90,10 @@ export function inspectSourceContractDigest(
       mode: match[1],
       objectId: match[2],
       sha256: sha256(
-        execFileSync(
-          "git",
-          ["-C", sourcePath, "show", `${sourceSha}:${contractPath}`],
-          { encoding: "buffer", maxBuffer: 16 * 1024 * 1024 },
+        fixedGit(
+          sourcePath,
+          ["show", `${sourceSha}:${contractPath}`],
+          "buffer",
         ),
       ),
     };
@@ -79,15 +129,10 @@ export async function inspectSourceReceipt(
     sourceKind,
     sourcePath: eligibility.sourcePath,
     sourceSha: eligibility.sourceSha,
-    sourceTree: execFileSync(
-      "git",
-      [
-        "-C",
-        eligibility.sourcePath,
-        "rev-parse",
-        `${eligibility.sourceSha}^{tree}`,
-      ],
-      { encoding: "utf8" },
+    sourceTree: fixedGit(
+      eligibility.sourcePath,
+      ["rev-parse", `${eligibility.sourceSha}^{tree}`],
+      "utf8",
     ).trim(),
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
     eligibilityDigest: eligibility.digest,

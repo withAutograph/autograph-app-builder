@@ -23,8 +23,13 @@ import type {
   LocalPublicationProposal,
   LocalPublicationSuccessReceipt,
 } from "@/lib/repository/local-publication";
+import type {
+  BranchWorktreePublicationFailureReceipt,
+  BranchWorktreePublicationProposal,
+  BranchWorktreePublicationSuccessReceipt,
+} from "@/lib/repository/branch-worktree-publication";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 8 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 10 as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -198,12 +203,34 @@ export type AppBuilderWorkflowState =
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "published_local";
       publicationReceipt: LocalPublicationSuccessReceipt;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "branch_publication_pending";
+      branchPublicationProposal: BranchWorktreePublicationProposal;
+      branchPublicationCallId: string;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "branch_publication_failed";
+      branchPublicationReceipt: BranchWorktreePublicationFailureReceipt;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "published_branch_worktree";
+      branchPublicationReceipt: BranchWorktreePublicationSuccessReceipt;
     } & ReviewedPhase);
 
 export type PublicationWorkflowPhase = Extract<
   AppBuilderWorkflowState,
   {
-    phase: "publication_pending" | "publication_failed" | "published_local";
+    phase:
+      | "publication_pending"
+      | "publication_failed"
+      | "published_local"
+      | "branch_publication_pending"
+      | "branch_publication_failed"
+      | "published_branch_worktree";
   }
 >;
 
@@ -213,7 +240,10 @@ export function isPublicationWorkflowPhase(
   return (
     state.phase === "publication_pending" ||
     state.phase === "publication_failed" ||
-    state.phase === "published_local"
+    state.phase === "published_local" ||
+    state.phase === "branch_publication_pending" ||
+    state.phase === "branch_publication_failed" ||
+    state.phase === "published_branch_worktree"
   );
 }
 
@@ -276,6 +306,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v8",
+  "autograph-app-builder.workflow.v9",
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );
