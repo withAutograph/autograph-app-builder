@@ -11,7 +11,7 @@ import {
   targetExecutionBlockers,
 } from "./target-execution";
 
-const state: AppBuilderWorkflowState = {
+const state = {
   version: APP_BUILDER_WORKFLOW_VERSION,
   phase: "planned",
   preparedByCallId: "prepare-call",
@@ -36,6 +36,18 @@ const state: AppBuilderWorkflowState = {
     workspaceDigest: "c".repeat(64),
     adapter: "arrusted-development-v0",
     eligibilityDigest: "d".repeat(64),
+  },
+  sourceReceipt: {
+    version: 2,
+    sourceKind: "existing-repository",
+    sourcePath: "/source",
+    sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
+    adapter: "arrusted-development-v0",
+    eligibilityDigest: "d".repeat(64),
+    contractDigest: "e".repeat(64),
+    releaseEnabled: false,
+    digest: "f".repeat(64),
   },
   appSpec: {
     appId: "expense-review",
@@ -98,7 +110,7 @@ const state: AppBuilderWorkflowState = {
     plannedByCallId: "plan-call",
     digest: "f".repeat(64),
   },
-};
+} satisfies AppBuilderWorkflowState;
 
 describe("target command readiness", () => {
   it("requires the exact planned proposal receipt", () => {

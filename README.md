@@ -60,7 +60,15 @@ approval-gated, and limited to a fresh builder-owned overlay; a failed attempt
 persists recovery-required state and is never replayed automatically. Validation
 is separately approved, runs each fixed command against an independent copy,
 and persists pending state before execution so an interrupted attempt is never
-redispatched automatically. Local publication, GitHub draft-PR publication,
+redispatched automatically. Local publication is separately approval-bound,
+disabled unless `APP_BUILDER_LOCAL_PUBLICATION=1`, and constrained by
+`REPOSITORY_LOCAL_ROOTS` to the exact original existing checkout. It performs
+a fixed binary-capable `git apply` invocation behind a durable Git-worktree
+journal. The workflow records mutation intent before dispatch, verifies exact
+HEAD, index, remote, unrelated-work, and postimage state afterward, and uses a
+checked reverse patch after a reported post-dispatch failure. It does not claim
+multi-file crash atomicity and never changes Git state.
+GitHub draft-PR publication,
 cloning, destination-repository creation, and remote template acquisition
 remain fail-closed until
 their typed tools and approval receipts land. The skills describe the intended

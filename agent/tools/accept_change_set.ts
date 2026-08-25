@@ -7,6 +7,8 @@ import { assertAtomicReviewedChangeSetReuse } from "@/lib/agent/reviewed-change-
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 
@@ -34,6 +36,7 @@ export default defineTool({
   approval: always(),
   async execute({ changeSet: expectedChangeSet }, ctx) {
     const state = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(state, "reviewed change-set acceptance");
     if (state.phase !== "validated" && state.phase !== "reviewed")
       throw new Error(
         "Read a passed exact target-validation change set before accepting it.",
@@ -58,6 +61,7 @@ export default defineTool({
         state.reviewReceipt.reviewedByCallId,
       );
       appBuilderWorkflowState.update((latest) => {
+        assertExactWorkflowState(latest, state, "reviewed change-set reuse");
         assertAtomicReviewedChangeSetReuse({
           latest:
             latest.phase === "reviewed"
@@ -78,6 +82,7 @@ export default defineTool({
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(latest, state, "reviewed change-set acceptance");
       if (
         latest.phase !== "validated" ||
         latest.validationReceipt.digest !== state.validationReceipt.digest ||
@@ -91,6 +96,7 @@ export default defineTool({
         phase: "reviewed",
         preparedByCallId: latest.preparedByCallId,
         workspace: latest.workspace,
+        sourceReceipt: latest.sourceReceipt,
         artifacts: latest.artifacts,
         appSpec: latest.appSpec,
         dependencyReceipt: latest.dependencyReceipt,

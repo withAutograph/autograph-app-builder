@@ -1,5 +1,7 @@
 import { defineEval } from "eve/evals";
 import { equals, includes, satisfies } from "eve/evals/expect";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
@@ -252,28 +254,62 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
+    await t.send("Publish reviewed change set locally.");
+    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await t.respondAll("cancel");
+    t.succeeded();
+    t.check(t.reply, includes("canceled or rejected"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Publish reviewed change set locally after cancellation.");
+    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("named existing local checkout"));
+    t.check(t.reply, includes("No commit, branch, GitHub publication"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Retry local publication after a lost response.");
+    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(
+      t.reply,
+      includes("reused the exact durable local-publication receipt"),
+    );
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    await t.send("Publish reviewed change set with stale review digest.");
+    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await t.respondAll("approve");
+    t.succeeded();
+    t.check(t.reply, includes("Stale local publication was rejected"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
     await t.send("Record a replacement prototype artifact.");
     t.requireInputRequest({ toolName: "record_prototype_artifact" });
     await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("invalidated the accepted AppSpec and proposal"));
+    t.check(t.reply, includes("durable state was not changed"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 2 });
-    t.check(t.reply, includes('"phase":"prepared"'));
+    t.check(t.reply, includes('"phase":"published_local"'));
     t.check(
       t.reply,
       satisfies(
         (reply) =>
           typeof reply === "string" &&
-          !reply.includes('"appSpec"') &&
-          !reply.includes('"dependencies"') &&
-          !reply.includes('"proposal"') &&
-          !reply.includes('"review"'),
-        "downstream AppSpec, dependency, proposal, and review receipts were invalidated",
+          reply.includes('"review"') &&
+          reply.includes('"publication"'),
+        "published workflow retains exact review and publication receipts",
       ),
     );
     const afterRevision = t.reply;
@@ -282,12 +318,22 @@ export default defineEval({
     t.requireInputRequest({ toolName: "record_prototype_artifact" });
     await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("reused the exact stored artifact revision"));
+    t.check(t.reply, includes("durable state was not changed"));
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
     t.check(t.reply, equals(afterRevision));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
+
+    const topologyPath = join(repository, "apps/shell/microfrontends.json");
+    const topologyBeforeOverlap = await readFile(topologyPath);
+    await writeFile(topologyPath, "concurrent overlap\n");
+    await t.send("Publish reviewed change set locally with dirty overlap.");
+    t.succeeded();
+    t.check(t.reply, includes("preconditions were rejected"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+    await writeFile(topologyPath, topologyBeforeOverlap);
   },
 });

@@ -231,7 +231,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         (result.output as { digest?: string } | undefined)?.digest === digest,
     );
     const requiredMatches = message.includes("retry recording") ? 2 : 1;
-    if (latest?.isError)
+    const failedRecordings = results.filter(({ isError }) => isError).length;
+    if (
+      latest?.isError &&
+      (!message.includes("retry recording") || failedRecordings >= 2)
+    )
       return "Prototype artifact recording was canceled; durable state was not changed.";
     if (matching.length >= requiredMatches) {
       const output = matching.at(-1)?.output as
@@ -407,6 +411,223 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The lost-response retry reused the exact durable reviewed change-set receipt without any target command, validation, or publication."
       : "The separately approved normalized change set was recorded from the exact canonical applied overlay. Publication did not run.";
   }
+  if (
+    message.includes("publish reviewed change set locally") ||
+    message.includes("retry local publication") ||
+    message.includes("publish reviewed change set with stale")
+  ) {
+    const stale = message.includes("stale");
+    const retry = message.includes("retry");
+    const afterCancellation = message.includes("after cancellation");
+    const status = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    const workflow = status?.output as
+      { phase?: string; review?: { digest?: string } } | undefined;
+    const latestPublicationIndex = toolResults.findLastIndex(
+      ({ name }) => name === "publish_reviewed_change_set",
+    );
+    const latestStatusIndex = toolResults.findLastIndex(
+      ({ name }) => name === "workspace_status",
+    );
+    if (
+      status === undefined ||
+      (retry && latestPublicationIndex > latestStatusIndex) ||
+      workflow === undefined ||
+      ![
+        "reviewed",
+        "publication_pending",
+        "publication_failed",
+        "published_local",
+      ].includes(workflow?.phase ?? "")
+    )
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const source = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "inspect_source");
+    const destinationPath = (
+      source?.output as { sourcePath?: string } | undefined
+    )?.sourcePath;
+    if (destinationPath === undefined || workflow.review?.digest === undefined)
+      return "An exact reviewed receipt and explicitly inspected local checkout are required before local publication.";
+    const reviewDigest = workflow.review.digest;
+    const publicationResults = toolResults.filter(
+      ({ name }) => name === "publish_reviewed_change_set",
+    );
+    const required = stale ? 4 : retry ? 3 : afterCancellation ? 2 : 1;
+    const publicationStatuses = toolResults.filter(
+      ({ name }) => name === "local_publication_status",
+    );
+    const latestPublicationStatusIndex = toolResults.findLastIndex(
+      ({ name }) => name === "local_publication_status",
+    );
+    if (
+      latestPublicationStatusIndex < latestStatusIndex ||
+      latestPublicationStatusIndex < latestPublicationIndex
+    )
+      return {
+        toolCalls: [
+          {
+            name: "local_publication_status",
+            input: {
+              destinationPath,
+              expectedReviewDigest: reviewDigest,
+            },
+          },
+        ],
+      };
+    if (
+      message.includes("dirty overlap") &&
+      toolResults.at(-1)?.name !== "local_publication_status"
+    )
+      return {
+        toolCalls: [
+          {
+            name: "local_publication_status",
+            input: {
+              destinationPath,
+              expectedReviewDigest: reviewDigest,
+            },
+          },
+        ],
+      };
+    const proposal = [...publicationStatuses].reverse().at(0);
+    if (proposal === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "local_publication_status",
+            input: {
+              destinationPath,
+              expectedReviewDigest: reviewDigest,
+            },
+          },
+        ],
+      };
+    if (proposal.isError || proposal.output === undefined) {
+      if (message.includes("dirty overlap"))
+        return "Local publication preconditions were rejected before approval or destination mutation.";
+      return {
+        toolCalls: [
+          {
+            name: "local_publication_status",
+            input: {
+              destinationPath,
+              expectedReviewDigest: reviewDigest,
+            },
+          },
+        ],
+      };
+    }
+    const publicationState = proposal.output as {
+      status?: string;
+      retryAllowed?: boolean;
+      recoveryAllowed?: boolean;
+      transactionWindow?: string;
+      workflowPhase?: string;
+    };
+    const durableStatus = publicationState.status;
+    const latestPublicationOutput = publicationResults.at(-1)?.output as
+      { reused?: boolean; terminalizedFailure?: boolean } | undefined;
+    if (
+      publicationState.workflowPhase === "published_local" &&
+      retry &&
+      latestPublicationOutput?.reused === true
+    )
+      return "The lost-response retry reused the exact durable local-publication receipt after postimage readback.";
+    if (
+      publicationState.workflowPhase === "published_local" &&
+      !retry &&
+      !stale
+    )
+      return "The separately approved reviewed change set was applied only to the named existing local checkout. No commit, branch, GitHub publication, provider, deployment, or release action ran.";
+    if (
+      publicationState.workflowPhase === "publication_failed" &&
+      latestPublicationOutput?.terminalizedFailure === true
+    )
+      return "The exact durable local-publication failure was terminalized without redispatching destination mutation.";
+    if (publicationState.workflowPhase === "publication_failed")
+      return "The failed local-publication receipt is readable and was not redispatched automatically.";
+    if (publicationState.recoveryAllowed === true && !retry)
+      return "The durable terminal local-publication journal awaits an explicit recovery request and was not redispatched automatically.";
+    if (
+      durableStatus === "pending" ||
+      publicationState.transactionWindow === "before-journal" ||
+      (durableStatus === "failed" && !publicationState.recoveryAllowed)
+    )
+      return "The prior local-publication attempt is recovery-required and was not redispatched automatically.";
+    const publicationProposal = {
+      ...(proposal.output as Record<string, unknown>),
+    };
+    if (typeof publicationProposal.proposalDigest === "string")
+      publicationProposal.digest = publicationProposal.proposalDigest;
+    delete publicationProposal.workflowPhase;
+    delete publicationProposal.recoveryAllowed;
+    delete publicationProposal.retryAllowed;
+    delete publicationProposal.transactionWindow;
+    delete publicationProposal.durableJournal;
+    delete publicationProposal.status;
+    delete publicationProposal.publishedByCallId;
+    delete publicationProposal.beforeStatusDigest;
+    delete publicationProposal.afterStatusDigest;
+    delete publicationProposal.appliedPaths;
+    delete publicationProposal.intentPaths;
+    delete publicationProposal.rolledBackPaths;
+    delete publicationProposal.conflictedPaths;
+    delete publicationProposal.uncertainPaths;
+    delete publicationProposal.pathEvidence;
+    delete publicationProposal.recoveryRequired;
+    delete publicationProposal.reason;
+    delete publicationProposal.failureMessage;
+    delete publicationProposal.proposalDigest;
+    delete publicationProposal.postconditionDigest;
+    const recoveryResult = toolResults
+      .slice(latestPublicationStatusIndex + 1)
+      .find(({ name }) => name === "publish_reviewed_change_set");
+    if (
+      publicationState.recoveryAllowed === true &&
+      recoveryResult === undefined
+    )
+      return {
+        toolCalls: [
+          {
+            name: "publish_reviewed_change_set",
+            input: { publication: publicationProposal },
+          },
+        ],
+      };
+    if (
+      publicationState.recoveryAllowed !== true &&
+      publicationResults.length < required
+    )
+      return {
+        toolCalls: [
+          {
+            name: "publish_reviewed_change_set",
+            input: {
+              publication: stale
+                ? {
+                    ...publicationProposal,
+                    reviewDigest: "0".repeat(64),
+                  }
+                : publicationProposal,
+            },
+          },
+        ],
+      };
+    const result = recoveryResult ?? publicationResults.at(-1);
+    if (result?.isError)
+      return stale
+        ? "Stale local publication was rejected without changing the destination checkout."
+        : "Local publication was canceled or rejected; the reviewed receipt was preserved.";
+    const output = result?.output as
+      { reused?: boolean; terminalizedFailure?: boolean } | undefined;
+    return output?.terminalizedFailure === true
+      ? "The exact durable local-publication failure was terminalized without redispatching destination mutation."
+      : output?.reused === true
+        ? "The lost-response retry reused the exact durable local-publication receipt after postimage readback."
+        : "The separately approved reviewed change set was applied only to the named existing local checkout. No commit, branch, GitHub publication, provider, deployment, or release action ran.";
+  }
   if (message.includes("read recorded prototype artifact")) {
     const stale = message.includes("stale digest");
     const recorded = [...toolResults]
@@ -518,6 +739,50 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return result.isError
       ? "Sandbox toolchain inspection failed."
       : `Sandbox toolchain receipt: ${JSON.stringify(result.output)}`;
+  }
+  if (message.includes("attempt appspec mutation after publication")) {
+    const status = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "workspace_status");
+    if (status === undefined)
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    const workflow = status.output as
+      | {
+          phase?: string;
+          workspace?: {
+            sourceSha?: string;
+            eligibilityDigest?: string;
+            workspaceDigest?: string;
+          };
+          appSpec?: {
+            appId?: string;
+            digest?: string;
+            artifactRevision?: string;
+          };
+        }
+      | undefined;
+    const attempts = toolResults.filter(
+      ({ name }) => name === "accept_app_spec",
+    );
+    if (attempts.length < 2)
+      return {
+        toolCalls: [
+          {
+            name: "accept_app_spec",
+            input: {
+              appId: workflow?.appSpec?.appId,
+              expectedArtifactDigest: workflow?.appSpec?.digest,
+              expectedArtifactRevision: workflow?.appSpec?.artifactRevision,
+              expectedSourceSha: workflow?.workspace?.sourceSha,
+              expectedEligibilityDigest: workflow?.workspace?.eligibilityDigest,
+              expectedWorkspaceDigest: workflow?.workspace?.workspaceDigest,
+            },
+          },
+        ],
+      };
+    return attempts.at(-1)?.isError
+      ? "AppSpec mutation was denied by the terminal publication workflow."
+      : "AppSpec mutation unexpectedly succeeded.";
   }
   const appSpecMatch =
     /^accept build-ready appspec for ([a-z0-9-]+):\n([\s\S]+)$/iu.exec(
@@ -680,7 +945,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    return "I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set. Publication, cloning, and remote-template acquisition are not implemented yet.";
+    const localPublication =
+      process.env.APP_BUILDER_LOCAL_PUBLICATION === "1"
+        ? " After one further approval, I can apply that exact reviewed set only to a named existing local checkout with base, preimage, status, and postimage verification; it never commits, changes history, or publishes remotely."
+        : " Local checkout publication is disabled on this host; I can still produce and review the exact change set without mutating the checkout.";
+    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication} Cloning and remote-template acquisition are not implemented yet.`;
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });

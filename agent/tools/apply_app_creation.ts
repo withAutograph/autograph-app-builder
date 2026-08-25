@@ -7,6 +7,8 @@ import { inspectTargetExecutionReadiness } from "@/lib/agent/target-execution";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
 import {
   executeProposalBoundApply,
@@ -25,6 +27,7 @@ export default defineTool({
   approval: always(),
   async execute({ expectedProposalDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "target proposal apply");
     if (
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
@@ -104,34 +107,50 @@ export default defineTool({
       appliedByCallId: ctx.callId,
     });
     if (!result.ok) {
-      appBuilderWorkflowState.update(() => ({
+      appBuilderWorkflowState.update((latest) => {
+        assertExactWorkflowState(
+          latest,
+          current,
+          "target apply failure recording",
+        );
+        return {
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          phase: "apply_failed",
+          preparedByCallId: current.preparedByCallId,
+          workspace: current.workspace,
+          sourceReceipt: current.sourceReceipt,
+          artifacts: current.artifacts,
+          appSpec: current.appSpec,
+          dependencyReceipt: current.dependencyReceipt,
+          identityReceipt: current.identityReceipt,
+          proposal: current.proposal,
+          applyFailure: result.receipt,
+        };
+      });
+      throw new Error(
+        `Target apply entered recovery-required partial failure ${result.receipt.digest}.`,
+      );
+    }
+    appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(
+        latest,
+        current,
+        "target apply success recording",
+      );
+      return {
         version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "apply_failed",
+        phase: "applied",
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
+        sourceReceipt: current.sourceReceipt,
         artifacts: current.artifacts,
         appSpec: current.appSpec,
         dependencyReceipt: current.dependencyReceipt,
         identityReceipt: current.identityReceipt,
         proposal: current.proposal,
-        applyFailure: result.receipt,
-      }));
-      throw new Error(
-        `Target apply entered recovery-required partial failure ${result.receipt.digest}.`,
-      );
-    }
-    appBuilderWorkflowState.update(() => ({
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      phase: "applied",
-      preparedByCallId: current.preparedByCallId,
-      workspace: current.workspace,
-      artifacts: current.artifacts,
-      appSpec: current.appSpec,
-      dependencyReceipt: current.dependencyReceipt,
-      identityReceipt: current.identityReceipt,
-      proposal: current.proposal,
-      applyReceipt: result.receipt,
-    }));
+        applyReceipt: result.receipt,
+      };
+    });
     return { ...result.receipt, reused: false };
   },
 });

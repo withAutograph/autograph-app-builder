@@ -7,6 +7,8 @@ import { inspectTargetExecutionReadiness } from "@/lib/agent/target-execution";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
 import {
   inspectApplyOverlay,
@@ -30,6 +32,7 @@ export default defineTool({
   approval: always(),
   async execute({ expectedApplyDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "target proposal validation");
     if (
       current.phase !== "applied" &&
       current.phase !== "validation_pending" &&
@@ -58,6 +61,7 @@ export default defineTool({
       version: APP_BUILDER_WORKFLOW_VERSION,
       preparedByCallId: current.preparedByCallId,
       workspace: current.workspace,
+      sourceReceipt: current.sourceReceipt,
       artifacts: current.artifacts,
       appSpec: current.appSpec,
       dependencyReceipt: current.dependencyReceipt,
@@ -67,6 +71,11 @@ export default defineTool({
     } as const;
     if (attempt !== undefined)
       appBuilderWorkflowState.update((latest) => {
+        assertExactWorkflowState(
+          latest,
+          current,
+          "target validation attempt recording",
+        );
         if (
           latest.phase !== "applied" ||
           latest.applyReceipt.digest !== current.applyReceipt.digest ||
@@ -233,6 +242,16 @@ export default defineTool({
       };
     if (!result.ok) {
       appBuilderWorkflowState.update((latest) => {
+        const expectedPending = {
+          ...base,
+          phase: "validation_pending" as const,
+          validationAttempt: attempt,
+        };
+        assertExactWorkflowState(
+          latest,
+          expectedPending,
+          "target validation failure recording",
+        );
         if (
           latest.phase !== "validation_pending" ||
           latest.validationAttempt.digest !== attempt.digest
@@ -251,6 +270,16 @@ export default defineTool({
       );
     }
     appBuilderWorkflowState.update((latest) => {
+      const expectedPending = {
+        ...base,
+        phase: "validation_pending" as const,
+        validationAttempt: attempt,
+      };
+      assertExactWorkflowState(
+        latest,
+        expectedPending,
+        "target validation success recording",
+      );
       if (
         latest.phase !== "validation_pending" ||
         latest.validationAttempt.digest !== attempt.digest

@@ -48,8 +48,9 @@ missing operation with a raw shell command or generic file write.
    path set from the canonical applied overlay. Then request separate approval
    for `accept_change_set`, carrying that exact payload; it recomputes the
    proposal and records the durable reviewed receipt. Request a separate
-   publication approval before creating
-   a commit, branch, draft pull request, or other named publication outcome.
+   local-publication approval before applying the reviewed paths to a named
+   existing checkout. This does not create a commit, branch, draft pull
+   request, or other remote publication outcome.
    State exactly that apply created and route-configured state only in its fresh
    overlay and validation used separate copies; neither operation published,
    provisioned providers, deployed the app, activated releases, or proved

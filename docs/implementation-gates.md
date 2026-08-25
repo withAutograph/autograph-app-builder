@@ -3,12 +3,25 @@
 The loopback local adapter and approval-gated isolated workflow through target
 validation are usable for local development and testing. Apply remains confined
 to a fresh builder-owned overlay; validation uses independent copies of that
-exact tree. Reviewed change-set generation, local publication, and hosted
-operation remain fail-closed until their typed tools and receipts land; the
+exact tree. Reviewed change-set generation and approval-bound local publication
+to an existing checkout are implemented; hosted
+operations remain fail-closed until their typed tools and receipts land; the
 generic shell and writer remain disabled. Hosted use also remains
 fail-closed until the production identity and session gates below are complete.
 
-Before enabling local repository mutation or publication:
+Local publication requires `APP_BUILDER_LOCAL_PUBLICATION=1` and an exact
+canonical checkout under `REPOSITORY_LOCAL_ROOTS`. Workflow V8 atomically owns
+the exact pending and terminal publication attempt. The builder applies one
+binary-capable patch through fixed `git apply` arguments after recording durable
+intent and rechecking root, Git-directory, HEAD, index, remote, unrelated-work,
+and reviewed-path identities. Topology is dispatched last. A reported
+post-dispatch failure is inspected and reversed only when every publisher
+postimage still matches. Multi-file publication is not globally crash-atomic;
+an interrupted or conflicted rollback is recorded as recovery-required and is
+never automatically retried. It does not touch the Git index, HEAD, branch,
+remotes, commits, providers, deployments, or releases.
+
+Before enabling GitHub or hosted repository publication:
 
 1. Build and pre-load an externally approved OCI image pinned by manifest
    digest, containing Git, `mise 2026.8.12`, `bun 1.3.14`, and the exact
