@@ -8,7 +8,7 @@ import {
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 
-export const FRESH_BOOTSTRAP_VERSION = 2 as const;
+export const FRESH_BOOTSTRAP_VERSION = 3 as const;
 
 export type PathIdentity = {
   path: string;
@@ -31,6 +31,7 @@ export type FreshBootstrapCapability = {
   systemPythonIdentity: ExecutableIdentity;
   systemNode: string;
   systemNodeIdentity: ExecutableIdentity;
+  lockStrategy: "flock" | "lockf";
   lockHelper: string;
   lockHelperIdentity: ExecutableIdentity;
   authority: "configured-production" | "structural-test-injection";
@@ -73,6 +74,7 @@ export type FreshBootstrapProposal = {
     systemPythonIdentity: ExecutableIdentity;
     systemNode: string;
     systemNodeIdentity: ExecutableIdentity;
+    lockStrategy: FreshBootstrapCapability["lockStrategy"];
     lockHelper: FreshBootstrapCapability["lockHelper"];
     lockHelperIdentity: ExecutableIdentity;
   };
@@ -306,6 +308,7 @@ function exactCapability(
     systemPythonIdentity: capability.systemPythonIdentity,
     systemNode: capability.systemNode,
     systemNodeIdentity: capability.systemNodeIdentity,
+    lockStrategy: capability.lockStrategy,
     lockHelper: capability.lockHelper,
     lockHelperIdentity: capability.lockHelperIdentity,
   };
@@ -461,9 +464,11 @@ export function assertExactFreshBootstrapProposal(
     !isExecutableIdentity(proposal.capability.systemGitIdentity) ||
     !isExecutableIdentity(proposal.capability.systemPythonIdentity) ||
     !isExecutableIdentity(proposal.capability.systemNodeIdentity) ||
-    !isExecutableIdentity(proposal.capability.lockHelperIdentity)
+    !isExecutableIdentity(proposal.capability.lockHelperIdentity) ||
+    (proposal.capability.lockStrategy !== "flock" &&
+      proposal.capability.lockStrategy !== "lockf")
   )
-    throw new Error("The fresh-bootstrap proposal is not canonical V2.");
+    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
   if (
     !hasExactKeys(proposal, [
       "version",
@@ -507,6 +512,7 @@ export function assertExactFreshBootstrapProposal(
       "systemPythonIdentity",
       "systemNode",
       "systemNodeIdentity",
+      "lockStrategy",
       "lockHelper",
       "lockHelperIdentity",
     ]) ||
@@ -563,7 +569,7 @@ export function assertExactFreshBootstrapProposal(
       }) ||
     proposal.digest !== stableDigest(canonicalProposal(proposal))
   )
-    throw new Error("The fresh-bootstrap proposal is not canonical V2.");
+    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
 }
 
 function dirnameForComparison(path: string): string {

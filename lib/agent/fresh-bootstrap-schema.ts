@@ -22,6 +22,7 @@ const capability = z.strictObject({
   systemPythonIdentity: executableIdentity,
   systemNode: z.string().startsWith("/"),
   systemNodeIdentity: executableIdentity,
+  lockStrategy: z.enum(["flock", "lockf"]),
   lockHelper: z.string().startsWith("/"),
   lockHelperIdentity: executableIdentity,
 });
@@ -39,7 +40,7 @@ const prestate = z.discriminatedUnion("kind", [
 ]);
 
 export const freshBootstrapProposalSchema = z.strictObject({
-  version: z.literal(2),
+  version: z.literal(3),
   capability,
   destinationPath: z.string().startsWith("/"),
   stagingPath: z.string().startsWith("/"),

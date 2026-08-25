@@ -376,7 +376,8 @@ async function assertCapability(
     !existsSync(capability.systemGit) ||
     !existsSync(capability.systemPython) ||
     !existsSync(capability.systemNode) ||
-    !existsSync(capability.lockHelper)
+    !existsSync(capability.lockHelper) ||
+    (capability.lockStrategy !== "flock" && capability.lockStrategy !== "lockf")
   )
     throw new Error("The fresh-bootstrap capability is invalid.");
   await Promise.all([
@@ -423,15 +424,15 @@ export async function productionFreshBootstrapCapability(
     : existsSync("/bin/python3")
       ? "/bin/python3"
       : undefined;
-  const selectedLockHelper = existsSync("/usr/bin/flock")
-    ? "/usr/bin/flock"
+  const selectedLock = existsSync("/usr/bin/flock")
+    ? ({ strategy: "flock", path: "/usr/bin/flock" } as const)
     : existsSync("/usr/bin/lockf")
-      ? "/usr/bin/lockf"
+      ? ({ strategy: "lockf", path: "/usr/bin/lockf" } as const)
       : undefined;
   if (
     selectedSystemGit === undefined ||
     selectedSystemPython === undefined ||
-    selectedLockHelper === undefined
+    selectedLock === undefined
   )
     throw new Error(
       "Fixed fresh-bootstrap helper executables are unavailable.",
@@ -440,7 +441,7 @@ export async function productionFreshBootstrapCapability(
     canonicalFreshBootstrapHelperPath(selectedSystemGit),
     canonicalFreshBootstrapHelperPath(selectedSystemPython),
     canonicalFreshBootstrapHelperPath(process.execPath),
-    canonicalFreshBootstrapHelperPath(selectedLockHelper),
+    canonicalFreshBootstrapHelperPath(selectedLock.path),
   ]);
   const capability: FreshBootstrapCapability = {
     kind: "fresh-bootstrap-local-v1",
@@ -452,6 +453,7 @@ export async function productionFreshBootstrapCapability(
     systemPythonIdentity: await executableIdentity(systemPython),
     systemNode,
     systemNodeIdentity: await executableIdentity(systemNode),
+    lockStrategy: selectedLock.strategy,
     lockHelper,
     lockHelperIdentity: await executableIdentity(lockHelper),
     authority: "configured-production",
@@ -676,9 +678,10 @@ async function acquireLease(
   const state = await lstat(path);
   await assertExactExecutable(capability.lockHelperIdentity);
   await assertExactExecutable(capability.systemNodeIdentity);
-  const helper = capability.lockHelper.endsWith("flock")
-    ? { command: capability.lockHelper, args: ["-n", path] }
-    : { command: capability.lockHelper, args: ["-k", "-t", "0", path] };
+  const helper =
+    capability.lockStrategy === "flock"
+      ? { command: capability.lockHelper, args: ["-n", path] }
+      : { command: capability.lockHelper, args: ["-k", "-t", "0", path] };
   const marker = `APP_BUILDER_FRESH_BOOTSTRAP_LEASE_ACTIVE_V1:${process.pid}:${randomUUID()}\n`;
   const holder = spawn(
     helper.command,
@@ -786,9 +789,10 @@ async function quiesceAbandonedLease(
   const state = await lstat(path);
   await assertExactExecutable(capability.lockHelperIdentity);
   await assertExactExecutable(capability.systemNodeIdentity);
-  const helper = capability.lockHelper.endsWith("flock")
-    ? { command: capability.lockHelper, args: ["-n", path] }
-    : { command: capability.lockHelper, args: ["-k", "-t", "0", path] };
+  const helper =
+    capability.lockStrategy === "flock"
+      ? { command: capability.lockHelper, args: ["-n", path] }
+      : { command: capability.lockHelper, args: ["-k", "-t", "0", path] };
   const marker = `APP_BUILDER_FRESH_BOOTSTRAP_LEASE_QUIESCED_V1:${expectedActiveDigest}:${randomUUID()}\n`;
   const holder = spawn(
     helper.command,
@@ -1169,6 +1173,7 @@ async function assertExactInputs(input: {
         systemPythonIdentity: input.capability.systemPythonIdentity,
         systemNode: input.capability.systemNode,
         systemNodeIdentity: input.capability.systemNodeIdentity,
+        lockStrategy: input.capability.lockStrategy,
         lockHelper: input.capability.lockHelper,
         lockHelperIdentity: input.capability.lockHelperIdentity,
       })

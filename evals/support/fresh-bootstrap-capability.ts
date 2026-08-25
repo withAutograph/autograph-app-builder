@@ -84,6 +84,9 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
   const allowedRoot = join(owner, "destinations");
   await mkdir(stateRoot, { mode: 0o700 });
   await mkdir(allowedRoot, { mode: 0o700 });
+  const selectedLock = existsSync("/usr/bin/flock")
+    ? ({ strategy: "flock", path: "/usr/bin/flock" } as const)
+    : ({ strategy: "lockf", path: "/usr/bin/lockf" } as const);
   const [systemGit, systemPython, systemNode, lockHelper] = await Promise.all([
     canonicalFreshBootstrapHelperPath(
       existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
@@ -92,9 +95,7 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
       existsSync("/usr/bin/python3") ? "/usr/bin/python3" : "/bin/python3",
     ),
     canonicalFreshBootstrapHelperPath(process.execPath),
-    canonicalFreshBootstrapHelperPath(
-      existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/usr/bin/lockf",
-    ),
+    canonicalFreshBootstrapHelperPath(selectedLock.path),
   ]);
   return {
     allowedRoot,
@@ -108,6 +109,7 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
       systemPythonIdentity: await executableIdentity(systemPython),
       systemNode,
       systemNodeIdentity: await executableIdentity(systemNode),
+      lockStrategy: selectedLock.strategy,
       lockHelper,
       lockHelperIdentity: await executableIdentity(lockHelper),
       authority: "structural-test-injection",

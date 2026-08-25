@@ -128,7 +128,13 @@ async function createTestSource(): Promise<string> {
   return root;
 }
 
-async function fixture(expectedPrestate: "absent" | "empty-directory") {
+async function fixture(
+  expectedPrestate: "absent" | "empty-directory",
+  lockSelection?: {
+    strategy: FreshBootstrapCapability["lockStrategy"];
+    path: string;
+  },
+) {
   const sourceRoot = await createTestSource();
   const source = await inspectSourceReceipt("fresh-template", sourceRoot);
   const changedPath = "apps/shell/microfrontends.json";
@@ -197,9 +203,12 @@ async function fixture(expectedPrestate: "absent" | "empty-directory") {
   const systemPython = await realpath(
     existsSync("/usr/bin/python3") ? "/usr/bin/python3" : "/bin/python3",
   );
-  const lockHelper = await realpath(
-    existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/usr/bin/lockf",
-  );
+  const selectedLock =
+    lockSelection ??
+    (existsSync("/usr/bin/flock")
+      ? ({ strategy: "flock", path: "/usr/bin/flock" } as const)
+      : ({ strategy: "lockf", path: "/usr/bin/lockf" } as const));
+  const lockHelper = await realpath(selectedLock.path);
   const systemNode = await realpath(process.execPath);
   const capability: FreshBootstrapCapability = {
     kind: "fresh-bootstrap-local-v1",
@@ -211,6 +220,7 @@ async function fixture(expectedPrestate: "absent" | "empty-directory") {
     systemPythonIdentity: await executableIdentity(systemPython),
     systemNode,
     systemNodeIdentity: await executableIdentity(systemNode),
+    lockStrategy: selectedLock.strategy,
     lockHelper,
     lockHelperIdentity: await executableIdentity(lockHelper),
     authority: "structural-test-injection",
@@ -260,6 +270,68 @@ it("canonicalizes selected git, python, and lock helper symlinks", async () => {
     );
   }
 });
+
+async function lockStrategyWrapper(
+  strategy: FreshBootstrapCapability["lockStrategy"],
+): Promise<string> {
+  const owner = await mkdtemp(join(tmpdir(), `app-builder-${strategy}-link-`));
+  roots.push(owner);
+  const executable = join(owner, "canonical-lock-helper");
+  const nativeFlock = existsSync("/usr/bin/flock")
+    ? "/usr/bin/flock"
+    : undefined;
+  const nativeLockf = existsSync("/usr/bin/lockf")
+    ? "/usr/bin/lockf"
+    : undefined;
+  if (nativeFlock === undefined && nativeLockf === undefined)
+    throw new Error("A native lock helper is required for this test.");
+  const body =
+    strategy === "flock"
+      ? nativeFlock !== undefined
+        ? `exec ${nativeFlock} "$@"\n`
+        : `test "$1" = "-n"\nshift\nlock_path="$1"\nshift\nexec ${nativeLockf} -k -t 0 "$lock_path" "$@"\n`
+      : nativeLockf !== undefined
+        ? `exec ${nativeLockf} "$@"\n`
+        : `test "$1" = "-k"\ntest "$2" = "-t"\ntest "$3" = "0"\nshift 3\nlock_path="$1"\nshift\nexec ${nativeFlock} -n "$lock_path" "$@"\n`;
+  await writeFile(executable, `#!/bin/sh\nset -eu\n${body}`, { mode: 0o755 });
+  const selected = join(owner, `selected-${strategy}`);
+  await symlink(executable, selected);
+  return selected;
+}
+
+it.each(["flock", "lockf"] as const)(
+  "dispatches the bound %s strategy through a canonical helper and excludes a contender",
+  async (strategy) => {
+    const selected = await lockStrategyWrapper(strategy);
+    const input = await fixture("absent", { strategy, path: selected });
+    expect(input.capability.lockHelper).toMatch(/canonical-lock-helper$/u);
+    expect(input.capability.lockStrategy).toBe(strategy);
+    let signalReady!: () => void;
+    let releaseFirst!: () => void;
+    const ready = new Promise<void>((resolve) => (signalReady = resolve));
+    const held = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const first = publishFreshBootstrap({
+      ...input,
+      publishedByCallId: `first-${strategy}`,
+      hooks: {
+        afterLockReady: async () => {
+          signalReady();
+          await held;
+        },
+      },
+    });
+    await ready;
+    await expect(
+      publishFreshBootstrap({
+        ...input,
+        publishedByCallId: `contender-${strategy}`,
+      }),
+    ).rejects.toThrow(/leased|lease/u);
+    releaseFirst();
+    await expect(first).resolves.toMatchObject({ ok: true });
+  },
+  40_000,
+);
 
 describe.each(["absent", "empty-directory"] as const)(
   "fresh local bootstrap from an %s destination",
@@ -560,7 +632,7 @@ it("rejects rehashed unknown keys plus reserved and prefix-colliding paths", asy
   delete candidate.digest;
   candidate.digest = stableDigest(candidate);
   expect(() => assertExactFreshBootstrapProposal(candidate as never)).toThrow(
-    "canonical V2",
+    "canonical V3",
   );
   expect(() =>
     gitTreeId([{ path: ".git/config", mode: "100644", blob: "a".repeat(40) }]),
@@ -628,6 +700,18 @@ it("rejects source, root, and helper identity drift before mutation", async () =
       publishedByCallId: "publish-call",
     }),
   ).rejects.toThrow("helper identity changed");
+
+  const strategyDrift = await fixture("absent");
+  const changedStrategy = structuredClone(strategyDrift.capability);
+  changedStrategy.lockStrategy =
+    changedStrategy.lockStrategy === "flock" ? "lockf" : "flock";
+  await expect(
+    publishFreshBootstrap({
+      ...strategyDrift,
+      capability: changedStrategy,
+      publishedByCallId: "publish-call",
+    }),
+  ).rejects.toThrow("exact fresh-bootstrap inputs changed");
 });
 
 it("keeps disabled recovery fail-closed after a durable pending attempt", async () => {
@@ -692,7 +776,7 @@ it("rejects V1 proposal and journal shapes even when rehashed", async () => {
   delete oldProposal.digest;
   oldProposal.digest = stableDigest(oldProposal);
   expect(() => assertExactFreshBootstrapProposal(oldProposal as never)).toThrow(
-    "canonical V2",
+    "canonical V3",
   );
   const result = await publishFreshBootstrap({
     ...input,
@@ -711,7 +795,7 @@ it("rejects V1 proposal and journal shapes even when rehashed", async () => {
   oldJournal.digest = stableDigest(oldJournal);
   expect(() =>
     assertCanonicalFreshBootstrapJournal(oldJournal as never),
-  ).toThrow(/canonical V2|malformed/u);
+  ).toThrow(/canonical V3|malformed/u);
   const mixed = {
     ...result.receipt,
     status: "pending",
