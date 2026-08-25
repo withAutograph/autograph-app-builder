@@ -216,7 +216,6 @@ export async function inspectSupportedRepository(
 
   const normalized = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
-    sourcePath,
     sourceSha,
     dirtyPaths: dirtyPaths.toSorted(),
     failures: failures.toSorted(),
@@ -236,6 +235,7 @@ export async function inspectSupportedRepository(
   return {
     ...normalized,
     eligible: failures.length === 0,
+    sourcePath,
     digest: sha256(JSON.stringify(normalized)),
   };
 }
