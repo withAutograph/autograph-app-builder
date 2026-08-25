@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 
 import {
   inspectSupportedRepository,
@@ -21,13 +20,46 @@ const contractPaths = [
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
+export function inspectSourceContractDigest(
+  sourcePath: string,
+  sourceSha: string,
+): string {
+  const contract = contractPaths.map((contractPath) => {
+    const entry = execFileSync(
+      "git",
+      ["-C", sourcePath, "ls-tree", sourceSha, "--", contractPath],
+      { encoding: "utf8", maxBuffer: 1024 * 1024 },
+    ).trim();
+    const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+    if (match === null || match[3] !== contractPath)
+      throw new Error(
+        `Repository contract path is not a regular blob at ${sourceSha}: ${contractPath}`,
+      );
+    return {
+      path: contractPath,
+      mode: match[1],
+      objectId: match[2],
+      sha256: sha256(
+        execFileSync(
+          "git",
+          ["-C", sourcePath, "show", `${sourceSha}:${contractPath}`],
+          { encoding: "buffer", maxBuffer: 16 * 1024 * 1024 },
+        ),
+      ),
+    };
+  });
+  return sha256(JSON.stringify(contract));
+}
+
 export type SourceReceipt = {
-  version: 1;
+  version: 2;
   sourceKind: SourceKind;
   sourcePath: string;
   sourceSha: string;
+  sourceTree: string;
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
   eligibilityDigest: string;
+  /** Stable digest of the supported-template contract at the reviewed SHA. */
   contractDigest: string;
   releaseEnabled: false;
   digest: string;
@@ -42,18 +74,27 @@ export async function inspectSourceReceipt(
     throw new Error(
       `Source is not eligible: ${eligibility.failures.join("; ")}`,
     );
-  const contract = contractPaths.map((contractPath) => ({
-    path: contractPath,
-    sha256: sha256(readFileSync(resolve(eligibility.sourcePath, contractPath))),
-  }));
   const receipt = {
-    version: 1,
+    version: 2,
     sourceKind,
     sourcePath: eligibility.sourcePath,
     sourceSha: eligibility.sourceSha,
+    sourceTree: execFileSync(
+      "git",
+      [
+        "-C",
+        eligibility.sourcePath,
+        "rev-parse",
+        `${eligibility.sourceSha}^{tree}`,
+      ],
+      { encoding: "utf8" },
+    ).trim(),
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
     eligibilityDigest: eligibility.digest,
-    contractDigest: sha256(JSON.stringify(contract)),
+    contractDigest: inspectSourceContractDigest(
+      eligibility.sourcePath,
+      eligibility.sourceSha,
+    ),
     releaseEnabled: false,
   } as const;
   return { ...receipt, digest: sha256(JSON.stringify(receipt)) };

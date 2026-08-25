@@ -4,6 +4,26 @@ import { z } from "zod";
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
+function isReviewedPhase(
+  state: ReturnType<typeof appBuilderWorkflowState.get>,
+): state is Extract<
+  ReturnType<typeof appBuilderWorkflowState.get>,
+  {
+    phase:
+      | "reviewed"
+      | "publication_pending"
+      | "publication_failed"
+      | "published_local";
+  }
+> {
+  return (
+    state.phase === "reviewed" ||
+    state.phase === "publication_pending" ||
+    state.phase === "publication_failed" ||
+    state.phase === "published_local"
+  );
+}
+
 export default defineTool({
   description:
     "Return session-bound artifact workflow receipt metadata without artifact content or mutation.",
@@ -39,7 +59,7 @@ export default defineTool({
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
-      state.phase === "reviewed"
+      isReviewedPhase(state)
         ? {
             appSpec: {
               path: state.appSpec.artifactPath,
@@ -56,7 +76,7 @@ export default defineTool({
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
-      state.phase === "reviewed"
+      isReviewedPhase(state)
         ? { dependencies: { digest: state.dependencyReceipt.digest } }
         : {}),
       ...(state.phase === "identity_resolved" ||
@@ -66,7 +86,7 @@ export default defineTool({
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
-      state.phase === "reviewed"
+      isReviewedPhase(state)
         ? { identity: { digest: state.identityReceipt.digest } }
         : {}),
       ...(state.phase === "planned" ||
@@ -75,7 +95,7 @@ export default defineTool({
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
-      state.phase === "reviewed"
+      isReviewedPhase(state)
         ? { proposal: { digest: state.proposal.digest } }
         : {}),
       ...(state.phase === "apply_failed"
@@ -92,7 +112,7 @@ export default defineTool({
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||
       state.phase === "validated" ||
-      state.phase === "reviewed"
+      isReviewedPhase(state)
         ? {
             apply: {
               status: state.applyReceipt.status,
@@ -120,7 +140,7 @@ export default defineTool({
             },
           }
         : {}),
-      ...(state.phase === "validated" || state.phase === "reviewed"
+      ...(state.phase === "validated" || isReviewedPhase(state)
         ? {
             validation: {
               status: state.validationReceipt.status,
@@ -128,7 +148,7 @@ export default defineTool({
             },
           }
         : {}),
-      ...(state.phase === "reviewed"
+      ...(isReviewedPhase(state)
         ? {
             review: {
               digest: state.reviewReceipt.digest,
@@ -136,6 +156,24 @@ export default defineTool({
             },
           }
         : {}),
+      ...(state.phase === "publication_pending"
+        ? {
+            publication: {
+              status: "pending",
+              proposalDigest: state.publicationProposal.digest,
+              callId: state.publicationCallId,
+            },
+          }
+        : state.phase === "publication_failed" ||
+            state.phase === "published_local"
+          ? {
+              publication: {
+                status: state.publicationReceipt.status,
+                digest: state.publicationReceipt.digest,
+                recoveryRequired: state.publicationReceipt.recoveryRequired,
+              },
+            }
+          : {}),
     };
   },
 });

@@ -1,7 +1,11 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { sha256, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  sha256,
+  appBuilderWorkflowState,
+  assertUpstreamMutationAllowed,
+} from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import {
   dependencyCacheReceiptDigest,
@@ -21,6 +25,7 @@ export default defineTool({
   inputSchema: z.object({}),
   async execute(_input, ctx) {
     const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "workspace readiness inspection");
     if (current.phase === "empty")
       throw new Error(
         "Prepare an eligible repository before checking workspace readiness.",

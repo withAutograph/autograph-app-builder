@@ -3,11 +3,30 @@ import { z } from "zod";
 
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
 import {
-  APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+
+function isReviewedPhase(
+  state: ReturnType<typeof appBuilderWorkflowState.get>,
+): state is Extract<
+  ReturnType<typeof appBuilderWorkflowState.get>,
+  {
+    phase:
+      | "reviewed"
+      | "publication_pending"
+      | "publication_failed"
+      | "published_local";
+  }
+> {
+  return (
+    state.phase === "reviewed" ||
+    state.phase === "publication_pending" ||
+    state.phase === "publication_failed" ||
+    state.phase === "published_local"
+  );
+}
 
 function statusReceipt(
   state: Exclude<
@@ -32,7 +51,7 @@ function statusReceipt(
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
     state.phase === "validated" ||
-    state.phase === "reviewed"
+    isReviewedPhase(state)
       ? {
           appSpec: {
             appId: state.appSpec.appId,
@@ -51,7 +70,7 @@ function statusReceipt(
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
     state.phase === "validated" ||
-    state.phase === "reviewed"
+    isReviewedPhase(state)
       ? { dependencies: { digest: state.dependencyReceipt.digest } }
       : {}),
     ...(state.phase === "identity_resolved" ||
@@ -61,7 +80,7 @@ function statusReceipt(
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
     state.phase === "validated" ||
-    state.phase === "reviewed"
+    isReviewedPhase(state)
       ? { identity: { digest: state.identityReceipt.digest } }
       : {}),
     ...(state.phase === "planned" ||
@@ -70,7 +89,7 @@ function statusReceipt(
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
     state.phase === "validated" ||
-    state.phase === "reviewed"
+    isReviewedPhase(state)
       ? { proposal: { digest: state.proposal.digest } }
       : {}),
     ...(state.phase === "apply_failed"
@@ -87,7 +106,7 @@ function statusReceipt(
     state.phase === "validation_pending" ||
     state.phase === "validation_failed" ||
     state.phase === "validated" ||
-    state.phase === "reviewed"
+    isReviewedPhase(state)
       ? {
           apply: {
             status: state.applyReceipt.status,
@@ -115,7 +134,7 @@ function statusReceipt(
           },
         }
       : {}),
-    ...(state.phase === "validated" || state.phase === "reviewed"
+    ...(state.phase === "validated" || isReviewedPhase(state)
       ? {
           validation: {
             status: state.validationReceipt.status,
@@ -123,7 +142,7 @@ function statusReceipt(
           },
         }
       : {}),
-    ...(state.phase === "reviewed"
+    ...(isReviewedPhase(state)
       ? {
           review: {
             digest: state.reviewReceipt.digest,
@@ -145,15 +164,9 @@ export default defineTool({
     );
     if (durable.phase === "empty") {
       if (observed.state === "absent") return durable;
-      const recovered = {
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "prepared" as const,
-        preparedByCallId: "recovered-from-sandbox",
-        workspace: observed.workspace,
-        artifacts: [],
-      };
-      appBuilderWorkflowState.update(() => recovered);
-      return statusReceipt(recovered, true);
+      throw new Error(
+        "The sandbox workspace cannot be recovered without its original durable source receipt.",
+      );
     }
     if (observed.state === "absent")
       throw new Error(

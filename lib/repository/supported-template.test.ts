@@ -205,7 +205,7 @@ describe("supported-template adapter", () => {
     );
   });
 
-  it("changes the source receipt when the supported contract drifts", async () => {
+  it("keeps the reviewed-object contract stable while dirty eligibility drifts", async () => {
     const root = fixture();
     process.env.REPOSITORY_LOCAL_ROOTS = root;
     const reviewed = await inspectSourceReceipt("fresh-template", root);
@@ -216,7 +216,7 @@ describe("supported-template adapter", () => {
     const drifted = await inspectSourceReceipt("fresh-template", root);
     expect(drifted.sourceSha).toBe(reviewed.sourceSha);
     expect(drifted.eligibilityDigest).not.toBe(reviewed.eligibilityDigest);
-    expect(drifted.contractDigest).not.toBe(reviewed.contractDigest);
+    expect(drifted.contractDigest).toBe(reviewed.contractDigest);
     expect(drifted.digest).not.toBe(reviewed.digest);
   });
 

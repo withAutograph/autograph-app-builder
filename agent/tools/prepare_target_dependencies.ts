@@ -6,6 +6,8 @@ import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
   sha256,
 } from "@/lib/agent/workflow-state";
 import {
@@ -27,6 +29,7 @@ export default defineTool({
   approval: always(),
   async execute({ expectedAppSpecDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "target dependency preparation");
     if (current.phase === "empty" || current.phase === "prepared")
       throw new Error(
         "Accept a build-ready AppSpec before preparing target dependencies.",
@@ -87,15 +90,19 @@ export default defineTool({
       ...unsigned,
       digest: sha256(JSON.stringify(unsigned)),
     };
-    appBuilderWorkflowState.update(() => ({
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      phase: "dependencies_prepared",
-      preparedByCallId: current.preparedByCallId,
-      workspace: current.workspace,
-      artifacts: current.artifacts,
-      appSpec: current.appSpec,
-      dependencyReceipt,
-    }));
+    appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(latest, current, "dependency receipt recording");
+      return {
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        phase: "dependencies_prepared",
+        preparedByCallId: current.preparedByCallId,
+        workspace: current.workspace,
+        sourceReceipt: current.sourceReceipt,
+        artifacts: current.artifacts,
+        appSpec: current.appSpec,
+        dependencyReceipt,
+      };
+    });
     return { ...dependencyReceipt, reused: false };
   },
 });

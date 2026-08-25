@@ -5,6 +5,8 @@ import { z } from "zod";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
@@ -19,6 +21,8 @@ export default defineTool({
   }),
   approval: always(),
   async execute({ expectedSourceReceiptDigest }, ctx) {
+    const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "workspace preparation");
     const source = sourceWorkflowState.get();
     if (source.phase === "empty") throw new Error("No source was reviewed.");
     if (source.receipt.digest !== expectedSourceReceiptDigest)
@@ -39,7 +43,6 @@ export default defineTool({
       sourceSha: expectedSha,
       eligibilityDigest: expectedEligibilityDigest,
     } = currentReceipt;
-    const current = appBuilderWorkflowState.get();
     const currentWorkspace = workflowWorkspace(current);
     if (
       currentWorkspace !== undefined &&
@@ -54,17 +57,19 @@ export default defineTool({
       await ctx.getSandbox(),
       ctx.callId,
     );
-    appBuilderWorkflowState.update(() =>
-      current.phase === "empty" || current.phase === "prepared"
+    appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(latest, current, "workspace preparation");
+      return current.phase === "empty" || current.phase === "prepared"
         ? {
             version: APP_BUILDER_WORKFLOW_VERSION,
             phase: "prepared",
             preparedByCallId: ctx.callId,
             workspace,
+            sourceReceipt: currentReceipt,
             artifacts: [],
           }
-        : current,
-    );
+        : current;
+    });
     return workspace;
   },
 });

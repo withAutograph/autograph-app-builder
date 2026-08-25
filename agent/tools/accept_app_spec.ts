@@ -6,6 +6,8 @@ import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
   validAppId,
 } from "@/lib/agent/workflow-state";
 
@@ -77,6 +79,7 @@ export default defineTool({
     if (!validAppId(appId))
       throw new Error("App id must be one lowercase kebab-case segment.");
     const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "AppSpec acceptance");
     if (current.phase === "validation_pending")
       throw new Error(
         `Target validation attempt ${current.validationAttempt.digest} is pending; AppSpec mutation is disabled until it is recovered.`,
@@ -129,14 +132,18 @@ export default defineTool({
       current.appSpec.appId === accepted.appId
     )
       return { ...current.appSpec, reused: true };
-    appBuilderWorkflowState.update(() => ({
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      phase: "app_spec_accepted",
-      workspace,
-      preparedByCallId: current.preparedByCallId,
-      artifacts: current.artifacts,
-      appSpec: accepted,
-    }));
+    appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(latest, current, "AppSpec acceptance");
+      return {
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        phase: "app_spec_accepted",
+        workspace,
+        sourceReceipt: current.sourceReceipt,
+        preparedByCallId: current.preparedByCallId,
+        artifacts: current.artifacts,
+        appSpec: accepted,
+      };
+    });
     return { ...accepted, reused: false };
   },
 });

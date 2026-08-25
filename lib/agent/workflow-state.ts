@@ -17,8 +17,14 @@ import type {
   TargetValidationReceipt,
 } from "@/lib/repository/target-validation";
 import type { ReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
+import type { SourceReceipt } from "@/lib/repository/source-receipt";
+import type {
+  LocalPublicationFailureReceipt,
+  LocalPublicationProposal,
+  LocalPublicationSuccessReceipt,
+} from "@/lib/repository/local-publication";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 6 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 8 as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -78,8 +84,19 @@ export type AppCreationProposal = TargetExecutionBinding & {
 
 type WorkspacePhase = {
   workspace: PreparedSandboxWorkspace;
+  sourceReceipt: SourceReceipt;
   preparedByCallId: string;
   artifacts: readonly PrototypeArtifact[];
+};
+
+type ReviewedPhase = WorkspacePhase & {
+  appSpec: AcceptedAppSpec;
+  dependencyReceipt: DependencyPreparationReceipt;
+  identityReceipt: TargetIdentityReceipt;
+  proposal: AppCreationProposal;
+  applyReceipt: TargetApplyReceipt;
+  validationReceipt: TargetValidationReceipt;
+  reviewReceipt: ReviewedChangeSetReceipt;
 };
 
 export type AppBuilderWorkflowState =
@@ -165,14 +182,84 @@ export type AppBuilderWorkflowState =
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "reviewed";
-      appSpec: AcceptedAppSpec;
-      dependencyReceipt: DependencyPreparationReceipt;
-      identityReceipt: TargetIdentityReceipt;
-      proposal: AppCreationProposal;
-      applyReceipt: TargetApplyReceipt;
-      validationReceipt: TargetValidationReceipt;
-      reviewReceipt: ReviewedChangeSetReceipt;
-    } & WorkspacePhase);
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "publication_pending";
+      publicationProposal: LocalPublicationProposal;
+      publicationCallId: string;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "publication_failed";
+      publicationReceipt: LocalPublicationFailureReceipt;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "published_local";
+      publicationReceipt: LocalPublicationSuccessReceipt;
+    } & ReviewedPhase);
+
+export type PublicationWorkflowPhase = Extract<
+  AppBuilderWorkflowState,
+  {
+    phase: "publication_pending" | "publication_failed" | "published_local";
+  }
+>;
+
+export function isPublicationWorkflowPhase(
+  state: AppBuilderWorkflowState,
+): state is PublicationWorkflowPhase {
+  return (
+    state.phase === "publication_pending" ||
+    state.phase === "publication_failed" ||
+    state.phase === "published_local"
+  );
+}
+
+/**
+ * The workflow aggregate is the sole mutation authority. Every operation that
+ * can invalidate a reviewed publication must call this before any source,
+ * sandbox, or target I/O.
+ */
+export function assertUpstreamMutationAllowed(
+  state: AppBuilderWorkflowState,
+  operation: string,
+): void {
+  if (isPublicationWorkflowPhase(state))
+    throw new Error(
+      `Local publication is ${state.phase}; ${operation} is permanently disabled for this workflow.`,
+    );
+}
+
+export function assertExactWorkflowState(
+  latest: AppBuilderWorkflowState,
+  expected: AppBuilderWorkflowState,
+  operation: string,
+): void {
+  if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected)))
+    throw new Error(`The workflow changed concurrently before ${operation}.`);
+}
+
+export function assertPublicationJournalStatus(
+  phase:
+    | "reviewed"
+    | "publication_pending"
+    | "publication_failed"
+    | "published_local",
+  status: "pending" | "failed" | "succeeded" | undefined,
+): void {
+  const allowed: Record<typeof phase, readonly (typeof status)[]> = {
+    reviewed: [undefined],
+    publication_pending: [undefined, "pending", "failed", "succeeded"],
+    publication_failed: [undefined, "failed"],
+    published_local: ["succeeded"],
+  };
+  if (!allowed[phase].includes(status))
+    throw new Error(
+      `Workflow phase ${phase} cannot be paired with local-publication journal ${status ?? "absent"}.`,
+    );
+}
 
 export function workflowWorkspace(
   state: AppBuilderWorkflowState,
@@ -189,6 +276,6 @@ export function validAppId(appId: string): boolean {
 }
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
-  "autograph-app-builder.workflow.v6",
+  "autograph-app-builder.workflow.v8",
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );

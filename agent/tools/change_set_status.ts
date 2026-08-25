@@ -69,6 +69,7 @@ export async function exactNormalizedChangeSet(input: {
     input.state.applyReceipt,
     input.state.validationReceipt,
     input.state.proposal.contractDigest,
+    input.state.sourceReceipt.contractDigest,
   );
 }
 

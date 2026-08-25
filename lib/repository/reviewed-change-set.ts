@@ -16,6 +16,7 @@ export type NormalizedChangeSet = {
   applyDigest: string;
   proposalDigest: string;
   contractDigest: string;
+  repositoryContractDigest: string;
   sourceSha: string;
   eligibilityDigest: string;
   workspaceDigest: string;
@@ -111,6 +112,7 @@ export function deriveNormalizedChangeSet(
   apply: TargetApplyReceipt,
   validation: TargetValidationReceipt,
   contractDigest: string,
+  repositoryContractDigest: string = contractDigest,
 ): NormalizedChangeSet {
   if (
     validation.status !== "passed" ||
@@ -121,8 +123,11 @@ export function deriveNormalizedChangeSet(
     throw new Error(
       "A passed validation receipt for the exact apply is required.",
     );
-  if (!/^[0-9a-f]{64}$/u.test(contractDigest))
-    throw new Error("The planned contract digest is invalid.");
+  if (
+    !/^[0-9a-f]{64}$/u.test(contractDigest) ||
+    !/^[0-9a-f]{64}$/u.test(repositoryContractDigest)
+  )
+    throw new Error("The planned or repository contract digest is invalid.");
   const before = normalizedSnapshot(apply.preTree);
   const after = normalizedSnapshot(apply.postTree);
   if (
@@ -146,6 +151,7 @@ export function deriveNormalizedChangeSet(
     applyDigest: apply.digest,
     proposalDigest: apply.proposalDigest,
     contractDigest,
+    repositoryContractDigest,
     sourceSha: apply.sourceSha,
     eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,

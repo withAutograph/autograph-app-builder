@@ -11,6 +11,8 @@ import {
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
 
 export default defineTool({
@@ -24,6 +26,7 @@ export default defineTool({
   approval: always(),
   async execute({ path, mediaType, content }, ctx) {
     const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "prototype artifact recording");
     if (current.phase === "empty")
       throw new Error(
         "Prepare a workspace before recording prototype artifacts.",
@@ -54,13 +57,17 @@ export default defineTool({
     });
     if (recorded.reused)
       return { ...prototypeArtifactReceipt(recorded.artifact), reused: true };
-    appBuilderWorkflowState.update(() => ({
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      phase: "prepared",
-      preparedByCallId: current.preparedByCallId,
-      workspace: current.workspace,
-      artifacts: recorded.artifacts,
-    }));
+    appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(latest, current, "prototype artifact recording");
+      return {
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        phase: "prepared",
+        preparedByCallId: current.preparedByCallId,
+        workspace: current.workspace,
+        sourceReceipt: current.sourceReceipt,
+        artifacts: recorded.artifacts,
+      };
+    });
     return {
       ...prototypeArtifactReceipt(recorded.artifact),
       reused: false,

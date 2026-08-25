@@ -6,6 +6,8 @@ import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
   sha256,
   type TargetIdentityReceipt,
 } from "@/lib/agent/workflow-state";
@@ -26,6 +28,7 @@ export default defineTool({
   approval: always(),
   async execute({ expectedAppSpecDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(current, "target identity and planning");
     if (
       current.phase === "empty" ||
       current.phase === "prepared" ||
@@ -79,6 +82,7 @@ export default defineTool({
       current.phase === "identity_resolved"
         ? current.identityReceipt
         : undefined;
+    let workflowBeforeProposal = current;
     const result = await executeTargetIdentityAndPlanning({
       sandbox,
       executor: execution.fixture
@@ -109,16 +113,26 @@ export default defineTool({
           ...unsigned,
           digest: sha256(JSON.stringify(unsigned)),
         };
-        appBuilderWorkflowState.update(() => ({
+        const identityState = {
           version: APP_BUILDER_WORKFLOW_VERSION,
           phase: "identity_resolved",
           preparedByCallId: current.preparedByCallId,
           workspace: current.workspace,
+          sourceReceipt: current.sourceReceipt,
           artifacts: current.artifacts,
           appSpec: current.appSpec,
           dependencyReceipt: current.dependencyReceipt,
           identityReceipt: identityReceipt!,
-        }));
+        } as const;
+        appBuilderWorkflowState.update((latest) => {
+          assertExactWorkflowState(
+            latest,
+            current,
+            "target identity receipt recording",
+          );
+          return identityState;
+        });
+        workflowBeforeProposal = identityState;
       },
     });
     if (identityReceipt === undefined)
@@ -133,17 +147,25 @@ export default defineTool({
       plannedByCallId: ctx.callId,
     };
     const proposal = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
-    appBuilderWorkflowState.update(() => ({
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      phase: "planned",
-      preparedByCallId: current.preparedByCallId,
-      workspace: current.workspace,
-      artifacts: current.artifacts,
-      appSpec: current.appSpec,
-      dependencyReceipt: current.dependencyReceipt,
-      identityReceipt: recordedIdentity,
-      proposal,
-    }));
+    appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(
+        latest,
+        workflowBeforeProposal,
+        "target proposal recording",
+      );
+      return {
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        phase: "planned",
+        preparedByCallId: current.preparedByCallId,
+        workspace: current.workspace,
+        sourceReceipt: current.sourceReceipt,
+        artifacts: current.artifacts,
+        appSpec: current.appSpec,
+        dependencyReceipt: current.dependencyReceipt,
+        identityReceipt: recordedIdentity,
+        proposal,
+      };
+    });
     return { ...proposal, reused: false };
   },
 });
