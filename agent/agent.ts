@@ -1028,6 +1028,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           phase?: string;
           workspace?: {
             sourceSha?: string;
+            sourceTree?: string;
             eligibilityDigest?: string;
             workspaceDigest?: string;
           };
@@ -1051,6 +1052,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
               expectedArtifactDigest: workflow?.appSpec?.digest,
               expectedArtifactRevision: workflow?.appSpec?.artifactRevision,
               expectedSourceSha: workflow?.workspace?.sourceSha,
+              expectedSourceTree: workflow?.workspace?.sourceTree,
               expectedEligibilityDigest: workflow?.workspace?.eligibilityDigest,
               expectedWorkspaceDigest: workflow?.workspace?.workspaceDigest,
             },
@@ -1078,6 +1080,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       | {
           workspace?: {
             sourceSha?: string;
+            sourceTree?: string;
             eligibilityDigest?: string;
             workspaceDigest?: string;
           };
@@ -1108,6 +1111,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         { digest?: string; revision?: string } | undefined;
       if (
         workspace?.sourceSha === undefined ||
+        workspace.sourceTree === undefined ||
         workspace.eligibilityDigest === undefined ||
         workspace.workspaceDigest === undefined ||
         artifact?.digest === undefined ||
@@ -1123,6 +1127,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
               expectedArtifactDigest: artifact.digest,
               expectedArtifactRevision: artifact.revision,
               expectedSourceSha: workspace.sourceSha,
+              expectedSourceTree: workspace.sourceTree,
               expectedEligibilityDigest: workspace.eligibilityDigest,
               expectedWorkspaceDigest: workspace.workspaceDigest,
             },

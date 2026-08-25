@@ -34,9 +34,9 @@ import type {
   FreshBootstrapSuccessReceipt,
 } from "@/lib/repository/fresh-bootstrap";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 12 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 13 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v12" as const;
+  "autograph-app-builder.workflow.v13" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -60,6 +60,7 @@ export type PrototypeArtifact = {
 
 type TargetExecutionBinding = {
   sourceSha: string;
+  sourceTree: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   imageDigest: string;
@@ -69,7 +70,7 @@ type TargetExecutionBinding = {
 };
 
 export type DependencyPreparationReceipt = TargetExecutionBinding & {
-  version: 1;
+  version: 2;
   targetSha: string;
   targetTree: string;
   cacheManifestDigest: string;

@@ -129,6 +129,7 @@ export function createBranchWorktreePublicationProposal(input: {
     source.headTree !== sourceReceipt.sourceTree ||
     source.contractDigest !== sourceReceipt.contractDigest ||
     review.sourceSha !== sourceReceipt.sourceSha ||
+    review.sourceTree !== sourceReceipt.sourceTree ||
     review.repositoryContractDigest !== sourceReceipt.contractDigest
   )
     throw new Error(

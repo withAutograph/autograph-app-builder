@@ -333,6 +333,7 @@ export function createFreshBootstrapProposal(input: {
     throw new Error("Fresh bootstrap requires a fresh-template source.");
   if (
     input.review.sourceSha !== input.sourceReceipt.sourceSha ||
+    input.review.sourceTree !== input.sourceReceipt.sourceTree ||
     input.review.repositoryContractDigest !== input.sourceReceipt.contractDigest
   )
     throw new Error("The fresh-bootstrap source and review bindings differ.");

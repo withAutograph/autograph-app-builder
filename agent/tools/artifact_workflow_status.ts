@@ -59,6 +59,7 @@ export default defineTool({
       artifacts: state.artifacts.map(prototypeArtifactReceipt),
       workspace: {
         sourceSha: state.workspace.sourceSha,
+        sourceTree: state.workspace.sourceTree,
         eligibilityDigest: state.workspace.eligibilityDigest,
         workspaceDigest: state.workspace.workspaceDigest,
       },

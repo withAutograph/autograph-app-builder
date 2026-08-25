@@ -8,6 +8,7 @@ import {
 } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import {
+  assertExactDependencyTargetBinding,
   dependencyCacheReceiptDigest,
   inspectDependencyCache,
 } from "@/lib/repository/dependency-cache";
@@ -58,7 +59,44 @@ export default defineTool({
     const cache =
       image === undefined
         ? undefined
-        : await inspectDependencyCache(sandbox).catch(() => undefined);
+        : await inspectDependencyCache(
+            sandbox,
+            process.env,
+            current.workspace,
+          ).catch(() => undefined);
+    let sourceTargetReady = false;
+    if (cache !== undefined) {
+      try {
+        assertExactDependencyTargetBinding({
+          workspace: current.workspace,
+          sourceReceipt: current.sourceReceipt,
+          cache,
+          ...(current.phase === "dependencies_prepared" ||
+          current.phase === "identity_resolved" ||
+          current.phase === "planned" ||
+          current.phase === "apply_failed" ||
+          current.phase === "applied" ||
+          current.phase === "validation_pending" ||
+          current.phase === "validation_failed" ||
+          current.phase === "validated" ||
+          current.phase === "reviewed" ||
+          current.phase === "publication_pending" ||
+          current.phase === "publication_failed" ||
+          current.phase === "published_local" ||
+          current.phase === "branch_publication_pending" ||
+          current.phase === "branch_publication_failed" ||
+          current.phase === "published_branch_worktree" ||
+          current.phase === "fresh_bootstrap_pending" ||
+          current.phase === "fresh_bootstrap_failed" ||
+          current.phase === "published_fresh_bootstrap"
+            ? { dependencyReceipt: current.dependencyReceipt }
+            : {}),
+        });
+        sourceTargetReady = true;
+      } catch {
+        sourceTargetReady = false;
+      }
+    }
     const required = (
       Object.keys(requiredToolVersions) as Array<
         keyof typeof requiredToolVersions
@@ -76,9 +114,11 @@ export default defineTool({
     const toolchainReady =
       image !== undefined &&
       cache !== undefined &&
+      sourceTargetReady &&
       required.every((tool) => tool.matches);
     const receipt = {
       sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: image ?? "unconfigured",
@@ -86,6 +126,8 @@ export default defineTool({
         cache === undefined
           ? "unverified"
           : dependencyCacheReceiptDigest(cache),
+      targetSha: cache?.manifest.target.sha ?? "unverified",
+      targetTree: cache?.manifest.target.tree ?? "unverified",
       required,
     };
     return {
@@ -95,6 +137,11 @@ export default defineTool({
       blockers: toolchainReady
         ? []
         : [
+            ...(sourceTargetReady
+              ? []
+              : [
+                  "The prepared source does not match the immutable dependency target.",
+                ]),
             "The immutable sandbox image and exact Git, mise, and Bun receipt are not ready.",
           ],
     };

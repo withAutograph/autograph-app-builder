@@ -404,6 +404,42 @@ describe("supported-template adapter", () => {
     });
   });
 
+  it("rejects reuse when the durable prepared source tree drifts", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const eligibility = await inspectSupportedRepository(root);
+    const sandbox = fakeSandbox();
+    await prepareSupportedSandboxWorkspace(
+      root,
+      eligibility.sourceSha!,
+      eligibility.digest,
+      sandbox,
+      "call_prepare",
+    );
+    const recordPath = resolve(
+      sandbox.resolvePath(".app-builder"),
+      "prepared-workspace.json",
+    );
+    const record = JSON.parse(readFileSync(recordPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    writeFileSync(
+      recordPath,
+      `${JSON.stringify({ ...record, sourceTree: "0".repeat(40) })}\n`,
+    );
+
+    await expect(
+      prepareSupportedSandboxWorkspace(
+        root,
+        eligibility.sourceSha!,
+        eligibility.digest,
+        sandbox,
+        "call_reuse",
+      ),
+    ).rejects.toThrow("already owns a different workspace");
+  });
+
   it("reports an absent workspace and rejects a malformed durable record", async () => {
     const sandbox = fakeSandbox();
     await expect(inspectPreparedSandboxWorkspace(sandbox)).resolves.toEqual({

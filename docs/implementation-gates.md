@@ -81,6 +81,10 @@ Before enabling GitHub or hosted repository publication:
    archive's directories and preserves their metadata during extraction so the
    verified cache remains reliable on the sandbox overlay filesystem. Its durable receipt is
    internally observed; `APP_BUILDER_DEPENDENCY_CACHE_DIGEST` is not accepted.
+   The cache target, durable source receipt, and prepared workspace must agree
+   on both the exact source commit and tree. That binding is carried through
+   dependency, identity, proposal, apply, validation, review, and publication
+   receipts; a SHA match with a different tree fails closed.
    The implemented fixed target identity and planning operation then uses a
    builder-owned overlay, bounded execution, strict output schemas, and durable
    receipts. Real execution still requires both the immutable image and a

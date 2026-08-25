@@ -41,12 +41,14 @@ export default defineTool({
     const {
       sourcePath: path,
       sourceSha: expectedSha,
+      sourceTree: expectedTree,
       eligibilityDigest: expectedEligibilityDigest,
     } = currentReceipt;
     const currentWorkspace = workflowWorkspace(current);
     if (
       currentWorkspace !== undefined &&
       (currentWorkspace.sourceSha !== expectedSha ||
+        currentWorkspace.sourceTree !== expectedTree ||
         currentWorkspace.eligibilityDigest !== expectedEligibilityDigest)
     )
       throw new Error("This Eve session already owns a different workspace.");
@@ -57,6 +59,8 @@ export default defineTool({
       await ctx.getSandbox(),
       ctx.callId,
     );
+    if (workspace.sourceTree !== expectedTree)
+      throw new Error("The prepared source tree changed after review.");
     appBuilderWorkflowState.update((latest) => {
       assertExactWorkflowState(latest, current, "workspace preparation");
       return current.phase === "empty" || current.phase === "prepared"

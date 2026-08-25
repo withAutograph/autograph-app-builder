@@ -51,6 +51,7 @@ const changes = [
 const apply = {
   version: 2,
   sourceSha: "1".repeat(40),
+  sourceTree: "0".repeat(40),
   eligibilityDigest: digest("2"),
   workspaceDigest: digest("3"),
   appSpecDigest: acceptedAppSpecDigest,
@@ -83,6 +84,7 @@ const validation = {
   version: 2,
   status: "passed",
   sourceSha: apply.sourceSha,
+  sourceTree: apply.sourceTree,
   eligibilityDigest: apply.eligibilityDigest,
   workspaceDigest: apply.workspaceDigest,
   appSpecDigest: apply.appSpecDigest,

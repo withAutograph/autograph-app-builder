@@ -5,6 +5,7 @@ import type {
 import type { SandboxSession } from "eve/sandbox";
 
 import {
+  assertExactDependencyTargetBinding,
   dependencyCacheReceiptDigest,
   inspectDependencyCache,
 } from "../repository/dependency-cache";
@@ -68,6 +69,7 @@ export function assertProposalExecutionBindings(
     );
   const expected = {
     sourceSha: state.workspace.sourceSha,
+    sourceTree: state.workspace.sourceTree,
     eligibilityDigest: state.workspace.eligibilityDigest,
     workspaceDigest: state.workspace.workspaceDigest,
     imageDigest: state.dependencyReceipt.imageDigest,
@@ -78,6 +80,7 @@ export function assertProposalExecutionBindings(
   };
   const actual = {
     sourceSha: state.proposal.sourceSha,
+    sourceTree: state.proposal.sourceTree,
     eligibilityDigest: state.proposal.eligibilityDigest,
     workspaceDigest: state.proposal.workspaceDigest,
     imageDigest: state.proposal.imageDigest,
@@ -171,9 +174,18 @@ export async function inspectTargetExecutionReadiness(input: {
   const cache =
     image === undefined
       ? undefined
-      : await inspectDependencyCache(input.sandbox, environment).catch(
-          () => undefined,
-        );
+      : await inspectDependencyCache(
+          input.sandbox,
+          environment,
+          input.state.workspace,
+        ).catch(() => undefined);
+  if (cache !== undefined)
+    assertExactDependencyTargetBinding({
+      workspace: input.state.workspace,
+      sourceReceipt: input.state.sourceReceipt,
+      cache,
+      dependencyReceipt: input.state.dependencyReceipt,
+    });
   const required = (
     Object.keys(requiredToolVersions) as Array<
       keyof typeof requiredToolVersions
@@ -205,6 +217,7 @@ export async function inspectTargetExecutionReadiness(input: {
   });
   const readiness = {
     sourceSha: input.state.workspace.sourceSha,
+    sourceTree: input.state.workspace.sourceTree,
     eligibilityDigest: input.state.workspace.eligibilityDigest,
     workspaceDigest: input.state.workspace.workspaceDigest,
     appSpecDigest: input.state.appSpec.digest,
@@ -216,6 +229,8 @@ export async function inspectTargetExecutionReadiness(input: {
     imageDigest: image ?? "unconfigured",
     dependencyCacheDigest:
       cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
+    targetSha: cache?.manifest.target.sha ?? "unverified",
+    targetTree: cache?.manifest.target.tree ?? "unverified",
     required,
   };
   return {

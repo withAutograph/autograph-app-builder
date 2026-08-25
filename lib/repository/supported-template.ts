@@ -488,11 +488,16 @@ export async function prepareSupportedSandboxWorkspace(
   if (eligibility.digest !== expectedEligibilityDigest)
     throw new Error("Repository eligibility changed after review.");
 
+  const sourceTree = git(eligibility.sourcePath, [
+    "rev-parse",
+    `${expectedSha}^{tree}`,
+  ]);
   const existing = await readSandboxRecord(sandbox);
   if (existing !== undefined) {
     if (
       existing.sourcePath !== eligibility.sourcePath ||
       existing.sourceSha !== expectedSha ||
+      existing.sourceTree !== sourceTree ||
       existing.eligibilityDigest !== expectedEligibilityDigest
     ) {
       throw new Error("This Eve session already owns a different workspace.");
@@ -501,10 +506,6 @@ export async function prepareSupportedSandboxWorkspace(
     return existing;
   }
 
-  const sourceTree = git(eligibility.sourcePath, [
-    "rev-parse",
-    `${expectedSha}^{tree}`,
-  ]);
   const treeEntries = execFileSync(
     "git",
     [

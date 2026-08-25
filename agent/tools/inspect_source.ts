@@ -1,7 +1,10 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { sourceWorkflowState } from "@/lib/agent/source-state";
+import {
+  APP_BUILDER_SOURCE_VERSION,
+  sourceWorkflowState,
+} from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
 export default defineTool({
@@ -14,7 +17,7 @@ export default defineTool({
   async execute({ sourceKind, path }) {
     const receipt = await inspectSourceReceipt(sourceKind, path);
     sourceWorkflowState.update(() => ({
-      version: 1,
+      version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",
       receipt,
     }));

@@ -20,14 +20,15 @@ export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 
 const sha256Digest = z.string().regex(/^[0-9a-f]{64}$/u);
+const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
 
-export const dependencyCacheManifestSchema = z.strictObject({
+const dependencyCacheManifestShapeSchema = z.strictObject({
   version: z.literal(1),
   scope: z.literal("identity-planning"),
   platform: z.literal("linux/arm64"),
   target: z.strictObject({
-    sha: z.literal(ARRUSTED_TARGET_SHA),
-    tree: z.literal(ARRUSTED_TARGET_TREE),
+    sha: gitObjectId,
+    tree: gitObjectId,
     miseConfigSha256: z.literal(
       "a9d2bf3a9366e38a1d75eb05d21b7a7dde46a5530afc5be2bff96be73ceb3782",
     ),
@@ -62,8 +63,16 @@ export const dependencyCacheManifestSchema = z.strictObject({
   }),
 });
 
+export const dependencyCacheManifestSchema =
+  dependencyCacheManifestShapeSchema.refine(
+    ({ target }) =>
+      target.sha === ARRUSTED_TARGET_SHA &&
+      target.tree === ARRUSTED_TARGET_TREE,
+    "dependency target does not match the committed source binding",
+  );
+
 export type DependencyCacheManifest = z.infer<
-  typeof dependencyCacheManifestSchema
+  typeof dependencyCacheManifestShapeSchema
 >;
 
 export type ObservedDependencyCache = {
@@ -71,6 +80,39 @@ export type ObservedDependencyCache = {
   manifestDigest: string;
   contentDigest: string;
 };
+
+type ExactSourceBinding = {
+  sourceSha: string;
+  sourceTree: string;
+};
+
+type ExactDependencyReceiptBinding = ExactSourceBinding & {
+  targetSha: string;
+  targetTree: string;
+};
+
+export function assertExactDependencyTargetBinding(input: {
+  workspace: ExactSourceBinding;
+  sourceReceipt: ExactSourceBinding;
+  cache: ObservedDependencyCache;
+  dependencyReceipt?: ExactDependencyReceiptBinding;
+}): void {
+  const target = input.cache.manifest.target;
+  if (
+    input.workspace.sourceSha !== input.sourceReceipt.sourceSha ||
+    input.workspace.sourceTree !== input.sourceReceipt.sourceTree ||
+    input.workspace.sourceSha !== target.sha ||
+    input.workspace.sourceTree !== target.tree ||
+    (input.dependencyReceipt !== undefined &&
+      (input.dependencyReceipt.sourceSha !== input.workspace.sourceSha ||
+        input.dependencyReceipt.sourceTree !== input.workspace.sourceTree ||
+        input.dependencyReceipt.targetSha !== target.sha ||
+        input.dependencyReceipt.targetTree !== target.tree))
+  )
+    throw new Error(
+      "The prepared source does not match the immutable dependency target.",
+    );
+}
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -89,14 +131,19 @@ function boundedOutput(stdout: string, stderr: string, label: string) {
     throw new Error(`${label} output exceeded the fixed size limit.`);
 }
 
-function fixtureManifest(): DependencyCacheManifest {
+function fixtureManifest(
+  target: ExactSourceBinding = {
+    sourceSha: ARRUSTED_TARGET_SHA,
+    sourceTree: ARRUSTED_TARGET_TREE,
+  },
+): DependencyCacheManifest {
   return {
     version: 1,
     scope: "identity-planning",
     platform: "linux/arm64",
     target: {
-      sha: ARRUSTED_TARGET_SHA,
-      tree: ARRUSTED_TARGET_TREE,
+      sha: target.sourceSha,
+      tree: target.sourceTree,
       miseConfigSha256:
         "a9d2bf3a9366e38a1d75eb05d21b7a7dde46a5530afc5be2bff96be73ceb3782",
       miseLockSha256:
@@ -126,9 +173,10 @@ function fixtureManifest(): DependencyCacheManifest {
 export async function inspectDependencyCache(
   sandbox: SandboxSession,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  fixtureTarget?: ExactSourceBinding,
 ): Promise<ObservedDependencyCache> {
   if (fixtureDependencyCacheEnabled(environment)) {
-    const manifest = fixtureManifest();
+    const manifest = fixtureManifest(fixtureTarget);
     const serialized = `${JSON.stringify(manifest, null, 2)}\n`;
     return {
       manifest,
@@ -198,10 +246,20 @@ export function planningOverlayRoot(artifactRevision: string) {
 export async function materializeOfflineDependencies(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
+  target: ExactSourceBinding;
   environment?: Readonly<Record<string, string | undefined>>;
 }) {
   const environment = input.environment ?? process.env;
-  const observed = await inspectDependencyCache(input.sandbox, environment);
+  const observed = await inspectDependencyCache(
+    input.sandbox,
+    environment,
+    input.target,
+  );
+  assertExactDependencyTargetBinding({
+    workspace: input.target,
+    sourceReceipt: input.target,
+    cache: observed,
+  });
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
     await ensureSandboxDirectories(input.sandbox, [root]);

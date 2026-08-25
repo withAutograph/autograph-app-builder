@@ -77,6 +77,7 @@ export type ApplyCommandExecutor = (input: {
 
 export type TargetApplyBinding = {
   sourceSha: string;
+  sourceTree: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;

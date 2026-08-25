@@ -65,9 +65,11 @@ Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V12 state key so older, synthetic, or
+workspace. The durable workflow uses its V13 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
-planning receipts;
+planning receipts. Every dependency, identity, proposal, apply, validation,
+review, and publication boundary carries the prepared source commit and tree;
+the immutable dependency-cache target must match both before target planning;
 an intact prepared sandbox can still be recovered and reviewed again.
 
 The real target commands remain fail-closed until an immutable cache-bearing
@@ -164,7 +166,7 @@ template manifest.
   readback and a content-free workflow-status receipt.
 - Approval-bound AppSpec acceptance, separate offline dependency preparation,
   and fixed bounded target identity/planning commands. Strict receipts bind
-  source, workspace, toolchain, observed cache bytes, and artifact revision
+  source commit and tree, workspace, toolchain, observed cache bytes, and artifact revision
   without writing the prepared target workspace.
 - Proposal-bound target apply in a fresh builder-owned overlay, with a separate
   approval, a repeated readiness check, normalized pre/post tree evidence, and
