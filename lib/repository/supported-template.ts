@@ -64,9 +64,37 @@ function sha256(value: string | Uint8Array): string {
 }
 
 function git(path: string, args: string[]): string {
-  return execFileSync("git", ["-C", path, ...args], {
-    encoding: "utf8",
-  }).trim();
+  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+  return execFileSync(
+    executable,
+    [
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "core.attributesfile=/dev/null",
+      "-C",
+      path,
+      ...args,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        NODE_ENV: process.env.NODE_ENV ?? "production",
+        PATH: "/usr/bin:/bin",
+        TMPDIR: "/tmp",
+        HOME: "/dev/null",
+        XDG_CONFIG_HOME: "/dev/null",
+        LANG: "C.UTF-8",
+        LC_ALL: "C.UTF-8",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_ATTR_NOSYSTEM: "1",
+      },
+    },
+  ).trim();
 }
 
 function allowedRoots(): string[] {

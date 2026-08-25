@@ -40,7 +40,16 @@ isolated workspace.
    canonical applied overlay, then obtain separate approval through
    `accept_change_set`. It recomputes the displayed digest and records a
    reviewed receipt; it does not validate or publish.
-6. Obtain a separate publication approval naming the destination and outcome.
+6. Obtain a separate publication approval naming exactly one local outcome:
+   apply to the exact original checkout, or create the deterministic
+   builder-owned branch/worktree. Never treat one approval as authority for the
+   other. Branch/worktree publication must recheck the source SHA/tree, root and
+   Git identity, index, remotes, full status, review, paths, modes, and content
+   digests; it never mutates the original checkout, commits, pushes, or
+   publishes remotely. A pending, partial-failure, or lost-response receipt is
+   a hard stop. Use only `recover_branch_worktree_publication`, after its own
+   explicit approval bound to the exact durable journal digest, to resume safe
+   preimage/already-applied state; never retry publication automatically.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.
 

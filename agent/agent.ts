@@ -412,6 +412,153 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The separately approved normalized change set was recorded from the exact canonical applied overlay. Publication did not run.";
   }
   if (
+    message.includes("publish reviewed change set to a new branch worktree") ||
+    message.includes(
+      "publish reviewed change set with stale branch preconditions",
+    ) ||
+    message.includes(
+      "retry branch worktree publication after a lost response",
+    ) ||
+    message.includes("recover branch worktree publication")
+  ) {
+    const stale = message.includes("stale branch preconditions");
+    const recover = message.includes("recover branch worktree publication");
+    const status = [...toolResults]
+      .reverse()
+      .find(({ name }) => name === "artifact_workflow_status");
+    if (status === undefined)
+      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+    const reviewDigest = (
+      status.output as { review?: { digest?: string } } | undefined
+    )?.review?.digest;
+    if (reviewDigest === undefined)
+      return "An exact reviewed receipt is required before branch-worktree publication.";
+    const publicationStatuses = toolResults.filter(
+      ({ name }) => name === "branch_worktree_publication_status",
+    );
+    const latestMutation = [...toolResults]
+      .reverse()
+      .find(
+        ({ name }) =>
+          name === "publish_reviewed_change_set_to_branch_worktree" ||
+          name === "recover_branch_worktree_publication",
+      );
+    const latestMutationIndex = toolResults.findLastIndex(
+      ({ name }) =>
+        name === "publish_reviewed_change_set_to_branch_worktree" ||
+        name === "recover_branch_worktree_publication",
+    );
+    const latestBranchStatusIndex = toolResults.findLastIndex(
+      ({ name }) => name === "branch_worktree_publication_status",
+    );
+    const latestStatus = publicationStatuses.at(-1);
+    if (
+      latestStatus === undefined ||
+      (latestMutation !== undefined &&
+        latestBranchStatusIndex < latestMutationIndex)
+    )
+      return {
+        toolCalls: [
+          {
+            name: "branch_worktree_publication_status",
+            input: { expectedReviewDigest: reviewDigest },
+          },
+        ],
+      };
+    if (latestStatus.isError || latestStatus.output === undefined)
+      return stale
+        ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
+        : "Branch-worktree publication preconditions were rejected without mutating the source checkout.";
+    const output = latestStatus.output as Record<string, unknown>;
+    const proposal = { ...output };
+    if (typeof proposal.proposalDigest === "string")
+      proposal.digest = proposal.proposalDigest;
+    for (const key of [
+      "workflowPhase",
+      "transactionWindow",
+      "retryAllowed",
+      "recoveryAllowed",
+      "status",
+      "proposalDigest",
+      "publishedByCallId",
+      "recoveryOfDigest",
+      "branchCreated",
+      "worktreeCreated",
+      "appliedPaths",
+      "recoveryRequired",
+      "reason",
+      "failureMessage",
+      "worktreeRootIdentity",
+      "worktreeGitDirectoryPath",
+      "worktreeGitDirectoryIdentity",
+      "worktreeHeadReference",
+      "worktreeIndexFileDigest",
+      "worktreeRemoteDigest",
+      "worktreeStatusDigest",
+      "postconditionDigest",
+    ])
+      delete proposal[key];
+    if (recover) {
+      if (output.status === "succeeded")
+        return "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
+      if (typeof output.digest !== "string")
+        return "The exact durable recovery journal digest is unavailable.";
+      if (toolResults.at(-1)?.name !== "recover_branch_worktree_publication")
+        return {
+          toolCalls: [
+            {
+              name: "recover_branch_worktree_publication",
+              input: {
+                publication: proposal,
+                expectedJournalDigest: output.digest,
+              },
+            },
+          ],
+        };
+      return latestMutation?.isError
+        ? "Branch-worktree recovery was canceled or rejected; its exact durable receipt was preserved."
+        : "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
+    }
+    if (output.status === "succeeded")
+      return message.includes("retry branch worktree publication")
+        ? "The exact durable branch-worktree publication receipt was verified and reused; no operation was redispatched."
+        : "The separately approved reviewed change set was applied only in a new deterministic branch worktree. The original checkout was unchanged, and no commit, push, GitHub, provider, deployment, or release operation ran.";
+    if (output.status === "pending" || output.status === "failed")
+      return message.includes("retry branch worktree publication")
+        ? "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically."
+        : output.status === "failed"
+          ? "Branch-worktree publication recorded a recovery-required partial-failure receipt and was not retried."
+          : "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically.";
+    if (
+      latestMutation?.isError === true &&
+      latestMutationIndex < latestBranchStatusIndex
+    )
+      return stale
+        ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
+        : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
+    if (latestMutationIndex < latestBranchStatusIndex)
+      return {
+        toolCalls: [
+          {
+            name: "publish_reviewed_change_set_to_branch_worktree",
+            input: {
+              publication: stale
+                ? { ...proposal, sourceStatusDigest: "0".repeat(64) }
+                : proposal,
+            },
+          },
+        ],
+      };
+    if (latestMutation?.isError)
+      return stale
+        ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
+        : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
+    const result = latestMutation?.output as { status?: string } | undefined;
+    return result?.status === "failed"
+      ? "Branch-worktree publication recorded a recovery-required partial-failure receipt and was not retried."
+      : "The separately approved reviewed change set was applied only in a new deterministic branch worktree. The original checkout was unchanged, and no commit, push, GitHub, provider, deployment, or release operation ran.";
+  }
+  if (
     message.includes("publish reviewed change set locally") ||
     message.includes("retry local publication") ||
     message.includes("publish reviewed change set with stale")
@@ -949,7 +1096,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       process.env.APP_BUILDER_LOCAL_PUBLICATION === "1"
         ? " After one further approval, I can apply that exact reviewed set only to a named existing local checkout with base, preimage, status, and postimage verification; it never commits, changes history, or publishes remotely."
         : " Local checkout publication is disabled on this host; I can still produce and review the exact change set without mutating the checkout.";
-    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication} Cloning and remote-template acquisition are not implemented yet.`;
+    const branchPublication =
+      process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1"
+        ? " As a distinct outcome with another approval, I can create a deterministic uncommitted branch/worktree at the exact reviewed base, apply only the reviewed paths there, preserve the original checkout, and require a separate digest-bound approval for partial-failure or lost-response recovery."
+        : " Branch/worktree publication is disabled on this host.";
+    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication}${branchPublication} Cloning and remote-template acquisition are not implemented yet.`;
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });
