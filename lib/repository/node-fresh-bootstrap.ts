@@ -334,6 +334,16 @@ async function executableIdentity(path: string): Promise<ExecutableIdentity> {
   };
 }
 
+export async function canonicalFreshBootstrapHelperPath(
+  path: string,
+): Promise<string> {
+  const canonical = await realpath(path);
+  const value = await lstat(canonical);
+  if (!value.isFile() || value.isSymbolicLink())
+    throw new Error("The bootstrap helper is not a fixed regular file.");
+  return canonical;
+}
+
 async function assertExactExecutable(
   expected: ExecutableIdentity,
 ): Promise<void> {
@@ -381,9 +391,10 @@ async function assertCapability(
     capability.systemGitIdentity.path !== capability.systemGit ||
     capability.systemPythonIdentity.path !== capability.systemPython ||
     capability.systemNodeIdentity.path !== capability.systemNode ||
-    capability.lockHelperIdentity.path !== capability.lockHelper ||
-    pathsOverlap(capability.stateRoot.path, capability.allowedRoot.path)
+    capability.lockHelperIdentity.path !== capability.lockHelper
   )
+    throw new Error("Bootstrap helper paths must be canonical and exact.");
+  if (pathsOverlap(capability.stateRoot.path, capability.allowedRoot.path))
     throw new Error("Bootstrap state and destination roots must be disjoint.");
   return capability;
 }
@@ -402,30 +413,35 @@ export async function productionFreshBootstrapCapability(
     !isAbsolute(allowedRootPath)
   )
     throw new Error("Fresh local bootstrap roots are not configured.");
-  const systemGit = existsSync("/usr/bin/git")
+  const selectedSystemGit = existsSync("/usr/bin/git")
     ? "/usr/bin/git"
     : existsSync("/bin/git")
       ? "/bin/git"
       : undefined;
-  const systemPython = existsSync("/usr/bin/python3")
+  const selectedSystemPython = existsSync("/usr/bin/python3")
     ? "/usr/bin/python3"
     : existsSync("/bin/python3")
       ? "/bin/python3"
       : undefined;
-  const lockHelper = existsSync("/usr/bin/flock")
+  const selectedLockHelper = existsSync("/usr/bin/flock")
     ? "/usr/bin/flock"
     : existsSync("/usr/bin/lockf")
       ? "/usr/bin/lockf"
       : undefined;
-  const systemNode = await realpath(process.execPath);
   if (
-    systemGit === undefined ||
-    systemPython === undefined ||
-    lockHelper === undefined
+    selectedSystemGit === undefined ||
+    selectedSystemPython === undefined ||
+    selectedLockHelper === undefined
   )
     throw new Error(
       "Fixed fresh-bootstrap helper executables are unavailable.",
     );
+  const [systemGit, systemPython, systemNode, lockHelper] = await Promise.all([
+    canonicalFreshBootstrapHelperPath(selectedSystemGit),
+    canonicalFreshBootstrapHelperPath(selectedSystemPython),
+    canonicalFreshBootstrapHelperPath(process.execPath),
+    canonicalFreshBootstrapHelperPath(selectedLockHelper),
+  ]);
   const capability: FreshBootstrapCapability = {
     kind: "fresh-bootstrap-local-v1",
     stateRoot: await rootIdentity(resolve(stateRootPath)),

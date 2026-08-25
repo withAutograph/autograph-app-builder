@@ -25,13 +25,13 @@ export type FreshBootstrapCapability = {
   kind: "fresh-bootstrap-local-v1";
   stateRoot: PathIdentity;
   allowedRoot: PathIdentity;
-  systemGit: "/usr/bin/git" | "/bin/git";
-  systemPython: "/usr/bin/python3" | "/bin/python3";
+  systemGit: string;
+  systemPython: string;
   systemGitIdentity: ExecutableIdentity;
   systemPythonIdentity: ExecutableIdentity;
   systemNode: string;
   systemNodeIdentity: ExecutableIdentity;
-  lockHelper: "/usr/bin/flock" | "/usr/bin/lockf";
+  lockHelper: string;
   lockHelperIdentity: ExecutableIdentity;
   authority: "configured-production" | "structural-test-injection";
 };

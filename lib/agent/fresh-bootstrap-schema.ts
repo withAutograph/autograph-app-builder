@@ -16,13 +16,13 @@ const executableIdentity = pathIdentity.extend({
 const capability = z.strictObject({
   stateRoot: pathIdentity,
   allowedRoot: pathIdentity,
-  systemGit: z.enum(["/usr/bin/git", "/bin/git"]),
-  systemPython: z.enum(["/usr/bin/python3", "/bin/python3"]),
+  systemGit: z.string().startsWith("/"),
+  systemPython: z.string().startsWith("/"),
   systemGitIdentity: executableIdentity,
   systemPythonIdentity: executableIdentity,
   systemNode: z.string().startsWith("/"),
   systemNodeIdentity: executableIdentity,
-  lockHelper: z.enum(["/usr/bin/flock", "/usr/bin/lockf"]),
+  lockHelper: z.string().startsWith("/"),
   lockHelperIdentity: executableIdentity,
 });
 const prestate = z.discriminatedUnion("kind", [

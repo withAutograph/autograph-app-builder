@@ -17,7 +17,10 @@ import type {
   FreshBootstrapCapability,
   PathIdentity,
 } from "@/lib/repository/fresh-bootstrap";
-import { productionFreshBootstrapCapability } from "@/lib/repository/node-fresh-bootstrap";
+import {
+  canonicalFreshBootstrapHelperPath,
+  productionFreshBootstrapCapability,
+} from "@/lib/repository/node-fresh-bootstrap";
 import { withFreshBootstrapTestCapability } from "@/lib/agent/fresh-bootstrap-capability";
 import type { FreshBootstrapFaultHooks } from "@/lib/repository/node-fresh-bootstrap";
 
@@ -81,14 +84,18 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
   const allowedRoot = join(owner, "destinations");
   await mkdir(stateRoot, { mode: 0o700 });
   await mkdir(allowedRoot, { mode: 0o700 });
-  const systemGit = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  const systemPython = existsSync("/usr/bin/python3")
-    ? "/usr/bin/python3"
-    : "/bin/python3";
-  const lockHelper = existsSync("/usr/bin/flock")
-    ? "/usr/bin/flock"
-    : "/usr/bin/lockf";
-  const systemNode = await realpath(process.execPath);
+  const [systemGit, systemPython, systemNode, lockHelper] = await Promise.all([
+    canonicalFreshBootstrapHelperPath(
+      existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
+    ),
+    canonicalFreshBootstrapHelperPath(
+      existsSync("/usr/bin/python3") ? "/usr/bin/python3" : "/bin/python3",
+    ),
+    canonicalFreshBootstrapHelperPath(process.execPath),
+    canonicalFreshBootstrapHelperPath(
+      existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/usr/bin/lockf",
+    ),
+  ]);
   return {
     allowedRoot,
     capability: {

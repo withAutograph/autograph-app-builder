@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { contentDigest, stableDigest } from "./local-publication";
 import {
+  canonicalFreshBootstrapHelperPath,
   deriveFreshBootstrapProposal,
   publishFreshBootstrap,
   readFreshBootstrapJournal,
@@ -190,13 +191,15 @@ async function fixture(expectedPrestate: "absent" | "empty-directory") {
   const destinationPath = join(allowedRoot, "new-repository");
   if (expectedPrestate === "empty-directory")
     await mkdir(destinationPath, { mode: 0o700 });
-  const systemGit = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  const systemPython = existsSync("/usr/bin/python3")
-    ? "/usr/bin/python3"
-    : "/bin/python3";
-  const lockHelper = existsSync("/usr/bin/flock")
-    ? "/usr/bin/flock"
-    : "/usr/bin/lockf";
+  const systemGit = await realpath(
+    existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
+  );
+  const systemPython = await realpath(
+    existsSync("/usr/bin/python3") ? "/usr/bin/python3" : "/bin/python3",
+  );
+  const lockHelper = await realpath(
+    existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/usr/bin/lockf",
+  );
   const systemNode = await realpath(process.execPath);
   const capability: FreshBootstrapCapability = {
     kind: "fresh-bootstrap-local-v1",
@@ -241,6 +244,22 @@ async function fixture(expectedPrestate: "absent" | "empty-directory") {
     readOverlayFile,
   };
 }
+
+it("canonicalizes selected git, python, and lock helper symlinks", async () => {
+  const owner = await mkdtemp(join(tmpdir(), "app-builder-helper-links-"));
+  roots.push(owner);
+  const executable = join(owner, "helper-executable");
+  await writeFile(executable, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const canonical = await realpath(executable);
+
+  for (const name of ["git", "python3", "flock"]) {
+    const selected = join(owner, name);
+    await symlink(executable, selected);
+    await expect(canonicalFreshBootstrapHelperPath(selected)).resolves.toBe(
+      canonical,
+    );
+  }
+});
 
 describe.each(["absent", "empty-directory"] as const)(
   "fresh local bootstrap from an %s destination",
