@@ -20,6 +20,7 @@ import { createSupportedRepositoryFixture } from "../../evals/support/supported-
 import {
   assertCanonicalBranchWorktreeJournal,
   assertExactBranchWorktreeProposal,
+  createBranchWorktreePublicationProposal,
 } from "./branch-worktree-publication";
 import {
   deriveBranchWorktreePublicationProposal,
@@ -70,6 +71,8 @@ async function fixture() {
   const oldTopology = await readFile(topology);
   const nextTopology = Buffer.from('{"branch":true}\n');
   const added = Buffer.from("new branch file\n");
+  const acceptedAppSpec = Buffer.from("# Accepted AppSpec\n");
+  const appSpecPath = "prototype/example/app-spec.md";
   const changes: OverlayChange[] = [
     {
       path: "apps/example/new.txt",
@@ -87,9 +90,14 @@ async function fixture() {
       kind: "deleted",
       before: { mode: "644", digest: hash("remove\n") },
     },
+    {
+      path: appSpecPath,
+      kind: "added",
+      after: { mode: "644", digest: hash(acceptedAppSpec) },
+    },
   ];
   const unsigned = {
-    version: 1 as const,
+    version: 2 as const,
     validationDigest: "a".repeat(64),
     applyDigest: "b".repeat(64),
     proposalDigest: "c".repeat(64),
@@ -98,7 +106,8 @@ async function fixture() {
     sourceSha: source.sourceSha,
     eligibilityDigest: source.eligibilityDigest,
     workspaceDigest: "d".repeat(64),
-    appSpecDigest: "e".repeat(64),
+    appSpecDigest: hash(acceptedAppSpec),
+    appSpecPath,
     artifactRevision: "f".repeat(64),
     dependencyReceiptDigest: "1".repeat(64),
     identityDigest: "2".repeat(64),
@@ -124,6 +133,7 @@ async function fixture() {
   const overlay = new Map<string, Uint8Array>([
     ["apps/example/new.txt", added],
     ["apps/shell/microfrontends.json", nextTopology],
+    [appSpecPath, acceptedAppSpec],
   ]);
   return {
     root: source.sourcePath,
@@ -132,6 +142,8 @@ async function fixture() {
     review,
     overlay,
     nextTopology,
+    acceptedAppSpec,
+    appSpecPath,
   };
 }
 
@@ -149,6 +161,50 @@ describe(
       );
       await chmod(publicationRootPath, 0o700);
       vi.stubEnv("APP_BUILDER_BRANCH_WORKTREE_ROOT", publicationRootPath);
+    });
+
+    it.each(["path-less-v1", "wrong-version"] as const)(
+      "rejects a rehashed %s review before branch publication",
+      async (mutation) => {
+        const candidate = await fixture();
+        const malformed = structuredClone(candidate.review) as Record<
+          string,
+          unknown
+        >;
+        if (mutation === "path-less-v1") delete malformed.appSpecPath;
+        malformed.version = 1;
+        const reviewedByCallId = malformed.reviewedByCallId;
+        delete malformed.digest;
+        delete malformed.changeSetDigest;
+        delete malformed.reviewedByCallId;
+        const changeSetDigest = hash(malformed);
+        const outer = {
+          ...malformed,
+          digest: changeSetDigest,
+          changeSetDigest,
+          reviewedByCallId,
+        };
+        outer.digest = hash(outer);
+        expect(() =>
+          createBranchWorktreePublicationProposal({
+            sourceReceipt: candidate.sourceReceipt,
+            source: {} as never,
+            review: outer as never,
+            worktreePath: "/tmp/unused",
+            publicationRootPath: "/tmp",
+            publicationRootIdentity: { device: "1", inode: "1" },
+          }),
+        ).toThrow(/canonical V2 reviewed change set/u);
+      },
+    );
+    it("rejects a rehashed wrong-version branch-publication proposal", () => {
+      const unsigned = { version: 1, intendedOutcome: "forged" };
+      expect(() =>
+        assertExactBranchWorktreeProposal({
+          ...unsigned,
+          digest: hash(unsigned),
+        } as never),
+      ).toThrow(/canonical V2 branch-worktree publication proposal/u);
     });
     afterEach(() => vi.unstubAllEnvs());
 
@@ -227,6 +283,9 @@ describe(
           join(proposal.worktreePath, "apps/shell/microfrontends.json"),
         ),
       ).toEqual(input.nextTopology);
+      expect(
+        await readFile(join(proposal.worktreePath, input.appSpecPath)),
+      ).toEqual(input.acceptedAppSpec);
       await expect(
         readFile(join(proposal.worktreePath, "obsolete.txt")),
       ).rejects.toMatchObject({ code: "ENOENT" });

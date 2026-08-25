@@ -12,11 +12,14 @@ import {
 } from "@/lib/agent/workflow-state";
 import {
   executeProposalBoundApply,
+  assertCurrentTargetApplyReceipt,
   fixtureApplyCommandExecutor,
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
   sandboxApplyCommandExecutor,
 } from "@/lib/repository/target-apply";
+import { planningOverlayRoot } from "@/lib/repository/dependency-cache";
+import { assertReusableTargetApplyReceipt } from "@/lib/repository/target-validation";
 
 export default defineTool({
   description:
@@ -60,17 +63,25 @@ export default defineTool({
         `Target apply is recovery-required after partial failure ${current.applyFailure.digest}; it will not be rerun automatically.`,
       );
     if (current.phase === "applied") {
-      const observed = fixture
-        ? await inspectFixtureApplyOverlay(
-            sandbox,
-            current.applyReceipt.applyRoot,
-            current.appSpec.appId,
-          )
-        : await inspectApplyOverlay(sandbox, current.applyReceipt.applyRoot);
-      if (observed.treeDigest !== current.applyReceipt.postTreeDigest)
-        throw new Error(
-          "The applied overlay changed after its durable receipt.",
-        );
+      assertCurrentTargetApplyReceipt(current.applyReceipt);
+      const inspect = (root: string) =>
+        fixture
+          ? inspectFixtureApplyOverlay(sandbox, root, current.appSpec.appId)
+          : inspectApplyOverlay(sandbox, root);
+      const [observed, planning, prepared] = await Promise.all([
+        inspect(current.applyReceipt.applyRoot),
+        inspect(
+          `/workspace/${planningOverlayRoot(current.appSpec.artifactRevision)}`,
+        ),
+        inspect(current.workspace.workspacePath),
+      ]);
+      assertReusableTargetApplyReceipt({
+        apply: current.applyReceipt,
+        expectedAppSpecPath: current.appSpec.artifactPath,
+        appliedTreeDigest: observed.treeDigest,
+        planningTreeDigest: planning.treeDigest,
+        preparedTreeDigest: prepared.treeDigest,
+      });
       return { ...current.applyReceipt, reused: true };
     }
 
@@ -79,6 +90,7 @@ export default defineTool({
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       appSpecDigest: current.appSpec.digest,
+      appSpecPath: current.appSpec.artifactPath,
       artifactRevision: current.appSpec.artifactRevision,
       dependencyReceiptDigest: current.dependencyReceipt.digest,
       identityDigest: current.identityReceipt.digest,

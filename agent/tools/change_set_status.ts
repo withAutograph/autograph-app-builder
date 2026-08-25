@@ -31,6 +31,7 @@ export async function exactNormalizedChangeSet(input: {
       state.applyReceipt.eligibilityDigest ||
     state.workspace.workspaceDigest !== state.applyReceipt.workspaceDigest ||
     state.appSpec.digest !== state.applyReceipt.appSpecDigest ||
+    state.appSpec.artifactPath !== state.applyReceipt.appSpecPath ||
     state.appSpec.artifactRevision !== state.applyReceipt.artifactRevision ||
     state.dependencyReceipt.digest !==
       state.applyReceipt.dependencyReceiptDigest ||

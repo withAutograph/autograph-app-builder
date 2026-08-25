@@ -95,7 +95,21 @@ Before enabling GitHub or hosted repository publication:
    apply tool separately approves the exact proposal, reruns execution readiness,
    writes only a fresh builder-owned overlay, and stores pre/post tree,
    changed-content, strict command, and recovery-required partial-failure
-   receipts. The implemented validation tool persists pending state before
+   receipts. Its durable planning-tree binding is distinct from the
+   prepared-source pre-tree: the accepted AppSpec is verified in planning,
+   restored to the prepared-source baseline for the pre-snapshot, and then
+   staged as an allowed canonical apply change. The exact AppSpec path and
+   digest remain receipt-bound by the V2 apply, validation, and normalized
+   change-set receipt shapes; the aggregate workflow remains V11. Every reuse,
+   validation, review, and local or branch publication boundary checks literal
+   V2 before accepting reconstructed digests, so JSON omission of the AppSpec
+   path cannot recreate current authority. Failures
+   before command dispatch remove only the
+   fresh apply overlay and permit a clean retry; a post-dispatch snapshot failure
+   records a recovery-required receipt and retains the overlay for reconciliation.
+   Reuse re-observes the planning, prepared, and applied tree digests. The
+   implemented validation tool
+   persists pending state before
    execution, rechecks readiness and the exact applied tree, and runs only the
    adapter-owned `mise run check` and `mise run test` commands in independent
    builder-owned copies. It records only bounded, digested output evidence and

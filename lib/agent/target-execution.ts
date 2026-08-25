@@ -73,6 +73,7 @@ export function assertProposalExecutionBindings(
     imageDigest: state.dependencyReceipt.imageDigest,
     dependencyCacheDigest: state.dependencyReceipt.dependencyCacheDigest,
     appSpecDigest: state.appSpec.digest,
+    appSpecPath: state.appSpec.artifactPath,
     artifactRevision: state.appSpec.artifactRevision,
   };
   const actual = {
@@ -82,6 +83,7 @@ export function assertProposalExecutionBindings(
     imageDigest: state.proposal.imageDigest,
     dependencyCacheDigest: state.proposal.dependencyCacheDigest,
     appSpecDigest: state.proposal.appSpecDigest,
+    appSpecPath: state.proposal.target.contract.appSpec.path,
     artifactRevision: state.proposal.artifactRevision,
   };
   if (
@@ -206,6 +208,7 @@ export async function inspectTargetExecutionReadiness(input: {
     eligibilityDigest: input.state.workspace.eligibilityDigest,
     workspaceDigest: input.state.workspace.workspaceDigest,
     appSpecDigest: input.state.appSpec.digest,
+    appSpecPath: input.state.appSpec.artifactPath,
     artifactRevision: input.state.appSpec.artifactRevision,
     dependencyReceiptDigest: input.state.dependencyReceipt.digest,
     identityDigest: input.state.identityReceipt.digest,

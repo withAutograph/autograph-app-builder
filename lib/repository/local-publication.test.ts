@@ -19,6 +19,8 @@ import { createSupportedRepositoryFixture } from "../../evals/support/supported-
 import {
   assertCanonicalLocalPublicationJournal,
   assertExactDurablePublicationSuccess,
+  assertExactProposal,
+  createLocalPublicationProposal,
   receiptDigest,
   type LocalPublicationJournal,
   type LocalPublicationPendingReceipt,
@@ -126,7 +128,7 @@ async function reviewFor(
     overlay.set(path, value.bytes);
   }
   const unsigned = {
-    version: 1 as const,
+    version: 2 as const,
     validationDigest: "a".repeat(64),
     applyDigest: "b".repeat(64),
     proposalDigest: "c".repeat(64),
@@ -136,6 +138,7 @@ async function reviewFor(
     eligibilityDigest: source.eligibilityDigest,
     workspaceDigest: "d".repeat(64),
     appSpecDigest: "e".repeat(64),
+    appSpecPath: "prototype/example/app-spec.md",
     artifactRevision: "f".repeat(64),
     dependencyReceiptDigest: "1".repeat(64),
     identityDigest: "2".repeat(64),
@@ -173,6 +176,27 @@ async function combinedFixture() {
     "obsolete.txt": { kind: "deleted" },
   });
   return { root, source, modified, added, ...reviewed };
+}
+
+function rehashHistoricalReview(
+  review: Awaited<ReturnType<typeof reviewFor>>["review"],
+  mutation: "path-less-v1" | "wrong-version",
+) {
+  const candidate = structuredClone(review) as Record<string, unknown>;
+  if (mutation === "path-less-v1") delete candidate.appSpecPath;
+  candidate.version = 1;
+  const reviewedByCallId = candidate.reviewedByCallId;
+  delete candidate.digest;
+  delete candidate.changeSetDigest;
+  delete candidate.reviewedByCallId;
+  const changeSetDigest = hash(candidate);
+  return {
+    ...candidate,
+    digest: changeSetDigest,
+    changeSetDigest,
+    reviewedByCallId,
+    outerDigest: undefined,
+  } as Record<string, unknown>;
 }
 
 async function materializeApprovedPostimages(
@@ -233,6 +257,31 @@ describe("approval-bound local publication", () => {
     vi.stubEnv("APP_BUILDER_LOCAL_PUBLICATION", "1");
   });
   afterEach(() => vi.unstubAllEnvs());
+
+  it.each(["path-less-v1", "wrong-version"] as const)(
+    "rejects a rehashed %s review before local publication",
+    async (mutation) => {
+      const fixture = await combinedFixture();
+      const malformed = rehashHistoricalReview(fixture.review, mutation);
+      const outer = { ...malformed };
+      delete outer.outerDigest;
+      outer.digest = hash(outer);
+      expect(() =>
+        createLocalPublicationProposal({
+          sourceReceipt: fixture.source,
+          destination: {} as never,
+          review: outer as never,
+        }),
+      ).toThrow(/canonical V2 reviewed change set/u);
+    },
+  );
+
+  it("rejects a rehashed wrong-version local-publication proposal", () => {
+    const unsigned = { version: 1, intendedOutcome: "forged" };
+    expect(() =>
+      assertExactProposal({ ...unsigned, digest: hash(unsigned) } as never),
+    ).toThrow(/canonical V2 local-publication proposal/u);
+  });
 
   it("applies combined add/modify/delete and exactly preserves unrelated staged, unstaged, and untracked work", async () => {
     const fixture = await combinedFixture();

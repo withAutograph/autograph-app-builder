@@ -202,6 +202,12 @@ function canonicalChanges(
 export function assertExactReviewedChangeSet(
   review: ReviewedChangeSetReceipt,
 ): void {
+  if (
+    review.version !== 2 ||
+    !safeSourcePath(review.appSpecPath) ||
+    !/^[0-9a-f]{64}$/u.test(review.appSpecDigest)
+  )
+    throw new Error("A canonical V2 reviewed change set is required.");
   const changes = canonicalChanges(review);
   const changeSetUnsigned = {
     version: review.version,
@@ -214,6 +220,7 @@ export function assertExactReviewedChangeSet(
     eligibilityDigest: review.eligibilityDigest,
     workspaceDigest: review.workspaceDigest,
     appSpecDigest: review.appSpecDigest,
+    appSpecPath: review.appSpecPath,
     artifactRevision: review.artifactRevision,
     dependencyReceiptDigest: review.dependencyReceiptDigest,
     identityDigest: review.identityDigest,
@@ -304,6 +311,8 @@ export function createLocalPublicationProposal(input: {
 }
 
 export function assertExactProposal(proposal: LocalPublicationProposal): void {
+  if (proposal.version !== LOCAL_PUBLICATION_VERSION)
+    throw new Error("A canonical V2 local-publication proposal is required.");
   if (proposal.digest !== stableDigest(canonicalProposal(proposal)))
     throw new Error("The local-publication proposal digest is malformed.");
   if (

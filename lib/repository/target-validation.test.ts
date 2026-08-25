@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -5,9 +7,13 @@ import type { SandboxSession } from "eve/sandbox";
 import type { OverlaySnapshot, TargetApplyReceipt } from "./target-apply";
 import {
   appliedOverlayDriftFailure,
+  assertReusableTargetApplyReceipt,
+  assertReusableTargetValidationReceipt,
+  assertTargetValidationSourceBindings,
   createTargetValidationAttempt,
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
+  type TargetValidationReceipt,
   type ValidationCommandExecutor,
   validationOverlayRoot,
 } from "./target-validation";
@@ -15,11 +21,12 @@ import {
 const digest = (value: string) => value.repeat(64).slice(0, 64);
 
 const apply: TargetApplyReceipt = {
-  version: 1,
+  version: 2,
   sourceSha: "1".repeat(40),
   eligibilityDigest: digest("2"),
   workspaceDigest: digest("3"),
   appSpecDigest: digest("4"),
+  appSpecPath: "prototype/example/app-spec.md",
   artifactRevision: digest("5"),
   dependencyReceiptDigest: digest("6"),
   identityDigest: digest("7"),
@@ -27,6 +34,7 @@ const apply: TargetApplyReceipt = {
   dependencyCacheDigest: `sha256:${digest("9")}`,
   proposalDigest: digest("a"),
   applyRoot: `/workspace/.app-builder/apply/${digest("a")}/repository`,
+  planningTreeDigest: digest("b"),
   preTree: [],
   postTree: [
     { path: "apps/example/package.json", mode: "644", digest: digest("b") },
@@ -74,6 +82,41 @@ function snapshot(treeDigest: string): OverlaySnapshot {
   return { treeDigest, files: apply.postTree };
 }
 
+const canonicalDigest = (value: unknown) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+function reusableValidationReceipt(): TargetValidationReceipt {
+  const attempt = createTargetValidationAttempt(apply, "validation-call");
+  const unsigned = {
+    version: 2 as const,
+    sourceSha: attempt.sourceSha,
+    eligibilityDigest: attempt.eligibilityDigest,
+    workspaceDigest: attempt.workspaceDigest,
+    appSpecDigest: attempt.appSpecDigest,
+    appSpecPath: attempt.appSpecPath,
+    artifactRevision: attempt.artifactRevision,
+    dependencyReceiptDigest: attempt.dependencyReceiptDigest,
+    identityDigest: attempt.identityDigest,
+    imageDigest: attempt.imageDigest,
+    dependencyCacheDigest: attempt.dependencyCacheDigest,
+    proposalDigest: attempt.proposalDigest,
+    applyDigest: attempt.applyDigest,
+    appliedTreeDigest: attempt.appliedTreeDigest,
+    changedContentDigest: attempt.changedContentDigest,
+    status: "passed" as const,
+    attemptDigest: attempt.digest,
+    commands: attempt.commands.map((command) => ({
+      ...command,
+      inputTreeDigest: apply.postTreeDigest,
+      exitCode: 0,
+      stdoutDigest: digest("1"),
+      stderrDigest: digest("2"),
+    })),
+    validatedByCallId: attempt.startedByCallId,
+  };
+  return { ...unsigned, digest: canonicalDigest(unsigned) };
+}
+
 function sandboxFixture() {
   const run = vi.fn(async (request: unknown) => {
     void request;
@@ -86,6 +129,127 @@ function sandboxFixture() {
 }
 
 describe("proposal-bound target validation", () => {
+  it("binds planning and prepared-source trees independently", () => {
+    expect(() =>
+      assertTargetValidationSourceBindings({
+        apply,
+        planningTreeDigest: apply.planningTreeDigest,
+        preparedTreeDigest: apply.preTreeDigest,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertTargetValidationSourceBindings({
+        apply,
+        planningTreeDigest: digest("0"),
+        preparedTreeDigest: apply.preTreeDigest,
+      }),
+    ).toThrow(/planning overlay changed/u);
+    expect(() =>
+      assertTargetValidationSourceBindings({
+        apply,
+        planningTreeDigest: apply.planningTreeDigest,
+        preparedTreeDigest: digest("0"),
+      }),
+    ).toThrow(/prepared source changed/u);
+  });
+
+  it.each([
+    ["apply", assertReusableTargetApplyReceipt],
+    ["validation", assertReusableTargetValidationReceipt],
+  ] as const)(
+    "rejects stale planning and prepared trees before reusing a %s receipt",
+    (_name, assertReusable) => {
+      const exact = {
+        apply,
+        validation: reusableValidationReceipt(),
+        expectedAppSpecPath: apply.appSpecPath,
+        appliedTreeDigest: apply.postTreeDigest,
+        planningTreeDigest: apply.planningTreeDigest,
+        preparedTreeDigest: apply.preTreeDigest,
+      };
+      expect(() => assertReusable(exact)).not.toThrow();
+      expect(() =>
+        assertReusable({ ...exact, planningTreeDigest: digest("0") }),
+      ).toThrow(/planning overlay changed/u);
+      expect(() =>
+        assertReusable({ ...exact, preparedTreeDigest: digest("0") }),
+      ).toThrow(/prepared source changed/u);
+      expect(() =>
+        assertReusable({
+          ...exact,
+          apply: { ...apply, appSpecPath: undefined } as never,
+        }),
+      ).toThrow(/canonical V2 target apply receipt/u);
+      expect(() =>
+        assertReusable({
+          ...exact,
+          apply: { ...apply, appSpecPath: "prototype/other/app-spec.md" },
+        }),
+      ).toThrow(/accepted AppSpec path changed/u);
+    },
+  );
+
+  it.each([
+    [
+      "path-less historical V1",
+      (receipt: Record<string, unknown>) => {
+        receipt.version = 1;
+        delete receipt.appSpecPath;
+      },
+    ],
+    [
+      "path-present wrong version",
+      (receipt: Record<string, unknown>) => {
+        receipt.version = 1;
+      },
+    ],
+    [
+      "tampered binding",
+      (receipt: Record<string, unknown>) => {
+        receipt.workspaceDigest = digest("0");
+      },
+    ],
+    [
+      "tampered attempt digest",
+      (receipt: Record<string, unknown>) => {
+        receipt.attemptDigest = digest("0");
+      },
+    ],
+    [
+      "extra command key",
+      (receipt: Record<string, unknown>) => {
+        const commands = receipt.commands as Array<Record<string, unknown>>;
+        if (commands[0] !== undefined) commands[0].unexpected = "authority";
+      },
+    ],
+    [
+      "tampered digest",
+      (receipt: Record<string, unknown>) => {
+        receipt.digest = digest("0");
+      },
+    ],
+  ] as const)("rejects %s during validated-state reuse", (_name, mutate) => {
+    const validation = structuredClone(reusableValidationReceipt()) as Record<
+      string,
+      unknown
+    >;
+    mutate(validation);
+    if (_name !== "tampered digest") {
+      delete validation.digest;
+      validation.digest = canonicalDigest(validation);
+    }
+    expect(() =>
+      assertReusableTargetValidationReceipt({
+        apply,
+        validation: validation as never,
+        expectedAppSpecPath: apply.appSpecPath,
+        appliedTreeDigest: apply.postTreeDigest,
+        planningTreeDigest: apply.planningTreeDigest,
+        preparedTreeDigest: apply.preTreeDigest,
+      }),
+    ).toThrow(/canonical V2 target validation receipt/u);
+  });
+
   it("binds a pending attempt to the exact apply receipt and fixed commands", () => {
     const attempt = createTargetValidationAttempt(apply, "validation-call");
     expect(attempt).toMatchObject({
@@ -107,6 +271,24 @@ describe("proposal-bound target validation", () => {
         validationRoot: validationOverlayRoot(apply.digest, "test"),
       },
     ]);
+  });
+
+  it("rejects historical or wrong-version runtime receipts at validation boundaries", async () => {
+    const historical = { ...apply, version: 1 } as Record<string, unknown>;
+    delete historical.appSpecPath;
+    expect(() =>
+      createTargetValidationAttempt(historical as never, "validation-call"),
+    ).toThrow(/canonical V2 target apply receipt/u);
+    const attempt = createTargetValidationAttempt(apply, "validation-call");
+    await expect(
+      executeProposalBoundValidation({
+        sandbox: sandboxFixture().sandbox,
+        executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        apply,
+        attempt: { ...attempt, version: 1 } as never,
+        appId: "example",
+      }),
+    ).rejects.toThrow(/canonical V2 target validation attempt/u);
   });
 
   it("rejects an apply overlay root that is not bound to the proposal", () => {

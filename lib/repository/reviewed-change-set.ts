@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import {
+  assertCurrentTargetApplyReceipt,
   overlayChanges,
   type OverlayChange,
   type OverlayFile,
@@ -11,7 +12,7 @@ import { safeSourcePath } from "./source-path";
 import type { TargetValidationReceipt } from "./target-validation";
 
 export type NormalizedChangeSet = {
-  version: 1;
+  version: 2;
   validationDigest: string;
   applyDigest: string;
   proposalDigest: string;
@@ -21,6 +22,7 @@ export type NormalizedChangeSet = {
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;
+  appSpecPath: string;
   artifactRevision: string;
   dependencyReceiptDigest: string;
   identityDigest: string;
@@ -114,7 +116,9 @@ export function deriveNormalizedChangeSet(
   contractDigest: string,
   repositoryContractDigest: string = contractDigest,
 ): NormalizedChangeSet {
+  assertCurrentTargetApplyReceipt(apply);
   if (
+    validation.version !== 2 ||
     validation.status !== "passed" ||
     validation.applyDigest !== apply.digest ||
     validation.appliedTreeDigest !== apply.postTreeDigest ||
@@ -122,6 +126,28 @@ export function deriveNormalizedChangeSet(
   )
     throw new Error(
       "A passed validation receipt for the exact apply is required.",
+    );
+  const exactValidationBinding = {
+    sourceSha: apply.sourceSha,
+    eligibilityDigest: apply.eligibilityDigest,
+    workspaceDigest: apply.workspaceDigest,
+    appSpecDigest: apply.appSpecDigest,
+    appSpecPath: apply.appSpecPath,
+    artifactRevision: apply.artifactRevision,
+    dependencyReceiptDigest: apply.dependencyReceiptDigest,
+    identityDigest: apply.identityDigest,
+    imageDigest: apply.imageDigest,
+    dependencyCacheDigest: apply.dependencyCacheDigest,
+    proposalDigest: apply.proposalDigest,
+  };
+  if (
+    Object.entries(exactValidationBinding).some(
+      ([key, value]) =>
+        validation[key as keyof typeof exactValidationBinding] !== value,
+    )
+  )
+    throw new Error(
+      "The validation receipt bindings differ from the exact apply receipt.",
     );
   if (
     !/^[0-9a-f]{64}$/u.test(contractDigest) ||
@@ -146,7 +172,7 @@ export function deriveNormalizedChangeSet(
   if (digest(canonicalChanges) !== apply.changedContentDigest)
     throw new Error("The applied change set content digest is stale.");
   const unsigned = {
-    version: 1 as const,
+    version: 2 as const,
     validationDigest: validation.digest,
     applyDigest: apply.digest,
     proposalDigest: apply.proposalDigest,
@@ -156,6 +182,7 @@ export function deriveNormalizedChangeSet(
     eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,
+    appSpecPath: apply.appSpecPath,
     artifactRevision: apply.artifactRevision,
     dependencyReceiptDigest: apply.dependencyReceiptDigest,
     identityDigest: apply.identityDigest,
@@ -182,6 +209,12 @@ export function createReviewedChangeSetReceipt(
   changeSet: NormalizedChangeSet,
   reviewedByCallId: string,
 ): ReviewedChangeSetReceipt {
+  if (
+    changeSet.version !== 2 ||
+    !safeSourcePath(changeSet.appSpecPath) ||
+    !/^[0-9a-f]{64}$/u.test(changeSet.appSpecDigest)
+  )
+    throw new Error("A canonical V2 normalized change set is required.");
   const unsigned = {
     ...changeSet,
     changeSetDigest: changeSet.digest,

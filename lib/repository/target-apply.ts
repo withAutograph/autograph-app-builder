@@ -80,6 +80,7 @@ export type TargetApplyBinding = {
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;
+  appSpecPath: string;
   artifactRevision: string;
   dependencyReceiptDigest: string;
   identityDigest: string;
@@ -89,14 +90,11 @@ export type TargetApplyBinding = {
 };
 
 type ApplyResultBase = TargetApplyBinding & {
-  version: 1;
+  version: 2;
   applyRoot: string;
+  planningTreeDigest: string;
   preTree: readonly OverlayFile[];
-  postTree: readonly OverlayFile[];
   preTreeDigest: string;
-  postTreeDigest: string;
-  changes: readonly OverlayChange[];
-  changedContentDigest: string;
   command: {
     name: "create-app";
     exitCode: number;
@@ -106,27 +104,60 @@ type ApplyResultBase = TargetApplyBinding & {
   appliedByCallId: string;
 };
 
-export type TargetApplyReceipt = ApplyResultBase & {
-  status: "applied";
-  targetReceipt: TargetApplyCommandReceipt;
-  digest: string;
+type ObservedApplyResult = {
+  postTree: readonly OverlayFile[];
+  postTreeDigest: string;
+  changes: readonly OverlayChange[];
+  changedContentDigest: string;
 };
 
-export type TargetApplyFailureReceipt = ApplyResultBase & {
-  status: "partial-failure";
-  reason:
-    | "command-failed"
-    | "output-limit"
-    | "invalid-receipt"
-    | "unexpected-path"
-    | "missing-required-change";
-  recoveryRequired: true;
-  digest: string;
-};
+export type TargetApplyReceipt = ApplyResultBase &
+  ObservedApplyResult & {
+    status: "applied";
+    targetReceipt: TargetApplyCommandReceipt;
+    digest: string;
+  };
+
+export type TargetApplyFailureReceipt = ApplyResultBase &
+  (
+    | (ObservedApplyResult & {
+        reason:
+          | "command-failed"
+          | "output-limit"
+          | "invalid-receipt"
+          | "unexpected-path"
+          | "missing-required-change";
+      })
+    | {
+        reason: "post-snapshot-failed";
+        postTree: null;
+        postTreeDigest: null;
+        changes: null;
+        changedContentDigest: null;
+      }
+  ) & {
+    status: "partial-failure";
+    recoveryRequired: true;
+    digest: string;
+  };
 
 export type TargetApplyResult =
   | { ok: true; receipt: TargetApplyReceipt }
   | { ok: false; receipt: TargetApplyFailureReceipt };
+
+export function assertCurrentTargetApplyReceipt(input: {
+  version: number;
+  appSpecPath?: string;
+  appSpecDigest: string;
+}): asserts input is typeof input & { version: 2; appSpecPath: string } {
+  if (
+    input.version !== 2 ||
+    input.appSpecPath === undefined ||
+    !safeSourcePath(input.appSpecPath) ||
+    !digest.safeParse(input.appSpecDigest).success
+  )
+    throw new Error("A canonical V2 target apply receipt is required.");
+}
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
@@ -150,7 +181,12 @@ export async function materializeFreshApplyOverlay(input: {
   artifactRevision: string;
   proposalDigest: string;
   proposal: TargetProposal;
-}): Promise<{ applyRoot: string; proposalPath: string }> {
+}): Promise<{
+  applyRoot: string;
+  proposalPath: string;
+  appSpecPath: string;
+  acceptedAppSpec: Uint8Array;
+}> {
   const relativeRoot = applyOverlayRoot(input.proposalDigest);
   const absoluteRoot = `/workspace/${relativeRoot}`;
   const parent = relativeRoot.slice(0, relativeRoot.lastIndexOf("/"));
@@ -170,20 +206,70 @@ export async function materializeFreshApplyOverlay(input: {
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
-  boundedOutput(copy);
-  if (copy.exitCode !== 0)
+  try {
+    boundedOutput(copy);
+    if (copy.exitCode !== 0) throw new Error("ApplyOverlayCopyFailed");
+  } catch {
+    await input.sandbox.removePath({ path: relativeRoot, force: true });
     throw new Error(
       "The fresh proposal apply overlay could not be materialized.",
     );
-  const proposalPath = `.app-builder/apply/${input.proposalDigest}/proposal.json`;
-  await input.sandbox.writeTextFile({
-    path: proposalPath,
-    content: `${JSON.stringify(input.proposal, null, 2)}\n`,
+  }
+  try {
+    const proposalPath = `.app-builder/apply/${input.proposalDigest}/proposal.json`;
+    await input.sandbox.writeTextFile({
+      path: proposalPath,
+      content: `${JSON.stringify(input.proposal, null, 2)}\n`,
+    });
+    const appSpecPath = input.proposal.contract.appSpec.path;
+    const acceptedAppSpec = await input.sandbox.readBinaryFile({
+      path: `${relativeRoot}/${appSpecPath}`,
+    });
+    if (
+      acceptedAppSpec === null ||
+      sha256(acceptedAppSpec) !== input.proposal.contract.appSpec.sha256
+    )
+      throw new Error(
+        "The planning overlay does not contain the exact accepted AppSpec.",
+      );
+    return {
+      applyRoot: absoluteRoot,
+      proposalPath: `/workspace/${proposalPath}`,
+      appSpecPath,
+      acceptedAppSpec,
+    };
+  } catch (error) {
+    await input.sandbox.removePath({ path: relativeRoot, force: true });
+    throw error;
+  }
+}
+
+async function restorePreparedAppSpecBaseline(input: {
+  sandbox: SandboxSession;
+  applyRoot: string;
+  appSpecPath: string;
+}): Promise<void> {
+  const prepared = await input.sandbox.readBinaryFile({
+    path: `repository/${input.appSpecPath}`,
   });
-  return {
-    applyRoot: absoluteRoot,
-    proposalPath: `/workspace/${proposalPath}`,
-  };
+  const applyPath = `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`;
+  if (prepared === null) {
+    await input.sandbox.removePath({ path: applyPath, force: true });
+    return;
+  }
+  await input.sandbox.writeBinaryFile({ path: applyPath, content: prepared });
+}
+
+async function stageAcceptedAppSpec(input: {
+  sandbox: SandboxSession;
+  applyRoot: string;
+  appSpecPath: string;
+  acceptedAppSpec: Uint8Array;
+}): Promise<void> {
+  await input.sandbox.writeBinaryFile({
+    path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`,
+    content: input.acceptedAppSpec,
+  });
 }
 
 const snapshotLine = /^([0-7]{3,4})\t([0-9a-f]{64})\t(.+)$/u;
@@ -324,8 +410,13 @@ export function overlayChanges(
     });
 }
 
-function allowedApplyChange(path: string, appId: string): boolean {
+function allowedApplyChange(
+  path: string,
+  appId: string,
+  appSpecPath: string,
+): boolean {
   return (
+    path === appSpecPath ||
     path === "apps/shell/microfrontends.json" ||
     path.startsWith(`apps/${appId}/`)
   );
@@ -427,6 +518,14 @@ export async function executeProposalBoundApply(input: {
   proposal: TargetProposal;
   appliedByCallId: string;
 }): Promise<TargetApplyResult> {
+  if (
+    input.binding.appSpecDigest !== input.proposal.contract.appSpec.sha256 ||
+    input.binding.appSpecPath !== input.proposal.contract.appSpec.path ||
+    !safeSourcePath(input.binding.appSpecPath)
+  )
+    throw new Error(
+      "The accepted AppSpec binding or path differs from the target proposal.",
+    );
   const snapshotter = input.snapshotter ?? inspectApplyOverlay;
   const overlay = await materializeFreshApplyOverlay({
     sandbox: input.sandbox,
@@ -434,7 +533,29 @@ export async function executeProposalBoundApply(input: {
     proposalDigest: input.binding.proposalDigest,
     proposal: input.proposal,
   });
-  const before = await snapshotter(input.sandbox, overlay.applyRoot);
+  let planning: OverlaySnapshot;
+  let before: OverlaySnapshot;
+  try {
+    planning = await snapshotter(input.sandbox, overlay.applyRoot);
+    await restorePreparedAppSpecBaseline({
+      sandbox: input.sandbox,
+      applyRoot: overlay.applyRoot,
+      appSpecPath: overlay.appSpecPath,
+    });
+    before = await snapshotter(input.sandbox, overlay.applyRoot);
+    await stageAcceptedAppSpec({
+      sandbox: input.sandbox,
+      applyRoot: overlay.applyRoot,
+      appSpecPath: overlay.appSpecPath,
+      acceptedAppSpec: overlay.acceptedAppSpec,
+    });
+  } catch (error) {
+    await input.sandbox.removePath({
+      path: applyOverlayRoot(input.binding.proposalDigest),
+      force: true,
+    });
+    throw error;
+  }
   let command: ApplyCommandResult;
   try {
     command = await input.executor({
@@ -457,13 +578,55 @@ export async function executeProposalBoundApply(input: {
   } catch {
     outputExceeded = true;
   }
-  const after = await snapshotter(input.sandbox, overlay.applyRoot);
+  const attemptBase = {
+    version: 2 as const,
+    ...input.binding,
+    applyRoot: overlay.applyRoot,
+    planningTreeDigest: planning.treeDigest,
+    preTree: before.files,
+    preTreeDigest: before.treeDigest,
+    command: {
+      name: "create-app" as const,
+      exitCode: command.exitCode,
+      stdoutDigest: sha256(command.stdout),
+      stderrDigest: sha256(command.stderr),
+    },
+    appliedByCallId: input.appliedByCallId,
+  };
+  let after: OverlaySnapshot;
+  try {
+    after = await snapshotter(input.sandbox, overlay.applyRoot);
+  } catch {
+    const unsigned = {
+      ...attemptBase,
+      postTree: null,
+      postTreeDigest: null,
+      changes: null,
+      changedContentDigest: null,
+      status: "partial-failure" as const,
+      reason: "post-snapshot-failed" as const,
+      recoveryRequired: true as const,
+    };
+    return {
+      ok: false,
+      receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
+    };
+  }
   const changes = overlayChanges(before, after);
   const targetReceipt = parseTargetReceipt(command, input.proposal);
   const unexpectedPath = changes.some(
-    ({ path }) => !allowedApplyChange(path, input.proposal.contract.appId),
+    ({ path }) =>
+      !allowedApplyChange(
+        path,
+        input.proposal.contract.appId,
+        input.proposal.contract.appSpec.path,
+      ),
+  );
+  const acceptedAppSpec = after.files.find(
+    ({ path }) => path === input.proposal.contract.appSpec.path,
   );
   const missingRequiredChange =
+    acceptedAppSpec?.digest !== input.proposal.contract.appSpec.sha256 ||
     !changes.some(
       ({ path }) =>
         path === input.proposal.plan.topology.configPath ||
@@ -473,22 +636,11 @@ export async function executeProposalBoundApply(input: {
       ({ path }) => path === input.proposal.plan.topology.configPath,
     );
   const base = {
-    version: 1 as const,
-    ...input.binding,
-    applyRoot: overlay.applyRoot,
-    preTree: before.files,
+    ...attemptBase,
     postTree: after.files,
-    preTreeDigest: before.treeDigest,
     postTreeDigest: after.treeDigest,
     changes,
     changedContentDigest: sha256(JSON.stringify(changes)),
-    command: {
-      name: "create-app" as const,
-      exitCode: command.exitCode,
-      stdoutDigest: sha256(command.stdout),
-      stderrDigest: sha256(command.stderr),
-    },
-    appliedByCallId: input.appliedByCallId,
   };
   if (
     command.exitCode !== 0 ||

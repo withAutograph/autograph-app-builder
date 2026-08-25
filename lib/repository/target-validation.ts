@@ -6,6 +6,7 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { SUPPORTED_VALIDATION_COMMANDS } from "./supported-template";
 import {
   applyOverlayRoot,
+  assertCurrentTargetApplyReceipt,
   inspectApplyOverlay,
   type ApplyCommandResult,
   type TargetApplyReceipt,
@@ -31,6 +32,7 @@ type TargetValidationBinding = {
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;
+  appSpecPath: string;
   artifactRevision: string;
   dependencyReceiptDigest: string;
   identityDigest: string;
@@ -49,7 +51,7 @@ export type PlannedValidationCommand = {
 };
 
 export type TargetValidationAttemptReceipt = TargetValidationBinding & {
-  version: 1;
+  version: 2;
   status: "pending";
   commands: readonly PlannedValidationCommand[];
   startedByCallId: string;
@@ -64,7 +66,7 @@ export type TargetValidationCommandReceipt = PlannedValidationCommand & {
 };
 
 type ValidationReceiptBase = TargetValidationBinding & {
-  version: 1;
+  version: 2;
   attemptDigest: string;
   commands: readonly TargetValidationCommandReceipt[];
   validatedByCallId: string;
@@ -103,6 +105,121 @@ function validDigest(value: string): boolean {
   return /^[0-9a-f]{64}$/u.test(value);
 }
 
+export function assertTargetValidationSourceBindings(input: {
+  apply: TargetApplyReceipt;
+  planningTreeDigest: string;
+  preparedTreeDigest: string;
+}): void {
+  if (input.planningTreeDigest !== input.apply.planningTreeDigest)
+    throw new Error("The planning overlay changed before target validation.");
+  if (input.preparedTreeDigest !== input.apply.preTreeDigest)
+    throw new Error("The prepared source changed before target validation.");
+}
+
+export function assertReusableTargetApplyReceipt(input: {
+  apply: TargetApplyReceipt;
+  expectedAppSpecPath: string;
+  appliedTreeDigest: string;
+  planningTreeDigest: string;
+  preparedTreeDigest: string;
+}): void {
+  assertCurrentTargetApplyReceipt(input.apply);
+  if (input.apply.appSpecPath !== input.expectedAppSpecPath)
+    throw new Error("The accepted AppSpec path changed after target apply.");
+  assertTargetValidationSourceBindings(input);
+  if (input.appliedTreeDigest !== input.apply.postTreeDigest)
+    throw new Error("The applied overlay changed after its durable receipt.");
+}
+
+export function assertReusableTargetValidationReceipt(input: {
+  apply: TargetApplyReceipt;
+  validation: TargetValidationReceipt;
+  expectedAppSpecPath: string;
+  appliedTreeDigest: string;
+  planningTreeDigest: string;
+  preparedTreeDigest: string;
+}): void {
+  assertCurrentTargetApplyReceipt(input.apply);
+  if (input.apply.appSpecPath !== input.expectedAppSpecPath)
+    throw new Error(
+      "The accepted AppSpec path changed after target validation.",
+    );
+  assertTargetValidationSourceBindings(input);
+  if (input.appliedTreeDigest !== input.apply.postTreeDigest)
+    throw new Error(
+      "The applied overlay changed after its target-validation receipt.",
+    );
+  const expectedBinding = validationBinding(input.apply);
+  const expectedAttempt = createTargetValidationAttempt(
+    input.apply,
+    input.validation.validatedByCallId,
+  );
+  if (
+    input.validation.version !== 2 ||
+    input.validation.status !== "passed" ||
+    input.validation.attemptDigest !== expectedAttempt.digest ||
+    input.validation.applyDigest !== input.apply.digest ||
+    input.validation.appSpecPath !== input.apply.appSpecPath ||
+    Object.entries(expectedBinding).some(
+      ([key, value]) =>
+        input.validation[key as keyof typeof expectedBinding] !== value,
+    ) ||
+    input.validation.commands.length !== expectedAttempt.commands.length ||
+    input.validation.commands.some((command, index) => {
+      const expected = expectedAttempt.commands[index];
+      return (
+        expected === undefined ||
+        command.name !== expected.name ||
+        command.command !== expected.command ||
+        command.validationRoot !== expected.validationRoot ||
+        command.inputTreeDigest !== input.apply.postTreeDigest ||
+        command.exitCode !== 0 ||
+        !validDigest(command.stdoutDigest) ||
+        !validDigest(command.stderrDigest)
+      );
+    })
+  )
+    throw new Error(
+      "A canonical V2 target validation receipt for the exact apply is required.",
+    );
+  const canonicalCommands = input.validation.commands.map((command, index) => {
+    const expected = expectedAttempt.commands[index];
+    if (expected === undefined)
+      throw new Error(
+        "A canonical V2 target validation receipt for the exact apply is required.",
+      );
+    return {
+      name: expected.name,
+      command: expected.command,
+      validationRoot: expected.validationRoot,
+      inputTreeDigest: input.apply.postTreeDigest,
+      exitCode: 0,
+      stdoutDigest: command.stdoutDigest,
+      stderrDigest: command.stderrDigest,
+    };
+  });
+  const unsigned = {
+    version: 2 as const,
+    ...expectedBinding,
+    status: "passed" as const,
+    attemptDigest: input.validation.attemptDigest,
+    commands: canonicalCommands,
+    validatedByCallId: input.validation.validatedByCallId,
+  };
+  if (
+    !validDigest(input.validation.attemptDigest) ||
+    input.validation.digest !== sha256(JSON.stringify(unsigned)) ||
+    JSON.stringify(input.validation) !==
+      JSON.stringify({
+        ...unsigned,
+        digest: sha256(JSON.stringify(unsigned)),
+      })
+  )
+    throw new Error(
+      "The canonical V2 target validation receipt digest is malformed.",
+    );
+}
+
 function commandName(
   command: TargetValidationCommand,
 ): TargetValidationCommandName {
@@ -126,6 +243,7 @@ export function validationBinding(
     eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,
+    appSpecPath: apply.appSpecPath,
     artifactRevision: apply.artifactRevision,
     dependencyReceiptDigest: apply.dependencyReceiptDigest,
     identityDigest: apply.identityDigest,
@@ -142,12 +260,13 @@ export function createTargetValidationAttempt(
   apply: TargetApplyReceipt,
   startedByCallId: string,
 ): TargetValidationAttemptReceipt {
+  assertCurrentTargetApplyReceipt(apply);
   if (
     apply.applyRoot !== `/workspace/${applyOverlayRoot(apply.proposalDigest)}`
   )
     throw new Error("The target apply overlay root is not proposal-bound.");
   const unsigned = {
-    version: 1 as const,
+    version: 2 as const,
     status: "pending" as const,
     ...validationBinding(apply),
     commands: TARGET_VALIDATION_COMMANDS.map((command) => {
@@ -167,6 +286,9 @@ function assertAttemptMatchesApply(
   attempt: TargetValidationAttemptReceipt,
   apply: TargetApplyReceipt,
 ): void {
+  assertCurrentTargetApplyReceipt(apply);
+  if (attempt.version !== 2)
+    throw new Error("A canonical V2 target validation attempt is required.");
   const expected = createTargetValidationAttempt(
     apply,
     attempt.startedByCallId,
@@ -185,6 +307,7 @@ function attemptBinding(
     eligibilityDigest: attempt.eligibilityDigest,
     workspaceDigest: attempt.workspaceDigest,
     appSpecDigest: attempt.appSpecDigest,
+    appSpecPath: attempt.appSpecPath,
     artifactRevision: attempt.artifactRevision,
     dependencyReceiptDigest: attempt.dependencyReceiptDigest,
     identityDigest: attempt.identityDigest,
@@ -249,7 +372,7 @@ function failureReceipt(
   reason: TargetValidationFailureReason,
 ): TargetValidationFailureReceipt {
   const unsigned = {
-    version: 1 as const,
+    version: 2 as const,
     ...attemptBinding(attempt),
     status: "failed" as const,
     attemptDigest: attempt.digest,
@@ -386,7 +509,7 @@ export async function executeProposalBoundValidation(input: {
       };
   }
   const unsigned = {
-    version: 1 as const,
+    version: 2 as const,
     ...attemptBinding(input.attempt),
     status: "passed" as const,
     attemptDigest: input.attempt.digest,
