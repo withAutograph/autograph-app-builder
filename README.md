@@ -112,7 +112,10 @@ template manifest.
 
 ## Portable plugin package
 
-The repository root is the cross-client Agent Plugins 1.0.0 package:
+The canonical cross-client contract is the published
+[Agent Plugins 1.0.0 specification](https://agent-plugins.org/specification).
+The repository keeps its portable source components at the fixed standard
+locations:
 
 - `plugin.json` is the canonical portable manifest;
 - `skills/` contains portable Agent Skills;
@@ -120,11 +123,33 @@ The repository root is the cross-client Agent Plugins 1.0.0 package:
 - `schemas/agent-plugins/1.0.0/` vendors the canonical versioned schemas used by
   `pnpm validate:plugin`.
 
-Client adapters are additive. `.codex-plugin/plugin.json` and `.app.json` are
-generated Codex/OpenAI integration files; they do not replace or redefine the
-portable package. Other compatible clients can install the same root package
-and consume its skills and MCP declaration according to their own distribution,
-permission, and authentication model.
+Build the client-neutral installable directory with:
+
+```bash
+pnpm build:agent-plugin-package
+```
+
+The result is `.artifacts/agent-plugin/autograph-app-builder/`. It is validated
+as a clean generated artifact containing exactly the portable manifest, MCP
+declaration, Agent Skills, and license. It deliberately excludes
+`.codex-plugin/plugin.json` and `.app.json`, which are generated OpenAI/Codex
+distribution metadata rather than Agent Plugins core. The artifact is the
+canonical portable package; client-specific packages are derived adapters.
+
+That package shape is standards-conformant, but the repository does not yet
+claim cross-client runtime portability or release readiness. `mcp.json` retains
+a non-routable development endpoint, Agent Plugins 1.0.0 leaves OAuth and
+credentials to each client, and hosted OAuth, tenancy, durable storage, and
+non-Codex client proofs remain required before either claim. The standard also
+does not define client installation UX.
+
+`pnpm validate:plugin` verifies the source components against the vendored,
+digest-pinned Agent Plugins 1.0.0 schemas and the specification's version,
+transport, public-header, path-containment, and Agent Skills discovery rules.
+The build command separately validates the generated clean artifact, so source
+files and client adapters cannot accidentally enter the portable package.
+`pnpm validate:release` additionally refuses the development MCP endpoint; it
+does not replace the hosted and cross-client proofs above.
 
 ## Run the Eve agent locally
 

@@ -6,7 +6,7 @@
   "homepage": "https://github.com/withAutograph/autograph-app-builder",
   "repository": "https://github.com/withAutograph/autograph-app-builder",
   "license": "MIT",
-  "keywords": ["eve", "agent", "mcp", "codex", "app-builder"],
+  "keywords": ["eve", "agent", "mcp", "agent-plugins", "app-builder"],
   "skills": "./skills/",
   "apps": "./.app.json",
   "interface": {

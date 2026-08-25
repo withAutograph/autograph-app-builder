@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -107,6 +107,25 @@ function fixture(): string {
   return root;
 }
 
+function cloneFixture(root: string): string {
+  const destination = join(
+    mkdtempSync(join(tmpdir(), "supported-template-clone-")),
+    "repository",
+  );
+  execFileSync("git", [
+    "clone",
+    "--quiet",
+    "--no-hardlinks",
+    root,
+    destination,
+  ]);
+  return destination;
+}
+
+function allowRepositories(...roots: string[]): void {
+  process.env.REPOSITORY_LOCAL_ROOTS = roots.join(delimiter);
+}
+
 function fakeSandbox({
   createParentsOnWrite = true,
 }: { createParentsOnWrite?: boolean } = {}): SandboxSession {
@@ -191,6 +210,79 @@ function fakeSandbox({
 }
 
 describe("supported-template adapter", () => {
+  it("keeps canonical eligibility stable across physical source paths", async () => {
+    const firstRoot = fixture();
+    const secondRoot = cloneFixture(firstRoot);
+    allowRepositories(firstRoot, secondRoot);
+
+    const first = await inspectSupportedRepository(firstRoot);
+    const second = await inspectSupportedRepository(secondRoot);
+
+    expect(first.sourcePath).not.toBe(second.sourcePath);
+    expect(first.sourceSha).toBe(second.sourceSha);
+    expect(first.dirtyPaths).toEqual(second.dirtyPaths);
+    expect(first.failures).toEqual(second.failures);
+    expect(first.observed).toEqual(second.observed);
+    expect(first.digest).toBe(second.digest);
+  });
+
+  it("binds canonical eligibility to SHA, dirty state, and observations", async () => {
+    const shaRoot = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = shaRoot;
+    const beforeSha = await inspectSupportedRepository(shaRoot);
+    writeFileSync(join(shaRoot, "README.md"), "advance source\n");
+    execFileSync("git", ["add", "README.md"], { cwd: shaRoot });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-m",
+        "advance fixture",
+      ],
+      { cwd: shaRoot },
+    );
+    const afterSha = await inspectSupportedRepository(shaRoot);
+    expect(afterSha.sourceSha).not.toBe(beforeSha.sourceSha);
+    expect(afterSha.dirtyPaths).toEqual(beforeSha.dirtyPaths);
+    expect(afterSha.observed).toEqual(beforeSha.observed);
+    expect(afterSha.digest).not.toBe(beforeSha.digest);
+
+    const dirtyRoot = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = dirtyRoot;
+    const beforeDirty = await inspectSupportedRepository(dirtyRoot);
+    writeFileSync(join(dirtyRoot, "README.md"), "dirty source\n");
+    const afterDirty = await inspectSupportedRepository(dirtyRoot);
+    expect(afterDirty.sourceSha).toBe(beforeDirty.sourceSha);
+    expect(afterDirty.dirtyPaths).not.toEqual(beforeDirty.dirtyPaths);
+    expect(afterDirty.observed).toEqual(beforeDirty.observed);
+    expect(afterDirty.digest).not.toBe(beforeDirty.digest);
+
+    const supportedRoot = fixture();
+    const driftedRoot = cloneFixture(supportedRoot);
+    const contractPath = ".config/mise/scripts/repository/app-contract.ts";
+    writeFileSync(
+      join(supportedRoot, contractPath),
+      'const source = { runtime: "nextjs" };\n// same dirty path\n',
+    );
+    writeFileSync(
+      join(driftedRoot, contractPath),
+      'const source = { runtime: "vite" };\n// same dirty path\n',
+    );
+    allowRepositories(supportedRoot, driftedRoot);
+    const supported = await inspectSupportedRepository(supportedRoot);
+    const drifted = await inspectSupportedRepository(driftedRoot);
+    expect(drifted.sourceSha).toBe(supported.sourceSha);
+    expect(drifted.dirtyPaths).toEqual(supported.dirtyPaths);
+    expect(drifted.observed).not.toEqual(supported.observed);
+    expect(drifted.digest).not.toBe(supported.digest);
+  });
+
   it("emits kind-specific canonical release-disabled source receipts", async () => {
     const root = fixture();
     process.env.REPOSITORY_LOCAL_ROOTS = root;
