@@ -13,19 +13,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm test:agent
-      - run: pnpm exec eve info
-      - run: pnpm exec eve build
-      - run: pnpm build:agent-plugin-package
-      - run: pnpm build:openai-package
-      - run: git diff --exit-code -- .codex-plugin/plugin.json .app.json
-      - run: pnpm build
+      - uses: jdx/mise-action@v3
+      - run: mise run ci

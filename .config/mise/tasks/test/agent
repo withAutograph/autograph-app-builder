@@ -9,7 +9,8 @@ APP_BUILDER_TEST_MODEL=1 \
 APP_BUILDER_LOCAL_PUBLICATION=1 \
 APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1 \
   "$node_bin" "$eve_entry" eval \
-    --exclude-tag disabled-local-publication fresh-bootstrap-publication \
+    --exclude-tag disabled-local-publication \
+    --exclude-tag fresh-bootstrap-publication \
     --strict --skip-report
 
 mise run test:fresh-bootstrap-evals

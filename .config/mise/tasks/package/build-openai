@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Build the derived OpenAI client package"
+set -euo pipefail
+
+exec "$(mise which node)" --import tsx scripts/build-openai-package.mts

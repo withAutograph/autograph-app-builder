@@ -332,6 +332,51 @@ it("never overwrites a hostile creator racing absent atomic publication", async 
   expect(await readdir(input.destinationPath)).toEqual([]);
 });
 
+it("never publishes a stage substituted after durable review", async () => {
+  const input = await fixture("absent");
+  const reviewedStage = `${input.proposal.stagingPath}.reviewed`;
+  const result = await publishFreshBootstrap({
+    ...input,
+    publishedByCallId: "publish-call",
+    hooks: {
+      beforeAtomicPublication: async () => {
+        await rename(input.proposal.stagingPath, reviewedStage);
+        await mkdir(input.proposal.stagingPath, { mode: 0o700 });
+        await writeFile(join(input.proposal.stagingPath, "unreviewed"), "x");
+      },
+    },
+  });
+  expect(result).toMatchObject({
+    ok: false,
+    receipt: { destinationPublished: false, recoveryRequired: true },
+  });
+  expect(existsSync(input.destinationPath)).toBe(false);
+  expect(await readdir(input.proposal.stagingPath)).toEqual(["unreviewed"]);
+  expect(existsSync(reviewedStage)).toBe(true);
+});
+
+it("never exchanges over a substituted exact-empty destination", async () => {
+  const input = await fixture("empty-directory");
+  const approvedEmpty = `${input.destinationPath}.approved`;
+  const result = await publishFreshBootstrap({
+    ...input,
+    publishedByCallId: "publish-call",
+    hooks: {
+      beforeAtomicPublication: async () => {
+        await rename(input.destinationPath, approvedEmpty);
+        await mkdir(input.destinationPath, { mode: 0o700 });
+      },
+    },
+  });
+  expect(result).toMatchObject({
+    ok: false,
+    receipt: { destinationPublished: false, recoveryRequired: true },
+  });
+  expect(await readdir(input.destinationPath)).toEqual([]);
+  expect(await readdir(approvedEmpty)).toEqual([]);
+  expect(existsSync(input.proposal.stagingPath)).toBe(true);
+});
+
 it("recovers the exact swapped-empty layout and retains its bound tombstone", async () => {
   const input = await fixture("empty-directory");
   const failed = await publishFreshBootstrap({

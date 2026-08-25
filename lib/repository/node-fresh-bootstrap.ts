@@ -74,22 +74,25 @@ export type FreshBootstrapFaultHooks = {
 type ExactFile = FreshBootstrapFile & { bytes: Buffer };
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
-mode, stage, destination, stage_dev, stage_ino, empty_dev, empty_ino = sys.argv[1:]
+mode, stage, destination, stage_dev, stage_ino, stage_uid, stage_mode, stage_nlink, empty_dev, empty_ino, empty_uid, empty_mode, empty_nlink, parent_dev, parent_ino, parent_uid, parent_mode, parent_nlink = sys.argv[1:]
 parent_fd = 3
 libc = ctypes.CDLL(None, use_errno=True)
 stage_b = os.fsencode(stage); destination_b = os.fsencode(destination)
-def exact(name, dev, ino):
+parent = os.fstat(parent_fd)
+if not stat.S_ISDIR(parent.st_mode) or str(parent.st_dev) != parent_dev or str(parent.st_ino) != parent_ino or str(parent.st_uid) != parent_uid or format(stat.S_IMODE(parent.st_mode), "o") != parent_mode or str(parent.st_nlink) != parent_nlink:
+    raise SystemExit(75)
+def exact(name, dev, ino, uid, mode, nlink):
     value = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-    if not stat.S_ISDIR(value.st_mode) or str(value.st_dev) != dev or str(value.st_ino) != ino:
+    if not stat.S_ISDIR(value.st_mode) or str(value.st_dev) != dev or str(value.st_ino) != ino or str(value.st_uid) != uid or format(stat.S_IMODE(value.st_mode), "o") != mode or str(value.st_nlink) != nlink:
         raise SystemExit(76)
     return value
 if mode == "noreplace":
-    exact(stage, stage_dev, stage_ino)
+    exact(stage, stage_dev, stage_ino, stage_uid, stage_mode, stage_nlink)
     try: os.stat(destination, dir_fd=parent_fd, follow_symlinks=False); raise SystemExit(77)
     except FileNotFoundError: pass
 else:
-    exact(stage, stage_dev, stage_ino)
-    exact(destination, empty_dev, empty_ino)
+    exact(stage, stage_dev, stage_ino, stage_uid, stage_mode, stage_nlink)
+    exact(destination, empty_dev, empty_ino, empty_uid, empty_mode, empty_nlink)
     old_fd = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
     try:
         if os.listdir(old_fd): raise SystemExit(79)
@@ -113,7 +116,7 @@ if result != 0:
     raise SystemExit(error or 79)
 os.fsync(parent_fd)
 if mode in ("exchange", "exchange-hold"):
-    exact(stage, empty_dev, empty_ino)
+    exact(stage, empty_dev, empty_ino, empty_uid, empty_mode, empty_nlink)
     old_fd = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
     try:
         if os.listdir(old_fd): raise SystemExit(80)
@@ -1709,6 +1712,7 @@ async function assertExactRepository(
 async function atomicPublish(
   capability: FreshBootstrapCapability,
   proposal: FreshBootstrapProposal,
+  stageIdentity: PathIdentity,
   hooks?: FreshBootstrapFaultHooks,
 ): Promise<void> {
   const parentPath = dirname(proposal.destinationPath);
@@ -1718,18 +1722,50 @@ async function atomicPublish(
   );
   try {
     const parentState = await parent.stat();
+    const expectedParentNlink = String(
+      BigInt(proposal.destinationPrestate.parent.nlink) + BigInt(1),
+    );
+    const approvedEmpty =
+      proposal.destinationPrestate.kind === "empty-directory"
+        ? proposal.destinationPrestate.destination
+        : undefined;
     if (
       String(parentState.dev) !== proposal.destinationPrestate.parent.device ||
-      String(parentState.ino) !== proposal.destinationPrestate.parent.inode
+      String(parentState.ino) !== proposal.destinationPrestate.parent.inode ||
+      String(parentState.uid) !== proposal.destinationPrestate.parent.uid ||
+      (parentState.mode & 0o777).toString(8) !==
+        proposal.destinationPrestate.parent.mode ||
+      String(parentState.nlink) !== expectedParentNlink
     )
       throw new Error(
         "The destination parent changed before atomic publication.",
       );
     const stageState = await lstat(proposal.stagingPath);
+    if (
+      stageState.isSymbolicLink() ||
+      !stageState.isDirectory() ||
+      JSON.stringify(await identity(proposal.stagingPath)) !==
+        JSON.stringify(stageIdentity)
+    )
+      throw new Error(
+        "The reviewed bootstrap stage changed before atomic publication.",
+      );
     const originalEmpty =
-      proposal.destinationPrestate.kind === "empty-directory"
-        ? await lstat(proposal.destinationPath)
-        : undefined;
+      approvedEmpty === undefined
+        ? undefined
+        : await lstat(proposal.destinationPath);
+    if (
+      originalEmpty !== undefined &&
+      (originalEmpty.isSymbolicLink() ||
+        !originalEmpty.isDirectory() ||
+        JSON.stringify(await identity(proposal.destinationPath)) !==
+          JSON.stringify(approvedEmpty) ||
+        (await readdir(proposal.destinationPath)).length !== 0)
+    )
+      throw new Error(
+        "The approved exact-empty destination changed before atomic publication.",
+      );
+    await assertExactExecutable(capability.systemPythonIdentity);
     const result = spawnSync(
       capability.systemPython,
       [
@@ -1743,10 +1779,21 @@ async function atomicPublish(
             : "exchange-hold",
         basename(proposal.stagingPath),
         basename(proposal.destinationPath),
-        String(stageState.dev),
-        String(stageState.ino),
-        originalEmpty === undefined ? "-" : String(originalEmpty.dev),
-        originalEmpty === undefined ? "-" : String(originalEmpty.ino),
+        stageIdentity.device,
+        stageIdentity.inode,
+        stageIdentity.uid,
+        stageIdentity.mode,
+        stageIdentity.nlink,
+        approvedEmpty?.device ?? "-",
+        approvedEmpty?.inode ?? "-",
+        approvedEmpty?.uid ?? "-",
+        approvedEmpty?.mode ?? "-",
+        approvedEmpty?.nlink ?? "-",
+        proposal.destinationPrestate.parent.device,
+        proposal.destinationPrestate.parent.inode,
+        proposal.destinationPrestate.parent.uid,
+        proposal.destinationPrestate.parent.mode,
+        expectedParentNlink,
       ],
       {
         env: minimalEnvironment(),
@@ -1761,8 +1808,8 @@ async function atomicPublish(
       );
     const destination = await lstat(proposal.destinationPath);
     if (
-      destination.dev !== stageState.dev ||
-      destination.ino !== stageState.ino
+      String(destination.dev) !== stageIdentity.device ||
+      String(destination.ino) !== stageIdentity.inode
     )
       throw new Error(
         "Atomic publication did not install the exact stage inode.",
@@ -2060,6 +2107,11 @@ async function executeBootstrap(input: {
   let stageReady =
     existingJournal?.status !== "succeeded" &&
     existingJournal?.layout.phase === "stage-ready";
+  let stageReadyIdentity =
+    existingJournal?.status !== "succeeded" &&
+    existingJournal?.layout.phase === "stage-ready"
+      ? existingJournal.layout.stageIdentity
+      : undefined;
   let destinationPublished = false;
   try {
     await input.hooks?.afterLockReady?.(lease.pid);
@@ -2205,6 +2257,7 @@ async function executeBootstrap(input: {
         input.proposal.stagingPath,
         { allowClaimMarker: true },
       );
+      const claimedReadyIdentity = await identity(input.proposal.stagingPath);
       const ready = pendingReceipt(
         input.proposal,
         input.publishedByCallId,
@@ -2213,7 +2266,7 @@ async function executeBootstrap(input: {
         priorLeaseMarkerDigest,
         {
           phase: "stage-ready",
-          stageIdentity: await identity(input.proposal.stagingPath),
+          stageIdentity: claimedReadyIdentity,
         },
       );
       await atomicWrite(
@@ -2224,6 +2277,23 @@ async function executeBootstrap(input: {
       stageReady = true;
       await unlink(marker);
       await syncDirectory(input.proposal.stagingPath);
+      stageReadyIdentity = await identity(input.proposal.stagingPath);
+      const markerRemovedReady = pendingReceipt(
+        input.proposal,
+        input.publishedByCallId,
+        input.recoveryOfDigest,
+        lease.markerDigest,
+        priorLeaseMarkerDigest,
+        {
+          phase: "stage-ready",
+          stageIdentity: stageReadyIdentity,
+        },
+      );
+      await atomicWrite(
+        capability,
+        input.proposal.journalPath,
+        `${JSON.stringify(markerRemovedReady)}\n`,
+      );
     } else if (!stageReady || markerState !== "absent") {
       throw new Error("Recovery lacks exact stage-ready ownership evidence.");
     }
@@ -2235,7 +2305,14 @@ async function executeBootstrap(input: {
     lease.assertHeld();
     await input.hooks?.beforeAtomicPublication?.();
     await assertSourceUnchanged(input.sourceReceipt);
-    await atomicPublish(capability, input.proposal, input.hooks);
+    if (stageReadyIdentity === undefined)
+      throw new Error("Fresh bootstrap lacks durable stage-ready identity.");
+    await atomicPublish(
+      capability,
+      input.proposal,
+      stageReadyIdentity,
+      input.hooks,
+    );
     destinationPublished = true;
     lease.assertHeld();
     await input.hooks?.afterAtomicPublication?.();

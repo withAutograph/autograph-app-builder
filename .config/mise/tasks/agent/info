@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Inspect the Eve agent definition"
+set -euo pipefail
+
+exec "$(mise which node)" node_modules/eve/bin/eve.js info

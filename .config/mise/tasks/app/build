@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Build the complete Eve and Next application"
+set -euo pipefail
+
+mise run agent:build
+exec "$(mise which node)" node_modules/next/dist/bin/next build --webpack

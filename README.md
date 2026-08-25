@@ -281,17 +281,20 @@ operation fails closed when no OS-managed advisory-lock helper exists.
 
 ## Use the local MCP façade
 
-Run Eve and the Next.js host on separate loopback ports. Set
-`APP_BUILDER_LOCAL_ADAPTER=1` and `EVE_AGENT_HOST` on the Next.js host so its
-five MCP operations call the local Eve channel. The adapter rejects non-loopback
-hosts and is never enabled implicitly.
+For the fresh-bootstrap-capable local lifecycle, pre-create the two owner-only
+roots described above, then run `mise run local:start -- <state-root>
+<destination-root>`. The task supervises Eve on loopback port 2000 and Next.js
+on loopback port 3000, and injects the exact same capability and local adapter
+configuration into both children. Run `mise run local:smoke` in another shell
+to verify the real Next health route and invoke the running Eve service. The
+adapter rejects non-loopback hosts and is never enabled implicitly.
 
 The portable manifest keeps a placeholder HTTPS endpoint until a separately
 approved deployment exists:
 
 ```bash
-pnpm configure --origin https://your-approved-deployment.example
-pnpm validate:release
+mise run package:configure -- --origin https://your-approved-deployment.example
+mise run package:validate-release
 ```
 
 Never put bearer tokens or secrets in `mcp.json` or `.app.json`.

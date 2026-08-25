@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Build the Eve agent"
+set -euo pipefail
+
+exec "$(mise which node)" node_modules/eve/bin/eve.js build
