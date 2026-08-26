@@ -57,9 +57,9 @@ ARG REPOSITORY_EXEC_SHA256=7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1
 COPY --from=arrusted-target / /tmp/arrusted-target
 
 RUN set -eux; \
-    test "$(git -C /tmp/arrusted-target rev-parse HEAD)" = "${TARGET_SHA}"; \
-    test "$(git -C /tmp/arrusted-target rev-parse HEAD^{tree})" = "${TARGET_TREE}"; \
-    test -z "$(git -C /tmp/arrusted-target status --porcelain=v1)"; \
+    test ! -e /tmp/arrusted-target/.git; \
+    test "$(bun -e 'console.log(require("/tmp/arrusted-target/.app-builder-source-manifest.json").source.commit)')" = "${TARGET_SHA}"; \
+    test "$(bun -e 'console.log(require("/tmp/arrusted-target/.app-builder-source-manifest.json").source.tree)')" = "${TARGET_TREE}"; \
     echo "${MISE_CONFIG_SHA256}  /tmp/arrusted-target/.config/mise/config.toml" | sha256sum --check --strict; \
     echo "${MISE_LOCK_SHA256}  /tmp/arrusted-target/.config/mise/mise.lock" | sha256sum --check --strict; \
     echo "${BUN_LOCK_SHA256}  /tmp/arrusted-target/bun.lock" | sha256sum --check --strict; \
@@ -114,10 +114,16 @@ RUN set -eux; \
 
 FROM toolchain
 
+ARG APP_BUILDER_REVISION
+
+LABEL org.opencontainers.image.revision="${APP_BUILDER_REVISION}" \
+      org.opencontainers.image.version="sandbox-v2"
+
 COPY --from=dependency-cache --chown=root:root /opt/app-builder/dependency-cache \
   /opt/app-builder/dependency-cache
 
 RUN --network=none set -eux; \
+    echo "${APP_BUILDER_REVISION}" | grep -E '^[0-9a-f]{40}$'; \
     test "$(bun --version)" = "1.3.14"; \
     bun -e 'const {execFileSync}=require("node:child_process"); const m=require("/opt/app-builder/dependency-cache/manifest.json"); const actual=execFileSync("sha256sum",[m.closure.archivePath],{encoding:"utf8"}).split(/\s/u)[0]; if(actual!==m.closure.archiveSha256) process.exit(1)'
 

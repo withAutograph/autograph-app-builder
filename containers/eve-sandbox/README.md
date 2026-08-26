@@ -18,24 +18,99 @@ archive bytes; there is no operator-supplied cache digest.
 
 ## Build and publish boundary
 
-Use a clean standalone Arrusted checkout whose `.git` directory is readable in
-the build context. Verify it is at the exact target commit with no dirty paths.
-From an exact App Builder checkout, build the transient tag:
+Use clean standalone App Builder and Arrusted checkouts whose `.git`
+directories are real directories, not worktree indirection. Every task requires
+the exact accepted Builder commit/tree and Dockerfile digest and re-observes both
+clean checkouts before acting. An integration worktree is preparation evidence,
+not an eligible image execution source. `--state-root` must be an absolute,
+canonical, no-link, current-user-owned mode `0700` directory outside both
+repositories (or an absent leaf beneath a canonical parent). It contains only
+the mode `0600`, fsynced receipts for one exact provenance; unknown files or a
+receipt from another provenance fail closed.
+
+Every lifecycle task takes one exclusive OS-held lock derived from the exact
+state-root path before it inspects receipts or invokes an external tool. The OS
+releases the lock if the owner is killed. A later owner removes only exact,
+owned mode-`0600` interrupted receipt temporaries and exact owned mode-`0700`
+sanitized-context temporaries; links, unexpected modes, and unknown artifacts
+fail closed. Concurrent build, inspection, push, preload, runtime preparation,
+and proof calls therefore cannot dispatch the same external operation twice.
+
+Verify sources, build, inspect the immutable local image identity, publish, and
+read back the GHCR manifest in this order:
+
+Authenticate only after separate publication approval. Supply a package token
+through standard input; it is never accepted in a command argument or
+environment variable, and the resulting receipt contains only the public
+registry and username.
 
 ```bash
-docker buildx build \
-  --platform linux/arm64 \
-  --build-context arrusted-target=/absolute/path/to/clean-arrusted-checkout \
-  --file containers/eve-sandbox/Dockerfile \
-  --tag ghcr.io/withautograph/autograph-app-builder-sandbox:app-builder-747f536-arrusted-e4e76f52-arm64-v1 \
-  --load \
-  .
+mise run image:login -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 REPLACE_WITH_ACCEPTED_DOCKERFILE_SHA256 \
+  --username REPLACE_WITH_GITHUB_LOGIN
 ```
+
+Type or paste the token only at the command's standard-input prompt. Do not
+place it in a shell history, receipt, or environment export. The
+subsequent push requires the matching local login receipt, while remote
+inspection independently reads back the published manifest, config, layers,
+platform, and OCI provenance.
+
+```bash
+mise run image:verify-sources -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76
+mise run image:build -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76
+mise run image:inspect-local -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76
+mise run image:push -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76
+mise run image:inspect-remote -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76
+```
+
+The tasks derive the transient tag from the first 12 hex characters of the
+Dockerfile's SHA-256 and the Arrusted target. They resolve pinned Docker,
+standalone Buildx, Microsandbox, Node, and pnpm binaries through mise. The local receipt binds the image
+ID and rootfs diff IDs; remote readback requires the config digest and rootfs
+identity to match before emitting a digest-only reference. The registry
+manifest digest, not the transient tag, remains runtime authority.
+For this exact Dockerfile and Arrusted source, the transient tag is
+`dockerfile-<dockerfile-sha-prefix>-arrusted-e4e76f52-arm64-v2`; it is only a publication
+handle and never runtime authority.
 
 The build fails on target SHA/tree or contract/lock drift. It performs the
 networked `bun install --frozen-lockfile --ignore-scripts` only while building
 the immutable cache layer. The final self-check runs with BuildKit networking
 disabled.
+
+The Arrusted checkout itself is never a BuildKit context. Immediately before
+the build, the locked lifecycle reconstructs a private temporary context from
+the exact commit's tracked Git blobs and modes, rejecting submodules, unsafe
+paths, unsupported modes, and escaping links. It adds a content-free source
+manifest binding the already verified commit, tree, tracked-entry digest, and
+entry count. The temporary context contains no `.git` directory or Git config,
+is passed as the named `arrusted-target` context, and is removed after the
+command or reconciled after a crash. The default Builder context remains
+deny-all through `.dockerignore`.
 
 Build, registry publication, and local acquisition are separate approvals.
 After an approved push, resolve the registry manifest digest and use only:
@@ -50,22 +125,48 @@ identity or planning.
 
 ## Local Microsandbox preload
 
-A Docker pull does not populate Microsandbox's OCI cache. Preload the exact
-approved digest before starting Eve, whose backend uses `pullPolicy: "never"`
-and deny-all networking:
+A Docker pull does not populate Microsandbox's OCI cache. The mise-pinned
+standalone `msb` binary preloads the exact approved digest from
+`remote-image-receipt.json`. The proof then uses Eve from a separately prepared,
+frozen Builder runtime. Source verification, build, publication, readback, and
+preload require empty ignored-file inventories in both repositories. The proof
+runtime is the sole exception: `image:prepare-proof-runtime` performs a forced
+`pnpm install --frozen-lockfile --ignore-scripts`, permits exactly the collapsed
+Builder entry `node_modules/`, and records the pnpm lock, dependency metadata,
+and normalized path/mode/symlink/file-byte tree digests. Symlinks must resolve
+inside `node_modules`. Arrusted's ignored inventory remains empty, and
+`.dockerignore` denies the entire Builder context so the runtime dependencies
+cannot enter the image build. Each proof re-hashes the actual dependency bytes
+before it can reuse or produce a receipt.
 
 ```bash
-pnpm exec msb pull \
-  ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:<remote-manifest-digest> \
-  --materialize all
-
-APP_BUILDER_SANDBOX_IMAGE=ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:<remote-manifest-digest> \
-  pnpm test:sandbox-toolchain
+mise run image:preload -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76 \
+  --image ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:REPLACE_WITH_VERIFIED_DIGEST
+mise run image:prepare-proof-runtime -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76
+mise run image:prove -- --arrusted-root /absolute/path/to/standalone-arrusted \
+  --state-root /absolute/path/to/private-image-lifecycle-state \
+  --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
+  --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
+  --dockerfile-sha256 0ee3864919f22017ca84addddd86fbbc5c26e92396cd31cc576e09280918bc76 \
+  --image ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:REPLACE_WITH_VERIFIED_DIGEST
 ```
 
-The observational eval verifies the fixed toolchain and image-internal cache.
-Real dependency preparation has its own approval and writes only the
-builder-owned planning overlay. It never installs over the network at runtime.
+The Eve proof uses the signed Gate A sandbox profile to bind the exact digest
+and canonical Arrusted source root. It prepares the immutable source tree,
+records and accepts a proof AppSpec, materializes the image-internal offline
+dependency cache into builder-owned planning metadata, and runs only the fixed
+typed identity and planning commands. The eval must terminate in `planned` and
+asserts that apply, validation, change-set acceptance, publication, generic
+shell, and generic file-write tools never ran. It never installs over the
+network at runtime.
 Building another target, architecture, or dependency closure requires another
 reviewed image and separate approval.
 

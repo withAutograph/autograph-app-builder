@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="Verify exact clean standalone Builder and Arrusted image sources"
+set -eu
+
+node_bin="$(mise which node)"
+export APP_BUILDER_IMAGE_NODE_BIN="$node_bin"
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$node_bin" --experimental-strip-types .config/mise/scripts/repository/image-lifecycle.ts verify-sources "$@"

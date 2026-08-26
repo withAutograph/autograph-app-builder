@@ -1,0 +1,10 @@
+#!/bin/sh
+#MISE description="Run the read-only sandbox proof against the preloaded exact digest"
+set -eu
+
+node_bin="$(mise which node)"
+export APP_BUILDER_IMAGE_NODE_BIN="$node_bin"
+pnpm_bin="$(mise which pnpm)"
+export APP_BUILDER_IMAGE_PNPM_BIN="$pnpm_bin"
+export APP_BUILDER_EVAL_NODE_BIN="$node_bin"
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$node_bin" --experimental-strip-types .config/mise/scripts/repository/image-lifecycle.ts prove "$@"

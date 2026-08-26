@@ -24,6 +24,7 @@ const stateRoot = option("--gate-a-state-root");
 const allowedRoot = option("--gate-a-allowed-root");
 const fault = option("--gate-a-fault");
 const image = option("--gate-a-image");
+const sourceRoot = option("--gate-a-source-root");
 const gateAEvalProfile =
   profileName === "general-enabled" || profileName === "general-disabled"
     ? createGateAEvalProfile(
@@ -45,7 +46,11 @@ const gateAEvalProfile =
         )
       : profileName === "sandbox"
         ? createGateAEvalProfile(
-            { profile: "sandbox", image: image ?? null },
+            {
+              profile: "sandbox",
+              image: image ?? null,
+              sourceRoot: sourceRoot ?? null,
+            },
             repositoryRoot,
           )
         : (() => {
@@ -60,6 +65,8 @@ if (
   throw new Error("Fresh Gate A arguments require the fresh profile.");
 if (gateAEvalProfile.profile !== "sandbox" && image !== undefined)
   throw new Error("The sandbox image requires the sandbox profile.");
+if (gateAEvalProfile.profile !== "sandbox" && sourceRoot !== undefined)
+  throw new Error("The sandbox source root requires the sandbox profile.");
 const freshEvaluations = new Set([
   "fresh-bootstrap-publication",
   "fresh-bootstrap-empty-publication",
@@ -79,8 +86,21 @@ if (
   args[0] !== "fresh-bootstrap-recovery"
 )
   throw new Error("The fresh Gate A fault requires the recovery evaluation.");
-if (gateAEvalProfile.profile === "sandbox" && args[0] !== "sandbox-toolchain")
+const sandboxEvaluations = new Set([
+  "sandbox-toolchain",
+  "sandbox-identity-planning",
+]);
+if (
+  gateAEvalProfile.profile === "sandbox" &&
+  (args[0] === undefined || !sandboxEvaluations.has(args[0]))
+)
   throw new Error("The sandbox Gate A evaluation was invalid.");
+if (
+  gateAEvalProfile.profile === "sandbox" &&
+  args[0] === "sandbox-identity-planning" &&
+  (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
+)
+  throw new Error("The sandbox identity/planning proof requires exact inputs.");
 if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
 const realSandbox = gateAEvalProfile.profile === "sandbox";

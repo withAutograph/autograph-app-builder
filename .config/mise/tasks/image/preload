@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Preload the exact remotely verified digest into Microsandbox"
+set -eu
+
+node_bin="$(mise which node)"
+export APP_BUILDER_IMAGE_NODE_BIN="$node_bin"
+export APP_BUILDER_IMAGE_MSB_BIN="$(mise which msb)"
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$node_bin" --experimental-strip-types .config/mise/scripts/repository/image-lifecycle.ts preload "$@"

@@ -71,6 +71,46 @@ function observeRoot(path, repositoryRoot) {
   }
 }
 
+function observeReadOnlyRoot(path, repositoryRoot) {
+  if (path === null) return null;
+  if (typeof path !== "string" || !isAbsolute(path)) fail("source root");
+  try {
+    const resolved = resolve(path);
+    const canonical = realpathSync(resolved);
+    const state = lstatSync(resolved, { bigint: true });
+    if (
+      canonical !== resolved ||
+      !state.isDirectory() ||
+      state.isSymbolicLink() ||
+      state.uid !== BigInt(process.getuid?.() ?? -1) ||
+      (state.mode & BigInt(0o022)) !== BigInt(0) ||
+      within(repositoryRoot, canonical) ||
+      within(canonical, repositoryRoot)
+    )
+      fail("source root");
+    return Object.freeze({
+      path: canonical,
+      device: String(state.dev),
+      inode: String(state.ino),
+      uid: String(state.uid),
+      mode: (state.mode & BigInt(0o777)).toString(8),
+      nlink: String(state.nlink),
+    });
+  } catch {
+    fail("source root");
+  }
+}
+
+function validateReadOnlyRootIdentity(value, repositoryRoot) {
+  if (value === null) return null;
+  if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"]))
+    fail("source root identity");
+  const observed = observeReadOnlyRoot(value.path, repositoryRoot);
+  for (const key of ["path", "device", "inode", "uid", "mode", "nlink"])
+    if (value[key] !== observed[key]) fail("source root identity");
+  return observed;
+}
+
 function validateRootIdentity(value, repositoryRoot) {
   if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"]))
     fail("root identity");
@@ -119,16 +159,21 @@ export function createGateAEvalProfile(input, repositoryRoot) {
       fault: input.fault,
     });
   }
-  if (exactKeys(input, ["profile", "image"]) && input.profile === "sandbox") {
+  if (
+    exactKeys(input, ["profile", "image", "sourceRoot"]) &&
+    input.profile === "sandbox"
+  ) {
     if (
       input.image !== null &&
       (typeof input.image !== "string" || !imagePattern.test(input.image))
     )
       fail("sandbox image");
+    const sourceRoot = observeReadOnlyRoot(input.sourceRoot, repositoryRoot);
     return Object.freeze({
       version: 1,
       profile: "sandbox",
       image: input.image,
+      sourceRoot,
     });
   }
   fail("profile");
@@ -174,12 +219,23 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
   }
   if (
     value.profile === "sandbox" &&
-    exactKeys(value, ["version", "profile", "image"])
-  )
-    return createGateAEvalProfile(
-      { profile: "sandbox", image: value.image },
-      repositoryRoot,
-    );
+    exactKeys(value, ["version", "profile", "image", "sourceRoot"])
+  ) {
+    if (
+      value.image !== null &&
+      (typeof value.image !== "string" || !imagePattern.test(value.image))
+    )
+      fail("sandbox image");
+    return Object.freeze({
+      version: 1,
+      profile: "sandbox",
+      image: value.image,
+      sourceRoot: validateReadOnlyRootIdentity(
+        value.sourceRoot,
+        repositoryRoot,
+      ),
+    });
+  }
   fail("profile envelope");
 }
 
@@ -202,6 +258,8 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
     environment.APP_BUILDER_REAL_SANDBOX = "1";
     if (profile.image !== null)
       environment.APP_BUILDER_SANDBOX_IMAGE = profile.image;
+    if (profile.sourceRoot !== null)
+      environment.REPOSITORY_LOCAL_ROOTS = profile.sourceRoot.path;
   }
   return profile;
 }
