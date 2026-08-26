@@ -20,7 +20,11 @@
     "validate:plugin": "mise run package:validate",
     "validate:release": "mise run package:validate-release",
     "build:agent-plugin-package": "mise run package:build",
-    "build:openai-package": "mise run package:build-openai"
+    "build:openai-package": "mise run package:build-openai",
+    "build:portable-release": "mise run package:build-portable-release --",
+    "install:portable-plugin": "mise run package:install-portable --",
+    "smoke:portable-plugin": "mise run package:smoke-portable --",
+    "test:portable-plugin": "mise run package:test-portable"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",

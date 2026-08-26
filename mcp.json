@@ -3,7 +3,7 @@
   "mcpServers": {
     "autograph-app-builder": {
       "type": "streamable-http",
-      "url": "https://replace-me.invalid/mcp"
+      "url": "https://mcp-endpoint.template/mcp"
     }
   }
 }

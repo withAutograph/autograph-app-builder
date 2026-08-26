@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Build a deterministic endpoint-bound Agent Plugins release"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/build-portable-release.mts "$@"

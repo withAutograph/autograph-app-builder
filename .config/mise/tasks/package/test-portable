@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Test deterministic release and offline client portability"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/test-portable-release.mts
