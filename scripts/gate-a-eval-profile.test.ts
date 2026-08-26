@@ -77,7 +77,7 @@ describe("closed Gate A eval profile", () => {
 
   it("installs an unconfigured sandbox with the image truly absent", () => {
     const profile = createGateAEvalProfile(
-      { profile: "sandbox", image: null },
+      { profile: "sandbox", image: null, sourceRoot: null },
       repositoryRoot,
     );
     const environment = hostileEnvironment();
@@ -91,7 +91,10 @@ describe("closed Gate A eval profile", () => {
     const environment: Record<string, string | undefined> = {};
     installGateAEvalProfile(
       environment,
-      createGateAEvalProfile({ profile: "sandbox", image }, repositoryRoot),
+      createGateAEvalProfile(
+        { profile: "sandbox", image, sourceRoot: null },
+        repositoryRoot,
+      ),
       repositoryRoot,
     );
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBe(image);
@@ -103,10 +106,43 @@ describe("closed Gate A eval profile", () => {
     ])
       expect(() =>
         createGateAEvalProfile(
-          { profile: "sandbox", image: hostile },
+          { profile: "sandbox", image: hostile, sourceRoot: null },
           repositoryRoot,
         ),
       ).toThrow(/sandbox image/u);
+  });
+
+  it("binds and reobserves an explicit read-only sandbox source root", () => {
+    const roots = freshRoots();
+    const image = `ghcr.io/example/toolchain@sha256:${"b".repeat(64)}`;
+    const profile = createGateAEvalProfile(
+      { profile: "sandbox", image, sourceRoot: roots.allowedRoot },
+      repositoryRoot,
+    );
+    const environment = hostileEnvironment();
+    installGateAEvalProfile(environment, profile, repositoryRoot);
+    expect(environment).toEqual({
+      APP_BUILDER_REAL_SANDBOX: "1",
+      APP_BUILDER_SANDBOX_IMAGE: image,
+      REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
+    });
+    if (profile?.profile !== "sandbox")
+      throw new Error("Expected sandbox profile.");
+    expect(() =>
+      validateGateAEvalProfile(
+        {
+          ...profile,
+          sourceRoot: { ...profile.sourceRoot, inode: "0" },
+        },
+        repositoryRoot,
+      ),
+    ).toThrow(/source root identity/u);
+    expect(() =>
+      validateGateAEvalProfile(
+        { ...profile, image: "ghcr.io/example/toolchain:latest" },
+        repositoryRoot,
+      ),
+    ).toThrow(/sandbox image/u);
   });
 
   it("rejects cross-profile keys, invalid faults, and root identity drift", () => {

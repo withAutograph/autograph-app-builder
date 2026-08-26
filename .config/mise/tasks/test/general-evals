@@ -11,6 +11,7 @@ eval_runner="scripts/run-eve-eval.mts"
   --exclude-tag disabled-local-publication \
   --exclude-tag fresh-bootstrap-publication \
   --exclude-tag sandbox-toolchain \
+  --exclude-tag sandbox-image-proof \
   --strict --skip-report
 
 exec "$launcher" "$node_bin" --import tsx "$eval_runner" \

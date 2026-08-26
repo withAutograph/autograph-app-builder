@@ -1,0 +1,9 @@
+#!/bin/sh
+#MISE description="Authenticate Docker to private GHCR with a token received only on stdin"
+set -eu
+
+node_bin="$(mise which node)"
+export APP_BUILDER_IMAGE_NODE_BIN="$node_bin"
+export APP_BUILDER_IMAGE_DOCKER_BIN="$(mise which docker)"
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$node_bin" --experimental-strip-types \
+  .config/mise/scripts/repository/image-lifecycle.ts login "$@"
