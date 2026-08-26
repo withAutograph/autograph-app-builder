@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -42,6 +42,7 @@ import {
   sandboxProofCommand,
 } from "./lifecycle.ts";
 import {
+  ghcrCredentialEnvironment,
   materializeSanitizedGitTree,
   normalizedNodeModulesDigest,
   reconcileLifecycleTemps,
@@ -84,6 +85,27 @@ const provenance = () =>
   });
 
 describe("image lifecycle", () => {
+  it("exposes only the pinned GHCR helper directory to registry commands", () => {
+    const root = mkdtempSync(join(tmpdir(), "app-builder-ghcr-helper-"));
+    const helper = join(root, "docker-credential-ghcr-login");
+    const previous = process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN;
+    try {
+      writeFileSync(helper, "#!/bin/sh\nprintf '0.2.0\\n'\n", { mode: 0o700 });
+      const canonical = realpathSync(helper);
+      process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN = canonical;
+      expect(ghcrCredentialEnvironment()).toEqual({
+        PATH: `${dirname(canonical)}:/usr/bin:/bin`,
+      });
+      writeFileSync(helper, "#!/bin/sh\nprintf '0.1.0\\n'\n", { mode: 0o700 });
+      expect(() => ghcrCredentialEnvironment()).toThrow("unsupported");
+    } finally {
+      if (previous === undefined)
+        delete process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN;
+      else process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN = previous;
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("allows only a fixed GHCR command that reads its token from stdin", () => {
     expect(ghcrLoginCommand("withAutograph")).toEqual({
       program: "docker",

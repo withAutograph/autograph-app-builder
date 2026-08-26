@@ -5,4 +5,5 @@ set -eu
 node_bin="$(mise which node)"
 export APP_BUILDER_IMAGE_NODE_BIN="$node_bin"
 export APP_BUILDER_IMAGE_BUILDX_BIN="$(mise which docker-cli-plugin-docker-buildx)"
+export APP_BUILDER_IMAGE_GHCR_HELPER_BIN="$(mise which docker-credential-ghcr-login)"
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$node_bin" --experimental-strip-types .config/mise/scripts/repository/image-lifecycle.ts inspect-remote "$@"
