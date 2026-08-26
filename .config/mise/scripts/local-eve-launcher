@@ -1,0 +1,112 @@
+#!/bin/sh
+set -eu
+
+if [ "${NODE_OPTIONS+x}" = x ]; then
+  echo "local-eve-launcher: refusing ambient NODE_OPTIONS" >&2
+  exit 78
+fi
+if [ "$#" -ne 0 ]; then
+  echo "local-eve-launcher: this closed profile accepts no arguments" >&2
+  exit 64
+fi
+
+script_directory=$(CDPATH= cd -P -- "$(/usr/bin/dirname -- "$0")" && pwd -P)
+repository_root=$(CDPATH= cd -P -- "$script_directory/../../.." && pwd -P)
+if [ "$(pwd -P)" != "$repository_root" ]; then
+  echo "local-eve-launcher: repository cwd was invalid" >&2
+  exit 78
+fi
+
+account_name=$(/usr/bin/id -un)
+case "$(/usr/bin/uname -s)" in
+  Darwin)
+    account_home=$(/usr/bin/dscacheutil -q user -a name "$account_name" | /usr/bin/awk '/^dir:/{print $2}')
+    stat_owner() { /usr/bin/stat -f '%u' -- "$1"; }
+    stat_mode() { /usr/bin/stat -f '%Lp' -- "$1"; }
+    stat_links() { /usr/bin/stat -f '%l' -- "$1"; }
+    ;;
+  Linux)
+    account_home=$(/usr/bin/getent passwd "$account_name" | /usr/bin/awk -F: '{print $6}')
+    stat_owner() { /usr/bin/stat -c '%u' -- "$1"; }
+    stat_mode() { /usr/bin/stat -c '%a' -- "$1"; }
+    stat_links() { /usr/bin/stat -c '%h' -- "$1"; }
+    ;;
+  *)
+    echo "local-eve-launcher: unsupported host" >&2
+    exit 78
+    ;;
+esac
+if [ -z "$account_home" ] || [ ! -d "$account_home" ]; then
+  echo "local-eve-launcher: OS account home was unavailable" >&2
+  exit 78
+fi
+if [ "$(CDPATH= cd -P -- "$account_home" && pwd -P)" != "$account_home" ]; then
+  echo "local-eve-launcher: OS account home was not canonical" >&2
+  exit 78
+fi
+
+verify_file() {
+  path=$1
+  confidentiality=$2
+  if [ -L "$path" ] || [ ! -f "$path" ] || [ "$(stat_owner "$path")" != "$(/usr/bin/id -u)" ] || [ "$(stat_links "$path")" -ne 1 ]; then
+    echo "local-eve-launcher: $path was not an owner-bound regular file" >&2
+    exit 78
+  fi
+  directory=$(/usr/bin/dirname -- "$path")
+  leaf=$(/usr/bin/basename -- "$path")
+  if [ "$(CDPATH= cd -P -- "$directory" && pwd -P)/$leaf" != "$path" ]; then
+    echo "local-eve-launcher: $path was not canonical" >&2
+    exit 78
+  fi
+  if [ "$confidentiality" = executable ] && [ ! -x "$path" ]; then
+    echo "local-eve-launcher: $path was not executable" >&2
+    exit 78
+  fi
+  mode=$(stat_mode "$path")
+  if [ "$confidentiality" = secret ]; then
+    case "$mode" in *[0-7][1-7]|*[1-7][0-7]) echo "local-eve-launcher: $path was not owner-only" >&2; exit 78 ;; esac
+  else
+    case "$mode" in *[0-7][2367]|*[2367][0-7]) echo "local-eve-launcher: $path was writable by another account" >&2; exit 78 ;; esac
+  fi
+}
+
+pinned_node="$account_home/.local/share/mise/installs/node/24.18.0/bin/node"
+verify_file "$pinned_node" executable
+verify_file "$repository_root/.env.local" secret
+verify_file "$repository_root/.vercel/project.json" public
+
+eve_cli=$(/usr/bin/env -i \
+  PATH=/usr/bin:/bin \
+  HOME="$account_home" \
+  "$pinned_node" --import tsx --input-type=module -e '
+    const { resolveInstalledEveCli } = await import("./lib/eve/local-vercel-oidc.ts");
+    process.stdout.write(resolveInstalledEveCli(process.cwd()));
+  ')
+verify_file "$eve_cli" executable
+
+token=$(/usr/bin/env -i \
+  PATH=/usr/bin:/bin \
+  HOME="$account_home" \
+  "$pinned_node" --import tsx --input-type=module -e '
+    const { parseLinkedVercelProject, parseLocalVercelOidcToken, readOwnerBoundLocalFile, validateLocalVercelOidcToken } = await import("./lib/eve/local-vercel-oidc.ts");
+    const token = parseLocalVercelOidcToken(readOwnerBoundLocalFile(".env.local", { confidential: true }));
+    const project = parseLinkedVercelProject(readOwnerBoundLocalFile(".vercel/project.json", { confidential: false }));
+    process.stdout.write(validateLocalVercelOidcToken({ token, project, nowEpochSeconds: Math.floor(Date.now() / 1000) }));
+  ')
+
+exec /usr/bin/env -i \
+  PATH=/usr/bin:/bin \
+  HOME="$account_home" \
+  TMPDIR="${TMPDIR:-/tmp}" \
+  LANG="${LANG:-C}" \
+  LC_ALL="${LC_ALL:-C}" \
+  TZ="${TZ:-}" \
+  APP_BUILDER_FRESH_BOOTSTRAP_ENABLED="${APP_BUILDER_FRESH_BOOTSTRAP_ENABLED:-}" \
+  APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT="${APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT:-}" \
+  APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT="${APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT:-}" \
+  APP_BUILDER_LOCAL_ADAPTER="${APP_BUILDER_LOCAL_ADAPTER:-}" \
+  EVE_AGENT_HOST="${EVE_AGENT_HOST:-}" \
+  REPOSITORY_LOCAL_ROOTS="${REPOSITORY_LOCAL_ROOTS:-}" \
+  REPOSITORY_WORKSPACE_ROOT="${REPOSITORY_WORKSPACE_ROOT:-}" \
+  VERCEL_OIDC_TOKEN="$token" \
+  "$pinned_node" "$eve_cli" dev --host 127.0.0.1 --port 2000 --no-ui

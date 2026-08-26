@@ -31,8 +31,7 @@ stop_children() {
 }
 trap stop_children EXIT INT TERM
 
-"$launcher" "$node_bin" node_modules/eve/bin/eve.js dev \
-  --host 127.0.0.1 --port 2000 --no-ui &
+.config/mise/scripts/local-eve-launcher &
 eve_pid="$!"
 "$launcher" "$node_bin" node_modules/next/dist/bin/next dev \
   --hostname 127.0.0.1 --port 3000 &
