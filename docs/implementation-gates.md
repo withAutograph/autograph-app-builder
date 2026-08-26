@@ -204,11 +204,12 @@ Before enabling real MCP mutations:
 2. Supply the request-scoped workspace membership adapter. The implemented boundary derives `workspaceId` and `ownerUserId` only from verified claims and makes missing, mismatched, denied, and failed workspace lookups indistinguishable.
 3. Apply the checked-in Drizzle-derived migration with `mise run database:migrate`
    and prove that issuer, audience, workspace, and owner remain in every query.
-4. Encrypt any cached continuation credential with versioned server-side keys.
+4. Keep continuation credentials outside the current MCP/store contract. If a
+   future gateway requires one, add a separately reviewed gateway-side encrypted
+   contract with versioned server-side keys.
 5. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
-6. Inject an approved workload-identity provider into the implemented HTTPS
-   transport/membership adapters and prove the fixed gateway paths with manual
-   redirects in the deployed environment.
+6. Prove the checked-in request-context Vercel OIDC exchange and fixed gateway
+   paths with manual redirects in the deployed environment.
 7. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
 8. Complete the MCP Apps host bridge. The iframe must invoke tools through the host, never call Eve or private endpoints directly.
 9. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
@@ -220,9 +221,9 @@ protected-resource metadata, tenant-scoped durable PostgreSQL store adapter,
 idempotency state machine, five-operation service core, public event projection,
 workload-authenticated HTTPS transport/membership adapters, and local
 conformance tests. The MCP route selects a request-scoped service without a
-hosted-to-local fallback, while the checked-in composition intentionally
-supplies no database handle or workload identity. Migration execution,
-deployment composition, and registration still require separate evidence and
+hosted-to-local fallback, lazily composes the bounded PostgreSQL store, and
+obtains Vercel workload identity only during a request-context hop. Migration
+execution, deployment, and registration still require separate evidence and
 authority.
 
 Do not advertise exactly-once starts or a production installation until these gates have evidence.

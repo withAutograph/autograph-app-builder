@@ -1,11 +1,16 @@
-import { createMcpRequestHandler } from "@/lib/mcp/request-handler";
+import { createVercelWorkloadIdentity } from "@/lib/eve/vercel-workload-identity";
+import { createDeploymentMcpRequestHandler } from "@/lib/mcp/hosted-route";
 
 export const runtime = "nodejs";
 
 /**
- * The module-level handler contains no principal or session service. It selects
- * and constructs the service independently inside every HTTP request.
+ * Construction acquires no credential and opens no connection. Hosted
+ * capabilities are composed lazily inside the first hosted request, while the
+ * authenticated principal and session service remain request-scoped.
  */
-const requestHandler = createMcpRequestHandler();
+const requestHandler = createDeploymentMcpRequestHandler({
+  environment: process.env,
+  workloadIdentity: createVercelWorkloadIdentity(),
+});
 
 export { requestHandler as GET, requestHandler as POST };
