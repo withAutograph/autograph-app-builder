@@ -159,28 +159,47 @@ describe("test capability preload", () => {
       } catch {}
       process.stdout.write(String(accepted));
     `;
-    const child = spawn(process.execPath, ["-e", source], {
-      cwd: repositoryRoot,
-      stdio: ["ignore", "pipe", "pipe", "pipe"],
-      env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
-    });
-    const authorization = child.stdio[3] as Duplex;
-    authorization.end(
-      `${JSON.stringify({
-        version: 2,
-        publicKey: attackerPublicKey,
-      })}\n`,
-    );
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.setEncoding("utf8").on("data", (chunk) => (stdout += chunk));
-    child.stderr?.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
-    const status = await new Promise<number | null>((resolveExit, reject) => {
-      child.once("error", reject);
-      child.once("exit", resolveExit);
-    });
-    expect(status, stderr).toBe(0);
-    expect(stdout).toBe("false");
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const child = spawn(process.execPath, ["-e", source], {
+        cwd: repositoryRoot,
+        stdio: ["ignore", "pipe", "pipe", "pipe"],
+        env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
+      });
+      const authorization = child.stdio[3] as Duplex;
+      const authorizationErrors: string[] = [];
+      authorization.on("error", (error: NodeJS.ErrnoException) => {
+        authorizationErrors.push(error.code ?? error.message);
+      });
+      const authorizationClosed = new Promise<void>((resolveClose) => {
+        authorization.once("close", resolveClose);
+      });
+      authorization.end(
+        `${JSON.stringify({
+          version: 2,
+          publicKey: attackerPublicKey,
+        })}\n`,
+      );
+      let stdout = "";
+      let stderr = "";
+      child.stdout
+        ?.setEncoding("utf8")
+        .on("data", (chunk) => (stdout += chunk));
+      child.stderr
+        ?.setEncoding("utf8")
+        .on("data", (chunk) => (stderr += chunk));
+      const status = await new Promise<number | null>((resolveExit, reject) => {
+        child.once("error", reject);
+        child.once("exit", resolveExit);
+      });
+      await authorizationClosed;
+      expect(status, stderr).toBe(0);
+      expect(stdout).toBe("false");
+      expect(
+        authorizationErrors.every((code) =>
+          ["ECONNRESET", "EPIPE"].includes(code),
+        ),
+      ).toBe(true);
+    }
   });
 
   it("does not authorize a clean Worker with claimant-created authority", () => {
