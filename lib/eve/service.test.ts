@@ -178,4 +178,115 @@ describe("local Eve acceptance", () => {
     expect(session.cancel).toHaveBeenCalledWith({ turnId: "turn-7" });
     expect(response.cancel).not.toHaveBeenCalled();
   });
+
+  it("rebinds follow-up and response streams at the exact buffered raw tail", async () => {
+    const stream = (events: MessageStreamEvent[]) => ({
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        for (const event of events) yield event;
+      },
+    });
+    const initial = stream([
+      { type: "session.waiting", data: {} } as MessageStreamEvent,
+    ]);
+    const followUp = stream([
+      {
+        type: "input.requested",
+        data: {
+          turnId: "turn-follow-up",
+          requests: [
+            {
+              requestId: "request-source",
+              kind: "tool-approval",
+              prompt: "Allow source inspection?",
+            },
+          ],
+        },
+      } as unknown as MessageStreamEvent,
+    ]);
+    const responded = stream([
+      {
+        type: "step.completed",
+        data: { turnId: "turn-follow-up" },
+      } as MessageStreamEvent,
+      { type: "session.waiting", data: {} } as MessageStreamEvent,
+    ]);
+    const rebound = {
+      state: { sessionId: "wrun_rebound" },
+      send: vi.fn(async () => followUp),
+      respond: vi.fn(async () => responded),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const created = { ...rebound };
+    const attach = vi.fn(() => rebound);
+    const service = createLocalEveSessionService({
+      sessions: {
+        create: vi.fn(async () => ({ session: created, response: initial })),
+        attach,
+      } as never,
+    });
+    const started = await service.start({
+      prompt: "Build",
+      clientRequestId: "rebind-start",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ cursor: 1, status: "waiting" });
+    });
+
+    await service.send({
+      sessionId: started.sessionId,
+      message: "Use the source",
+      clientRequestId: "rebind-send",
+    });
+    expect(attach).toHaveBeenNthCalledWith(1, started.sessionId, {
+      streamIndex: 1,
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 1, limit: 100 }),
+      ).resolves.toMatchObject({
+        cursor: 2,
+        status: "input_required",
+        inputRequests: [
+          expect.objectContaining({ requestId: "request-source" }),
+        ],
+      });
+    });
+
+    await service.respond({
+      sessionId: started.sessionId,
+      requestId: "request-source",
+      response: { kind: "approve" },
+      clientRequestId: "rebind-respond",
+    });
+    expect(attach).toHaveBeenNthCalledWith(2, started.sessionId, {
+      streamIndex: 2,
+    });
+    await vi.waitFor(async () => {
+      const result = await service.get({
+        sessionId: started.sessionId,
+        cursor: 0,
+        limit: 100,
+      });
+      expect(result.cursor).toBe(4);
+      expect(
+        result.events.filter(
+          (event) => event.type === "status" && event.status === "waiting",
+        ),
+      ).toHaveLength(2);
+      expect(result.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "input_required",
+            request: expect.objectContaining({ requestId: "request-source" }),
+          }),
+        ]),
+      );
+    });
+    expect(rebound.respond).toHaveBeenCalledWith([
+      { requestId: "request-source", optionId: "approve" },
+    ]);
+  });
 });

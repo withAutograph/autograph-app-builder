@@ -252,6 +252,14 @@ export function createLocalEveSessionService(
     return attached;
   }
 
+  function sessionAtBufferedTail(sessionId: string): ClientSession {
+    const attached = client.sessions.attach(sessionId, {
+      streamIndex: localSessionEvents.get(sessionId)?.length ?? 0,
+    });
+    localSessionHandles.set(sessionId, attached);
+    return attached;
+  }
+
   return {
     async start({ prompt, clientRequestId }) {
       const key = `start:${clientRequestId}`;
@@ -277,7 +285,7 @@ export function createLocalEveSessionService(
     async send({ sessionId, message, clientRequestId }) {
       const key = `send:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
-        const response = await sessionFor(sessionId).send(message);
+        const response = await sessionAtBufferedTail(sessionId).send(message);
         consumeResponse(sessionId, response);
         localRequests.set(key, sessionId);
       }
@@ -287,7 +295,7 @@ export function createLocalEveSessionService(
       const key = `respond:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
         const input = toEveInputResponse(requestId, response);
-        const result = await sessionFor(sessionId).respond([input]);
+        const result = await sessionAtBufferedTail(sessionId).respond([input]);
         consumeResponse(sessionId, result);
         localRequests.set(key, sessionId);
       }
