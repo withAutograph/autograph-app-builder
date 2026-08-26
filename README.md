@@ -335,8 +335,9 @@ operation fails closed when no OS-managed advisory-lock helper exists.
 After linking the repository to the intended Vercel project, refresh the
 Development environment with `vercel env pull .env.local --environment
 development --yes`, then run `mise run local:install-oidc`. The install task
-validates the JWT claims against the owner-bound `.vercel/project.json`, emits
-only a sanitized claims receipt, and atomically replaces `.env.local` at mode
+emits only a transient sanitized status record; do not persist it as a public
+receipt. It validates the linked Development project without requiring an
+unrelated user identity claim and atomically owner-binds `.env.local` at mode
 `0600`. This is claim validation; AI Gateway remains responsible for
 cryptographic signature verification. `local:start` rejects a missing,
 symlinked, expired, mismatched, or permissive credential file.

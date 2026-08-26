@@ -5,7 +5,7 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 type LinkedVercelProject = {
   projectId: string;
@@ -39,6 +39,24 @@ function assertOwnerNonWritable(path: string): void {
   }
 }
 
+function assertOwnerBoundDirectory(path: string): void {
+  const stat = lstatSync(path);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error("Installed Eve input was not an owner-bound directory.");
+  }
+  assertOwnerNonWritable(path);
+}
+
+function isContainedPath(parent: string, candidate: string): boolean {
+  const relativeCandidate = relative(parent, candidate);
+  return (
+    relativeCandidate.length > 0 &&
+    !isAbsolute(relativeCandidate) &&
+    relativeCandidate !== ".." &&
+    !relativeCandidate.startsWith(`..${sep}`)
+  );
+}
+
 export function resolveInstalledEveCli(repositoryRootInput: string): string {
   const repositoryRoot = realpathSync(repositoryRootInput);
   if (repositoryRoot !== resolve(repositoryRootInput)) {
@@ -47,12 +65,10 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
   const nodeModules = join(repositoryRoot, "node_modules");
   const pnpmRoot = join(nodeModules, ".pnpm");
   const packageLink = join(nodeModules, "eve");
+  assertOwnerBoundDirectory(nodeModules);
+  assertOwnerBoundDirectory(pnpmRoot);
   const packageLinkStat = lstatSync(packageLink);
   if (
-    !lstatSync(nodeModules).isDirectory() ||
-    lstatSync(nodeModules).isSymbolicLink() ||
-    !lstatSync(pnpmRoot).isDirectory() ||
-    lstatSync(pnpmRoot).isSymbolicLink() ||
     !packageLinkStat.isSymbolicLink() ||
     packageLinkStat.uid !== process.getuid?.() ||
     realpathSync(dirname(packageLink)) !== dirname(packageLink)
@@ -61,7 +77,7 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
   }
   const rawTarget = readlinkSync(packageLink, "utf8");
   if (
-    rawTarget.startsWith("/") ||
+    isAbsolute(rawTarget) ||
     rawTarget.split("/").includes("..") ||
     !/^\.pnpm\/eve@0\.43\.0(?:_[^/]+)?\/node_modules\/eve$/u.test(rawTarget)
   ) {
@@ -70,22 +86,24 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
   const packageRoot = realpathSync(packageLink);
   const relativePackageRoot = relative(pnpmRoot, packageRoot);
   if (
-    isAbsolute(relativePackageRoot) ||
-    relativePackageRoot.startsWith("..") ||
+    !isContainedPath(pnpmRoot, packageRoot) ||
     !/^eve@0\.43\.0(?:_[^/]+)?\/node_modules\/eve$/u.test(relativePackageRoot)
   ) {
     throw new Error("Installed Eve resolved outside the pinned pnpm package.");
   }
   const cli = join(packageRoot, "bin/eve.js");
   const metadataPath = join(packageRoot, "package.json");
+  const packageNodeModules = dirname(packageRoot);
+  const packageStoreRoot = dirname(packageNodeModules);
   for (const path of [
-    nodeModules,
-    pnpmRoot,
+    packageStoreRoot,
+    packageNodeModules,
     packageRoot,
     join(packageRoot, "bin"),
-    cli,
-    metadataPath,
   ]) {
+    assertOwnerBoundDirectory(path);
+  }
+  for (const path of [cli, metadataPath]) {
     assertOwnerNonWritable(path);
   }
   if (
