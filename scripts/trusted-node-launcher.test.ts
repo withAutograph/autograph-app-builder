@@ -89,6 +89,24 @@ describe("trusted Node launcher", () => {
     expect(fake.stdout).toBe("");
   });
 
+  it("preserves piped stdin for the trusted child", () => {
+    const cleanEnvironment = { ...process.env };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const input = "bounded-stdin-payload\n";
+    const result = spawnSync(
+      launcher,
+      [pinnedNode, "-e", "process.stdin.pipe(process.stdout)"],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        env: cleanEnvironment,
+        input,
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe(input);
+  });
+
   it("runs a clean frozen pnpm lifecycle with only the exact pinned Node", () => {
     const scratch = mkdtempSync(join(tmpdir(), "trusted-pnpm-lifecycle-"));
     const fixture = join(scratch, "fixture");
