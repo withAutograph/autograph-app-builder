@@ -145,6 +145,7 @@ function withFakeGhEnvironment(
   callback: () => void,
 ) {
   const values = {
+    APP_BUILDER_GH_CONFIG_DIR: fixture.config,
     APP_BUILDER_IMAGE_GH_BIN: fixture.gh,
     APP_BUILDER_IMAGE_NODE_BIN: realpathSync(process.execPath),
     APP_BUILDER_IMAGE_DOCKER_BIN: realpathSync(join(fixture.bin, "docker")),

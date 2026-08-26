@@ -758,7 +758,11 @@ function exactGithubCli(): string {
 }
 
 function exactGithubConfigRoot(): string {
-  const root = realpathSync(join(homedir(), ".config/gh"));
+  // The trusted launcher never forwards this internal override. It exists so
+  // hermetic tests can bind an owner-only fixture without reading the runner's
+  // real GitHub configuration.
+  const configured = process.env.APP_BUILDER_GH_CONFIG_DIR;
+  const root = realpathSync(configured ?? join(homedir(), ".config/gh"));
   ensureNoLinkPath(root, "GitHub configuration root");
   githubConfigDigest(root);
   return root;
