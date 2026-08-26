@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -25,6 +25,11 @@ const pinnedNode = process.execPath.includes("/mise/installs/")
       cwd: repositoryRoot,
       encoding: "utf8",
     }).stdout.trim();
+const accountHome = pinnedNode.split("/.local/share/mise/")[0];
+const pinnedPnpm = resolve(
+  accountHome,
+  ".local/share/mise/installs/pnpm/11.7.0/pnpm",
+);
 
 function taskFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -82,6 +87,78 @@ describe("trusted Node launcher", () => {
     });
     expect(fake.status).toBe(78);
     expect(fake.stdout).toBe("");
+  });
+
+  it("runs a clean frozen pnpm lifecycle with only the exact pinned Node", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "trusted-pnpm-lifecycle-"));
+    const fixture = join(scratch, "fixture");
+    const hostile = join(scratch, "hostile");
+    const store = join(scratch, "store");
+    mkdirSync(fixture);
+    mkdirSync(hostile);
+    const receipt = join(scratch, "postinstall.json");
+    writeFileSync(
+      join(scratch, "package.json"),
+      `${JSON.stringify({ private: true, dependencies: { fixture: "file:./fixture" } })}\n`,
+    );
+    writeFileSync(
+      join(scratch, "pnpm-workspace.yaml"),
+      "dangerouslyAllowAllBuilds: true\n",
+    );
+    writeFileSync(
+      join(fixture, "package.json"),
+      `${JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { postinstall: "node postinstall.cjs" } })}\n`,
+    );
+    writeFileSync(
+      join(fixture, "postinstall.cjs"),
+      `require("node:fs").writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({ executable: process.execPath, path: process.env.PATH }));\n`,
+    );
+    const hostileNode = join(hostile, "node");
+    writeFileSync(hostileNode, "#!/bin/sh\nexit 93\n");
+    chmodSync(hostileNode, 0o755);
+    const cleanEnvironment = { ...process.env };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const lock = spawnSync(
+      launcher,
+      [
+        pinnedPnpm,
+        "install",
+        "--lockfile-only",
+        "--ignore-scripts",
+        "--store-dir",
+        store,
+      ],
+      { cwd: scratch, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(lock.status, lock.stderr).toBe(0);
+    const installed = spawnSync(
+      launcher,
+      [
+        pinnedPnpm,
+        "install",
+        "--frozen-lockfile",
+        "--offline",
+        "--store-dir",
+        store,
+      ],
+      {
+        cwd: scratch,
+        encoding: "utf8",
+        env: { ...cleanEnvironment, PATH: hostile },
+      },
+    );
+    expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(
+      0,
+    );
+    const observation = JSON.parse(readFileSync(receipt, "utf8")) as {
+      executable: string;
+      path: string;
+    };
+    expect(observation.executable).toBe(pinnedNode);
+    expect(observation.path).not.toContain(hostile);
+    expect(
+      observation.path.endsWith(`${dirname(pinnedNode)}:/usr/bin:/bin`),
+    ).toBe(true);
   });
 
   it("does not trust a forged public symbol and matching environment", () => {
