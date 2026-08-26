@@ -123,6 +123,7 @@ export function assertVerifiedGhcrLoginPayload(
 
 type GhStatusRecord = Readonly<{
   active: true;
+  gitProtocol: "https";
   host: "github.com";
   login: string;
   scopes: string;
@@ -164,8 +165,9 @@ export function parseGhAuthStatus(
   const value = record as Record<string, unknown>;
   if (
     Object.keys(value).sort().join(",") !==
-      "active,host,login,scopes,state,tokenSource" ||
+      "active,gitProtocol,host,login,scopes,state,tokenSource" ||
     value.active !== true ||
+    value.gitProtocol !== "https" ||
     value.host !== githubHost ||
     value.login !== expectedUsername ||
     value.state !== "success" ||

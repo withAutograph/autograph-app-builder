@@ -192,12 +192,13 @@ diagnostic (`configure is not a function`) after the sandbox had been stopped.
 GHCR publication has its own closed authentication gate. `mise run image:login`
 accepts the operator-approved token once on bounded standard input and compares
 it directly with the existing keyring credential read by pinned GitHub CLI
-2.98.0. GitHub CLI status, keyring source, `write:packages` scope, account, and
-namespace membership must all match; login, OAuth, refresh, and credential-store
-operations are not available. Push and remote inspection later re-read only that
-same digest-bound keyring credential through the lifecycle-owned Docker `get`
-helper. The lifecycle derives GitHub CLI's `XDG_STATE_HOME` internally as the
-owned mode-0700 `github-cli-state` directory beneath the approved external
+2.98.0. GitHub CLI status, exact HTTPS Git protocol, keyring source,
+`write:packages` scope, account, and namespace membership must all match; login,
+OAuth, refresh, and credential-store operations are not available. Push and
+remote inspection later re-read only that same digest-bound keyring credential
+through the lifecycle-owned Docker `get` helper. The lifecycle derives GitHub
+CLI's `XDG_STATE_HOME` internally as an owned mode-0700 `github-cli-state`
+directory beneath the approved external
 state root. Its closed `gh/device-id` state is digest-bound in the versioned
 login receipt; links, unsafe modes, unexpected files, or later byte drift stop
 reuse. Every receipt-backed credential-helper invocation verifies that approved

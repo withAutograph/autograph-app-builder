@@ -134,7 +134,7 @@ case "$*" in
     printf '%s\n' 'fixture-device-id' > "\$XDG_STATE_HOME/gh/device-id"
     /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"
     case "$*" in
-      'auth status --active --hostname github.com --json hosts') printf '%s\n' '{"hosts":{"github.com":[{"active":true,"host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}' ;;
+      'auth status --active --hostname github.com --json hosts') printf '%s\n' '{"hosts":{"github.com":[{"active":true,"gitProtocol":"https","host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}' ;;
       'auth token --hostname github.com --user withAutograph') ${
         mutateStateDuringTokenRead
           ? `printf '%s\n' 'mutated-device-id' > "\$XDG_STATE_HOME/gh/device-id"; /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"; `
@@ -416,7 +416,7 @@ describe("image lifecycle", () => {
 
   it("accepts only a closed active keyring status with write:packages", () => {
     const valid =
-      '{"hosts":{"github.com":[{"active":true,"host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}';
+      '{"hosts":{"github.com":[{"active":true,"gitProtocol":"https","host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}';
     expect(parseGhAuthStatus(valid, "withAutograph").tokenSource).toBe(
       "keyring",
     );
@@ -435,6 +435,14 @@ describe("image lifecycle", () => {
         "withAutograph",
       ),
     ).toThrow("malformed");
+    expect(() =>
+      parseGhAuthStatus(valid.replace('"https"', '"ssh"'), "withAutograph"),
+    ).toThrow("did not match");
+    const extraRecord = JSON.parse(valid);
+    extraRecord.hosts["github.com"][0].extra = true;
+    expect(() =>
+      parseGhAuthStatus(JSON.stringify(extraRecord), "withAutograph"),
+    ).toThrow("did not match");
     expect(() => assertGhcrUsername("owner/token")).toThrow("malformed");
   });
 
