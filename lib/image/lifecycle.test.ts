@@ -20,8 +20,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  assertGithubStateRoot,
   assertBoundGhcrPayload,
   githubConfigDigest,
+  githubStateDigest,
   ghcrIdentityDigest,
   parseGhAuthStatus,
   readBoundedInput,
@@ -96,11 +98,17 @@ const provenance = () =>
     targetFiles,
   });
 
-function installFakeGhBoundary(root: string, token: string) {
+function installFakeGhBoundary(
+  root: string,
+  token: string,
+  mutateStateDuringTokenRead = false,
+) {
   const bin = join(root, "bin");
   const config = join(root, "gh-config");
+  const state = join(root, "github-cli-state");
   mkdirSync(bin);
   mkdirSync(config, { mode: 0o700 });
+  mkdirSync(state, { mode: 0o700 });
   writeFileSync(join(config, "config.yml"), "git_protocol: ssh\n", {
     mode: 0o600,
   });
@@ -119,11 +127,24 @@ set -eu
 printf '%s\n' "$*" >> '${commandLog}'
 case "$*" in
   version) printf 'gh version 2.98.0 (fixture)\n' ;;
-  'auth status --active --hostname github.com --json hosts') printf '%s\n' '{"hosts":{"github.com":[{"active":true,"host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}' ;;
-  'auth token --hostname github.com --user withAutograph') printf '%s\n' '${token}' ;;
-  'api /user --jq .login') printf '%s\n' 'withAutograph' ;;
-  'api /user/memberships/orgs/withAutograph --jq [.state,.role,.organization.login] | @tsv') printf 'active\tadmin\twithAutograph\n' ;;
-  *) exit 41 ;;
+  *)
+    [ "\${XDG_STATE_HOME:-}" = '${state}' ] || exit 42
+    /bin/mkdir -p "\$XDG_STATE_HOME/gh"
+    /bin/chmod 700 "\$XDG_STATE_HOME/gh"
+    printf '%s\n' 'fixture-device-id' > "\$XDG_STATE_HOME/gh/device-id"
+    /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"
+    case "$*" in
+      'auth status --active --hostname github.com --json hosts') printf '%s\n' '{"hosts":{"github.com":[{"active":true,"host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}' ;;
+      'auth token --hostname github.com --user withAutograph') ${
+        mutateStateDuringTokenRead
+          ? `printf '%s\n' 'mutated-device-id' > "\$XDG_STATE_HOME/gh/device-id"; /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"; `
+          : ""
+      }printf '%s\n' '${token}' ;;
+      'api /user --jq .login') printf '%s\n' 'withAutograph' ;;
+      'api /user/memberships/orgs/withAutograph --jq [.state,.role,.organization.login] | @tsv') printf 'active\tadmin\twithAutograph\n' ;;
+      *) exit 41 ;;
+    esac
+    ;;
 esac
 `,
     { mode: 0o700 },
@@ -135,6 +156,7 @@ esac
   return {
     config: realpathSync(config),
     gh: realpathSync(gh),
+    state: realpathSync(state),
     bin,
     commandLog,
   };
@@ -167,6 +189,16 @@ function withFakeGhEnvironment(
   }
 }
 
+function seedFakeGhState(
+  fixture: ReturnType<typeof installFakeGhBoundary>,
+): string {
+  mkdirSync(join(fixture.state, "gh"), { mode: 0o700 });
+  writeFileSync(join(fixture.state, "gh", "device-id"), "fixture-device-id\n", {
+    mode: 0o600,
+  });
+  return githubStateDigest(fixture.state);
+}
+
 describe("image lifecycle", () => {
   it("binds the pinned GitHub CLI, keyring configuration, and image consumers", () => {
     const root = realpathSync(
@@ -187,16 +219,22 @@ describe("image lifecycle", () => {
             PATH: `${root}:/usr/bin:/bin`,
             DOCKER_CONFIG: root,
             APP_BUILDER_IMAGE_GH_BIN: fixture.gh,
+            APP_BUILDER_GH_STATE_DIR: fixture.state,
           });
           const binding = currentGhcrCredentialBinding(root);
           expect(binding).toMatchObject({
-            version: 2,
+            version: 3,
             provider: {
               name: "gh",
               version: "2.98.0",
               authenticationSource: "keyring",
             },
             dockerConfig: { providerName: "ghcr-bound" },
+            state: {
+              environment: "XDG_STATE_HOME",
+              relativePath: "github-cli-state",
+              policy: "owned-0700-closed-gh-device-id-v1",
+            },
           });
           expect(binding.provider.sha256).toHaveLength(64);
           expect(binding.provider.configDigest).toHaveLength(64);
@@ -204,7 +242,7 @@ describe("image lifecycle", () => {
           expect(binding.consumers.buildxSha256).toHaveLength(64);
           expect(() =>
             assertNoSecretMaterial({
-              schema: "ghcr-login-v2",
+              schema: "ghcr-login-v3",
               status: "credential-matched",
               registry: "ghcr.io",
               username: "withAutograph",
@@ -222,6 +260,7 @@ describe("image lifecycle", () => {
           const approved = Buffer.from(
             "github_pat_exact_private_package_token",
           );
+          const stateDigest = seedFakeGhState(fixture);
           const helperResult = spawnSync(
             join(root, "docker-credential-ghcr-bound"),
             ["get"],
@@ -237,6 +276,7 @@ describe("image lifecycle", () => {
                     approved,
                   ),
                   provenanceDigest,
+                  stateDigest,
                 }),
               },
               input: "ghcr.io\n",
@@ -260,6 +300,114 @@ describe("image lifecycle", () => {
           if (oldHome === undefined) delete process.env.HOME;
           else process.env.HOME = oldHome;
         }
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps GitHub CLI mutable state out of the Builder checkout", () => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-gh-state-boundary-")),
+    );
+    const fixture = installFakeGhBoundary(
+      root,
+      "github_pat_exact_private_package_token",
+    );
+    const builder = join(root, "builder");
+    mkdirSync(builder, { mode: 0o700 });
+    execFileSync("/usr/bin/git", ["init", "--quiet", builder]);
+    writeFileSync(join(builder, "tracked"), "baseline\n");
+    execFileSync("/usr/bin/git", ["-C", builder, "add", "tracked"]);
+    const before = execFileSync(
+      "/usr/bin/git",
+      ["-C", builder, "status", "--porcelain=v1", "--untracked-files=all"],
+      { encoding: "utf8" },
+    );
+    const provenanceDigest = "9".repeat(64);
+    const stateDigest = seedFakeGhState(fixture);
+    const approved = Buffer.from("github_pat_exact_private_package_token");
+    const identity = {
+      username: "withAutograph",
+      digest: ghcrIdentityDigest("withAutograph", provenanceDigest, approved),
+      provenanceDigest,
+      stateDigest,
+    };
+    approved.fill(0);
+    try {
+      withFakeGhEnvironment(fixture, () => {
+        const result = spawnSync(
+          join(root, "docker-credential-ghcr-bound"),
+          ["get"],
+          {
+            cwd: builder,
+            encoding: "utf8",
+            env: {
+              HOME: builder,
+              NODE_ENV: "test",
+              XDG_STATE_HOME: join(builder, "hostile-state"),
+              ...ghcrCredentialEnvironment(root, identity),
+            },
+            input: "ghcr.io\n",
+          },
+        );
+        expect(result.status, result.stderr).toBe(0);
+      });
+      expect(
+        execFileSync(
+          "/usr/bin/git",
+          ["-C", builder, "status", "--porcelain=v1", "--untracked-files=all"],
+          { encoding: "utf8" },
+        ),
+      ).toBe(before);
+      expect(existsSync(join(builder, ".local"))).toBe(false);
+      expect(existsSync(join(builder, "hostile-state"))).toBe(false);
+      expect(
+        readFileSync(".config/mise/scripts/trusted-node-launcher", "utf8"),
+      ).not.toContain("APP_BUILDER_GH_STATE_DIR");
+      expect(readFileSync(join(fixture.state, "gh", "device-id"), "utf8")).toBe(
+        "fixture-device-id\n",
+      );
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects unsafe, linked, and drifted GitHub CLI state", () => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-gh-state-safety-")),
+    );
+    const fixture = installFakeGhBoundary(
+      root,
+      "github_pat_exact_private_package_token",
+    );
+    try {
+      withFakeGhEnvironment(fixture, () => {
+        assertGithubStateRoot(fixture.state);
+        const initial = currentGhcrCredentialBinding(root).state.digest;
+        mkdirSync(join(fixture.state, "gh"), { mode: 0o700 });
+        writeFileSync(join(fixture.state, "gh", "device-id"), "one\n", {
+          mode: 0o600,
+        });
+        const observed = currentGhcrCredentialBinding(root).state.digest;
+        expect(observed).not.toBe(initial);
+        writeFileSync(join(fixture.state, "unexpected"), "drift\n", {
+          mode: 0o600,
+        });
+        expect(() => currentGhcrCredentialBinding(root)).toThrow(
+          "unexpected contents",
+        );
+        rmSync(join(fixture.state, "unexpected"));
+        chmodSync(fixture.state, 0o755);
+        expect(() => currentGhcrCredentialBinding(root)).toThrow("unsafe");
+        chmodSync(fixture.state, 0o700);
+        rmSync(fixture.state, { recursive: true });
+        const linkedTarget = join(root, "linked-state-target");
+        mkdirSync(linkedTarget, { mode: 0o700 });
+        symlinkSync(linkedTarget, fixture.state);
+        expect(() => currentGhcrCredentialBinding(root)).toThrow(
+          "state root is invalid",
+        );
       });
     } finally {
       rmSync(root, { force: true, recursive: true });
@@ -387,6 +535,7 @@ describe("image lifecycle", () => {
     );
     const approved = "github_pat_exact_private_package_token";
     const fixture = installFakeGhBoundary(root, approved);
+    const stateDigest = seedFakeGhState(fixture);
     const provenanceDigest = "b".repeat(64);
     const environment: NodeJS.ProcessEnv = {
       NODE_ENV: "test",
@@ -394,6 +543,7 @@ describe("image lifecycle", () => {
       APP_BUILDER_GH_SHA256: hashArtifact(readFileSync(fixture.gh)),
       APP_BUILDER_GH_CONFIG_DIR: fixture.config,
       APP_BUILDER_GH_CONFIG_DIGEST: githubConfigDigest(fixture.config),
+      APP_BUILDER_GH_STATE_DIR: fixture.state,
       APP_BUILDER_GHCR_USERNAME: "withAutograph",
       APP_BUILDER_GHCR_IDENTITY_DIGEST: ghcrIdentityDigest(
         "withAutograph",
@@ -410,7 +560,14 @@ describe("image lifecycle", () => {
       spawnSync(
         process.execPath,
         ["--experimental-strip-types", verifierModule, mode],
-        { encoding: "utf8", env: environment, input },
+        {
+          encoding: "utf8",
+          env:
+            mode === "get"
+              ? { ...environment, APP_BUILDER_GH_STATE_DIGEST: stateDigest }
+              : environment,
+          input,
+        },
       );
     try {
       const oversized = invoke("x".repeat(257));
@@ -451,6 +608,55 @@ describe("image lifecycle", () => {
     }
   });
 
+  it("emits no credential when GitHub state changes during token read-back", () => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-ghcr-state-race-")),
+    );
+    const approved = "github_pat_exact_private_package_token";
+    const fixture = installFakeGhBoundary(root, approved, true);
+    const stateDigest = seedFakeGhState(fixture);
+    const provenanceDigest = "7".repeat(64);
+    const environment: NodeJS.ProcessEnv = {
+      NODE_ENV: "test",
+      APP_BUILDER_IMAGE_GH_BIN: fixture.gh,
+      APP_BUILDER_GH_SHA256: hashArtifact(readFileSync(fixture.gh)),
+      APP_BUILDER_GH_CONFIG_DIR: fixture.config,
+      APP_BUILDER_GH_CONFIG_DIGEST: githubConfigDigest(fixture.config),
+      APP_BUILDER_GH_STATE_DIR: fixture.state,
+      APP_BUILDER_GH_STATE_DIGEST: stateDigest,
+      APP_BUILDER_GHCR_USERNAME: "withAutograph",
+      APP_BUILDER_GHCR_IDENTITY_DIGEST: ghcrIdentityDigest(
+        "withAutograph",
+        provenanceDigest,
+        Buffer.from(approved),
+      ),
+      APP_BUILDER_GHCR_PROVENANCE_DIGEST: provenanceDigest,
+    };
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--experimental-strip-types",
+          join(process.cwd(), "lib/image/ghcr-bound-helper.ts"),
+          "get",
+        ],
+        { encoding: "utf8", env: environment, input: "ghcr.io\n" },
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).not.toContain(approved);
+      expect(result.stderr).toContain("GitHub state drifted after approval");
+      expect(
+        readFileSync(fixture.commandLog, "utf8").trim().split("\n"),
+      ).toEqual([
+        "auth status --active --hostname github.com --json hosts",
+        "auth token --hostname github.com --user withAutograph",
+      ]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps the helper and provider descendants in one externally killable process group", async () => {
     const root = realpathSync(
       mkdtempSync(join(tmpdir(), "app-builder-ghcr-process-group-")),
@@ -471,12 +677,14 @@ wait
     );
     const provenanceDigest = "d".repeat(64);
     const token = Buffer.from("github_pat_exact_private_package_token");
+    const stateDigest = githubStateDigest(fixture.state);
     const environment: NodeJS.ProcessEnv = {
       NODE_ENV: "test",
       APP_BUILDER_IMAGE_GH_BIN: fixture.gh,
       APP_BUILDER_GH_SHA256: hashArtifact(readFileSync(fixture.gh)),
       APP_BUILDER_GH_CONFIG_DIR: fixture.config,
       APP_BUILDER_GH_CONFIG_DIGEST: githubConfigDigest(fixture.config),
+      APP_BUILDER_GH_STATE_DIR: fixture.state,
       APP_BUILDER_GHCR_USERNAME: "withAutograph",
       APP_BUILDER_GHCR_IDENTITY_DIGEST: ghcrIdentityDigest(
         "withAutograph",
@@ -484,6 +692,7 @@ wait
         token,
       ),
       APP_BUILDER_GHCR_PROVENANCE_DIGEST: provenanceDigest,
+      APP_BUILDER_GH_STATE_DIGEST: stateDigest,
     };
     const child = spawn(
       process.execPath,
