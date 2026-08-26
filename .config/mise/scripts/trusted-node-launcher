@@ -87,6 +87,7 @@ fi
 
 case "$kind" in
   node|pnpm)
+    exec 3<&0
     /usr/bin/env -i \
       PATH="$child_path" \
       HOME="$account_home" \
@@ -115,8 +116,9 @@ case "$kind" in
       EVE_AGENT_HOST="${EVE_AGENT_HOST:-}" \
       REPOSITORY_LOCAL_ROOTS="${REPOSITORY_LOCAL_ROOTS:-}" \
       REPOSITORY_WORKSPACE_ROOT="${REPOSITORY_WORKSPACE_ROOT:-}" \
-      "$executable" "$@" &
+      "$executable" "$@" <&3 3<&- &
     child_pid=$!
+    exec 3<&-
     trap 'kill -TERM "$child_pid" 2>/dev/null || true' HUP INT TERM
     set +e
     wait "$child_pid"
