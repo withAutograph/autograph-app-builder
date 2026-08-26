@@ -19,6 +19,8 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE } from "../../evals/support/supported-repository";
+
 import { contentDigest, stableDigest } from "./local-publication";
 import {
   canonicalFreshBootstrapHelperPath,
@@ -76,16 +78,13 @@ async function createTestSource(): Promise<string> {
   roots.push(root);
   const files: Record<string, string> = {
     ".config/mise/config.toml": `[tasks."create:app"]\nrun = 'mise exec -- bun create --proposal "$usage_proposal"'\n[tasks."repository:preflight"]\nrun = "mise run repository:exec -- repository-preflight.ts"\n[tasks."generate:app"]\nrun = 'turbo gen --config .config/turbo/generators/config.ts app --args "$usage_app_id"'\n`,
-    ".github/workflows/cd.yml":
-      "name: Authorize (Repository release gate)\npermissions:\n  actions: read\nrun: REPOSITORY_RELEASE_ENABLED\nif: needs.release-gate.outputs.enabled == 'true'\n",
+    ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":
       'const scope = "@autograph/${appId}";\n',
     ".config/mise/scripts/repository/repository-preflight.ts":
       'const observed = { runtime: "nextjs" };\nconst a = "mise run repository:exec -- app-identity.ts --app <app-id>";\nconst b = "mise run repository:exec -- app-contract.ts --contract <contract-file>";\nconst c = "mise run create:app -- --proposal <proposal-file>";\nconst d = "mise run repository:preflight";\nconst e = ["mise run check", "mise run test"];\n',
-    ".config/mise/scripts/repository/repository-release-gate.sh":
-      'gh api "repos/$GITHUB_REPOSITORY/actions/variables/REPOSITORY_RELEASE_ENABLED"\nif [[ "$value" == "true" ]]; then\n',
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":

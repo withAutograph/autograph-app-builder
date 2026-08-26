@@ -46,7 +46,11 @@ const hash = (value: Uint8Array | string | unknown) =>
     .digest("hex");
 
 function git(root: string, args: string[]): string {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  return execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, HK: "0" },
+  });
 }
 
 async function seedTracked(
