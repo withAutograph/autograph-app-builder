@@ -863,6 +863,7 @@ wait
     });
     expect(sandboxProofCommand(reference, "/tmp/exact-arrusted")).toEqual({
       program: "node",
+      launcher: "trusted-node",
       args: [
         "--import",
         "tsx",

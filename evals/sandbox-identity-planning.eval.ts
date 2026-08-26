@@ -45,11 +45,11 @@ export default defineEval({
     t.check(t.reply, includes('"phase":"planned"'));
 
     t.calledTool("inspect_source", { count: 1 });
-    t.calledTool("prepare_workspace", { count: 2 });
-    t.calledTool("record_prototype_artifact", { count: 2 });
-    t.calledTool("accept_app_spec", { count: 2 });
-    t.calledTool("prepare_target_dependencies", { count: 2 });
-    t.calledTool("plan_app_creation", { count: 2 });
+    t.calledTool("prepare_workspace", { count: 1 });
+    t.calledTool("record_prototype_artifact", { count: 1 });
+    t.calledTool("accept_app_spec", { count: 1 });
+    t.calledTool("prepare_target_dependencies", { count: 1 });
+    t.calledTool("plan_app_creation", { count: 1 });
     for (const tool of [
       "apply_app_creation",
       "validate_app_creation",

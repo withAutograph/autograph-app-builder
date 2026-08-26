@@ -23,6 +23,7 @@ export type CommandSpec = Readonly<{
   program: string;
   args: readonly string[];
   environment?: Readonly<Record<string, string>>;
+  launcher?: "trusted-node";
 }>;
 
 export const IMAGE_TOOL_VERSIONS = {
@@ -348,6 +349,7 @@ export function sandboxProofCommand(
 ): CommandSpec {
   return {
     program: "node",
+    launcher: "trusted-node",
     args: [
       "--import",
       "tsx",
