@@ -6,10 +6,12 @@ import {
   closeSync,
   existsSync,
   lstatSync,
+  linkSync,
   mkdtempSync,
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -47,10 +49,13 @@ import {
   inspectProofRuntimeCommand,
   localImageInspectionCommand,
   parseLocalImageInspection,
+  parseRemoteIndexDescriptor,
+  parseRemoteIndexInspection,
   parseRemoteImageInspection,
   prepareProofRuntimeCommand,
   remoteDescriptorCommand,
   remoteImageCommand,
+  remoteIndexCommand,
   remoteManifestCommand,
   sandboxProofCommand,
 } from "./lifecycle.ts";
@@ -61,6 +66,7 @@ import {
   materializeSanitizedGitTree,
   normalizedNodeModulesDigest,
   reconcileLifecycleTemps,
+  withBuildxRuntime,
   withLifecycleLock,
 } from "./node-lifecycle.ts";
 
@@ -826,9 +832,16 @@ wait
     });
     expect(localImageInspectionCommand(exact).args).toContain("linux/arm64");
     expect(remoteDescriptorCommand(exact).program).toBe("docker-buildx");
-    expect(remoteManifestCommand(exact).args).toContain("--raw");
-    expect(remoteImageCommand(exact).args).toContain("{{json .Image}}");
     const reference = `ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:${"9".repeat(64)}`;
+    expect(remoteIndexCommand(reference).args).toContain("--raw");
+    expect(remoteManifestCommand(reference).args).toEqual([
+      "imagetools",
+      "inspect",
+      "--raw",
+      reference,
+    ]);
+    expect(remoteImageCommand(reference).args).toContain("{{json .Image}}");
+    expect(remoteImageCommand(reference).args).toContain(reference);
     expect(imagePreloadCommand(reference)).toEqual({
       program: "msb",
       args: ["pull", reference, "--materialize", "all"],
@@ -1149,9 +1162,41 @@ wait
     const context = join(root, `arrusted-context.tmp-123-${randomUUID()}`);
     mkdirSync(context, { mode: 0o700 });
     writeFileSync(join(context, "tracked"), "bytes");
+    const buildx = join(root, `buildx-runtime.tmp-123-${randomUUID()}`);
+    mkdirSync(buildx, { mode: 0o700 });
+    mkdirSync(join(buildx, "activity"));
+    writeFileSync(join(buildx, "activity", "default"), "bytes");
     reconcileLifecycleTemps(root);
     expect(() => readFileSync(receipt)).toThrow();
     expect(() => readFileSync(join(context, "tracked"))).toThrow();
+    expect(existsSync(buildx)).toBe(false);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("isolates and removes Buildx state on success and command failure", () => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-buildx-runtime-")),
+    );
+    let first = "";
+    expect(
+      withBuildxRuntime(root, ({ BUILDX_CONFIG }) => {
+        first = BUILDX_CONFIG;
+        mkdirSync(join(BUILDX_CONFIG, "instances"));
+        writeFileSync(join(BUILDX_CONFIG, "instances", "default"), "bytes");
+        return "complete";
+      }),
+    ).toBe("complete");
+    expect(existsSync(first)).toBe(false);
+    let failed = "";
+    expect(() =>
+      withBuildxRuntime(root, ({ BUILDX_CONFIG }) => {
+        failed = BUILDX_CONFIG;
+        writeFileSync(join(BUILDX_CONFIG, "current"), "bytes");
+        throw new Error("fixture failed");
+      }),
+    ).toThrow("fixture failed");
+    expect(existsSync(failed)).toBe(false);
+    expect(readdirSync(root)).toEqual([]);
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -1210,10 +1255,56 @@ wait
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("binds remote config and rootfs identity to the exact local image", () => {
+  it("refuses linked interrupted Buildx state instead of recovering it", () => {
+    for (const fixture of [
+      "root-symlink",
+      "nested-symlink",
+      "hardlink",
+    ] as const) {
+      const root = realpathSync(
+        mkdtempSync(join(tmpdir(), "app-builder-buildx-unsafe-")),
+      );
+      const outside = join(root, "outside");
+      writeFileSync(outside, "keep");
+      const runtime = join(root, `buildx-runtime.tmp-123-${randomUUID()}`);
+      if (fixture === "root-symlink") {
+        symlinkSync(outside, runtime);
+      } else {
+        mkdirSync(runtime, { mode: 0o700 });
+        if (fixture === "nested-symlink")
+          symlinkSync(outside, join(runtime, "current"));
+        else linkSync(outside, join(runtime, "current"));
+      }
+      expect(() => reconcileLifecycleTemps(root)).toThrow(
+        "Unsafe interrupted Buildx state",
+      );
+      expect(readFileSync(outside, "utf8")).toBe("keep");
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("binds the exact OCI index and selected platform manifest to the local image", () => {
     const exact = provenance();
-    const imageId = `sha256:${"a".repeat(64)}`;
     const rootFsLayers = [`sha256:${"b".repeat(64)}`];
+    const attestationDigest = `sha256:${"d".repeat(64)}`;
+    const manifest = {
+      config: {
+        digest: `sha256:${"e".repeat(64)}`,
+        mediaType: "application/vnd.oci.image.config.v1+json",
+        size: 512,
+      },
+      layers: [
+        {
+          digest: `sha256:${"f".repeat(64)}`,
+          mediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
+          size: 1024,
+        },
+      ],
+      mediaType: "application/vnd.oci.image.manifest.v1+json",
+      schemaVersion: 2,
+    };
+    const manifestRaw = JSON.stringify(manifest);
+    const imageId = `sha256:${hashArtifact(manifestRaw)}`;
     const local = parseLocalImageInspection(
       JSON.stringify([
         {
@@ -1228,53 +1319,171 @@ wait
             },
           },
           RootFS: { Layers: rootFsLayers },
+          Descriptor: {
+            digest: imageId,
+            mediaType: "application/vnd.oci.image.manifest.v1+json",
+            platform: { architecture: "arm64", os: "linux" },
+            size: Buffer.byteLength(manifestRaw),
+          },
         },
       ]),
       exact,
     );
-    const remote = parseRemoteImageInspection(
-      JSON.stringify({ digest: `sha256:${"c".repeat(64)}` }),
-      JSON.stringify({
-        config: { digest: imageId },
-        layers: [{ digest: `sha256:${"d".repeat(64)}` }],
-      }),
-      JSON.stringify({
-        architecture: "arm64",
-        os: "linux",
-        config: {
-          Labels: {
-            "org.opencontainers.image.revision": builderCommit,
-            "org.opencontainers.image.version": "sandbox-v2",
-          },
+    const manifests = [
+      {
+        digest: imageId,
+        mediaType: "application/vnd.oci.image.manifest.v1+json",
+        platform: { architecture: "arm64", os: "linux" },
+        size: Buffer.byteLength(manifestRaw),
+      },
+      {
+        annotations: {
+          "vnd.docker.reference.digest": imageId,
+          "vnd.docker.reference.type": "attestation-manifest",
         },
-        rootfs: { diff_ids: rootFsLayers },
-      }),
+        digest: attestationDigest,
+        mediaType: "application/vnd.oci.image.manifest.v1+json",
+        platform: { architecture: "unknown", os: "unknown" },
+        size: 564,
+      },
+    ];
+    const indexManifests = [...manifests].reverse();
+    const indexRaw = (entries: typeof manifests) =>
+      JSON.stringify({
+        manifests: entries,
+        mediaType: "application/vnd.oci.image.index.v1+json",
+        schemaVersion: 2,
+      });
+    const descriptorRaw = (entries: typeof manifests) => {
+      const raw = indexRaw(entries);
+      return JSON.stringify({
+        digest: `sha256:${hashArtifact(raw)}`,
+        manifests: entries,
+        mediaType: "application/vnd.oci.image.index.v1+json",
+        schemaVersion: 2,
+        size: Buffer.byteLength(raw),
+      });
+    };
+    const indexDigest = `sha256:${hashArtifact(indexRaw(indexManifests))}`;
+    expect(
+      parseRemoteIndexDescriptor(descriptorRaw(indexManifests)).indexReference,
+    ).toContain(indexDigest);
+    const selection = parseRemoteIndexInspection(
+      descriptorRaw(indexManifests),
+      indexRaw(indexManifests),
+      imageId,
+    );
+    const image = {
+      architecture: "arm64",
+      os: "linux",
+      config: {
+        Labels: {
+          "org.opencontainers.image.revision": builderCommit,
+          "org.opencontainers.image.version": "sandbox-v2",
+        },
+      },
+      rootfs: { diff_ids: rootFsLayers },
+    };
+    const remote = parseRemoteImageInspection(
+      manifestRaw,
+      JSON.stringify(image),
       exact,
       local,
+      selection,
     );
-    expect(remote.reference.endsWith(`@sha256:${"c".repeat(64)}`)).toBe(true);
+    expect(remote.reference.endsWith(`@${imageId}`)).toBe(true);
+    expect(remote.indexReference.endsWith(`@${indexDigest}`)).toBe(true);
+    expect(remote.attestationManifestDigest).toBe(attestationDigest);
+    expect(remote.attestationPolicy).toBe("descriptor-bound-not-trusted");
+    const sameLengthIndexRaw = JSON.stringify({
+      schemaVersion: 2,
+      mediaType: "application/vnd.oci.image.index.v1+json",
+      manifests: indexManifests,
+    });
+    expect(sameLengthIndexRaw).toHaveLength(indexRaw(indexManifests).length);
+    expect(() =>
+      parseRemoteIndexInspection(
+        descriptorRaw(indexManifests),
+        sameLengthIndexRaw,
+        imageId,
+      ),
+    ).toThrow("declared digest");
+    expect(() =>
+      parseRemoteIndexInspection(
+        descriptorRaw(indexManifests),
+        `${indexRaw(indexManifests)} `,
+        imageId,
+      ),
+    ).toThrow(/exact OCI image index|declared digest/u);
+    expect(() =>
+      parseRemoteIndexInspection(
+        descriptorRaw(manifests),
+        indexRaw(manifests),
+        `sha256:${"0".repeat(64)}`,
+      ),
+    ).toThrow("platform manifest");
+    const wrongAttestation: typeof manifests = [
+      manifests[0]!,
+      {
+        ...manifests[1]!,
+        annotations: {
+          "vnd.docker.reference.digest": `sha256:${"0".repeat(64)}`,
+          "vnd.docker.reference.type": "attestation-manifest",
+        },
+      },
+    ];
+    expect(() =>
+      parseRemoteIndexInspection(
+        descriptorRaw(wrongAttestation),
+        indexRaw(wrongAttestation),
+        imageId,
+      ),
+    ).toThrow("attestation manifest");
+    expect(() =>
+      parseRemoteIndexInspection(
+        descriptorRaw([...manifests, manifests[0]!]),
+        indexRaw([...manifests, manifests[0]!]),
+        imageId,
+      ),
+    ).toThrow("descriptor set");
     expect(() =>
       parseRemoteImageInspection(
-        JSON.stringify({ digest: `sha256:${"c".repeat(64)}` }),
+        `${manifestRaw} `,
+        JSON.stringify(image),
+        exact,
+        local,
+        selection,
+      ),
+    ).toThrow(/exact OCI image manifest|declared digest/u);
+    expect(() =>
+      parseRemoteImageInspection(
+        manifestRaw,
         JSON.stringify({
-          config: { digest: `sha256:${"e".repeat(64)}` },
-          layers: [{ digest: `sha256:${"d".repeat(64)}` }],
-        }),
-        JSON.stringify({
-          architecture: "arm64",
-          os: "linux",
+          ...image,
           config: {
             Labels: {
-              "org.opencontainers.image.revision": builderCommit,
-              "org.opencontainers.image.version": "sandbox-v2",
+              ...image.config.Labels,
+              "org.opencontainers.image.revision": "0".repeat(40),
             },
           },
-          rootfs: { diff_ids: rootFsLayers },
         }),
         exact,
         local,
+        selection,
       ),
-    ).toThrow("config digest");
+    ).toThrow("provenance labels");
+    expect(() =>
+      parseRemoteImageInspection(
+        manifestRaw,
+        JSON.stringify({
+          ...image,
+          rootfs: { diff_ids: [`sha256:${"0".repeat(64)}`] },
+        }),
+        exact,
+        local,
+        selection,
+      ),
+    ).toThrow("rootfs identity");
   });
 
   it("rejects mutable preload references and secret-like receipt material", () => {

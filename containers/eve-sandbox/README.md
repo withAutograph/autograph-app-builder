@@ -109,9 +109,13 @@ mise run image:inspect-remote -- --arrusted-root /absolute/path/to/standalone-ar
 The tasks derive the transient tag from the first 12 hex characters of the
 Dockerfile's SHA-256 and the Arrusted target. They resolve pinned Docker,
 standalone Buildx, Microsandbox, Node, and pnpm binaries through mise. The local receipt binds the image
-ID and rootfs diff IDs; remote readback requires the config digest and rootfs
-identity to match before emitting a digest-only reference. The registry
-manifest digest, not the transient tag, remains runtime authority.
+ID and rootfs diff IDs. Remote readback requires one exact OCI index containing
+the matching `linux/arm64` platform manifest and one descriptor-bound BuildKit
+attestation companion. The companion is recorded but is not trusted as
+provenance. The selected platform manifest is then fetched by digest and its
+closed manifest shape, labels, and rootfs identity must match before the task
+emits the platform digest-only reference. The selected platform manifest
+digest, not the transient tag or top-level index, remains runtime authority.
 For this exact Dockerfile and Arrusted source, the transient tag is
 `dockerfile-<dockerfile-sha-prefix>-arrusted-e4e76f52-arm64-v2`; it is only a publication
 handle and never runtime authority.
@@ -137,6 +141,11 @@ After an approved push, resolve the registry manifest digest and use only:
 ```text
 ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:<remote-manifest-digest>
 ```
+
+Buildx receives a lifecycle-owned temporary `BUILDX_CONFIG` for builds and
+grouped registry reads. The directory is removed on success or failure and is
+the only Buildx state shape recovered after an interrupted operation;
+`DOCKER_CONFIG` remains the closed credential-helper root.
 
 The earlier published image ending in `c44a4077...` contains Bun `1.2.20` and
 no target dependency closure. It is intentionally ineligible for real target
