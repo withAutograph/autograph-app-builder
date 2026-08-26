@@ -158,8 +158,17 @@ template manifest.
 - Eve `0.43.0` with durable sessions and human-in-the-loop approvals.
 - The four app-creation skills: `create-app`, `design-app`,
   `plan-app-creation`, and `scaffold-app-workspace`.
-- A purpose-built supported-template eligibility adapter and canonical local
+- A purpose-built supported-template eligibility adapter and canonical V3
   source receipt that distinguishes existing-repository from fresh-template.
+  Its durable evidence and digest bind the logical source kind, adapter, exact
+  SHA and tree, eligibility, contract files, and disabled release policy without
+  binding the checkout's absolute path. The local path remains an un-hashed
+  runtime diagnostic. Reproduce portable evidence with:
+
+  ```sh
+  mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
+  ```
+
 - An approval-gated, digest-bound Eve sandbox workspace tool.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
 - Approval-bound, session-scoped prototype artifact receipts with exact-digest

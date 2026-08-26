@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 
 import {
   inspectSupportedRepository,
@@ -110,10 +111,11 @@ export function inspectSourceContractDigest(
   return sha256(JSON.stringify(contract));
 }
 
-export type SourceReceipt = {
-  version: 2;
+export const SOURCE_RECEIPT_VERSION = 3 as const;
+
+export type SourceReceiptEvidence = {
+  version: typeof SOURCE_RECEIPT_VERSION;
   sourceKind: SourceKind;
-  sourcePath: string;
   sourceSha: string;
   sourceTree: string;
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
@@ -124,6 +126,116 @@ export type SourceReceipt = {
   digest: string;
 };
 
+export type SourceReceipt = SourceReceiptEvidence & {
+  /** Local runtime locator only. It is deliberately excluded from `digest`. */
+  sourcePath: string;
+};
+
+type UnsignedSourceReceiptEvidence = Omit<SourceReceiptEvidence, "digest">;
+
+const sourceReceiptEvidenceKeys = [
+  "adapter",
+  "contractDigest",
+  "digest",
+  "eligibilityDigest",
+  "releaseEnabled",
+  "sourceKind",
+  "sourceSha",
+  "sourceTree",
+  "version",
+] as const;
+
+const sourceReceiptKeys = [...sourceReceiptEvidenceKeys, "sourcePath"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean {
+  return (
+    Object.keys(value).toSorted().join("\0") ===
+    [...expected].toSorted().join("\0")
+  );
+}
+
+function isDigest(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
+}
+
+function isGitObjectId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    (/^[0-9a-f]{40}$/u.test(value) || /^[0-9a-f]{64}$/u.test(value))
+  );
+}
+
+function sourceReceiptDigest(receipt: UnsignedSourceReceiptEvidence): string {
+  return sha256(
+    JSON.stringify({
+      version: receipt.version,
+      sourceKind: receipt.sourceKind,
+      sourceSha: receipt.sourceSha,
+      sourceTree: receipt.sourceTree,
+      adapter: receipt.adapter,
+      eligibilityDigest: receipt.eligibilityDigest,
+      contractDigest: receipt.contractDigest,
+      releaseEnabled: receipt.releaseEnabled,
+    }),
+  );
+}
+
+export function parseSourceReceiptEvidence(
+  value: unknown,
+): SourceReceiptEvidence {
+  if (!isRecord(value) || !hasExactKeys(value, sourceReceiptEvidenceKeys))
+    throw new Error("Source receipt evidence has an unsupported schema.");
+  if (
+    value.version !== SOURCE_RECEIPT_VERSION ||
+    (value.sourceKind !== "existing-repository" &&
+      value.sourceKind !== "fresh-template") ||
+    !isGitObjectId(value.sourceSha) ||
+    !isGitObjectId(value.sourceTree) ||
+    value.adapter !== SUPPORTED_TEMPLATE_ADAPTER ||
+    !isDigest(value.eligibilityDigest) ||
+    !isDigest(value.contractDigest) ||
+    value.releaseEnabled !== false ||
+    !isDigest(value.digest)
+  )
+    throw new Error("Source receipt evidence is invalid.");
+  const { digest, ...unsigned } = value as SourceReceiptEvidence;
+  if (digest !== sourceReceiptDigest(unsigned))
+    throw new Error("Source receipt evidence digest is invalid.");
+  return value as SourceReceiptEvidence;
+}
+
+export function sourceReceiptEvidence(
+  receipt: SourceReceipt,
+): SourceReceiptEvidence {
+  return parseSourceReceiptEvidence({
+    version: receipt.version,
+    sourceKind: receipt.sourceKind,
+    sourceSha: receipt.sourceSha,
+    sourceTree: receipt.sourceTree,
+    adapter: receipt.adapter,
+    eligibilityDigest: receipt.eligibilityDigest,
+    contractDigest: receipt.contractDigest,
+    releaseEnabled: receipt.releaseEnabled,
+    digest: receipt.digest,
+  });
+}
+
+export function parseSourceReceipt(value: unknown): SourceReceipt {
+  if (!isRecord(value) || !hasExactKeys(value, sourceReceiptKeys))
+    throw new Error("Source receipt has an unsupported schema.");
+  if (typeof value.sourcePath !== "string" || !isAbsolute(value.sourcePath))
+    throw new Error("Source receipt diagnostic path is invalid.");
+  const { sourcePath, ...evidenceInput } = value;
+  return { ...parseSourceReceiptEvidence(evidenceInput), sourcePath };
+}
+
 export async function inspectSourceReceipt(
   sourceKind: SourceKind,
   path: string,
@@ -133,10 +245,9 @@ export async function inspectSourceReceipt(
     throw new Error(
       `Source is not eligible: ${eligibility.failures.join("; ")}`,
     );
-  const receipt = {
-    version: 2,
+  const evidence = {
+    version: SOURCE_RECEIPT_VERSION,
     sourceKind,
-    sourcePath: eligibility.sourcePath,
     sourceSha: eligibility.sourceSha,
     sourceTree: fixedGit(
       eligibility.sourcePath,
@@ -151,5 +262,9 @@ export async function inspectSourceReceipt(
     ),
     releaseEnabled: false,
   } as const;
-  return { ...receipt, digest: sha256(JSON.stringify(receipt)) };
+  return parseSourceReceipt({
+    ...evidence,
+    digest: sourceReceiptDigest(evidence),
+    sourcePath: eligibility.sourcePath,
+  });
 }

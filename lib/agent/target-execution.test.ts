@@ -38,7 +38,7 @@ const state = {
     eligibilityDigest: "d".repeat(64),
   },
   sourceReceipt: {
-    version: 2,
+    version: 3,
     sourceKind: "existing-repository",
     sourcePath: "/source",
     sourceSha: "a".repeat(40),

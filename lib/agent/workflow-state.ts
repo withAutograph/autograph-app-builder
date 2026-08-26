@@ -34,9 +34,9 @@ import type {
   FreshBootstrapSuccessReceipt,
 } from "@/lib/repository/fresh-bootstrap";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 13 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 14 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v13" as const;
+  "autograph-app-builder.workflow.v14" as const;
 
 export type AcceptedAppSpec = {
   appId: string;

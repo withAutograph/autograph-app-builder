@@ -18,7 +18,12 @@ import {
   inspectSupportedRepository,
   prepareSupportedSandboxWorkspace,
 } from "./supported-template";
-import { inspectSourceReceipt } from "./source-receipt";
+import {
+  inspectSourceReceipt,
+  parseSourceReceipt,
+  parseSourceReceiptEvidence,
+  sourceReceiptEvidence,
+} from "./source-receipt";
 
 const previousRoots = process.env.REPOSITORY_LOCAL_ROOTS;
 const previousWorkspaceRoot = process.env.REPOSITORY_WORKSPACE_ROOT;
@@ -295,6 +300,80 @@ describe("supported-template adapter", () => {
     await expect(inspectSourceReceipt("fresh-template", root)).resolves.toEqual(
       fresh,
     );
+  });
+
+  it("keeps source evidence reproducible across physical checkout paths", async () => {
+    const firstRoot = fixture();
+    const secondRoot = cloneFixture(firstRoot);
+    allowRepositories(firstRoot, secondRoot);
+
+    const first = await inspectSourceReceipt("fresh-template", firstRoot);
+    const second = await inspectSourceReceipt("fresh-template", secondRoot);
+
+    expect(first.sourcePath).not.toBe(second.sourcePath);
+    expect(first.version).toBe(3);
+    expect(second.version).toBe(3);
+    expect(first.digest).toBe(second.digest);
+    expect(sourceReceiptEvidence(first)).toEqual(sourceReceiptEvidence(second));
+
+    const relocated = parseSourceReceipt({
+      ...first,
+      sourcePath: second.sourcePath,
+    });
+    expect(relocated.digest).toBe(first.digest);
+    expect(sourceReceiptEvidence(relocated)).toEqual(
+      sourceReceiptEvidence(first),
+    );
+  });
+
+  it("parses only exact V3 path-independent source evidence", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const receipt = await inspectSourceReceipt("existing-repository", root);
+    const evidence = sourceReceiptEvidence(receipt);
+
+    expect(parseSourceReceiptEvidence(evidence)).toEqual(evidence);
+    expect(
+      parseSourceReceiptEvidence(
+        Object.fromEntries(Object.entries(evidence).toReversed()),
+      ),
+    ).toEqual(evidence);
+    expect(() =>
+      parseSourceReceiptEvidence({ ...evidence, version: 2 }),
+    ).toThrow("invalid");
+    expect(() =>
+      parseSourceReceiptEvidence({ ...evidence, sourcePath: root }),
+    ).toThrow("unsupported schema");
+    expect(() =>
+      parseSourceReceiptEvidence({
+        ...evidence,
+        sourceSha: "0".repeat(40),
+      }),
+    ).toThrow("digest");
+    expect(() =>
+      parseSourceReceiptEvidence({
+        ...evidence,
+        sourceTree: "0".repeat(40),
+      }),
+    ).toThrow("digest");
+    expect(() =>
+      parseSourceReceiptEvidence({
+        ...evidence,
+        eligibilityDigest: "0".repeat(64),
+      }),
+    ).toThrow("digest");
+    expect(() =>
+      parseSourceReceiptEvidence({
+        ...evidence,
+        contractDigest: "0".repeat(64),
+      }),
+    ).toThrow("digest");
+    expect(() =>
+      parseSourceReceiptEvidence({
+        ...evidence,
+        digest: "0".repeat(64),
+      }),
+    ).toThrow("digest");
   });
 
   it("keeps the reviewed-object contract stable while dirty eligibility drifts", async () => {
