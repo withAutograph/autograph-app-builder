@@ -136,8 +136,9 @@ describe("typed target identity and planning", () => {
     });
     expect(run).toHaveBeenCalledWith({
       command:
-        "mise run repository:exec -- app-identity.ts --app expense-review",
-      workingDirectory: "/workspace/repository",
+        "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise run --skip-tools repository:exec -- app-identity.ts --app expense-review",
+      workingDirectory:
+        "/workspace/.app-builder/target-inputs/revision/repository",
       abortSignal: expect.any(AbortSignal),
     });
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");

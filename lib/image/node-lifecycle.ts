@@ -1265,7 +1265,34 @@ function execute(
   };
   if (tool === "msb") inspectVersion("node");
   inspectVersion(tool);
-  const invocation = imageToolInvocation(tool, command.args);
+  const toolInvocation = imageToolInvocation(tool, command.args);
+  const invocation =
+    command.launcher === undefined
+      ? toolInvocation
+      : (() => {
+          if (command.launcher !== "trusted-node" || tool !== "node")
+            throw new Error("The image lifecycle launcher is unsupported.");
+          const launcher = join(
+            cwd,
+            ".config/mise/scripts/trusted-node-launcher",
+          );
+          const stat = lstatSync(launcher);
+          if (
+            realpathSync(launcher) !== launcher ||
+            !stat.isFile() ||
+            stat.isSymbolicLink() ||
+            stat.uid !== (process.getuid?.() ?? -1) ||
+            stat.nlink !== 1 ||
+            (stat.mode & 0o022) !== 0
+          )
+            throw new Error(
+              "The image lifecycle trusted Node launcher is invalid.",
+            );
+          return {
+            program: "/bin/sh",
+            args: [launcher, toolInvocation.program, ...toolInvocation.args],
+          };
+        })();
   const result = spawnSync(invocation.program, [...invocation.args], {
     cwd,
     encoding: "utf8",
