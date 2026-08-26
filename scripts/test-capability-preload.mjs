@@ -20,6 +20,11 @@ import {
   receiveMessageOnPort,
   workerData,
 } from "node:worker_threads";
+import {
+  captureEveWorkerEnvelope,
+  eveWorkerEnvelopeKey,
+  installEveWorkerEnvelope,
+} from "./eve-worker-environment.mjs";
 
 const authorizationFd = 3;
 const maxBytes = 4096;
@@ -71,13 +76,19 @@ const allowedWorkerEnvironment = new Set([
 ]);
 delete process.env.NODE_OPTIONS;
 
-function workerEnvironment(source, eveProfile) {
+function workerEnvironment(source, eveProfile, hasEveEnvelope) {
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment)
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined)
       environment[name] = source[name];
-  environment.EVE_DEV_WORKER_APP_ROOT = repositoryRoot;
-  environment.EVE_DEV = eveProfile ? "1" : undefined;
+  environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope
+    ? undefined
+    : repositoryRoot;
+  environment.EVE_DEV = hasEveEnvelope
+    ? undefined
+    : eveProfile
+      ? "1"
+      : undefined;
   return environment;
 }
 
@@ -229,8 +240,17 @@ function allowedWorkerPaths() {
     }),
   );
 }
+function eveRuntimeWorkerPath() {
+  return realpathSync(
+    resolve(
+      dirname(require.resolve("eve/package.json")),
+      "dist/src/compiled/env-runner/node-worker.js",
+    ),
+  );
+}
 function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
   const allowed = allowedWorkerPaths();
+  const eveWorker = eveRuntimeWorkerPath();
   const OriginalWorker = workerThreads.Worker;
   workerThreads.Worker = class AuthorizedTestWorker extends OriginalWorker {
     constructor(filename, options = {}) {
@@ -244,6 +264,10 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
         typeof options.workerData === "object" && options.workerData !== null
           ? options.workerData
           : {};
+      const eveEnvelope =
+        eveProfile && exactFilename === eveWorker
+          ? captureEveWorkerEnvelope(options.env, repositoryRoot)
+          : undefined;
       const isTimeoutFixture = exactFilename?.endsWith(
         "/scripts/test-capability-worker-timeout-fixture.mjs",
       );
@@ -254,11 +278,16 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
           [workerPortKey]: channel.port2,
           [`${workerPortKey}PublicKey`]: publicKey,
           [workerProfileKey]: eveProfile ? "eve" : "vitest",
+          [eveWorkerEnvelopeKey]: eveEnvelope,
         },
         transferList: [...(options.transferList ?? []), channel.port2],
         execArgv: [],
         env: {
-          ...workerEnvironment(options.env ?? process.env, eveProfile),
+          ...workerEnvironment(
+            options.env ?? process.env,
+            eveProfile,
+            eveEnvelope !== undefined,
+          ),
           NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
           APP_BUILDER_TEST_MODEL: undefined,
           APP_BUILDER_TEST_CAPABILITY_ID: undefined,
@@ -329,8 +358,23 @@ try {
   const eveProfile = isMainThread
     ? process.env.EVE_DEV_WORKER_APP_ROOT === repositoryRoot
     : workerData?.[workerProfileKey] === "eve";
-  if (eveProfile) process.env.EVE_DEV = "1";
-  else delete process.env.EVE_DEV;
+  const eveEnvelope = workerData?.[eveWorkerEnvelopeKey];
+  if (eveEnvelope !== undefined) {
+    installEveWorkerEnvelope(process.env, eveEnvelope, repositoryRoot);
+    delete workerData[eveWorkerEnvelopeKey];
+  } else if (eveProfile) process.env.EVE_DEV = "1";
+  else {
+    for (const name of [
+      "EVE_DEV",
+      "WORKFLOW_LOCAL_BASE_URL",
+      "PORT",
+      "EVE_DEV_WORKFLOW_TRANSPORT_SECRET",
+      "EVE_DEVELOPMENT_SANDBOX_RUN_ID",
+      "EVE_EVALUATION",
+      "EVE_EVALUATION_RUN_ID",
+    ])
+      delete process.env[name];
+  }
   installed = authorization.capability;
   process.env.APP_BUILDER_TEST_CAPABILITY_ID = installed.id;
   process.env.APP_BUILDER_TEST_MODEL = "1";

@@ -71,6 +71,12 @@ describe("test capability preload", () => {
         ...process.env,
         EVE_DEV: "1",
         EVE_DEV_WORKER_APP_ROOT: "/hostile/app-root",
+        WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
+        PORT: "43123",
+        EVE_DEV_WORKFLOW_TRANSPORT_SECRET: "hostile-secret",
+        EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile-sandbox",
+        EVE_EVALUATION: "1",
+        EVE_EVALUATION_RUN_ID: "hostile-evaluation",
       },
     });
     const result = await new Promise<{
@@ -80,6 +86,12 @@ describe("test capability preload", () => {
       nestedCapability: typeof capability;
       nestedAppRoot: string | null;
       nestedEveDev: string | null;
+      workflowBaseUrl: string | null;
+      port: string | null;
+      hasTransportSecret: boolean;
+      sandboxRunId: string | null;
+      evaluation: string | null;
+      evaluationRunId: string | null;
     }>((resolveMessage, reject) => {
       worker.once("message", resolveMessage);
       worker.once("error", reject);
@@ -89,6 +101,12 @@ describe("test capability preload", () => {
     expect(result.capability?.id).not.toBe(capability?.id);
     expect(result.appRoot).toBe(repositoryRoot);
     expect(result.eveDev).toBeNull();
+    expect(result.workflowBaseUrl).toBeNull();
+    expect(result.port).toBeNull();
+    expect(result.hasTransportSecret).toBe(false);
+    expect(result.sandboxRunId).toBeNull();
+    expect(result.evaluation).toBeNull();
+    expect(result.evaluationRunId).toBeNull();
     expect(result.nestedCapability).toMatchObject({ version: 1 });
     expect(result.nestedCapability?.id).not.toBe(result.capability?.id);
     expect(result.nestedAppRoot).toBe(repositoryRoot);

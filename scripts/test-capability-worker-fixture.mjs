@@ -28,6 +28,13 @@ parentPort?.postMessage({
   capability,
   appRoot: process.env.EVE_DEV_WORKER_APP_ROOT ?? null,
   eveDev: process.env.EVE_DEV ?? null,
+  workflowBaseUrl: process.env.WORKFLOW_LOCAL_BASE_URL ?? null,
+  port: process.env.PORT ?? null,
+  hasTransportSecret:
+    process.env.EVE_DEV_WORKFLOW_TRANSPORT_SECRET !== undefined,
+  sandboxRunId: process.env.EVE_DEVELOPMENT_SANDBOX_RUN_ID ?? null,
+  evaluation: process.env.EVE_EVALUATION ?? null,
+  evaluationRunId: process.env.EVE_EVALUATION_RUN_ID ?? null,
   nestedCapability,
   nestedAppRoot,
   nestedEveDev,
