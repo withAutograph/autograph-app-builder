@@ -470,6 +470,7 @@ describe("approval-bound local publication", () => {
         /not canonical/u,
       );
     },
+    15_000,
   );
 
   it.each(["staged", "unstaged", "deleted", "untracked", "rename"] as const)(

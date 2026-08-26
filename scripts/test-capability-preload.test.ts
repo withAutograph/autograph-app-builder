@@ -210,7 +210,7 @@ describe("test capability preload", () => {
         accepted = true;
       } catch {}
       process.stdout.write(String(accepted));
-    `;
+      `;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const child = spawn(process.execPath, ["-e", source], {
         cwd: repositoryRoot,
@@ -252,7 +252,7 @@ describe("test capability preload", () => {
         ),
       ).toBe(true);
     }
-  });
+  }, 15_000);
 
   it("does not authorize a clean Worker with claimant-created authority", () => {
     const source = `

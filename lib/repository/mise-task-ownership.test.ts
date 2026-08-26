@@ -97,9 +97,20 @@ describe("mise-owned repository operations", () => {
 
     const start = await read(".config/mise/tasks/local/start");
     expect(start).toContain("APP_BUILDER_FRESH_BOOTSTRAP_ENABLED=1");
-    expect(start).toContain("node_modules/eve/bin/eve.js dev");
+    expect(start).toContain(
+      'REPOSITORY_LOCAL_ROOTS="$source_root" .config/mise/scripts/local-eve-launcher &',
+    );
+    expect(start).not.toContain("node_modules/eve/bin/eve.js");
     expect(start).toContain("node_modules/next/dist/bin/next dev");
     expect(start).toContain("productionFreshBootstrapCapability");
+
+    const eveLauncher = await read(".config/mise/scripts/local-eve-launcher");
+    expect(eveLauncher).toContain(
+      'if [ "$#" -ne 0 ]; then\n  echo "local-eve-launcher: this closed profile accepts no arguments"',
+    );
+    expect(eveLauncher).toContain(
+      '"$pinned_node" "$eve_cli" dev --host 127.0.0.1 --port 2000 --no-ui',
+    );
 
     for (const task of [
       ".config/mise/tasks/ci",
