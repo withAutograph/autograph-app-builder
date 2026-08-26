@@ -2,4 +2,4 @@
 #MISE description="Build the derived OpenAI client package"
 set -eu
 
-exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/build-openai-package.mts
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/build-openai-package.mts "$@"

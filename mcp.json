@@ -3,7 +3,7 @@
   "mcpServers": {
     "autograph-app-builder": {
       "type": "streamable-http",
-      "url": "https://mcp-endpoint.template/mcp"
+      "url": "http://127.0.0.1:3000/mcp"
     }
   }
 }
