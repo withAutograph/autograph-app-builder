@@ -1,7 +1,7 @@
 [tools]
 "aqua:docker/buildx" = "0.33.0"
 docker-cli = "29.4.0"
-"github:bradschwartz/docker-credential-ghcr-login" = "0.2.0"
+gh = "2.98.0"
 "npm:microsandbox" = "0.6.14"
 node = "24.18.0"
 pnpm = "11.7.0"

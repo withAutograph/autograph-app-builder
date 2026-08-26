@@ -189,6 +189,15 @@ execution. It requires a host supported by Eve's microsandbox backend. The
 2026-08-24 proof passed every eval gate; Eve also emitted a non-fatal cleanup
 diagnostic (`configure is not a function`) after the sandbox had been stopped.
 
+GHCR publication has its own closed authentication gate. `mise run image:login`
+accepts the operator-approved token once on bounded standard input and compares
+it directly with the existing keyring credential read by pinned GitHub CLI
+2.98.0. GitHub CLI status, keyring source, `write:packages` scope, account, and
+namespace membership must all match; login, OAuth, refresh, and credential-store
+operations are not available. Push and remote inspection later re-read only that
+same digest-bound keyring credential through the lifecycle-owned Docker `get`
+helper. Tokens never enter argv, environment, receipts, or persistent files.
+
 Before enabling real MCP mutations:
 
 1. Configure the implemented strict remote-JWKS verifier against the approved OAuth authorization server with CIMD, PKCE, consent, and the workspace OIDC provider; prove revocation behavior separately.

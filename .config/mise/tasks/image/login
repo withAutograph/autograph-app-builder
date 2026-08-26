@@ -1,9 +1,11 @@
 #!/bin/sh
-#MISE description="Match the approved stdin token to the pinned GHCR provider identity"
+#MISE description="Match one approved stdin token to the pinned GitHub CLI keyring identity"
 set -eu
 
 node_bin="$(mise which node)"
 export APP_BUILDER_IMAGE_NODE_BIN="$node_bin"
-export APP_BUILDER_IMAGE_GHCR_HELPER_BIN="$(mise which docker-credential-ghcr-login)"
+export APP_BUILDER_IMAGE_GH_BIN="$(mise which gh)"
+export APP_BUILDER_IMAGE_DOCKER_BIN="$(mise which docker)"
+export APP_BUILDER_IMAGE_BUILDX_BIN="$(mise which docker-cli-plugin-docker-buildx)"
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$node_bin" --experimental-strip-types \
   .config/mise/scripts/repository/image-lifecycle.ts login "$@"

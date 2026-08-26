@@ -69,44 +69,51 @@ url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.4.0.tgz"
 [tools.docker-cli."platforms.windows-x64"]
 url = "https://download.docker.com/win/static/stable/x86_64/docker-29.4.0.zip"
 
-[[tools."github:bradschwartz/docker-credential-ghcr-login"]]
-version = "0.2.0"
-backend = "github:bradschwartz/docker-credential-ghcr-login"
+[[tools.gh]]
+version = "2.98.0"
+backend = "aqua:cli/cli"
 
-[tools."github:bradschwartz/docker-credential-ghcr-login"."platforms.linux-arm64"]
-checksum = "sha256:e866d63d3335cdc67b7e0ed16e2dfe84500826b13677bbd9fc42009a2c23a1d9"
-url = "https://github.com/bradschwartz/docker-credential-ghcr-login/releases/download/v0.2.0/docker-credential-ghcr-login_0.2.0_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/bradschwartz/docker-credential-ghcr-login/releases/assets/526408376"
+[tools.gh."platforms.linux-arm64"]
+checksum = "sha256:cf689084f3a3618f7eae4a2420d335d74626d65f5e594b9828d125d69f800d86"
+url = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857902"
+provenance = "github-attestations"
 
-[tools."github:bradschwartz/docker-credential-ghcr-login"."platforms.linux-arm64-musl"]
-checksum = "sha256:e866d63d3335cdc67b7e0ed16e2dfe84500826b13677bbd9fc42009a2c23a1d9"
-url = "https://github.com/bradschwartz/docker-credential-ghcr-login/releases/download/v0.2.0/docker-credential-ghcr-login_0.2.0_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/bradschwartz/docker-credential-ghcr-login/releases/assets/526408376"
+[tools.gh."platforms.linux-arm64-musl"]
+checksum = "sha256:cf689084f3a3618f7eae4a2420d335d74626d65f5e594b9828d125d69f800d86"
+url = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857902"
+provenance = "github-attestations"
 
-[tools."github:bradschwartz/docker-credential-ghcr-login"."platforms.linux-x64"]
-checksum = "sha256:01e7657acced71105fe22ce4394f323d2dca3a915c881d8711b67e555c57e070"
-url = "https://github.com/bradschwartz/docker-credential-ghcr-login/releases/download/v0.2.0/docker-credential-ghcr-login_0.2.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/bradschwartz/docker-credential-ghcr-login/releases/assets/526408374"
+[tools.gh."platforms.linux-x64"]
+checksum = "sha256:3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de"
+url = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857901"
+provenance = "github-attestations"
 
-[tools."github:bradschwartz/docker-credential-ghcr-login"."platforms.linux-x64-musl"]
-checksum = "sha256:01e7657acced71105fe22ce4394f323d2dca3a915c881d8711b67e555c57e070"
-url = "https://github.com/bradschwartz/docker-credential-ghcr-login/releases/download/v0.2.0/docker-credential-ghcr-login_0.2.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/bradschwartz/docker-credential-ghcr-login/releases/assets/526408374"
+[tools.gh."platforms.linux-x64-musl"]
+checksum = "sha256:3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de"
+url = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857901"
+provenance = "github-attestations"
 
-[tools."github:bradschwartz/docker-credential-ghcr-login"."platforms.macos-arm64"]
-checksum = "sha256:85cc8dcbda7a78901bf112504e87da3bc6959e6fd3db6d35328b8a6ce66e6444"
-url = "https://github.com/bradschwartz/docker-credential-ghcr-login/releases/download/v0.2.0/docker-credential-ghcr-login_0.2.0_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/bradschwartz/docker-credential-ghcr-login/releases/assets/526408373"
+[tools.gh."platforms.macos-arm64"]
+checksum = "sha256:8cfb027cc5310675f2b830eac8f9865c1155a45ffcf9757f699fdd5a22046ca4"
+url = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_macOS_arm64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857972"
+provenance = "github-attestations"
 
-[tools."github:bradschwartz/docker-credential-ghcr-login"."platforms.macos-x64"]
-checksum = "sha256:ef7249db7f28c17d1f81234ff23f3345a491f2790caa682053b1b8ab45cdf6af"
-url = "https://github.com/bradschwartz/docker-credential-ghcr-login/releases/download/v0.2.0/docker-credential-ghcr-login_0.2.0_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/bradschwartz/docker-credential-ghcr-login/releases/assets/526408372"
+[tools.gh."platforms.macos-x64"]
+checksum = "sha256:734c7bbd0bc56a3974500ee9aea74d60f0e5b89be09e92b9d9148939a3a1e0e6"
+url = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_macOS_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857971"
+provenance = "github-attestations"
 
-[tools."github:bradschwartz/docker-credential-ghcr-login"."platforms.windows-x64"]
-checksum = "sha256:3aaec3129874557cfbd3f4097338c29ea86f64980564400ad9a8c31d4dea2285"
-url = "https://github.com/bradschwartz/docker-credential-ghcr-login/releases/download/v0.2.0/docker-credential-ghcr-login_0.2.0_windows_amd64.zip"
-url_api = "https://api.github.com/repos/bradschwartz/docker-credential-ghcr-login/releases/assets/526408380"
+[tools.gh."platforms.windows-x64"]
+checksum = "sha256:c28c7b3b584967a05b74d9eaf7481bff24ddc34930bf2d6e442c148236561eb1"
+url = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857996"
+provenance = "github-attestations"
 
 [[tools.node]]
 version = "24.18.0"

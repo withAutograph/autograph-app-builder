@@ -271,20 +271,6 @@ export function assertGhcrUsername(username: string): void {
     throw new Error("GHCR username is malformed.");
 }
 
-/**
- * The pinned helper is a read-only Docker credential provider: its `get`
- * operation resolves the GitHub CLI credential, while its `store` operation is
- * intentionally unsupported. The lifecycle therefore validates the token
- * supplied on stdin against `get` instead of dispatching `docker login`, which
- * would necessarily call the unsupported `store` operation.
- */
-export function ghcrCredentialLookupCommand(): CommandSpec {
-  return {
-    program: "docker-credential-ghcr-login",
-    args: ["get"],
-  };
-}
-
 export function remoteManifestCommand(
   provenance: ImageProvenance,
 ): CommandSpec {
