@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Typecheck repository sources with the pinned runtime"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/typescript/bin/tsc --noEmit

@@ -18,6 +18,7 @@ import {
   inspectFixtureApplyOverlay,
   sandboxApplyCommandExecutor,
 } from "@/lib/repository/target-apply";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 import { planningOverlayRoot } from "@/lib/repository/dependency-cache";
 import { assertReusableTargetApplyReceipt } from "@/lib/repository/target-validation";
 
@@ -55,9 +56,7 @@ export default defineTool({
       throw new Error(
         `Target apply is not ready: ${readiness.blockers.join(" ")}`,
       );
-    const fixture =
-      process.env.APP_BUILDER_TEST_MODEL === "1" &&
-      process.env.APP_BUILDER_REAL_SANDBOX !== "1";
+    const fixture = hasTestCapability("simulated-target");
     if (current.phase === "apply_failed")
       throw new Error(
         `Target apply is recovery-required after partial failure ${current.applyFailure.digest}; it will not be rerun automatically.`,
@@ -87,6 +86,7 @@ export default defineTool({
 
     const binding = {
       sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       appSpecDigest: current.appSpec.digest,

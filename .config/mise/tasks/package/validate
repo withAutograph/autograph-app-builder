@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Validate the canonical Agent Plugins source package"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/validate-plugin.mts

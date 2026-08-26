@@ -58,8 +58,9 @@ const state = {
     artifactRevision: "a".repeat(64),
   },
   dependencyReceipt: {
-    version: 1,
+    version: 2,
     sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
     eligibilityDigest: "d".repeat(64),
     workspaceDigest: "c".repeat(64),
     imageDigest: `fixture@sha256:${"1".repeat(64)}`,
@@ -76,6 +77,7 @@ const state = {
   identityReceipt: {
     version: 1,
     sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
     eligibilityDigest: "d".repeat(64),
     workspaceDigest: "c".repeat(64),
     imageDigest: `fixture@sha256:${"1".repeat(64)}`,
@@ -98,6 +100,7 @@ const state = {
   proposal: {
     version: 1,
     sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
     eligibilityDigest: "d".repeat(64),
     workspaceDigest: "c".repeat(64),
     imageDigest: `fixture@sha256:${"1".repeat(64)}`,

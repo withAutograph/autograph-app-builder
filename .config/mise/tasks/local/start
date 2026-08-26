@@ -1,0 +1,58 @@
+#!/bin/sh
+#MISE description="Supervise Eve and Next with one exact fresh-bootstrap capability"
+set -eu
+
+if [ "$#" -ne 2 ]; then
+  echo "usage: mise run local:start -- <owner-only-state-root> <owner-only-destination-root>" >&2
+  exit 64
+fi
+
+export APP_BUILDER_FRESH_BOOTSTRAP_ENABLED=1
+export APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT="$1"
+export APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT="$2"
+export APP_BUILDER_LOCAL_ADAPTER=1
+export EVE_AGENT_HOST="http://127.0.0.1:2000"
+
+node_bin="$(mise which node)"
+launcher=".config/mise/scripts/trusted-node-launcher"
+"$launcher" "$node_bin" --import tsx --input-type=module -e '
+  const { productionFreshBootstrapCapability } = await import("./lib/repository/node-fresh-bootstrap.ts");
+  await productionFreshBootstrapCapability();
+'
+eve_pid=""
+next_pid=""
+
+stop_children() {
+  trap - EXIT INT TERM
+  [ -z "$eve_pid" ] || kill "$eve_pid" 2>/dev/null || true
+  [ -z "$next_pid" ] || kill "$next_pid" 2>/dev/null || true
+  [ -z "$eve_pid" ] || wait "$eve_pid" 2>/dev/null || true
+  [ -z "$next_pid" ] || wait "$next_pid" 2>/dev/null || true
+}
+trap stop_children EXIT INT TERM
+
+"$launcher" "$node_bin" node_modules/eve/bin/eve.js dev \
+  --host 127.0.0.1 --port 2000 --no-ui &
+eve_pid="$!"
+"$launcher" "$node_bin" node_modules/next/dist/bin/next dev \
+  --hostname 127.0.0.1 --port 3000 &
+next_pid="$!"
+
+while kill -0 "$eve_pid" 2>/dev/null && kill -0 "$next_pid" 2>/dev/null; do
+  sleep 1
+done
+
+status=1
+if ! kill -0 "$eve_pid" 2>/dev/null; then
+  set +e
+  wait "$eve_pid"
+  status="$?"
+  set -e
+elif ! kill -0 "$next_pid" 2>/dev/null; then
+  set +e
+  wait "$next_pid"
+  status="$?"
+  set -e
+fi
+stop_children
+exit "$status"

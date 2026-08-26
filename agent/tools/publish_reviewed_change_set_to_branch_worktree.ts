@@ -13,6 +13,7 @@ import {
 import { publishReviewedChangeSetToBranchWorktree } from "@/lib/repository/node-branch-worktree-publication";
 import { branchWorktreePublicationProposalSchema } from "@/lib/agent/branch-worktree-publication-schema";
 import { exactBranchWorktreePublicationProposal } from "./branch_worktree_publication_status";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
@@ -54,7 +55,7 @@ export default defineTool({
           ),
       hooks: {
         beforePendingJournal:
-          process.env.APP_BUILDER_TEST_MODEL === "1" &&
+          hasTestCapability("simulated-publication") &&
           workflow.appSpec.appId ===
             "branch-publication-pre-journal-interruption"
             ? () => {
@@ -83,7 +84,7 @@ export default defineTool({
           });
           pendingWorkflow = appBuilderWorkflowState.get();
         },
-        ...(process.env.APP_BUILDER_TEST_MODEL === "1" &&
+        ...(hasTestCapability("simulated-publication") &&
         workflow.appSpec.appId === "branch-publication-lost-response"
           ? {
               beforeTerminalJournal: () => {
@@ -94,7 +95,7 @@ export default defineTool({
               preserveNonterminalJournal: true,
             }
           : {}),
-        ...(process.env.APP_BUILDER_TEST_MODEL === "1" &&
+        ...(hasTestCapability("simulated-publication") &&
         workflow.appSpec.appId === "branch-publication-partial-failure"
           ? {
               afterPathMutation: (_path: string, index: number) => {

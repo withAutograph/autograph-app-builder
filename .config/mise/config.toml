@@ -1,0 +1,6 @@
+[tools]
+node = "24.18.0"
+pnpm = "11.7.0"
+
+[settings]
+experimental = true

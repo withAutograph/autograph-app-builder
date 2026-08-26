@@ -24,6 +24,7 @@ import {
   proposalFromJournal,
 } from "@/lib/repository/local-publication";
 import { exactLocalPublicationProposal } from "./local_publication_status";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const file = z.strictObject({
@@ -235,7 +236,7 @@ export default defineTool({
       };
     });
     if (
-      process.env.APP_BUILDER_TEST_MODEL === "1" &&
+      hasTestCapability("simulated-publication") &&
       workflow.appSpec.appId === "publication-pre-journal-interruption"
     )
       throw new Error(
@@ -251,7 +252,7 @@ export default defineTool({
       review: workflow.reviewReceipt,
       publishedByCallId: ctx.callId,
       readOverlayFile: (path) =>
-        process.env.APP_BUILDER_TEST_MODEL === "1" &&
+        hasTestCapability("simulated-publication") &&
         workflow.appSpec.appId === "publication-precondition-failure"
           ? Promise.resolve(null)
           : ctx
@@ -259,7 +260,7 @@ export default defineTool({
               .then((sandbox) =>
                 sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
               ),
-      ...(process.env.APP_BUILDER_TEST_MODEL === "1" &&
+      ...(hasTestCapability("simulated-publication") &&
       workflow.appSpec.appId === "publication-interruption"
         ? {
             hooks: {
@@ -272,7 +273,7 @@ export default defineTool({
             },
           }
         : {}),
-      ...(process.env.APP_BUILDER_TEST_MODEL === "1" &&
+      ...(hasTestCapability("simulated-publication") &&
       workflow.appSpec.appId === "publication-failure-recovery"
         ? {
             hooks: {
@@ -309,7 +310,7 @@ export default defineTool({
         "The failed publication journal was not durably read back; workflow remains pending.",
       );
     if (
-      process.env.APP_BUILDER_TEST_MODEL === "1" &&
+      hasTestCapability("simulated-publication") &&
       (workflow.appSpec.appId === "publication-success-recovery" ||
         workflow.appSpec.appId === "publication-failure-recovery")
     )

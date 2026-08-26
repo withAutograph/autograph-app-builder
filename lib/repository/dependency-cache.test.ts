@@ -8,6 +8,7 @@ import {
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
+  assertExactDependencyTargetBinding,
   inspectDependencyCache,
   materializeOfflineDependencies,
 } from "./dependency-cache";
@@ -68,11 +69,73 @@ function sandboxFixture(inputManifest: unknown = manifest) {
 }
 
 describe("offline dependency cache", () => {
+  it("binds fixture cache observations to the exact prepared source", async () => {
+    const target = {
+      sourceSha: "3".repeat(40),
+      sourceTree: "4".repeat(40),
+    };
+    const cache = await inspectDependencyCache(
+      {} as SandboxSession,
+      process.env,
+      target,
+    );
+
+    expect(cache.manifest.target).toEqual(
+      expect.objectContaining({
+        sha: target.sourceSha,
+        tree: target.sourceTree,
+      }),
+    );
+    expect(() =>
+      assertExactDependencyTargetBinding({
+        workspace: target,
+        sourceReceipt: target,
+        cache,
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects source-tree and durable dependency-receipt drift", async () => {
+    const target = {
+      sourceSha: "3".repeat(40),
+      sourceTree: "4".repeat(40),
+    };
+    const cache = await inspectDependencyCache(
+      {} as SandboxSession,
+      process.env,
+      target,
+    );
+
+    expect(() =>
+      assertExactDependencyTargetBinding({
+        workspace: target,
+        sourceReceipt: { ...target, sourceTree: "5".repeat(40) },
+        cache,
+      }),
+    ).toThrow("prepared source does not match");
+    expect(() =>
+      assertExactDependencyTargetBinding({
+        workspace: target,
+        sourceReceipt: target,
+        cache,
+        dependencyReceipt: {
+          ...target,
+          targetSha: target.sourceSha,
+          targetTree: "5".repeat(40),
+        },
+      }),
+    ).toThrow("prepared source does not match");
+  });
+
   it("verifies target-bound manifest and archive bytes before extraction", async () => {
     const { run, sandbox } = sandboxFixture();
     const result = await materializeOfflineDependencies({
       sandbox,
       artifactRevision: "b".repeat(64),
+      target: {
+        sourceSha: ARRUSTED_TARGET_SHA,
+        sourceTree: ARRUSTED_TARGET_TREE,
+      },
       environment: {},
     });
     expect(result.contentDigest).toBe(archiveDigest);

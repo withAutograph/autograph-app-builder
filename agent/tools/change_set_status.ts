@@ -12,6 +12,7 @@ import {
   createReviewedChangeSetReceipt,
   deriveNormalizedChangeSet,
 } from "@/lib/repository/reviewed-change-set";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export async function exactNormalizedChangeSet(input: {
   state: Extract<
@@ -49,9 +50,7 @@ export async function exactNormalizedChangeSet(input: {
     revision: input.state.appSpec.artifactRevision,
     sessionId: input.sessionId,
   });
-  const fixture =
-    process.env.APP_BUILDER_TEST_MODEL === "1" &&
-    process.env.APP_BUILDER_REAL_SANDBOX !== "1";
+  const fixture = hasTestCapability("simulated-target");
   const observed = fixture
     ? await inspectFixtureApplyOverlay(
         input.sandbox,

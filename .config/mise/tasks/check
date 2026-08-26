@@ -1,0 +1,9 @@
+#!/bin/sh
+#MISE description="Run the complete repository validation with the pinned Node runtime"
+set -eu
+
+mise run format-check
+mise run lint
+mise run typecheck
+mise run test:unit
+mise run package:validate

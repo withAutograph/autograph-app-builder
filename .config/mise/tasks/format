@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Format repository sources with the pinned runtime"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/prettier/bin/prettier.cjs --write .

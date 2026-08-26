@@ -1,0 +1,122 @@
+#!/bin/sh
+set -eu
+
+if [ "${NODE_OPTIONS+x}" = x ]; then
+  echo "trusted-node-launcher: refusing ambient NODE_OPTIONS" >&2
+  exit 78
+fi
+if [ "$#" -eq 0 ]; then
+  echo "trusted-node-launcher: missing pinned executable" >&2
+  exit 64
+fi
+
+executable=$1
+shift
+account_name=$(/usr/bin/id -un)
+host_name=$(/usr/bin/uname -s)
+case "$host_name" in
+  Darwin)
+    account_home=$(/usr/bin/dscacheutil -q user -a name "$account_name" | /usr/bin/awk '/^dir:/{print $2}')
+    ;;
+  Linux)
+    account_home=$(/usr/bin/getent passwd "$account_name" | /usr/bin/awk -F: '{print $6}')
+    ;;
+  *)
+    echo "trusted-node-launcher: unsupported host" >&2
+    exit 78
+    ;;
+esac
+if [ -z "$account_home" ] || [ ! -d "$account_home" ]; then
+  echo "trusted-node-launcher: OS account home was unavailable" >&2
+  exit 78
+fi
+pinned_node="$account_home/.local/share/mise/installs/node/24.18.0/bin/node"
+pinned_pnpm="$account_home/.local/share/mise/installs/pnpm/11.7.0/pnpm"
+case "$executable" in
+  "$pinned_node") kind=node ;;
+  "$pinned_pnpm") kind=pnpm ;;
+  *)
+    echo "trusted-node-launcher: executable is not a pinned Node or pnpm path" >&2
+    exit 78
+    ;;
+esac
+
+verify_pinned_executable() {
+  candidate=$1
+  if [ -L "$candidate" ] || [ ! -f "$candidate" ] || [ ! -x "$candidate" ]; then
+    echo "trusted-node-launcher: pinned executable is not a regular executable" >&2
+    exit 78
+  fi
+  candidate_directory=$(/usr/bin/dirname -- "$candidate")
+  candidate_leaf=$(/usr/bin/basename -- "$candidate")
+  canonical_directory=$(CDPATH= cd -P -- "$candidate_directory" && pwd -P)
+  if [ "$canonical_directory/$candidate_leaf" != "$candidate" ]; then
+    echo "trusted-node-launcher: pinned executable path is not canonical" >&2
+    exit 78
+  fi
+  case "$host_name" in
+    Darwin)
+      owner=$(/usr/bin/stat -f '%u' -- "$candidate")
+      mode=$(/usr/bin/stat -f '%Lp' -- "$candidate")
+      links=$(/usr/bin/stat -f '%l' -- "$candidate")
+      ;;
+    Linux)
+      owner=$(/usr/bin/stat -c '%u' -- "$candidate")
+      mode=$(/usr/bin/stat -c '%a' -- "$candidate")
+      links=$(/usr/bin/stat -c '%h' -- "$candidate")
+      ;;
+  esac
+  if [ "$owner" != "$(/usr/bin/id -u)" ] || [ "$links" -lt 1 ]; then
+    echo "trusted-node-launcher: pinned executable identity is not owner-bound" >&2
+    exit 78
+  fi
+  case "$mode" in
+    *[2367][0-9]|*[0-9][2367])
+      echo "trusted-node-launcher: pinned executable is group/world writable" >&2
+      exit 78
+      ;;
+  esac
+}
+
+verify_pinned_executable "$executable"
+child_path=/usr/bin:/bin
+if [ "$kind" = pnpm ]; then
+  verify_pinned_executable "$pinned_node"
+  child_path="$account_home/.local/share/mise/installs/node/24.18.0/bin:/usr/bin:/bin"
+fi
+
+case "$kind" in
+  node|pnpm)
+    /usr/bin/env -i \
+      PATH="$child_path" \
+      HOME="$account_home" \
+      TMPDIR="${TMPDIR:-/tmp}" \
+      LANG="${LANG:-C}" \
+      LC_ALL="${LC_ALL:-C}" \
+      TZ="${TZ:-}" \
+      CI="${CI:-}" \
+      NODE_ENV="${NODE_ENV:-}" \
+      APP_BUILDER_LOCAL_PUBLICATION="${APP_BUILDER_LOCAL_PUBLICATION:-}" \
+      APP_BUILDER_BRANCH_WORKTREE_PUBLICATION="${APP_BUILDER_BRANCH_WORKTREE_PUBLICATION:-}" \
+      APP_BUILDER_BRANCH_WORKTREE_ROOT="${APP_BUILDER_BRANCH_WORKTREE_ROOT:-}" \
+      APP_BUILDER_FRESH_BOOTSTRAP_ENABLED="${APP_BUILDER_FRESH_BOOTSTRAP_ENABLED:-}" \
+      APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT="${APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT:-}" \
+      APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT="${APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT:-}" \
+      APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT="${APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT:-}" \
+      APP_BUILDER_REAL_SANDBOX="${APP_BUILDER_REAL_SANDBOX:-}" \
+      APP_BUILDER_SANDBOX_IMAGE="${APP_BUILDER_SANDBOX_IMAGE:-}" \
+      APP_BUILDER_LOCAL_ADAPTER="${APP_BUILDER_LOCAL_ADAPTER:-}" \
+      EVE_AGENT_HOST="${EVE_AGENT_HOST:-}" \
+      REPOSITORY_LOCAL_ROOTS="${REPOSITORY_LOCAL_ROOTS:-}" \
+      REPOSITORY_WORKSPACE_ROOT="${REPOSITORY_WORKSPACE_ROOT:-}" \
+      "$executable" "$@" &
+    child_pid=$!
+    trap 'kill -TERM "$child_pid" 2>/dev/null || true' HUP INT TERM
+    set +e
+    wait "$child_pid"
+    status=$?
+    set -e
+    trap - HUP INT TERM
+    exit "$status"
+    ;;
+esac

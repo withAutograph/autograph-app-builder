@@ -23,6 +23,7 @@ const digest = (value: string) => value.repeat(64).slice(0, 64);
 const apply: TargetApplyReceipt = {
   version: 2,
   sourceSha: "1".repeat(40),
+  sourceTree: "0".repeat(40),
   eligibilityDigest: digest("2"),
   workspaceDigest: digest("3"),
   appSpecDigest: digest("4"),
@@ -90,6 +91,7 @@ function reusableValidationReceipt(): TargetValidationReceipt {
   const unsigned = {
     version: 2 as const,
     sourceSha: attempt.sourceSha,
+    sourceTree: attempt.sourceTree,
     eligibilityDigest: attempt.eligibilityDigest,
     workspaceDigest: attempt.workspaceDigest,
     appSpecDigest: attempt.appSpecDigest,

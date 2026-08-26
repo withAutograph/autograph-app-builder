@@ -2,7 +2,10 @@ import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
-import { sourceWorkflowState } from "@/lib/agent/source-state";
+import {
+  APP_BUILDER_SOURCE_VERSION,
+  sourceWorkflowState,
+} from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
 export default defineTool({
@@ -26,7 +29,7 @@ export default defineTool({
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review.");
     sourceWorkflowState.update(() => ({
-      version: 1,
+      version: APP_BUILDER_SOURCE_VERSION,
       phase: "acquisition_approved",
       receipt: currentReceipt,
       approvedByCallId: ctx.callId,

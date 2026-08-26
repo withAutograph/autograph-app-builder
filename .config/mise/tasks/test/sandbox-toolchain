@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Prove the pinned sandbox toolchain through Eve"
+set -eu
+
+node_bin="$(mise which node)"
+launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
+exec "$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts \
+  --gate-a-profile sandbox sandbox-toolchain --strict --skip-report

@@ -29,6 +29,7 @@ export type ValidationCommandExecutor = (input: {
 
 type TargetValidationBinding = {
   sourceSha: string;
+  sourceTree: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;
@@ -240,6 +241,7 @@ export function validationBinding(
 ): TargetValidationBinding {
   return {
     sourceSha: apply.sourceSha,
+    sourceTree: apply.sourceTree,
     eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,
@@ -304,6 +306,7 @@ function attemptBinding(
 ): TargetValidationBinding {
   return {
     sourceSha: attempt.sourceSha,
+    sourceTree: attempt.sourceTree,
     eligibilityDigest: attempt.eligibilityDigest,
     workspaceDigest: attempt.workspaceDigest,
     appSpecDigest: attempt.appSpecDigest,

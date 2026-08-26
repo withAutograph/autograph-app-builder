@@ -7,7 +7,7 @@ isolated workspace.
 1. Resolve whether the user wants a fresh repository from the supported
    template or an existing supported repository. Accept only an explicitly
    allowlisted local checkout. Fresh templates require their own acquisition
-   approval; never clone or create a destination repository.
+   approval; never clone during source acquisition.
 2. Verify eligibility through the versioned builder-owned adapter. Bind source
    kind, exact SHA, eligibility, contract, and release-disabled state in the
    canonical receipt, then bind workspace approval to that exact receipt.
@@ -43,15 +43,21 @@ isolated workspace.
    `accept_change_set`. It recomputes the displayed digest and records a
    reviewed receipt; it does not validate or publish.
 6. Obtain a separate publication approval naming exactly one local outcome:
-   apply to the exact original checkout, or create the deterministic
-   builder-owned branch/worktree. Never treat one approval as authority for the
-   other. Branch/worktree publication must recheck the source SHA/tree, root and
+   apply to the exact original checkout, create the deterministic
+   builder-owned branch/worktree, or atomically bootstrap a fresh-template tree
+   at the exact absent or exact-empty local destination. Never treat one
+   approval as authority for another. Branch/worktree publication must recheck the source SHA/tree, root and
    Git identity, index, remotes, full status, review, paths, modes, and content
    digests; it never mutates the original checkout, commits, pushes, or
    publishes remotely. A pending, partial-failure, or lost-response receipt is
    a hard stop. Use only `recover_branch_worktree_publication`, after its own
    explicit approval bound to the exact durable journal digest, to resume safe
    preimage/already-applied state; never retry publication automatically.
+   Fresh bootstrap must use only `fresh_bootstrap_status`,
+   `publish_fresh_repository`, and `recover_fresh_repository`. It must remain
+   disabled unless the host's mise-owned lifecycle supplies exact owner-only
+   state and destination roots. GitHub, remotes, release activation, and an
+   abandoned-lease reset remain unavailable.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.
 

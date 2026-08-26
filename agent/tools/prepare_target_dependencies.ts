@@ -11,8 +11,8 @@ import {
   sha256,
 } from "@/lib/agent/workflow-state";
 import {
-  ARRUSTED_TARGET_SHA,
-  ARRUSTED_TARGET_TREE,
+  assertExactDependencyTargetBinding,
+  inspectDependencyCache,
   materializeOfflineDependencies,
 } from "@/lib/repository/dependency-cache";
 import {
@@ -44,16 +44,39 @@ export default defineTool({
       revision: current.appSpec.artifactRevision,
       sessionId: ctx.session.id,
     });
+    const sandbox = await ctx.getSandbox();
+    const observedCache = await inspectDependencyCache(
+      sandbox,
+      process.env,
+      current.workspace,
+    );
+    assertExactDependencyTargetBinding({
+      workspace: current.workspace,
+      sourceReceipt: current.sourceReceipt,
+      cache: observedCache,
+      ...(current.phase === "app_spec_accepted"
+        ? {}
+        : { dependencyReceipt: current.dependencyReceipt }),
+    });
     await materializePlanningOverlay({
-      sandbox: await ctx.getSandbox(),
+      sandbox,
       artifactRevision: current.appSpec.artifactRevision,
       appId: current.appSpec.appId,
       appSpecContent: current.appSpec.content,
       appSpecDigest: current.appSpec.digest,
     });
     const cache = await materializeOfflineDependencies({
-      sandbox: await ctx.getSandbox(),
+      sandbox,
       artifactRevision: current.appSpec.artifactRevision,
+      target: current.workspace,
+    });
+    assertExactDependencyTargetBinding({
+      workspace: current.workspace,
+      sourceReceipt: current.sourceReceipt,
+      cache,
+      ...(current.phase === "app_spec_accepted"
+        ? {}
+        : { dependencyReceipt: current.dependencyReceipt }),
     });
     const execution = targetExecutionBinding(cache);
 
@@ -72,16 +95,17 @@ export default defineTool({
     }
 
     const unsigned = {
-      version: 1 as const,
+      version: 2 as const,
       sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: execution.imageDigest,
       dependencyCacheDigest: execution.dependencyCacheDigest,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
-      targetSha: ARRUSTED_TARGET_SHA,
-      targetTree: ARRUSTED_TARGET_TREE,
+      targetSha: cache.manifest.target.sha,
+      targetTree: cache.manifest.target.tree,
       cacheManifestDigest: cache.manifestDigest,
       cacheContentDigest: cache.contentDigest,
       preparedByCallId: ctx.callId,

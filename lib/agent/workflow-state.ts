@@ -28,10 +28,15 @@ import type {
   BranchWorktreePublicationProposal,
   BranchWorktreePublicationSuccessReceipt,
 } from "@/lib/repository/branch-worktree-publication";
+import type {
+  FreshBootstrapFailureReceipt,
+  FreshBootstrapProposal,
+  FreshBootstrapSuccessReceipt,
+} from "@/lib/repository/fresh-bootstrap";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 11 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 13 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v11" as const;
+  "autograph-app-builder.workflow.v13" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -55,6 +60,7 @@ export type PrototypeArtifact = {
 
 type TargetExecutionBinding = {
   sourceSha: string;
+  sourceTree: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   imageDigest: string;
@@ -64,7 +70,7 @@ type TargetExecutionBinding = {
 };
 
 export type DependencyPreparationReceipt = TargetExecutionBinding & {
-  version: 1;
+  version: 2;
   targetSha: string;
   targetTree: string;
   cacheManifestDigest: string;
@@ -221,6 +227,22 @@ export type AppBuilderWorkflowState =
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "published_branch_worktree";
       branchPublicationReceipt: BranchWorktreePublicationSuccessReceipt;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "fresh_bootstrap_pending";
+      freshBootstrapProposal: FreshBootstrapProposal;
+      freshBootstrapCallId: string;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "fresh_bootstrap_failed";
+      freshBootstrapReceipt: FreshBootstrapFailureReceipt;
+    } & ReviewedPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "published_fresh_bootstrap";
+      freshBootstrapReceipt: FreshBootstrapSuccessReceipt;
     } & ReviewedPhase);
 
 export type PublicationWorkflowPhase = Extract<
@@ -232,7 +254,10 @@ export type PublicationWorkflowPhase = Extract<
       | "published_local"
       | "branch_publication_pending"
       | "branch_publication_failed"
-      | "published_branch_worktree";
+      | "published_branch_worktree"
+      | "fresh_bootstrap_pending"
+      | "fresh_bootstrap_failed"
+      | "published_fresh_bootstrap";
   }
 >;
 
@@ -245,7 +270,10 @@ export function isPublicationWorkflowPhase(
     state.phase === "published_local" ||
     state.phase === "branch_publication_pending" ||
     state.phase === "branch_publication_failed" ||
-    state.phase === "published_branch_worktree"
+    state.phase === "published_branch_worktree" ||
+    state.phase === "fresh_bootstrap_pending" ||
+    state.phase === "fresh_bootstrap_failed" ||
+    state.phase === "published_fresh_bootstrap"
   );
 }
 
@@ -290,6 +318,26 @@ export function assertPublicationJournalStatus(
   if (!allowed[phase].includes(status))
     throw new Error(
       `Workflow phase ${phase} cannot be paired with local-publication journal ${status ?? "absent"}.`,
+    );
+}
+
+export function assertFreshBootstrapJournalStatus(
+  phase:
+    | "reviewed"
+    | "fresh_bootstrap_pending"
+    | "fresh_bootstrap_failed"
+    | "published_fresh_bootstrap",
+  status: "pending" | "failed" | "succeeded" | undefined,
+): void {
+  const allowed: Record<typeof phase, readonly (typeof status)[]> = {
+    reviewed: [undefined, "pending", "failed"],
+    fresh_bootstrap_pending: ["pending", "failed", "succeeded"],
+    fresh_bootstrap_failed: ["failed", "succeeded"],
+    published_fresh_bootstrap: ["succeeded"],
+  };
+  if (!allowed[phase].includes(status))
+    throw new Error(
+      `Workflow phase ${phase} cannot be paired with fresh-bootstrap journal ${status ?? "absent"}.`,
     );
 }
 

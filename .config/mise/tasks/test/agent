@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="Run the complete deterministic Eve evaluation suite"
+set -eu
+
+node_bin="$(mise which node)"
+launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
+eval_runner="scripts/run-eve-eval.mts"
+
+"$launcher" "$node_bin" --import tsx "$eval_runner" \
+    --gate-a-profile general-enabled \
+    --exclude-tag disabled-local-publication \
+    --exclude-tag fresh-bootstrap-publication \
+    --strict --skip-report
+
+mise run test:fresh-bootstrap-evals
+
+exec "$launcher" "$node_bin" --import tsx "$eval_runner" \
+  --gate-a-profile general-disabled \
+  --tag disabled-local-publication --strict --skip-report

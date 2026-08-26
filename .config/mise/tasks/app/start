@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Run the built Next application"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/next/dist/bin/next start "$@"

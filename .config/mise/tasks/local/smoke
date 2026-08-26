@@ -1,0 +1,15 @@
+#!/bin/sh
+#MISE description="Smoke the supervised local Next and Eve services"
+set -eu
+
+node_bin="$(mise which node)"
+launcher=".config/mise/scripts/trusted-node-launcher"
+"$launcher" "$node_bin" -e '
+  const response = await fetch("http://127.0.0.1:3000/healthz");
+  const body = await response.json();
+  if (!response.ok || body.status !== "ok") process.exit(1);
+'
+
+exec "$launcher" "$node_bin" node_modules/eve/bin/eve.js invoke \
+  --url http://127.0.0.1:2000 \
+  "What are your app builder capabilities?"

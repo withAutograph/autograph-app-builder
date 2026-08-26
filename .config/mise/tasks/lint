@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Lint repository sources with the pinned runtime"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/eslint/bin/eslint.js .

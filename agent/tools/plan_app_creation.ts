@@ -11,7 +11,10 @@ import {
   sha256,
   type TargetIdentityReceipt,
 } from "@/lib/agent/workflow-state";
-import { inspectDependencyCache } from "@/lib/repository/dependency-cache";
+import {
+  assertExactDependencyTargetBinding,
+  inspectDependencyCache,
+} from "@/lib/repository/dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -46,7 +49,17 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     const sandbox = await ctx.getSandbox();
-    const cache = await inspectDependencyCache(sandbox);
+    const cache = await inspectDependencyCache(
+      sandbox,
+      process.env,
+      current.workspace,
+    );
+    assertExactDependencyTargetBinding({
+      workspace: current.workspace,
+      sourceReceipt: current.sourceReceipt,
+      cache,
+      dependencyReceipt: current.dependencyReceipt,
+    });
     const execution = targetExecutionBinding(cache);
     if (
       current.dependencyReceipt.imageDigest !== execution.imageDigest ||
@@ -71,6 +84,7 @@ export default defineTool({
 
     const binding = {
       sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: execution.imageDigest,

@@ -6,11 +6,10 @@ import {
   configuredToolchainImage,
   sandboxRevalidationKey,
 } from "@/lib/sandbox/toolchain";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const image = configuredToolchainImage();
-const useFixtureSandbox =
-  process.env.APP_BUILDER_TEST_MODEL === "1" &&
-  process.env.APP_BUILDER_REAL_SANDBOX !== "1";
+const useFixtureSandbox = hasTestCapability("simulated-target");
 
 export default defineSandbox({
   // A missing or invalid external image is not allowed to fall back to Eve's

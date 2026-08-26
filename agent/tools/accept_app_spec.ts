@@ -61,6 +61,7 @@ export default defineTool({
     expectedArtifactDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     expectedArtifactRevision: z.string().regex(/^[0-9a-f]{64}$/u),
     expectedSourceSha: z.string().regex(/^[0-9a-f]{40}$/u),
+    expectedSourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
     expectedEligibilityDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     expectedWorkspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
@@ -71,6 +72,7 @@ export default defineTool({
       expectedArtifactDigest,
       expectedArtifactRevision,
       expectedSourceSha,
+      expectedSourceTree,
       expectedEligibilityDigest,
       expectedWorkspaceDigest,
     },
@@ -104,6 +106,7 @@ export default defineTool({
       );
     if (
       workspace.sourceSha !== expectedSourceSha ||
+      workspace.sourceTree !== expectedSourceTree ||
       workspace.eligibilityDigest !== expectedEligibilityDigest ||
       workspace.workspaceDigest !== expectedWorkspaceDigest
     )

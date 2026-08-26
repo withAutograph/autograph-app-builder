@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Run the complete CI contract through repository-owned tasks"
+set -eu
+
+mise run dependencies:install
+mise run check
+mise run test:agent
+mise run agent:info
+mise run package:build
+mise run package:build-openai
+mise run package:verify-generated
+mise run app:build

@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Inspect the Eve agent definition"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" node_modules/eve/bin/eve.js info

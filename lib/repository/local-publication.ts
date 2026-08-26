@@ -217,6 +217,7 @@ export function assertExactReviewedChangeSet(
     contractDigest: review.contractDigest,
     repositoryContractDigest: review.repositoryContractDigest,
     sourceSha: review.sourceSha,
+    sourceTree: review.sourceTree,
     eligibilityDigest: review.eligibilityDigest,
     workspaceDigest: review.workspaceDigest,
     appSpecDigest: review.appSpecDigest,
@@ -265,6 +266,7 @@ export function createLocalPublicationProposal(input: {
     destination.headTree !== source.sourceTree ||
     destination.contractDigest !== source.contractDigest ||
     review.sourceSha !== source.sourceSha ||
+    review.sourceTree !== source.sourceTree ||
     review.repositoryContractDigest !== source.contractDigest
   )
     throw new Error(

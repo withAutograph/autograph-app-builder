@@ -41,7 +41,7 @@ allowlisted fresh-template checkout:
     an explicit reviewed and published path. Its exact repository path and
     digest remain bound through apply, validation, review, and publication. A
     V2 apply, validation, and normalized-change receipt boundary rejects the
-    earlier path-less receipt shape while the aggregate workflow remains V11.
+    earlier path-less receipt shape while the aggregate workflow remains V12.
     Literal V2 is checked again at apply reuse, validation, reviewed-change,
     local-publication, and branch-publication trust boundaries; recomputing a
     historical receipt digest cannot upgrade its authority. A
@@ -57,15 +57,19 @@ allowlisted fresh-template checkout:
 12. after choosing a publication outcome and granting another approval, either
     apply the reviewed set to the exact original checkout or create a
     deterministic builder-owned branch/worktree at the exact base and apply it
-    there without committing or mutating the original checkout.
+    there without committing or mutating the original checkout; or, for a
+    fresh-template source only, atomically install a fully built one-commit
+    repository at an approved absent or exact-empty local destination.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V11 state key so older, synthetic, or
+workspace. The durable workflow uses its V13 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
-planning receipts;
+planning receipts. Every dependency, identity, proposal, apply, validation,
+review, and publication boundary carries the prepared source commit and tree;
+the immutable dependency-cache target must match both before target planning;
 an intact prepared sandbox can still be recovered and reviewed again.
 
 The real target commands remain fail-closed until an immutable cache-bearing
@@ -118,8 +122,27 @@ deployment, or release action runs. Partial and lost-response states are never
 replayed automatically; a separate recovery approval must name the
 exact durable journal digest and fails closed on any conflicting bytes or Git
 identity. The original checkout's HEAD, index, and worktree state remain exact.
+
+Fresh local bootstrap is exposed only through the supported mise lifecycle
+entrypoint. Pre-create two disjoint canonical directories owned by the current
+user with mode `0700`, then start the local builder with:
+
+```bash
+mise run local:start -- /absolute/builder-state /absolute/destination-root
+```
+
+The task owns the runtime configuration boundary; do not export bootstrap
+environment variables directly. Every status, publish, and recovery tool
+re-reads the configured roots and fixed executable identities. Without this
+entrypoint—or after either root or helper changes—the capability is unavailable.
+Publication remains separately approval-bound. Restart recovery uses the same
+mise-owned host gate and exact journal digest. An abnormal ACTIVE lease cannot
+be taken over; only a still-running coordinator may mark it QUIESCED after all
+bounded helpers have returned. Exact-empty publication retains the swapped-out
+empty inode as a receipt-bound tombstone rather than deleting it by path.
+
 GitHub draft-PR publication,
-cloning, destination-repository creation, and remote template acquisition
+cloning and remote template acquisition
 remain fail-closed until
 their typed tools and approval receipts land. The skills describe the intended
 workflow, but they must use builder-owned operations; they do not authorize raw
@@ -143,7 +166,7 @@ template manifest.
   readback and a content-free workflow-status receipt.
 - Approval-bound AppSpec acceptance, separate offline dependency preparation,
   and fixed bounded target identity/planning commands. Strict receipts bind
-  source, workspace, toolchain, observed cache bytes, and artifact revision
+  source commit and tree, workspace, toolchain, observed cache bytes, and artifact revision
   without writing the prepared target workspace.
 - Proposal-bound target apply in a fresh builder-owned overlay, with a separate
   approval, a repeated readiness check, normalized pre/post tree evidence, and
@@ -155,9 +178,11 @@ template manifest.
   with an atomic durable claim, protected source/cache/planning/apply drift
   detection, passed or recovery-required failure receipts, and no
   validation-generated files admitted to reviewed change sets.
-- Two distinct local publication outcomes: exact-checkout apply, or creation of
-  an uncommitted deterministic branch/worktree with separate durable intent,
-  terminal, partial-failure, lost-response, and recovery receipts.
+- Three distinct local publication outcomes: exact-checkout apply, creation of
+  an uncommitted deterministic branch/worktree, or atomic fresh-template
+  bootstrap into an approved absent or exact-empty destination. Each has
+  separate durable intent, terminal, partial-failure, lost-response, and
+  recovery receipts.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
@@ -165,6 +190,32 @@ template manifest.
 - A loopback-only local MCP-to-Eve adapter.
 - Deterministic unit tests and Eve evals that drive the real HTTP session
   surface with a fixture model, including approval and cancellation paths.
+  A non-Node trusted launcher rejects ambient `NODE_OPTIONS` and replaces the
+  child environment with an explicit allowlist before every supported mise task
+  can start the pinned Node or pnpm executable. Dynamic-loader influence before
+  `/bin/sh` begins remains an operating-system and parent-process trust boundary;
+  the launcher does not claim to sanitize its own already-started process. The
+  named test tasks then keep the non-Node launcher alive as the wrapper's parent
+  and mint a process-scoped structural capability only after the wrapper has
+  verified the launcher's exact executable, source digest, cwd, and tokenized
+  argv. A wrapper-owned public key is delivered over inherited private IPC and
+  a signed, one-shot challenge is consumed. The registry also verifies an exact
+  supported launcher-root wrapper parent argv before binding that key. The
+  protocol fixture has no authorization path; a separate non-authorizing
+  harness proves 4096-byte frame limits, exact frame counts, terminal closure,
+  and stream backpressure. Only exact supported Eve,
+  Vitest, and harness worker entrypoints receive fresh signed one-shot proofs;
+  arbitrary Node, shell, and worker descendants inherit no reusable authority. A
+  module-private registry brands the capability for the authorized process
+  lifetime after consuming the proof. Importing the tracked preload, copying
+  its environment flags, creating a MessageChannel, or
+  forging the former public symbol does not enable a fixture path. The real
+  sandbox proof receives only the fixture-model capability, so target and
+  publication simulation remain fail-closed while the pinned image is observed.
+  Linux lineage inspection uses `/proc`. macOS uses fixed, isolated OS tooling
+  to read exact process arguments and cwd; Codex's ordinary sandbox blocks that
+  inspection, so the macOS lineage proof is intentionally an approved local
+  test boundary and fails closed without that access.
 
 ## Portable plugin package
 
@@ -177,12 +228,12 @@ locations:
 - `skills/` contains portable Agent Skills;
 - `mcp.json` declares the Streamable HTTP MCP server; and
 - `schemas/agent-plugins/1.0.0/` vendors the canonical versioned schemas used by
-  `pnpm validate:plugin`.
+  `mise run package:validate`.
 
 Build the client-neutral installable directory with:
 
 ```bash
-pnpm build:agent-plugin-package
+mise run package:build
 ```
 
 The result is `.artifacts/agent-plugin/autograph-app-builder/`. It is validated
@@ -199,12 +250,12 @@ credentials to each client, and hosted OAuth, tenancy, durable storage, and
 non-Codex client proofs remain required before either claim. The standard also
 does not define client installation UX.
 
-`pnpm validate:plugin` verifies the source components against the vendored,
+`mise run package:validate` verifies the source components against the vendored,
 digest-pinned Agent Plugins 1.0.0 schemas and the specification's version,
 transport, public-header, path-containment, and Agent Skills discovery rules.
 The build command separately validates the generated clean artifact, so source
 files and client adapters cannot accidentally enter the portable package.
-`pnpm validate:release` additionally refuses the development MCP endpoint; it
+`mise run package:validate-release` additionally refuses the development MCP endpoint; it
 does not replace the hosted and cross-client proofs above.
 
 ## Run the Eve agent locally
@@ -212,24 +263,29 @@ does not replace the hosted and cross-client proofs above.
 Use Node.js 24 and pnpm 11.7.0:
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm check
-pnpm test:agent
-pnpm exec eve dev
+mise run dependencies:install
+mise run check
+mise run test:agent
+mise run local:dev
 ```
 
 For a non-interactive smoke test through Eve itself:
 
 ```bash
-APP_BUILDER_TEST_MODEL=1 pnpm exec eve invoke \
-  "What are your app builder capabilities?"
+mise run local:smoke
 ```
 
 To inspect the fixed tool allowlist through Eve's real sandbox backend:
 
 ```bash
-pnpm test:sandbox-toolchain
+mise run test:sandbox-toolchain
 ```
+
+Use the named mise tasks for these eval lanes. The internal preload and eval
+wrapper are not supported entrypoints and do not create a second runtime mode.
+The same rule applies to local, build, package, and unit-test operations: the
+named task is the supported boundary because its non-Node launcher rejects
+ambient Node options before the pinned runtime starts.
 
 The inspection is observational and remains not-ready unless an externally
 built, preloaded OCI image is configured through
@@ -259,17 +315,20 @@ operation fails closed when no OS-managed advisory-lock helper exists.
 
 ## Use the local MCP façade
 
-Run Eve and the Next.js host on separate loopback ports. Set
-`APP_BUILDER_LOCAL_ADAPTER=1` and `EVE_AGENT_HOST` on the Next.js host so its
-five MCP operations call the local Eve channel. The adapter rejects non-loopback
-hosts and is never enabled implicitly.
+For the fresh-bootstrap-capable local lifecycle, pre-create the two owner-only
+roots described above, then run `mise run local:start -- <state-root>
+<destination-root>`. The task supervises Eve on loopback port 2000 and Next.js
+on loopback port 3000, and injects the exact same capability and local adapter
+configuration into both children. Run `mise run local:smoke` in another shell
+to verify the real Next health route and invoke the running Eve service. The
+adapter rejects non-loopback hosts and is never enabled implicitly.
 
 The portable manifest keeps a placeholder HTTPS endpoint until a separately
 approved deployment exists:
 
 ```bash
-pnpm configure --origin https://your-approved-deployment.example
-pnpm validate:release
+mise run package:configure -- --origin https://your-approved-deployment.example
+mise run package:validate-release
 ```
 
 Never put bearer tokens or secrets in `mcp.json` or `.app.json`.
