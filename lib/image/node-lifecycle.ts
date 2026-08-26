@@ -20,7 +20,7 @@ import {
   writeSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
+import { arch, homedir, platform } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
@@ -28,6 +28,7 @@ import {
   ARRUSTED_IMAGE_TARGET_TREE,
   assertCanonicalRoot,
   assertExactImageToolVersion,
+  assertGhcrUsername,
   assertNoSecretMaterial,
   assertProofRuntimeIgnoredInventory,
   assertStandaloneGitMetadata,
@@ -35,7 +36,7 @@ import {
   exactDigestReference,
   hashArtifact,
   imageBuildCommand,
-  ghcrLoginCommand,
+  ghcrCredentialLookupCommand,
   imagePreloadCommand,
   imagePushCommand,
   imageToolVersionCommand,
@@ -52,6 +53,11 @@ import {
   type ImageProvenance,
   type ImageTool,
 } from "./lifecycle.ts";
+import {
+  assertBoundGhcrPayload,
+  ghcrIdentityDigest,
+  readBoundedInput,
+} from "./ghcr-bound-helper.ts";
 
 const dockerfilePath = "containers/eve-sandbox/Dockerfile" as const;
 const maximumCommandOutputBytes = 4 * 1024 * 1024;
@@ -96,6 +102,37 @@ type ReceiptEnvelope = Readonly<{
 
 const fixedGit = "/usr/bin/git";
 const ghcrCredentialHelperVersion = "0.2.0";
+const ghcrCredentialServer = "https://ghcr.io";
+const ghcrDockerConfigName = "config.json";
+const ghcrBoundHelperName = "docker-credential-ghcr-bound";
+const ghcrDockerConfigBytes = Buffer.from(
+  '{"credHelpers":{"ghcr.io":"ghcr-bound"}}\n',
+  "utf8",
+);
+const ghcrBoundHelperBytes = Buffer.from(
+  '#!/bin/sh\nexec "$APP_BUILDER_IMAGE_NODE_BIN" --experimental-strip-types "$APP_BUILDER_IMAGE_GHCR_BOUND_HELPER_MODULE" "$@"\n',
+  "utf8",
+);
+
+type GhcrCredentialBinding = Readonly<{
+  version: 1;
+  platform: string;
+  helper: Readonly<{
+    name: "docker-credential-ghcr-login";
+    version: "0.2.0";
+    sha256: string;
+    protocol: "get-only";
+  }>;
+  dockerConfig: Readonly<{
+    sha256: string;
+    providerName: "ghcr-bound";
+  }>;
+  verifier: Readonly<{
+    wrapperSha256: string;
+    moduleSha256: string;
+    nodeSha256: string;
+  }>;
+}>;
 
 const sanitizedEnvironment = (
   extra: Readonly<Record<string, string>> = {},
@@ -551,6 +588,14 @@ function verifyStateRootContents(provenance: ImageProvenance): void {
   for (const entry of readdirSync(provenance.builder.stateRoot, {
     withFileTypes: true,
   })) {
+    if (entry.name === ghcrDockerConfigName) {
+      assertExactGhcrDockerConfig(provenance.builder.stateRoot);
+      continue;
+    }
+    if (entry.name === ghcrBoundHelperName) {
+      assertExactGhcrBoundHelper(provenance.builder.stateRoot);
+      continue;
+    }
     const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
     if (kind === undefined || !entry.isFile() || entry.isSymbolicLink())
       throw new Error(
@@ -693,7 +738,7 @@ function exactToolBinary(program: ImageTool): string {
   return binary;
 }
 
-export function ghcrCredentialEnvironment(): Readonly<Record<"PATH", string>> {
+function exactGhcrCredentialHelper(): string {
   const configured = process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN;
   if (configured === undefined || !isAbsolute(configured))
     throw new Error(
@@ -722,7 +767,194 @@ export function ghcrCredentialEnvironment(): Readonly<Record<"PATH", string>> {
     version.stdout.trim() !== ghcrCredentialHelperVersion
   )
     throw new Error("GHCR credential helper version is unsupported.");
-  return { PATH: `${dirname(binary)}:/usr/bin:/bin` };
+  return binary;
+}
+
+function ghcrDockerConfigPath(stateRoot: string): string {
+  return join(stateRoot, ghcrDockerConfigName);
+}
+
+function ghcrBoundHelperPath(stateRoot: string): string {
+  return join(stateRoot, ghcrBoundHelperName);
+}
+
+function assertExactGhcrDockerConfig(stateRoot: string): void {
+  const path = ghcrDockerConfigPath(stateRoot);
+  ensureNoLinkPath(path, "GHCR Docker configuration");
+  const stat = lstatSync(path);
+  const uid = process.getuid?.();
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    uid === undefined ||
+    stat.uid !== uid ||
+    (stat.mode & 0o777) !== 0o600
+  )
+    throw new Error(
+      "GHCR Docker configuration must be an owned mode 0600 regular file.",
+    );
+  if (!readFileSync(path).equals(ghcrDockerConfigBytes))
+    throw new Error(
+      "GHCR Docker configuration does not match the closed schema.",
+    );
+}
+
+function ensureGhcrDockerConfig(stateRoot: string): void {
+  const path = ghcrDockerConfigPath(stateRoot);
+  if (!existsSync(path)) writeExactFile(path, ghcrDockerConfigBytes, 0o600);
+  assertExactGhcrDockerConfig(stateRoot);
+}
+
+function assertExactGhcrBoundHelper(stateRoot: string): void {
+  const path = ghcrBoundHelperPath(stateRoot);
+  ensureNoLinkPath(path, "GHCR bound helper");
+  const stat = lstatSync(path);
+  const uid = process.getuid?.();
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    uid === undefined ||
+    stat.uid !== uid ||
+    (stat.mode & 0o777) !== 0o700
+  )
+    throw new Error(
+      "GHCR bound helper must be an owned mode 0700 regular file.",
+    );
+  if (!readFileSync(path).equals(ghcrBoundHelperBytes))
+    throw new Error(
+      "GHCR bound helper does not match the closed implementation.",
+    );
+}
+
+function ensureGhcrBoundHelper(stateRoot: string): void {
+  const path = ghcrBoundHelperPath(stateRoot);
+  if (!existsSync(path)) writeExactFile(path, ghcrBoundHelperBytes, 0o700);
+  assertExactGhcrBoundHelper(stateRoot);
+}
+
+function exactGhcrBoundHelperModule(): string {
+  const path = realpathSync(
+    join(process.cwd(), "lib/image/ghcr-bound-helper.ts"),
+  );
+  const stat = lstatSync(path);
+  if (!stat.isFile() || stat.isSymbolicLink())
+    throw new Error("GHCR bound helper module is invalid.");
+  return path;
+}
+
+export function currentGhcrCredentialBinding(
+  stateRoot: string,
+): GhcrCredentialBinding {
+  ensureGhcrDockerConfig(stateRoot);
+  ensureGhcrBoundHelper(stateRoot);
+  const helper = exactGhcrCredentialHelper();
+  const verifierModule = exactGhcrBoundHelperModule();
+  const node = exactToolBinary("node");
+  return {
+    version: 1,
+    platform: `${platform()}/${arch()}`,
+    helper: {
+      name: "docker-credential-ghcr-login",
+      version: ghcrCredentialHelperVersion,
+      sha256: hashArtifact(readFileSync(helper)),
+      protocol: "get-only",
+    },
+    dockerConfig: {
+      sha256: hashArtifact(ghcrDockerConfigBytes),
+      providerName: "ghcr-bound",
+    },
+    verifier: {
+      wrapperSha256: hashArtifact(ghcrBoundHelperBytes),
+      moduleSha256: hashArtifact(readFileSync(verifierModule)),
+      nodeSha256: hashArtifact(readFileSync(node)),
+    },
+  };
+}
+
+export function ghcrCredentialEnvironment(
+  stateRoot: string,
+  identity?: Readonly<{ username: string; digest: string }>,
+): Readonly<Record<string, string>> {
+  const helper = exactGhcrCredentialHelper();
+  ensureGhcrDockerConfig(stateRoot);
+  ensureGhcrBoundHelper(stateRoot);
+  const environment: Record<string, string> = {
+    PATH: `${stateRoot}:/usr/bin:/bin`,
+    DOCKER_CONFIG: stateRoot,
+    APP_BUILDER_IMAGE_NODE_BIN: exactToolBinary("node"),
+    APP_BUILDER_IMAGE_GHCR_HELPER_BIN: helper,
+    APP_BUILDER_IMAGE_GHCR_BOUND_HELPER_MODULE: exactGhcrBoundHelperModule(),
+    APP_BUILDER_GHCR_HELPER_SHA256: hashArtifact(readFileSync(helper)),
+  };
+  if (identity !== undefined) {
+    environment.APP_BUILDER_GHCR_USERNAME = identity.username;
+    environment.APP_BUILDER_GHCR_IDENTITY_DIGEST = identity.digest;
+  }
+  return environment;
+}
+
+function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
+  receipt: ReceiptEnvelope;
+  binding: GhcrCredentialBinding;
+  identity: Readonly<{ username: string; digest: string }>;
+}> {
+  const receipt = readReceipt(
+    provenance.builder.stateRoot,
+    "ghcr-login-receipt.json",
+    "ghcr-login",
+    provenance,
+  );
+  const binding = currentGhcrCredentialBinding(provenance.builder.stateRoot);
+  const result = receipt.result;
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    (result as { authenticationBoundaryDigest?: unknown })
+      .authenticationBoundaryDigest !== hashArtifact(JSON.stringify(binding)) ||
+    JSON.stringify(
+      (result as { authenticationBoundary?: unknown }).authenticationBoundary,
+    ) !== JSON.stringify(binding) ||
+    typeof (result as { username?: unknown }).username !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(
+      String((result as { identityDigest?: unknown }).identityDigest),
+    )
+  )
+    throw new Error(
+      "GHCR login receipt does not match the current credential boundary.",
+    );
+  const username = (result as { username: string }).username;
+  assertGhcrUsername(username);
+  return {
+    receipt,
+    binding,
+    identity: {
+      username,
+      digest: String((result as { identityDigest: string }).identityDigest),
+    },
+  };
+}
+
+function readGhcrTokenFromStdin(): Buffer {
+  const input = readBoundedInput(0, 4096);
+  try {
+    let end = input.length;
+    if (end > 0 && input[end - 1] === 0x0a) end -= 1;
+    if (end > 0 && input[end - 1] === 0x0d) end -= 1;
+    const token = Buffer.from(input.subarray(0, end));
+    if (token.length < 20) {
+      token.fill(0);
+      throw new Error("GHCR token from stdin is malformed.");
+    }
+    for (const byte of token) {
+      if (byte <= 0x20 || byte >= 0x7f) {
+        token.fill(0);
+        throw new Error("GHCR token from stdin is malformed.");
+      }
+    }
+    return token;
+  } finally {
+    input.fill(0);
+  }
 }
 
 function execute(
@@ -868,12 +1100,7 @@ function pushImageUnlocked(approval: LifecycleApproval) {
     provenance,
   );
   if (existing !== undefined) return existing;
-  readReceipt(
-    provenance.builder.stateRoot,
-    "ghcr-login-receipt.json",
-    "ghcr-login",
-    provenance,
-  );
+  const login = requireCurrentGhcrLogin(provenance);
   const local = readReceipt(
     provenance.builder.stateRoot,
     "local-image-receipt.json",
@@ -883,7 +1110,7 @@ function pushImageUnlocked(approval: LifecycleApproval) {
   execute(
     imagePushCommand(provenance),
     provenance.builder.root,
-    ghcrCredentialEnvironment(),
+    ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
   );
   return writeReceipt(
     provenance.builder.stateRoot,
@@ -894,6 +1121,7 @@ function pushImageUnlocked(approval: LifecycleApproval) {
       status: "pushed",
       tag: provenance.image.tag,
       localImageReceiptDigest: local.digest,
+      ghcrLoginReceiptDigest: login.receipt.digest,
     },
   );
 }
@@ -906,35 +1134,47 @@ function loginGhcrUnlocked(approval: LifecycleApproval, username: string) {
     "image-source",
     provenance,
   );
-  const command = ghcrLoginCommand(username);
-  const binary = exactToolBinary("docker");
-  const credentialEnvironment = ghcrCredentialEnvironment();
-  const version = spawnSync(binary, ["--version"], {
-    cwd: provenance.builder.root,
-    encoding: "utf8",
-    maxBuffer: maximumCommandOutputBytes,
-    env: sanitizedEnvironment(credentialEnvironment),
-  });
-  if (version.error !== undefined || version.status !== 0)
-    throw new Error("docker version inspection failed.");
-  assertExactImageToolVersion("docker", version.stdout);
-  const result = spawnSync(binary, command.args, {
-    cwd: provenance.builder.root,
-    encoding: "utf8",
-    maxBuffer: maximumCommandOutputBytes,
-    env: sanitizedEnvironment(credentialEnvironment),
-    stdio: ["inherit", "ignore", "pipe"],
-  });
-  if (result.error !== undefined) throw result.error;
-  if (result.status !== 0)
-    throw new Error("GHCR login failed without recording credential output.");
-  return writeReceipt(
-    provenance.builder.stateRoot,
-    "ghcr-login-receipt.json",
-    "ghcr-login",
-    provenance,
-    { status: "authenticated", registry: "ghcr.io", username },
-  );
+  assertGhcrUsername(username);
+  const binding = currentGhcrCredentialBinding(provenance.builder.stateRoot);
+  const token = readGhcrTokenFromStdin();
+  try {
+    const identityDigest = ghcrIdentityDigest(username, token);
+    const command = ghcrCredentialLookupCommand();
+    const result = spawnSync(exactGhcrCredentialHelper(), command.args, {
+      cwd: provenance.builder.root,
+      encoding: "utf8",
+      input: `${ghcrCredentialServer}\n`,
+      maxBuffer: maximumCommandOutputBytes,
+      env: sanitizedEnvironment(
+        ghcrCredentialEnvironment(provenance.builder.stateRoot),
+      ),
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    if (result.error !== undefined) throw result.error;
+    if (result.status !== 0)
+      throw new Error(
+        "GHCR credential helper lookup failed without recording credential output.",
+      );
+    assertBoundGhcrPayload(result.stdout, username, identityDigest);
+    return writeReceipt(
+      provenance.builder.stateRoot,
+      "ghcr-login-receipt.json",
+      "ghcr-login",
+      provenance,
+      {
+        status: "credential-matched",
+        registry: "ghcr.io",
+        username,
+        authenticationProvider: `docker-credential-ghcr-login@${ghcrCredentialHelperVersion}`,
+        inputTransport: "stdin",
+        authenticationBoundary: binding,
+        authenticationBoundaryDigest: hashArtifact(JSON.stringify(binding)),
+        identityDigest,
+      },
+    );
+  } finally {
+    token.fill(0);
+  }
 }
 
 function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
@@ -958,11 +1198,14 @@ function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
     "image-push",
     provenance,
   );
+  const login = requireCurrentGhcrLogin(provenance);
   if (
     typeof push.result !== "object" ||
     push.result === null ||
     (push.result as { localImageReceiptDigest?: unknown })
-      .localImageReceiptDigest !== local.digest
+      .localImageReceiptDigest !== local.digest ||
+    (push.result as { ghcrLoginReceiptDigest?: unknown })
+      .ghcrLoginReceiptDigest !== login.receipt.digest
   )
     throw new Error(
       "Image push receipt is not bound to the local image identity.",
@@ -973,17 +1216,17 @@ function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
     execute(
       remoteDescriptorCommand(provenance),
       provenance.builder.root,
-      ghcrCredentialEnvironment(),
+      ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
     ),
     execute(
       remoteManifestCommand(provenance),
       provenance.builder.root,
-      ghcrCredentialEnvironment(),
+      ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
     ),
     execute(
       remoteImageCommand(provenance),
       provenance.builder.root,
-      ghcrCredentialEnvironment(),
+      ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
     ),
     provenance,
     local.result as { imageId: string; rootFsLayers: readonly string[] },

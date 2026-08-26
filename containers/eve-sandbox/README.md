@@ -25,8 +25,10 @@ clean checkouts before acting. An integration worktree is preparation evidence,
 not an eligible image execution source. `--state-root` must be an absolute,
 canonical, no-link, current-user-owned mode `0700` directory outside both
 repositories (or an absent leaf beneath a canonical parent). It contains only
-the mode `0600`, fsynced receipts for one exact provenance; unknown files or a
-receipt from another provenance fail closed.
+the mode `0600`, fsynced receipts for one exact provenance, the exact owned mode
+`0600` Docker configuration, and its exact mode `0700` identity-checking helper
+wrapper; unknown files, configuration drift, or a receipt from another
+provenance fail closed.
 
 Every lifecycle task takes one exclusive OS-held lock derived from the exact
 state-root path before it inspects receipts or invokes an external tool. The OS
@@ -39,10 +41,23 @@ and proof calls therefore cannot dispatch the same external operation twice.
 Verify sources, build, inspect the immutable local image identity, publish, and
 read back the GHCR manifest in this order:
 
-Authenticate only after separate publication approval. Supply a package token
-through standard input; it is never accepted in a command argument or
-environment variable, and the resulting receipt contains only the public
-registry and username.
+Match credentials only after separate publication approval. Supply a package
+token through bounded standard input; it is never accepted in a command
+argument or environment variable, and the resulting receipt contains only the
+public registry, username, provider version, identity digest, and input
+transport. The pinned GHCR helper uses only Docker's `get` protocol, and the
+task fail-closed compares that identity with the stdin token. The underlying
+GitHub helper may validate or refresh GitHub OAuth state while resolving the
+credential, so running this approved phase is the authority for that bounded
+authentication side effect; the receipt does not claim a registry request.
+It does not call `docker login`, because the pinned helper intentionally does
+not implement Docker's credential `store` operation. Later push and read-back
+commands independently use the same exact provider through an
+identity-verifying wrapper and the lifecycle-owned `DOCKER_CONFIG`; ambient
+Docker configuration is never publication authority. The actual Docker `get`
+call refuses a changed account or package token before publication. The helper,
+wrapper, verifier module, Node runtime, platform, and closed Docker
+configuration are digest-bound into the login and publication receipts.
 
 ```bash
 mise run image:login -- --arrusted-root /absolute/path/to/standalone-arrusted \

@@ -266,17 +266,22 @@ export function imagePushCommand(provenance: ImageProvenance): CommandSpec {
   return { program: "docker", args: ["push", provenance.image.tag] };
 }
 
-/**
- * GHCR credentials are supplied exclusively on the child's standard input.
- * The username is receipt-safe; the token is never an argument, environment
- * value, result, or receipt field.
- */
-export function ghcrLoginCommand(username: string): CommandSpec {
+export function assertGhcrUsername(username: string): void {
   if (!/^[A-Za-z0-9-]{1,39}$/u.test(username))
     throw new Error("GHCR username is malformed.");
+}
+
+/**
+ * The pinned helper is a read-only Docker credential provider: its `get`
+ * operation resolves the GitHub CLI credential, while its `store` operation is
+ * intentionally unsupported. The lifecycle therefore validates the token
+ * supplied on stdin against `get` instead of dispatching `docker login`, which
+ * would necessarily call the unsupported `store` operation.
+ */
+export function ghcrCredentialLookupCommand(): CommandSpec {
   return {
-    program: "docker",
-    args: ["login", "ghcr.io", "--username", username, "--password-stdin"],
+    program: "docker-credential-ghcr-login",
+    args: ["get"],
   };
 }
 
