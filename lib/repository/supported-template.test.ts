@@ -370,6 +370,38 @@ describe("supported-template adapter", () => {
     );
   });
 
+  it("rebinds receipt evidence when an eligible normalized input changes", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const before = await inspectSourceReceipt("existing-repository", root);
+    const misePath = join(root, ".config/mise/config.toml");
+    writeFileSync(
+      misePath,
+      `${readFileSync(misePath, "utf8")}\n[tasks."unrelated:check"]\ndescription = "Additional repository check"\nrun = "true"\n`,
+    );
+    fixtureGit(root, ["add", "--", ".config/mise/config.toml"]);
+    fixtureGit(root, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "advance eligible input",
+    ]);
+
+    const eligibility = await inspectSupportedRepository(root);
+    const after = await inspectSourceReceipt("existing-repository", root);
+    expect(eligibility.eligible).toBe(true);
+    expect(after.sourceSha).not.toBe(before.sourceSha);
+    expect(after.sourceTree).not.toBe(before.sourceTree);
+    expect(after.eligibilityDigest).not.toBe(before.eligibilityDigest);
+    expect(after.contractDigest).not.toBe(before.contractDigest);
+    expect(after.digest).not.toBe(before.digest);
+  });
+
   it("keeps source evidence reproducible across physical checkout paths", async () => {
     const firstRoot = fixture();
     const secondRoot = cloneFixture(firstRoot);
