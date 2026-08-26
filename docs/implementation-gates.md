@@ -85,6 +85,16 @@ Before enabling GitHub or hosted repository publication:
    on both the exact source commit and tree. That binding is carried through
    dependency, identity, proposal, apply, validation, review, and publication
    receipts; a SHA match with a different tree fails closed.
+   Source receipt V3 hashes only this immutable logical binding; its absolute
+   local checkout path is diagnostic and deliberately excluded. Generate the
+   strict path-independent evidence with:
+
+   ```sh
+   mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
+   ```
+
+   The command emits no local path, rejects the V2
+   schema and unknown arguments, and does not prepare or mutate the source.
    The implemented fixed target identity and planning operation then uses a
    builder-owned overlay, bounded execution, strict output schemas, and durable
    receipts. Real execution still requires both the immutable image and a
@@ -113,6 +123,7 @@ Before enabling GitHub or hosted repository publication:
    prepared source/workspace receipts to the immutable toolchain observation.
    The implemented proposal-bound apply-readiness receipt adds the exact
    proposal digest. Neither executes a target command or authorizes apply.
+
 3. The implemented prototype-artifact tools allow only the three conventional
    files, bind AppSpec acceptance to an exact recorded revision, and invalidate
    downstream receipts when artifact bytes or paths change. The implemented

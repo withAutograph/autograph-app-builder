@@ -154,14 +154,18 @@ describe(
   () => {
     let publicationRootPath: string;
 
-    beforeEach(async () => {
-      vi.stubEnv("APP_BUILDER_TEST_MODEL", "1");
-      vi.stubEnv("APP_BUILDER_BRANCH_WORKTREE_PUBLICATION", "1");
+    const useIsolatedPublicationRoot = async () => {
       publicationRootPath = await realpath(
         await mkdtemp(join(tmpdir(), "branch-publication-test-")),
       );
       await chmod(publicationRootPath, 0o700);
       vi.stubEnv("APP_BUILDER_BRANCH_WORKTREE_ROOT", publicationRootPath);
+    };
+
+    beforeEach(async () => {
+      vi.stubEnv("APP_BUILDER_TEST_MODEL", "1");
+      vi.stubEnv("APP_BUILDER_BRANCH_WORKTREE_PUBLICATION", "1");
+      await useIsolatedPublicationRoot();
     });
 
     it.each(["path-less-v1", "wrong-version"] as const)(
@@ -759,6 +763,7 @@ describe(
         ]).trim(),
       ).toBe("");
 
+      await useIsolatedPublicationRoot();
       const after = await fixture();
       const afterProposal =
         await deriveBranchWorktreePublicationProposal(after);

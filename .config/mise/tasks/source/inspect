@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Emit path-independent evidence for one supported local source"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/inspect-source-receipt.mts "$@"
