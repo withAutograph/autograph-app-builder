@@ -1,4 +1,8 @@
-import { Client, type MessageStreamEvent } from "eve/client";
+import {
+  Client,
+  type ClientSession,
+  type MessageStreamEvent,
+} from "eve/client";
 
 import type {
   EveSessionResult,
@@ -66,6 +70,8 @@ export function toEveInputResponse(
 }
 
 const localRequests = new Map<string, string>();
+const localSessionEvents = new Map<string, MessageStreamEvent[]>();
+const localSessionHandles = new Map<string, ClientSession>();
 
 function inputRequest(request: {
   requestId: string;
@@ -184,14 +190,13 @@ function deriveStatus(events: readonly MessageStreamEvent[]): EveSessionStatus {
   return "working";
 }
 
-async function resultFor(
-  client: Client,
+function resultForEvents(
   sessionId: string,
+  snapshotEvents: readonly MessageStreamEvent[],
   cursor = 0,
   limit = 100,
-): Promise<EveSessionResult> {
-  const snapshot = await client.sessions.attach(sessionId).snapshot();
-  const bounded = snapshot.events.slice(cursor, cursor + limit);
+): EveSessionResult {
+  const bounded = snapshotEvents.slice(cursor, cursor + limit);
   const events = bounded.flatMap((event, offset) =>
     projectEvent(event, cursor + offset),
   );
@@ -200,49 +205,93 @@ async function resultFor(
   );
   return {
     sessionId,
-    status: deriveStatus(snapshot.events),
-    cursor: Math.min(cursor + bounded.length, snapshot.events.length),
+    status: deriveStatus(snapshotEvents),
+    cursor: Math.min(cursor + bounded.length, snapshotEvents.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
   };
 }
 
-function localService(host: string): EveSessionService {
-  const client = new Client({ host, redirect: "error" });
+function acceptedResult(sessionId: string): EveSessionResult {
+  return { sessionId, status: "working", cursor: 0, events: [] };
+}
+
+function consumeResponse(
+  sessionId: string,
+  response: AsyncIterable<MessageStreamEvent>,
+): void {
+  const events = localSessionEvents.get(sessionId) ?? [];
+  localSessionEvents.set(sessionId, events);
+  void (async () => {
+    try {
+      for await (const event of response) events.push(event);
+    } catch {
+      // Acceptance is already durable in Eve. A later read or follow-up remains
+      // authoritative; a stream failure must never delay the public handle.
+    }
+  })();
+}
+
+export function createLocalEveSessionService(
+  client: Pick<Client, "sessions">,
+): EveSessionService {
+  function sessionFor(sessionId: string): ClientSession {
+    const existing = localSessionHandles.get(sessionId);
+    if (existing !== undefined) return existing;
+    const attached = client.sessions.attach(sessionId);
+    localSessionHandles.set(sessionId, attached);
+    return attached;
+  }
+
   return {
     async start({ prompt, clientRequestId }) {
       const key = `start:${clientRequestId}`;
       const existing = localRequests.get(key);
-      if (existing !== undefined) return resultFor(client, existing);
-      const { session } = await client.sessions.create({ message: prompt });
-      localRequests.set(key, session.state.sessionId);
-      return resultFor(client, session.state.sessionId);
+      if (existing !== undefined) return acceptedResult(existing);
+      const { session, response } = await client.sessions.create({
+        message: prompt,
+      });
+      const sessionId = session.state.sessionId;
+      localRequests.set(key, sessionId);
+      localSessionHandles.set(sessionId, session);
+      consumeResponse(sessionId, response);
+      return acceptedResult(sessionId);
     },
     async get({ sessionId, cursor, limit }) {
-      return resultFor(client, sessionId, cursor, limit);
+      return resultForEvents(
+        sessionId,
+        localSessionEvents.get(sessionId) ?? [],
+        cursor,
+        limit,
+      );
     },
     async send({ sessionId, message, clientRequestId }) {
       const key = `send:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
-        await client.sessions.attach(sessionId).send(message);
+        const response = await sessionFor(sessionId).send(message);
+        consumeResponse(sessionId, response);
         localRequests.set(key, sessionId);
       }
-      return resultFor(client, sessionId);
+      return acceptedResult(sessionId);
     },
     async respond({ sessionId, requestId, response, clientRequestId }) {
       const key = `respond:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
         const input = toEveInputResponse(requestId, response);
-        await client.sessions.attach(sessionId).respond([input]);
+        const result = await sessionFor(sessionId).respond([input]);
+        consumeResponse(sessionId, result);
         localRequests.set(key, sessionId);
       }
-      return resultFor(client, sessionId);
+      return acceptedResult(sessionId);
     },
     async cancel({ sessionId, turnId }) {
-      await client.sessions
-        .attach(sessionId)
-        .cancel(turnId === undefined ? undefined : { turnId });
-      return resultFor(client, sessionId);
+      await sessionFor(sessionId).cancel(
+        turnId === undefined ? undefined : { turnId },
+      );
+      return resultForEvents(
+        sessionId,
+        localSessionEvents.get(sessionId) ?? [],
+      );
     },
   };
 }
@@ -264,7 +313,9 @@ export function createEveSessionService(
         "The local Eve adapter requires a loopback EVE_AGENT_HOST.",
       );
     }
-    return localService(url.origin);
+    return createLocalEveSessionService(
+      new Client({ host: url.origin, redirect: "error" }),
+    );
   }
   return {
     start: notConfigured,
