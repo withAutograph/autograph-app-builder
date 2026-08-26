@@ -57,6 +57,7 @@ import {
 import {
   currentGhcrCredentialBinding,
   ghcrCredentialEnvironment,
+  hasExactKeys,
   materializeSanitizedGitTree,
   normalizedNodeModulesDigest,
   reconcileLifecycleTemps,
@@ -97,6 +98,40 @@ const provenance = () =>
     expectedDockerfileSha256: dockerfileSha256,
     targetFiles,
   });
+
+describe("closed receipt key sets", () => {
+  const expected = [
+    "authenticationBoundary",
+    "authenticationBoundaryDigest",
+    "authenticationProvider",
+    "identityDigest",
+    "keyringReadbackTransport",
+    "operatorApprovalTransport",
+    "providerMutation",
+    "provenanceDigest",
+    "registry",
+    "schema",
+    "status",
+    "username",
+  ] as const;
+
+  it("accepts the exact GHCR login receipt keys independent of declaration order", () => {
+    const exact = Object.fromEntries(
+      [...expected].reverse().map((key) => [key, true]),
+    );
+
+    expect(hasExactKeys(exact, expected)).toBe(true);
+    expect(hasExactKeys({ ...exact, extra: true }, expected)).toBe(false);
+    const missing = { ...exact };
+    delete missing.username;
+    expect(hasExactKeys(missing, expected)).toBe(false);
+    const collision = { ...exact };
+    delete collision.authenticationBoundary;
+    delete collision.authenticationBoundaryDigest;
+    collision["authenticationBoundary,authenticationBoundaryDigest"] = true;
+    expect(hasExactKeys(collision, expected)).toBe(false);
+  });
+});
 
 function installFakeGhBoundary(
   root: string,

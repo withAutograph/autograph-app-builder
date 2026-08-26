@@ -989,6 +989,18 @@ export function ghcrCredentialEnvironment(
   return environment;
 }
 
+export function hasExactKeys(
+  value: object,
+  expected: readonly string[],
+): boolean {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  return (
+    actual.length === wanted.length &&
+    actual.every((key, index) => key === wanted[index])
+  );
+}
+
 function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
   receipt: ReceiptEnvelope;
   binding: GhcrCredentialBinding;
@@ -1020,11 +1032,11 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
     "schema",
     "status",
     "username",
-  ].join(",");
+  ];
   if (
     typeof result !== "object" ||
     result === null ||
-    Object.keys(result).sort().join(",") !== expectedResultKeys ||
+    !hasExactKeys(result, expectedResultKeys) ||
     (result as { status?: unknown }).status !== "credential-matched" ||
     (result as { registry?: unknown }).registry !== "ghcr.io" ||
     (result as { schema?: unknown }).schema !== "ghcr-login-v3" ||
