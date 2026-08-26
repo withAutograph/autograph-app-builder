@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Run repository, unit, and Agent Plugins validation for CI"
+set -eu
+
+exec mise run check

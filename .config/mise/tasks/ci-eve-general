@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Run the general Gate A Eve evaluations for CI"
+set -eu
+
+exec mise run test:general-evals
