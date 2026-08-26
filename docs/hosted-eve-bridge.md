@@ -41,13 +41,25 @@ challenge, and missing, mismatched, denied, or failed workspace lookups share
 one content-free 404 projection. The protected-resource metadata endpoint is
 `/.well-known/oauth-protected-resource`.
 
-The checked-in Next.js composition deliberately supplies no database handle or
-workload identity. Enabling hosted mode there therefore returns a fail-closed
-503 until those capabilities are supplied together by separately authorized
-deployment composition through `composeHostedMcpRuntime`. That pure composition
-boundary reads no environment, opens no connection, and obtains no credential.
-Unconfigured mode and the explicit
-loopback-only local adapter preserve the same exact five MCP tools.
+The checked-in Next.js route now supplies the deployment composition without
+weakening the provider-neutral service boundary. Constructing the route reads
+no secret, opens no connection, and obtains no credential. On the first request
+with `EVE_HOSTED_ADAPTER=1`, it validates the complete hosted configuration,
+opens one bounded PostgreSQL pool, and composes the principal-free runtime. Each
+gateway hop then obtains the current Vercel invocation's OIDC token and exchanges
+it for the exact configured workload audience. The user's principal is not used
+as workload authority or sent to the token exchange. Authentication,
+authorization, membership, and session-service construction remain scoped to
+each request. Invalid composition returns 503 and never falls back to the local
+adapter. Unconfigured mode and the explicit loopback-only local adapter preserve
+the same exact five MCP tools.
+
+The MCP-side contract accepts no continuation credential and the durable store
+schema has no field for one. If a future Eve gateway requires a continuation
+credential, that gateway must encrypt it with versioned server-side keys outside
+the public result and target-owned session record; adding such a field requires
+a new closed contract and migration rather than reusing `record` as an opaque
+secret container.
 
 ## Idempotency and uncertain submissions
 
@@ -96,17 +108,13 @@ store remains test/local scaffolding.
 Hosted activation still requires separately authorized work:
 
 - configure the implemented cryptographic verifier with approved identity
-  metadata, inject the approved workload-identity provider, and bind the fixed
-  HTTPS gateway origin/audience;
+  metadata and bind the fixed HTTPS gateway origin/audience;
 - apply the checked-in PostgreSQL migration with `mise run database:migrate` to
   an approved database and prove transaction behavior against that deployment;
 - verify the workload gateway implements the fixed transport contract and maps
   installed Eve events into the normalized internal projection;
-- encrypt any continuation credential outside public records with versioned
-  server-side keys;
-- compose the already request-scoped route with an approved database handle and
-  workload identity; the repository deliberately does not do this at module
-  import from ambient environment;
+- keep the gateway contract free of continuation credentials, or introduce a
+  separately reviewed encrypted gateway-side contract before one is needed;
 - deploy and prove hosted authentication, persistence, cancellation, and
   lost-response behavior; and
 - publish an immutable Agent Plugins package pointing at that proven endpoint

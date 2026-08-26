@@ -359,12 +359,15 @@ portable package root.
 Never put bearer tokens or secrets in `mcp.json` or `.app.json`.
 
 Hosted request handling is enabled only with `EVE_HOSTED_ADAPTER=1` and a
-complete request-scoped runtime composition. It never falls back to the local
-adapter. The OAuth resource metadata is served from
+complete deployment configuration. The route lazily opens its bounded
+PostgreSQL pool on the first hosted request and acquires a Vercel workload OIDC
+credential only inside the request-context gateway hop, exchanging it for
+`EVE_HOSTED_WORKLOAD_AUDIENCE`. It never falls back to the local adapter. The
+OAuth resource metadata is served from
 `/.well-known/oauth-protected-resource`; hosted clients send their verified
-workspace selection in `X-Eve-Workspace-Id`. Merely setting environment values
-does not create a database connection, obtain a workload credential, or enable
-the hosted composition.
+workspace selection in `X-Eve-Workspace-Id`. Importing the route does not create
+a database connection or obtain a workload credential. The checked-in MCP and
+store contracts contain no continuation credential.
 
 ## Authority boundary
 
