@@ -63,6 +63,7 @@ import {
   currentGhcrCredentialBinding,
   ghcrCredentialEnvironment,
   hasExactKeys,
+  imageToolInvocation,
   materializeSanitizedGitTree,
   normalizedNodeModulesDigest,
   reconcileLifecycleTemps,
@@ -194,6 +195,11 @@ esac
     writeFileSync(join(bin, name), `#!/bin/sh\nprintf '${name} fixture\\n'\n`, {
       mode: 0o700,
     });
+  writeFileSync(
+    join(bin, "msb"),
+    '#!/usr/bin/env node\nprocess.stdout.write("msb 0.6.14\\n");\n',
+    { mode: 0o700 },
+  );
   return {
     config: realpathSync(config),
     gh: realpathSync(gh),
@@ -215,6 +221,7 @@ function withFakeGhEnvironment(
     APP_BUILDER_IMAGE_BUILDX_BIN: realpathSync(
       join(fixture.bin, "docker-buildx"),
     ),
+    APP_BUILDER_IMAGE_MSB_BIN: realpathSync(join(fixture.bin, "msb")),
   };
   const previous = Object.fromEntries(
     Object.keys(values).map((key) => [key, process.env[key]]),
@@ -903,6 +910,37 @@ wait
       program: "docker-buildx",
       args: ["version"],
     });
+    const fixtureRoot = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-msb-invocation-")),
+    );
+    const fixture = installFakeGhBoundary(fixtureRoot, "approved");
+    withFakeGhEnvironment(fixture, () => {
+      expect(imageToolInvocation("msb", ["--version"])).toEqual({
+        program: realpathSync(process.execPath),
+        args: [realpathSync(join(fixture.bin, "msb")), "--version"],
+      });
+      const invocation = imageToolInvocation("msb", ["--version"]);
+      const invoked = spawnSync(invocation.program, [...invocation.args], {
+        encoding: "utf8",
+        env: {
+          HOME: tmpdir(),
+          LANG: "C",
+          NODE_ENV: "production",
+          PATH: "/usr/bin:/bin",
+        },
+      });
+      expect(invoked.status).toBe(0);
+      expect(invoked.stdout).toBe("msb 0.6.14\n");
+      expect(imageToolInvocation("docker", ["version"])).toEqual({
+        program: realpathSync(join(fixture.bin, "docker")),
+        args: ["version"],
+      });
+      process.env.APP_BUILDER_IMAGE_MSB_BIN = "relative/msb";
+      expect(() => imageToolInvocation("msb", ["--version"])).toThrow(
+        "must be resolved",
+      );
+    });
+    rmSync(fixtureRoot, { recursive: true, force: true });
     expect(() =>
       assertExactImageToolVersion(
         "docker-buildx",
