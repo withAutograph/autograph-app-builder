@@ -7,3 +7,4 @@ mise run lint
 mise run typecheck
 mise run test:unit
 mise run package:validate
+mise run package:test-portable

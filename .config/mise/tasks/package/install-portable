@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Install one offline portable-plugin client harness"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/install-portable-plugin.mts "$@"

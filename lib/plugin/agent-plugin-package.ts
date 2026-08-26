@@ -115,6 +115,19 @@ const isLoopback = (hostname: string) => {
   return family === 6 && host === "::1";
 };
 
+const isReservedReleaseHost = (hostname: string) => {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    isLoopback(host) ||
+    ["example.com", "example.net", "example.org"].some(
+      (name) => host === name || host.endsWith(`.${name}`),
+    ) ||
+    [".invalid", ".test", ".example", ".localhost", ".template"].some(
+      (suffix) => host.endsWith(suffix),
+    )
+  );
+};
+
 const requireString = ({
   value,
   field,
@@ -358,10 +371,7 @@ export const validateAgentPluginPackage = async ({
         throw new Error(`${name} must use HTTPS outside loopback.`);
       const headers = (server.headers ?? {}) as Record<string, string>;
       validateHeaders(name, headers);
-      if (
-        release &&
-        (url.hostname.endsWith(".invalid") || isLoopback(url.hostname))
-      )
+      if (release && isReservedReleaseHost(url.hostname))
         throw new Error(
           `${name} must use a deployed HTTPS endpoint for release.`,
         );

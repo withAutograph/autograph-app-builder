@@ -331,13 +331,30 @@ configuration into both children. Run `mise run local:smoke` in another shell
 to verify the real Next health route and invoke the running Eve service. The
 adapter rejects non-loopback hosts and is never enabled implicitly.
 
-The portable manifest keeps a placeholder HTTPS endpoint until a separately
-approved deployment exists:
+The source manifest is intentionally a non-releasable endpoint template. The
+existing derived-manifest workflow remains available for an approved deployed
+origin:
 
 ```bash
 mise run package:configure -- --origin https://your-approved-deployment.example
 mise run package:validate-release
 ```
+
+A sealed portable release can instead inject its separately approved, literal
+HTTPS endpoint without mutating the source manifest. The command neither
+deploys nor registers a connection:
+
+```bash
+mise run package:build-portable-release -- \
+  --endpoint https://mcp.autograph.dev
+```
+
+The resulting archive, SHA-256 digest receipt, and offline client harness
+inputs are written below `.artifacts/portable-release/`. Reserved development hosts,
+localhost, credentials, and non-literal endpoint templates are rejected before
+an archive can be sealed. The tarball contains only the Agent Plugins core;
+client-specific offline adapters are emitted beside it and never added to the
+portable package root.
 
 Never put bearer tokens or secrets in `mcp.json` or `.app.json`.
 

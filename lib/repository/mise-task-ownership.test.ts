@@ -107,7 +107,11 @@ describe("mise-owned repository operations", () => {
       ".config/mise/tasks/agent/build",
       ".config/mise/tasks/app/build",
       ".config/mise/tasks/package/build-openai",
+      ".config/mise/tasks/package/build-portable-release",
       ".config/mise/tasks/package/configure",
+      ".config/mise/tasks/package/install-portable",
+      ".config/mise/tasks/package/smoke-portable",
+      ".config/mise/tasks/package/test-portable",
       ".config/mise/tasks/package/verify-generated",
     ]) {
       const mode = (await fs.stat(resolve(task))).mode;
