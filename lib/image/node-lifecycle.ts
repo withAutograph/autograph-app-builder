@@ -838,13 +838,25 @@ function exactGithubConfigRoot(): string {
 function exactToolBinary(program: ImageTool): string {
   const key = toolEnvironmentKeys[program];
   const configured = process.env[key];
-  if (configured === undefined || !resolve(configured).startsWith("/"))
+  if (configured === undefined || !isAbsolute(configured))
     throw new Error(`${program} must be resolved by the owning mise task.`);
   const binary = realpathSync(configured);
   const stat = lstatSync(binary);
   if (!stat.isFile())
     throw new Error(`${program} does not resolve to a regular file.`);
   return binary;
+}
+
+export function imageToolInvocation(
+  tool: ImageTool,
+  args: readonly string[],
+): Readonly<{ program: string; args: readonly string[] }> {
+  const binary = exactToolBinary(tool);
+  if (tool !== "msb") return { program: binary, args };
+  return {
+    program: exactToolBinary("node"),
+    args: [binary, ...args],
+  };
 }
 
 function ghcrDockerConfigPath(stateRoot: string): string {
@@ -1230,18 +1242,31 @@ function execute(
   extraEnvironment: Readonly<Record<string, string>> = {},
 ): string {
   const tool = command.program as ImageTool;
-  const binary = exactToolBinary(tool);
-  const versionCommand = imageToolVersionCommand(tool);
-  const version = spawnSync(binary, [...versionCommand.args], {
-    cwd,
-    encoding: "utf8",
-    maxBuffer: maximumCommandOutputBytes,
-    env: sanitizedEnvironment(),
-  });
-  if (version.error !== undefined || version.status !== 0)
-    throw new Error(`${tool} version inspection failed.`);
-  assertExactImageToolVersion(tool, version.stdout);
-  const result = spawnSync(binary, [...command.args], {
+  const inspectVersion = (versionTool: ImageTool) => {
+    const versionCommand = imageToolVersionCommand(versionTool);
+    const versionInvocation = imageToolInvocation(
+      versionTool,
+      versionCommand.args,
+    );
+    const version = spawnSync(
+      versionInvocation.program,
+      [...versionInvocation.args],
+      {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: maximumCommandOutputBytes,
+        env: sanitizedEnvironment(),
+        timeout: 10_000,
+      },
+    );
+    if (version.error !== undefined || version.status !== 0)
+      throw new Error(`${versionTool} version inspection failed.`);
+    assertExactImageToolVersion(versionTool, version.stdout);
+  };
+  if (tool === "msb") inspectVersion("node");
+  inspectVersion(tool);
+  const invocation = imageToolInvocation(tool, command.args);
+  const result = spawnSync(invocation.program, [...invocation.args], {
     cwd,
     encoding: "utf8",
     maxBuffer: maximumCommandOutputBytes,
