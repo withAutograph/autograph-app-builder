@@ -4,9 +4,15 @@ import {
   randomBytes,
   sign,
 } from "node:crypto";
-import { fstatSync, readSync, realpathSync, writeSync } from "node:fs";
+import {
+  fstatSync,
+  readSync,
+  realpathSync,
+  statSync,
+  writeSync,
+} from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MessageChannel,
@@ -21,6 +27,15 @@ const timeoutMs = 10_000;
 const preloadUrl = import.meta.url;
 const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
+if (
+  !isAbsolute(repositoryRoot) ||
+  realpathSync(repositoryRoot) !== repositoryRoot ||
+  !repositoryRootStat.isDirectory() ||
+  repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
+  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
+)
+  throw new Error("Structural test package root was not owner-bound.");
 const require = createRequire(import.meta.url);
 const registry = require(
   resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"),
@@ -49,6 +64,7 @@ const allowedWorkerEnvironment = new Set([
   "APP_BUILDER_SANDBOX_IMAGE",
   "APP_BUILDER_LOCAL_ADAPTER",
   "EVE_AGENT_HOST",
+  "EVE_DEV_WORKER_APP_ROOT",
   "REPOSITORY_LOCAL_ROOTS",
   "REPOSITORY_WORKSPACE_ROOT",
 ]);
@@ -57,7 +73,9 @@ delete process.env.NODE_OPTIONS;
 function workerEnvironment(source) {
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment)
-    if (source[name] !== undefined) environment[name] = source[name];
+    if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined)
+      environment[name] = source[name];
+  environment.EVE_DEV_WORKER_APP_ROOT = repositoryRoot;
   return environment;
 }
 

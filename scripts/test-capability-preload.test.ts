@@ -67,10 +67,13 @@ describe("test capability preload", () => {
     });
     const worker = new Worker(workerFixture, {
       workerData: { spawnNested: true },
+      env: { ...process.env, EVE_DEV_WORKER_APP_ROOT: "/hostile/app-root" },
     });
     const result = await new Promise<{
       capability: typeof capability;
+      appRoot: string | null;
       nestedCapability: typeof capability;
+      nestedAppRoot: string | null;
     }>((resolveMessage, reject) => {
       worker.once("message", resolveMessage);
       worker.once("error", reject);
@@ -78,8 +81,10 @@ describe("test capability preload", () => {
     await worker.terminate();
     expect(result.capability).toMatchObject({ version: 1 });
     expect(result.capability?.id).not.toBe(capability?.id);
+    expect(result.appRoot).toBe(repositoryRoot);
     expect(result.nestedCapability).toMatchObject({ version: 1 });
     expect(result.nestedCapability?.id).not.toBe(result.capability?.id);
+    expect(result.nestedAppRoot).toBe(repositoryRoot);
     const activeHandles = () =>
       (
         process as unknown as { _getActiveHandles(): readonly unknown[] }

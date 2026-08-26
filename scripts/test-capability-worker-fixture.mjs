@@ -9,17 +9,22 @@ const accessor =
 const capability = typeof accessor === "function" ? (accessor() ?? null) : null;
 
 let nestedCapability = null;
+let nestedAppRoot = null;
 if (workerData?.spawnNested === true) {
   const { Worker } = await import("node:worker_threads");
   const nested = new Worker(new URL(import.meta.url));
-  nestedCapability = await new Promise((resolveMessage, reject) => {
-    nested.once("message", (message) => resolveMessage(message.capability));
+  const nestedResult = await new Promise((resolveMessage, reject) => {
+    nested.once("message", resolveMessage);
     nested.once("error", reject);
   });
+  nestedCapability = nestedResult.capability;
+  nestedAppRoot = nestedResult.appRoot;
   await nested.terminate();
 }
 
 parentPort?.postMessage({
   capability,
+  appRoot: process.env.EVE_DEV_WORKER_APP_ROOT ?? null,
   nestedCapability,
+  nestedAppRoot,
 });

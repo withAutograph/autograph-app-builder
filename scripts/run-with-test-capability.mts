@@ -6,11 +6,20 @@ import {
 } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, realpathSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
+const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
+if (
+  !isAbsolute(repositoryRoot) ||
+  realpathSync(repositoryRoot) !== repositoryRoot ||
+  !repositoryRootStat.isDirectory() ||
+  repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
+  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
+)
+  throw new Error("The structural test package root was not owner-bound.");
 const preload = pathToFileURL(
   resolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
 ).href;
@@ -44,6 +53,7 @@ const allowedEnvironment = [
   "APP_BUILDER_SANDBOX_IMAGE",
   "APP_BUILDER_LOCAL_ADAPTER",
   "EVE_AGENT_HOST",
+  "EVE_DEV_WORKER_APP_ROOT",
   "REPOSITORY_LOCAL_ROOTS",
   "REPOSITORY_WORKSPACE_ROOT",
 ] as const;
@@ -198,6 +208,8 @@ export async function runWithTestCapability(options: {
     stdio: ["inherit", "inherit", "inherit", "pipe"],
     env: {
       ...childEnvironment(),
+      EVE_DEV_WORKER_APP_ROOT:
+        options.profile === "eve" ? repositoryRoot : undefined,
       NODE_OPTIONS: `--import=${preload}`,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,
