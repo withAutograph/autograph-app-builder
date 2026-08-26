@@ -53,8 +53,10 @@ import {
   type ImageTool,
 } from "./lifecycle.ts";
 import {
+  assertGithubStateRoot,
   assertVerifiedGhcrLoginPayload,
   githubConfigDigest,
+  githubStateDigest,
   ghcrIdentityDigest,
   readBoundedInput,
 } from "./ghcr-bound-helper.ts";
@@ -104,6 +106,7 @@ const fixedGit = "/usr/bin/git";
 const githubCliVersion = "2.98.0";
 const ghcrDockerConfigName = "config.json";
 const ghcrBoundHelperName = "docker-credential-ghcr-bound";
+const githubStateRootName = "github-cli-state";
 const ghcrDockerConfigBytes = Buffer.from(
   '{"credHelpers":{"ghcr.io":"ghcr-bound"}}\n',
   "utf8",
@@ -114,7 +117,7 @@ const ghcrBoundHelperBytes = Buffer.from(
 );
 
 type GhcrCredentialBinding = Readonly<{
-  version: 2;
+  version: 3;
   platform: string;
   provider: Readonly<{
     name: "gh";
@@ -132,6 +135,12 @@ type GhcrCredentialBinding = Readonly<{
   dockerConfig: Readonly<{
     sha256: string;
     providerName: "ghcr-bound";
+  }>;
+  state: Readonly<{
+    environment: "XDG_STATE_HOME";
+    relativePath: "github-cli-state";
+    policy: "owned-0700-closed-gh-device-id-v1";
+    digest: string;
   }>;
   verifier: Readonly<{
     wrapperSha256: string;
@@ -602,6 +611,12 @@ function verifyStateRootContents(provenance: ImageProvenance): void {
       assertExactGhcrBoundHelper(provenance.builder.stateRoot);
       continue;
     }
+    if (entry.name === githubStateRootName) {
+      assertGithubStateRoot(
+        join(provenance.builder.stateRoot, githubStateRootName),
+      );
+      continue;
+    }
     const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
     if (kind === undefined || !entry.isFile() || entry.isSymbolicLink())
       throw new Error(
@@ -788,6 +803,24 @@ function ghcrBoundHelperPath(stateRoot: string): string {
   return join(stateRoot, ghcrBoundHelperName);
 }
 
+function ensureGithubStateRoot(stateRoot: string): string {
+  const path = join(stateRoot, githubStateRootName);
+  if (!existsSync(path)) {
+    mkdirSync(path, { recursive: false, mode: 0o700 });
+    const directory = openSync(
+      stateRoot,
+      constants.O_RDONLY | constants.O_NOFOLLOW,
+    );
+    try {
+      fsyncSync(directory);
+    } finally {
+      closeSync(directory);
+    }
+  }
+  assertGithubStateRoot(path);
+  return path;
+}
+
 function assertExactGhcrDockerConfig(stateRoot: string): void {
   const path = ghcrDockerConfigPath(stateRoot);
   ensureNoLinkPath(path, "GHCR Docker configuration");
@@ -857,12 +890,13 @@ export function currentGhcrCredentialBinding(
 ): GhcrCredentialBinding {
   ensureGhcrDockerConfig(stateRoot);
   ensureGhcrBoundHelper(stateRoot);
+  ensureGithubStateRoot(stateRoot);
   const gh = exactGithubCli();
   const ghConfigRoot = exactGithubConfigRoot();
   const verifierModule = exactGhcrBoundHelperModule();
   const node = exactToolBinary("node");
   return {
-    version: 2,
+    version: 3,
     platform: `${platform()}/${arch()}`,
     provider: {
       name: "gh",
@@ -906,6 +940,12 @@ export function currentGhcrCredentialBinding(
       sha256: hashArtifact(ghcrDockerConfigBytes),
       providerName: "ghcr-bound",
     },
+    state: {
+      environment: "XDG_STATE_HOME",
+      relativePath: githubStateRootName,
+      policy: "owned-0700-closed-gh-device-id-v1",
+      digest: githubStateDigest(join(stateRoot, githubStateRootName)),
+    },
     verifier: {
       wrapperSha256: hashArtifact(ghcrBoundHelperBytes),
       moduleSha256: hashArtifact(readFileSync(verifierModule)),
@@ -920,12 +960,14 @@ export function ghcrCredentialEnvironment(
     username: string;
     digest: string;
     provenanceDigest: string;
+    stateDigest?: string;
   }>,
 ): Readonly<Record<string, string>> {
   const gh = exactGithubCli();
   const ghConfigRoot = exactGithubConfigRoot();
   ensureGhcrDockerConfig(stateRoot);
   ensureGhcrBoundHelper(stateRoot);
+  const githubStateRoot = ensureGithubStateRoot(stateRoot);
   const environment: Record<string, string> = {
     PATH: `${stateRoot}:/usr/bin:/bin`,
     DOCKER_CONFIG: stateRoot,
@@ -935,11 +977,14 @@ export function ghcrCredentialEnvironment(
     APP_BUILDER_GH_SHA256: hashArtifact(readFileSync(gh)),
     APP_BUILDER_GH_CONFIG_DIR: ghConfigRoot,
     APP_BUILDER_GH_CONFIG_DIGEST: githubConfigDigest(ghConfigRoot),
+    APP_BUILDER_GH_STATE_DIR: githubStateRoot,
   };
   if (identity !== undefined) {
     environment.APP_BUILDER_GHCR_USERNAME = identity.username;
     environment.APP_BUILDER_GHCR_IDENTITY_DIGEST = identity.digest;
     environment.APP_BUILDER_GHCR_PROVENANCE_DIGEST = identity.provenanceDigest;
+    if (identity.stateDigest !== undefined)
+      environment.APP_BUILDER_GH_STATE_DIGEST = identity.stateDigest;
   }
   return environment;
 }
@@ -951,6 +996,7 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
     username: string;
     digest: string;
     provenanceDigest: string;
+    stateDigest: string;
   }>;
 }> {
   const receipt = readReceipt(
@@ -981,7 +1027,7 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
     Object.keys(result).sort().join(",") !== expectedResultKeys ||
     (result as { status?: unknown }).status !== "credential-matched" ||
     (result as { registry?: unknown }).registry !== "ghcr.io" ||
-    (result as { schema?: unknown }).schema !== "ghcr-login-v2" ||
+    (result as { schema?: unknown }).schema !== "ghcr-login-v3" ||
     (result as { authenticationProvider?: unknown }).authenticationProvider !==
       `gh@${githubCliVersion}-keyring` ||
     (result as { operatorApprovalTransport?: unknown })
@@ -1013,6 +1059,7 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
       username,
       digest: String((result as { identityDigest: string }).identityDigest),
       provenanceDigest: provenance.digest,
+      stateDigest: binding.state.digest,
     },
   };
 }
@@ -1294,7 +1341,7 @@ async function loginGhcrUnlocked(
     provenance,
   );
   assertGhcrUsername(username);
-  const binding = currentGhcrCredentialBinding(provenance.builder.stateRoot);
+  currentGhcrCredentialBinding(provenance.builder.stateRoot);
   const existing = optionalReceipt(
     provenance.builder.stateRoot,
     "ghcr-login-receipt.json",
@@ -1330,13 +1377,14 @@ async function loginGhcrUnlocked(
       provenance.digest,
       identityDigest,
     );
+    const binding = currentGhcrCredentialBinding(provenance.builder.stateRoot);
     return writeReceipt(
       provenance.builder.stateRoot,
       "ghcr-login-receipt.json",
       "ghcr-login",
       provenance,
       {
-        schema: "ghcr-login-v2",
+        schema: "ghcr-login-v3",
         status: "credential-matched",
         registry: "ghcr.io",
         username,

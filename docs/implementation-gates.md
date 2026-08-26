@@ -196,7 +196,16 @@ it directly with the existing keyring credential read by pinned GitHub CLI
 namespace membership must all match; login, OAuth, refresh, and credential-store
 operations are not available. Push and remote inspection later re-read only that
 same digest-bound keyring credential through the lifecycle-owned Docker `get`
-helper. Tokens never enter argv, environment, receipts, or persistent files.
+helper. The lifecycle derives GitHub CLI's `XDG_STATE_HOME` internally as the
+owned mode-0700 `github-cli-state` directory beneath the approved external
+state root. Its closed `gh/device-id` state is digest-bound in the versioned
+login receipt; links, unsafe modes, unexpected files, or later byte drift stop
+reuse. Every receipt-backed credential-helper invocation verifies that approved
+digest before and after each GitHub CLI subprocess and once more immediately
+before credential output; initial login alone may initialize the state before
+the parent binds its final digest. Ambient state paths are ignored, and GitHub
+CLI cannot write mutable state into the immutable Builder checkout. Tokens
+never enter argv, environment, receipts, or persistent files.
 
 Before enabling real MCP mutations:
 

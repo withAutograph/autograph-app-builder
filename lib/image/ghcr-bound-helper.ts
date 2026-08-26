@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { lstatSync, readFileSync, readSync, realpathSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  readSync,
+  realpathSync,
+} from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -240,11 +247,86 @@ export function githubConfigDigest(configRoot: string): string {
   return createHash("sha256").update(records.join("\n")).digest("hex");
 }
 
+export function assertGithubStateRoot(stateRoot: string): void {
+  if (
+    !isAbsolute(stateRoot) ||
+    !existsSync(stateRoot) ||
+    realpathSync(stateRoot) !== stateRoot
+  )
+    throw new Error("GitHub state root is invalid.");
+  const uid = process.getuid?.();
+  const rootStat = lstatSync(stateRoot);
+  if (
+    !rootStat.isDirectory() ||
+    rootStat.isSymbolicLink() ||
+    uid === undefined ||
+    rootStat.uid !== uid ||
+    (rootStat.mode & 0o777) !== 0o700
+  )
+    throw new Error("GitHub state root is unsafe.");
+
+  const rootEntries = readdirSync(stateRoot, { withFileTypes: true });
+  if (rootEntries.length === 0) return;
+  if (
+    rootEntries.length !== 1 ||
+    rootEntries[0]?.name !== "gh" ||
+    !rootEntries[0].isDirectory() ||
+    rootEntries[0].isSymbolicLink()
+  )
+    throw new Error("GitHub state root has unexpected contents.");
+  const ghRoot = join(stateRoot, "gh");
+  if (realpathSync(ghRoot) !== ghRoot)
+    throw new Error("GitHub state root contains a symbolic link.");
+  const ghStat = lstatSync(ghRoot);
+  if (ghStat.uid !== uid || (ghStat.mode & 0o022) !== 0)
+    throw new Error("GitHub state root is unsafe.");
+
+  const ghEntries = readdirSync(ghRoot, { withFileTypes: true });
+  if (ghEntries.length === 0) return;
+  if (
+    ghEntries.length !== 1 ||
+    ghEntries[0]?.name !== "device-id" ||
+    !ghEntries[0].isFile() ||
+    ghEntries[0].isSymbolicLink()
+  )
+    throw new Error("GitHub state root has unexpected contents.");
+  const deviceId = join(ghRoot, "device-id");
+  if (realpathSync(deviceId) !== deviceId)
+    throw new Error("GitHub state root contains a symbolic link.");
+  const deviceStat = lstatSync(deviceId);
+  if (
+    deviceStat.uid !== uid ||
+    deviceStat.nlink !== 1 ||
+    (deviceStat.mode & 0o022) !== 0 ||
+    deviceStat.size === 0 ||
+    deviceStat.size > 256
+  )
+    throw new Error("GitHub state root is unsafe.");
+}
+
+export function githubStateDigest(stateRoot: string): string {
+  assertGithubStateRoot(stateRoot);
+  const deviceId = join(stateRoot, "gh", "device-id");
+  if (!existsSync(deviceId))
+    return createHash("sha256").update("empty").digest("hex");
+  const bytes = readFileSync(deviceId);
+  try {
+    return createHash("sha256")
+      .update("gh/device-id\0")
+      .update(createHash("sha256").update(bytes).digest("hex"))
+      .digest("hex");
+  } finally {
+    bytes.fill(0);
+  }
+}
+
 function githubEnvironment(): NodeJS.ProcessEnv {
   const configRoot = requiredEnvironment("APP_BUILDER_GH_CONFIG_DIR");
   const expectedDigest = requiredEnvironment("APP_BUILDER_GH_CONFIG_DIGEST");
+  const stateRoot = requiredEnvironment("APP_BUILDER_GH_STATE_DIR");
   if (githubConfigDigest(configRoot) !== expectedDigest)
     throw new Error("GitHub configuration drifted after approval.");
+  assertGithubStateRoot(stateRoot);
   return {
     GH_CONFIG_DIR: configRoot,
     GH_NO_UPDATE_NOTIFIER: "1",
@@ -255,11 +337,25 @@ function githubEnvironment(): NodeJS.ProcessEnv {
     NODE_ENV: "production",
     NO_COLOR: "1",
     PATH: "/usr/bin:/bin",
+    XDG_STATE_HOME: stateRoot,
   };
+}
+
+function assertExpectedGithubState(): void {
+  const stateRoot = requiredEnvironment("APP_BUILDER_GH_STATE_DIR");
+  const expectedDigest = process.env.APP_BUILDER_GH_STATE_DIGEST;
+  assertGithubStateRoot(stateRoot);
+  if (expectedDigest === undefined) return;
+  if (
+    !/^[a-f0-9]{64}$/u.test(expectedDigest) ||
+    githubStateDigest(stateRoot) !== expectedDigest
+  )
+    throw new Error("GitHub state drifted after approval.");
 }
 
 async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
   const executable = exactGithubCli();
+  assertExpectedGithubState();
   const child = spawn(executable, [...args], {
     detached: false,
     env: githubEnvironment(),
@@ -307,6 +403,7 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
     });
     if (timedOut || overflow || status !== 0)
       throw new Error("GitHub credential read-back failed.");
+    assertExpectedGithubState();
     return Buffer.concat(stdout);
   } finally {
     clearTimeout(timeout);
@@ -388,6 +485,7 @@ async function verifyNamespace(username: string): Promise<void> {
 }
 
 async function writeCredential(username: string, token: Buffer): Promise<void> {
+  assertExpectedGithubState();
   const prefix = Buffer.from(
     `{"ServerURL":"${registry}","Username":"${username}","Secret":"`,
     "utf8",
@@ -414,6 +512,7 @@ async function writeVerifiedLogin(
   provenanceDigest: string,
   identityDigest: string,
 ): Promise<void> {
+  assertExpectedGithubState();
   const payload = Buffer.from(
     JSON.stringify({
       Username: username,
@@ -440,9 +539,12 @@ async function run(): Promise<void> {
   if (process.argv.length !== 3 || (mode !== "get" && mode !== "verify-login"))
     throw new Error("Only the closed GHCR credential protocols are supported.");
   if (mode === "get") {
+    requiredEnvironment("APP_BUILDER_GH_STATE_DIGEST");
     const request = readBoundedInput(0, 256).toString("utf8").trim();
     if (request !== "ghcr.io" && request !== registry)
       throw new Error("GHCR provider request named an unsupported registry.");
+  } else if (process.env.APP_BUILDER_GH_STATE_DIGEST !== undefined) {
+    throw new Error("Initial GHCR login cannot inherit approved state.");
   }
   const username = requiredEnvironment("APP_BUILDER_GHCR_USERNAME");
   const provenanceDigest = requiredEnvironment(
