@@ -95,6 +95,7 @@ type ReceiptEnvelope = Readonly<{
 }>;
 
 const fixedGit = "/usr/bin/git";
+const ghcrCredentialHelperVersion = "0.2.0";
 
 const sanitizedEnvironment = (
   extra: Readonly<Record<string, string>> = {},
@@ -692,7 +693,43 @@ function exactToolBinary(program: ImageTool): string {
   return binary;
 }
 
-function execute(command: CommandSpec, cwd: string): string {
+export function ghcrCredentialEnvironment(): Readonly<Record<"PATH", string>> {
+  const configured = process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN;
+  if (configured === undefined || !isAbsolute(configured))
+    throw new Error(
+      "GHCR credential helper must be resolved by the owning mise task.",
+    );
+  const binary = realpathSync(configured);
+  if (binary !== configured)
+    throw new Error("GHCR credential helper must use its canonical path.");
+  if (binary.split(sep).at(-1) !== "docker-credential-ghcr-login")
+    throw new Error(
+      "GHCR credential helper has an unexpected executable name.",
+    );
+  const stat = lstatSync(binary);
+  if (!stat.isFile())
+    throw new Error(
+      "GHCR credential helper does not resolve to a regular file.",
+    );
+  const version = spawnSync(binary, ["-v"], {
+    encoding: "utf8",
+    maxBuffer: maximumCommandOutputBytes,
+    env: sanitizedEnvironment(),
+  });
+  if (
+    version.error !== undefined ||
+    version.status !== 0 ||
+    version.stdout.trim() !== ghcrCredentialHelperVersion
+  )
+    throw new Error("GHCR credential helper version is unsupported.");
+  return { PATH: `${dirname(binary)}:/usr/bin:/bin` };
+}
+
+function execute(
+  command: CommandSpec,
+  cwd: string,
+  extraEnvironment: Readonly<Record<string, string>> = {},
+): string {
   const tool = command.program as ImageTool;
   const binary = exactToolBinary(tool);
   const versionCommand = imageToolVersionCommand(tool);
@@ -709,10 +746,10 @@ function execute(command: CommandSpec, cwd: string): string {
     cwd,
     encoding: "utf8",
     maxBuffer: maximumCommandOutputBytes,
-    env:
-      command.environment === undefined
-        ? sanitizedEnvironment()
-        : sanitizedEnvironment(command.environment),
+    env: sanitizedEnvironment({
+      ...(command.environment ?? {}),
+      ...extraEnvironment,
+    }),
   });
   if (result.error !== undefined) throw result.error;
   if (
@@ -843,7 +880,11 @@ function pushImageUnlocked(approval: LifecycleApproval) {
     "local-image",
     provenance,
   );
-  execute(imagePushCommand(provenance), provenance.builder.root);
+  execute(
+    imagePushCommand(provenance),
+    provenance.builder.root,
+    ghcrCredentialEnvironment(),
+  );
   return writeReceipt(
     provenance.builder.stateRoot,
     "push-receipt.json",
@@ -867,11 +908,12 @@ function loginGhcrUnlocked(approval: LifecycleApproval, username: string) {
   );
   const command = ghcrLoginCommand(username);
   const binary = exactToolBinary("docker");
+  const credentialEnvironment = ghcrCredentialEnvironment();
   const version = spawnSync(binary, ["--version"], {
     cwd: provenance.builder.root,
     encoding: "utf8",
     maxBuffer: maximumCommandOutputBytes,
-    env: sanitizedEnvironment(),
+    env: sanitizedEnvironment(credentialEnvironment),
   });
   if (version.error !== undefined || version.status !== 0)
     throw new Error("docker version inspection failed.");
@@ -880,7 +922,7 @@ function loginGhcrUnlocked(approval: LifecycleApproval, username: string) {
     cwd: provenance.builder.root,
     encoding: "utf8",
     maxBuffer: maximumCommandOutputBytes,
-    env: sanitizedEnvironment(),
+    env: sanitizedEnvironment(credentialEnvironment),
     stdio: ["inherit", "ignore", "pipe"],
   });
   if (result.error !== undefined) throw result.error;
@@ -928,9 +970,21 @@ function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
   if (typeof local.result !== "object" || local.result === null)
     throw new Error("Local image receipt has no exact image identity.");
   const result = parseRemoteImageInspection(
-    execute(remoteDescriptorCommand(provenance), provenance.builder.root),
-    execute(remoteManifestCommand(provenance), provenance.builder.root),
-    execute(remoteImageCommand(provenance), provenance.builder.root),
+    execute(
+      remoteDescriptorCommand(provenance),
+      provenance.builder.root,
+      ghcrCredentialEnvironment(),
+    ),
+    execute(
+      remoteManifestCommand(provenance),
+      provenance.builder.root,
+      ghcrCredentialEnvironment(),
+    ),
+    execute(
+      remoteImageCommand(provenance),
+      provenance.builder.root,
+      ghcrCredentialEnvironment(),
+    ),
     provenance,
     local.result as { imageId: string; rootFsLayers: readonly string[] },
   );
