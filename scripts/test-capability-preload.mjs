@@ -26,6 +26,7 @@ const maxBytes = 4096;
 const timeoutMs = 10_000;
 const preloadUrl = import.meta.url;
 const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
+const workerProfileKey = `${workerPortKey}Profile`;
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
@@ -70,12 +71,13 @@ const allowedWorkerEnvironment = new Set([
 ]);
 delete process.env.NODE_OPTIONS;
 
-function workerEnvironment(source) {
+function workerEnvironment(source, eveProfile) {
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment)
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined)
       environment[name] = source[name];
   environment.EVE_DEV_WORKER_APP_ROOT = repositoryRoot;
+  environment.EVE_DEV = eveProfile ? "1" : undefined;
   return environment;
 }
 
@@ -227,7 +229,7 @@ function allowedWorkerPaths() {
     }),
   );
 }
-function installWorkerBroker(capabilities, privateKey, publicKey) {
+function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
   const allowed = allowedWorkerPaths();
   const OriginalWorker = workerThreads.Worker;
   workerThreads.Worker = class AuthorizedTestWorker extends OriginalWorker {
@@ -251,11 +253,12 @@ function installWorkerBroker(capabilities, privateKey, publicKey) {
           ...existingData,
           [workerPortKey]: channel.port2,
           [`${workerPortKey}PublicKey`]: publicKey,
+          [workerProfileKey]: eveProfile ? "eve" : "vitest",
         },
         transferList: [...(options.transferList ?? []), channel.port2],
         execArgv: [],
         env: {
-          ...workerEnvironment(options.env ?? process.env),
+          ...workerEnvironment(options.env ?? process.env, eveProfile),
           NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
           APP_BUILDER_TEST_MODEL: undefined,
           APP_BUILDER_TEST_CAPABILITY_ID: undefined,
@@ -323,6 +326,11 @@ function installWorkerBroker(capabilities, privateKey, publicKey) {
 let installed;
 try {
   const authorization = requestAuthorization();
+  const eveProfile = isMainThread
+    ? process.env.EVE_DEV_WORKER_APP_ROOT === repositoryRoot
+    : workerData?.[workerProfileKey] === "eve";
+  if (eveProfile) process.env.EVE_DEV = "1";
+  else delete process.env.EVE_DEV;
   installed = authorization.capability;
   process.env.APP_BUILDER_TEST_CAPABILITY_ID = installed.id;
   process.env.APP_BUILDER_TEST_MODEL = "1";
@@ -330,6 +338,7 @@ try {
     installed.capabilities,
     authorization.privateKey,
     authorization.publicKey,
+    eveProfile,
   );
 } catch {
   if (installed !== undefined) registry.revoke(process, installed);

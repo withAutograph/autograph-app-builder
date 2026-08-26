@@ -67,13 +67,19 @@ describe("test capability preload", () => {
     });
     const worker = new Worker(workerFixture, {
       workerData: { spawnNested: true },
-      env: { ...process.env, EVE_DEV_WORKER_APP_ROOT: "/hostile/app-root" },
+      env: {
+        ...process.env,
+        EVE_DEV: "1",
+        EVE_DEV_WORKER_APP_ROOT: "/hostile/app-root",
+      },
     });
     const result = await new Promise<{
       capability: typeof capability;
       appRoot: string | null;
+      eveDev: string | null;
       nestedCapability: typeof capability;
       nestedAppRoot: string | null;
+      nestedEveDev: string | null;
     }>((resolveMessage, reject) => {
       worker.once("message", resolveMessage);
       worker.once("error", reject);
@@ -82,9 +88,23 @@ describe("test capability preload", () => {
     expect(result.capability).toMatchObject({ version: 1 });
     expect(result.capability?.id).not.toBe(capability?.id);
     expect(result.appRoot).toBe(repositoryRoot);
+    expect(result.eveDev).toBeNull();
     expect(result.nestedCapability).toMatchObject({ version: 1 });
     expect(result.nestedCapability?.id).not.toBe(result.capability?.id);
     expect(result.nestedAppRoot).toBe(repositoryRoot);
+    expect(result.nestedEveDev).toBeNull();
+    for (const hostileEveDev of [undefined, "0", "hostile"]) {
+      const environment = { ...process.env, EVE_DEV: hostileEveDev };
+      const hostileWorker = new Worker(workerFixture, { env: environment });
+      const hostileResult = await new Promise<{ eveDev: string | null }>(
+        (resolveMessage, reject) => {
+          hostileWorker.once("message", resolveMessage);
+          hostileWorker.once("error", reject);
+        },
+      );
+      await hostileWorker.terminate();
+      expect(hostileResult.eveDev).toBeNull();
+    }
     const activeHandles = () =>
       (
         process as unknown as { _getActiveHandles(): readonly unknown[] }
