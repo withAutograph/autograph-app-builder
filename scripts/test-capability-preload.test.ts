@@ -77,6 +77,13 @@ describe("test capability preload", () => {
         EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile-sandbox",
         EVE_EVALUATION: "1",
         EVE_EVALUATION_RUN_ID: "hostile-evaluation",
+        APP_BUILDER_LOCAL_PUBLICATION: "1",
+        APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
+        APP_BUILDER_BRANCH_WORKTREE_ROOT: "",
+        APP_BUILDER_SANDBOX_IMAGE: "",
+        APP_BUILDER_LOCAL_ADAPTER: "1",
+        EVE_AGENT_HOST: "http://127.0.0.1:9999",
+        REPOSITORY_LOCAL_ROOTS: "/hostile",
       },
     });
     const result = await new Promise<{
@@ -92,6 +99,7 @@ describe("test capability preload", () => {
       sandboxRunId: string | null;
       evaluation: string | null;
       evaluationRunId: string | null;
+      hasGateAEnvironment: boolean;
     }>((resolveMessage, reject) => {
       worker.once("message", resolveMessage);
       worker.once("error", reject);
@@ -107,6 +115,7 @@ describe("test capability preload", () => {
     expect(result.sandboxRunId).toBeNull();
     expect(result.evaluation).toBeNull();
     expect(result.evaluationRunId).toBeNull();
+    expect(result.hasGateAEnvironment).toBe(false);
     expect(result.nestedCapability).toMatchObject({ version: 1 });
     expect(result.nestedCapability?.id).not.toBe(result.capability?.id);
     expect(result.nestedAppRoot).toBe(repositoryRoot);

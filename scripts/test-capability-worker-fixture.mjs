@@ -7,6 +7,21 @@ const accessor =
     )
   ];
 const capability = typeof accessor === "function" ? (accessor() ?? null) : null;
+const gateAFields = [
+  "APP_BUILDER_LOCAL_PUBLICATION",
+  "APP_BUILDER_BRANCH_WORKTREE_PUBLICATION",
+  "APP_BUILDER_BRANCH_WORKTREE_ROOT",
+  "APP_BUILDER_FRESH_BOOTSTRAP_ENABLED",
+  "APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT",
+  "APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT",
+  "APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT",
+  "APP_BUILDER_REAL_SANDBOX",
+  "APP_BUILDER_SANDBOX_IMAGE",
+  "APP_BUILDER_LOCAL_ADAPTER",
+  "EVE_AGENT_HOST",
+  "REPOSITORY_LOCAL_ROOTS",
+  "REPOSITORY_WORKSPACE_ROOT",
+];
 
 let nestedCapability = null;
 let nestedAppRoot = null;
@@ -35,6 +50,9 @@ parentPort?.postMessage({
   sandboxRunId: process.env.EVE_DEVELOPMENT_SANDBOX_RUN_ID ?? null,
   evaluation: process.env.EVE_EVALUATION ?? null,
   evaluationRunId: process.env.EVE_EVALUATION_RUN_ID ?? null,
+  hasGateAEnvironment: gateAFields.some(
+    (field) => process.env[field] !== undefined,
+  ),
   nestedCapability,
   nestedAppRoot,
   nestedEveDev,

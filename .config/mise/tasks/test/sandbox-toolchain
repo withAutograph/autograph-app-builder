@@ -4,5 +4,5 @@ set -eu
 
 node_bin="$(mise which node)"
 launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
-export APP_BUILDER_REAL_SANDBOX=1
-exec "$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts sandbox-toolchain --strict --skip-report
+exec "$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts \
+  --gate-a-profile sandbox sandbox-toolchain --strict --skip-report

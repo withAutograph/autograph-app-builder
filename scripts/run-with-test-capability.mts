@@ -42,20 +42,6 @@ const allowedEnvironment = [
   "NO_COLOR",
   "FORCE_COLOR",
   "NODE_ENV",
-  "APP_BUILDER_LOCAL_PUBLICATION",
-  "APP_BUILDER_BRANCH_WORKTREE_PUBLICATION",
-  "APP_BUILDER_BRANCH_WORKTREE_ROOT",
-  "APP_BUILDER_FRESH_BOOTSTRAP_ENABLED",
-  "APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT",
-  "APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT",
-  "APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT",
-  "APP_BUILDER_REAL_SANDBOX",
-  "APP_BUILDER_SANDBOX_IMAGE",
-  "APP_BUILDER_LOCAL_ADAPTER",
-  "EVE_AGENT_HOST",
-  "EVE_DEV_WORKER_APP_ROOT",
-  "REPOSITORY_LOCAL_ROOTS",
-  "REPOSITORY_WORKSPACE_ROOT",
 ] as const;
 
 function childEnvironment(): NodeJS.ProcessEnv {
@@ -78,6 +64,7 @@ function canonical(proof: Record<string, unknown>) {
     expiresAt: proof.expiresAt,
     capabilities: proof.capabilities,
     publicKey: proof.publicKey,
+    gateAEvalProfile: proof.gateAEvalProfile,
   });
 }
 
@@ -179,6 +166,7 @@ export async function runWithTestCapability(options: {
   command: string;
   args: readonly string[];
   capabilities: readonly string[];
+  gateAEvalProfile?: unknown;
 }): Promise<number> {
   verifyTrustedLauncher(options.profile);
   if (process.env.NODE_OPTIONS !== undefined)
@@ -193,7 +181,9 @@ export async function runWithTestCapability(options: {
     options.command !== process.execPath ||
     options.args[0] !== expectedEntry ||
     (options.profile === "vitest" && options.capabilities.length !== 3) ||
-    (options.profile === "eve" && ![1, 3].includes(options.capabilities.length))
+    (options.profile === "eve" &&
+      ![1, 3].includes(options.capabilities.length)) ||
+    (options.profile === "eve") !== (options.gateAEvalProfile !== undefined)
   )
     throw new Error("The structural test wrapper profile was invalid.");
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -261,6 +251,7 @@ export async function runWithTestCapability(options: {
         expiresAt: Date.now() + 5_000,
         capabilities: options.capabilities,
         publicKey: publicKeySource,
+        gateAEvalProfile: options.gateAEvalProfile ?? null,
       };
       const signature = sign(
         null,

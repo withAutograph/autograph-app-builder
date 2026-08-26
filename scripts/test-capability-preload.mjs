@@ -25,6 +25,12 @@ import {
   eveWorkerEnvelopeKey,
   installEveWorkerEnvelope,
 } from "./eve-worker-environment.mjs";
+import {
+  gateAEnvironmentFields,
+  gateAEvalProfileKey,
+  installGateAEvalProfile,
+  validateGateAEvalProfile,
+} from "./gate-a-eval-profile.mjs";
 
 const authorizationFd = 3;
 const maxBytes = 4096;
@@ -59,20 +65,6 @@ const allowedWorkerEnvironment = new Set([
   "NO_COLOR",
   "FORCE_COLOR",
   "NODE_ENV",
-  "APP_BUILDER_LOCAL_PUBLICATION",
-  "APP_BUILDER_BRANCH_WORKTREE_PUBLICATION",
-  "APP_BUILDER_BRANCH_WORKTREE_ROOT",
-  "APP_BUILDER_FRESH_BOOTSTRAP_ENABLED",
-  "APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT",
-  "APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT",
-  "APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT",
-  "APP_BUILDER_REAL_SANDBOX",
-  "APP_BUILDER_SANDBOX_IMAGE",
-  "APP_BUILDER_LOCAL_ADAPTER",
-  "EVE_AGENT_HOST",
-  "EVE_DEV_WORKER_APP_ROOT",
-  "REPOSITORY_LOCAL_ROOTS",
-  "REPOSITORY_WORKSPACE_ROOT",
 ]);
 delete process.env.NODE_OPTIONS;
 
@@ -101,6 +93,7 @@ function canonical(proof) {
     expiresAt: proof.expiresAt,
     capabilities: proof.capabilities,
     publicKey: proof.publicKey,
+    gateAEvalProfile: proof.gateAEvalProfile,
   });
 }
 function exactKeys(value, keys) {
@@ -180,6 +173,7 @@ function requestAuthorization() {
       "expiresAt",
       "capabilities",
       "publicKey",
+      "gateAEvalProfile",
       "signature",
       "delegationPrivateKey",
     ])
@@ -198,7 +192,12 @@ function requestAuthorization() {
   const proof = { ...response };
   delete proof.delegationPrivateKey;
   const capability = registry.complete(process, proof);
-  return { capability, privateKey, publicKey: response.publicKey };
+  return {
+    capability,
+    privateKey,
+    publicKey: response.publicKey,
+    gateAEvalProfile: response.gateAEvalProfile,
+  };
 }
 
 function workerFilename(value) {
@@ -248,7 +247,13 @@ function eveRuntimeWorkerPath() {
     ),
   );
 }
-function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
+function installWorkerBroker(
+  capabilities,
+  privateKey,
+  publicKey,
+  eveProfile,
+  gateAEvalProfile,
+) {
   const allowed = allowedWorkerPaths();
   const eveWorker = eveRuntimeWorkerPath();
   const OriginalWorker = workerThreads.Worker;
@@ -268,6 +273,10 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
         eveProfile && exactFilename === eveWorker
           ? captureEveWorkerEnvelope(options.env, repositoryRoot)
           : undefined;
+      const nestedGateAEvalProfile =
+        eveProfile && exactFilename === eveWorker
+          ? validateGateAEvalProfile(gateAEvalProfile, repositoryRoot)
+          : null;
       const isTimeoutFixture = exactFilename?.endsWith(
         "/scripts/test-capability-worker-timeout-fixture.mjs",
       );
@@ -279,6 +288,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
           [`${workerPortKey}PublicKey`]: publicKey,
           [workerProfileKey]: eveProfile ? "eve" : "vitest",
           [eveWorkerEnvelopeKey]: eveEnvelope,
+          [gateAEvalProfileKey]: nestedGateAEvalProfile,
         },
         transferList: [...(options.transferList ?? []), channel.port2],
         execArgv: [],
@@ -332,6 +342,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile) {
           expiresAt: Date.now() + 5_000,
           capabilities,
           publicKey,
+          gateAEvalProfile: nestedGateAEvalProfile,
         };
         const signature = sign(
           null,
@@ -359,6 +370,24 @@ try {
     ? process.env.EVE_DEV_WORKER_APP_ROOT === repositoryRoot
     : workerData?.[workerProfileKey] === "eve";
   const eveEnvelope = workerData?.[eveWorkerEnvelopeKey];
+  const workerGateAEvalProfile = workerData?.[gateAEvalProfileKey];
+  if (
+    !isMainThread &&
+    JSON.stringify(workerGateAEvalProfile) !==
+      JSON.stringify(authorization.gateAEvalProfile)
+  )
+    throw new Error("The delegated Gate A eval profile did not match.");
+  const gateAEvalProfileToInstall = isMainThread
+    ? authorization.gateAEvalProfile
+    : workerGateAEvalProfile;
+  if (eveProfile)
+    installGateAEvalProfile(
+      process.env,
+      gateAEvalProfileToInstall,
+      repositoryRoot,
+    );
+  else for (const name of gateAEnvironmentFields) delete process.env[name];
+  if (!isMainThread) delete workerData[gateAEvalProfileKey];
   if (eveEnvelope !== undefined) {
     installEveWorkerEnvelope(process.env, eveEnvelope, repositoryRoot);
     delete workerData[eveWorkerEnvelopeKey];
@@ -383,6 +412,7 @@ try {
     authorization.privateKey,
     authorization.publicKey,
     eveProfile,
+    authorization.gateAEvalProfile,
   );
 } catch {
   if (installed !== undefined) registry.revoke(process, installed);
