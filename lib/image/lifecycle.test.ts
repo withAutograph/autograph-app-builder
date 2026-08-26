@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
+  existsSync,
   lstatSync,
   mkdtempSync,
   mkdirSync,
+  openSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -13,21 +16,28 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+
+import {
+  assertBoundGhcrPayload,
+  ghcrIdentityDigest,
+  readBoundedInput,
+} from "./ghcr-bound-helper.ts";
 
 import {
   ARRUSTED_IMAGE_TARGET_SHA,
   ARRUSTED_IMAGE_TARGET_TREE,
   assertCanonicalRoot,
   assertExactImageToolVersion,
+  assertGhcrUsername,
   assertNoSecretMaterial,
   assertProofRuntimeIgnoredInventory,
   assertStandaloneGitMetadata,
   createExactImageProvenance,
   exactDigestReference,
   hashArtifact,
-  ghcrLoginCommand,
+  ghcrCredentialLookupCommand,
   imageBuildCommand,
   imagePreloadCommand,
   imageToolVersionCommand,
@@ -42,6 +52,7 @@ import {
   sandboxProofCommand,
 } from "./lifecycle.ts";
 import {
+  currentGhcrCredentialBinding,
   ghcrCredentialEnvironment,
   materializeSanitizedGitTree,
   normalizedNodeModulesDigest,
@@ -86,38 +97,178 @@ const provenance = () =>
 
 describe("image lifecycle", () => {
   it("exposes only the pinned GHCR helper directory to registry commands", () => {
-    const root = mkdtempSync(join(tmpdir(), "app-builder-ghcr-helper-"));
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-ghcr-helper-")),
+    );
     const helper = join(root, "docker-credential-ghcr-login");
     const previous = process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN;
+    const previousNode = process.env.APP_BUILDER_IMAGE_NODE_BIN;
     try {
       writeFileSync(helper, "#!/bin/sh\nprintf '0.2.0\\n'\n", { mode: 0o700 });
       const canonical = realpathSync(helper);
       process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN = canonical;
-      expect(ghcrCredentialEnvironment()).toEqual({
-        PATH: `${dirname(canonical)}:/usr/bin:/bin`,
+      process.env.APP_BUILDER_IMAGE_NODE_BIN = realpathSync(process.execPath);
+      expect(ghcrCredentialEnvironment(root)).toMatchObject({
+        PATH: `${root}:/usr/bin:/bin`,
+        DOCKER_CONFIG: root,
+        APP_BUILDER_IMAGE_GHCR_HELPER_BIN: canonical,
       });
+      const config = join(root, "config.json");
+      expect(readFileSync(config, "utf8")).toBe(
+        '{"credHelpers":{"ghcr.io":"ghcr-bound"}}\n',
+      );
+      expect(lstatSync(config).mode & 0o777).toBe(0o600);
+      expect(
+        lstatSync(join(root, "docker-credential-ghcr-bound")).mode & 0o777,
+      ).toBe(0o700);
+      const binding = currentGhcrCredentialBinding(root);
+      expect(binding).toMatchObject({
+        version: 1,
+        helper: {
+          name: "docker-credential-ghcr-login",
+          version: "0.2.0",
+          protocol: "get-only",
+        },
+        dockerConfig: { providerName: "ghcr-bound" },
+      });
+      expect(binding.helper.sha256).toHaveLength(64);
+      expect(binding.dockerConfig.sha256).toHaveLength(64);
+      writeFileSync(config, '{"credsStore":"ambient"}\n', { mode: 0o600 });
+      expect(() => ghcrCredentialEnvironment(root)).toThrow("closed schema");
+      writeFileSync(config, '{"credHelpers":{"ghcr.io":"ghcr-bound"}}\n', {
+        mode: 0o600,
+      });
+      writeFileSync(helper, "#!/bin/sh\n# changed\nprintf '0.2.0\\n'\n", {
+        mode: 0o700,
+      });
+      expect(currentGhcrCredentialBinding(root).helper.sha256).not.toBe(
+        binding.helper.sha256,
+      );
       writeFileSync(helper, "#!/bin/sh\nprintf '0.1.0\\n'\n", { mode: 0o700 });
-      expect(() => ghcrCredentialEnvironment()).toThrow("unsupported");
+      expect(() => ghcrCredentialEnvironment(root)).toThrow("unsupported");
     } finally {
       if (previous === undefined)
         delete process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN;
       else process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN = previous;
+      if (previousNode === undefined)
+        delete process.env.APP_BUILDER_IMAGE_NODE_BIN;
+      else process.env.APP_BUILDER_IMAGE_NODE_BIN = previousNode;
       rmSync(root, { force: true, recursive: true });
     }
   });
 
-  it("allows only a fixed GHCR command that reads its token from stdin", () => {
-    expect(ghcrLoginCommand("withAutograph")).toEqual({
-      program: "docker",
-      args: [
-        "login",
-        "ghcr.io",
-        "--username",
-        "withAutograph",
-        "--password-stdin",
-      ],
+  it("uses only the helper's read-only credential lookup protocol", () => {
+    expect(ghcrCredentialLookupCommand()).toEqual({
+      program: "docker-credential-ghcr-login",
+      args: ["get"],
     });
-    expect(() => ghcrLoginCommand("owner/token")).toThrow("malformed");
+    expect(() => assertGhcrUsername("owner/token")).toThrow("malformed");
+  });
+
+  it("binds the stdin token to the exact helper credential without recording it", () => {
+    const token = Buffer.from("github_pat_exact_private_package_token");
+    const credential = JSON.stringify({
+      ServerURL: "https://ghcr.io",
+      Username: "withAutograph",
+      Secret: token.toString("utf8"),
+    });
+    const identityDigest = ghcrIdentityDigest("withAutograph", token);
+    expect(() =>
+      assertBoundGhcrPayload(credential, "withAutograph", identityDigest),
+    ).not.toThrow();
+    expect(() =>
+      assertBoundGhcrPayload(
+        credential,
+        "withAutograph",
+        ghcrIdentityDigest(
+          "withAutograph",
+          Buffer.from("github_pat_different_private_token"),
+        ),
+      ),
+    ).toThrow("drifted after approval");
+    expect(() =>
+      assertBoundGhcrPayload(credential, "another-user", identityDigest),
+    ).toThrow("identity did not match");
+    expect(() =>
+      assertBoundGhcrPayload(
+        JSON.stringify({ ...JSON.parse(credential), Extra: true }),
+        "withAutograph",
+        identityDigest,
+      ),
+    ).toThrow("identity did not match");
+  });
+
+  it("rejects credential input beyond the closed bound", () => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-ghcr-input-")),
+    );
+    const path = join(root, "oversized-input");
+    writeFileSync(path, "x".repeat(4097), { mode: 0o600 });
+    const descriptor = openSync(path, "r");
+    try {
+      expect(() => readBoundedInput(descriptor, 4096)).toThrow(
+        "exceeded the closed size limit",
+      );
+    } finally {
+      closeSync(descriptor);
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("checks credential drift inside Docker's actual get helper", () => {
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-ghcr-bound-helper-")),
+    );
+    const helper = join(root, "docker-credential-ghcr-login");
+    const secretPath = join(root, "secret");
+    const marker = join(root, "invoked");
+    const approved = "github_pat_exact_private_package_token";
+    writeFileSync(secretPath, approved, { mode: 0o600 });
+    writeFileSync(
+      helper,
+      `#!/bin/sh\n: > '${marker}'\nvalue=$(/bin/cat '${secretPath}')\nprintf '{"ServerURL":"https://ghcr.io","Username":"withAutograph","Secret":"%s"}\\n' "$value"\n`,
+      { mode: 0o700 },
+    );
+    const environment = {
+      ...process.env,
+      APP_BUILDER_IMAGE_GHCR_HELPER_BIN: helper,
+      APP_BUILDER_GHCR_HELPER_SHA256: hashArtifact(readFileSync(helper)),
+      APP_BUILDER_GHCR_USERNAME: "withAutograph",
+      APP_BUILDER_GHCR_IDENTITY_DIGEST: ghcrIdentityDigest(
+        "withAutograph",
+        Buffer.from(approved),
+      ),
+    };
+    const verifierModule = join(
+      process.cwd(),
+      "lib/image/ghcr-bound-helper.ts",
+    );
+    const invoke = (input: string) =>
+      spawnSync(
+        process.execPath,
+        ["--experimental-strip-types", verifierModule, "get"],
+        { encoding: "utf8", env: environment, input },
+      );
+    try {
+      const oversized = invoke("x".repeat(257));
+      expect(oversized.status).not.toBe(0);
+      expect(existsSync(marker)).toBe(false);
+
+      const accepted = invoke("ghcr.io\n");
+      expect(accepted.status).toBe(0);
+      expect(accepted.stdout).toContain(approved);
+      expect(existsSync(marker)).toBe(true);
+
+      writeFileSync(secretPath, "github_pat_rotated_private_package_token", {
+        mode: 0o600,
+      });
+      const drifted = invoke("ghcr.io\n");
+      expect(drifted.status).not.toBe(0);
+      expect(drifted.stdout).toBe("");
+      expect(drifted.stderr).toContain("drifted after approval");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   it("sends no Builder workspace files through the default build context", () => {
