@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Run the Next application locally"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/next/dist/bin/next dev "$@"

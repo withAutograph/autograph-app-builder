@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Configure derived client manifests for an approved origin"
-set -euo pipefail
+set -eu
 
-exec "$(mise which node)" --import tsx scripts/configure-template.mts "$@"
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/configure-template.mts "$@"

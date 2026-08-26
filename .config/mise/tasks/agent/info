@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Inspect the Eve agent definition"
-set -euo pipefail
+set -eu
 
-exec "$(mise which node)" node_modules/eve/bin/eve.js info
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" node_modules/eve/bin/eve.js info

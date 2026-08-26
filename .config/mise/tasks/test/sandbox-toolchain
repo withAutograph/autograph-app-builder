@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Prove the pinned sandbox toolchain through Eve"
-set -euo pipefail
+set -eu
 
 node_bin="$(mise which node)"
-export APP_BUILDER_TEST_MODEL=1
+launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
 export APP_BUILDER_REAL_SANDBOX=1
-exec "$node_bin" node_modules/eve/bin/eve.js eval sandbox-toolchain --strict --skip-report
+exec "$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts sandbox-toolchain --strict --skip-report

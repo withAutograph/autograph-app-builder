@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
+import { hasTestCapability } from "../testing/test-capability";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
@@ -132,7 +133,7 @@ export function targetExecutionBinding(
   cache: ObservedDependencyCache,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  if (environment.APP_BUILDER_TEST_MODEL === "1")
+  if (hasTestCapability("simulated-target", environment))
     return {
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
       dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
@@ -152,9 +153,7 @@ export function targetExecutionBinding(
 
 type SourceFile = { path: string };
 
-const fixturePlanningEnabled = () =>
-  process.env.APP_BUILDER_TEST_MODEL === "1" &&
-  process.env.APP_BUILDER_REAL_SANDBOX !== "1";
+const fixturePlanningEnabled = () => hasTestCapability("simulated-target");
 
 export async function materializePlanningOverlay(input: {
   sandbox: SandboxSession;

@@ -5,6 +5,7 @@ import {
   productionFreshBootstrapCapability,
   type FreshBootstrapFaultHooks,
 } from "@/lib/repository/node-fresh-bootstrap";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 type FreshBootstrapTestContext = {
   capability: FreshBootstrapCapability;
@@ -40,7 +41,7 @@ export function currentFreshBootstrapTestHooks():
 export function configuredFreshBootstrapEvalHooks():
   FreshBootstrapFaultHooks | undefined {
   if (
-    process.env.APP_BUILDER_TEST_MODEL !== "1" ||
+    !hasTestCapability("simulated-publication") ||
     process.env.APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT !== "after-stage"
   )
     return undefined;

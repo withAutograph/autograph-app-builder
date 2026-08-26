@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Build the derived OpenAI client package"
-set -euo pipefail
+set -eu
 
-exec "$(mise which node)" --import tsx scripts/build-openai-package.mts
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/build-openai-package.mts

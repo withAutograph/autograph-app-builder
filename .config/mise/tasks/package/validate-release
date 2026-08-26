@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Validate install-ready Agent Plugins release configuration"
-set -euo pipefail
+set -eu
 
-exec "$(mise which node)" --import tsx scripts/validate-plugin.mts --release
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/validate-plugin.mts --release

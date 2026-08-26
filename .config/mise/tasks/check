@@ -1,11 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Run the complete repository validation with the pinned Node runtime"
-set -euo pipefail
+set -eu
 
-node_bin="$(mise which node)"
-
-"$node_bin" node_modules/prettier/bin/prettier.cjs --check .
-"$node_bin" node_modules/eslint/bin/eslint.js .
-"$node_bin" node_modules/typescript/bin/tsc --noEmit
-"$node_bin" node_modules/vitest/vitest.mjs run
-"$node_bin" --import tsx scripts/validate-plugin.mts
+mise run format-check
+mise run lint
+mise run typecheck
+mise run test:unit
+mise run package:validate

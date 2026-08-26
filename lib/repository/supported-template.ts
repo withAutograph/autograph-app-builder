@@ -9,6 +9,7 @@ import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
+import { hasTestCapability } from "../testing/test-capability";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
@@ -100,7 +101,7 @@ function git(path: string, args: string[]): string {
 function allowedRoots(): string[] {
   const value = process.env.REPOSITORY_LOCAL_ROOTS;
   if (value === undefined || value.trim() === "") {
-    if (process.env.APP_BUILDER_TEST_MODEL === "1") return [tmpdir()];
+    if (hasTestCapability("simulated-target")) return [tmpdir()];
     throw new Error(
       "REPOSITORY_LOCAL_ROOTS must name at least one allowed local source root.",
     );
@@ -286,9 +287,7 @@ const sandboxSourceArchivePath = ".app-builder/source-tree.tar";
 const sandboxOperationTimeoutMs = 120_000;
 const sandboxOperationOutputBytes = 262_144;
 
-const fixtureSandboxEnabled = () =>
-  process.env.APP_BUILDER_TEST_MODEL === "1" &&
-  process.env.APP_BUILDER_REAL_SANDBOX !== "1";
+const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
 type PreparedSourceFile = {
   mode: "100644" | "100755";
@@ -432,7 +431,7 @@ async function verifyPreparedSandboxWorkspace(
         path: `repository/${file.path}`,
       });
       if (content === null || sha256(content) !== file.sha256)
-        throw new Error(`Prepared workspace file drifted: ${file.path}`);
+        throw new Error("A prepared workspace file drifted or is missing.");
     }
     return;
   }
@@ -562,6 +561,12 @@ export async function prepareSupportedSandboxWorkspace(
     force: true,
   });
   if (fixtureSandboxEnabled()) {
+    await ensureSandboxDirectories(
+      sandbox,
+      sourceFiles.map(
+        ({ path }) => `repository/${path.split("/").slice(0, -1).join("/")}`,
+      ),
+    );
     for (const entry of sourceFiles) {
       await sandbox.writeBinaryFile({
         path: `repository/${entry.path}`,

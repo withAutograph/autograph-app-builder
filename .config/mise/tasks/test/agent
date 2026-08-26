@@ -1,21 +1,20 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Run the complete deterministic Eve evaluation suite"
-set -euo pipefail
+set -eu
 
 node_bin="$(mise which node)"
-eve_entry="node_modules/eve/bin/eve.js"
+launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
+eval_runner="scripts/run-eve-eval.mts"
 
-APP_BUILDER_TEST_MODEL=1 \
 APP_BUILDER_LOCAL_PUBLICATION=1 \
 APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1 \
-  "$node_bin" "$eve_entry" eval \
+  "$launcher" "$node_bin" --import tsx "$eval_runner" \
     --exclude-tag disabled-local-publication \
     --exclude-tag fresh-bootstrap-publication \
     --strict --skip-report
 
 mise run test:fresh-bootstrap-evals
 
-APP_BUILDER_TEST_MODEL=1 \
 APP_BUILDER_LOCAL_PUBLICATION=0 \
 APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1 \
-  exec "$node_bin" "$eve_entry" eval --tag disabled-local-publication --strict --skip-report
+  exec "$launcher" "$node_bin" --import tsx "$eval_runner" --tag disabled-local-publication --strict --skip-report

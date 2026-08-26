@@ -25,6 +25,7 @@ import {
   fixtureValidationCommandExecutor,
   sandboxValidationCommandExecutor,
 } from "@/lib/repository/target-validation";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
@@ -58,9 +59,7 @@ export default defineTool({
       revision: current.appSpec.artifactRevision,
       sessionId: ctx.session.id,
     });
-    const fixture =
-      process.env.APP_BUILDER_TEST_MODEL === "1" &&
-      process.env.APP_BUILDER_REAL_SANDBOX !== "1";
+    const fixture = hasTestCapability("simulated-target");
     const attempt =
       current.phase === "applied"
         ? createTargetValidationAttempt(current.applyReceipt, ctx.callId)

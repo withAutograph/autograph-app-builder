@@ -2,6 +2,7 @@ import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
 import { sha256 } from "@/lib/agent/workflow-state";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
@@ -1247,10 +1248,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
 });
 
 export default defineAgent({
-  model:
-    process.env.APP_BUILDER_TEST_MODEL === "1"
-      ? testModel
-      : "openai/gpt-5.6-terra",
+  model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-terra",
   modelContextWindowTokens: 128_000,
   reasoning: "high",
   limits: {

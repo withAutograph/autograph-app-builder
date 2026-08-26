@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Run Eve locally without repository publication capabilities"
-set -euo pipefail
+set -eu
 
-exec "$(mise which node)" node_modules/eve/bin/eve.js dev
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" node_modules/eve/bin/eve.js dev

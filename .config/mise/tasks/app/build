@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Build the complete Eve and Next application"
-set -euo pipefail
+set -eu
 
 mise run agent:build
-exec "$(mise which node)" node_modules/next/dist/bin/next build --webpack
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" node_modules/next/dist/bin/next build --webpack

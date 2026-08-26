@@ -3,6 +3,7 @@ import type {
   AppCreationProposal,
 } from "./workflow-state";
 import type { SandboxSession } from "eve/sandbox";
+import { hasTestCapability } from "../testing/test-capability";
 
 import {
   assertExactDependencyTargetBinding,
@@ -137,9 +138,7 @@ export async function inspectTargetExecutionReadiness(input: {
     throw new Error(
       "The prepared workspace receipt changed before execution readiness.",
     );
-  const fixture =
-    environment.APP_BUILDER_TEST_MODEL === "1" &&
-    environment.APP_BUILDER_REAL_SANDBOX !== "1";
+  const fixture = hasTestCapability("simulated-target", environment);
   const tools = fixture
     ? commands.map((command) => ({
         command,

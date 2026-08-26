@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Run the complete CI contract through repository-owned tasks"
-set -euo pipefail
+set -eu
 
 mise run dependencies:install
 mise run check

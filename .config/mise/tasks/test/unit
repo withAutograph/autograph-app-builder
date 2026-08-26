@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Run repository unit tests with brokered structural test authority"
+set -eu
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx scripts/run-vitest.mts run "$@"

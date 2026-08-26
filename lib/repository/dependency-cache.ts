@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
+import { hasTestCapability } from "../testing/test-capability";
 
 export const ARRUSTED_TARGET_SHA = "e4e76f52a365c6b8da2f84698b38844f26a31750";
 export const ARRUSTED_TARGET_TREE = "7244f79f2ec523d0269fda6a9b59a1067bd723f8";
@@ -119,9 +120,7 @@ const sha256 = (value: string) =>
 
 const fixtureDependencyCacheEnabled = (
   environment: Readonly<Record<string, string | undefined>>,
-) =>
-  environment.APP_BUILDER_TEST_MODEL === "1" &&
-  environment.APP_BUILDER_REAL_SANDBOX !== "1";
+) => hasTestCapability("simulated-target", environment);
 
 function boundedOutput(stdout: string, stderr: string, label: string) {
   if (

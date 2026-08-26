@@ -88,8 +88,28 @@ Before enabling GitHub or hosted repository publication:
    The implemented fixed target identity and planning operation then uses a
    builder-owned overlay, bounded execution, strict output schemas, and durable
    receipts. Real execution still requires both the immutable image and a
-   matching durable dependency-preparation receipt; fixture tests execute no
-   Arrusted command. The read-only pre-plan workspace readiness receipt binds the
+   matching durable dependency-preparation receipt. Named mise test tasks inject
+   a process-scoped structural capability for fixture execution only after a
+   non-Node launcher rejects ambient `NODE_OPTIONS`, replaces the Node child
+   environment with an explicit allowlist, and a wrapper-owned root key plus
+   one-shot private IPC challenge succeeds. Pre-exec dynamic-loader influence on
+   the launcher itself remains an operating-system/parent-process trust boundary.
+   The non-Node launcher remains the wrapper parent. The wrapper verifies exact
+   launcher executable, source digest, cwd, and tokenized argv before creating a
+   key; the registry separately accepts only exact launcher-root wrapper argv
+   tokens and binds the inherited key. No test protocol fixture is an accepted
+   authority parent. A non-authorizing pure harness verifies bounded complete
+   frames, exact counts, backpressure, and terminal closure. The registry brands
+   only that authorized capability for the process lifetime after the signed
+   proof is consumed. Linux uses `/proc`; macOS exact process inspection requires
+   the approved local boundary and fails closed in an ordinary Codex sandbox.
+   Exact supported workers
+   derive fresh one-shot proofs from that authorized parent broker;
+   arbitrary Node, shell, and worker descendants do not. An ambient tracked
+   preload, copied flags, a self-created channel, or a forged public symbol cannot select simulated
+   target or publication behavior. Vitest and Eve use the same broker. The real
+   sandbox proof is structurally denied those capabilities. Fixture tests
+   execute no Arrusted command. The read-only pre-plan workspace readiness receipt binds the
    prepared source/workspace receipts to the immutable toolchain observation.
    The implemented proposal-bound apply-readiness receipt adds the exact
    proposal digest. Neither executes a target command or authorizes apply.

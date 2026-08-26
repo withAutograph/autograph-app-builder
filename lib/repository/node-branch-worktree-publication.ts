@@ -40,6 +40,7 @@ import {
   type BranchWorktreePublicationProposal,
   type BranchWorktreePublicationSuccessReceipt,
 } from "./branch-worktree-publication";
+import { hasTestCapability } from "../testing/test-capability";
 import {
   contentDigest,
   stableDigest,
@@ -226,7 +227,7 @@ function parseCanonicalPathList(output: Buffer, message: string): string[] {
 function publicationRoot(): string {
   const configured = process.env.APP_BUILDER_BRANCH_WORKTREE_ROOT;
   const testRoot =
-    configured === undefined && process.env.APP_BUILDER_TEST_MODEL === "1"
+    configured === undefined && hasTestCapability("simulated-publication")
       ? resolve(
           realpathSync(tmpdir()),
           "autograph-app-builder-branch-publication",

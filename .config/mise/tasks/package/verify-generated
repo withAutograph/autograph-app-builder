@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #MISE description="Verify committed derived client manifests are current"
-set -euo pipefail
+set -eu
 
 exec git diff --exit-code -- .codex-plugin/plugin.json .app.json

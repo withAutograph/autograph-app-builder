@@ -76,7 +76,7 @@ describe("offline dependency cache", () => {
     };
     const cache = await inspectDependencyCache(
       {} as SandboxSession,
-      { APP_BUILDER_TEST_MODEL: "1" },
+      process.env,
       target,
     );
 
@@ -102,7 +102,7 @@ describe("offline dependency cache", () => {
     };
     const cache = await inspectDependencyCache(
       {} as SandboxSession,
-      { APP_BUILDER_TEST_MODEL: "1" },
+      process.env,
       target,
     );
 

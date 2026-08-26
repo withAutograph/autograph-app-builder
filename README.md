@@ -190,6 +190,32 @@ template manifest.
 - A loopback-only local MCP-to-Eve adapter.
 - Deterministic unit tests and Eve evals that drive the real HTTP session
   surface with a fixture model, including approval and cancellation paths.
+  A non-Node trusted launcher rejects ambient `NODE_OPTIONS` and replaces the
+  child environment with an explicit allowlist before every supported mise task
+  can start the pinned Node or pnpm executable. Dynamic-loader influence before
+  `/bin/sh` begins remains an operating-system and parent-process trust boundary;
+  the launcher does not claim to sanitize its own already-started process. The
+  named test tasks then keep the non-Node launcher alive as the wrapper's parent
+  and mint a process-scoped structural capability only after the wrapper has
+  verified the launcher's exact executable, source digest, cwd, and tokenized
+  argv. A wrapper-owned public key is delivered over inherited private IPC and
+  a signed, one-shot challenge is consumed. The registry also verifies an exact
+  supported launcher-root wrapper parent argv before binding that key. The
+  protocol fixture has no authorization path; a separate non-authorizing
+  harness proves 4096-byte frame limits, exact frame counts, terminal closure,
+  and stream backpressure. Only exact supported Eve,
+  Vitest, and harness worker entrypoints receive fresh signed one-shot proofs;
+  arbitrary Node, shell, and worker descendants inherit no reusable authority. A
+  module-private registry brands the capability for the authorized process
+  lifetime after consuming the proof. Importing the tracked preload, copying
+  its environment flags, creating a MessageChannel, or
+  forging the former public symbol does not enable a fixture path. The real
+  sandbox proof receives only the fixture-model capability, so target and
+  publication simulation remain fail-closed while the pinned image is observed.
+  Linux lineage inspection uses `/proc`. macOS uses fixed, isolated OS tooling
+  to read exact process arguments and cwd; Codex's ordinary sandbox blocks that
+  inspection, so the macOS lineage proof is intentionally an approved local
+  test boundary and fails closed without that access.
 
 ## Portable plugin package
 
@@ -202,7 +228,7 @@ locations:
 - `skills/` contains portable Agent Skills;
 - `mcp.json` declares the Streamable HTTP MCP server; and
 - `schemas/agent-plugins/1.0.0/` vendors the canonical versioned schemas used by
-  `pnpm validate:plugin`.
+  `mise run package:validate`.
 
 Build the client-neutral installable directory with:
 
@@ -254,6 +280,12 @@ To inspect the fixed tool allowlist through Eve's real sandbox backend:
 ```bash
 mise run test:sandbox-toolchain
 ```
+
+Use the named mise tasks for these eval lanes. The internal preload and eval
+wrapper are not supported entrypoints and do not create a second runtime mode.
+The same rule applies to local, build, package, and unit-test operations: the
+named task is the supported boundary because its non-Node launcher rejects
+ambient Node options before the pinned runtime starts.
 
 The inspection is observational and remains not-ready unless an externally
 built, preloaded OCI image is configured through

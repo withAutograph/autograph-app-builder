@@ -117,9 +117,7 @@ describe("typed target identity and planning", () => {
         artifactRevision: "b".repeat(64),
       }),
     ).rejects.toThrow("invalid shape");
-    const cache = await inspectDependencyCache(sandbox, {
-      APP_BUILDER_TEST_MODEL: "1",
-    });
+    const cache = await inspectDependencyCache(sandbox, process.env);
     expect(() => targetExecutionBinding(cache, {})).toThrow(
       "offline dependency cache",
     );
