@@ -41,23 +41,25 @@ and proof calls therefore cannot dispatch the same external operation twice.
 Verify sources, build, inspect the immutable local image identity, publish, and
 read back the GHCR manifest in this order:
 
-Match credentials only after separate publication approval. Supply a package
-token through bounded standard input; it is never accepted in a command
-argument or environment variable, and the resulting receipt contains only the
-public registry, username, provider version, identity digest, and input
-transport. The pinned GHCR helper uses only Docker's `get` protocol, and the
-task fail-closed compares that identity with the stdin token. The underlying
-GitHub helper may validate or refresh GitHub OAuth state while resolving the
-credential, so running this approved phase is the authority for that bounded
-authentication side effect; the receipt does not claim a registry request.
-It does not call `docker login`, because the pinned helper intentionally does
-not implement Docker's credential `store` operation. Later push and read-back
-commands independently use the same exact provider through an
-identity-verifying wrapper and the lifecycle-owned `DOCKER_CONFIG`; ambient
-Docker configuration is never publication authority. The actual Docker `get`
-call refuses a changed account or package token before publication. The helper,
-wrapper, verifier module, Node runtime, platform, and closed Docker
-configuration are digest-bound into the login and publication receipts.
+Match credentials only after separate publication approval. Supply the approved
+package token once through bounded standard input. The task compares it directly
+and in constant time with the credential read from the existing GitHub CLI
+keyring; neither token is accepted from an argument or environment variable.
+The pinned `gh` 2.98.0 status must name one active keyring-backed identity with
+`write:packages`, and read-only API evidence must bind that identity to the
+`withAutograph` namespace. The command never starts login, OAuth, refresh, or a
+Docker credential-store operation. It records only public identity and
+provenance-domain digests, the closed provider boundary, and the fact that the
+operator approval arrived by one-time standard input.
+
+Later push and read-back commands re-read the same credential from the pinned
+GitHub CLI keyring. A lifecycle-owned Docker `get` helper sends credential JSON
+to the exact digest-bound Docker or Buildx process through an in-memory pipe;
+it never places the token in argv, a child environment, a receipt, or a file.
+Ambient GitHub and Docker configuration is not publication authority. GitHub
+CLI, its no-plaintext-token configuration digest, Docker, Buildx, the wrapper,
+verifier module, Node runtime, platform, and closed Docker configuration are
+all bound into the login and publication receipts.
 
 ```bash
 mise run image:login -- --arrusted-root /absolute/path/to/standalone-arrusted \
@@ -68,9 +70,11 @@ mise run image:login -- --arrusted-root /absolute/path/to/standalone-arrusted \
   --username REPLACE_WITH_GITHUB_LOGIN
 ```
 
-Type or paste the token only at the command's standard-input prompt. Do not
-place it in a shell history, receipt, or environment export. The
-subsequent push requires the matching local login receipt, while remote
+Type or paste the token only for the first exact receipt at the command's
+standard input. An idempotent retry reuses that closed receipt without reading
+stdin or contacting GitHub. Do not place the token in shell history, a receipt,
+an environment export, or `hosts.yml`. The
+subsequent push requires the matching keyring-bound login receipt, while remote
 inspection independently reads back the published manifest, config, layers,
 platform, and OCI provenance.
 
