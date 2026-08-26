@@ -6,18 +6,10 @@ import { isAbsolute } from "node:path";
 import {
   inspectSupportedRepository,
   SUPPORTED_TEMPLATE_ADAPTER,
+  SUPPORTED_TEMPLATE_INPUT_PATHS,
 } from "./supported-template";
 
 export type SourceKind = "existing-repository" | "fresh-template";
-
-const contractPaths = [
-  ".config/mise/config.toml",
-  ".github/workflows/cd.yml",
-  ".config/mise/scripts/repository/app-contract.ts",
-  ".config/mise/scripts/repository/repository-preflight.ts",
-  ".config/mise/scripts/repository/repository-release-gate.sh",
-  ".config/turbo/generators/config.ts",
-] as const;
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
@@ -84,7 +76,7 @@ export function inspectSourceContractDigest(
   sourcePath: string,
   sourceSha: string,
 ): string {
-  const contract = contractPaths.map((contractPath) => {
+  const contract = SUPPORTED_TEMPLATE_INPUT_PATHS.map((contractPath) => {
     const entry = fixedGit(
       sourcePath,
       ["ls-tree", sourceSha, "--", contractPath],
@@ -122,6 +114,11 @@ export type SourceReceiptEvidence = {
   eligibilityDigest: string;
   /** Stable digest of the supported-template contract at the reviewed SHA. */
   contractDigest: string;
+  /**
+   * The exported Git tree carries no enabled release state. The local V0
+   * adapter does not inspect repository-hosted variables, so this is not
+   * evidence about an existing GitHub repository's current release setting.
+   */
   releaseEnabled: false;
   digest: string;
 };

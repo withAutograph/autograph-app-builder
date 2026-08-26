@@ -14,9 +14,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import {
+  inspectSupportedTemplateDependencyClosure,
   inspectPreparedSandboxWorkspace,
   inspectSupportedRepository,
   prepareSupportedSandboxWorkspace,
+  SUPPORTED_TEMPLATE_DEPENDENCY_PATHS,
 } from "./supported-template";
 import {
   inspectSourceReceipt,
@@ -27,6 +29,22 @@ import {
 
 const previousRoots = process.env.REPOSITORY_LOCAL_ROOTS;
 const previousWorkspaceRoot = process.env.REPOSITORY_WORKSPACE_ROOT;
+
+function fixtureGit(root: string, args: string[]): void {
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "core.excludesfile=/dev/null",
+      "-c",
+      "commit.gpgsign=false",
+      ...args,
+    ],
+    { cwd: root, env: { ...process.env, HK: "0" } },
+  );
+}
 
 afterEach(() => {
   if (previousRoots === undefined) delete process.env.REPOSITORY_LOCAL_ROOTS;
@@ -54,14 +72,27 @@ function fixture(): string {
     ].join("\n"),
     ".github/workflows/cd.yml": [
       "jobs:",
-      "  release-gate:",
-      "    name: Authorize (Repository release gate)",
-      "    permissions:",
-      "      actions: read",
+      "  template-safety:",
+      "    name: Authorize (Template instance safety)",
+      "    permissions: {}",
+      "    outputs:",
+      "      enabled: ${{ steps.safety.outputs.enabled }}",
       "    steps:",
-      "      - run: REPOSITORY_RELEASE_ENABLED",
-      "  preflight:",
-      "    if: needs.release-gate.outputs.enabled == 'true'",
+      "      - id: safety",
+      "        name: Read active repository safety flag",
+      "        env:",
+      "          REPOSITORY_RELEASE_ENABLED: ${{ vars.REPOSITORY_RELEASE_ENABLED }}",
+      "        run: |",
+      "          set -euo pipefail",
+      '          value="$REPOSITORY_RELEASE_ENABLED"',
+      "          enabled=false",
+      '          if [[ "$value" == "true" ]]; then',
+      "            enabled=true",
+      "          fi",
+      '          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"',
+      "  scope:",
+      "    needs: template-safety",
+      "    if: needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository",
     ].join("\n"),
     "apps/shell/microfrontends.json": "{}\n",
     ".config/mise/scripts/repository/app-contract.ts":
@@ -76,10 +107,6 @@ function fixture(): string {
       'const preflight = "mise run repository:preflight";',
       'const validation = ["mise run check", "mise run test"];',
     ].join("\n"),
-    ".config/mise/scripts/repository/repository-release-gate.sh": [
-      'gh api "repos/$GITHUB_REPOSITORY/actions/variables/REPOSITORY_RELEASE_ENABLED"',
-      'if [[ "$value" == "true" ]]; then',
-    ].join("\n"),
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":
@@ -90,25 +117,19 @@ function fixture(): string {
     mkdirSync(join(absolute, ".."), { recursive: true });
     writeFileSync(absolute, content);
   }
-  execFileSync("git", ["init", "-b", "main"], { cwd: root });
-  execFileSync("git", ["add", "--", ...Object.keys(files)], { cwd: root });
-  execFileSync(
-    "git",
-    [
-      "-c",
-      "user.name=Test",
-      "-c",
-      "user.email=test@example.com",
-      "-c",
-      "commit.gpgsign=false",
-      "commit",
-      "-m",
-      "fixture",
-    ],
-    {
-      cwd: root,
-    },
-  );
+  fixtureGit(root, ["init", "-b", "main"]);
+  fixtureGit(root, ["add", "--", ...Object.keys(files)]);
+  fixtureGit(root, [
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.com",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "-m",
+    "fixture",
+  ]);
   return root;
 }
 
@@ -215,6 +236,57 @@ function fakeSandbox({
 }
 
 describe("supported-template adapter", () => {
+  it("declares a complete immutable inspection entrypoint closure", () => {
+    expect(SUPPORTED_TEMPLATE_DEPENDENCY_PATHS).toEqual([
+      ".config/mise/config.toml",
+      ".config/mise/mise.lock",
+      ".config/mise/scripts/trusted-node-launcher",
+      ".config/mise/tasks/source/inspect",
+      "lib/repository/sandbox-filesystem.ts",
+      "lib/repository/source-path.ts",
+      "lib/repository/source-receipt.ts",
+      "lib/repository/supported-template.ts",
+      "lib/testing/test-capability.ts",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/inspect-source-receipt.mts",
+      "tsconfig.json",
+    ]);
+    const repositoryRoot = resolve(import.meta.dirname, "../..");
+    const closureRoot = mkdtempSync(join(tmpdir(), "adapter-closure-"));
+    for (const path of SUPPORTED_TEMPLATE_DEPENDENCY_PATHS) {
+      const destination = join(closureRoot, path);
+      mkdirSync(resolve(destination, ".."), { recursive: true });
+      writeFileSync(destination, readFileSync(join(repositoryRoot, path)));
+    }
+    fixtureGit(closureRoot, ["init", "-b", "main"]);
+    fixtureGit(closureRoot, [
+      "add",
+      "--",
+      ...SUPPORTED_TEMPLATE_DEPENDENCY_PATHS,
+    ]);
+    fixtureGit(closureRoot, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "closure fixture",
+    ]);
+    const closure = inspectSupportedTemplateDependencyClosure(closureRoot);
+    expect(closure.files.map(({ path }) => path)).toEqual([
+      ...SUPPORTED_TEMPLATE_DEPENDENCY_PATHS,
+    ]);
+    expect(
+      closure.files.every(({ sha256 }) => /^[0-9a-f]{64}$/u.test(sha256)),
+    ).toBe(true);
+    expect(closure.digest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
   it("keeps canonical eligibility stable across physical source paths", async () => {
     const firstRoot = fixture();
     const secondRoot = cloneFixture(firstRoot);
@@ -236,22 +308,18 @@ describe("supported-template adapter", () => {
     process.env.REPOSITORY_LOCAL_ROOTS = shaRoot;
     const beforeSha = await inspectSupportedRepository(shaRoot);
     writeFileSync(join(shaRoot, "README.md"), "advance source\n");
-    execFileSync("git", ["add", "README.md"], { cwd: shaRoot });
-    execFileSync(
-      "git",
-      [
-        "-c",
-        "user.name=Test",
-        "-c",
-        "user.email=test@example.com",
-        "-c",
-        "commit.gpgsign=false",
-        "commit",
-        "-m",
-        "advance fixture",
-      ],
-      { cwd: shaRoot },
-    );
+    fixtureGit(shaRoot, ["add", "README.md"]);
+    fixtureGit(shaRoot, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "advance fixture",
+    ]);
     const afterSha = await inspectSupportedRepository(shaRoot);
     expect(afterSha.sourceSha).not.toBe(beforeSha.sourceSha);
     expect(afterSha.dirtyPaths).toEqual(beforeSha.dirtyPaths);
@@ -300,6 +368,38 @@ describe("supported-template adapter", () => {
     await expect(inspectSourceReceipt("fresh-template", root)).resolves.toEqual(
       fresh,
     );
+  });
+
+  it("rebinds receipt evidence when an eligible normalized input changes", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const before = await inspectSourceReceipt("existing-repository", root);
+    const misePath = join(root, ".config/mise/config.toml");
+    writeFileSync(
+      misePath,
+      `${readFileSync(misePath, "utf8")}\n[tasks."unrelated:check"]\ndescription = "Additional repository check"\nrun = "true"\n`,
+    );
+    fixtureGit(root, ["add", "--", ".config/mise/config.toml"]);
+    fixtureGit(root, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "advance eligible input",
+    ]);
+
+    const eligibility = await inspectSupportedRepository(root);
+    const after = await inspectSourceReceipt("existing-repository", root);
+    expect(eligibility.eligible).toBe(true);
+    expect(after.sourceSha).not.toBe(before.sourceSha);
+    expect(after.sourceTree).not.toBe(before.sourceTree);
+    expect(after.eligibilityDigest).not.toBe(before.eligibilityDigest);
+    expect(after.contractDigest).not.toBe(before.contractDigest);
+    expect(after.digest).not.toBe(before.digest);
   });
 
   it("keeps source evidence reproducible across physical checkout paths", async () => {
@@ -539,22 +639,18 @@ describe("supported-template adapter", () => {
     process.env.REPOSITORY_LOCAL_ROOTS = root;
     const eligibility = await inspectSupportedRepository(root);
     writeFileSync(join(root, "README.md"), "new commit\n");
-    execFileSync("git", ["add", "README.md"], { cwd: root });
-    execFileSync(
-      "git",
-      [
-        "-c",
-        "user.name=Test",
-        "-c",
-        "user.email=test@example.com",
-        "-c",
-        "commit.gpgsign=false",
-        "commit",
-        "-m",
-        "advance fixture",
-      ],
-      { cwd: root },
-    );
+    fixtureGit(root, ["add", "README.md"]);
+    fixtureGit(root, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "advance fixture",
+    ]);
     await expect(
       prepareSupportedSandboxWorkspace(
         root,
@@ -614,7 +710,7 @@ describe("supported-template adapter", () => {
     const root = fixture();
     writeFileSync(
       join(root, ".github/workflows/cd.yml"),
-      "jobs:\n  release-gate:\n    name: something else\n",
+      "jobs:\n  template-safety:\n    name: something else\n",
     );
     process.env.REPOSITORY_LOCAL_ROOTS = root;
     const eligibility = await inspectSupportedRepository(root);

@@ -6,6 +6,7 @@ import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 
 import type { SandboxSession } from "eve/sandbox";
+import { parse as parseYaml } from "yaml";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
@@ -13,17 +14,38 @@ import { hasTestCapability } from "../testing/test-capability";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
-const requiredPaths = [
+export const SUPPORTED_TEMPLATE_INPUT_PATHS = [
   ".config/mise/config.toml",
   ".github/workflows/cd.yml",
   "apps/shell/microfrontends.json",
   ".config/mise/scripts/repository/app-contract.ts",
   ".config/mise/scripts/repository/app-identity.ts",
   ".config/mise/scripts/repository/repository-preflight.ts",
-  ".config/mise/scripts/repository/repository-release-gate.sh",
   ".config/turbo/generators/config.ts",
   ".config/turbo/generators/create-app.ts",
   ".config/turbo/generators/templates/app/next.config.ts.hbs",
+] as const;
+
+/**
+ * Closed repository-owned dependency set for the non-executing source
+ * inspection entrypoint. Node built-ins are platform inputs; package.json,
+ * pnpm-lock.yaml, and the mise lock bind all external packages and tools.
+ */
+export const SUPPORTED_TEMPLATE_DEPENDENCY_PATHS = [
+  ".config/mise/config.toml",
+  ".config/mise/mise.lock",
+  ".config/mise/scripts/trusted-node-launcher",
+  ".config/mise/tasks/source/inspect",
+  "lib/repository/sandbox-filesystem.ts",
+  "lib/repository/source-path.ts",
+  "lib/repository/source-receipt.ts",
+  "lib/repository/supported-template.ts",
+  "lib/testing/test-capability.ts",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "scripts/inspect-source-receipt.mts",
+  "tsconfig.json",
 ] as const;
 
 const expectedCommands = {
@@ -64,6 +86,20 @@ function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+type DependencyFile = {
+  path: (typeof SUPPORTED_TEMPLATE_DEPENDENCY_PATHS)[number];
+  mode: "100644" | "100755";
+  objectId: string;
+  sha256: string;
+};
+
+export type SupportedTemplateDependencyClosure = {
+  commit: string;
+  tree: string;
+  files: DependencyFile[];
+  digest: string;
+};
+
 function git(path: string, args: string[]): string {
   const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
   return execFileSync(
@@ -96,6 +132,126 @@ function git(path: string, args: string[]): string {
       },
     },
   ).trim();
+}
+
+function gitBytes(path: string, args: string[]): Buffer {
+  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+  return execFileSync(
+    executable,
+    [
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "core.attributesfile=/dev/null",
+      "-c",
+      "credential.helper=",
+      "-c",
+      "protocol.allow=never",
+      "-C",
+      path,
+      ...args,
+    ],
+    {
+      encoding: "buffer",
+      env: {
+        NODE_ENV: process.env.NODE_ENV ?? "production",
+        PATH: "/usr/bin:/bin",
+        TMPDIR: "/tmp",
+        HOME: "/dev/null",
+        XDG_CONFIG_HOME: "/dev/null",
+        LANG: "C.UTF-8",
+        LC_ALL: "C.UTF-8",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_NO_LAZY_FETCH: "1",
+        GIT_TERMINAL_PROMPT: "0",
+      },
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 30_000,
+    },
+  );
+}
+
+export function inspectSupportedTemplateDependencyClosure(
+  repositoryRoot: string,
+  commit = "HEAD",
+): SupportedTemplateDependencyClosure {
+  const resolvedCommit = git(repositoryRoot, [
+    "rev-parse",
+    `${commit}^{commit}`,
+  ]);
+  const tree = git(repositoryRoot, ["rev-parse", `${resolvedCommit}^{tree}`]);
+  const files = SUPPORTED_TEMPLATE_DEPENDENCY_PATHS.map((path) => {
+    const entry = git(repositoryRoot, ["ls-tree", resolvedCommit, "--", path]);
+    const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+    if (match === null || match[3] !== path)
+      throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
+    return {
+      path,
+      mode: match[1] as DependencyFile["mode"],
+      objectId: match[2],
+      sha256: sha256(
+        gitBytes(repositoryRoot, ["show", `${resolvedCommit}:${path}`]),
+      ),
+    };
+  });
+  return {
+    commit: resolvedCommit,
+    tree,
+    files,
+    digest: sha256(JSON.stringify(files)),
+  };
+}
+
+function configurationRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+const checkoutFreeReleaseGate = `set -euo pipefail
+value="$REPOSITORY_RELEASE_ENABLED"
+enabled=false
+if [[ "$value" == "true" ]]; then
+  enabled=true
+fi
+echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+`;
+
+function supportsReleaseGate(workflowSource: string): boolean {
+  let workflow: Record<string, unknown>;
+  try {
+    workflow = configurationRecord(parseYaml(workflowSource));
+  } catch {
+    return false;
+  }
+  const jobs = configurationRecord(workflow.jobs);
+  const templateSafety = configurationRecord(jobs["template-safety"]);
+  const scope = configurationRecord(jobs.scope);
+  const steps = Array.isArray(templateSafety.steps) ? templateSafety.steps : [];
+  const safety = configurationRecord(steps[0]);
+  const expectedScopeCondition =
+    "needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository";
+  return (
+    templateSafety.name === "Authorize (Template instance safety)" &&
+    JSON.stringify(templateSafety.permissions) === JSON.stringify({}) &&
+    JSON.stringify(templateSafety.outputs) ===
+      JSON.stringify({ enabled: "${{ steps.safety.outputs.enabled }}" }) &&
+    steps.length === 1 &&
+    safety.id === "safety" &&
+    safety.name === "Read active repository safety flag" &&
+    JSON.stringify(safety.env) ===
+      JSON.stringify({
+        REPOSITORY_RELEASE_ENABLED: "${{ vars.REPOSITORY_RELEASE_ENABLED }}",
+      }) &&
+    safety.run === checkoutFreeReleaseGate &&
+    scope.needs === "template-safety" &&
+    scope.if === expectedScopeCondition
+  );
 }
 
 function allowedRoots(): string[] {
@@ -149,7 +305,7 @@ export async function inspectSupportedRepository(
     failures.push("source is not a readable Git worktree");
   }
 
-  for (const path of requiredPaths) {
+  for (const path of SUPPORTED_TEMPLATE_INPUT_PATHS) {
     if (!existsSync(resolve(sourcePath, path)))
       failures.push(`missing required path ${path}`);
   }
@@ -221,24 +377,7 @@ export async function inspectSupportedRepository(
 
   const cdPath = resolve(sourcePath, ".github/workflows/cd.yml");
   const cd = existsSync(cdPath) ? readFileSync(cdPath, "utf8") : "";
-  const releaseGatePath = resolve(
-    sourcePath,
-    ".config/mise/scripts/repository/repository-release-gate.sh",
-  );
-  const releaseGate = existsSync(releaseGatePath)
-    ? readFileSync(releaseGatePath, "utf8")
-    : "";
-  const declaresReleaseGate = [
-    "name: Authorize (Repository release gate)",
-    "actions: read",
-    "REPOSITORY_RELEASE_ENABLED",
-    "needs.release-gate.outputs.enabled == 'true'",
-  ].every((expected) => cd.includes(expected));
-  const hasCaseSensitiveRepositoryGate = [
-    "repos/$GITHUB_REPOSITORY/actions/variables/REPOSITORY_RELEASE_ENABLED",
-    '[[ "$value" == "true" ]]',
-  ].every((expected) => releaseGate.includes(expected));
-  if (!declaresReleaseGate || !hasCaseSensitiveRepositoryGate)
+  if (!supportsReleaseGate(cd))
     failures.push(
       "REPOSITORY_RELEASE_ENABLED gate is not the supported CD gate",
     );

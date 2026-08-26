@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Export the four app-creation skills deterministically"
+set -eu
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx scripts/export-app-creation-skills.mts "$@"
