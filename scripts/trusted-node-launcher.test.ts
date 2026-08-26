@@ -183,6 +183,29 @@ describe("trusted Node launcher", () => {
     expect(result.stdout).toBe("false");
   });
 
+  it("passes the exact GHCR helper path through the closed environment", () => {
+    const helper = resolve(
+      accountHome,
+      ".local/share/mise/installs/github-bradschwartz-docker-credential-ghcr-login/0.2.0/docker-credential-ghcr-login",
+    );
+    const cleanEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      APP_BUILDER_IMAGE_GHCR_HELPER_BIN: helper,
+    };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(process.env.APP_BUILDER_IMAGE_GHCR_HELPER_BIN ?? '')",
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe(helper);
+  });
+
   it("rejects a trusted wrapper name supplied only as a dummy argv token", () => {
     const cleanEnvironment = { ...process.env };
     delete cleanEnvironment.NODE_OPTIONS;
