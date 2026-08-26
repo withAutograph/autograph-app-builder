@@ -188,6 +188,14 @@ template manifest.
 - Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
   `eve_respond`, and `eve_cancel`.
 - A loopback-only local MCP-to-Eve adapter.
+- A provider-neutral hosted Eve service core with strict request-scoped Bearer
+  and remote-JWKS verification, protected-resource metadata, closed principal
+  and membership boundaries, exact per-operation scopes, a tenant-scoped
+  durable PostgreSQL store adapter, non-replaying idempotency state machine,
+  workload-authenticated HTTPS membership/transport adapters, and public-only
+  projection. The checked-in route remains fail-closed because deployment
+  credentials and runtime composition are intentionally not supplied; see
+  [`docs/hosted-eve-bridge.md`](docs/hosted-eve-bridge.md).
 - Deterministic unit tests and Eve evals that drive the real HTTP session
   surface with a fixture model, including approval and cancellation paths.
   A non-Node trusted launcher rejects ambient `NODE_OPTIONS` and replaces the
@@ -332,6 +340,14 @@ mise run package:validate-release
 ```
 
 Never put bearer tokens or secrets in `mcp.json` or `.app.json`.
+
+Hosted request handling is enabled only with `EVE_HOSTED_ADAPTER=1` and a
+complete request-scoped runtime composition. It never falls back to the local
+adapter. The OAuth resource metadata is served from
+`/.well-known/oauth-protected-resource`; hosted clients send their verified
+workspace selection in `X-Eve-Workspace-Id`. Merely setting environment values
+does not create a database connection, obtain a workload credential, or enable
+the hosted composition.
 
 ## Authority boundary
 

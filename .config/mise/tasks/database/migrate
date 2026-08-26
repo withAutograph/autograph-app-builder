@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Apply the checked-in PostgreSQL migrations"
+set -eu
+
+if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
+  echo "database:migrate requires DATABASE_URL" >&2
+  exit 64
+fi
+
+# The trusted launcher intentionally does not forward DATABASE_URL. Hand the
+# one task-scoped secret to the migration process over a private inherited file
+# descriptor, then close it before any database client is created.
+database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$database_url" | (
+  unset database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx lib/db/migrate.mts \
+    --database-url-fd 3 3<&0 </dev/null
+)

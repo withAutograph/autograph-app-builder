@@ -35,6 +35,9 @@ importers:
       eve:
         specifier: 0.43.0
         version: 0.43.0(ai@7.0.73(zod@4.4.3))(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.1)(microsandbox@0.6.14)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+      jose:
+        specifier: 6.2.9
+        version: 6.2.9
       mcp-handler:
         specifier: 2.1.1
         version: 2.1.1(@modelcontextprotocol/server@2.0.0)(next@16.3.1(@babel/core@7.29.7)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
