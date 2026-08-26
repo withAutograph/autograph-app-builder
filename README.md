@@ -128,7 +128,7 @@ entrypoint. Pre-create two disjoint canonical directories owned by the current
 user with mode `0700`, then start the local builder with:
 
 ```bash
-mise run local:start -- /absolute/builder-state /absolute/destination-root
+mise run local:start -- /absolute/builder-state /absolute/destination-root /absolute/source-repository
 ```
 
 The task owns the runtime configuration boundary; do not export bootstrap
@@ -343,7 +343,10 @@ symlinked, expired, mismatched, or permissive credential file.
 
 For the fresh-bootstrap-capable local lifecycle, pre-create the two owner-only
 roots described above, then run `mise run local:start -- <state-root>
-<destination-root>`. The task supervises Eve on loopback port 2000 and Next.js
+<destination-root> <local-source-root>`. The third argument is one exact,
+canonical, owner-bound existing repository root; it becomes Eve's only local
+source allowlist and is never read from ambient environment. The task
+supervises Eve on loopback port 2000 and Next.js
 on loopback port 3000, and injects the exact same capability and local adapter
 configuration into both children. Run `mise run local:smoke` in another shell
 to verify the real Next health route and invoke the running Eve service. The

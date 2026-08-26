@@ -72,6 +72,10 @@ export function toEveInputResponse(
 const localRequests = new Map<string, string>();
 const localSessionEvents = new Map<string, MessageStreamEvent[]>();
 const localSessionHandles = new Map<string, ClientSession>();
+type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
+  cancel(): Promise<unknown>;
+};
+const localActiveResponses = new Map<string, CancellableResponse>();
 
 function inputRequest(request: {
   requestId: string;
@@ -218,16 +222,21 @@ function acceptedResult(sessionId: string): EveSessionResult {
 
 function consumeResponse(
   sessionId: string,
-  response: AsyncIterable<MessageStreamEvent>,
+  response: CancellableResponse,
 ): void {
   const events = localSessionEvents.get(sessionId) ?? [];
   localSessionEvents.set(sessionId, events);
+  localActiveResponses.set(sessionId, response);
   void (async () => {
     try {
       for await (const event of response) events.push(event);
     } catch {
       // Acceptance is already durable in Eve. A later read or follow-up remains
       // authoritative; a stream failure must never delay the public handle.
+    } finally {
+      if (localActiveResponses.get(sessionId) === response) {
+        localActiveResponses.delete(sessionId);
+      }
     }
   })();
 }
@@ -285,9 +294,14 @@ export function createLocalEveSessionService(
       return acceptedResult(sessionId);
     },
     async cancel({ sessionId, turnId }) {
-      await sessionFor(sessionId).cancel(
-        turnId === undefined ? undefined : { turnId },
-      );
+      const active = localActiveResponses.get(sessionId);
+      if (turnId === undefined && active !== undefined) {
+        await active.cancel();
+      } else {
+        await sessionFor(sessionId).cancel(
+          turnId === undefined ? undefined : { turnId },
+        );
+      }
       return resultForEvents(
         sessionId,
         localSessionEvents.get(sessionId) ?? [],

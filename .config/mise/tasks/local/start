@@ -2,10 +2,42 @@
 #MISE description="Supervise Eve and Next with one exact fresh-bootstrap capability"
 set -eu
 
-if [ "$#" -ne 2 ]; then
-  echo "usage: mise run local:start -- <owner-only-state-root> <owner-only-destination-root>" >&2
+if [ "$#" -ne 3 ]; then
+  echo "usage: mise run local:start -- <owner-only-state-root> <owner-only-destination-root> <local-source-root>" >&2
   exit 64
 fi
+
+source_root=$3
+if [ "${source_root#/}" = "$source_root" ] || [ -L "$source_root" ] || [ ! -d "$source_root" ]; then
+  echo "local:start: source root must be an absolute regular directory" >&2
+  exit 78
+fi
+canonical_source=$(CDPATH= cd -P -- "$source_root" && pwd -P)
+if [ "$canonical_source" != "$source_root" ]; then
+  echo "local:start: source root must be canonical" >&2
+  exit 78
+fi
+case "$(/usr/bin/uname -s)" in
+  Darwin)
+    source_owner=$(/usr/bin/stat -f '%u' -- "$source_root")
+    source_mode=$(/usr/bin/stat -f '%Lp' -- "$source_root")
+    ;;
+  Linux)
+    source_owner=$(/usr/bin/stat -c '%u' -- "$source_root")
+    source_mode=$(/usr/bin/stat -c '%a' -- "$source_root")
+    ;;
+  *) echo "local:start: unsupported host" >&2; exit 78 ;;
+esac
+if [ "$source_owner" != "$(/usr/bin/id -u)" ]; then
+  echo "local:start: source root must be owned by the current account" >&2
+  exit 78
+fi
+case "$source_mode" in
+  *[0-7][2367]|*[2367][0-7])
+    echo "local:start: source root must not be group/world writable" >&2
+    exit 78
+    ;;
+esac
 
 export APP_BUILDER_FRESH_BOOTSTRAP_ENABLED=1
 export APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT="$1"
@@ -31,7 +63,7 @@ stop_children() {
 }
 trap stop_children EXIT INT TERM
 
-.config/mise/scripts/local-eve-launcher &
+REPOSITORY_LOCAL_ROOTS="$source_root" .config/mise/scripts/local-eve-launcher &
 eve_pid="$!"
 "$launcher" "$node_bin" node_modules/next/dist/bin/next dev \
   --hostname 127.0.0.1 --port 3000 &

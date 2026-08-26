@@ -36,6 +36,7 @@ describe("local Eve acceptance", () => {
   it("returns one stable public handle without waiting for the active turn", async () => {
     const never = new Promise<void>(() => undefined);
     const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         await never;
         yield {} as MessageStreamEvent;
@@ -75,10 +76,25 @@ describe("local Eve acceptance", () => {
   });
 
   it("keeps get and the remaining lifecycle calls independent of an unsettled stream", async () => {
+    let publishCancellation!: () => void;
+    const cancelled = new Promise<void>((resolve) => {
+      publishCancellation = resolve;
+    });
     const response = {
+      cancel: vi.fn(async () => {
+        publishCancellation();
+        return { status: "accepted" };
+      }),
       async *[Symbol.asyncIterator]() {
-        await new Promise<void>(() => undefined);
-        yield {} as MessageStreamEvent;
+        yield {
+          type: "step.started",
+          data: { turnId: "turn-1" },
+        } as MessageStreamEvent;
+        await cancelled;
+        yield {
+          type: "turn.cancelled",
+          data: { turnId: "turn-1" },
+        } as MessageStreamEvent;
       },
     };
     const session = {
@@ -118,8 +134,48 @@ describe("local Eve acceptance", () => {
     await expect(
       service.cancel({ sessionId: start.sessionId }),
     ).resolves.toMatchObject({ sessionId: start.sessionId });
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: start.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({
+        status: "cancelled",
+        events: expect.arrayContaining([
+          expect.objectContaining({ type: "status", status: "cancelled" }),
+        ]),
+      });
+    });
     expect(session.send).toHaveBeenCalledTimes(1);
     expect(session.respond).toHaveBeenCalledTimes(1);
-    expect(session.cancel).toHaveBeenCalledTimes(1);
+    expect(response.cancel).toHaveBeenCalledTimes(1);
+    expect(session.cancel).not.toHaveBeenCalled();
+  });
+
+  it("uses the retained session for an explicit turn cancellation", async () => {
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        await new Promise<void>(() => undefined);
+        yield {} as MessageStreamEvent;
+      },
+    };
+    const session = {
+      state: { sessionId: "wrun_exact_turn" },
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const service = createLocalEveSessionService({
+      sessions: {
+        create: vi.fn(async () => ({ session, response })),
+        attach: vi.fn(() => session),
+      } as never,
+    });
+    const start = await service.start({
+      prompt: "Build",
+      clientRequestId: "prompt-turn-cancel",
+    });
+    await service.cancel({ sessionId: start.sessionId, turnId: "turn-7" });
+    expect(session.cancel).toHaveBeenCalledWith({ turnId: "turn-7" });
+    expect(response.cancel).not.toHaveBeenCalled();
   });
 });

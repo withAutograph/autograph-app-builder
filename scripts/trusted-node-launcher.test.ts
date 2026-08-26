@@ -266,6 +266,10 @@ describe("trusted Node launcher", () => {
       "utf8",
     );
     expect(localStart.match(/local-eve-launcher/gu)).toHaveLength(1);
+    expect(localStart).not.toContain("export REPOSITORY_LOCAL_ROOTS");
+    expect(localStart).toContain(
+      'REPOSITORY_LOCAL_ROOTS="$source_root" .config/mise/scripts/local-eve-launcher',
+    );
     expect(localStart).toContain(
       '"$launcher" "$node_bin" node_modules/next/dist/bin/next dev',
     );
@@ -278,6 +282,36 @@ describe("trusted Node launcher", () => {
         "local-eve-launcher",
       );
     }
+  });
+
+  it("requires one explicit canonical source root before starting local services", () => {
+    const localStart = resolve(
+      repositoryRoot,
+      ".config/mise/tasks/local/start",
+    );
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      REPOSITORY_LOCAL_ROOTS: "ambient-must-not-authorize",
+    };
+    delete environment.NODE_OPTIONS;
+    const missing = spawnSync(localStart, ["/tmp/state", "/tmp/output"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: environment,
+    });
+    expect(missing.status).toBe(64);
+    expect(missing.stdout).not.toContain("ambient-must-not-authorize");
+    expect(missing.stderr).not.toContain("ambient-must-not-authorize");
+
+    const relative = spawnSync(
+      localStart,
+      ["/tmp/state", "/tmp/output", "relative/source"],
+      { cwd: repositoryRoot, encoding: "utf8", env: environment },
+    );
+    expect(relative.status).toBe(78);
+    expect(relative.stderr).toContain("absolute regular directory");
+    expect(relative.stdout).not.toContain("ambient-must-not-authorize");
+    expect(relative.stderr).not.toContain("ambient-must-not-authorize");
   });
 
   it("rejects a trusted wrapper name supplied only as a dummy argv token", () => {
