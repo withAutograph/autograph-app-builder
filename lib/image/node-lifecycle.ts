@@ -42,10 +42,13 @@ import {
   inspectProofRuntimeCommand,
   localImageInspectionCommand,
   parseLocalImageInspection,
+  parseRemoteIndexDescriptor,
+  parseRemoteIndexInspection,
   parseRemoteImageInspection,
   prepareProofRuntimeCommand,
   remoteDescriptorCommand,
   remoteImageCommand,
+  remoteIndexCommand,
   remoteManifestCommand,
   sandboxProofCommand,
   type CommandSpec,
@@ -341,6 +344,34 @@ const temporaryReceiptPattern = new RegExp(
 );
 const temporaryContextPattern =
   /^arrusted-context[.]tmp-[0-9]+-[0-9a-f-]{36}$/u;
+const temporaryBuildxPattern = /^buildx-runtime[.]tmp-[0-9]+-[0-9a-f-]{36}$/u;
+
+function assertOwnedNoLinkTree(path: string, uid: number): void {
+  const stat = lstatSync(path);
+  if (
+    stat.isSymbolicLink() ||
+    stat.uid !== uid ||
+    (!stat.isDirectory() && !stat.isFile()) ||
+    (stat.isFile() && stat.nlink !== 1)
+  )
+    throw new Error("Unsafe interrupted Buildx state requires review.");
+  if (!stat.isDirectory()) return;
+  for (const entry of readdirSync(path))
+    assertOwnedNoLinkTree(join(path, entry), uid);
+}
+
+function removeBuildxRuntime(path: string, uid: number): void {
+  const stat = lstatSync(path);
+  if (
+    !stat.isDirectory() ||
+    stat.isSymbolicLink() ||
+    stat.uid !== uid ||
+    (stat.mode & 0o777) !== 0o700
+  )
+    throw new Error("Unsafe interrupted Buildx state requires review.");
+  assertOwnedNoLinkTree(path, uid);
+  rmSync(path, { recursive: true, force: false });
+}
 
 export function reconcileLifecycleTemps(stateRoot: string): void {
   if (!existsSync(stateRoot)) return;
@@ -370,7 +401,28 @@ export function reconcileLifecycleTemps(stateRoot: string): void {
       )
         throw new Error("Unsafe interrupted build context requires review.");
       rmSync(absolute, { recursive: true, force: false });
+    } else if (temporaryBuildxPattern.test(entry.name)) {
+      removeBuildxRuntime(absolute, uid);
     }
+  }
+}
+
+export function withBuildxRuntime<T>(
+  stateRoot: string,
+  operation: (environment: Readonly<{ BUILDX_CONFIG: string }>) => T,
+): T {
+  const uid = process.getuid?.();
+  if (uid === undefined)
+    throw new Error("Buildx runtime isolation requires a current user ID.");
+  const runtime = join(
+    stateRoot,
+    `buildx-runtime.tmp-${process.pid}-${randomUUID()}`,
+  );
+  mkdirSync(runtime, { recursive: false, mode: 0o700 });
+  try {
+    return operation({ BUILDX_CONFIG: runtime });
+  } finally {
+    removeBuildxRuntime(runtime, uid);
   }
 }
 
@@ -1256,9 +1308,12 @@ function buildImageUnlocked(approval: LifecycleApproval) {
     provenance.arrusted.tree,
   );
   try {
-    execute(
-      imageBuildCommand(provenance, context.root),
-      provenance.builder.root,
+    withBuildxRuntime(provenance.builder.stateRoot, (environment) =>
+      execute(
+        imageBuildCommand(provenance, context.root),
+        provenance.builder.root,
+        environment,
+      ),
     );
   } finally {
     removeSanitizedGitTree(context);
@@ -1450,24 +1505,51 @@ function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
     );
   if (typeof local.result !== "object" || local.result === null)
     throw new Error("Local image receipt has no exact image identity.");
-  const result = parseRemoteImageInspection(
-    execute(
-      remoteDescriptorCommand(provenance),
-      provenance.builder.root,
-      ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
-    ),
-    execute(
-      remoteManifestCommand(provenance),
-      provenance.builder.root,
-      ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
-    ),
-    execute(
-      remoteImageCommand(provenance),
-      provenance.builder.root,
-      ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
-    ),
-    provenance,
-    local.result as { imageId: string; rootFsLayers: readonly string[] },
+  const result = withBuildxRuntime(
+    provenance.builder.stateRoot,
+    (buildxEnvironment) => {
+      const environment = {
+        ...ghcrCredentialEnvironment(
+          provenance.builder.stateRoot,
+          login.identity,
+        ),
+        ...buildxEnvironment,
+      };
+      const localIdentity = local.result as {
+        imageId: string;
+        rootFsLayers: readonly string[];
+      };
+      const descriptorRaw = execute(
+        remoteDescriptorCommand(provenance),
+        provenance.builder.root,
+        environment,
+      );
+      const descriptor = parseRemoteIndexDescriptor(descriptorRaw);
+      const selection = parseRemoteIndexInspection(
+        descriptorRaw,
+        execute(
+          remoteIndexCommand(descriptor.indexReference),
+          provenance.builder.root,
+          environment,
+        ),
+        localIdentity.imageId,
+      );
+      return parseRemoteImageInspection(
+        execute(
+          remoteManifestCommand(selection.platformReference),
+          provenance.builder.root,
+          environment,
+        ),
+        execute(
+          remoteImageCommand(selection.platformReference),
+          provenance.builder.root,
+          environment,
+        ),
+        provenance,
+        localIdentity,
+        selection,
+      );
+    },
   );
   return writeReceipt(
     provenance.builder.stateRoot,
