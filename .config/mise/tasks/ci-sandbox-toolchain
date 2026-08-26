@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Run the optional sandbox-toolchain Eve gate for CI"
+set -eu
+
+exec mise run test:sandbox-toolchain
