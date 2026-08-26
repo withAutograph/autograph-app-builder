@@ -252,9 +252,12 @@ const notConfigured = async (): Promise<never> => {
 };
 
 /** Hosted use stays fail-closed until the authenticated durable adapter is wired. */
-export function createEveSessionService(): EveSessionService {
-  const host = process.env.EVE_AGENT_HOST;
-  if (process.env.APP_BUILDER_LOCAL_ADAPTER === "1" && host !== undefined) {
+export function createEveSessionService(
+  environment:
+    NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): EveSessionService {
+  const host = environment.EVE_AGENT_HOST;
+  if (environment.APP_BUILDER_LOCAL_ADAPTER === "1" && host !== undefined) {
     const url = new URL(host);
     if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
       throw new Error(

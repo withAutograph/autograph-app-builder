@@ -1,7 +1,8 @@
 import {
   index,
-  integer,
+  jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -10,49 +11,74 @@ import {
 export const agentSessions = pgTable(
   "agent_session",
   {
-    id: text("id").primaryKey(),
+    issuer: text("issuer").notNull(),
+    audience: text("audience").notNull(),
     workspaceId: text("workspace_id").notNull(),
     ownerUserId: text("owner_user_id").notNull(),
-    eveSessionId: text("eve_session_id"),
-    encryptedContinuationToken: text("encrypted_continuation_token"),
-    cachedStatus: text("cached_status").notNull(),
-    lastObservedEventIndex: integer("last_observed_event_index")
-      .notNull()
-      .default(0),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    sessionId: text("session_id").notNull(),
+    adapterSessionId: text("adapter_session_id").notNull(),
+    record: jsonb("record").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    index("agent_session_owner_idx").on(table.workspaceId, table.ownerUserId),
-    uniqueIndex("agent_session_eve_id_idx").on(table.eveSessionId),
+    primaryKey({
+      name: "agent_session_tenant_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+      ],
+    }),
+    index("agent_session_owner_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+    ),
+    uniqueIndex("agent_session_adapter_id_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.adapterSessionId,
+    ),
   ],
 );
 
 export const agentOperations = pgTable(
   "agent_operation",
   {
-    id: text("id").primaryKey(),
+    issuer: text("issuer").notNull(),
+    audience: text("audience").notNull(),
     workspaceId: text("workspace_id").notNull(),
     ownerUserId: text("owner_user_id").notNull(),
-    agentSessionId: text("agent_session_id").references(() => agentSessions.id),
+    operationId: text("operation_id").notNull(),
+    sessionId: text("session_id"),
     kind: text("kind").notNull(),
     clientRequestId: text("client_request_id").notNull(),
-    status: text("status").notNull(),
-    safeErrorCode: text("safe_error_code"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    requestDigest: text("request_digest").notNull(),
+    state: text("state").notNull(),
+    record: jsonb("record").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
+    primaryKey({
+      name: "agent_operation_tenant_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.operationId,
+      ],
+    }),
     uniqueIndex("agent_operation_idempotency_idx").on(
+      table.issuer,
+      table.audience,
       table.workspaceId,
       table.ownerUserId,
       table.kind,

@@ -1,0 +1,126 @@
+import { readFile } from "node:fs/promises";
+
+import { describe, expect, it } from "vitest";
+
+import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
+import {
+  parseHostedOperationRow,
+  parseHostedSessionRow,
+} from "./postgres-hosted-store";
+
+const principal: HostedPrincipal = {
+  issuer: "https://identity.example.test",
+  audience: "eve-hosted",
+  workspaceId: "workspace_1",
+  ownerUserId: "user_1",
+  scopes: Object.values(hostedEveOperationScopes),
+};
+
+const operationRecord = {
+  version: 1 as const,
+  operationId: "operation_1",
+  principal,
+  kind: "start" as const,
+  clientRequestId: "request_1",
+  requestDigest: `sha256:${"a".repeat(64)}`,
+  state: "reserved" as const,
+  createdAtEpochMs: 1_000,
+  updatedAtEpochMs: 1_000,
+};
+
+const operationRow = {
+  issuer: principal.issuer,
+  audience: principal.audience,
+  workspaceId: principal.workspaceId,
+  ownerUserId: principal.ownerUserId,
+  operationId: operationRecord.operationId,
+  sessionId: null,
+  kind: operationRecord.kind,
+  clientRequestId: operationRecord.clientRequestId,
+  requestDigest: operationRecord.requestDigest,
+  state: operationRecord.state,
+  record: operationRecord,
+  createdAt: new Date(1_000),
+  updatedAt: new Date(1_000),
+};
+
+const sessionRecord = {
+  version: 1 as const,
+  sessionId: "session_1",
+  principal,
+  adapterSessionId: "adapter_1",
+  status: "waiting" as const,
+  createdAtEpochMs: 2_000,
+  updatedAtEpochMs: 2_000,
+};
+
+const sessionRow = {
+  issuer: principal.issuer,
+  audience: principal.audience,
+  workspaceId: principal.workspaceId,
+  ownerUserId: principal.ownerUserId,
+  sessionId: sessionRecord.sessionId,
+  adapterSessionId: sessionRecord.adapterSessionId,
+  record: sessionRecord,
+  createdAt: new Date(2_000),
+  updatedAt: new Date(2_000),
+};
+
+describe("PostgreSQL hosted Eve row authority", () => {
+  it("accepts only an operation whose indexed authority matches its closed record", () => {
+    expect(parseHostedOperationRow(operationRow)).toEqual(operationRecord);
+    expect(() =>
+      parseHostedOperationRow({ ...operationRow, workspaceId: "workspace_2" }),
+    ).toThrow("canonically bound");
+    expect(() =>
+      parseHostedOperationRow({
+        ...operationRow,
+        record: { ...operationRecord, untrustedRole: "admin" },
+      }),
+    ).toThrow();
+  });
+
+  it("accepts only a session whose tenant and adapter index match its record", () => {
+    expect(parseHostedSessionRow(sessionRow)).toEqual(sessionRecord);
+    expect(() =>
+      parseHostedSessionRow({ ...sessionRow, adapterSessionId: "substituted" }),
+    ).toThrow("canonically bound");
+  });
+
+  it("keeps the checked-in migration tenant scoped and idempotency bound", async () => {
+    const migration = await readFile(
+      new URL("../../drizzle/0001_hosted_eve_bridge.sql", import.meta.url),
+      "utf8",
+    );
+    for (const required of [
+      '"issuer" text NOT NULL',
+      '"audience" text NOT NULL',
+      '"workspace_id" text NOT NULL',
+      '"owner_user_id" text NOT NULL',
+      '"record" jsonb NOT NULL',
+      '"agent_operation_idempotency_idx"',
+      '"kind", "client_request_id"',
+    ]) {
+      expect(migration).toContain(required);
+    }
+    const journal = JSON.parse(
+      await readFile(
+        new URL("../../drizzle/meta/_journal.json", import.meta.url),
+        "utf8",
+      ),
+    ) as unknown;
+    expect(journal).toEqual({
+      version: "7",
+      dialect: "postgresql",
+      entries: [
+        {
+          idx: 0,
+          version: "7",
+          when: 1_787_626_800_000,
+          tag: "0001_hosted_eve_bridge",
+          breakpoints: true,
+        },
+      ],
+    });
+  });
+});

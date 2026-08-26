@@ -191,14 +191,29 @@ diagnostic (`configure is not a function`) after the sandbox had been stopped.
 
 Before enabling real MCP mutations:
 
-1. Configure Better Auth as the OAuth authorization server with CIMD, PKCE, consent, and the workspace OIDC provider.
-2. Derive `workspaceId` and `ownerUserId` only from verified token claims.
-3. Apply the Drizzle schema and require both identifiers in every session query.
+1. Configure the implemented strict remote-JWKS verifier against the approved OAuth authorization server with CIMD, PKCE, consent, and the workspace OIDC provider; prove revocation behavior separately.
+2. Supply the request-scoped workspace membership adapter. The implemented boundary derives `workspaceId` and `ownerUserId` only from verified claims and makes missing, mismatched, denied, and failed workspace lookups indistinguishable.
+3. Apply the checked-in Drizzle-derived migration with `mise run database:migrate`
+   and prove that issuer, audience, workspace, and owner remain in every query.
 4. Encrypt any cached continuation credential with versioned server-side keys.
 5. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
-6. Replace the loopback-only service in `lib/eve/service.ts` with the authenticated `eve/client` adapter using Vercel OIDC and manual redirects.
+6. Inject an approved workload-identity provider into the implemented HTTPS
+   transport/membership adapters and prove the fixed gateway paths with manual
+   redirects in the deployed environment.
 7. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
 8. Complete the MCP Apps host bridge. The iframe must invoke tools through the host, never call Eve or private endpoints directly.
 9. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
+
+The provider-neutral service prerequisite is documented in
+[`hosted-eve-bridge.md`](hosted-eve-bridge.md). It implements the closed
+request-principal boundary, strict Bearer and remote-JWKS verification,
+protected-resource metadata, tenant-scoped durable PostgreSQL store adapter,
+idempotency state machine, five-operation service core, public event projection,
+workload-authenticated HTTPS transport/membership adapters, and local
+conformance tests. The MCP route selects a request-scoped service without a
+hosted-to-local fallback, while the checked-in composition intentionally
+supplies no database handle or workload identity. Migration execution,
+deployment composition, and registration still require separate evidence and
+authority.
 
 Do not advertise exactly-once starts or a production installation until these gates have evidence.
