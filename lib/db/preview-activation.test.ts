@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -172,5 +174,15 @@ describe("Preview activation prerequisite contract", () => {
     ]) {
       expect(() => assertRuntimeRoleReadback({ ...exact, ...drift })).toThrow();
     }
+  });
+
+  it("has PostgreSQL quote the validated role credential without exposing failed SQL", async () => {
+    const cli = await readFile("lib/db/preview-activation-cli.mts", "utf8");
+    expect(cli).toContain(
+      "select format(${template}::text, ${roleName}::text, ${password}::text)",
+    );
+    expect(cli).toContain("await sql.unsafe(statement)");
+    expect(cli).toContain("Runtime database role configuration failed.");
+    expect(cli).not.toContain("sql.unsafe(input.password)");
   });
 });
