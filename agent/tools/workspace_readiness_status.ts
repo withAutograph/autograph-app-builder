@@ -19,6 +19,7 @@ import {
 } from "@/lib/sandbox/toolchain";
 import { sandboxBackendPlan } from "@/lib/sandbox/backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { targetExecutionBinding } from "@/lib/repository/target-planning";
 
 const commands = ["git", "mise", "bun"] as const;
 
@@ -63,13 +64,13 @@ export default defineTool({
       localImageConfigured: image !== undefined,
     });
     const cache =
-      image === undefined
-        ? undefined
-        : await inspectDependencyCache(
+      backend.blockers.length === 0
+        ? await inspectDependencyCache(
             sandbox,
             process.env,
             current.workspace,
-          ).catch(() => undefined);
+          ).catch(() => undefined)
+        : undefined;
     let sourceTargetReady = false;
     if (cache !== undefined) {
       try {
@@ -117,9 +118,19 @@ export default defineTool({
         matches: toolVersionMatches(command, version),
       };
     });
+    const execution =
+      cache === undefined
+        ? undefined
+        : (() => {
+            try {
+              return targetExecutionBinding(cache);
+            } catch {
+              return undefined;
+            }
+          })();
     const toolchainReady =
       backend.blockers.length === 0 &&
-      image !== undefined &&
+      execution !== undefined &&
       cache !== undefined &&
       sourceTargetReady &&
       required.every((tool) => tool.matches);
@@ -128,7 +139,7 @@ export default defineTool({
       sourceTree: current.workspace.sourceTree,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
-      imageDigest: image ?? "unconfigured",
+      imageDigest: execution?.imageDigest ?? image ?? "unconfigured",
       dependencyCacheDigest:
         cache === undefined
           ? "unverified"

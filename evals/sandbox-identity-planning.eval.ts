@@ -61,5 +61,31 @@ export default defineEval({
       "write_file",
     ])
       t.notCalledTool(tool);
+
+    process.stdout.write(
+      `${JSON.stringify({
+        version: 1,
+        terminalPhase: "planned",
+        calledTools: [
+          "inspect_source",
+          "prepare_workspace",
+          "record_prototype_artifact",
+          "accept_app_spec",
+          "prepare_target_dependencies",
+          "plan_app_creation",
+          "artifact_workflow_status",
+        ],
+        forbiddenTools: [
+          "apply_app_creation",
+          "validate_app_creation",
+          "accept_change_set",
+          "publish_reviewed_change_set",
+          "publish_reviewed_change_set_to_branch_worktree",
+          "prepare_fresh_template",
+          "bash",
+          "write_file",
+        ],
+      })}\n`,
+    );
   },
 });

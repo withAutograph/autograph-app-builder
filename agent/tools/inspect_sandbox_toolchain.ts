@@ -12,6 +12,7 @@ import {
   dependencyCacheReceiptDigest,
   inspectDependencyCache,
 } from "@/lib/repository/dependency-cache";
+import { targetExecutionBinding } from "@/lib/repository/target-planning";
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
@@ -45,9 +46,19 @@ export default defineTool({
       localImageConfigured: image !== undefined,
     });
     const cache =
-      image === undefined
+      backend.blockers.length === 0
+        ? await inspectDependencyCache(sandbox).catch(() => undefined)
+        : undefined;
+    const execution =
+      cache === undefined
         ? undefined
-        : await inspectDependencyCache(sandbox).catch(() => undefined);
+        : (() => {
+            try {
+              return targetExecutionBinding(cache);
+            } catch {
+              return undefined;
+            }
+          })();
     const required = (
       Object.keys(requiredToolVersions) as Array<
         keyof typeof requiredToolVersions
@@ -68,9 +79,10 @@ export default defineTool({
       sandboxId: sandbox.id,
       backend: backend.kind,
       backendBlockers: backend.blockers,
-      imageConfiguration: image === undefined ? "unconfigured" : "configured",
+      imageConfiguration:
+        execution === undefined ? "unconfigured" : "configured",
       toolchainReady:
-        image !== undefined &&
+        execution !== undefined &&
         cache !== undefined &&
         required.every((tool) => tool.matches),
       dependencyCacheDigest:

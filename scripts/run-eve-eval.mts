@@ -44,10 +44,10 @@ const gateAEvalProfile =
           },
           repositoryRoot,
         )
-      : profileName === "sandbox"
+      : profileName === "sandbox" || profileName === "hosted-artifact"
         ? createGateAEvalProfile(
             {
-              profile: "sandbox",
+              profile: profileName,
               image: image ?? null,
               sourceRoot: sourceRoot ?? null,
             },
@@ -63,9 +63,17 @@ if (
   (stateRoot !== undefined || allowedRoot !== undefined || fault !== undefined)
 )
   throw new Error("Fresh Gate A arguments require the fresh profile.");
-if (gateAEvalProfile.profile !== "sandbox" && image !== undefined)
+if (
+  gateAEvalProfile.profile !== "sandbox" &&
+  gateAEvalProfile.profile !== "hosted-artifact" &&
+  image !== undefined
+)
   throw new Error("The sandbox image requires the sandbox profile.");
-if (gateAEvalProfile.profile !== "sandbox" && sourceRoot !== undefined)
+if (
+  gateAEvalProfile.profile !== "sandbox" &&
+  gateAEvalProfile.profile !== "hosted-artifact" &&
+  sourceRoot !== undefined
+)
   throw new Error("The sandbox source root requires the sandbox profile.");
 const freshEvaluations = new Set([
   "fresh-bootstrap-publication",
@@ -91,19 +99,23 @@ const sandboxEvaluations = new Set([
   "sandbox-identity-planning",
 ]);
 if (
-  gateAEvalProfile.profile === "sandbox" &&
+  (gateAEvalProfile.profile === "sandbox" ||
+    gateAEvalProfile.profile === "hosted-artifact") &&
   (args[0] === undefined || !sandboxEvaluations.has(args[0]))
 )
   throw new Error("The sandbox Gate A evaluation was invalid.");
 if (
-  gateAEvalProfile.profile === "sandbox" &&
+  (gateAEvalProfile.profile === "sandbox" ||
+    gateAEvalProfile.profile === "hosted-artifact") &&
   args[0] === "sandbox-identity-planning" &&
   (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
 )
   throw new Error("The sandbox identity/planning proof requires exact inputs.");
 if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
-const realSandbox = gateAEvalProfile.profile === "sandbox";
+const realSandbox =
+  gateAEvalProfile.profile === "sandbox" ||
+  gateAEvalProfile.profile === "hosted-artifact";
 const capabilities = realSandbox
   ? ["mock-model"]
   : ["mock-model", "simulated-target", "simulated-publication"];

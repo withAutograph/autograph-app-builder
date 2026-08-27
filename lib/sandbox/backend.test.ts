@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  VERCEL_SANDBOX_ARTIFACT_BLOCKER,
-  sandboxBackendPlan,
-  selectSandboxDefinition,
-} from "./backend";
+import { sandboxBackendPlan, selectSandboxDefinition } from "./backend";
 
 describe("sandbox backend selection", () => {
   it("uses Eve's supported Vercel Sandbox only for Preview", () => {
@@ -16,7 +12,7 @@ describe("sandbox backend selection", () => {
       }),
     ).toEqual({
       kind: "vercel-preview",
-      blockers: [VERCEL_SANDBOX_ARTIFACT_BLOCKER],
+      blockers: [],
     });
   });
 
@@ -27,9 +23,7 @@ describe("sandbox backend selection", () => {
       localImageConfigured: true,
     });
     expect(plan.kind).toBe("vercel-preview");
-    expect(plan.blockers.join(" ")).toContain(
-      "no digest-bound offline dependency cache",
-    );
+    expect(plan.blockers).toEqual([]);
   });
 
   it("preserves local microsandbox and fixture paths", () => {

@@ -12,6 +12,7 @@ export const gateAEnvironmentFields = Object.freeze([
   "APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT",
   "APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT",
   "APP_BUILDER_REAL_SANDBOX",
+  "APP_BUILDER_HOSTED_ARTIFACT_PROOF",
   "APP_BUILDER_SANDBOX_IMAGE",
   "APP_BUILDER_LOCAL_ADAPTER",
   "EVE_AGENT_HOST",
@@ -161,7 +162,7 @@ export function createGateAEvalProfile(input, repositoryRoot) {
   }
   if (
     exactKeys(input, ["profile", "image", "sourceRoot"]) &&
-    input.profile === "sandbox"
+    (input.profile === "sandbox" || input.profile === "hosted-artifact")
   ) {
     if (
       input.image !== null &&
@@ -171,7 +172,7 @@ export function createGateAEvalProfile(input, repositoryRoot) {
     const sourceRoot = observeReadOnlyRoot(input.sourceRoot, repositoryRoot);
     return Object.freeze({
       version: 1,
-      profile: "sandbox",
+      profile: input.profile === "sandbox" ? "sandbox" : "hosted-artifact",
       image: input.image,
       sourceRoot,
     });
@@ -218,7 +219,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
     });
   }
   if (
-    value.profile === "sandbox" &&
+    (value.profile === "sandbox" || value.profile === "hosted-artifact") &&
     exactKeys(value, ["version", "profile", "image", "sourceRoot"])
   ) {
     if (
@@ -228,7 +229,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
       fail("sandbox image");
     return Object.freeze({
       version: 1,
-      profile: "sandbox",
+      profile: value.profile === "sandbox" ? "sandbox" : "hosted-artifact",
       image: value.image,
       sourceRoot: validateReadOnlyRootIdentity(
         value.sourceRoot,
@@ -256,6 +257,8 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
       environment.APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT = profile.fault;
   } else {
     environment.APP_BUILDER_REAL_SANDBOX = "1";
+    if (profile.profile === "hosted-artifact")
+      environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF = "1";
     if (profile.image !== null)
       environment.APP_BUILDER_SANDBOX_IMAGE = profile.image;
     if (profile.sourceRoot !== null)

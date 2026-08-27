@@ -8,6 +8,7 @@ import {
   HOSTED_TOOLCHAIN_CONTRACT_VERSION,
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedToolchainArtifacts,
+  hostedArtifactWorkspaceInstallCommand,
   hostedToolchainBootstrapCommand,
   hostedToolchainRevalidationKey,
 } from "./hosted-toolchain";
@@ -38,9 +39,9 @@ describe("hosted Vercel Sandbox toolchain", () => {
   });
 
   it("binds snapshot revalidation to the contract, inputs, and exact command bytes", () => {
-    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(2);
+    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(3);
     expect(hostedToolchainRevalidationKey()).toMatch(
-      /^autograph-app-builder-vercel-toolchain-v2:[0-9a-f]{64}$/u,
+      /^autograph-app-builder-vercel-toolchain-v3:[0-9a-f]{64}$/u,
     );
     expect(hostedToolchainRevalidationKey()).toBe(
       hostedToolchainRevalidationKey(),
@@ -51,9 +52,21 @@ describe("hosted Vercel Sandbox toolchain", () => {
     );
   });
 
+  it("materializes the sealed dependency closure in the proof workspace", () => {
+    const command = hostedArtifactWorkspaceInstallCommand();
+    expect(command).toContain(
+      "/workspace/.app-builder/hosted-dependency-cache",
+    );
+    expect(command).toContain("sha256sum --check --strict");
+    expect(command).toContain("node-modules.tar.gz");
+    expect(command).not.toContain("/opt/app-builder/dependency-cache");
+    expect(command).not.toMatch(/curl|sudo|token|password|authorization/iu);
+  });
+
   it("narrows live sessions after the bootstrap snapshot", () => {
     const definition = readFileSync("agent/sandbox.ts", "utf8");
     expect(definition).toContain("backend: createHostedVercelBackend()");
+    expect(definition).toContain("readHostedArtifactBytes()");
     expect(definition).toContain('await use({ networkPolicy: "deny-all" })');
     expect(definition).toContain(
       "revalidationKey: hostedToolchainRevalidationKey",

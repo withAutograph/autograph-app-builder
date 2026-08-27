@@ -7,6 +7,7 @@ import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
   sandboxTargetCommandExecutor,
+  TARGET_PLANNING_MISE_PROFILE,
   targetContractDigest,
   targetExecutionBinding,
   type TargetCommandExecutor,
@@ -96,6 +97,11 @@ describe("typed target identity and planning", () => {
         `.app-builder/target-inputs/${"b".repeat(64)}/app-contract.json`,
       ),
     ).toBe(true);
+    expect(
+      files.get(
+        `.app-builder/target-inputs/${"b".repeat(64)}/repository/.config/mise/config.app-builder.toml`,
+      ),
+    ).toBe(TARGET_PLANNING_MISE_PROFILE);
     expect(files.has("repository/prototype/expense-review/app-spec.md")).toBe(
       false,
     );
@@ -136,7 +142,7 @@ describe("typed target identity and planning", () => {
     });
     expect(run).toHaveBeenCalledWith({
       command:
-        "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise run --skip-tools repository:exec -- app-identity.ts --app expense-review",
+        "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools repository:exec -- app-identity.ts --app expense-review",
       workingDirectory:
         "/workspace/.app-builder/target-inputs/revision/repository",
       abortSignal: expect.any(AbortSignal),

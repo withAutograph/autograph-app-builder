@@ -12,6 +12,10 @@ import {
 import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
+import {
+  hostedSourceReceipt,
+  prepareHostedSourceWorkspace,
+} from "@/lib/repository/hosted-source";
 
 export default defineTool({
   description:
@@ -32,10 +36,16 @@ export default defineTool({
       source.phase !== "acquisition_approved"
     )
       throw new Error("Fresh-template acquisition was not approved.");
-    const currentReceipt = await inspectSourceReceipt(
+    const hostedReceipt = hostedSourceReceipt(
       source.receipt.sourceKind,
       source.receipt.sourcePath,
     );
+    const currentReceipt =
+      hostedReceipt ??
+      (await inspectSourceReceipt(
+        source.receipt.sourceKind,
+        source.receipt.sourcePath,
+      ));
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review or approval.");
     const {
@@ -52,13 +62,21 @@ export default defineTool({
         currentWorkspace.eligibilityDigest !== expectedEligibilityDigest)
     )
       throw new Error("This Eve session already owns a different workspace.");
-    const workspace = await prepareSupportedSandboxWorkspace(
-      path,
-      expectedSha,
-      expectedEligibilityDigest,
-      await ctx.getSandbox(),
-      ctx.callId,
-    );
+    const sandbox = await ctx.getSandbox();
+    const workspace =
+      hostedReceipt === undefined
+        ? await prepareSupportedSandboxWorkspace(
+            path,
+            expectedSha,
+            expectedEligibilityDigest,
+            sandbox,
+            ctx.callId,
+          )
+        : await prepareHostedSourceWorkspace({
+            receipt: currentReceipt,
+            sandbox,
+            callId: ctx.callId,
+          });
     if (workspace.sourceTree !== expectedTree)
       throw new Error("The prepared source tree changed after review.");
     appBuilderWorkflowState.update((latest) => {
