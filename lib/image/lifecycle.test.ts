@@ -108,6 +108,20 @@ const provenance = () =>
     targetFiles,
   });
 
+describe("image lifecycle task ownership", () => {
+  it("resolves every credential-bound preload executable through mise", () => {
+    const task = readFileSync(".config/mise/tasks/image/preload", "utf8");
+    for (const binding of [
+      'APP_BUILDER_IMAGE_GH_BIN="$(mise which gh)"',
+      'APP_BUILDER_IMAGE_DOCKER_BIN="$(mise which docker)"',
+      'APP_BUILDER_IMAGE_BUILDX_BIN="$(mise which docker-cli-plugin-docker-buildx)"',
+      'APP_BUILDER_IMAGE_MSB_BIN="$(mise which msb)"',
+    ]) {
+      expect(task).toContain(binding);
+    }
+  });
+});
+
 describe("closed receipt key sets", () => {
   const expected = [
     "authenticationBoundary",
