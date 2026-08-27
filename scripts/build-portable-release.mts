@@ -14,6 +14,7 @@ import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import {
   deterministicGzip,
   deterministicTar,
+  hasCanonicalFetchRemote,
   registeredEveToolNames,
   releaseEndpoint,
   sha256,
@@ -44,11 +45,7 @@ if (git("status", "--porcelain=v1") !== "")
   throw new Error("Portable releases require a clean source checkout.");
 const sourceRepository =
   "https://github.com/withAutograph/autograph-app-builder";
-if (
-  !git("remote", "-v")
-    .split("\n")
-    .some((line) => line.includes(`\t${sourceRepository} (fetch)`))
-)
+if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository))
   throw new Error("Portable releases require the canonical source remote.");
 const source = {
   repository: sourceRepository,

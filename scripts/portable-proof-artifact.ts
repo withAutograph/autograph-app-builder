@@ -9,6 +9,7 @@ import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import {
   deterministicGzip,
   deterministicTar,
+  hasCanonicalFetchRemote,
   releaseEndpoint,
   sha256,
   TOOL_NAMES,
@@ -148,9 +149,10 @@ export async function verifyPortableProofArtifact(input: {
       "Release source SHA/tree did not match the proof checkout.",
     );
   if (
-    !git(repositoryRoot, "remote", "-v")
-      .split("\n")
-      .some((line) => line.includes(`\t${receipt.source.repository} (fetch)`))
+    !hasCanonicalFetchRemote(
+      git(repositoryRoot, "remote", "-v"),
+      receipt.source.repository,
+    )
   )
     throw new Error(
       "Release source repository was not a configured fetch remote.",

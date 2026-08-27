@@ -13,6 +13,22 @@ export const TOOL_NAMES = [
 export const sha256 = (value: Uint8Array | string) =>
   createHash("sha256").update(value).digest("hex");
 
+/** Matches one exact canonical fetch remote, allowing Git's optional .git suffix. */
+export function hasCanonicalFetchRemote(
+  remoteOutput: string,
+  expectedRepository: string,
+) {
+  return remoteOutput.split("\n").some((line) => {
+    const fields = line.trim().split(/\s+/u);
+    if (fields.length !== 3 || fields[2] !== "(fetch)") return false;
+    const remoteUrl = fields[1];
+    return (
+      remoteUrl === expectedRepository ||
+      remoteUrl === `${expectedRepository}.git`
+    );
+  });
+}
+
 const reservedReleaseHost = (hostname: string) => {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (host === "localhost") return true;
