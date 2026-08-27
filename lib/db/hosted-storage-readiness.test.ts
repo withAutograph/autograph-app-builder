@@ -151,6 +151,7 @@ describe("hosted storage read-only readiness", () => {
     expect(task).toContain("unset DATABASE_URL");
     expect(task).toContain("--database-url-fd 0");
     expect(cli).toContain("SET TRANSACTION READ ONLY");
+    expect(cli).toContain("constraint_record.contype <> 'n'");
     expect(cli).toContain("'github_publication_proposal'");
     expect(cli).toContain("'github_publication_proposal'");
     expect(cli).not.toContain("process.env.DATABASE_URL");

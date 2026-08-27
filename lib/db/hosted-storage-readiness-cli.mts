@@ -106,6 +106,7 @@ try {
       JOIN pg_catalog.pg_namespace AS namespace
         ON namespace.oid = relation.relnamespace
       WHERE namespace.nspname = 'public'
+        AND constraint_record.contype <> 'n'
         AND relation.relname IN (
           'account',
           'agent_operation',
