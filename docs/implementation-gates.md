@@ -222,30 +222,59 @@ never enter argv, environment, receipts, or persistent files.
 
 Before enabling real MCP mutations:
 
-1. Configure the implemented strict remote-JWKS verifier against the approved OAuth authorization server with CIMD, PKCE, consent, and the workspace OIDC provider; prove revocation behavior separately.
-2. Supply the request-scoped workspace membership adapter. The implemented boundary derives `workspaceId` and `ownerUserId` only from verified claims and makes missing, mismatched, denied, and failed workspace lookups indistinguishable.
-3. Apply the checked-in Drizzle-derived migration with `mise run database:migrate`
+1. Implement and configure the approved Preview OAuth authorization server with
+   CIMD, authorization code plus S256 PKCE, consent, and a selected user sign-in
+   method. It must mint an exact-resource, five-minute JWT with integer `nbf`
+   and a consent-bound `workspace_id`; Preview does not claim immediate token
+   revocation and has a residual window of at most five minutes. Activating CIMD
+   can create, persist, or refresh a discovery-owned authorization-server client
+   record and therefore requires the same separate mutation authority as live
+   consent and grant creation. DCR remains disabled.
+2. Keep the signed `workspace_id` claim as the sole workspace selector. The
+   implemented boundary derives `workspaceId` and `ownerUserId` only from
+   verified claims and performs a live exact active-membership read for that
+   subject/workspace on every MCP request before store or Eve access.
+3. Bind Preview to one origin: `/api/auth` is the issuer,
+   `/api/auth/jwks` is its key source, `/mcp` is audience/resource, and the
+   canonical Eve 0.43 routes remain under `/eve/v1/*` on that origin. The
+   trusted-forwarder environment must be exactly `preview`; Production and
+   Development values fail closed.
+4. Apply the three checked-in Drizzle-derived migrations with `mise run database:migrate`
    and prove that issuer, audience, workspace, and owner remain in every query.
-4. Keep continuation credentials outside the current MCP/store contract. If a
-   future gateway requires one, add a separately reviewed gateway-side encrypted
-   contract with versioned server-side keys.
-5. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
-6. Prove the checked-in request-context Vercel OIDC exchange and fixed gateway
-   paths with manual redirects in the deployed environment.
-7. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
-8. Complete the MCP Apps host bridge. The iframe must invoke tools through the host, never call Eve or private endpoints directly.
-9. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
+   Membership seed/revoke, retention, and tenant deletion are separate
+   confirmation-bound tasks with identity-free receipts. Retention preserves
+   reserved replay authority; deletion requires a five-minute revocation drain.
+5. Before hosted composition can open storage, bind a fresh exact provider
+   readback through the closed `EVE_HOSTED_ADMISSION_CONTROL` contract. It must
+   name bounded per-subject/workspace request and session ceilings plus a monthly
+   spend ceiling and expire within 24 hours. Treat the binding as configuration
+   evidence only; activation still requires a separate provider-enforcement
+   readback.
+6. Keep continuation credentials outside the current MCP/store contract. The
+   canonical installed Eve 0.43 session routes require only durable session IDs.
+7. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
+8. Prove the checked-in request-context Vercel project OIDC call to the same
+   origin's canonical Eve routes, including the exact trusted-forwarder subject,
+   forwarded principal, and manual redirect denial.
+9. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
+10. Complete the MCP Apps host bridge. The iframe must invoke tools through the host, never call Eve or private endpoints directly.
+11. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
 
 The provider-neutral service prerequisite is documented in
 [`hosted-eve-bridge.md`](hosted-eve-bridge.md). It implements the closed
 request-principal boundary, strict Bearer and remote-JWKS verification,
-protected-resource metadata, tenant-scoped durable PostgreSQL store adapter,
+protected-resource metadata, live PostgreSQL workspace-membership authority,
+tenant-scoped durable PostgreSQL store adapter,
 idempotency state machine, five-operation service core, public event projection,
-workload-authenticated HTTPS transport/membership adapters, and local
+same-origin canonical Eve transport, token-only workspace selection, and local
 conformance tests. The MCP route selects a request-scoped service without a
 hosted-to-local fallback, lazily composes the bounded PostgreSQL store, and
-obtains Vercel workload identity only during a request-context hop. Migration
-execution, deployment, and registration still require separate evidence and
+obtains Vercel workload identity only during a request-context hop. It does not
+implement an OAuth authorization server or user sign-in/consent surface.
+Its source/configuration receipt is explicitly non-activation evidence. A
+separate closed live-activation receipt schema requires all external proofs and
+cannot be populated from source configuration alone.
+Migration execution, deployment, and registration still require separate evidence and
 authority.
 
 Do not advertise exactly-once starts or a production installation until these gates have evidence.

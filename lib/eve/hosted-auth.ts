@@ -49,7 +49,6 @@ export class HostedAuthorizationError extends Error {
     | "invalid_claims"
     | "issuer_mismatch"
     | "audience_mismatch"
-    | "workspace_mismatch"
     | "insufficient_scope";
 
   constructor(code: HostedAuthorizationError["code"]) {
@@ -64,7 +63,6 @@ export function authorizeHostedPrincipal(input: {
   expectedIssuer: string;
   expectedAudience: string;
   requiredScopes: readonly string[];
-  requestedWorkspaceId: string;
 }): HostedPrincipal {
   const parsed = verifiedHostedClaimsSchema.safeParse(input.verifiedClaims);
   if (!parsed.success) {
@@ -78,10 +76,6 @@ export function authorizeHostedPrincipal(input: {
   if (claims.audience !== input.expectedAudience) {
     throw new HostedAuthorizationError("audience_mismatch");
   }
-  if (claims.workspaceId !== input.requestedWorkspaceId) {
-    throw new HostedAuthorizationError("workspace_mismatch");
-  }
-
   const scopes = [...new Set(claims.scopes)].sort();
   if (input.requiredScopes.some((scope) => !scopes.includes(scope))) {
     throw new HostedAuthorizationError("insufficient_scope");

@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Delete one drained hosted Preview tenant's durable rows"
+set -eu
+
+if [ "$#" -ne 2 ] || [ "$1" != "--request-file" ]; then
+  echo "usage: mise run hosted:tenant-delete -- --request-file /absolute/owner-only.json" >&2
+  exit 64
+fi
+if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
+  echo "hosted:tenant-delete requires DATABASE_URL" >&2
+  exit 64
+fi
+database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$database_url" | (
+  unset database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx lib/db/hosted-admin-cli.mts \
+    apply --expected-action tenant.delete --database-url-fd 0 --request-file "$2"
+)

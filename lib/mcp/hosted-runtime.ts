@@ -1,11 +1,11 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as databaseSchema from "../db/schema";
+import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import {
-  createHostedHttpMembership,
-  createHostedHttpTransport,
+  createSameOriginEveTransport,
   type HostedWorkloadIdentity,
-} from "../eve/hosted-http";
+} from "../eve/same-origin-http";
 import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
 import {
   createRemoteJwksAccessTokenVerifier,
@@ -21,9 +21,8 @@ import type { HostedMcpRuntime } from "./request-handler";
 export function composeHostedMcpRuntime(input: {
   auth: unknown;
   database: PostgresJsDatabase<typeof databaseSchema>;
-  gateway: {
+  eve: {
     baseUrl: string;
-    workloadAudience: string;
     timeoutMs?: number;
   };
   workloadIdentity: HostedWorkloadIdentity;
@@ -32,7 +31,7 @@ export function composeHostedMcpRuntime(input: {
 }): HostedMcpRuntime {
   const auth = hostedMcpAuthConfigSchema.parse(input.auth);
   const httpInput = {
-    config: input.gateway,
+    config: input.eve,
     workloadIdentity: input.workloadIdentity,
     fetchImplementation: input.fetchImplementation,
   };
@@ -42,9 +41,9 @@ export function composeHostedMcpRuntime(input: {
       config: auth,
       fetchImplementation: input.fetchImplementation,
     }),
-    membership: createHostedHttpMembership(httpInput),
+    membership: createPostgresWorkspaceMembership(input.database),
     store: createPostgresHostedEveStore(input.database),
-    transport: createHostedHttpTransport(httpInput),
+    transport: createSameOriginEveTransport(httpInput),
     now: input.now,
   };
 }

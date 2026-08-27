@@ -205,6 +205,9 @@ template manifest.
   projection. The checked-in route remains fail-closed because deployment
   credentials and runtime composition are intentionally not supplied; see
   [`docs/hosted-eve-bridge.md`](docs/hosted-eve-bridge.md).
+- Confirmation-bound hosted database tasks for exact membership activation and
+  revocation, terminal-row retention, and drained tenant deletion. Their closed
+  receipts contain only source/authority digests and bounded row counts.
 - Deterministic unit tests and Eve evals that drive the real HTTP session
   surface with a fixture model, including approval and cancellation paths.
   A non-Node trusted launcher rejects ambient `NODE_OPTIONS` and replaces the
@@ -382,14 +385,46 @@ Never put bearer tokens or secrets in `mcp.json` or `.app.json`.
 
 Hosted request handling is enabled only with `EVE_HOSTED_ADAPTER=1` and a
 complete deployment configuration. The route lazily opens its bounded
-PostgreSQL pool on the first hosted request and acquires a Vercel workload OIDC
-credential only inside the request-context gateway hop, exchanging it for
-`EVE_HOSTED_WORKLOAD_AUDIENCE`. It never falls back to the local adapter. The
+PostgreSQL pool on the first hosted request. `withEve(nextConfig)` deploys the
+canonical Eve 0.43 session routes in the same Vercel project and origin as
+`/mcp`; each request-context hop presents a fresh project OIDC token directly
+to those routes. The verified MCP user crosses that hop only through Eve's
+closed forwarded-principal field, accepted from the configured exact Vercel
+team/project/Preview environment. Production and Development forwarder subjects
+fail closed; this boundary does not authorize either environment. It never falls
+back to the local adapter. Hosted composition also requires a fresh, closed
+`EVE_HOSTED_ADMISSION_CONTROL` JSON binding to an exact provider readback. That
+binding names bounded per-subject and per-workspace start/session ceilings plus
+a monthly spend ceiling, expires within 24 hours, and is configuration evidence,
+not proof that the provider enforced it. The
 OAuth resource metadata is served from
-`/.well-known/oauth-protected-resource`; hosted clients send their verified
-workspace selection in `X-Eve-Workspace-Id`. Importing the route does not create
-a database connection or obtain a workload credential. The checked-in MCP and
-store contracts contain no continuation credential.
+`/.well-known/oauth-protected-resource`. The signed, consent-bound
+`workspace_id` access-token claim is the sole workspace selector. Its `aud`
+must equal the canonical `/mcp` resource URL, and the resource server accepts
+only tokens with an integer `nbf`/`iat` and at most a five-minute lifetime. A
+live exact subject/workspace membership row is required on every MCP request
+before the tenant-scoped store or Eve transport can run. Importing the route
+does not create a database connection or obtain a workload credential. This
+repository does not yet contain the authorization server that records consent
+and mints the claim. Activating the checked-in CIMD policy is separately
+authorized because discovery may create, persist, or refresh an authorization-
+server client record; DCR remains disabled. The checked-in MCP and store
+contracts contain no continuation credential.
+
+The deterministic source/configuration receipt is explicitly marked
+`source-configuration-only` and `activation.status=not-proven`. A distinct
+future live-activation schema requires digest-bound deployment, OAuth metadata,
+minted-token, migration, admission-control, workload-identity, tenant-isolation,
+and five-tool lifecycle evidence. Neither schema performs or authorizes those
+external actions.
+
+Preview database changes are plan-first. Run
+`mise run hosted:admin-plan -- --request-file /absolute/owner-only.json`, approve
+the exact confirmation digest, then run only the matching
+`hosted:membership-seed`, `hosted:membership-revoke`,
+`hosted:retention-apply`, or `hosted:tenant-delete` task. The tasks emit
+sanitized digests and counts; their presence does not authorize database,
+provider, Preview, or Production mutation.
 
 ## Authority boundary
 

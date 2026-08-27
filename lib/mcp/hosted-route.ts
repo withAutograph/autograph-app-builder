@@ -4,7 +4,9 @@ import postgres from "postgres";
 import { z } from "zod";
 
 import * as databaseSchema from "../db/schema";
-import type { HostedWorkloadIdentity } from "../eve/hosted-http";
+import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
+import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
+import { readHostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 import { composeHostedMcpRuntime } from "./hosted-runtime";
 import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
 import { createMcpRequestHandler } from "./request-handler";
@@ -34,42 +36,30 @@ const databaseUrlSchema = z
     return value;
   });
 
-const httpsOriginSchema = z
-  .string()
-  .url()
-  .startsWith("https://")
-  .transform((value, context) => {
-    const url = new URL(value);
-    if (
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.pathname !== "/" && url.pathname !== "")
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted Eve gateway must be an HTTPS origin.",
-      });
-      return z.NEVER;
-    }
-    return url.origin;
-  });
-
 export function readHostedDeploymentConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  nowEpochMs = Date.now(),
 ) {
+  const auth = readHostedMcpAuthConfig(environment);
+  const resourceUrl = new URL(auth.resourceUrl);
+  if (resourceUrl.pathname !== "/mcp") {
+    throw new Error("The hosted MCP resource URL must use the /mcp route.");
+  }
+  const forwarderSubject = readHostedForwarderSubject(environment);
+  if (forwarderSubject === undefined) {
+    throw new Error("The hosted Eve forwarder binding is unavailable.");
+  }
   return {
-    auth: readHostedMcpAuthConfig(environment),
+    auth,
     databaseUrl: databaseUrlSchema.parse(environment.DATABASE_URL),
-    gateway: {
-      baseUrl: httpsOriginSchema.parse(environment.EVE_HOSTED_GATEWAY_URL),
-      workloadAudience: z
-        .string()
-        .min(1)
-        .max(300)
-        .parse(environment.EVE_HOSTED_WORKLOAD_AUDIENCE),
+    admissionControl: readHostedPreviewAdmissionControlBinding(
+      environment,
+      nowEpochMs,
+    ),
+    eve: {
+      baseUrl: resourceUrl.origin,
     },
+    forwarderSubject,
   };
 }
 
@@ -101,6 +91,7 @@ export function createDeploymentMcpRequestHandler(input: {
     environment: input.environment,
   });
   let hostedHandler: ((request: Request) => Promise<Response>) | undefined;
+  let hostedResourceUrl: string | undefined;
 
   return async (request: Request): Promise<Response> => {
     if (input.environment.EVE_HOSTED_ADAPTER !== "1") {
@@ -109,14 +100,22 @@ export function createDeploymentMcpRequestHandler(input: {
 
     try {
       if (hostedHandler === undefined) {
-        const config = readHostedDeploymentConfig(input.environment);
+        const config = readHostedDeploymentConfig(
+          input.environment,
+          input.now?.() ?? Date.now(),
+        );
+        if (request.url !== config.auth.resourceUrl) {
+          throw new Error(
+            "The hosted request does not match the configured MCP resource.",
+          );
+        }
         const database = (input.openDatabase ?? openHostedPostgresDatabase)(
           config.databaseUrl,
         );
         const runtime = composeHostedMcpRuntime({
           auth: config.auth,
           database,
-          gateway: config.gateway,
+          eve: config.eve,
           workloadIdentity: input.workloadIdentity,
           fetchImplementation: input.fetchImplementation,
           now: input.now,
@@ -125,6 +124,12 @@ export function createDeploymentMcpRequestHandler(input: {
           environment: input.environment,
           hostedRuntime: runtime,
         });
+        hostedResourceUrl = config.auth.resourceUrl;
+      }
+      if (request.url !== hostedResourceUrl) {
+        throw new Error(
+          "The hosted request does not match the configured MCP resource.",
+        );
       }
       return hostedHandler(request);
     } catch {

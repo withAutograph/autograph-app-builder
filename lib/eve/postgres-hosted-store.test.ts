@@ -120,6 +120,20 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0001_hosted_eve_bridge",
           breakpoints: true,
         },
+        {
+          idx: 1,
+          version: "7",
+          when: 1_787_755_200_000,
+          tag: "0002_hosted_workspace_membership",
+          breakpoints: true,
+        },
+        {
+          idx: 2,
+          version: "7",
+          when: 1_787_795_200_000,
+          tag: "0003_hosted_retention_indexes",
+          breakpoints: true,
+        },
       ],
     });
   });

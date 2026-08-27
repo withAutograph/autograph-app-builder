@@ -1,6 +1,6 @@
-import { exchangeVercelOidcToken, getVercelOidcToken } from "@vercel/oidc";
+import { getVercelOidcToken } from "@vercel/oidc";
 
-import type { HostedWorkloadIdentity } from "./hosted-http";
+import type { HostedWorkloadIdentity } from "./same-origin-http";
 
 const MAX_TOKEN_BYTES = 8_192;
 
@@ -20,27 +20,20 @@ function exactToken(value: string): string {
  * Request-context workload identity adapter for Vercel deployments.
  *
  * Constructing the adapter reads no environment and obtains no credential.
- * Each transport call obtains the current invocation's Vercel OIDC token and
- * exchanges it for the exact configured gateway audience. The user principal
- * is deliberately not used as workload authority or included in the exchange.
+ * Each transport call obtains the current invocation's Vercel OIDC token. The
+ * same-project Eve service verifies that project-bound token directly. The user
+ * principal is carried separately as Eve's closed forwarded-principal metadata.
  */
 export function createVercelWorkloadIdentity(
   dependencies: {
     getToken?: () => Promise<string>;
-    exchangeToken?: (input: {
-      token: string;
-      audience: string;
-    }) => Promise<string>;
   } = {},
 ): HostedWorkloadIdentity {
   const getToken = dependencies.getToken ?? getVercelOidcToken;
-  const exchangeToken =
-    dependencies.exchangeToken ?? ((input) => exchangeVercelOidcToken(input));
 
   return {
-    async token({ audience }) {
-      const sourceToken = exactToken(await getToken());
-      return exactToken(await exchangeToken({ token: sourceToken, audience }));
+    async token() {
+      return exactToken(await getToken());
     },
   };
 }

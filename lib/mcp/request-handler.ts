@@ -27,15 +27,12 @@ import {
   hostedMcpAuthConfigSchema,
   notFoundResponse,
   parseStrictBearerAuthorization,
-  parseWorkspaceSelection,
   unauthorizedResponse,
   unavailableResponse,
   type HostedAccessTokenVerifier,
   type HostedMcpAuthConfig,
 } from "./request-auth";
 import { safeToolError, SESSION_RESOURCE_URI, toolResult } from "./result";
-
-export const HOSTED_WORKSPACE_HEADER = "x-eve-workspace-id";
 
 export interface HostedWorkspaceMembership {
   isMember(input: {
@@ -204,15 +201,6 @@ async function hostedServiceForRequest(
     return unauthorizedResponse(auth);
   }
 
-  let workspaceId: string;
-  try {
-    workspaceId = parseWorkspaceSelection(
-      request.headers.get(HOSTED_WORKSPACE_HEADER),
-    );
-  } catch {
-    return notFoundResponse();
-  }
-
   let principal: HostedPrincipal;
   try {
     principal = authorizeHostedPrincipal({
@@ -220,7 +208,6 @@ async function hostedServiceForRequest(
       expectedIssuer: auth.issuer,
       expectedAudience: auth.audience,
       requiredScopes: ["eve:session"],
-      requestedWorkspaceId: workspaceId,
     });
   } catch (error) {
     if (
@@ -229,17 +216,18 @@ async function hostedServiceForRequest(
     ) {
       return forbiddenResponse(auth);
     }
-    if (
-      error instanceof HostedAuthorizationError &&
-      error.code === "workspace_mismatch"
-    ) {
-      return notFoundResponse();
-    }
     return unauthorizedResponse(auth);
   }
 
   try {
-    if (!(await runtime.membership.isMember({ principal, workspaceId }))) {
+    // The signed claim is the sole selector. The runtime membership adapter
+    // must still perform a live exact subject/workspace read on every request.
+    if (
+      !(await runtime.membership.isMember({
+        principal,
+        workspaceId: principal.workspaceId,
+      }))
+    ) {
       return notFoundResponse();
     }
   } catch {

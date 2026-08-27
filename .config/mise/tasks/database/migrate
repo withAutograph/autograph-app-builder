@@ -16,5 +16,5 @@ printf '%s' "$database_url" | (
   unset database_url
   exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
     "$(mise which node)" --import tsx lib/db/migrate.mts \
-    --database-url-fd 3 3<&0 </dev/null
+    --database-url-fd 0
 )

@@ -4,12 +4,12 @@ import {
   type MessageStreamEvent,
 } from "eve/client";
 
-import type {
-  EveSessionResult,
-  EveSessionStatus,
-  PublicEveEvent,
-  PublicInputRequest,
-} from "@/lib/mcp/contracts";
+import type { EveSessionResult, PublicEveEvent } from "@/lib/mcp/contracts";
+import {
+  deriveInstalledEveStatus,
+  projectInstalledEveEvent,
+  toPublicEvent,
+} from "./public-events";
 
 export class AdapterNotConfiguredError extends Error {
   constructor() {
@@ -77,121 +77,14 @@ type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
 };
 const localActiveResponses = new Map<string, CancellableResponse>();
 
-function inputRequest(request: {
-  requestId: string;
-  kind: "question" | "session-limit" | "tool-approval";
-  prompt: string;
-  options?: readonly { id: string; label: string }[];
-  allowFreeform?: boolean;
-}): PublicInputRequest {
-  return {
-    requestId: request.requestId,
-    kind: request.kind === "tool-approval" ? "approval" : "question",
-    title: request.prompt,
-    ...(request.options === undefined
-      ? {}
-      : { options: request.options.map(({ id, label }) => ({ id, label })) }),
-    allowFreeform: request.allowFreeform ?? false,
-  };
-}
-
 function projectEvent(
   event: MessageStreamEvent,
   index: number,
 ): PublicEveEvent[] {
-  switch (event.type) {
-    case "message.completed":
-      return event.data.message === null
-        ? []
-        : [
-            {
-              type: "assistant_message",
-              index,
-              turnId: event.data.turnId,
-              text: event.data.message,
-            },
-          ];
-    case "step.started":
-    case "step.completed":
-    case "step.failed":
-      return [
-        {
-          type: "progress",
-          index,
-          turnId: event.data.turnId,
-          label: "Agent step",
-          state:
-            event.type === "step.started"
-              ? "started"
-              : event.type === "step.completed"
-                ? "completed"
-                : "failed",
-        },
-      ];
-    case "input.requested":
-      return event.data.requests.map((request) => ({
-        type: "input_required" as const,
-        index,
-        request: inputRequest(request),
-      }));
-    case "authorization.required":
-      return [
-        {
-          type: "input_required",
-          index,
-          request: {
-            requestId:
-              event.data.attemptId ??
-              event.data.candidateId ??
-              `${event.data.turnId}:${event.data.name}`,
-            kind: "authorization",
-            title: event.data.name,
-            description: event.data.description,
-            allowFreeform: false,
-          },
-        },
-      ];
-    case "turn.cancelled":
-      return [{ type: "status", index, status: "cancelled" }];
-    case "session.waiting":
-      return [{ type: "status", index, status: "waiting" }];
-    case "session.completed":
-      return [{ type: "status", index, status: "completed" }];
-    case "session.failed":
-      return [
-        {
-          type: "error",
-          index,
-          code: event.data.code,
-          message: event.data.message,
-        },
-        { type: "status", index, status: "failed" },
-      ];
-    default:
-      return [];
-  }
-}
-
-function deriveStatus(events: readonly MessageStreamEvent[]): EveSessionStatus {
-  const last = events.at(-1);
-  if (last?.type === "session.failed") return "failed";
-  if (last?.type === "session.completed") return "completed";
-  const lastInput = events.findLastIndex(
-    (event) => event.type === "input.requested",
-  );
-  const lastProgress = events.findLastIndex((event) =>
-    [
-      "approval.settled",
-      "message.completed",
-      "step.started",
-      "turn.cancelled",
-      "turn.completed",
-    ].includes(event.type),
-  );
-  if (lastInput > lastProgress) return "input_required";
-  if (last?.type === "session.waiting") return "waiting";
-  if (last?.type === "turn.cancelled") return "cancelled";
-  return "working";
+  return projectInstalledEveEvent(event, index).flatMap((projected) => {
+    const publicEvent = toPublicEvent(projected);
+    return publicEvent === null ? [] : [publicEvent];
+  });
 }
 
 function resultForEvents(
@@ -209,7 +102,7 @@ function resultForEvents(
   );
   return {
     sessionId,
-    status: deriveStatus(snapshotEvents),
+    status: deriveInstalledEveStatus(snapshotEvents),
     cursor: Math.min(cursor + bounded.length, snapshotEvents.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),

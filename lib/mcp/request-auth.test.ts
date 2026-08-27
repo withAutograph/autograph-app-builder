@@ -9,9 +9,9 @@ import {
 } from "./request-auth";
 
 const config = hostedMcpAuthConfigSchema.parse({
-  issuer: "https://identity.example.test",
-  audience: "eve-hosted",
-  jwksUrl: "https://identity.example.test/.well-known/jwks.json",
+  issuer: "https://builder.example.test/api/auth",
+  audience: "https://builder.example.test/mcp",
+  jwksUrl: "https://builder.example.test/api/auth/jwks",
   algorithm: "ES256",
   resourceUrl: "https://builder.example.test/mcp",
 });
@@ -54,6 +54,12 @@ describe("hosted MCP request authentication", () => {
         jwksUrl: `${config.jwksUrl}?tenant=one`,
       }),
     ).toThrow();
+    expect(() =>
+      hostedMcpAuthConfigSchema.parse({
+        ...config,
+        audience: "https://another.example.test/mcp",
+      }),
+    ).toThrow("audience must equal");
   });
 
   it("publishes closed protected-resource metadata", () => {
@@ -94,6 +100,7 @@ describe("hosted MCP request authentication", () => {
       .setIssuer(config.issuer)
       .setAudience(config.audience)
       .setSubject("user-one")
+      .setIssuedAt(now - 1)
       .setNotBefore(now - 1)
       .setExpirationTime(now + 60)
       .sign(privateKey);
@@ -118,6 +125,7 @@ describe("hosted MCP request authentication", () => {
       Partial<{
         audience: string;
         expirationTime: number;
+        issuedAt: number;
         notBefore: number;
         kid: undefined;
       }>,
@@ -125,6 +133,8 @@ describe("hosted MCP request authentication", () => {
   >([
     ["wrong audience", { audience: "another-audience" }],
     ["expired", { expirationTime: 1_999_999_999 }],
+    ["long-lived", { expirationTime: 2_000_000_301 }],
+    ["future issued-at", { issuedAt: 2_000_000_001 }],
     ["future not-before", { notBefore: 2_000_000_001 }],
     ["missing key id", { kid: undefined }],
   ])("rejects %s", async (_name, override) => {
@@ -147,6 +157,7 @@ describe("hosted MCP request authentication", () => {
       .setIssuer(config.issuer)
       .setAudience(override.audience ?? config.audience)
       .setSubject("user-one")
+      .setIssuedAt(override.issuedAt ?? now - 1)
       .setNotBefore(override.notBefore ?? now - 1)
       .setExpirationTime(override.expirationTime ?? now + 60);
     const token = await signer.sign(privateKey);
@@ -173,6 +184,7 @@ describe("hosted MCP request authentication", () => {
       .setIssuer(config.issuer)
       .setAudience(config.audience)
       .setSubject("user-one")
+      .setIssuedAt(1_999_999_999)
       .setNotBefore(1_999_999_999)
       .setExpirationTime(2_000_000_060)
       .sign(privateKey);
