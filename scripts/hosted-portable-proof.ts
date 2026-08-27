@@ -180,11 +180,11 @@ export function verifyWorkspaceTokenPair(input: {
       );
   }
   if (
-    primary.sub !== secondary.sub ||
+    primary.sub === secondary.sub ||
     primary.workspace_id === secondary.workspace_id
   )
     throw new Error(
-      "Proof tokens must bind one subject to two distinct workspaces.",
+      "Proof tokens must bind two distinct subjects to two distinct workspaces.",
     );
   return {
     primaryIdentityDigest: digest(

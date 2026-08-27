@@ -54,21 +54,21 @@ const scenario = hostedProofScenarioSchema.parse({
   pollIntervalMs: 100,
 });
 
-function jwt(workspaceId: string) {
+function jwt(subject: string, workspaceId: string) {
   const encode = (value: unknown) =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
     iss: scenario.oauth.issuer,
     aud: scenario.oauth.audience,
-    sub: "proof-user",
+    sub: subject,
     workspace_id: workspaceId,
     scope: "eve:session eve:start eve:get eve:send eve:respond eve:cancel",
     nbf: 1_900,
     exp: 2_100,
   })}.signature`;
 }
-const primaryToken = jwt("workspace-primary");
-const secondaryToken = jwt("workspace-secondary");
+const primaryToken = jwt("proof-user-primary", "workspace-primary");
+const secondaryToken = jwt("proof-user-secondary", "workspace-secondary");
 
 const rpc = (id: unknown, result: unknown, status = 200) =>
   new Response(
@@ -356,7 +356,7 @@ describe("hosted portable fresh-client proof", () => {
     ).toThrow("Exactly one structural draft-PR receipt");
   });
 
-  it("rejects metadata drift and non-distinct workspace tokens", async () => {
+  it("rejects metadata drift and reused subject or workspace bindings", async () => {
     await expect(
       runHostedProof(
         proofInput(
@@ -373,7 +373,23 @@ describe("hosted portable fresh-client proof", () => {
         scenario,
         nowEpochSeconds: 2_000,
       }),
-    ).toThrow("two distinct workspaces");
+    ).toThrow("two distinct subjects to two distinct workspaces");
+    expect(() =>
+      verifyWorkspaceTokenPair({
+        primary: primaryToken,
+        secondary: jwt("proof-user-primary", "workspace-secondary"),
+        scenario,
+        nowEpochSeconds: 2_000,
+      }),
+    ).toThrow("two distinct subjects to two distinct workspaces");
+    expect(() =>
+      verifyWorkspaceTokenPair({
+        primary: primaryToken,
+        secondary: jwt("proof-user-secondary", "workspace-primary"),
+        scenario,
+        nowEpochSeconds: 2_000,
+      }),
+    ).toThrow("two distinct subjects to two distinct workspaces");
   });
 
   it("requires mutual server-backed workspace denial", async () => {
