@@ -225,6 +225,95 @@ describe("trusted Node launcher", () => {
     expect(JSON.parse(result.stdout)).toEqual({ gh, token: null });
   });
 
+  it("keeps OIDC out of generic tasks and exposes only a closed Eve launcher", () => {
+    const cleanEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      VERCEL_OIDC_TOKEN: "hostile-ambient-token",
+    };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const generic = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(process.env.VERCEL_OIDC_TOKEN ?? 'absent')",
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(generic.status, generic.stderr).toBe(0);
+    expect(generic.stdout).toBe("absent");
+
+    const localEveLauncher = resolve(
+      repositoryRoot,
+      ".config/mise/scripts/local-eve-launcher",
+    );
+    const localEveSource = readFileSync(localEveLauncher, "utf8");
+    const arbitrary = spawnSync(
+      localEveLauncher,
+      [pinnedNode, "-e", "process.stdout.write(process.env.VERCEL_OIDC_TOKEN)"],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(arbitrary.status).toBe(64);
+    expect(arbitrary.stdout).toBe("");
+    expect(arbitrary.stderr).not.toContain("hostile-ambient-token");
+    expect(localEveSource).not.toContain('"$@"');
+    expect(localEveSource).toContain(
+      '"$pinned_node" "$eve_cli" dev --host 127.0.0.1 --port 2000 --no-ui',
+    );
+
+    const localStart = readFileSync(
+      resolve(repositoryRoot, ".config/mise/tasks/local/start"),
+      "utf8",
+    );
+    expect(localStart.match(/local-eve-launcher/gu)).toHaveLength(1);
+    expect(localStart).not.toContain("export REPOSITORY_LOCAL_ROOTS");
+    expect(localStart).toContain(
+      'REPOSITORY_LOCAL_ROOTS="$source_root" .config/mise/scripts/local-eve-launcher',
+    );
+    expect(localStart).toContain(
+      '"$launcher" "$node_bin" node_modules/next/dist/bin/next dev',
+    );
+    expect(readFileSync(launcher, "utf8")).not.toContain("VERCEL_OIDC_TOKEN");
+    for (const path of taskFiles(
+      resolve(repositoryRoot, ".config/mise/tasks"),
+    )) {
+      if (path.endsWith("/local/start")) continue;
+      expect(readFileSync(path, "utf8"), path).not.toContain(
+        "local-eve-launcher",
+      );
+    }
+  });
+
+  it("requires one explicit canonical source root before starting local services", () => {
+    const localStart = resolve(
+      repositoryRoot,
+      ".config/mise/tasks/local/start",
+    );
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      REPOSITORY_LOCAL_ROOTS: "ambient-must-not-authorize",
+    };
+    delete environment.NODE_OPTIONS;
+    const missing = spawnSync(localStart, ["/tmp/state", "/tmp/output"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: environment,
+    });
+    expect(missing.status).toBe(64);
+    expect(missing.stdout).not.toContain("ambient-must-not-authorize");
+    expect(missing.stderr).not.toContain("ambient-must-not-authorize");
+
+    const relative = spawnSync(
+      localStart,
+      ["/tmp/state", "/tmp/output", "relative/source"],
+      { cwd: repositoryRoot, encoding: "utf8", env: environment },
+    );
+    expect(relative.status).toBe(78);
+    expect(relative.stderr).toContain("absolute regular directory");
+    expect(relative.stdout).not.toContain("ambient-must-not-authorize");
+    expect(relative.stderr).not.toContain("ambient-must-not-authorize");
+  });
+
   it("rejects a trusted wrapper name supplied only as a dummy argv token", () => {
     const cleanEnvironment = { ...process.env };
     delete cleanEnvironment.NODE_OPTIONS;

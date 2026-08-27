@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Validate and owner-bind a pulled local Vercel Development OIDC token"
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  echo "usage: mise run local:install-oidc" >&2
+  exit 64
+fi
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/install-local-vercel-oidc.ts

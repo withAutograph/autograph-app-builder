@@ -186,7 +186,8 @@ Before enabling GitHub or hosted repository publication:
    reset in this slice. GitHub
    draft-PR publication and remote template acquisition remain unavailable.
    Local operators expose this production capability only with `mise run
-local:start -- <owner-only-state-root> <owner-only-destination-root>`; direct
+local:start -- <owner-only-state-root> <owner-only-destination-root>
+<canonical-local-source-root>`; direct
    environment configuration is not a supported interface.
 
 Re-run the observational real-backend receipt with:
