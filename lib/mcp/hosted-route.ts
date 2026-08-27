@@ -94,6 +94,7 @@ export function createDeploymentMcpRequestHandler(input: {
           database,
           eve: config.eve,
           workloadIdentity: input.workloadIdentity,
+          admissionControl: config.admissionControl,
           fetchImplementation: input.fetchImplementation,
           now: input.now,
         });

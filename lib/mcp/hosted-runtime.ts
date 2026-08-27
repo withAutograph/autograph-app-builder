@@ -12,6 +12,7 @@ import {
   hostedMcpAuthConfigSchema,
 } from "./request-auth";
 import type { HostedMcpRuntime } from "./request-handler";
+import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
 /**
  * Pure composition boundary for a hosted deployment. Callers must inject an
@@ -26,6 +27,7 @@ export function composeHostedMcpRuntime(input: {
     timeoutMs?: number;
   };
   workloadIdentity: HostedWorkloadIdentity;
+  admissionControl: HostedPreviewAdmissionControlBinding;
   fetchImplementation?: typeof fetch;
   now?: () => number;
 }): HostedMcpRuntime {
@@ -43,6 +45,7 @@ export function composeHostedMcpRuntime(input: {
     }),
     membership: createPostgresWorkspaceMembership(input.database),
     store: createPostgresHostedEveStore(input.database),
+    admissionControl: input.admissionControl,
     transport: createSameOriginEveTransport(httpInput),
     now: input.now,
   };

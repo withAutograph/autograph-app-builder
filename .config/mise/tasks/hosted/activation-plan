@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Plan one closed Preview activation prerequisite"
+set -eu
+
+if [ "$#" -ne 2 ] || [ "$1" != "--request-file" ]; then
+  echo "usage: mise run hosted:activation-plan -- --request-file /absolute/owner-only.json" >&2
+  exit 64
+fi
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx lib/db/preview-activation-cli.mts \
+  plan --request-file "$2"

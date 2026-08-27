@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Initialize and read back the exact Preview OAuth resource and JWKS"
+set -eu
+
+if [ "$#" -ne 2 ] || [ "$1" != "--request-file" ]; then
+  echo "usage: mise run hosted:oauth-initialize -- --request-file /absolute/owner-only.json" >&2
+  exit 64
+fi
+if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
+  echo "hosted:oauth-initialize requires DATABASE_URL" >&2
+  exit 64
+fi
+database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$database_url" | (
+  unset database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx lib/db/preview-activation-cli.mts \
+    apply --expected-action oauth.initialize --database-url-fd 0 --request-file "$2"
+)

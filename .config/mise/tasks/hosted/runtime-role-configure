@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Configure and verify the least-privilege Preview runtime database role"
+set -eu
+
+if [ "$#" -ne 2 ] || [ "$1" != "--request-file" ]; then
+  echo "usage: mise run hosted:runtime-role-configure -- --request-file /absolute/owner-only.json" >&2
+  exit 64
+fi
+if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
+  echo "hosted:runtime-role-configure requires DATABASE_URL" >&2
+  exit 64
+fi
+database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$database_url" | (
+  unset database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx lib/db/preview-activation-cli.mts \
+    apply --expected-action runtime-role.configure --database-url-fd 0 --request-file "$2"
+)

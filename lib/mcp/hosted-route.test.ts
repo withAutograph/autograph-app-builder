@@ -30,6 +30,7 @@ const environment = {
     startsPerWorkspacePerMinute: 50,
     maxConcurrentSessionsPerSubject: 2,
     maxActiveSessionsPerWorkspace: 20,
+    monthlySpendUsedUsdCents: 0,
     monthlySpendLimitUsdCents: 10_000,
     observedAt: "2026-08-27T00:55:00.000Z",
     expiresAt: "2026-08-27T01:55:00.000Z",

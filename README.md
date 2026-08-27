@@ -208,6 +208,12 @@ template manifest.
 - Confirmation-bound hosted database tasks for exact membership activation and
   revocation, terminal-row retention, and drained tenant deletion. Their closed
   receipts contain only source/authority digests and bounded row counts.
+- Confirmation-bound Preview activation tasks for operator-invited users, a
+  separately verified least-privilege runtime database role, and bounded
+  resource/JWKS initialization. Public signup remains disabled; owner-only
+  requests carry secrets while receipts contain only digests, counts, and exact
+  privilege/role-attribute booleans. The runtime role has no memberships or
+  inherited, replication, bypass-RLS, owner, or extra object authority.
 - Deterministic unit tests and Eve evals that drive the real HTTP session
   surface with a fixture model, including approval and cancellation paths.
   A non-Node trusted launcher rejects ambient `NODE_OPTIONS` and replaces the
@@ -395,8 +401,9 @@ fail closed; this boundary does not authorize either environment. It never falls
 back to the local adapter. Hosted composition also requires a fresh, closed
 `EVE_HOSTED_ADMISSION_CONTROL` JSON binding to an exact provider readback. That
 binding names bounded per-subject and per-workspace start/session ceilings plus
-a monthly spend ceiling, expires within 24 hours, and is configuration evidence,
-not proof that the provider enforced it. The
+current monthly spend and its ceiling, and expires within 24 hours. Starts are
+rejected at the spend ceiling; the durable reservation transaction enforces the
+start/session limits before dispatch. The
 OAuth resource metadata is served from
 `/.well-known/oauth-protected-resource`. The signed, consent-bound
 `workspace_id` access-token claim is the sole workspace selector. OAuth

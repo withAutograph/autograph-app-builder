@@ -13,6 +13,7 @@ export const hostedPreviewAdmissionControlBindingSchema = z
     startsPerWorkspacePerMinute: z.number().int().min(1).max(300),
     maxConcurrentSessionsPerSubject: z.number().int().min(1).max(10),
     maxActiveSessionsPerWorkspace: z.number().int().min(1).max(100),
+    monthlySpendUsedUsdCents: z.number().int().min(0).max(1_000_000),
     monthlySpendLimitUsdCents: z.number().int().min(1).max(1_000_000),
     observedAt: instantSchema,
     expiresAt: instantSchema,
@@ -31,6 +32,13 @@ export const hostedPreviewAdmissionControlBindingSchema = z
         path: ["expiresAt"],
         message:
           "Hosted admission-control readback must expire within 24 hours.",
+      });
+    }
+    if (binding.monthlySpendUsedUsdCents >= binding.monthlySpendLimitUsdCents) {
+      context.addIssue({
+        code: "custom",
+        path: ["monthlySpendUsedUsdCents"],
+        message: "Hosted monthly spend is at or above its configured ceiling.",
       });
     }
   });
