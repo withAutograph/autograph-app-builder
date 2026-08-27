@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
+  HOSTED_TOOLCHAIN_CONTRACT_VERSION,
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedToolchainArtifacts,
   hostedToolchainBootstrapCommand,
@@ -36,20 +37,23 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).not.toMatch(/token|password|authorization/iu);
   });
 
-  it("binds snapshot revalidation to versions, artifacts, and hosts", () => {
+  it("binds snapshot revalidation to the contract, inputs, and exact command bytes", () => {
+    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(2);
     expect(hostedToolchainRevalidationKey()).toMatch(
-      /^autograph-app-builder-vercel-toolchain-v1:[0-9a-f]{64}$/u,
+      /^autograph-app-builder-vercel-toolchain-v2:[0-9a-f]{64}$/u,
     );
     expect(hostedToolchainRevalidationKey()).toBe(
       hostedToolchainRevalidationKey(),
+    );
+    const command = hostedToolchainBootstrapCommand();
+    expect(hostedToolchainRevalidationKey(`${command}\n# changed`)).not.toBe(
+      hostedToolchainRevalidationKey(command),
     );
   });
 
   it("narrows live sessions after the bootstrap snapshot", () => {
     const definition = readFileSync("agent/sandbox.ts", "utf8");
-    expect(definition).toContain(
-      "networkPolicy: { allow: [...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS] }",
-    );
+    expect(definition).toContain("backend: createHostedVercelBackend()");
     expect(definition).toContain('await use({ networkPolicy: "deny-all" })');
     expect(definition).toContain(
       "revalidationKey: hostedToolchainRevalidationKey",

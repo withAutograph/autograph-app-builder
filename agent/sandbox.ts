@@ -1,11 +1,9 @@
 import { defineSandbox } from "eve/sandbox";
 import { justbash } from "eve/sandbox/just-bash";
 import { microsandbox } from "eve/sandbox/microsandbox";
-import { vercel } from "eve/sandbox/vercel";
 
 import { sandboxBackendPlan } from "@/lib/sandbox/backend";
 import {
-  HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedToolchainBootstrapCommand,
   hostedToolchainRevalidationKey,
 } from "@/lib/sandbox/hosted-toolchain";
@@ -13,6 +11,7 @@ import {
   configuredToolchainImage,
   sandboxRevalidationKey,
 } from "@/lib/sandbox/toolchain";
+import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const image = configuredToolchainImage();
@@ -23,10 +22,7 @@ const plan = sandboxBackendPlan({
 });
 
 const vercelDefinition = defineSandbox({
-  backend: vercel({
-    networkPolicy: { allow: [...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS] },
-    resources: { vcpus: 2 },
-  }),
+  backend: createHostedVercelBackend(),
   async bootstrap({ use }) {
     // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
     const sandbox = await use();

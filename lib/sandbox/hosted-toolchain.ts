@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 export const HOSTED_MISE_VERSION = "2026.8.12";
 export const HOSTED_BUN_VERSION = "1.3.14";
+export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 2;
 
 export const hostedToolchainArtifacts = {
   aarch64: {
@@ -71,15 +72,20 @@ mise --version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'`;
 }
 
-export function hostedToolchainRevalidationKey(): string {
+export function hostedToolchainRevalidationKey(
+  bootstrapCommand = hostedToolchainBootstrapCommand(),
+): string {
   const binding = {
-    version: 1,
+    contractVersion: HOSTED_TOOLCHAIN_CONTRACT_VERSION,
     mise: HOSTED_MISE_VERSION,
     bun: HOSTED_BUN_VERSION,
     artifacts: hostedToolchainArtifacts,
     downloadHosts: HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
+    bootstrapCommand,
   };
-  return `autograph-app-builder-vercel-toolchain-v1:${createHash("sha256")
+  return `autograph-app-builder-vercel-toolchain-v${HOSTED_TOOLCHAIN_CONTRACT_VERSION}:${createHash(
+    "sha256",
+  )
     .update(JSON.stringify(binding))
     .digest("hex")}`;
 }
