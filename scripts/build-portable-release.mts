@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import {
   deterministicGzip,
@@ -28,6 +29,32 @@ const argument = (name: string) => {
 };
 
 const repositoryRoot = resolve(".");
+const git = (...args: string[]) =>
+  execFileSync("/usr/bin/git", args, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    env: {
+      PATH: "/usr/bin:/bin",
+      HOME: process.env.HOME,
+      LC_ALL: "C",
+      NODE_ENV: "production",
+    },
+  }).trim();
+if (git("status", "--porcelain=v1") !== "")
+  throw new Error("Portable releases require a clean source checkout.");
+const sourceRepository =
+  "https://github.com/withAutograph/autograph-app-builder";
+if (
+  !git("remote", "-v")
+    .split("\n")
+    .some((line) => line.includes(`\t${sourceRepository} (fetch)`))
+)
+  throw new Error("Portable releases require the canonical source remote.");
+const source = {
+  repository: sourceRepository,
+  sha: git("rev-parse", "HEAD"),
+  tree: git("rev-parse", "HEAD^{tree}"),
+};
 const endpoint = releaseEndpoint(argument("--endpoint"));
 const requestedOutput = resolve(
   argument("--output") ?? ".artifacts/portable-release/autograph-app-builder",
@@ -84,13 +111,17 @@ const clientRoot = join(output, "clients");
 await mkdir(clientRoot);
 for (const client of ["vscode", "cursor", "codex"] as const) {
   await writeFile(
-    join(clientRoot, `${client}.offline-harness.json`),
+    join(clientRoot, `${client}.client-harness.json`),
     `${JSON.stringify(
       {
-        format: "agent-plugins-offline-client-harness-v1",
+        format: "agent-plugins-client-harness-v2",
         client,
         pluginRoot: "../autograph-app-builder",
         mcp: "../autograph-app-builder/mcp.json",
+        transport: { type: "streamable-http", url: `${endpoint}/mcp` },
+        oauth: {
+          protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
+        },
       },
       null,
       2,
@@ -125,6 +156,7 @@ const receipt = {
   specification: "1.0.0",
   name: portable.name,
   version: portable.version,
+  source,
   endpoint: `${endpoint}/mcp`,
   archive: { name: archiveName, sha256: sha256(archive) },
   coreFiles: Object.fromEntries(

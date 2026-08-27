@@ -55,14 +55,14 @@ await cp(
 );
 const harness = JSON.parse(
   await readFile(
-    join(source, "clients", `${client}.offline-harness.json`),
+    join(source, "clients", `${client}.client-harness.json`),
     "utf8",
   ),
 );
 harness.pluginRoot = "./autograph-app-builder";
 harness.mcp = "./autograph-app-builder/mcp.json";
 await writeFile(
-  join(clientRoot, "offline-harness.json"),
+  join(clientRoot, "client-harness.json"),
   `${JSON.stringify(harness, null, 2)}\n`,
 );
 const release = JSON.parse(
@@ -81,4 +81,4 @@ await writeFile(
     2,
   )}\n`,
 );
-console.log(`Installed offline ${client} harness at ${clientRoot}`);
+console.log(`Installed portable ${client} harness at ${clientRoot}`);
