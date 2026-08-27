@@ -220,6 +220,65 @@ describe("Preview OAuth activation contract", () => {
     });
   });
 
+  it("normalizes only the native Codex refresh capability to the closed server grant", async () => {
+    const fetchClientMetadataResource = vi.fn(async () =>
+      Response.json({
+        client_id: "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json",
+        client_uri: "https://chatgpt.com/codex",
+        application_type: "native",
+        redirect_uris: [
+          "http://127.0.0.1/callback/4-bzS8rt42zJ",
+          "http://localhost/callback/4-bzS8rt42zJ",
+        ],
+        token_endpoint_auth_method: "none",
+        token_endpoint_auth_methods_supported: ["none"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        client_name: "Codex",
+        logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
+      }),
+    );
+    const options = buildPreviewCimdOptions({ fetchClientMetadataResource });
+    const response = await options.fetchClientMetadataResource(
+      "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json",
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code"],
+      redirect_uris: [
+        "http://127.0.0.1/callback/4-bzS8rt42zJ",
+        "http://localhost/callback/4-bzS8rt42zJ",
+      ],
+    });
+
+    const unsupported = buildPreviewCimdOptions({
+      fetchClientMetadataResource: vi.fn(async () =>
+        Response.json({
+          client_name: "Expanded client",
+          redirect_uris: ["http://127.0.0.1/callback"],
+          token_endpoint_auth_method: "none",
+          grant_types: [
+            "authorization_code",
+            "refresh_token",
+            "client_credentials",
+          ],
+          response_types: ["code"],
+        }),
+      ),
+    });
+    const unsupportedResponse = await unsupported.fetchClientMetadataResource(
+      "https://client.example/expanded.json",
+    );
+    await expect(unsupportedResponse.json()).resolves.toMatchObject({
+      grant_types: [
+        "authorization_code",
+        "refresh_token",
+        "client_credentials",
+      ],
+    });
+  });
+
   it("rejects missing and private_key_jwt auth before CIMD persistence", async () => {
     for (const tokenEndpointAuthMethod of [undefined, "private_key_jwt"]) {
       const options = buildPreviewCimdOptions({

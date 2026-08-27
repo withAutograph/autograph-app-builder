@@ -19,12 +19,38 @@ const clientId = "https://client.withautograph.com/portable.json";
 const redirectUri = "http://127.0.0.1:43123/auth/callback";
 const requestedScope = "eve:session eve:start";
 
-function authorizationUrl(challenge: string, state: string) {
+const codexClientId =
+  "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json";
+const codexRedirectUris = [
+  "http://127.0.0.1/callback/4-bzS8rt42zJ",
+  "http://localhost/callback/4-bzS8rt42zJ",
+] as const;
+const codexClientMetadata = {
+  client_id: codexClientId,
+  client_uri: "https://chatgpt.com/codex",
+  application_type: "native",
+  redirect_uris: [...codexRedirectUris],
+  token_endpoint_auth_method: "none",
+  token_endpoint_auth_methods_supported: ["none"],
+  grant_types: ["authorization_code", "refresh_token"],
+  response_types: ["code"],
+  client_name: "Codex",
+  logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
+};
+
+function authorizationUrl(
+  challenge: string,
+  state: string,
+  client: { id: string; redirectUri: string } = {
+    id: clientId,
+    redirectUri,
+  },
+) {
   const url = new URL(`${issuer}/oauth2/authorize`);
   for (const [key, value] of Object.entries({
     response_type: "code",
-    client_id: clientId,
-    redirect_uri: redirectUri,
+    client_id: client.id,
+    redirect_uri: client.redirectUri,
     scope: requestedScope,
     state,
     resource,
@@ -36,16 +62,21 @@ function authorizationUrl(challenge: string, state: string) {
   return url;
 }
 
-async function setup(activeWorkspaces: string[] = ["workspace_1"]) {
+async function setup(
+  activeWorkspaces: string[] = ["workspace_1"],
+  clientMetadata: Record<string, unknown> = {
+    client_name: "Portable client",
+    redirect_uris: [redirectUri],
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code"],
+    response_types: ["code"],
+  },
+) {
   const membershipState = { activeWorkspaces };
   const fetchClientMetadata = vi.fn(async (input: RequestInfo | URL) =>
     Response.json({
+      ...clientMetadata,
       client_id: input instanceof Request ? input.url : String(input),
-      client_name: "Portable client",
-      redirect_uris: [redirectUri],
-      token_endpoint_auth_method: "none",
-      grant_types: ["authorization_code"],
-      response_types: ["code"],
     }),
   );
   const options = buildPreviewMcpOAuthOptions({
@@ -248,6 +279,7 @@ describe("real Better Auth Preview OAuth handler", () => {
     const tokenBody = (await token.json()) as {
       access_token: string;
       expires_in: number;
+      refresh_token?: string;
       scope: string;
       token_type: string;
     };
@@ -256,6 +288,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       scope: requestedScope,
       token_type: "Bearer",
     });
+    expect(tokenBody.refresh_token).toBeUndefined();
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
     const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
@@ -278,6 +311,51 @@ describe("real Better Auth Preview OAuth handler", () => {
       clientId,
       expect.any(Object),
     );
+  });
+
+  it("accepts the native Codex CIMD metadata without weakening PKCE or redirects", async () => {
+    const { customFetchImpl, fetchClientMetadata, signIn } = await setup(
+      ["workspace_1"],
+      codexClientMetadata,
+    );
+    const signedIn = await signIn();
+    const response = await customFetchImpl(
+      authorizationUrl("k".repeat(43), "state_codex", {
+        id: codexClientId,
+        redirectUri: codexRedirectUris[0],
+      }),
+      { headers: signedIn, redirect: "manual" },
+    );
+
+    expect(response.status).toBe(302);
+    const consentLocation = new URL(response.headers.get("location")!, origin);
+    expect(consentLocation.pathname).toBe("/auth/consent");
+    expect(consentLocation.searchParams.get("client_id")).toBe(codexClientId);
+    expect(consentLocation.searchParams.get("redirect_uri")).toBe(
+      codexRedirectUris[0],
+    );
+    expect(consentLocation.searchParams.get("code_challenge_method")).toBe(
+      "S256",
+    );
+    expect(fetchClientMetadata).toHaveBeenCalledWith(
+      codexClientId,
+      expect.any(Object),
+    );
+
+    const alteredRedirect = authorizationUrl("k".repeat(43), "state_bad", {
+      id: codexClientId,
+      redirectUri: "http://127.0.0.1/callback/not-codex",
+    });
+    const rejected = await customFetchImpl(alteredRedirect, {
+      headers: signedIn,
+      redirect: "manual",
+    });
+    expect(rejected.status).toBe(302);
+    const errorLocation = new URL(rejected.headers.get("location")!);
+    expect(errorLocation.origin + errorLocation.pathname).toBe(
+      `${issuer}/error`,
+    );
+    expect(errorLocation.searchParams.get("error")).toBe("invalid_redirect");
   });
 
   it("normalizes a form POST authorization request", async () => {
