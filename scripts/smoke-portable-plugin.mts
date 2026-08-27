@@ -23,6 +23,8 @@ const receipt = JSON.parse(
 if (
   receipt.format !== "autograph-portable-plugin-release-v2" ||
   receipt.specification !== "1.0.0" ||
+  !/^[0-9a-f]{40}$/u.test(receipt.source?.sha ?? "") ||
+  !/^[0-9a-f]{40}$/u.test(receipt.source?.tree ?? "") ||
   !Array.isArray(receipt.tools) ||
   JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES)
 )
@@ -65,21 +67,25 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
     }
   }
   const harness = JSON.parse(
-    await readFile(join(root, "offline-harness.json"), "utf8"),
+    await readFile(join(root, "client-harness.json"), "utf8"),
   );
   const installation = JSON.parse(
     await readFile(join(root, "installation-receipt.json"), "utf8"),
   );
   if (
-    harness.format !== "agent-plugins-offline-client-harness-v1" ||
+    harness.format !== "agent-plugins-client-harness-v2" ||
     harness.client !== client ||
     harness.pluginRoot !== "./autograph-app-builder" ||
     harness.mcp !== "./autograph-app-builder/mcp.json" ||
+    harness.transport?.type !== "streamable-http" ||
+    harness.transport?.url !== receipt.endpoint ||
+    harness.oauth?.protectedResourceMetadata !==
+      `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource` ||
     installation.client !== client ||
     installation.releaseArchive.sha256 !== receipt.archive.sha256
   )
     throw new Error(`${client} offline harness metadata was invalid.`);
 }
 console.log(
-  "Offline VS Code, Cursor, and Codex package loading plus exact-five-tool discovery passed.",
+  "Portable VS Code, Cursor, and Codex package loading plus exact-five-tool discovery passed.",
 );

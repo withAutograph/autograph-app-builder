@@ -7,7 +7,7 @@ import {
 
 const claims = {
   issuer: "https://identity.example.test",
-  audience: "autograph-app-builder",
+  audience: "https://builder.example.test/mcp",
   subject: "user_1",
   workspaceId: "workspace_1",
   scopes: ["eve:session", "eve:respond"],
@@ -19,7 +19,6 @@ function authorize(verifiedClaims: unknown = claims) {
     expectedIssuer: claims.issuer,
     expectedAudience: claims.audience,
     requiredScopes: ["eve:session", "eve:respond"],
-    requestedWorkspaceId: claims.workspaceId,
   });
 }
 
@@ -37,7 +36,6 @@ describe("hosted Eve authorization", () => {
   it.each([
     ["issuer_mismatch", { ...claims, issuer: "https://other.example.test" }],
     ["audience_mismatch", { ...claims, audience: "another-client" }],
-    ["workspace_mismatch", { ...claims, workspaceId: "workspace_2" }],
     ["insufficient_scope", { ...claims, scopes: ["eve:session"] }],
     ["invalid_claims", { ...claims, unexpected: "claim" }],
     ["invalid_claims", { ...claims, audience: [claims.audience] }],

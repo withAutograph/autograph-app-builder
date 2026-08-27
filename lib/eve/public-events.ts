@@ -3,6 +3,7 @@ import type {
   PublicEveEvent,
   PublicInputRequest,
 } from "@/lib/mcp/contracts";
+import type { MessageStreamEvent } from "eve/client";
 
 export type InternalEveEvent = {
   type: string;
@@ -18,6 +19,126 @@ export type InternalEveEvent = {
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
+
+function inputRequest(request: {
+  requestId: string;
+  kind: "question" | "session-limit" | "tool-approval";
+  prompt: string;
+  options?: readonly { id: string; label: string }[];
+  allowFreeform?: boolean;
+}): PublicInputRequest {
+  return {
+    requestId: request.requestId,
+    kind: request.kind === "tool-approval" ? "approval" : "question",
+    title: request.prompt,
+    ...(request.options === undefined
+      ? {}
+      : { options: request.options.map(({ id, label }) => ({ id, label })) }),
+    allowFreeform: request.allowFreeform ?? false,
+  };
+}
+
+/** Converts only the installed Eve 0.43 events that belong in the public MCP projection. */
+export function projectInstalledEveEvent(
+  event: MessageStreamEvent,
+  index: number,
+): InternalEveEvent[] {
+  switch (event.type) {
+    case "message.completed":
+      return event.data.message === null
+        ? []
+        : [
+            {
+              type: "assistant.message",
+              index,
+              turnId: event.data.turnId,
+              text: event.data.message,
+            },
+          ];
+    case "step.started":
+    case "step.completed":
+    case "step.failed":
+      return [
+        {
+          type: "progress",
+          index,
+          turnId: event.data.turnId,
+          label: "Agent step",
+          state:
+            event.type === "step.started"
+              ? "started"
+              : event.type === "step.completed"
+                ? "completed"
+                : "failed",
+        },
+      ];
+    case "input.requested":
+      return event.data.requests.map((request) => ({
+        type: "input.requested",
+        index,
+        request: inputRequest(request),
+      }));
+    case "authorization.required":
+      return [
+        {
+          type: "input.requested",
+          index,
+          request: {
+            requestId:
+              event.data.attemptId ??
+              event.data.candidateId ??
+              `${event.data.turnId}:${event.data.name}`,
+            kind: "authorization",
+            title: event.data.name,
+            description: event.data.description,
+            allowFreeform: false,
+          },
+        },
+      ];
+    case "turn.cancelled":
+      return [{ type: "status", index, status: "cancelled" }];
+    case "session.waiting":
+      return [{ type: "status", index, status: "waiting" }];
+    case "session.completed":
+      return [{ type: "status", index, status: "completed" }];
+    case "session.failed":
+      return [
+        {
+          type: "error.public",
+          index,
+          code: event.data.code,
+          message: event.data.message,
+        },
+        { type: "status", index, status: "failed" },
+      ];
+    default:
+      return [];
+  }
+}
+
+export function deriveInstalledEveStatus(
+  events: readonly MessageStreamEvent[],
+): EveSessionStatus {
+  const last = events.at(-1);
+  if (last?.type === "session.failed") return "failed";
+  if (last?.type === "session.completed") return "completed";
+  const lastInput = events.findLastIndex(
+    (event) => event.type === "input.requested",
+  );
+  const lastProgress = events.findLastIndex((event) =>
+    [
+      "approval.settled",
+      "message.completed",
+      "step.started",
+      "turn.cancelled",
+      "turn.completed",
+    ].includes(event.type),
+  );
+  if (lastInput > lastProgress) return "input_required";
+  if (last?.type === "session.waiting") return "waiting";
+  if (last?.type === "turn.cancelled") return "cancelled";
+  return "working";
+}
 
 /** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */
 export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {

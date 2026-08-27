@@ -24,9 +24,13 @@
     "build:portable-release": "mise run package:build-portable-release --",
     "install:portable-plugin": "mise run package:install-portable --",
     "smoke:portable-plugin": "mise run package:smoke-portable --",
+    "prove:hosted-plugin": "mise run package:prove-hosted --",
     "test:portable-plugin": "mise run package:test-portable"
   },
   "dependencies": {
+    "@better-auth/cimd": "1.7.1",
+    "@better-auth/mcp": "1.7.1",
+    "@better-auth/oauth-provider": "1.7.1",
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/server": "2.0.0",
     "@vercel/connect": "0.9.0",

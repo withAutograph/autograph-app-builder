@@ -56,7 +56,14 @@ isolated workspace.
    Fresh bootstrap must use only `fresh_bootstrap_status`,
    `publish_fresh_repository`, and `recover_fresh_repository`. It must remain
    disabled unless the host's mise-owned lifecycle supplies exact owner-only
-   state and destination roots. GitHub, remotes, release activation, and an
+   state and destination roots. Remote GitHub work is a different outcome: use
+   only the typed GitHub acquisition, private fresh-history creation, and
+   branch/draft-PR tools, with separate approval for each mutation. Bind every
+   operation to the exact selected installation, repository ID, immutable
+   SHA/tree, reviewed digest, absent `REPOSITORY_RELEASE_ENABLED` gate, and
+   durable idempotency receipt. If the installation-bound adapter and CAS store
+   are unavailable, stop; never substitute a token, endpoint, shell, local Git
+   command, or caller-supplied provider response. Release activation and an
    abandoned-lease reset remain unavailable.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.

@@ -1,0 +1,63 @@
+{
+  "format": "autograph-hosted-client-proof-scenario-v2",
+  "createPrompt": "Create the exact approved application and pause at every approval boundary.",
+  "iterateMessage": "Apply the exact approved iteration, validate it, and create only the approved draft pull request.",
+  "cancelPrompt": "Begin a read-only design exploration that remains active long enough for cooperative cancellation.",
+  "target": {
+    "repository": "OWNER/REPOSITORY",
+    "baseRef": "refs/heads/main",
+    "baseSha": "0000000000000000000000000000000000000000",
+    "headRef": "refs/heads/approved-proof-branch",
+    "appSpecDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "changeSetDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "oauth": {
+    "issuer": "https://ISSUER_ORIGIN",
+    "audience": "https://PREVIEW_ORIGIN/mcp",
+    "resource": "https://PREVIEW_ORIGIN/mcp"
+  },
+  "questionResponses": [],
+  "approvalReceipts": [
+    {
+      "requestTitle": "Approve AppSpec",
+      "receipt": {
+        "format": "autograph-eve-approval-receipt-v1",
+        "phase": "appspec",
+        "repository": "OWNER/REPOSITORY",
+        "baseRef": "refs/heads/main",
+        "baseSha": "0000000000000000000000000000000000000000",
+        "subjectDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "outcome": "accept-appspec"
+      },
+      "response": "approve"
+    },
+    {
+      "requestTitle": "Approve change set",
+      "receipt": {
+        "format": "autograph-eve-approval-receipt-v1",
+        "phase": "change_set",
+        "repository": "OWNER/REPOSITORY",
+        "baseRef": "refs/heads/main",
+        "baseSha": "0000000000000000000000000000000000000000",
+        "subjectDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "outcome": "accept-change-set"
+      },
+      "response": "approve"
+    },
+    {
+      "requestTitle": "Approve draft PR publication",
+      "receipt": {
+        "format": "autograph-eve-approval-receipt-v1",
+        "phase": "publication",
+        "repository": "OWNER/REPOSITORY",
+        "baseRef": "refs/heads/main",
+        "baseSha": "0000000000000000000000000000000000000000",
+        "subjectDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "outcome": "create-draft-pr"
+      },
+      "response": "approve"
+    }
+  ],
+  "maxPolls": 60,
+  "pollIntervalMs": 1000
+}

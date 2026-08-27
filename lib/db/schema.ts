@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   jsonb,
   pgTable,
@@ -7,6 +8,29 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+
+export const hostedWorkspaceMemberships = pgTable(
+  "hosted_workspace_membership",
+  {
+    issuer: text("issuer").notNull(),
+    audience: text("audience").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    active: boolean("active").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_workspace_membership_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+      ],
+    }),
+  ],
+);
 
 export const agentSessions = pgTable(
   "agent_session",
@@ -37,6 +61,13 @@ export const agentSessions = pgTable(
       table.audience,
       table.workspaceId,
       table.ownerUserId,
+    ),
+    index("agent_session_retention_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.updatedAt,
     ),
     uniqueIndex("agent_session_adapter_id_idx").on(
       table.issuer,
@@ -83,6 +114,14 @@ export const agentOperations = pgTable(
       table.ownerUserId,
       table.kind,
       table.clientRequestId,
+    ),
+    index("agent_operation_retention_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.updatedAt,
+      table.state,
     ),
   ],
 );

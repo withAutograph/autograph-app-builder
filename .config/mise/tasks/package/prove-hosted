@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Prove a live OAuth-backed hosted Agent Plugins lifecycle"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/prove-hosted-portable-plugin.mts "$@"

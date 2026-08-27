@@ -1,0 +1,195 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  buildPreviewCimdOptions,
+  buildPreviewMcpOAuthOptions,
+  previewEmailPasswordPolicy,
+  previewMcpScopes,
+  readPreviewOAuthContractConfig,
+} from "./preview-oauth-contract";
+
+const config = {
+  issuer: "https://builder.example.test/api/auth",
+  resource: "https://builder.example.test/mcp",
+};
+
+function membership(active = true) {
+  return {
+    activeWorkspaceForUser: vi.fn(async () =>
+      active ? "workspace_1" : undefined,
+    ),
+    isActiveMember: vi.fn(async () => active),
+  };
+}
+
+describe("Preview OAuth activation contract", () => {
+  it("closes issuer and resource to one exact origin and route", () => {
+    expect(
+      readPreviewOAuthContractConfig({
+        BETTER_AUTH_URL: config.issuer,
+        MCP_RESOURCE_URL: config.resource,
+      }),
+    ).toEqual(config);
+    for (const candidate of [
+      { ...config, issuer: "https://other.example.test/api/auth" },
+      { ...config, issuer: "https://builder.example.test/not-auth" },
+      { ...config, resource: "https://builder.example.test/not-mcp" },
+      { ...config, resource: `${config.resource}?tenant=one` },
+    ]) {
+      expect(() =>
+        buildPreviewMcpOAuthOptions({
+          config: candidate,
+          membership: membership(),
+        }),
+      ).toThrow();
+    }
+  });
+
+  it("declares only approval-bound user grants, S256 policy, and server-owned ceilings", () => {
+    const options = buildPreviewMcpOAuthOptions({
+      config,
+      membership: membership(),
+    });
+    expect(options).toMatchObject({
+      resource: config.resource,
+      loginPage: "/auth/sign-in",
+      consentPage: "/auth/consent",
+      grantTypes: ["authorization_code", "refresh_token"],
+      accessTokenExpiresIn: 300,
+      refreshTokenReuseInterval: 0,
+      clientRegistrationRequirePKCE: true,
+      allowDynamicClientRegistration: false,
+      allowUnauthenticatedClientRegistration: false,
+      clientRegistrationDefaultResources: [config.resource],
+      clientRegistrationAllowedResources: [],
+      clientRegistrationDefaultScopes: ["eve:session"],
+    });
+    expect(options.scopes).toEqual(previewMcpScopes);
+    expect(options.clientRegistrationAllowedScopes).toEqual(
+      previewMcpScopes.slice(1),
+    );
+    expect(options.resources).toEqual([
+      {
+        identifier: config.resource,
+        accessTokenTtl: 300,
+        allowedScopes: [...previewMcpScopes],
+        signingAlgorithm: "ES256",
+      },
+    ]);
+    expect(previewEmailPasswordPolicy).toEqual({
+      enabled: true,
+      disableSignUp: true,
+      minPasswordLength: 12,
+      maxPasswordLength: 128,
+    });
+  });
+
+  it("binds consent and token claims to the same live exact membership", async () => {
+    const authority = membership();
+    const options = buildPreviewMcpOAuthOptions({
+      config,
+      membership: authority,
+      now: () => 2_000_000_000_000,
+    });
+    const user = { id: "user_1" } as never;
+    await expect(
+      options.postLogin?.consentReferenceId({
+        user,
+        session: {} as never,
+        scopes: ["eve:session"],
+      }),
+    ).resolves.toBe("workspace_1");
+    await expect(
+      options.customAccessTokenClaims?.({
+        user,
+        referenceId: "workspace_1",
+        scopes: ["eve:session"],
+        resources: [config.resource],
+      }),
+    ).resolves.toEqual({
+      nbf: 2_000_000_000,
+      workspace_id: "workspace_1",
+    });
+    expect(authority.isActiveMember).toHaveBeenCalledWith({
+      issuer: config.issuer,
+      audience: config.resource,
+      workspaceId: "workspace_1",
+      ownerUserId: "user_1",
+    });
+  });
+
+  it("fails claim issuance closed for absent membership or wrong resource", async () => {
+    const inactive = buildPreviewMcpOAuthOptions({
+      config,
+      membership: membership(false),
+    });
+    const user = { id: "user_1" } as never;
+    await expect(
+      inactive.postLogin?.consentReferenceId({
+        user,
+        session: {} as never,
+        scopes: ["eve:session"],
+      }),
+    ).rejects.toThrow("exactly one active");
+    await expect(
+      inactive.customAccessTokenClaims?.({
+        user,
+        referenceId: "workspace_1",
+        scopes: ["eve:session"],
+        resources: [config.resource],
+      }),
+    ).rejects.toThrow("not active");
+
+    const active = buildPreviewMcpOAuthOptions({
+      config,
+      membership: membership(),
+    });
+    await expect(
+      active.customAccessTokenClaims?.({
+        user,
+        referenceId: "workspace_1",
+        scopes: ["eve:session"],
+        resources: ["https://other.example.test/mcp"],
+      }),
+    ).rejects.toThrow("not active");
+  });
+
+  it("pins CIMD to public clients through the application-owned transport", async () => {
+    const fetchClientMetadataResource = vi.fn(async () =>
+      Response.json({
+        client_name: "Codex",
+        redirect_uris: ["http://127.0.0.1:43123/auth/callback"],
+        token_endpoint_auth_method: "none",
+      }),
+    );
+    const options = buildPreviewCimdOptions({ fetchClientMetadataResource });
+    expect(options.metadataProfile).toBe("mcp-2026-07-28");
+    const response = await options.fetchClientMetadataResource(
+      "https://client.example/codex.json",
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      token_endpoint_auth_method: "none",
+    });
+  });
+
+  it("rejects missing and private_key_jwt auth before CIMD persistence", async () => {
+    for (const tokenEndpointAuthMethod of [undefined, "private_key_jwt"]) {
+      const options = buildPreviewCimdOptions({
+        fetchClientMetadataResource: vi.fn(async () =>
+          Response.json({
+            client_name: "Privileged client",
+            redirect_uris: ["https://client.example/callback"],
+            ...(tokenEndpointAuthMethod === undefined
+              ? {}
+              : { token_endpoint_auth_method: tokenEndpointAuthMethod }),
+          }),
+        ),
+      });
+      await expect(
+        options.fetchClientMetadataResource(
+          "https://client.example/metadata.json",
+        ),
+      ).rejects.toThrow("token_endpoint_auth_method none");
+    }
+  });
+});

@@ -26,8 +26,7 @@ export function OPTIONS(): Response {
   return new Response(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Headers":
-        "Authorization, Content-Type, X-Eve-Workspace-Id",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Max-Age": "86400",

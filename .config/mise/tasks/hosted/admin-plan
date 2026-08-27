@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Plan a closed hosted database action without opening PostgreSQL"
+set -eu
+
+if [ "$#" -ne 2 ] || [ "$1" != "--request-file" ]; then
+  echo "usage: mise run hosted:admin-plan -- --request-file /absolute/owner-only.json" >&2
+  exit 64
+fi
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx lib/db/hosted-admin-cli.mts \
+  plan --request-file "$2"

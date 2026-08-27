@@ -8,6 +8,20 @@
       "when": 1787626800000,
       "tag": "0001_hosted_eve_bridge",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787755200000,
+      "tag": "0002_hosted_workspace_membership",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787795200000,
+      "tag": "0003_hosted_retention_indexes",
+      "breakpoints": true
     }
   ]
 }

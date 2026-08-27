@@ -2,22 +2,39 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
 import * as databaseSchema from "../db/schema";
-import type { HostedWorkloadIdentity } from "../eve/hosted-http";
+import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import {
   createDeploymentMcpRequestHandler,
   readHostedDeploymentConfig,
 } from "./hosted-route";
 
+const nowEpochMs = Date.parse("2026-08-27T01:00:00.000Z");
+
 const environment = {
   EVE_HOSTED_ADAPTER: "1",
+  EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+  EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
+  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
   DATABASE_URL: "postgresql://user:password@database.example.test/eve",
-  EVE_HOSTED_GATEWAY_URL: "https://eve-gateway.example.test",
-  EVE_HOSTED_WORKLOAD_AUDIENCE: "eve-workload",
-  MCP_OAUTH_ISSUER: "https://identity.example.test",
-  MCP_OAUTH_AUDIENCE: "eve-hosted",
-  MCP_OAUTH_JWKS_URL: "https://identity.example.test/.well-known/jwks.json",
+  MCP_OAUTH_ISSUER: "https://builder.example.test/api/auth",
+  MCP_OAUTH_AUDIENCE: "https://builder.example.test/mcp",
+  MCP_OAUTH_JWKS_URL: "https://builder.example.test/api/auth/jwks",
   MCP_OAUTH_ALGORITHM: "ES256",
   MCP_RESOURCE_URL: "https://builder.example.test/mcp",
+  EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify({
+    version: 1,
+    environment: "preview",
+    enforcement: "provider-readback",
+    scope: "issuer-audience-workspace-subject",
+    startsPerSubjectPerMinute: 10,
+    startsPerWorkspacePerMinute: 50,
+    maxConcurrentSessionsPerSubject: 2,
+    maxActiveSessionsPerWorkspace: 20,
+    monthlySpendLimitUsdCents: 10_000,
+    observedAt: "2026-08-27T00:55:00.000Z",
+    expiresAt: "2026-08-27T01:55:00.000Z",
+    readbackDigest: `sha256:${"a".repeat(64)}`,
+  }),
 };
 
 const workloadIdentity: HostedWorkloadIdentity = {
@@ -51,6 +68,7 @@ describe("hosted route composition", () => {
       environment,
       workloadIdentity,
       openDatabase,
+      now: () => nowEpochMs,
     });
 
     expect(openDatabase).not.toHaveBeenCalled();
@@ -64,19 +82,59 @@ describe("hosted route composition", () => {
   });
 
   it("fails closed without constructing storage when hosted configuration is invalid", async () => {
+    for (const invalidEnvironment of [
+      { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
+      { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
+      { ...environment, EVE_HOSTED_ADMISSION_CONTROL: undefined },
+    ]) {
+      const openDatabase = vi.fn(() => ({}) as unknown as Database);
+      const handler = createDeploymentMcpRequestHandler({
+        environment: invalidEnvironment,
+        workloadIdentity,
+        openDatabase,
+        now: () => nowEpochMs,
+      });
+
+      const response = await handler(request());
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toEqual({
+        error: "service_unavailable",
+      });
+      expect(openDatabase).not.toHaveBeenCalled();
+    }
+  });
+
+  it("binds every hosted request to the exact configured MCP resource before opening storage", async () => {
     const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({
-      environment: { ...environment, EVE_HOSTED_GATEWAY_URL: "http://local" },
+      environment,
       workloadIdentity,
       openDatabase,
+      now: () => nowEpochMs,
     });
 
-    const response = await handler(request());
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({
-      error: "service_unavailable",
-    });
+    const wrongOrigin = await handler(
+      new Request("https://other.example.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      }),
+    );
+    expect(wrongOrigin.status).toBe(503);
     expect(openDatabase).not.toHaveBeenCalled();
+
+    expect((await handler(request())).status).toBe(401);
+    expect(openDatabase).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        await handler(
+          new Request(`${environment.MCP_RESOURCE_URL}?unexpected=1`, {
+            method: "POST",
+          }),
+        )
+      ).status,
+    ).toBe(503);
+    expect(openDatabase).toHaveBeenCalledTimes(1);
   });
 
   it("never falls back after a hosted storage composition failure", async () => {
@@ -87,6 +145,7 @@ describe("hosted route composition", () => {
       environment,
       workloadIdentity,
       openDatabase,
+      now: () => nowEpochMs,
     });
 
     const response = await handler(request());
@@ -95,33 +154,51 @@ describe("hosted route composition", () => {
   });
 
   it("accepts only a bounded PostgreSQL deployment URL", () => {
-    expect(readHostedDeploymentConfig(environment).databaseUrl).toBe(
-      environment.DATABASE_URL,
-    );
+    expect(
+      readHostedDeploymentConfig(environment, nowEpochMs).databaseUrl,
+    ).toBe(environment.DATABASE_URL);
     for (const databaseUrl of [
       "mysql://database.example.test/eve",
       "postgresql://database.example.test/eve\n",
       "not-a-url",
     ]) {
       expect(() =>
-        readHostedDeploymentConfig({
-          ...environment,
-          DATABASE_URL: databaseUrl,
-        }),
+        readHostedDeploymentConfig(
+          { ...environment, DATABASE_URL: databaseUrl },
+          nowEpochMs,
+        ),
       ).toThrow();
     }
-    for (const gatewayUrl of [
-      "http://eve-gateway.example.test",
-      "https://eve-gateway.example.test/private",
-      "https://user@eve-gateway.example.test",
-      "https://eve-gateway.example.test?tenant=one",
-    ]) {
-      expect(() =>
-        readHostedDeploymentConfig({
+    expect(readHostedDeploymentConfig(environment, nowEpochMs).eve).toEqual({
+      baseUrl: "https://builder.example.test",
+    });
+    expect(
+      readHostedDeploymentConfig(environment, nowEpochMs).forwarderSubject,
+    ).toBe(
+      "owner:withautograph:project:autograph-app-builder:environment:preview",
+    );
+    expect(
+      readHostedDeploymentConfig(environment, nowEpochMs).admissionControl,
+    ).toMatchObject({
+      environment: "preview",
+      enforcement: "provider-readback",
+      maxConcurrentSessionsPerSubject: 2,
+    });
+    expect(() =>
+      readHostedDeploymentConfig(
+        {
           ...environment,
-          EVE_HOSTED_GATEWAY_URL: gatewayUrl,
-        }),
-      ).toThrow();
-    }
+          MCP_RESOURCE_URL: "https://builder.example.test/not-mcp",
+          MCP_OAUTH_AUDIENCE: "https://builder.example.test/not-mcp",
+        },
+        nowEpochMs,
+      ),
+    ).toThrow("resourceUrl must be the exact /mcp URL");
+    expect(() =>
+      readHostedDeploymentConfig(
+        { ...environment, EVE_HOSTED_ADMISSION_CONTROL: undefined },
+        nowEpochMs,
+      ),
+    ).toThrow("admission-control readback is required");
   });
 });

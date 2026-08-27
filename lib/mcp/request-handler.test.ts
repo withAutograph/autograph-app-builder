@@ -9,9 +9,9 @@ import {
 } from "./request-handler";
 
 const auth = {
-  issuer: "https://identity.example.test",
-  audience: "eve-hosted",
-  jwksUrl: "https://identity.example.test/.well-known/jwks.json",
+  issuer: "https://builder.example.test/api/auth",
+  audience: "https://builder.example.test/mcp",
+  jwksUrl: "https://builder.example.test/api/auth/jwks",
   algorithm: "ES256" as const,
   resourceUrl: "https://builder.example.test/mcp",
 };
@@ -143,7 +143,6 @@ describe("request-scoped MCP service selection", () => {
     const response = await handler(
       mcpRequest({
         authorization: "Bearer token",
-        "x-eve-workspace-id": "workspace-one",
       }),
     );
     expect(response.status).toBe(503);
@@ -180,7 +179,6 @@ describe("request-scoped MCP service selection", () => {
     const invalidResponse = await invalid(
       mcpRequest({
         authorization: "Bearer token",
-        "x-eve-workspace-id": "workspace-one",
       }),
     );
     expect(invalidResponse.status).toBe(401);
@@ -194,7 +192,6 @@ describe("request-scoped MCP service selection", () => {
     const insufficientResponse = await insufficient(
       mcpRequest({
         authorization: "Bearer token",
-        "x-eve-workspace-id": "workspace-one",
       }),
     );
     expect(insufficientResponse.status).toBe(403);
@@ -203,16 +200,9 @@ describe("request-scoped MCP service selection", () => {
     );
   });
 
-  it("makes missing, mismatched, denied, and membership-error workspaces indistinguishable", async () => {
-    const requestHeaders = {
-      authorization: "Bearer token",
-      "x-eve-workspace-id": "workspace-two",
-    };
+  it("makes denied and membership-error workspaces indistinguishable", async () => {
+    const requestHeaders = { authorization: "Bearer token" };
     const handlers = [
-      createMcpRequestHandler({
-        environment: { EVE_HOSTED_ADAPTER: "1" },
-        hostedRuntime: runtime(),
-      }),
       createMcpRequestHandler({
         environment: { EVE_HOSTED_ADAPTER: "1" },
         hostedRuntime: runtime({
@@ -231,10 +221,8 @@ describe("request-scoped MCP service selection", () => {
       }),
     ];
     const responses = [
-      await handlers[0]!(mcpRequest({ authorization: "Bearer token" })),
       await handlers[0]!(mcpRequest(requestHeaders)),
       await handlers[1]!(mcpRequest(requestHeaders)),
-      await handlers[2]!(mcpRequest(requestHeaders)),
     ];
     const projections = await Promise.all(
       responses.map(async (response) => ({
@@ -277,13 +265,11 @@ describe("request-scoped MCP service selection", () => {
       handler(
         mcpRequest({
           authorization: "Bearer one",
-          "x-eve-workspace-id": "workspace-one",
         }),
       ),
       handler(
         mcpRequest({
           authorization: "Bearer two",
-          "x-eve-workspace-id": "workspace-two",
         }),
       ),
     ]);

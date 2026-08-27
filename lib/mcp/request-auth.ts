@@ -7,7 +7,6 @@ import {
 import { z } from "zod";
 
 import {
-  hostedIdentifierSchema,
   verifiedHostedClaimsSchema,
   type VerifiedHostedClaims,
 } from "../eve/hosted-auth";
@@ -17,7 +16,7 @@ const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 export const hostedMcpAuthConfigSchema = z
   .object({
     issuer: z.string().url().startsWith("https://"),
-    audience: z.string().min(1).max(300),
+    audience: z.string().url().startsWith("https://"),
     jwksUrl: z.string().url().startsWith("https://"),
     algorithm: strongAlgorithmSchema,
     resourceUrl: z.string().url().startsWith("https://"),
@@ -37,6 +36,44 @@ export const hostedMcpAuthConfigSchema = z
           message: `${field} cannot contain credentials, query, or fragment.`,
         });
       }
+    }
+    if (config.audience !== config.resourceUrl) {
+      context.addIssue({
+        code: "custom",
+        path: ["audience"],
+        message: "audience must equal the protected resource URL.",
+      });
+    }
+    const issuer = new URL(config.issuer);
+    const resource = new URL(config.resourceUrl);
+    const jwks = new URL(config.jwksUrl);
+    if (issuer.pathname !== "/api/auth") {
+      context.addIssue({
+        code: "custom",
+        path: ["issuer"],
+        message: "issuer must be the exact /api/auth URL.",
+      });
+    }
+    if (resource.pathname !== "/mcp") {
+      context.addIssue({
+        code: "custom",
+        path: ["resourceUrl"],
+        message: "resourceUrl must be the exact /mcp URL.",
+      });
+    }
+    if (issuer.origin !== resource.origin) {
+      context.addIssue({
+        code: "custom",
+        path: ["resourceUrl"],
+        message: "issuer and resourceUrl must share one origin.",
+      });
+    }
+    if (jwks.origin !== issuer.origin || jwks.pathname !== "/api/auth/jwks") {
+      context.addIssue({
+        code: "custom",
+        path: ["jwksUrl"],
+        message: "jwksUrl must be the exact issuer /api/auth/jwks URL.",
+      });
     }
   });
 
@@ -78,12 +115,6 @@ export function parseStrictBearerAuthorization(
     throw new BearerAuthorizationError();
   }
   return match[1];
-}
-
-export function parseWorkspaceSelection(value: string | null): string {
-  const parsed = hostedIdentifierSchema.safeParse(value);
-  if (!parsed.success) throw new Error("Invalid workspace selection.");
-  return parsed.data;
 }
 
 export interface HostedAccessTokenVerifier {
@@ -142,7 +173,7 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         issuer: config.issuer,
         audience: config.audience,
         algorithms: [config.algorithm],
-        requiredClaims: ["iss", "aud", "sub", "exp", "nbf", "scope"],
+        requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
         clockTolerance: 0,
         currentDate: new Date(nowEpochSeconds * 1_000),
       });
@@ -151,9 +182,13 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         payload.aud !== config.audience ||
         typeof payload.sub !== "string" ||
         !Number.isInteger(payload.exp) ||
+        !Number.isInteger(payload.iat) ||
         !Number.isInteger(payload.nbf) ||
         payload.exp! <= nowEpochSeconds ||
         payload.nbf! > nowEpochSeconds ||
+        payload.iat! < payload.nbf! ||
+        payload.iat! > nowEpochSeconds ||
+        payload.exp! - payload.nbf! > 300 ||
         typeof payload.scope !== "string" ||
         !oauthScopeTokenPattern.test(payload.scope) ||
         typeof payload.workspace_id !== "string"
