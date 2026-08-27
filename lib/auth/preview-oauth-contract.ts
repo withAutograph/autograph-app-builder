@@ -206,6 +206,27 @@ export function buildPreviewCimdOptions(input: {
           "Preview CIMD clients must use token_endpoint_auth_method none.",
         );
       }
+      // Native Codex advertises refresh_token as an optional client
+      // capability. Preview intentionally has no continuation credential and
+      // Better Auth requires every persisted client grant to be supported by
+      // the server. Intersect only this known metadata pair with the closed
+      // authorization-code grant; every other field still reaches Better Auth
+      // for its normal redirect, response-type, and public-client validation.
+      if (
+        record.application_type === "native" &&
+        Array.isArray(record.response_types) &&
+        record.response_types.length === 1 &&
+        record.response_types[0] === "code" &&
+        Array.isArray(record.grant_types) &&
+        record.grant_types.length === 2 &&
+        record.grant_types.includes("authorization_code") &&
+        record.grant_types.includes("refresh_token")
+      ) {
+        return Response.json(
+          { ...record, grant_types: ["authorization_code"] },
+          { status: response.status, statusText: response.statusText },
+        );
+      }
       return response;
     },
     metadataProfile: "mcp-2026-07-28",
