@@ -14,6 +14,7 @@ import {
   type ObservedDependencyCache,
 } from "./dependency-cache";
 import { configuredToolchainImage } from "../sandbox/toolchain";
+import { sandboxBackendPlan } from "../sandbox/backend";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -140,10 +141,18 @@ export function targetExecutionBinding(
       fixture: true,
     } as const;
   const imageDigest = configuredToolchainImage(environment);
-  if (imageDigest === undefined)
+  if (imageDigest === undefined) {
+    const backend = sandboxBackendPlan({
+      environment,
+      fixture: false,
+      localImageConfigured: false,
+    });
     throw new Error(
-      "The immutable sandbox image and offline dependency cache are not ready for target commands.",
+      backend.kind === "vercel-preview"
+        ? backend.blockers[0]
+        : "The immutable sandbox image and offline dependency cache are not ready for target commands.",
     );
+  }
   return {
     imageDigest,
     dependencyCacheDigest: dependencyCacheReceiptDigest(cache),

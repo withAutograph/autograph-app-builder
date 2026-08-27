@@ -325,6 +325,23 @@ gates](docs/implementation-gates.md). The reproducible `linux/arm64` image
 source and its digest-resolution procedure are documented in
 [`containers/eve-sandbox`](containers/eve-sandbox/README.md).
 
+On a Vercel Preview deployment the agent selects Eve 0.43's supported Vercel
+Sandbox backend instead of attempting to start local microsandbox. Eve's
+Vercel backend fixes the runtime to its Vercel Container Registry
+`vercel/eve:latest` image and removes author-supplied image/runtime fields. It
+therefore cannot consume `APP_BUILDER_SANDBOX_IMAGE`, which is the private GHCR
+artifact carrying the exact mise/Bun versions and Arrusted dependency cache.
+The Vercel template bootstrap instead installs checksum-pinned mise `2026.8.12`
+and Bun `1.3.14` for either supported Linux architecture, allowing only the two
+GitHub release hosts while building the reusable snapshot. Every live session
+then switches to deny-all networking. Hosted target identity and planning
+remain deliberately blocked because no hosted artifact yet supplies the exact
+offline dependency cache or a digest-bound acquisition path for the private
+Arrusted source. Production and other hosted environments use the non-executing
+fallback rather than silently selecting Preview semantics.
+
+Validate this boundary with `mise run test:hosted-sandbox`.
+
 For local source access, set `REPOSITORY_LOCAL_ROOTS` to a platform-delimited
 allowlist of absolute roots. Fresh-template acquisition means approving one
 exact local checkout receipt; it never means cloning or creating a destination

@@ -17,6 +17,7 @@ import {
   requiredToolVersions,
   toolVersionMatches,
 } from "../sandbox/toolchain";
+import { sandboxBackendPlan } from "../sandbox/backend";
 import { sha256 } from "./workflow-state";
 
 export type ProposalWorkflowState = Extract<
@@ -105,8 +106,9 @@ export function assertProposalExecutionBindings(
 export function targetExecutionBlockers(input: {
   imageConfigured: boolean;
   toolchainReady: boolean;
+  capabilityBlockers?: readonly string[];
 }): string[] {
-  const blockers: string[] = [];
+  const blockers: string[] = [...(input.capabilityBlockers ?? [])];
   if (!input.imageConfigured)
     blockers.push("No immutable sandbox image is configured.");
   if (!input.toolchainReady)
@@ -170,6 +172,11 @@ export async function inspectTargetExecutionReadiness(input: {
   const image = fixture
     ? input.state.dependencyReceipt.imageDigest
     : configuredToolchainImage(environment);
+  const backend = sandboxBackendPlan({
+    environment,
+    fixture,
+    localImageConfigured: image !== undefined,
+  });
   const cache =
     image === undefined
       ? undefined
@@ -201,6 +208,7 @@ export async function inspectTargetExecutionReadiness(input: {
     };
   });
   const toolchainReady =
+    backend.blockers.length === 0 &&
     image !== undefined &&
     cache !== undefined &&
     input.state.dependencyReceipt.imageDigest === image &&
@@ -213,6 +221,7 @@ export async function inspectTargetExecutionReadiness(input: {
   const blockers = targetExecutionBlockers({
     imageConfigured: image !== undefined,
     toolchainReady,
+    capabilityBlockers: backend.blockers,
   });
   const readiness = {
     sourceSha: input.state.workspace.sourceSha,

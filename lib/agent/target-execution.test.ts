@@ -141,5 +141,16 @@ describe("target command readiness", () => {
     expect(
       targetExecutionBlockers({ imageConfigured: true, toolchainReady: true }),
     ).toEqual([]);
+    expect(
+      targetExecutionBlockers({
+        imageConfigured: false,
+        toolchainReady: false,
+        capabilityBlockers: ["Hosted artifact is unavailable."],
+      }),
+    ).toEqual([
+      "Hosted artifact is unavailable.",
+      "No immutable sandbox image is configured.",
+      "The sandbox does not prove the exact required Git, mise, and Bun toolchain.",
+    ]);
   });
 });
