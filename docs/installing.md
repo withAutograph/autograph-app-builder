@@ -1,8 +1,9 @@
 # Installing Autograph App Builder
 
-## Recommended: install the verified Codex marketplace release
+## Install before shared marketplace publication
 
-Download these files from the latest GitHub release:
+Until the shared marketplace is published, obtain these files from an
+authorized GitHub release or directly from an Autograph maintainer:
 
 - `autograph-app-builder-codex-marketplace-VERSION.tar.gz`
 - `SHA256SUMS`
@@ -27,18 +28,22 @@ Confirm that a new task exposes exactly `eve_start`, `eve_get`, `eve_send`,
 tool is unavailable, it stops without using another app builder or editing a
 target directly.
 
-### Install from a configured shared marketplace
+The App Builder repository and its releases may require GitHub access during
+this pre-marketplace period. If you cannot access an authorized release asset,
+there is no supported external installation until the shared marketplace is
+published.
 
-When an administrator has separately configured a shared `autograph`
-marketplace, the installation command is:
+## Install from the shared marketplace after publication
+
+After an administrator publishes and configures the shared `autograph`
+marketplace, install through its Codex listing or run:
 
 ```sh
 codex plugin add autograph-app-builder@autograph
 ```
 
-Open a new Codex task after installation. A future catalog listing may present
-the same operation in the Codex UI, but the existence of a release does not by
-itself create that listing.
+Open a new Codex task after installation. Publishing a release does not create
+the shared listing; marketplace publication is a separate distribution action.
 
 ## Other Agent Plugins clients
 

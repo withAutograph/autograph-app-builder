@@ -11,8 +11,9 @@ without changing that source repository.
 
 ## Install
 
-Download the verified Codex marketplace archive and `SHA256SUMS` from the
-latest GitHub release. After extracting the archive, install it with:
+Before the shared marketplace is published, obtain the verified Codex
+marketplace archive and `SHA256SUMS` from an authorized GitHub release or an
+Autograph maintainer. After extracting the archive, install it with:
 
 ```sh
 codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
@@ -21,7 +22,8 @@ codex plugin add autograph-app-builder@autograph
 
 Complete OAuth, open a new task, and mention `@Autograph App Builder`. A shared
 marketplace listing is a separate distribution action and is not implied by a
-GitHub release. See
+GitHub release. If you cannot access an authorized release, external
+installation is not yet available. See
 [the complete installation guide](docs/installing.md) for every supported
 option.
 
