@@ -73,7 +73,6 @@ export function createEveMcpHandler(service: EveSessionService) {
           "Start a new durable Eve objective and return immediately.",
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
-        _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
       },
       async (input) => {
         try {
@@ -93,7 +92,6 @@ export function createEveMcpHandler(service: EveSessionService) {
         description: "Read the next bounded page of public session events.",
         inputSchema: eveGetInputSchema,
         outputSchema: eveSessionResultSchema,
-        _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
       },
       async (input) => {
         try {
