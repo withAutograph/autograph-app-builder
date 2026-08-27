@@ -1,5 +1,13 @@
 import { execFileSync, spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -131,8 +139,12 @@ try {
     throw new Error("Codex marketplace manifest was invalid.");
   const codexPluginRoot = join(
     marketplace,
-    ".agents/plugins/plugins/autograph-app-builder",
+    marketplaceManifest.plugins[0].source.path,
   );
+  if (!(await stat(codexPluginRoot)).isDirectory())
+    throw new Error(
+      "Codex marketplace source path did not resolve to the packaged plugin.",
+    );
   const codexAdapter = JSON.parse(
     await readFile(join(codexPluginRoot, ".mcp.json"), "utf8"),
   );

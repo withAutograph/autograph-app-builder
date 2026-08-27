@@ -8,7 +8,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import {
@@ -142,13 +142,7 @@ const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(join(output, archiveName), archive);
 
 const marketplaceRoot = join(output, "codex-marketplace");
-const marketplacePluginRoot = join(
-  marketplaceRoot,
-  ".agents",
-  "plugins",
-  "plugins",
-  portable.name,
-);
+const marketplacePluginRoot = join(marketplaceRoot, "plugins", portable.name);
 await mkdir(join(marketplacePluginRoot, ".codex-plugin"), {
   recursive: true,
   mode: 0o755,
@@ -186,6 +180,7 @@ const marketplacePath = join(
   "plugins",
   "marketplace.json",
 );
+await mkdir(dirname(marketplacePath), { recursive: true, mode: 0o755 });
 await writeFile(
   marketplacePath,
   `${JSON.stringify(

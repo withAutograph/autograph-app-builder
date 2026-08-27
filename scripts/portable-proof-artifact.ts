@@ -193,7 +193,7 @@ export async function verifyPortableProofArtifact(input: {
       "Codex marketplace archive digest did not match its receipt.",
     );
   const marketplaceFiles = archiveFiles(marketplaceArchive);
-  const marketplacePrefix = `.agents/plugins/plugins/${receipt.name}/`;
+  const marketplacePrefix = `plugins/${receipt.name}/`;
   for (const path of archived.keys()) {
     const relativePath = relative(receipt.name, path);
     if (!marketplaceFiles.has(`${marketplacePrefix}${relativePath}`))
