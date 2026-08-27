@@ -6,6 +6,28 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("github publication status")) {
+    const result = toolResults.at(-1);
+    if (result?.name !== "github_publication_status")
+      return { toolCalls: [{ name: "github_publication_status", input: {} }] };
+    if (result.isError)
+      return "The typed GitHub publication status could not be verified.";
+    const status = result.output as
+      | {
+          enabled?: boolean;
+          adapterConfigured?: boolean;
+          genericShellAuthority?: boolean;
+          liveGitHubCallsAvailable?: boolean;
+          reason?: string;
+        }
+      | undefined;
+    return status?.enabled === false &&
+      status.adapterConfigured === false &&
+      status.genericShellAuthority === false &&
+      status.liveGitHubCallsAvailable === false
+      ? `GitHub publication is fail-closed: ${status.reason ?? "no typed adapter is configured."}`
+      : "GitHub publication status did not prove the required fail-closed boundary.";
+  }
   if (message.includes("report artifact workflow status")) {
     const result = toolResults.at(-1);
     if (result?.name !== "artifact_workflow_status")
@@ -1242,7 +1264,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       process.env.APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT !== undefined
         ? " With another approval, fresh local bootstrap is enabled for an exact absent or exact-empty destination under the configured owner-only root; it creates one release-disabled parentless commit and never configures a remote."
         : " Fresh local bootstrap publication is disabled on this host.";
-    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication}${branchPublication}${freshBootstrap} Cloning and remote-template acquisition are not implemented yet.`;
+    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication}${branchPublication}${freshBootstrap} A typed least-privilege GitHub acquisition/private-repository/draft-PR contract is defined, but live GitHub calls remain disabled until an installation-bound adapter and durable receipt store are configured. Generic shell access is never a GitHub fallback.`;
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });
