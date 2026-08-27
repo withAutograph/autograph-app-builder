@@ -135,6 +135,49 @@ describe("Preview CIMD transport", () => {
     expect(requestHttps).not.toHaveBeenCalled();
   });
 
+  it("applies the internal timeout while DNS resolution is pending", async () => {
+    const timeout = new AbortController();
+    const timeoutSignal = vi.fn(() => timeout.signal);
+    const requestHttps = vi.fn();
+    const fetchMetadata = createPreviewCimdTransport({
+      resolveHostname: vi.fn(
+        () => new Promise<LookupAddress[]>(() => undefined),
+      ),
+      requestHttps,
+      timeoutSignal,
+    });
+
+    const rejection = expect(
+      fetchMetadata("https://client.example.com/metadata.json"),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    timeout.abort(new DOMException("Timed out.", "TimeoutError"));
+
+    await rejection;
+    expect(timeoutSignal).toHaveBeenCalledWith(5_000);
+    expect(requestHttps).not.toHaveBeenCalled();
+  });
+
+  it("honors caller abort while DNS resolution is pending", async () => {
+    const controller = new AbortController();
+    const requestHttps = vi.fn();
+    const fetchMetadata = createPreviewCimdTransport({
+      resolveHostname: vi.fn(
+        () => new Promise<LookupAddress[]>(() => undefined),
+      ),
+      requestHttps,
+    });
+
+    const rejection = expect(
+      fetchMetadata("https://client.example.com/metadata.json", {
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+
+    await rejection;
+    expect(requestHttps).not.toHaveBeenCalled();
+  });
+
   it.each(["http://client.example.com/metadata.json", "POST"])(
     "rejects unsupported transport input %s",
     async (input) => {

@@ -24,6 +24,7 @@ type RequestHttps = (
 export type PreviewCimdTransportDependencies = {
   resolveHostname: ResolveHostname;
   requestHttps: RequestHttps;
+  timeoutSignal?: (milliseconds: number) => AbortSignal;
 };
 
 function lookupError(hostname: string): NodeJS.ErrnoException {
@@ -84,6 +85,28 @@ function responseHeaders(headers: IncomingMessage["headers"]): Headers {
   return result;
 }
 
+function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
+  if (signal.aborted) return Promise.reject<T>(signal.reason);
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 export function createPreviewCimdTransport(
   dependencies: PreviewCimdTransportDependencies = {
     resolveHostname,
@@ -100,10 +123,21 @@ export function createPreviewCimdTransport(
       throw new TypeError("Preview CIMD transport supports only GET and HEAD.");
     }
 
-    const addresses = await dependencies.resolveHostname(url.hostname, {
-      all: true,
-      verbatim: true,
-    });
+    const callerSignal =
+      init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const timeoutSignal = (dependencies.timeoutSignal ?? AbortSignal.timeout)(
+      REQUEST_TIMEOUT_MS,
+    );
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, timeoutSignal])
+      : timeoutSignal;
+    const addresses = await awaitWithAbort(
+      dependencies.resolveHostname(url.hostname, {
+        all: true,
+        verbatim: true,
+      }),
+      signal,
+    );
     if (addresses.length === 0) {
       throw new TypeError("Metadata hostname returned no DNS addresses.");
     }
@@ -115,12 +149,6 @@ export function createPreviewCimdTransport(
 
     const headers = Object.fromEntries(webRequest.headers.entries());
     headers.host = url.host;
-    const callerSignal =
-      init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    const signal = callerSignal
-      ? AbortSignal.any([callerSignal, timeoutSignal])
-      : timeoutSignal;
 
     return new Promise<Response>((resolve, reject) => {
       const request = dependencies.requestHttps(
