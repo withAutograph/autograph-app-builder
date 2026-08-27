@@ -185,4 +185,25 @@ describe("Preview activation prerequisite contract", () => {
     expect(cli).toContain("Runtime database role configuration failed.");
     expect(cli).not.toContain("sql.unsafe(input.password)");
   });
+
+  it("provisions the exact migrated membership shape in one transaction", async () => {
+    const [cli, migration] = await Promise.all([
+      readFile("lib/db/preview-activation-cli.mts", "utf8"),
+      readFile("drizzle/0002_hosted_workspace_membership.sql", "utf8"),
+    ]);
+    const provisionStart = cli.indexOf("async provisionInvitedUser(input)");
+    const provisionEnd = cli.indexOf("async configureRuntimeRole(input)");
+    expect(provisionStart).toBeGreaterThanOrEqual(0);
+    expect(provisionEnd).toBeGreaterThan(provisionStart);
+    const provision = cli.slice(provisionStart, provisionEnd);
+    expect(provision).toContain("return sql.begin(async (transaction) => {");
+    expect(provision).toContain(
+      "insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at)",
+    );
+    expect(provision).not.toMatch(
+      /hosted_workspace_membership[^;]*created_at/u,
+    );
+    expect(migration).toContain('"updated_at" timestamptz NOT NULL');
+    expect(migration).not.toContain('"created_at"');
+  });
 });
