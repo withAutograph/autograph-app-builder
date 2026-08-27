@@ -266,10 +266,12 @@ Before enabling real MCP mutations:
    deletion requires a five-minute revocation drain.
 5. Before hosted composition can open storage, bind a fresh exact provider
    readback through the closed `EVE_HOSTED_ADMISSION_CONTROL` contract. It must
-   name bounded per-subject/workspace request and session ceilings plus a monthly
-   spend ceiling and expire within 24 hours. Treat the binding as configuration
-   evidence only; activation still requires a separate provider-enforcement
-   readback.
+   name bounded per-subject/workspace request and session ceilings plus current
+   monthly spend and its ceiling, and expire within 24 hours. The runtime must
+   enforce every field: monthly spend fails closed before dispatch, while the
+   durable PostgreSQL start reservation serializes the start and active-session
+   ceilings. Every observed session result refreshes the durable status used by
+   those checks.
 6. Keep continuation credentials outside the current MCP/store contract. The
    canonical installed Eve 0.43 session routes require only durable session IDs.
 7. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.

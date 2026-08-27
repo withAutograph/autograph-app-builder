@@ -24,6 +24,7 @@ import {
   sessionStatusSchema,
   type EveSessionResult,
 } from "../mcp/contracts";
+import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
 const hostedSnapshotSchema = z
   .object({
@@ -97,6 +98,13 @@ export class HostedRejectedOperationError extends Error {
     super("The hosted Eve operation was rejected before a durable result.");
     this.name = "HostedRejectedOperationError";
     this.code = code;
+  }
+}
+
+export class HostedAdmissionDeniedError extends Error {
+  constructor() {
+    super("The hosted Eve admission limit was reached.");
+    this.name = "HostedAdmissionDeniedError";
   }
 }
 
@@ -175,6 +183,7 @@ export function createHostedEveSessionService(input: {
   store: HostedEveStore;
   transport: HostedEveTransport;
   now?: () => number;
+  admissionControl?: HostedPreviewAdmissionControlBinding;
 }): EveSessionService {
   const principal = hostedPrincipalSchema.parse(input.principal);
   const now = input.now ?? Date.now;
@@ -295,7 +304,13 @@ export function createHostedEveSessionService(input: {
     let reservation: z.infer<typeof reserveOperationResultSchema>;
     try {
       reservation = reserveOperationResultSchema.parse(
-        await input.store.reserveOperation(principal, candidate),
+        await input.store.reserveOperation(
+          principal,
+          candidate,
+          options.kind === "start" && input.admissionControl !== undefined
+            ? { binding: input.admissionControl, nowEpochMs: timestamp }
+            : undefined,
+        ),
       );
     } catch {
       throw new HostedSubmissionUnknownError();
@@ -303,6 +318,8 @@ export function createHostedEveSessionService(input: {
     switch (reservation.disposition) {
       case "conflict":
         throw new HostedIdempotencyConflictError();
+      case "rejected":
+        throw new HostedAdmissionDeniedError();
       case "reserved": {
         const operation = requireOwnedOperation(reservation.operation, {
           operationId,
@@ -496,7 +513,14 @@ export function createHostedEveSessionService(input: {
         principal,
         adapterSessionId: session.adapterSessionId,
       });
-      return projectSnapshot(sessionId, snapshot, cursor, limit);
+      const result = projectSnapshot(sessionId, snapshot, cursor, limit);
+      await input.store.observeSession?.({
+        principal,
+        sessionId,
+        status: result.status,
+        nowEpochMs: now(),
+      });
+      return result;
     },
     async send(request) {
       requireHostedOperationScope(principal, "send");
@@ -512,9 +536,14 @@ export function createHostedEveSessionService(input: {
             adapterSessionId: session.adapterSessionId,
             message: request.message,
           });
-          return {
-            result: projectSnapshot(request.sessionId, snapshot),
-          };
+          const result = projectSnapshot(request.sessionId, snapshot);
+          await input.store.observeSession?.({
+            principal,
+            sessionId: request.sessionId,
+            status: result.status,
+            nowEpochMs: now(),
+          });
+          return { result };
         },
       });
     },
@@ -533,9 +562,14 @@ export function createHostedEveSessionService(input: {
             requestId: request.requestId,
             response: request.response,
           });
-          return {
-            result: projectSnapshot(request.sessionId, snapshot),
-          };
+          const result = projectSnapshot(request.sessionId, snapshot);
+          await input.store.observeSession?.({
+            principal,
+            sessionId: request.sessionId,
+            status: result.status,
+            nowEpochMs: now(),
+          });
+          return { result };
         },
       });
     },
@@ -547,7 +581,14 @@ export function createHostedEveSessionService(input: {
         adapterSessionId: session.adapterSessionId,
         ...(turnId === undefined ? {} : { turnId }),
       });
-      return projectSnapshot(sessionId, snapshot);
+      const result = projectSnapshot(sessionId, snapshot);
+      await input.store.observeSession?.({
+        principal,
+        sessionId,
+        status: result.status,
+        nowEpochMs: now(),
+      });
+      return result;
     },
   };
 }

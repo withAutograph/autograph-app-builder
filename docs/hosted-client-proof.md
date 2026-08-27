@@ -28,9 +28,9 @@ tool names.
 
 ## Run the live proof
 
-Prepare two owner-only (`0600`) token files. The primary token must select the
-approved proof workspace through its signed claim. The second token must be a
-live membership for the same subject in a different workspace. Each token must
+Prepare two owner-only (`0600`) token files for two distinct invited subjects.
+Each subject must have exactly one active workspace, and each token must select
+that subject's sole workspace through its signed claim. Each token must
 be resource-bound, contain all six operation scopes, and have a lifetime of at
 most five minutes. The server must accept both identities, and each identity
 must be unable to read the other's owned session. Tokens are never copied into
@@ -79,7 +79,7 @@ receipt:
 - a public structural publication receipt proves a real draft GitHub URL plus
   exact repository, base/head refs and SHAs, change-set digest, and outcome;
 - unknown/stale access fails closed and two server-accepted workspace
-  identities are mutually isolated; and
+  subject/workspace identities are mutually isolated; and
 - cooperative cancellation reaches a public `cancelled` state.
 
 The receipt stores hashes, booleans, counts, immutable release bindings, and the

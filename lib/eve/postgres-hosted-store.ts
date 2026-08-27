@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -18,6 +18,7 @@ import {
   type HostedOperationRecord,
   type HostedSessionRecord,
 } from "./hosted-store";
+import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -69,6 +70,91 @@ function sessionTenantPredicate(principal: HostedPrincipal) {
     eq(agentSessions.audience, principal.audience),
     eq(agentSessions.workspaceId, principal.workspaceId),
     eq(agentSessions.ownerUserId, principal.ownerUserId),
+  );
+}
+
+function workspaceOperationPredicate(principal: HostedPrincipal) {
+  return and(
+    eq(agentOperations.issuer, principal.issuer),
+    eq(agentOperations.audience, principal.audience),
+    eq(agentOperations.workspaceId, principal.workspaceId),
+  );
+}
+
+function workspaceSessionPredicate(principal: HostedPrincipal) {
+  return and(
+    eq(agentSessions.issuer, principal.issuer),
+    eq(agentSessions.audience, principal.audience),
+    eq(agentSessions.workspaceId, principal.workspaceId),
+  );
+}
+
+async function exceedsAdmissionLimit(
+  database: Transaction,
+  principal: HostedPrincipal,
+  binding: HostedPreviewAdmissionControlBinding,
+  nowEpochMs: number,
+) {
+  if (binding.monthlySpendUsedUsdCents >= binding.monthlySpendLimitUsdCents) {
+    return true;
+  }
+  const workspaceKey = `${principal.issuer}\0${principal.audience}\0${principal.workspaceId}`;
+  const subjectKey = `${workspaceKey}\0${principal.ownerUserId}`;
+  await database.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${workspaceKey}, 0))`,
+  );
+  await database.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${subjectKey}, 0))`,
+  );
+  const minuteStart = new Date(nowEpochMs - 60_000);
+  const activeStatuses = ["working", "input_required", "waiting"];
+  const [subjectStarts, workspaceStarts, subjectConcurrent, workspaceActive] =
+    await Promise.all([
+      database
+        .select({ value: count() })
+        .from(agentOperations)
+        .where(
+          and(
+            tenantPredicate(principal),
+            eq(agentOperations.kind, "start"),
+            gte(agentOperations.createdAt, minuteStart),
+          ),
+        ),
+      database
+        .select({ value: count() })
+        .from(agentOperations)
+        .where(
+          and(
+            workspaceOperationPredicate(principal),
+            eq(agentOperations.kind, "start"),
+            gte(agentOperations.createdAt, minuteStart),
+          ),
+        ),
+      database
+        .select({ value: count() })
+        .from(agentSessions)
+        .where(
+          and(
+            sessionTenantPredicate(principal),
+            sql`${agentSessions.record}->>'status' = 'working'`,
+          ),
+        ),
+      database
+        .select({ value: count() })
+        .from(agentSessions)
+        .where(
+          and(
+            workspaceSessionPredicate(principal),
+            inArray(sql`${agentSessions.record}->>'status'`, activeStatuses),
+          ),
+        ),
+    ]);
+  return (
+    (subjectStarts[0]?.value ?? 0) >= binding.startsPerSubjectPerMinute ||
+    (workspaceStarts[0]?.value ?? 0) >= binding.startsPerWorkspacePerMinute ||
+    (subjectConcurrent[0]?.value ?? 0) >=
+      binding.maxConcurrentSessionsPerSubject ||
+    (workspaceActive[0]?.value ?? 0) >= binding.maxActiveSessionsPerWorkspace
   );
 }
 
@@ -218,7 +304,7 @@ export function createPostgresHostedEveStore(
   database: Database,
 ): HostedEveStore {
   return {
-    async reserveOperation(principalInput, candidateInput) {
+    async reserveOperation(principalInput, candidateInput, admission) {
       const principal = hostedPrincipalSchema.parse(principalInput);
       const candidate = hostedOperationRecordSchema.parse(candidateInput);
       if (
@@ -228,54 +314,74 @@ export function createPostgresHostedEveStore(
         return { disposition: "conflict" };
       }
 
-      const existing = await operationById(
-        database,
-        principal,
-        candidate.operationId,
-      );
-      if (existing !== null) {
-        return isExactReservation(existing, candidate)
-          ? { disposition: "existing", operation: existing }
-          : { disposition: "conflict" };
-      }
-      const requestExisting = await operationByRequest(
-        database,
-        principal,
-        candidate.kind,
-        candidate.clientRequestId,
-      );
-      if (requestExisting !== null) {
-        return isExactReservation(requestExisting, candidate)
-          ? { disposition: "existing", operation: requestExisting }
-          : { disposition: "conflict" };
-      }
-
-      try {
-        const inserted = await database
-          .insert(agentOperations)
-          .values(operationValues(candidate))
-          .returning();
-        if (inserted.length !== 1) {
-          throw new Error("Hosted operation reservation was not durable.");
+      return database.transaction(async (transaction) => {
+        const existing = await operationById(
+          transaction,
+          principal,
+          candidate.operationId,
+        );
+        if (existing !== null) {
+          return isExactReservation(existing, candidate)
+            ? { disposition: "existing" as const, operation: existing }
+            : { disposition: "conflict" as const };
         }
-        return {
-          disposition: "reserved",
-          operation: parseHostedOperationRow(inserted[0]),
-        };
-      } catch (error) {
-        const raced =
-          (await operationById(database, principal, candidate.operationId)) ??
-          (await operationByRequest(
-            database,
-            principal,
-            candidate.kind,
-            candidate.clientRequestId,
-          ));
-        if (raced === null) throw error;
-        return isExactReservation(raced, candidate)
-          ? { disposition: "existing", operation: raced }
-          : { disposition: "conflict" };
-      }
+        const requestExisting = await operationByRequest(
+          transaction,
+          principal,
+          candidate.kind,
+          candidate.clientRequestId,
+        );
+        if (requestExisting !== null) {
+          return isExactReservation(requestExisting, candidate)
+            ? { disposition: "existing" as const, operation: requestExisting }
+            : { disposition: "conflict" as const };
+        }
+        if (
+          candidate.kind === "start" &&
+          (admission === undefined ||
+            (await exceedsAdmissionLimit(
+              transaction,
+              principal,
+              admission.binding,
+              admission.nowEpochMs,
+            )))
+        ) {
+          return {
+            disposition: "rejected" as const,
+            reason: "admission_limit" as const,
+          };
+        }
+        try {
+          const inserted = await transaction
+            .insert(agentOperations)
+            .values(operationValues(candidate))
+            .returning();
+          if (inserted.length !== 1) {
+            throw new Error("Hosted operation reservation was not durable.");
+          }
+          return {
+            disposition: "reserved" as const,
+            operation: parseHostedOperationRow(inserted[0]),
+          };
+        } catch (error) {
+          const raced =
+            (await operationById(
+              transaction,
+              principal,
+              candidate.operationId,
+            )) ??
+            (await operationByRequest(
+              transaction,
+              principal,
+              candidate.kind,
+              candidate.clientRequestId,
+            ));
+          if (raced === null) throw error;
+          return isExactReservation(raced, candidate)
+            ? { disposition: "existing" as const, operation: raced }
+            : { disposition: "conflict" as const };
+        }
+      });
     },
 
     async settleSucceeded(input) {
@@ -403,6 +509,47 @@ export function createPostgresHostedEveStore(
         )
         .limit(1);
       return rows[0] === undefined ? null : parseHostedSessionRow(rows[0]);
+    },
+
+    async observeSession(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return database.transaction(async (transaction) => {
+        const rows = await transaction
+          .select()
+          .from(agentSessions)
+          .where(
+            and(
+              sessionTenantPredicate(principal),
+              eq(agentSessions.sessionId, input.sessionId),
+            ),
+          )
+          .limit(1)
+          .for("update");
+        if (rows[0] === undefined) {
+          throw new Error("Hosted session was not found.");
+        }
+        const current = parseHostedSessionRow(rows[0]);
+        const observed = hostedSessionRecordSchema.parse({
+          ...current,
+          status: input.status,
+          updatedAtEpochMs: input.nowEpochMs,
+        });
+        const updated = await transaction
+          .update(agentSessions)
+          .set(sessionValues(observed))
+          .where(
+            and(
+              sessionTenantPredicate(principal),
+              eq(agentSessions.sessionId, input.sessionId),
+              eq(agentSessions.updatedAt, new Date(current.updatedAtEpochMs)),
+            ),
+          )
+          .returning();
+        if (updated.length !== 1) {
+          throw new Error("Hosted session observation was not durable.");
+        }
+        return parseHostedSessionRow(updated[0]);
+      });
     },
   };
 }

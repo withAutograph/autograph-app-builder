@@ -85,11 +85,11 @@ the same exact five MCP tools.
 Hosted composition additionally requires a fresh closed admission-control
 binding in `EVE_HOSTED_ADMISSION_CONTROL`. It binds exact per-subject and
 per-workspace start limits, active/concurrent session ceilings, a monthly spend
-ceiling, an observation window of at most 24 hours, and the SHA-256 digest of the
-provider readback. Missing, stale, non-Preview, unknown, or out-of-range bindings
-return 503 before storage opens. This is a fail-closed compensating-control
-precondition; it is not an in-process rate limiter and does not prove the
-provider actually enforced the values.
+observation plus ceiling, an observation window of at most 24 hours, and the
+SHA-256 digest of the provider readback. Missing, stale, non-Preview, unknown,
+or out-of-range bindings return 503 before storage opens. The durable start
+reservation serializes and enforces the rate/session fields before Eve
+dispatch, and every observed public session result refreshes active status.
 
 The MCP-side contract accepts no continuation credential and the durable store
 schema has no field for one. Canonical Eve 0.43 routes use durable session IDs
@@ -153,7 +153,9 @@ Hosted activation still requires separately authorized work:
   membership; the resource server rechecks that membership on every request;
 - read back the exact Preview provider request, concurrency, session, and spend
   controls; construct the closed, time-bounded admission-control binding from
-  that evidence; and separately prove that the provider enforces it;
+  that evidence. The runtime rejects starts when observed monthly spend reaches
+  the ceiling and atomically enforces the per-subject/workspace start and
+  active-session ceilings in its durable reservation transaction;
 - establish a separately evidenced Preview restore point, apply the five
   checked-in additive PostgreSQL migrations with `mise run database:migrate`,
   then run `mise run hosted:storage-verify`. The verifier opens one bounded
@@ -201,6 +203,28 @@ separate future activation receipt schema accepts only digest-bound live
 deployment, OAuth metadata, minted-token, migration, admission-control,
 workload-identity, tenant-isolation, and five-tool lifecycle proof. It cannot
 create or activate any of them.
+
+Preview activation prerequisites use the same plan-first boundary. Prepare one
+absolute owner-only request, run `mise run hosted:activation-plan`, approve its
+exact confirmation digest, then invoke only the matching task:
+
+- `hosted:runtime-role-configure` creates or verifies a non-owner login role,
+  fixes it to `NOINHERIT`, `NOREPLICATION`, `NOBYPASSRLS`, and the other safe
+  non-owner attributes, rejects every role membership, clears existing object
+  grants, then grants only connect, public-schema usage, table read/write, and
+  sequence usage/read. It applies the owner-only requested credential and emits
+  exact privilege/attribute booleans without that password;
+- `hosted:oauth-initialize` initializes the single exact resource and ES256 JWKS
+  through the real Better Auth handler and reports bounded pre/post row counts;
+  and
+- `hosted:invited-user-provision` creates one verified operator-invited
+  credential user plus that user's sole active workspace membership. Exact
+  retries prove the stored credential and return a no-op receipt; conflicts
+  fail closed.
+
+Secrets remain only in the owner-only request and the database URL remains on
+task-scoped stdin. Public signup stays disabled by the closed runtime policy.
+Repository tests use pure stores and never invoke these mutating adapters.
 
 The aligned Better Auth 1.7.1 MCP, CIMD, and OAuth Provider packages and the
 Preview-only issuer are checked in. The issuer is mounted at `/api/auth`, with

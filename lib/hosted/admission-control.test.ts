@@ -12,6 +12,7 @@ const binding = {
   startsPerWorkspacePerMinute: 50,
   maxConcurrentSessionsPerSubject: 2,
   maxActiveSessionsPerWorkspace: 20,
+  monthlySpendUsedUsdCents: 2_500,
   monthlySpendLimitUsdCents: 10_000,
   observedAt: "2026-08-27T00:55:00.000Z",
   expiresAt: "2026-08-27T01:55:00.000Z",
@@ -33,6 +34,7 @@ describe("hosted Preview admission-control binding", () => {
       undefined,
       JSON.stringify({ ...binding, environment: "production" }),
       JSON.stringify({ ...binding, startsPerSubjectPerMinute: 61 }),
+      JSON.stringify({ ...binding, monthlySpendUsedUsdCents: 10_000 }),
       JSON.stringify({ ...binding, expiresAt: "2026-08-27T00:59:59.000Z" }),
       JSON.stringify({ ...binding, unknownControl: true }),
     ]) {

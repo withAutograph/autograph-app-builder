@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
 import { eveSessionResultSchema, sessionStatusSchema } from "../mcp/contracts";
+import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
 export const hostedOperationKindSchema = z.enum(["start", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;
@@ -163,6 +164,12 @@ export const reserveOperationResultSchema = z.discriminatedUnion(
       })
       .strict(),
     z.object({ disposition: z.literal("conflict") }).strict(),
+    z
+      .object({
+        disposition: z.literal("rejected"),
+        reason: z.literal("admission_limit"),
+      })
+      .strict(),
   ],
 );
 
@@ -180,6 +187,10 @@ export interface HostedEveStore {
   reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
+    admission?: {
+      binding: HostedPreviewAdmissionControlBinding;
+      nowEpochMs: number;
+    },
   ): Promise<ReserveOperationResult>;
   settleSucceeded(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
@@ -201,6 +212,12 @@ export interface HostedEveStore {
     principal: z.infer<typeof hostedPrincipalSchema>,
     sessionId: string,
   ): Promise<HostedSessionRecord | null>;
+  observeSession?(input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    status: z.infer<typeof sessionStatusSchema>;
+    nowEpochMs: number;
+  }): Promise<HostedSessionRecord>;
 }
 
 /** Test/local conformance store. Hosted deployment must supply durable storage. */
@@ -211,6 +228,10 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   async reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
+    admission?: {
+      binding: HostedPreviewAdmissionControlBinding;
+      nowEpochMs: number;
+    },
   ): Promise<ReserveOperationResult> {
     const parsed = hostedOperationRecordSchema.parse(candidate);
     if (tenantKeyFor(parsed.principal) !== tenantKeyFor(principal)) {
@@ -224,6 +245,51 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         existing.clientRequestId === parsed.clientRequestId
         ? { disposition: "existing", operation: structuredClone(existing) }
         : { disposition: "conflict" };
+    }
+    if (parsed.kind === "start" && admission !== undefined) {
+      const minuteStart = admission.nowEpochMs - 60_000;
+      const subjectStarts = [...this.operations.values()].filter(
+        (record) =>
+          record.kind === "start" &&
+          record.createdAtEpochMs >= minuteStart &&
+          record.principal.issuer === principal.issuer &&
+          record.principal.audience === principal.audience &&
+          record.principal.workspaceId === principal.workspaceId &&
+          record.principal.ownerUserId === principal.ownerUserId,
+      ).length;
+      const workspaceStarts = [...this.operations.values()].filter(
+        (record) =>
+          record.kind === "start" &&
+          record.createdAtEpochMs >= minuteStart &&
+          record.principal.issuer === principal.issuer &&
+          record.principal.audience === principal.audience &&
+          record.principal.workspaceId === principal.workspaceId,
+      ).length;
+      const subjectConcurrent = [...this.sessions.values()].filter(
+        (record) =>
+          record.principal.issuer === principal.issuer &&
+          record.principal.audience === principal.audience &&
+          record.principal.workspaceId === principal.workspaceId &&
+          record.principal.ownerUserId === principal.ownerUserId &&
+          record.status === "working",
+      ).length;
+      const workspaceActive = [...this.sessions.values()].filter(
+        (record) =>
+          record.principal.issuer === principal.issuer &&
+          record.principal.audience === principal.audience &&
+          record.principal.workspaceId === principal.workspaceId &&
+          ["working", "input_required", "waiting"].includes(record.status),
+      ).length;
+      const limits = admission.binding;
+      if (
+        limits.monthlySpendUsedUsdCents >= limits.monthlySpendLimitUsdCents ||
+        subjectStarts >= limits.startsPerSubjectPerMinute ||
+        workspaceStarts >= limits.startsPerWorkspacePerMinute ||
+        subjectConcurrent >= limits.maxConcurrentSessionsPerSubject ||
+        workspaceActive >= limits.maxActiveSessionsPerWorkspace
+      ) {
+        return { disposition: "rejected", reason: "admission_limit" };
+      }
     }
     this.operations.set(key, structuredClone(parsed));
     return { disposition: "reserved", operation: structuredClone(parsed) };
@@ -306,6 +372,24 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   ): Promise<HostedSessionRecord | null> {
     const session = this.sessions.get(this.sessionKey(principal, sessionId));
     return session === undefined ? null : structuredClone(session);
+  }
+
+  async observeSession(input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    status: z.infer<typeof sessionStatusSchema>;
+    nowEpochMs: number;
+  }): Promise<HostedSessionRecord> {
+    const key = this.sessionKey(input.principal, input.sessionId);
+    const current = this.sessions.get(key);
+    if (current === undefined) throw new Error("Hosted session was not found.");
+    const observed = hostedSessionRecordSchema.parse({
+      ...current,
+      status: input.status,
+      updatedAtEpochMs: input.nowEpochMs,
+    });
+    this.sessions.set(key, structuredClone(observed));
+    return structuredClone(observed);
   }
 
   private requireReserved(input: {

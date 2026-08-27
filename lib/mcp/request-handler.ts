@@ -14,6 +14,7 @@ import {
   type EveSessionService,
 } from "../eve/service";
 import type { HostedEveStore } from "../eve/hosted-store";
+import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 import {
   eveCancelInputSchema,
   eveGetInputSchema,
@@ -47,6 +48,7 @@ export interface HostedMcpRuntime {
   membership: HostedWorkspaceMembership;
   store: HostedEveStore;
   transport: HostedEveTransport;
+  admissionControl?: HostedPreviewAdmissionControlBinding;
   now?: () => number;
 }
 
@@ -182,6 +184,7 @@ async function hostedServiceForRequest(
   const parsedAuth = hostedMcpAuthConfigSchema.safeParse(runtime.auth);
   if (!parsedAuth.success) return unavailableResponse();
   const auth = parsedAuth.data;
+  if (runtime.admissionControl === undefined) return unavailableResponse();
   let token: string;
   try {
     token = parseStrictBearerAuthorization(
@@ -238,6 +241,7 @@ async function hostedServiceForRequest(
     principal,
     store: runtime.store,
     transport: runtime.transport,
+    admissionControl: runtime.admissionControl,
     now: runtime.now,
   });
 }
