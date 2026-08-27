@@ -32,9 +32,10 @@ Prepare two owner-only (`0600`) token files for two distinct invited subjects.
 Each subject must have exactly one active workspace, and each token must select
 that subject's sole workspace through its signed claim. Each token must
 be resource-bound, contain all six operation scopes, and have a lifetime of at
-most five minutes. The server must accept both identities, and each identity
-must be unable to read the other's owned session. Tokens are never copied into
-a package or receipt.
+most five minutes. The proof rejects reuse of either a subject or workspace
+across the pair. The server must accept both identities, verify each signed
+subject/workspace membership, and prevent each identity from reading the
+other's owned session. Tokens are never copied into a package or receipt.
 
 Copy `fixtures/hosted-proof/create-iterate-draft-pr.template.json` to a private
 input path and replace every repository, ref, SHA, digest, issuer, audience,
