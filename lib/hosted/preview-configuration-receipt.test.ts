@@ -29,6 +29,8 @@ const configuration = {
       "0001_hosted_eve_bridge",
       "0002_hosted_workspace_membership",
       "0003_hosted_retention_indexes",
+      "0004_preview_oauth",
+      "0005_github_publication_journal",
     ],
   },
   admissionControl: {
@@ -92,6 +94,13 @@ describe("hosted Preview receipt boundaries", () => {
       {
         ...configuration,
         database: { ...configuration.database, migrations: [] },
+      },
+      {
+        ...configuration,
+        database: {
+          ...configuration.database,
+          migrations: configuration.database.migrations.slice(0, 3),
+        },
       },
       { ...configuration, staticAiGatewayKey: true },
     ]) {

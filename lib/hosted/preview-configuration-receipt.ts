@@ -42,6 +42,8 @@ const hostedPreviewConfigurationSchema = z
           z.literal("0001_hosted_eve_bridge"),
           z.literal("0002_hosted_workspace_membership"),
           z.literal("0003_hosted_retention_indexes"),
+          z.literal("0004_preview_oauth"),
+          z.literal("0005_github_publication_journal"),
         ]),
       })
       .strict(),
