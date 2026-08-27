@@ -17,6 +17,8 @@ import {
   requiredToolVersions,
   toolVersionMatches,
 } from "@/lib/sandbox/toolchain";
+import { sandboxBackendPlan } from "@/lib/sandbox/backend";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const commands = ["git", "mise", "bun"] as const;
 
@@ -56,6 +58,10 @@ export default defineTool({
       }),
     );
     const image = configuredToolchainImage();
+    const backend = sandboxBackendPlan({
+      fixture: hasTestCapability("simulated-target"),
+      localImageConfigured: image !== undefined,
+    });
     const cache =
       image === undefined
         ? undefined
@@ -112,6 +118,7 @@ export default defineTool({
       };
     });
     const toolchainReady =
+      backend.blockers.length === 0 &&
       image !== undefined &&
       cache !== undefined &&
       sourceTargetReady &&
@@ -137,6 +144,7 @@ export default defineTool({
       blockers: toolchainReady
         ? []
         : [
+            ...backend.blockers,
             ...(sourceTargetReady
               ? []
               : [

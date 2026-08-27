@@ -17,6 +17,7 @@ export default defineEval({
       includes(`toolchainReady":${configured ? "true" : "false"}`),
     );
     t.check(t.reply, includes("toolchainReady"));
+    t.check(t.reply, includes("backend"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

@@ -15,6 +15,7 @@
     "test": "mise run test:unit",
     "test:agent": "mise run test:agent",
     "test:sandbox-toolchain": "mise run test:sandbox-toolchain",
+    "test:hosted-sandbox": "mise run test:hosted-sandbox",
     "check": "mise run check",
     "configure": "mise run package:configure --",
     "validate:plugin": "mise run package:validate",
@@ -29,6 +30,7 @@
   },
   "dependencies": {
     "@better-auth/cimd": "1.7.1",
+    "@better-auth/core": "1.7.1",
     "@better-auth/mcp": "1.7.1",
     "@better-auth/oauth-provider": "1.7.1",
     "@modelcontextprotocol/ext-apps": "1.7.5",

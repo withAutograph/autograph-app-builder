@@ -1,3 +1,5 @@
+import { isHostedVercelRuntime } from "./backend";
+
 export const TOOLCHAIN_IMAGE_ENV = "APP_BUILDER_SANDBOX_IMAGE";
 
 export const requiredToolVersions = {
@@ -24,6 +26,10 @@ export function configuredToolchainImage(
     throw new Error(
       `${TOOLCHAIN_IMAGE_ENV} must be an OCI image reference pinned with @sha256:<64 lowercase hex characters>.`,
     );
+  // Eve 0.43's supported Vercel backend fixes its VCR image and strips
+  // author-supplied image/runtime fields. A GHCR reference is therefore local
+  // microsandbox authority only.
+  if (isHostedVercelRuntime(environment)) return undefined;
   return image;
 }
 
@@ -34,6 +40,9 @@ export function toolVersionMatches(
   return requiredToolVersions[tool].test(version);
 }
 
-export function sandboxRevalidationKey(image: string | undefined): string {
-  return `autograph-app-builder-toolchain-v2:${image ?? "unconfigured"}`;
+export function sandboxRevalidationKey(
+  image: string | undefined,
+  backend = "local",
+): string {
+  return `autograph-app-builder-toolchain-v2:${backend}:${image ?? "unconfigured"}`;
 }

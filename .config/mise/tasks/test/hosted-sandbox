@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Validate the environment-aware hosted sandbox contract"
+set -eu
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx scripts/run-vitest.mts run \
+  lib/sandbox/backend.test.ts lib/sandbox/hosted-toolchain.test.ts \
+  lib/sandbox/toolchain.test.ts lib/sandbox/vercel-backend.test.ts

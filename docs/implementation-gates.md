@@ -74,6 +74,16 @@ Before enabling GitHub or hosted repository publication:
    to match every pinned version before any target-owned command can run. With
    no configured image, the agent selects just-bash and is deliberately not
    toolchain-ready.
+   A Vercel Preview instead selects Eve 0.43's native Vercel Sandbox backend.
+   That backend fixes its sandbox to Eve's Vercel Container Registry image and
+   strips author image/runtime fields, so the approved private GHCR image is
+   not hosted execution authority. The reusable Vercel template installs the
+   exact checksum-pinned mise and Bun binaries for `aarch64` or `x86_64` with a
+   two-host bootstrap allowlist, binds them into the revalidation key, and
+   changes every live session to deny-all networking. Hosted planning still
+   reports a concrete blocker because no hosted artifact provides the exact
+   offline cache or digest-bound private Arrusted source acquisition. Other
+   Vercel environments use the non-executing backend.
 2. The implemented approval-gated dependency preparation verifies the fixed
    image-internal manifest and archive bytes, binds Arrusted commit/tree and
    contract/lock hashes, and extracts `node_modules` only into builder-owned

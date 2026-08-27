@@ -1,5 +1,4 @@
 import { cimd } from "@better-auth/cimd";
-import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { mcp } from "@better-auth/mcp";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
@@ -12,6 +11,7 @@ import {
   previewEmailPasswordPolicy,
   type PreviewOAuthMembershipAuthority,
 } from "./preview-oauth-contract";
+import { fetchPreviewClientMetadataResource } from "./preview-cimd-transport";
 
 const databaseUrlSchema = z
   .string()
@@ -95,7 +95,7 @@ export function createPreviewOAuthServer(input: {
   config: PreviewOAuthRuntimeConfig;
   database: NonNullable<BetterAuthOptions["database"]>;
   membership: PreviewOAuthMembershipAuthority;
-  fetchClientMetadata?: typeof fetchClientMetadataResource;
+  fetchClientMetadata?: typeof fetchPreviewClientMetadataResource;
 }) {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
   const resourceOrigin = new URL(config.resource).origin;
@@ -142,7 +142,7 @@ export function createPreviewOAuthServer(input: {
       cimd(
         buildPreviewCimdOptions({
           fetchClientMetadataResource:
-            input.fetchClientMetadata ?? fetchClientMetadataResource,
+            input.fetchClientMetadata ?? fetchPreviewClientMetadataResource,
         }),
       ),
       nextCookies(),

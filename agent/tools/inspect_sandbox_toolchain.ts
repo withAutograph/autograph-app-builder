@@ -6,6 +6,8 @@ import {
   requiredToolVersions,
   toolVersionMatches,
 } from "@/lib/sandbox/toolchain";
+import { sandboxBackendPlan } from "@/lib/sandbox/backend";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
   dependencyCacheReceiptDigest,
   inspectDependencyCache,
@@ -38,6 +40,10 @@ export default defineTool({
       }),
     );
     const image = configuredToolchainImage();
+    const backend = sandboxBackendPlan({
+      fixture: hasTestCapability("simulated-target"),
+      localImageConfigured: image !== undefined,
+    });
     const cache =
       image === undefined
         ? undefined
@@ -60,6 +66,8 @@ export default defineTool({
     });
     return {
       sandboxId: sandbox.id,
+      backend: backend.kind,
+      backendBlockers: backend.blockers,
       imageConfiguration: image === undefined ? "unconfigured" : "configured",
       toolchainReady:
         image !== undefined &&
