@@ -769,3 +769,79 @@ export async function prepareSupportedSandboxWorkspace(
   await verifyPreparedSandboxWorkspace(sandbox, record);
   return record;
 }
+
+/** Materializes the fixed server-bundled source that seeded a Vercel template. */
+export async function prepareFixedHostedSandboxWorkspace(input: {
+  sandbox: SandboxSession;
+  callId: string;
+  sourcePath: string;
+  sourceSha: string;
+  sourceTree: string;
+  eligibilityDigest: string;
+  workspaceDigest: string;
+}): Promise<PreparedSandboxWorkspace> {
+  const expected: Omit<PreparedSandboxWorkspace, "workspaceId"> = {
+    workspacePath: "/workspace/repository",
+    sourcePath: input.sourcePath,
+    sourceSha: input.sourceSha,
+    sourceTree: input.sourceTree,
+    workspaceDigest: input.workspaceDigest,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER,
+    eligibilityDigest: input.eligibilityDigest,
+  };
+  const existing = await readSandboxRecord(input.sandbox);
+  if (existing !== undefined) {
+    const { workspaceId, ...observed } = existing;
+    if (
+      workspaceId !== input.sandbox.id ||
+      JSON.stringify(observed) !== JSON.stringify(expected)
+    )
+      throw new Error("This Eve session already owns a different workspace.");
+    await verifyPreparedSandboxWorkspace(input.sandbox, existing);
+    return existing;
+  }
+
+  await ensureSandboxDirectories(input.sandbox, [".app-builder"]);
+  await input.sandbox.writeTextFile({
+    path: ".app-builder/prepare-intent.json",
+    content: `${JSON.stringify(
+      {
+        callId: input.callId,
+        sourcePath: input.sourcePath,
+        sourceSha: input.sourceSha,
+        sourceTree: input.sourceTree,
+        eligibilityDigest: input.eligibilityDigest,
+      },
+      null,
+      2,
+    )}\n`,
+  });
+  await input.sandbox.removePath({
+    path: "repository",
+    recursive: true,
+    force: true,
+  });
+  const materialized = await input.sandbox.run({
+    command:
+      "set -euo pipefail; mkdir -p repository; tar --extract --gzip --file /opt/app-builder/hosted-source/arrusted-development/source-tree.tar.gz --directory repository --no-same-owner --no-same-permissions; cp /opt/app-builder/hosted-source/arrusted-development/source-files.json .app-builder/source-files.json; cp /opt/app-builder/hosted-source/arrusted-development/source-checksums.sha256 .app-builder/source-checksums.sha256",
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
+  });
+  if (
+    Buffer.byteLength(materialized.stdout) > sandboxOperationOutputBytes ||
+    Buffer.byteLength(materialized.stderr) > sandboxOperationOutputBytes ||
+    materialized.exitCode !== 0
+  )
+    throw new Error("The hosted source artifact could not be materialized.");
+
+  const record: PreparedSandboxWorkspace = {
+    workspaceId: input.sandbox.id,
+    ...expected,
+  };
+  await input.sandbox.writeTextFile({
+    path: sandboxRecordPath,
+    content: `${JSON.stringify(record, null, 2)}\n`,
+  });
+  await verifyPreparedSandboxWorkspace(input.sandbox, record);
+  return record;
+}

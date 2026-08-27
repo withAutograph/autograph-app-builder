@@ -79,11 +79,16 @@ Before enabling GitHub or hosted repository publication:
    strips author image/runtime fields, so the approved private GHCR image is
    not hosted execution authority. The reusable Vercel template installs the
    exact checksum-pinned mise and Bun binaries for `aarch64` or `x86_64` with a
-   two-host bootstrap allowlist, binds them into the revalidation key, and
-   changes every live session to deny-all networking. Hosted planning still
-   reports a concrete blocker because no hosted artifact provides the exact
-   offline cache or digest-bound private Arrusted source acquisition. Other
-   Vercel environments use the non-executing backend.
+   two-host bootstrap allowlist. A server-only traced artifact supplies the
+   exact Arrusted Git tree and a platform-portable, planning-only dependency
+   closure; its source, cache, and artifact digests are part of the template
+   revalidation key. The bootstrap installs those bytes before every live
+   session changes to deny-all networking. The artifact is never a public
+   route or static asset. Preview can run only the fixed read-only identity and
+   planning commands; other Vercel environments use the non-executing backend.
+   The combined `hosted:artifact-prove-typed` gate first proves those exact
+   artifact commands offline, then exercises the approval-bound Eve tool flow
+   to terminal `planned` and emits its asserted called/forbidden tool trace.
 2. The implemented approval-gated dependency preparation verifies the fixed
    image-internal manifest and archive bytes, binds Arrusted commit/tree and
    contract/lock hashes, and extracts `node_modules` only into builder-owned

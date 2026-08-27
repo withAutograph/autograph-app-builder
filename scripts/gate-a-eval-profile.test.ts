@@ -112,6 +112,41 @@ describe("closed Gate A eval profile", () => {
       ).toThrow(/sandbox image/u);
   });
 
+  it("installs the hosted artifact marker only from its closed sandbox profile", () => {
+    const roots = freshRoots();
+    const image = `ghcr.io/example/toolchain@sha256:${"c".repeat(64)}`;
+    const profile = createGateAEvalProfile(
+      {
+        profile: "hosted-artifact",
+        image,
+        sourceRoot: roots.allowedRoot,
+      },
+      repositoryRoot,
+    );
+    const environment = hostileEnvironment();
+    installGateAEvalProfile(environment, profile, repositoryRoot);
+    expect(environment).toEqual({
+      APP_BUILDER_REAL_SANDBOX: "1",
+      APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
+      APP_BUILDER_SANDBOX_IMAGE: image,
+      REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
+    });
+    expect(validateGateAEvalProfile(profile, repositoryRoot)).toEqual(profile);
+
+    const ordinaryEnvironment = hostileEnvironment();
+    installGateAEvalProfile(
+      ordinaryEnvironment,
+      createGateAEvalProfile(
+        { profile: "sandbox", image, sourceRoot: roots.allowedRoot },
+        repositoryRoot,
+      ),
+      repositoryRoot,
+    );
+    expect(
+      ordinaryEnvironment.APP_BUILDER_HOSTED_ARTIFACT_PROOF,
+    ).toBeUndefined();
+  });
+
   it("binds and reobserves an explicit read-only sandbox source root", () => {
     const roots = freshRoots();
     const image = `ghcr.io/example/toolchain@sha256:${"b".repeat(64)}`;

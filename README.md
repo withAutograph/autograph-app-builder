@@ -333,14 +333,24 @@ therefore cannot consume `APP_BUILDER_SANDBOX_IMAGE`, which is the private GHCR
 artifact carrying the exact mise/Bun versions and Arrusted dependency cache.
 The Vercel template bootstrap instead installs checksum-pinned mise `2026.8.12`
 and Bun `1.3.14` for either supported Linux architecture, allowing only the two
-GitHub release hosts while building the reusable snapshot. Every live session
-then switches to deny-all networking. Hosted target identity and planning
-remain deliberately blocked because no hosted artifact yet supplies the exact
-offline dependency cache or a digest-bound acquisition path for the private
-Arrusted source. Production and other hosted environments use the non-executing
-fallback rather than silently selecting Preview semantics.
+GitHub release hosts while building the reusable snapshot. It also receives a
+server-only, digest-bound seed containing the exact supported Arrusted Git tree
+and a platform-portable planning-only dependency closure. The seed is included
+in the server function trace, is never placed under `public/`, and is copied
+into the reusable template before every live session switches to deny-all
+networking. Preview can therefore run the fixed read-only identity and planning
+commands against `/opt/app-builder/hosted-source/arrusted-development` without
+claiming the private GHCR image as hosted authority. Production and other
+hosted environments use the non-executing fallback.
 
-Validate this boundary with `mise run test:hosted-sandbox`.
+Rebuild the seed with `mise run hosted:artifact-build -- --arrusted-root
+<exact-clean-checkout> --output artifacts/hosted/arrusted-c9a5faf2-preview.tar.gz`.
+Validate its server-only placement, exact bytes, and real offline target
+commands with `mise run test:hosted-sandbox`.
+Run `mise run hosted:artifact-prove-typed -- --image <exact-local-digest-ref>
+--source-root <exact-clean-checkout>` to combine that artifact proof with the
+approval-bound Eve workflow proof. It must terminate at `planned` and emits the
+asserted called-tool and forbidden-tool trace.
 
 For local source access, set `REPOSITORY_LOCAL_ROOTS` to a platform-delimited
 allowlist of absolute roots. Fresh-template acquisition means approving one

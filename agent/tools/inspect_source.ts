@@ -6,6 +6,7 @@ import {
   sourceWorkflowState,
 } from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
+import { hostedSourceReceipt } from "@/lib/repository/hosted-source";
 
 export default defineTool({
   description:
@@ -15,7 +16,9 @@ export default defineTool({
     path: z.string().min(1),
   }),
   async execute({ sourceKind, path }) {
-    const receipt = await inspectSourceReceipt(sourceKind, path);
+    const receipt =
+      hostedSourceReceipt(sourceKind, path) ??
+      (await inspectSourceReceipt(sourceKind, path));
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",

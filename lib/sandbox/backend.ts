@@ -10,9 +10,6 @@ export type SandboxBackendPlan = {
   blockers: string[];
 };
 
-export const VERCEL_SANDBOX_ARTIFACT_BLOCKER =
-  "The pinned Vercel Sandbox toolchain snapshot has no digest-bound offline dependency cache or private Arrusted source-acquisition artifact, so hosted typed planning remains unavailable.";
-
 export function isHostedVercelRuntime(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
@@ -35,10 +32,7 @@ export function sandboxBackendPlan(input: {
           "The hosted App Builder sandbox is enabled only for Vercel Preview.",
         ],
       };
-    return {
-      kind: "vercel-preview",
-      blockers: [VERCEL_SANDBOX_ARTIFACT_BLOCKER],
-    };
+    return { kind: "vercel-preview", blockers: [] };
   }
   if (input.localImageConfigured)
     return { kind: "local-microsandbox", blockers: [] };

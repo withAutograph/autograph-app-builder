@@ -15,6 +15,7 @@ import {
 } from "./dependency-cache";
 import { configuredToolchainImage } from "../sandbox/toolchain";
 import { sandboxBackendPlan } from "../sandbox/backend";
+import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -88,6 +89,14 @@ export function targetContractDigest(
 
 export const TARGET_COMMAND_TIMEOUT_MS = 30_000;
 export const TARGET_COMMAND_OUTPUT_BYTES = 1_048_576;
+export const TARGET_PLANNING_MISE_PROFILE = `[settings]
+exec_auto_install = false
+not_found_auto_install = false
+task.run_auto_install = false
+
+[deps]
+disable = ["bun"]
+`;
 
 export type TargetCommand = "identity" | "planning";
 export type TargetCommandResult = {
@@ -147,10 +156,14 @@ export function targetExecutionBinding(
       fixture: false,
       localImageConfigured: false,
     });
+    if (backend.kind === "vercel-preview" && backend.blockers.length === 0)
+      return {
+        imageDigest: hostedExecutionArtifactDigest(),
+        dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
+        fixture: false,
+      } as const;
     throw new Error(
-      backend.kind === "vercel-preview"
-        ? backend.blockers[0]
-        : "The immutable sandbox image and offline dependency cache are not ready for target commands.",
+      "The immutable sandbox image and offline dependency cache are not ready for target commands.",
     );
   }
   return {
@@ -225,6 +238,10 @@ export async function materializePlanningOverlay(input: {
     path: contractPath,
     content: `${JSON.stringify(contract, null, 2)}\n`,
   });
+  await input.sandbox.writeTextFile({
+    path: `${root}/.config/mise/config.app-builder.toml`,
+    content: TARGET_PLANNING_MISE_PROFILE,
+  });
   return {
     planningRoot: `/workspace/${root}`,
     contractPath: `/workspace/${contractPath}`,
@@ -243,7 +260,7 @@ export function sandboxTargetCommandExecutor(
   }) => {
     const abortSignal = AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS);
     const mise =
-      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise run --skip-tools repository:exec --";
+      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools repository:exec --";
     const request =
       command === "identity"
         ? {

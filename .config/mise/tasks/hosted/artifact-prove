@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Prove the hosted artifact runs the exact Arrusted planner offline"
+set -eu
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" \
+  .config/mise/scripts/repository/prove-hosted-arrusted-artifact.mts \
+  --mise-bin "$(command -v mise)"

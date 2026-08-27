@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="Prove exact artifact commands and typed planning-only Eve workflow"
+set -eu
+
+if [ "$#" -ne 4 ] || [ "$1" != "--image" ] || [ "$3" != "--source-root" ]; then
+  echo "usage: mise run hosted:artifact-prove-typed -- --image <digest-ref> --source-root <exact-checkout>" >&2
+  exit 64
+fi
+
+image=$2
+source_root=$4
+mise run hosted:artifact-prove
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx scripts/run-eve-eval.mts \
+  --gate-a-profile hosted-artifact \
+  --gate-a-image "$image" \
+  --gate-a-source-root "$source_root" \
+  sandbox-identity-planning --strict --skip-report

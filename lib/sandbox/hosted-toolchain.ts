@@ -1,8 +1,21 @@
 import { createHash } from "node:crypto";
 
+import {
+  HOSTED_ARTIFACT_BYTES,
+  HOSTED_ARTIFACT_CONTRACT_VERSION,
+  HOSTED_ARTIFACT_SHA256,
+  HOSTED_DEPENDENCY_ARCHIVE_BYTES,
+  HOSTED_DEPENDENCY_ARCHIVE_SHA256,
+  HOSTED_DEPENDENCY_MANIFEST_SHA256,
+  HOSTED_SOURCE_ARCHIVE_BYTES,
+  HOSTED_SOURCE_ARCHIVE_SHA256,
+  HOSTED_SOURCE_ENTRY_COUNT,
+  HOSTED_SOURCE_WORKSPACE_DIGEST,
+} from "./hosted-artifact";
+
 export const HOSTED_MISE_VERSION = "2026.8.12";
 export const HOSTED_BUN_VERSION = "1.3.14";
-export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 2;
+export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 3;
 
 export const hostedToolchainArtifacts = {
   aarch64: {
@@ -34,6 +47,9 @@ export const HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS = [
   "release-assets.githubusercontent.com",
 ] as const;
 
+export const HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT =
+  "/workspace/.app-builder/hosted-dependency-cache";
+
 const artifactCase = (
   architecture: keyof typeof hostedToolchainArtifacts,
 ): string => {
@@ -59,7 +75,17 @@ command -v git >/dev/null
 command -v sha256sum >/dev/null
 command -v unzip >/dev/null
 work="$(mktemp -d /tmp/app-builder-toolchain.XXXXXX)"
-trap 'find "$work" -depth -delete 2>/dev/null || true' EXIT
+seed='/workspace/.app-builder/hosted-seed.tar.gz'
+trap 'find "$work" -depth -delete 2>/dev/null || true; rm -f "$seed"' EXIT
+test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
+echo '${HOSTED_ARTIFACT_SHA256}  /workspace/.app-builder/hosted-seed.tar.gz' | sha256sum --check --strict
+tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions
+artifact="$work/.app-builder-hosted-seed"
+test "$(stat --format='%s' "$artifact/source-tree.tar.gz")" = '${HOSTED_SOURCE_ARCHIVE_BYTES}'
+printf '%s  %s\n' '${HOSTED_SOURCE_ARCHIVE_SHA256}' "$artifact/source-tree.tar.gz" | sha256sum --check --strict
+test "$(stat --format='%s' "$artifact/dependency-cache/node-modules.tar.gz")" = '${HOSTED_DEPENDENCY_ARCHIVE_BYTES}'
+printf '%s  %s\n' '${HOSTED_DEPENDENCY_ARCHIVE_SHA256}' "$artifact/dependency-cache/node-modules.tar.gz" | sha256sum --check --strict
+printf '%s  %s\n' '${HOSTED_DEPENDENCY_MANIFEST_SHA256}' "$artifact/dependency-cache/manifest.json" | sha256sum --check --strict
 curl --fail --location --silent --show-error "$mise_url" --output "$work/mise"
 echo "$mise_sha  $work/mise" | sha256sum --check --strict
 curl --fail --location --silent --show-error "$bun_url" --output "$work/bun.zip"
@@ -67,9 +93,35 @@ echo "$bun_sha  $work/bun.zip" | sha256sum --check --strict
 unzip -q "$work/bun.zip" -d "$work"
 sudo install --owner=root --group=root --mode=0755 "$work/mise" /usr/local/bin/mise
 sudo install --owner=root --group=root --mode=0755 "$work/$bun_directory/bun" /usr/local/bin/bun
+sudo install --owner=root --group=root --mode=0755 -d /opt/app-builder/hosted-source/arrusted-development /opt/app-builder/dependency-cache
+sudo install --owner=root --group=root --mode=0444 "$artifact/source-tree.tar.gz" /opt/app-builder/hosted-source/arrusted-development/source-tree.tar.gz
+sudo install --owner=root --group=root --mode=0444 "$artifact/source-files.json" /opt/app-builder/hosted-source/arrusted-development/source-files.json
+sudo install --owner=root --group=root --mode=0444 "$artifact/source-checksums.sha256" /opt/app-builder/hosted-source/arrusted-development/source-checksums.sha256
+sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/manifest.json" /opt/app-builder/dependency-cache/manifest.json
+sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
 git --version
 mise --version | grep -E '^2026[.]8[.]12($| )'
-bun --version | grep -E '^1[.]3[.]14$'`;
+bun --version | grep -E '^1[.]3[.]14$'
+bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/opt/app-builder/hosted-source/arrusted-development/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/portable"||cache.target.sha!=="c9a5faf2a5b042df708fb8deade12f399ef2547b"||cache.target.tree!=="7f4cbdac458b74dd51a0c2a516c5da1c2f4d8755") process.exit(1)'`;
+}
+
+export function hostedArtifactWorkspaceInstallCommand(): string {
+  return `set -euo pipefail
+command -v sha256sum >/dev/null
+work="$(mktemp -d /tmp/app-builder-hosted-artifact.XXXXXX)"
+seed='/workspace/.app-builder/hosted-seed.tar.gz'
+trap 'find "$work" -depth -delete 2>/dev/null || true; rm -f "$seed"' EXIT
+test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
+printf '%s  %s\n' '${HOSTED_ARTIFACT_SHA256}' "$seed" | sha256sum --check --strict
+tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions
+artifact="$work/.app-builder-hosted-seed/dependency-cache"
+test "$(stat --format='%s' "$artifact/node-modules.tar.gz")" = '${HOSTED_DEPENDENCY_ARCHIVE_BYTES}'
+printf '%s  %s\n' '${HOSTED_DEPENDENCY_ARCHIVE_SHA256}' "$artifact/node-modules.tar.gz" | sha256sum --check --strict
+printf '%s  %s\n' '${HOSTED_DEPENDENCY_MANIFEST_SHA256}' "$artifact/manifest.json" | sha256sum --check --strict
+rm -rf '${HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT}'
+install -d -m 0755 '${HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT}'
+install -m 0444 "$artifact/manifest.json" '${HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT}/manifest.json'
+install -m 0444 "$artifact/node-modules.tar.gz" '${HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT}/node-modules.tar.gz'`;
 }
 
 export function hostedToolchainRevalidationKey(
@@ -80,6 +132,14 @@ export function hostedToolchainRevalidationKey(
     mise: HOSTED_MISE_VERSION,
     bun: HOSTED_BUN_VERSION,
     artifacts: hostedToolchainArtifacts,
+    hostedArtifact: {
+      contractVersion: HOSTED_ARTIFACT_CONTRACT_VERSION,
+      sha256: HOSTED_ARTIFACT_SHA256,
+      bytes: HOSTED_ARTIFACT_BYTES,
+      sourceArchiveSha256: HOSTED_SOURCE_ARCHIVE_SHA256,
+      dependencyManifestSha256: HOSTED_DEPENDENCY_MANIFEST_SHA256,
+      dependencyArchiveSha256: HOSTED_DEPENDENCY_ARCHIVE_SHA256,
+    },
     downloadHosts: HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
     bootstrapCommand,
   };

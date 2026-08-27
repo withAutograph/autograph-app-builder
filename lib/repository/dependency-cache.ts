@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
+import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
 export const ARRUSTED_TARGET_SHA = "c9a5faf2a5b042df708fb8deade12f399ef2547b";
@@ -26,7 +27,7 @@ const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
 const dependencyCacheManifestShapeSchema = z.strictObject({
   version: z.literal(1),
   scope: z.literal("identity-planning"),
-  platform: z.literal("linux/arm64"),
+  platform: z.union([z.literal("linux/arm64"), z.literal("linux/portable")]),
   target: z.strictObject({
     sha: gitObjectId,
     tree: gitObjectId,
@@ -122,6 +123,24 @@ const fixtureDependencyCacheEnabled = (
   environment: Readonly<Record<string, string | undefined>>,
 ) => hasTestCapability("simulated-target", environment);
 
+const hostedArtifactDependencyCacheEnabled = (
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
+  environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF === "1" &&
+  hasTestCapability("mock-model", environment);
+
+function dependencyCachePaths(
+  environment: Readonly<Record<string, string | undefined>>,
+) {
+  const root = hostedArtifactDependencyCacheEnabled(environment)
+    ? HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT
+    : "/opt/app-builder/dependency-cache";
+  return {
+    manifest: `${root}/manifest.json`,
+    archive: `${root}/node-modules.tar.gz`,
+  };
+}
+
 function boundedOutput(stdout: string, stderr: string, label: string) {
   if (
     Buffer.byteLength(stdout) > DEPENDENCY_CACHE_OUTPUT_BYTES ||
@@ -184,8 +203,10 @@ export async function inspectDependencyCache(
     };
   }
 
+  const cachePaths = dependencyCachePaths(environment);
+
   const manifestResult = await sandbox.run({
-    command: `cat -- ${DEPENDENCY_CACHE_MANIFEST_PATH}`,
+    command: `cat -- ${cachePaths.manifest}`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
@@ -207,7 +228,7 @@ export async function inspectDependencyCache(
     throw new Error("The fixed offline dependency cache manifest drifted.");
 
   const archiveResult = await sandbox.run({
-    command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH}`,
+    command: `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive}`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
@@ -261,9 +282,10 @@ export async function materializeOfflineDependencies(input: {
   });
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
+    const cachePaths = dependencyCachePaths(environment);
     await ensureSandboxDirectories(input.sandbox, [root]);
     const extraction = await input.sandbox.run({
-      command: `rm -rf /workspace/${root}/node_modules && cd /workspace/${root} && tar --list --gzip --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} | awk 'substr($0, length($0), 1) == "/"' | while IFS= read -r directory; do mkdir -p -- "$directory"; done && tar --extract --gzip --no-overwrite-dir --file ${DEPENDENCY_CACHE_ARCHIVE_PATH} --no-same-owner --no-same-permissions`,
+      command: `rm -rf /workspace/${root}/node_modules && cd /workspace/${root} && tar --list --gzip --file ${cachePaths.archive} | awk 'substr($0, length($0), 1) == "/"' | while IFS= read -r directory; do mkdir -p -- "$directory"; done && tar --extract --gzip --no-overwrite-dir --file ${cachePaths.archive} --no-same-owner --no-same-permissions`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });

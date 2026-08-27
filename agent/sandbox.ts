@@ -7,6 +7,7 @@ import {
   selectSandboxDefinition,
 } from "@/lib/sandbox/backend";
 import {
+  hostedArtifactWorkspaceInstallCommand,
   hostedToolchainBootstrapCommand,
   hostedToolchainRevalidationKey,
 } from "@/lib/sandbox/hosted-toolchain";
@@ -15,10 +16,15 @@ import {
   sandboxRevalidationKey,
 } from "@/lib/sandbox/toolchain";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
+import { readHostedArtifactBytes } from "@/lib/sandbox/hosted-artifact";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { ensureSandboxDirectories } from "@/lib/repository/sandbox-filesystem";
 
 const image = configuredToolchainImage();
 const useFixtureSandbox = hasTestCapability("simulated-target");
+const useHostedArtifactProof =
+  process.env.APP_BUILDER_HOSTED_ARTIFACT_PROOF === "1" &&
+  hasTestCapability("mock-model");
 const plan = sandboxBackendPlan({
   fixture: useFixtureSandbox,
   localImageConfigured: image !== undefined,
@@ -30,6 +36,11 @@ function createVercelDefinition() {
     async bootstrap({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       const sandbox = await use();
+      await ensureSandboxDirectories(sandbox, [".app-builder"]);
+      await sandbox.writeBinaryFile({
+        path: ".app-builder/hosted-seed.tar.gz",
+        content: readHostedArtifactBytes(),
+      });
       const result = await sandbox.run({
         command: hostedToolchainBootstrapCommand(),
         abortSignal: AbortSignal.timeout(120_000),
@@ -57,9 +68,27 @@ function createMicrosandboxDefinition() {
     }),
     async bootstrap({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-      await use();
+      const sandbox = await use();
+      if (useHostedArtifactProof) {
+        await ensureSandboxDirectories(sandbox, [".app-builder"]);
+        await sandbox.writeBinaryFile({
+          path: ".app-builder/hosted-seed.tar.gz",
+          content: readHostedArtifactBytes(),
+        });
+        const result = await sandbox.run({
+          command: hostedArtifactWorkspaceInstallCommand(),
+          abortSignal: AbortSignal.timeout(120_000),
+        });
+        if (result.exitCode !== 0)
+          throw new Error(
+            "The hosted planning artifact failed to materialize.",
+          );
+      }
     },
-    revalidationKey: () => sandboxRevalidationKey(image, plan.kind),
+    revalidationKey: () =>
+      `${sandboxRevalidationKey(image, plan.kind)}:${
+        useHostedArtifactProof ? hostedToolchainRevalidationKey() : "base"
+      }`,
   });
 }
 
