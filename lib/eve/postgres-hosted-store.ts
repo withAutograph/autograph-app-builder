@@ -98,8 +98,8 @@ async function exceedsAdmissionLimit(
   if (binding.monthlySpendUsedUsdCents >= binding.monthlySpendLimitUsdCents) {
     return true;
   }
-  const workspaceKey = `${principal.issuer}\0${principal.audience}\0${principal.workspaceId}`;
-  const subjectKey = `${workspaceKey}\0${principal.ownerUserId}`;
+  const workspaceKey = admissionAdvisoryLockKey("workspace", principal);
+  const subjectKey = admissionAdvisoryLockKey("subject", principal);
   await database.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${workspaceKey}, 0))`,
   );
@@ -155,6 +155,30 @@ async function exceedsAdmissionLimit(
     (subjectConcurrent[0]?.value ?? 0) >=
       binding.maxConcurrentSessionsPerSubject ||
     (workspaceActive[0]?.value ?? 0) >= binding.maxActiveSessionsPerWorkspace
+  );
+}
+
+export function admissionAdvisoryLockKey(
+  scope: "workspace" | "subject",
+  principal: HostedPrincipal,
+) {
+  return JSON.stringify(
+    scope === "workspace"
+      ? [
+          "hosted_eve_admission_v1",
+          scope,
+          principal.issuer,
+          principal.audience,
+          principal.workspaceId,
+        ]
+      : [
+          "hosted_eve_admission_v1",
+          scope,
+          principal.issuer,
+          principal.audience,
+          principal.workspaceId,
+          principal.ownerUserId,
+        ],
   );
 }
 
