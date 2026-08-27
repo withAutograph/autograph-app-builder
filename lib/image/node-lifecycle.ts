@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -63,6 +64,7 @@ import {
   ghcrIdentityDigest,
   readBoundedInput,
 } from "./ghcr-bound-helper.ts";
+import { hasTestCapability } from "../testing/test-capability.ts";
 
 const dockerfilePath = "containers/eve-sandbox/Dockerfile" as const;
 const maximumCommandOutputBytes = 4 * 1024 * 1024;
@@ -104,6 +106,19 @@ type ReceiptEnvelope = Readonly<{
   result: unknown;
   digest: string;
 }>;
+
+const injectedImageProvenance = new AsyncLocalStorage<ImageProvenance>();
+
+export function withImageLifecycleTestProvenance<T>(
+  provenance: ImageProvenance,
+  operation: () => T,
+): T {
+  if (!hasTestCapability("simulated-target"))
+    throw new Error(
+      "Image lifecycle provenance injection requires structural test authority.",
+    );
+  return injectedImageProvenance.run(provenance, operation);
+}
 
 const fixedGit = "/usr/bin/git";
 const githubCliVersion = "2.98.0";
@@ -683,6 +698,20 @@ export function observeImageProvenance(
   builderRootInput: string = process.cwd(),
   options: Readonly<{ allowProofRuntime?: boolean }> = {},
 ): ImageProvenance {
+  const injected = injectedImageProvenance.getStore();
+  if (injected !== undefined) {
+    if (
+      approval.arrustedRoot !== injected.arrusted.root ||
+      approval.stateRoot !== injected.builder.stateRoot ||
+      approval.builderCommit !== injected.builder.commit ||
+      approval.builderTree !== injected.builder.tree ||
+      approval.dockerfileSha256 !== injected.dockerfile.sha256
+    )
+      throw new Error(
+        "Injected image provenance does not match the lifecycle approval.",
+      );
+    return injected;
+  }
   assertAbsoluteInput(builderRootInput, "Builder root");
   assertAbsoluteInput(approval.arrustedRoot, "Arrusted root");
   assertAbsoluteInput(approval.stateRoot, "Image lifecycle state root");
@@ -1645,7 +1674,27 @@ function preloadImageUnlocked(
     (remote.result as { reference?: unknown }).reference !== reference
   )
     throw new Error("Digest-only preload does not match remote readback.");
-  execute(imagePreloadCommand(reference), provenance.builder.root);
+  const login = requireCurrentGhcrLogin(provenance);
+  const push = readReceipt(
+    provenance.builder.stateRoot,
+    "push-receipt.json",
+    "image-push",
+    provenance,
+  );
+  if (
+    typeof push.result !== "object" ||
+    push.result === null ||
+    (push.result as { ghcrLoginReceiptDigest?: unknown })
+      .ghcrLoginReceiptDigest !== login.receipt.digest
+  )
+    throw new Error(
+      "Image push receipt does not match the current GHCR login identity.",
+    );
+  execute(
+    imagePreloadCommand(reference),
+    provenance.builder.root,
+    ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
+  );
   return writeReceipt(
     provenance.builder.stateRoot,
     "preload-receipt.json",

@@ -53,6 +53,31 @@ function stableId(prefix: string, value: string) {
   return `${prefix}_${createHash("sha256").update(value).digest("hex")}`;
 }
 
+async function configureLoginRole(
+  sql: Sql,
+  action: "create" | "alter",
+  roleName: string,
+  password: string,
+) {
+  const template = `${action} role %I login noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls password %L`;
+  const rows = await sql<{ statement: string }[]>`
+    select format(${template}::text, ${roleName}::text, ${password}::text) as statement
+  `;
+  const statement = rows[0]?.statement;
+  if (
+    statement === undefined ||
+    statement.length > 2_048 ||
+    /[\0\r\n]/u.test(statement)
+  ) {
+    throw new Error("Runtime database role statement was invalid.");
+  }
+  try {
+    await sql.unsafe(statement);
+  } catch {
+    throw new Error("Runtime database role configuration failed.");
+  }
+}
+
 function createStore(sql: Sql): PreviewActivationStore {
   return {
     async provisionInvitedUser(input) {
@@ -152,7 +177,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         from pg_roles r where r.rolname = ${input.roleName}`;
       const runtimeRoleCreated = existing.length === 0;
       if (runtimeRoleCreated) {
-        await sql`create role ${sql(input.roleName)} login noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls password ${input.password}`;
+        await configureLoginRole(sql, "create", input.roleName, input.password);
       } else if (
         existing.length !== 1 ||
         existing[0]?.rolcanlogin !== true ||
@@ -162,7 +187,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           "Runtime database role exists with incompatible authority or membership.",
         );
       } else {
-        await sql`alter role ${sql(input.roleName)} login noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls password ${input.password}`;
+        await configureLoginRole(sql, "alter", input.roleName, input.password);
       }
       const database = await sql<
         { name: string }[]
