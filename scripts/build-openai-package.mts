@@ -73,6 +73,19 @@ await writeFile(
   await format(JSON.stringify(manifest), { parser: "json" }),
 );
 if (endpoint) {
+  const portableMcpPath = resolve("mcp.json");
+  const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf8"));
+  const portableServer = portableMcp.mcpServers?.["autograph-app-builder"];
+  if (!portableServer || typeof portableServer !== "object") {
+    throw new Error(
+      "mcp.json must declare the autograph-app-builder MCP server.",
+    );
+  }
+  portableServer.url = endpoint;
+  await writeFile(
+    portableMcpPath,
+    await format(JSON.stringify(portableMcp), { parser: "json" }),
+  );
   await writeFile(
     resolve(".mcp.json"),
     await format(
