@@ -399,17 +399,38 @@ a monthly spend ceiling, expires within 24 hours, and is configuration evidence,
 not proof that the provider enforced it. The
 OAuth resource metadata is served from
 `/.well-known/oauth-protected-resource`. The signed, consent-bound
-`workspace_id` access-token claim is the sole workspace selector. Its `aud`
+`workspace_id` access-token claim is the sole workspace selector. OAuth
+authorization-server discovery is rewritten from the RFC well-known path. The
+Preview scope contract does not advertise OpenID discovery. Its `aud`
 must equal the canonical `/mcp` resource URL, and the resource server accepts
 only tokens with an integer `nbf`/`iat` and at most a five-minute lifetime. A
 live exact subject/workspace membership row is required on every MCP request
 before the tenant-scoped store or Eve transport can run. Importing the route
-does not create a database connection or obtain a workload credential. This
-repository does not yet contain the authorization server that records consent
-and mints the claim. Activating the checked-in CIMD policy is separately
-authorized because discovery may create, persist, or refresh an authorization-
-server client record; DCR remains disabled. The checked-in MCP and store
-contracts contain no continuation credential.
+does not create a database connection or obtain a workload credential. The
+Preview-only Better Auth issuer is mounted at `/api/auth`, with exact OAuth AS
+discovery, JWKS, explicit sign-in, and sole-workspace confirmation on the
+single consent surface. The consent reference is re-read from the user's sole
+active workspace immediately before consent and token issuance. Signed-query
+public-client prelogin verifies the CIMD client identity and exact requested
+scopes before consent; client and resource management endpoints deny every
+authenticated user action.
+Those routes construct lazily and fail closed until the checked-in schema is
+separately applied and the exact Preview environment is configured; their
+presence does not create a client, consent, grant, key, membership, or token.
+Activating the checked-in CIMD policy remains separately authorized because
+discovery may create, persist, or refresh an authorization-server client record;
+DCR remains disabled. The checked-in MCP and store contracts contain no
+continuation credential.
+The first configured request can also overwrite the exact resource seed and
+create the first ES256 JWKS key pair in PostgreSQL. Both are separately
+authorized database mutations and are not proven by mounting these routes.
+
+The real memory-adapter handler proof exercises both GET-query and POST-form
+authorization, CIMD resolution, the signed consent query, allow and deny,
+S256 code exchange, exact five-minute ES256 resource/workspace claims, and
+membership drift before consent and token exchange. It uses Better Auth's
+handler directly; no proxy or compatibility patch is installed. This remains
+source proof rather than deployment, database, or client-registration proof.
 
 The deterministic source/configuration receipt is explicitly marked
 `source-configuration-only` and `activation.status=not-proven`. A distinct

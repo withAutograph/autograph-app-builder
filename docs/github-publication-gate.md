@@ -11,6 +11,29 @@ under a deterministic adapter. It does not prove GitHub App installation,
 authentication, network behavior, repository creation, pushing, or opening a
 pull request against GitHub.
 
+The repository also contains a disabled-by-default runtime composition seam.
+`createGitHubAppPublicationAdapter` accepts only an injected provider port,
+requests the exact operation-scoped permission set, closes every provider
+snapshot before returning it, and sanitizes provider transport failures. The
+provider port—not Eve input—owns GitHub authentication, the fixed API origin,
+template materialization, and reviewed file bytes.
+
+`createPostgresGitHubPublicationStores` persists closed proposals and delegates
+mutation receipts to the single shared PostgreSQL CAS journal in the
+Drizzle-owned `github_publication_proposal` and `github_publication_journal`
+tables. The JSON record is authoritative; duplicate index columns are rebound
+on every read, and receipt transitions use one SQL compare-and-set against the
+prior receipt digest. Migration remains the mise-owned `database:migrate`
+operation.
+
+`composeGitHubPublicationRuntime` enables the typed tools only when an adapter,
+proposal store, and receipt store are all injected with `enabled: true`. The
+shipped singleton passes `enabled: false`. It reads no token, endpoint,
+environment variable, or database URL, and this slice performs no GitHub or
+database call. A later deployment composition must supply the credential-bound
+provider and database handle, then prove the behavior against GitHub before
+EXT-BLD-04 can be accepted.
+
 The boundary supports four operations:
 
 1. Resolve one installation-selected private repository ref to an immutable
@@ -36,6 +59,13 @@ side effect. A mutation transport failure, provider read-back failure, invalid
 postcondition, or terminal-store failure remains pending and is reconciled by
 exact idempotency read-back. Only an explicit provider rejection becomes a
 bounded sanitized failure receipt and requires explicit recovery.
+
+The repository now supplies the PostgreSQL CAS store and its additive schema,
+but the fail-closed runtime does not compose it with a live GitHub App yet. A
+proposal digest is the journal authority key; duplicated digest, idempotency,
+kind, and status columns are rebound to the closed JSON receipt. The hosted
+tenant retention task cannot delete these rows. `hosted:storage-verify` proves
+the exact installed schema read-only, not GitHub installation or mutation.
 
 The typed tools accept no command, executable, working directory, environment,
 credential, endpoint, arbitrary refspec, or provider response. Generic shell,

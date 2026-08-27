@@ -12,6 +12,7 @@ import {
 } from "./hosted-admin";
 import { createPostgresHostedAdminStore } from "./postgres-hosted-admin";
 import { readPrivateDatabaseUrl } from "./private-database-url";
+import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const actions = [
@@ -76,13 +77,7 @@ if (argv[0] === "plan") {
     throw new Error("Hosted admin request did not match the task action.");
   }
   const databaseUrl = readPrivateDatabaseUrl(0);
-  const client = postgres(databaseUrl, {
-    max: 1,
-    connect_timeout: 5,
-    idle_timeout: 5,
-    prepare: false,
-    onnotice: () => undefined,
-  });
+  const client = postgres(databaseUrl, hostedTaskPostgresOptions);
   try {
     const receipt = await executeHostedAdminRequest({
       request,

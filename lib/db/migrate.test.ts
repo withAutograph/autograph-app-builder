@@ -37,6 +37,17 @@ describe("database migration secret boundary", () => {
     expect(cli).not.toContain("process.env.DATABASE_URL");
   });
 
+  it("keeps hosted storage verification read-only and secret-blind", async () => {
+    const [task, verification] = await Promise.all([
+      readFile(".config/mise/tasks/hosted/storage-verify", "utf8"),
+      readFile("lib/db/hosted-storage-readiness-cli.mts", "utf8"),
+    ]);
+    expect(task).toContain("unset DATABASE_URL");
+    expect(task).toContain("--database-url-fd 0");
+    expect(verification).toContain("SET TRANSACTION READ ONLY");
+    expect(verification).not.toContain("process.env.DATABASE_URL");
+  });
+
   it("adds exact tenant retention indexes without weakening durable keys", async () => {
     const migration = await readFile(
       "drizzle/0003_hosted_retention_indexes.sql",

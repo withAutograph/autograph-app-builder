@@ -1,5 +1,7 @@
 import { closeSync, readSync } from "node:fs";
 
+import { parseHostedDatabaseUrl } from "./postgres-connection-policy";
+
 const MAX_SECRET_BYTES = 8_192;
 
 export function readPrivateDatabaseUrl(fd: number): string {
@@ -26,9 +28,5 @@ export function readPrivateDatabaseUrl(fd: number): string {
   if (/[\0\r\n]/u.test(databaseUrl)) {
     throw new Error("The database URL secret frame was malformed.");
   }
-  const url = new URL(databaseUrl);
-  if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
-    throw new Error("DATABASE_URL must use PostgreSQL.");
-  }
-  return databaseUrl;
+  return parseHostedDatabaseUrl(databaseUrl);
 }

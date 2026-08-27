@@ -1,9 +1,12 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { z } from "zod";
 
 import * as databaseSchema from "../db/schema";
+import {
+  hostedRuntimePostgresOptions,
+  parseHostedDatabaseUrl,
+} from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import { readHostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
@@ -12,29 +15,6 @@ import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
 import { createMcpRequestHandler } from "./request-handler";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
-
-const databaseUrlSchema = z
-  .string()
-  .min(1)
-  .max(8_192)
-  .refine((value) => !/[\0\r\n]/u.test(value), "Malformed database URL.")
-  .transform((value, context) => {
-    let url: URL;
-    try {
-      url = new URL(value);
-    } catch {
-      context.addIssue({ code: "custom", message: "Invalid database URL." });
-      return z.NEVER;
-    }
-    if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted storage requires PostgreSQL.",
-      });
-      return z.NEVER;
-    }
-    return value;
-  });
 
 export function readHostedDeploymentConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
@@ -51,7 +31,7 @@ export function readHostedDeploymentConfig(
   }
   return {
     auth,
-    databaseUrl: databaseUrlSchema.parse(environment.DATABASE_URL),
+    databaseUrl: parseHostedDatabaseUrl(environment.DATABASE_URL),
     admissionControl: readHostedPreviewAdmissionControlBinding(
       environment,
       nowEpochMs,
@@ -64,13 +44,10 @@ export function readHostedDeploymentConfig(
 }
 
 export function openHostedPostgresDatabase(databaseUrl: string): Database {
-  const client = postgres(databaseUrlSchema.parse(databaseUrl), {
-    max: 5,
-    connect_timeout: 5,
-    idle_timeout: 20,
-    prepare: false,
-    onnotice: () => undefined,
-  });
+  const client = postgres(
+    parseHostedDatabaseUrl(databaseUrl),
+    hostedRuntimePostgresOptions,
+  );
   return drizzle(client, { schema: databaseSchema });
 }
 

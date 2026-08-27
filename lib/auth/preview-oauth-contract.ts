@@ -77,11 +77,10 @@ export interface PreviewOAuthMembershipAuthority {
 }
 
 /**
- * Typed, non-mounted Better Auth 1.7.1 policy. It becomes an authorization
- * server only after a separately approved slice passes these options to
- * `mcp()` alongside `jwt()` and `cimd()`, mounts the auth routes, and applies
- * the generated schema. Keeping this builder pure cannot issue a token or
- * create a client/grant.
+ * Pure policy builder for the lazily mounted Preview authorization server.
+ * Calling it cannot issue a token or create a client/grant; database and
+ * protocol side effects remain request-time behavior behind the deployment
+ * gate documented in docs/hosted-eve-bridge.md.
  */
 export function buildPreviewMcpOAuthOptions(input: {
   config: unknown;
@@ -95,9 +94,8 @@ export function buildPreviewMcpOAuthOptions(input: {
     loginPage: "/auth/sign-in",
     consentPage: "/auth/consent",
     scopes: [...previewMcpScopes],
-    grantTypes: ["authorization_code", "refresh_token"],
+    grantTypes: ["authorization_code"],
     accessTokenExpiresIn: 300,
-    refreshTokenReuseInterval: 0,
     resources: [
       {
         identifier: config.resource,
@@ -112,19 +110,33 @@ export function buildPreviewMcpOAuthOptions(input: {
     clientRegistrationDefaultScopes: ["eve:session"],
     clientRegistrationAllowedScopes: previewMcpScopes.slice(1),
     clientRegistrationRequirePKCE: true,
+    allowPublicClientPrelogin: true,
+    clientPrivileges: async () => false,
+    resourcePrivileges: async () => false,
     // Preview clients are resolved through CIMD. Dynamic registration remains
     // disabled, but activating CIMD can still persist discovery-owned client
     // records and therefore requires separate mutation authority.
     allowDynamicClientRegistration: false,
     allowUnauthenticatedClientRegistration: false,
     postLogin: {
-      page: "/auth/workspace",
-      shouldRedirect: async ({ user }) =>
-        (await input.membership.activeWorkspaceForUser({
+      // Better Auth nests consent reference binding under postLogin. Returning
+      // false keeps consent as the one user confirmation instead of adding a
+      // second workspace-selection continuation when only one workspace is
+      // eligible.
+      page: "/auth/consent",
+      shouldRedirect: async ({ user }) => {
+        const workspaceId = await input.membership.activeWorkspaceForUser({
           issuer: config.issuer,
           audience: config.resource,
           ownerUserId: user.id,
-        })) === undefined,
+        });
+        if (workspaceId === undefined) {
+          throw new Error(
+            "Preview OAuth requires exactly one active workspace membership.",
+          );
+        }
+        return false;
+      },
       consentReferenceId: async ({ user }) => {
         const workspaceId = await input.membership.activeWorkspaceForUser({
           issuer: config.issuer,
