@@ -151,7 +151,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         }
         if (memberships.length === 0) {
           const now = new Date(input.requestedAt);
-          await transaction`insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, created_at, updated_at) values (${input.issuer}, ${input.resource}, ${input.workspaceId}, ${input.userId}, true, ${now}, ${now})`;
+          await transaction`insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at) values (${input.issuer}, ${input.resource}, ${input.workspaceId}, ${input.userId}, true, ${now})`;
           membershipRowsAffected = 1;
         } else if (
           memberships.length !== 1 ||

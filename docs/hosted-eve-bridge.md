@@ -218,9 +218,11 @@ exact confirmation digest, then invoke only the matching task:
   through the real Better Auth handler and reports bounded pre/post row counts;
   and
 - `hosted:invited-user-provision` creates one verified operator-invited
-  credential user plus that user's sole active workspace membership. Exact
-  retries prove the stored credential and return a no-op receipt; conflicts
-  fail closed.
+  credential user plus that user's sole active workspace membership in one SQL
+  transaction. The membership write follows migration `0002` exactly and uses
+  `updated_at` as its lifecycle timestamp. Exact retries prove the stored
+  credential and return a no-op receipt; conflicts fail closed. A failed user,
+  account, or membership write rolls back the whole provisioning attempt.
 
 Secrets remain only in the owner-only request and the database URL remains on
 task-scoped stdin. Public signup stays disabled by the closed runtime policy.
