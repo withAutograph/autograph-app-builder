@@ -28,6 +28,11 @@ boundaries:
    Retention indexes support exact-tenant cleanup without adding an unscoped
    store method. Age-based retention never removes a `reserved` operation and
    deletes an old session only after no retained operation references it.
+   The provider-publication boundary has a separate PostgreSQL compare-and-set
+   journal keyed by exact proposal digest. Its duplicated receipt digest,
+   idempotency key, kind, and state are rebound to the closed receipt on every
+   read. It is intentionally outside tenant retention: pending or terminal
+   provider mutation authority must not disappear and permit redispatch.
 4. The same-origin HTTPS adapter implements `HostedEveTransport` against the
    canonical API emitted by installed Eve 0.43 and `withEve(nextConfig)`. It
    obtains a fresh Vercel project OIDC token for every hop, uses only the
@@ -140,17 +145,21 @@ store remains test/local scaffolding.
 
 Hosted activation still requires separately authorized work:
 
-- separately authorize and activate the in-project Preview OAuth server. Mount
-  the checked-in Better Auth policy and routes, compile and apply its generated
-  schema, add the sign-in and consent surfaces, then prove its minted token. The
-  issuer must record user consent and mint `workspace_id` from that record. The
-  resource server still rechecks the exact active database membership on every
-  request;
+- apply the checked-in Better Auth Preview migration, configure its exact
+  same-origin environment, and prove discovery, sign-in, consent, the
+  single-active-workspace binding, and a minted token. The mounted routes
+  remain fail-closed without that configuration and unapplied schema. The
+  issuer records user consent and derives `workspace_id` from the exact live
+  membership; the resource server rechecks that membership on every request;
 - read back the exact Preview provider request, concurrency, session, and spend
   controls; construct the closed, time-bounded admission-control binding from
   that evidence; and separately prove that the provider enforces it;
-- apply the checked-in PostgreSQL migration with `mise run database:migrate` to
-  an approved database and prove transaction behavior against that deployment;
+- establish a separately evidenced Preview restore point, apply the five
+  checked-in additive PostgreSQL migrations with `mise run database:migrate`,
+  then run `mise run hosted:storage-verify`. The verifier opens one bounded
+  pooled connection, uses a read-only transaction, and emits only schema and
+  contract digests/counts. It refuses migration-order, managed-object, or
+  read-only drift and honestly leaves the provider restore point `not-proven`;
 - configure the exact Vercel team slug, project name, and environment used by
   the authored Eve channel's trusted-forwarder predicate, then prove project
   OIDC and installed Eve 0.43 event projection in Preview;
@@ -194,10 +203,19 @@ workload-identity, tenant-isolation, and five-tool lifecycle proof. It cannot
 create or activate any of them.
 
 The aligned Better Auth 1.7.1 MCP, CIMD, and OAuth Provider packages and the
-non-mounted typed Preview policy are checked in. That policy selects
+Preview-only issuer are checked in. The issuer is mounted at `/api/auth`, with
+an RFC OAuth authorization-server discovery rewrite, `/api/auth/jwks`, and
+explicit sign-in and a single verified-client consent surface that binds the
+sole active workspace. The scope contract does not advertise OpenID discovery.
+Construction is
+lazy and fail-closed: importing a route does not parse secrets, connect to the
+database, generate keys, register a client, or mint a grant. The policy selects
 operator-provisioned email/password login with public signup disabled,
-authorization code/S256 PKCE, explicit consent, CIMD-first client identity,
-public `none` client authentication, and exact resource/scope ceilings. Dynamic
+authorization code/S256 PKCE as the sole grant, explicit consent, CIMD-first
+client identity, public `none` client authentication, and exact resource/scope
+ceilings. Signed-query public-client prelogin verifies the client identity and
+exact requested scopes before consent, while every client/resource management
+action is denied. Dynamic
 client registration stays disabled: enabling it would mutate the authorization
 server client registry and needs separate authority. Activating CIMD is also a
 separately authorized mutation because discovery may create, persist, or refresh
@@ -207,11 +225,25 @@ including `private_key_jwt`. CIMD metadata advertises the client's exact RFC 825
 loopback redirect URI, including its runtime-chosen port, and the authorization
 request still requires S256 PKCE. The policy also
 sets a 300-second access-token TTL and sources the `workspace_id` claim from the
-consented active membership. It deliberately does not mount an issuer,
-compile/apply the Better Auth schema, provide login/consent pages, or mint a
-grant. Those activation steps require separate OAuth issuer/provider authority
-and a real minted-token integration proof showing integer `nbf`, the exact
-resource audience, `workspace_id`, and a lifetime no greater than 300 seconds.
+consented active membership. The checked-in migration remains unapplied and no
+client, consent, grant, key, or token exists merely because the routes are
+present. Live activation still requires the separately authorized migration,
+environment, membership, CIMD persistence, consent/grant, and minted-token
+proof showing integer `nbf`, the exact resource audience, `workspace_id`, and a
+lifetime no greater than 300 seconds.
+The first configured request may overwrite the exact resource seed and create
+the first ES256 JWKS key pair. Those are explicit, separately authorized
+PostgreSQL mutations; route mounting and source receipts authorize neither.
+The repository-level memory-adapter test proves real OAuth AS metadata, ES256
+public JWKS, absent OpenID metadata, management denial, GET and form POST
+authorization, CIMD resolution, signed-query client/scope display, allow and
+deny, no-consent denial, S256 exchange, exact five-minute resource/workspace
+claims, and membership drift before consent or exchange. Exactly one active
+workspace proceeds directly to the single consent surface; zero or multiple
+memberships fail before consent even with `prompt=consent`. No workspace
+selection continuation, generic proxy, or compatibility patch is installed.
+The proof still uses an in-memory adapter and is not a deployed-issuer or live
+PostgreSQL activation receipt.
 
 No database, provider, deployment, plugin registration, or remote repository is
 changed by this slice. The loopback local adapter remains the only configured

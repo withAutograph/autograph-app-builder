@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import * as databaseSchema from "../db/schema";
 import type { HostedPrincipal } from "./hosted-auth";
-import { createPostgresWorkspaceMembership } from "./postgres-workspace-membership";
+import {
+  createPostgresOAuthMembershipAuthority,
+  createPostgresWorkspaceMembership,
+} from "./postgres-workspace-membership";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
@@ -15,7 +18,7 @@ const principal: HostedPrincipal = {
   scopes: ["eve:session"],
 };
 
-function databaseReturning(rows: Array<{ active: boolean }>) {
+function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   const limit = vi.fn(async () => rows);
   const where = vi.fn(() => ({ limit }));
   const from = vi.fn(() => ({ where }));
@@ -55,6 +58,30 @@ describe("PostgreSQL workspace membership", () => {
     ).resolves.toBe(false);
     expect(fixture.select).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [[], undefined],
+    [[{ workspaceId: "workspace_1" }], "workspace_1"],
+    [
+      [{ workspaceId: "workspace_1" }, { workspaceId: "workspace_2" }],
+      undefined,
+    ],
+  ] as const)(
+    "selects only one exact active OAuth workspace",
+    async (rows, expected) => {
+      const fixture = databaseReturning([...rows]);
+      await expect(
+        createPostgresOAuthMembershipAuthority(
+          fixture.database,
+        ).activeWorkspaceForUser({
+          issuer: principal.issuer,
+          audience: principal.audience,
+          ownerUserId: principal.ownerUserId,
+        }),
+      ).resolves.toBe(expected);
+      expect(fixture.limit).toHaveBeenCalledWith(2);
+    },
+  );
 
   it("propagates database failures for the request boundary to fail closed", async () => {
     const database = {

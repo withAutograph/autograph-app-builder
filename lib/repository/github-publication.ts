@@ -361,7 +361,9 @@ function exactDigest(value: { digest: string }, label: string): void {
     throw new Error(`${label} digest is malformed.`);
 }
 
-function permissionsFor(operation: GitHubOperation): GitHubPermissions {
+export function githubPermissionsFor(
+  operation: GitHubOperation,
+): GitHubPermissions {
   switch (operation) {
     case "resolve-existing-source":
       return {
@@ -511,7 +513,7 @@ export function createGitHubInstallationIdentity(
     accountType: input.accountType,
     repositorySelection: "selected" as const,
     selectedRepositoryIds: [...input.selectedRepositoryIds].toSorted(),
-    permissions: permissionsFor(input.operation),
+    permissions: githubPermissionsFor(input.operation),
   };
   return { ...unsigned, digest: digest(unsigned) };
 }

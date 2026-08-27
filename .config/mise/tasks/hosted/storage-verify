@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Verify hosted PostgreSQL schema in a read-only transaction"
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  echo "usage: mise run hosted:storage-verify" >&2
+  exit 64
+fi
+if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
+  echo "hosted:storage-verify requires DATABASE_URL" >&2
+  exit 64
+fi
+database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$database_url" | (
+  unset database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx lib/db/hosted-storage-readiness-cli.mts \
+    --database-url-fd 0
+)

@@ -134,6 +134,20 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0003_hosted_retention_indexes",
           breakpoints: true,
         },
+        {
+          idx: 3,
+          version: "7",
+          when: 1_787_800_800_000,
+          tag: "0004_preview_oauth",
+          breakpoints: true,
+        },
+        {
+          idx: 4,
+          version: "7",
+          when: 1_787_803_200_000,
+          tag: "0005_github_publication_journal",
+          breakpoints: true,
+        },
       ],
     });
   });

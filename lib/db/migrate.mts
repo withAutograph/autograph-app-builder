@@ -5,6 +5,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
 import { readPrivateDatabaseUrl } from "./private-database-url";
+import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 
 if (
   process.argv.length !== 4 ||
@@ -15,13 +16,7 @@ if (
 }
 const databaseUrl = readPrivateDatabaseUrl(0);
 
-const sql = postgres(databaseUrl, {
-  max: 1,
-  connect_timeout: 5,
-  idle_timeout: 5,
-  prepare: false,
-  onnotice: () => undefined,
-});
+const sql = postgres(databaseUrl, hostedTaskPostgresOptions);
 try {
   await migrate(drizzle(sql), {
     migrationsFolder: resolve("drizzle"),

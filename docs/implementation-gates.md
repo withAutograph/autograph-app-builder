@@ -222,14 +222,26 @@ never enter argv, environment, receipts, or persistent files.
 
 Before enabling real MCP mutations:
 
-1. Implement and configure the approved Preview OAuth authorization server with
-   CIMD, authorization code plus S256 PKCE, consent, and a selected user sign-in
-   method. It must mint an exact-resource, five-minute JWT with integer `nbf`
+1. Configure and prove the checked-in Preview OAuth authorization server with
+   CIMD, authorization code plus S256 PKCE, consent, and invited-account
+   email/password sign-in. Its routes are mounted but remain fail-closed until
+   the exact Preview environment and unapplied schema are separately activated.
+   It must mint an exact-resource, five-minute JWT with integer `nbf`
    and a consent-bound `workspace_id`; Preview does not claim immediate token
    revocation and has a residual window of at most five minutes. Activating CIMD
    can create, persist, or refresh a discovery-owned authorization-server client
    record and therefore requires the same separate mutation authority as live
    consent and grant creation. DCR remains disabled.
+   Every client/resource management action is denied, and signed-query public
+   client prelogin must verify the portable CIMD identity and exact requested
+   scopes before consent. The first configured request may overwrite the exact
+   resource seed and create the first ES256 JWKS key pair; each is a separately
+   authorized database mutation. The scope contract does not advertise OpenID
+   discovery, and the only grant type is authorization code with S256 PKCE.
+   The memory-adapter handler proof covers GET-query and POST-form
+   authorization, CIMD, signed consent, allow/deny, S256 exchange, exact
+   five-minute ES256 claims, and membership drift. It is source proof only;
+   deployment and live PostgreSQL activation remain separately evidenced.
 2. Keep the signed `workspace_id` claim as the sole workspace selector. The
    implemented boundary derives `workspaceId` and `ownerUserId` only from
    verified claims and performs a live exact active-membership read for that
@@ -239,11 +251,19 @@ Before enabling real MCP mutations:
    canonical Eve 0.43 routes remain under `/eve/v1/*` on that origin. The
    trusted-forwarder environment must be exactly `preview`; Production and
    Development values fail closed.
-4. Apply the three checked-in Drizzle-derived migrations with `mise run database:migrate`
-   and prove that issuer, audience, workspace, and owner remain in every query.
+4. Establish an approved Preview database restore point, then apply the five
+   checked-in additive Drizzle-derived migrations with
+   `mise run database:migrate`. Run `mise run hosted:storage-verify` afterward;
+   it uses a read-only transaction to require the exact migration order,
+   managed columns, indexes, constraints, bounded connection policy, tenant
+   predicate contract, and durable GitHub publication CAS journal. Its
+   sanitized receipt deliberately reports the external restore point as
+   `not-proven`; source verification is not rollback evidence.
+   Prove that issuer, audience, workspace, and owner remain in every tenant query.
    Membership seed/revoke, retention, and tenant deletion are separate
    confirmation-bound tasks with identity-free receipts. Retention preserves
-   reserved replay authority; deletion requires a five-minute revocation drain.
+   reserved replay authority and never deletes GitHub mutation journals;
+   deletion requires a five-minute revocation drain.
 5. Before hosted composition can open storage, bind a fresh exact provider
    readback through the closed `EVE_HOSTED_ADMISSION_CONTROL` contract. It must
    name bounded per-subject/workspace request and session ceilings plus a monthly
@@ -269,11 +289,18 @@ idempotency state machine, five-operation service core, public event projection,
 same-origin canonical Eve transport, token-only workspace selection, and local
 conformance tests. The MCP route selects a request-scoped service without a
 hosted-to-local fallback, lazily composes the bounded PostgreSQL store, and
-obtains Vercel workload identity only during a request-context hop. It does not
-implement an OAuth authorization server or user sign-in/consent surface.
+obtains Vercel workload identity only during a request-context hop. The
+Preview-only Better Auth route, RFC OAuth AS discovery rewrite, JWKS, sign-in,
+verified-client consent with single-active-workspace binding are mounted
+lazily and fail closed
+before an approved migration and exact environment are present.
 Its source/configuration receipt is explicitly non-activation evidence. A
 separate closed live-activation receipt schema requires all external proofs and
 cannot be populated from source configuration alone.
+The memory-adapter handler test covers OAuth AS discovery, ES256 JWKS, absent
+OpenID metadata, management denial, GET/form authorization, signed consent,
+allow/deny, PKCE token exchange, exact claims, and membership drift. It remains
+in-memory source proof rather than deployed-issuer or live PostgreSQL proof.
 Migration execution, deployment, and registration still require separate evidence and
 authority.
 

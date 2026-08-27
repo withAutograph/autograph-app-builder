@@ -45,7 +45,7 @@ describe("Preview OAuth activation contract", () => {
     }
   });
 
-  it("declares only approval-bound user grants, S256 policy, and server-owned ceilings", () => {
+  it("declares only approval-bound user grants, S256 policy, and server-owned ceilings", async () => {
     const options = buildPreviewMcpOAuthOptions({
       config,
       membership: membership(),
@@ -54,10 +54,10 @@ describe("Preview OAuth activation contract", () => {
       resource: config.resource,
       loginPage: "/auth/sign-in",
       consentPage: "/auth/consent",
-      grantTypes: ["authorization_code", "refresh_token"],
+      grantTypes: ["authorization_code"],
       accessTokenExpiresIn: 300,
-      refreshTokenReuseInterval: 0,
       clientRegistrationRequirePKCE: true,
+      allowPublicClientPrelogin: true,
       allowDynamicClientRegistration: false,
       allowUnauthenticatedClientRegistration: false,
       clientRegistrationDefaultResources: [config.resource],
@@ -82,6 +82,38 @@ describe("Preview OAuth activation contract", () => {
       minPasswordLength: 12,
       maxPasswordLength: 128,
     });
+    for (const action of [
+      "create",
+      "read",
+      "update",
+      "delete",
+      "list",
+      "rotate",
+      "configure-client-credentials-scopes",
+    ] as const) {
+      await expect(
+        options.clientPrivileges?.({
+          headers: new Headers(),
+          action,
+        }),
+      ).resolves.toBe(false);
+    }
+    for (const action of [
+      "create",
+      "read",
+      "update",
+      "delete",
+      "list",
+      "link",
+      "unlink",
+    ] as const) {
+      await expect(
+        options.resourcePrivileges?.({
+          headers: new Headers(),
+          action,
+        }),
+      ).resolves.toBe(false);
+    }
   });
 
   it("binds consent and token claims to the same live exact membership", async () => {
@@ -92,6 +124,14 @@ describe("Preview OAuth activation contract", () => {
       now: () => 2_000_000_000_000,
     });
     const user = { id: "user_1" } as never;
+    await expect(
+      options.postLogin?.shouldRedirect({
+        headers: new Headers(),
+        user,
+        session: {} as never,
+        scopes: ["eve:session"],
+      }),
+    ).resolves.toBe(false);
     await expect(
       options.postLogin?.consentReferenceId({
         user,
@@ -124,6 +164,14 @@ describe("Preview OAuth activation contract", () => {
       membership: membership(false),
     });
     const user = { id: "user_1" } as never;
+    await expect(
+      inactive.postLogin?.shouldRedirect({
+        headers: new Headers(),
+        user,
+        session: {} as never,
+        scopes: ["eve:session"],
+      }),
+    ).rejects.toThrow("exactly one active");
     await expect(
       inactive.postLogin?.consentReferenceId({
         user,
