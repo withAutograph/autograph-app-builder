@@ -47,3 +47,17 @@ export function sandboxBackendPlan(input: {
     blockers: ["No immutable local sandbox image is configured."],
   };
 }
+
+/** Constructs only the backend selected by the environment plan. */
+export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
+  kind: SandboxBackendKind,
+  factories: {
+    localMicrosandbox: () => Local;
+    nonExecuting: () => NonExecuting;
+    vercelPreview: () => Hosted;
+  },
+): Hosted | Local | NonExecuting {
+  if (kind === "vercel-preview") return factories.vercelPreview();
+  if (kind === "local-microsandbox") return factories.localMicrosandbox();
+  return factories.nonExecuting();
+}

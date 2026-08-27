@@ -59,4 +59,18 @@ describe("hosted Vercel Sandbox toolchain", () => {
       "revalidationKey: hostedToolchainRevalidationKey",
     );
   });
+
+  it("selects the environment before constructing any sandbox backend", () => {
+    const definition = readFileSync("agent/sandbox.ts", "utf8");
+    expect(definition).toContain(
+      "export default selectSandboxDefinition(plan.kind, {",
+    );
+    expect(definition).toContain(
+      "localMicrosandbox: createMicrosandboxDefinition",
+    );
+    expect(definition).not.toContain("const microsandboxDefinition =");
+    expect(definition).not.toContain(
+      "export default function resolveSandboxDefinition",
+    );
+  });
 });

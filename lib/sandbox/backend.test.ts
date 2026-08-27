@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { VERCEL_SANDBOX_ARTIFACT_BLOCKER, sandboxBackendPlan } from "./backend";
+import {
+  VERCEL_SANDBOX_ARTIFACT_BLOCKER,
+  sandboxBackendPlan,
+  selectSandboxDefinition,
+} from "./backend";
 
 describe("sandbox backend selection", () => {
   it("uses Eve's supported Vercel Sandbox only for Preview", () => {
@@ -58,5 +62,26 @@ describe("sandbox backend selection", () => {
         "The hosted App Builder sandbox is enabled only for Vercel Preview.",
       ],
     });
+  });
+
+  it("constructs only the hosted backend for Vercel Preview", () => {
+    const localMicrosandbox = vi.fn(() => {
+      throw new Error("Local sandbox backends are pruned");
+    });
+    const nonExecuting = vi.fn(() => {
+      throw new Error("Local sandbox backends are pruned");
+    });
+    const vercelPreview = vi.fn(() => "vercel");
+
+    expect(
+      selectSandboxDefinition("vercel-preview", {
+        localMicrosandbox,
+        nonExecuting,
+        vercelPreview,
+      }),
+    ).toBe("vercel");
+    expect(vercelPreview).toHaveBeenCalledOnce();
+    expect(localMicrosandbox).not.toHaveBeenCalled();
+    expect(nonExecuting).not.toHaveBeenCalled();
   });
 });
