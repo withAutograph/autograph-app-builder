@@ -66,7 +66,9 @@ import {
   imageToolInvocation,
   materializeSanitizedGitTree,
   normalizedNodeModulesDigest,
+  preloadImage,
   reconcileLifecycleTemps,
+  withImageLifecycleTestProvenance,
   withBuildxRuntime,
   withLifecycleLock,
 } from "./node-lifecycle.ts";
@@ -144,10 +146,11 @@ function installFakeGhBoundary(
   root: string,
   token: string,
   mutateStateDuringTokenRead = false,
+  state: string = join(root, "github-cli-state"),
 ) {
   const bin = join(root, "bin");
   const config = join(root, "gh-config");
-  const state = join(root, "github-cli-state");
+  const msbLog = join(root, "msb-invocations.jsonl");
   mkdirSync(bin);
   mkdirSync(config, { mode: 0o700 });
   mkdirSync(state, { mode: 0o700 });
@@ -197,7 +200,42 @@ esac
     });
   writeFileSync(
     join(bin, "msb"),
-    '#!/usr/bin/env node\nprocess.stdout.write("msb 0.6.14\\n");\n',
+    `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
+const { appendFileSync } = require("node:fs");
+const { join } = require("node:path");
+if (process.argv.length === 3 && process.argv[2] === "--version") {
+  process.stdout.write("msb 0.6.14\\n");
+  process.exit(0);
+}
+const helper = spawnSync(
+  join(process.env.DOCKER_CONFIG, "docker-credential-ghcr-bound"),
+  ["get"],
+  { encoding: "utf8", env: process.env, input: "ghcr.io\\n" },
+);
+if (helper.status !== 0) {
+  process.stderr.write("credential helper failed\\n");
+  process.exit(51);
+}
+const credential = JSON.parse(helper.stdout);
+const credentialDigest = createHash("sha256")
+  .update(credential.Secret)
+  .digest("hex");
+if (credentialDigest !== "${hashArtifact(token)}") {
+  process.stderr.write("credential identity mismatch\\n");
+  process.exit(52);
+}
+appendFileSync(
+  ${JSON.stringify(msbLog)},
+  JSON.stringify({
+    argv: process.argv.slice(2),
+    environment: process.env,
+    credentialDigest,
+  }) + "\\n",
+);
+process.stdout.write("preloaded\\n");
+`,
     { mode: 0o700 },
   );
   return {
@@ -206,6 +244,7 @@ esac
     state: realpathSync(state),
     bin,
     commandLog,
+    msbLog,
   };
 }
 
@@ -237,6 +276,34 @@ function withFakeGhEnvironment(
   }
 }
 
+async function withFakeGhEnvironmentAsync(
+  fixture: ReturnType<typeof installFakeGhBoundary>,
+  callback: () => Promise<void>,
+): Promise<void> {
+  const values = {
+    APP_BUILDER_GH_CONFIG_DIR: fixture.config,
+    APP_BUILDER_IMAGE_GH_BIN: fixture.gh,
+    APP_BUILDER_IMAGE_NODE_BIN: realpathSync(process.execPath),
+    APP_BUILDER_IMAGE_DOCKER_BIN: realpathSync(join(fixture.bin, "docker")),
+    APP_BUILDER_IMAGE_BUILDX_BIN: realpathSync(
+      join(fixture.bin, "docker-buildx"),
+    ),
+    APP_BUILDER_IMAGE_MSB_BIN: realpathSync(join(fixture.bin, "msb")),
+  };
+  const previous = Object.fromEntries(
+    Object.keys(values).map((key) => [key, process.env[key]]),
+  );
+  try {
+    Object.assign(process.env, values);
+    await callback();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 function seedFakeGhState(
   fixture: ReturnType<typeof installFakeGhBoundary>,
 ): string {
@@ -245,6 +312,177 @@ function seedFakeGhState(
     mode: 0o600,
   });
   return githubStateDigest(fixture.state);
+}
+
+type FixtureReceipt = Readonly<{
+  version: 1;
+  kind: string;
+  provenance: ReturnType<typeof createExactImageProvenance>;
+  result: unknown;
+  digest: string;
+}>;
+
+function writeFixtureReceipt(
+  stateRoot: string,
+  filename: string,
+  kind: string,
+  exact: ReturnType<typeof createExactImageProvenance>,
+  result: unknown,
+): FixtureReceipt {
+  const unsigned = { version: 1 as const, kind, provenance: exact, result };
+  const receipt = {
+    ...unsigned,
+    digest: hashArtifact(JSON.stringify(unsigned)),
+  };
+  writeFileSync(
+    join(stateRoot, filename),
+    `${JSON.stringify(receipt, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  return receipt;
+}
+
+function stateArtifactText(root: string): string {
+  const contents: string[] = [];
+  const visit = (path: string) => {
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const absolute = join(path, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else if (entry.isFile()) contents.push(readFileSync(absolute, "utf8"));
+    }
+  };
+  visit(root);
+  return contents.join("\n");
+}
+
+function installPreloadFixture(
+  variant:
+    | "current"
+    | "missing"
+    | "stale"
+    | "provenance-mismatch"
+    | "identity-mismatch"
+    | "state-drift",
+) {
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), `app-builder-preload-${variant}-`)),
+  );
+  const providerRoot = join(root, "provider");
+  const stateRoot = join(root, "state");
+  const arrustedRoot = join(root, "arrusted");
+  mkdirSync(providerRoot, { mode: 0o700 });
+  mkdirSync(stateRoot, { mode: 0o700 });
+  mkdirSync(arrustedRoot, { mode: 0o700 });
+  const sentinel = "github_pat_preload_behavioral_sentinel";
+  const fixture = installFakeGhBoundary(
+    providerRoot,
+    sentinel,
+    false,
+    join(stateRoot, "github-cli-state"),
+  );
+  seedFakeGhState(fixture);
+  const exact = createExactImageProvenance({
+    builderRoot: realpathSync(process.cwd()),
+    stateRoot: realpathSync(stateRoot),
+    observedBuilderCommit: builderCommit,
+    observedBuilderTree: builderTree,
+    expectedBuilderCommit: builderCommit,
+    expectedBuilderTree: builderTree,
+    builderStatus: "",
+    builderIgnored: "",
+    arrustedRoot: realpathSync(arrustedRoot),
+    observedArrustedCommit: ARRUSTED_IMAGE_TARGET_SHA,
+    observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
+    arrustedStatus: "",
+    arrustedIgnored: "",
+    dockerfileSha256,
+    expectedDockerfileSha256: dockerfileSha256,
+    targetFiles,
+  });
+  const reference = `${exact.image.repository}@sha256:${"9".repeat(64)}`;
+  const approval = {
+    arrustedRoot: exact.arrusted.root,
+    stateRoot: exact.builder.stateRoot,
+    builderCommit: exact.builder.commit,
+    builderTree: exact.builder.tree,
+    dockerfileSha256: exact.dockerfile.sha256,
+  };
+
+  return {
+    approval,
+    exact,
+    fixture,
+    reference,
+    root,
+    sentinel,
+    stateRoot,
+    seedReceipts: () => {
+      const binding = currentGhcrCredentialBinding(stateRoot);
+      const approved = Buffer.from(sentinel);
+      const approvedIdentityDigest = ghcrIdentityDigest(
+        "withAutograph",
+        exact.digest,
+        approved,
+      );
+      approved.fill(0);
+      const loginResult = {
+        schema: "ghcr-login-v3",
+        status: "credential-matched",
+        registry: "ghcr.io",
+        username: "withAutograph",
+        authenticationProvider: "gh@2.98.0-keyring",
+        operatorApprovalTransport: "one-time-stdin",
+        keyringReadbackTransport: "github-cli-keyring",
+        providerMutation: "none",
+        authenticationBoundary: binding,
+        authenticationBoundaryDigest: hashArtifact(JSON.stringify(binding)),
+        identityDigest:
+          variant === "identity-mismatch"
+            ? "0".repeat(64)
+            : approvedIdentityDigest,
+        provenanceDigest:
+          variant === "provenance-mismatch" ? "0".repeat(64) : exact.digest,
+      };
+      const login =
+        variant === "missing"
+          ? undefined
+          : writeFixtureReceipt(
+              stateRoot,
+              "ghcr-login-receipt.json",
+              "ghcr-login",
+              exact,
+              loginResult,
+            );
+      if (variant === "stale" && login !== undefined)
+        writeFileSync(
+          join(stateRoot, "ghcr-login-receipt.json"),
+          `${JSON.stringify({ ...login, result: { ...loginResult, status: "stale" } }, null, 2)}\n`,
+          { mode: 0o600 },
+        );
+      writeFixtureReceipt(stateRoot, "push-receipt.json", "image-push", exact, {
+        status: "pushed",
+        tag: exact.image.tag,
+        localImageReceiptDigest: "7".repeat(64),
+        ghcrLoginReceiptDigest:
+          variant === "identity-mismatch"
+            ? "8".repeat(64)
+            : (login?.digest ?? "6".repeat(64)),
+      });
+      writeFixtureReceipt(
+        stateRoot,
+        "remote-image-receipt.json",
+        "remote-image",
+        exact,
+        { reference },
+      );
+      if (variant === "state-drift")
+        writeFileSync(
+          join(fixture.state, "gh", "device-id"),
+          "drifted-device-id\n",
+          { mode: 0o600 },
+        );
+    },
+  };
 }
 
 describe("image lifecycle", () => {
@@ -804,6 +1042,133 @@ wait
       body.indexOf("readGhcrTokenFromStdin()"),
     );
   });
+
+  it("preloads through the public path with only the current bound GHCR identity", async () => {
+    const scenario = installPreloadFixture("current");
+    try {
+      await withFakeGhEnvironmentAsync(scenario.fixture, async () => {
+        scenario.seedReceipts();
+        const receipt = await withImageLifecycleTestProvenance(
+          scenario.exact,
+          () => preloadImage(scenario.approval, scenario.reference),
+        );
+        expect(receipt.result).toEqual({
+          status: "preloaded",
+          reference: scenario.reference,
+        });
+      });
+
+      const invocations = readFileSync(scenario.fixture.msbLog, "utf8")
+        .trim()
+        .split("\n")
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              argv: string[];
+              environment: Record<string, string>;
+              credentialDigest: string;
+            },
+        );
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0]!.argv).toEqual([
+        "pull",
+        scenario.reference,
+        "--materialize",
+        "all",
+      ]);
+      expect(
+        Object.keys(invocations[0]!.environment)
+          .filter((key) => key !== "__CF_USER_TEXT_ENCODING")
+          .sort(),
+      ).toEqual(
+        [
+          "APP_BUILDER_GH_CONFIG_DIGEST",
+          "APP_BUILDER_GH_CONFIG_DIR",
+          "APP_BUILDER_GH_STATE_DIGEST",
+          "APP_BUILDER_GH_STATE_DIR",
+          "APP_BUILDER_GHCR_IDENTITY_DIGEST",
+          "APP_BUILDER_GHCR_PROVENANCE_DIGEST",
+          "APP_BUILDER_GHCR_USERNAME",
+          "APP_BUILDER_GH_SHA256",
+          "APP_BUILDER_IMAGE_GHCR_BOUND_HELPER_MODULE",
+          "APP_BUILDER_IMAGE_GH_BIN",
+          "APP_BUILDER_IMAGE_NODE_BIN",
+          "DOCKER_CONFIG",
+          "HOME",
+          "LANG",
+          "NODE_ENV",
+          "PATH",
+        ].sort(),
+      );
+      expect(invocations[0]!.environment).toMatchObject({
+        APP_BUILDER_GHCR_USERNAME: "withAutograph",
+        APP_BUILDER_GHCR_PROVENANCE_DIGEST: scenario.exact.digest,
+        APP_BUILDER_GH_STATE_DIR: scenario.fixture.state,
+        DOCKER_CONFIG: scenario.stateRoot,
+        NODE_ENV: "production",
+        PATH: `${scenario.stateRoot}:/usr/bin:/bin`,
+      });
+      expect(invocations[0]!.credentialDigest).toBe(
+        hashArtifact(scenario.sentinel),
+      );
+      expect(readFileSync(scenario.fixture.msbLog, "utf8")).not.toContain(
+        scenario.sentinel,
+      );
+      expect(stateArtifactText(scenario.stateRoot)).not.toContain(
+        scenario.sentinel,
+      );
+    } finally {
+      rmSync(scenario.root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    ["missing", "ENOENT"],
+    ["stale", "digest is invalid"],
+    ["provenance-mismatch", "current credential boundary"],
+    ["identity-mismatch", "current GHCR login identity"],
+    ["state-drift", "current credential boundary"],
+  ] as const)(
+    "rejects a %s login receipt before invoking the credential provider",
+    async (variant, expectedError) => {
+      const scenario = installPreloadFixture(variant);
+      try {
+        let errorText = "";
+        await withFakeGhEnvironmentAsync(scenario.fixture, async () => {
+          scenario.seedReceipts();
+          const providerCallsBefore = readFileSync(
+            scenario.fixture.commandLog,
+            "utf8",
+          )
+            .split("\n")
+            .filter((line) => line.startsWith("auth token ")).length;
+          try {
+            await withImageLifecycleTestProvenance(scenario.exact, () =>
+              preloadImage(scenario.approval, scenario.reference),
+            );
+          } catch (error) {
+            errorText = error instanceof Error ? error.message : String(error);
+          }
+          expect(errorText).toContain(expectedError);
+          expect(
+            readFileSync(scenario.fixture.commandLog, "utf8")
+              .split("\n")
+              .filter((line) => line.startsWith("auth token ")),
+          ).toHaveLength(providerCallsBefore);
+        });
+        expect(existsSync(scenario.fixture.msbLog)).toBe(false);
+        expect(
+          existsSync(join(scenario.stateRoot, "preload-receipt.json")),
+        ).toBe(false);
+        expect(errorText).not.toContain(scenario.sentinel);
+        expect(stateArtifactText(scenario.stateRoot)).not.toContain(
+          scenario.sentinel,
+        );
+      } finally {
+        rmSync(scenario.root, { force: true, recursive: true });
+      }
+    },
+  );
 
   it("sends no Builder workspace files through the default build context", () => {
     expect(readFileSync(".dockerignore", "utf8")).toBe("**\n");
