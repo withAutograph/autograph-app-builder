@@ -17,7 +17,7 @@ const issuer = `${origin}/api/auth`;
 const resource = `${origin}/mcp`;
 const clientId = "https://client.withautograph.com/portable.json";
 const redirectUri = "http://127.0.0.1:43123/auth/callback";
-const requestedScope = "eve:session eve:start";
+const requestedScope = "eve:session eve:start offline_access";
 
 const codexClientId =
   "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json";
@@ -68,7 +68,7 @@ async function setup(
     client_name: "Portable client",
     redirect_uris: [redirectUri],
     token_endpoint_auth_method: "none",
-    grant_types: ["authorization_code"],
+    grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
   },
 ) {
@@ -156,7 +156,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       token_endpoint: `${issuer}/oauth2/token`,
       jwks_uri: `${issuer}/jwks`,
       code_challenge_methods_supported: ["S256"],
-      grant_types_supported: ["authorization_code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
     });
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
@@ -288,7 +288,29 @@ describe("real Better Auth Preview OAuth handler", () => {
       scope: requestedScope,
       token_type: "Bearer",
     });
-    expect(tokenBody.refresh_token).toBeUndefined();
+    expect(tokenBody.refresh_token).toMatch(/^[A-Za-z0-9_-]+$/u);
+
+    const refreshed = await customFetchImpl(`${issuer}/oauth2/token`, {
+      method: "POST",
+      headers: {
+        origin,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: clientId,
+        refresh_token: tokenBody.refresh_token!,
+        resource,
+      }),
+    });
+    expect(refreshed.status).toBe(200);
+    await expect(refreshed.json()).resolves.toMatchObject({
+      access_token: expect.any(String),
+      expires_in: 300,
+      refresh_token: expect.any(String),
+      scope: requestedScope,
+      token_type: "Bearer",
+    });
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
     const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
