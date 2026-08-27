@@ -1,5 +1,13 @@
 import { execFileSync, spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -61,11 +69,21 @@ try {
       "--output",
       output,
     ]);
-  const archiveName = "autograph-app-builder-0.1.0.tar.gz";
+  const portableManifest = JSON.parse(await readFile("plugin.json", "utf8"));
+  const archiveName = `autograph-app-builder-${portableManifest.version}.tar.gz`;
+  const marketplaceArchiveName = `autograph-app-builder-codex-marketplace-${portableManifest.version}.tar.gz`;
   const firstArchive = await readFile(join(first, archiveName));
   const secondArchive = await readFile(join(second, archiveName));
   if (!firstArchive.equals(secondArchive))
     throw new Error("Portable archive is not reproducible.");
+  const firstMarketplaceArchive = await readFile(
+    join(first, marketplaceArchiveName),
+  );
+  const secondMarketplaceArchive = await readFile(
+    join(second, marketplaceArchiveName),
+  );
+  if (!firstMarketplaceArchive.equals(secondMarketplaceArchive))
+    throw new Error("Codex marketplace archive is not reproducible.");
   const firstReceipt = JSON.parse(
     await readFile(join(first, "release-receipt.json"), "utf8"),
   );
@@ -97,6 +115,44 @@ try {
     "--artifact",
     "--release",
   ]);
+  const marketplace = join(temp, "codex-marketplace");
+  await mkdir(marketplace);
+  execFileSync(
+    "/usr/bin/tar",
+    ["-xzf", join(first, marketplaceArchiveName), "-C", marketplace],
+    {
+      stdio: "inherit",
+      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+    },
+  );
+  const marketplaceManifest = JSON.parse(
+    await readFile(
+      join(marketplace, ".agents/plugins/marketplace.json"),
+      "utf8",
+    ),
+  );
+  if (
+    marketplaceManifest.name !== "autograph" ||
+    marketplaceManifest.plugins?.[0]?.source?.path !==
+      "./plugins/autograph-app-builder"
+  )
+    throw new Error("Codex marketplace manifest was invalid.");
+  const codexPluginRoot = join(
+    marketplace,
+    marketplaceManifest.plugins[0].source.path,
+  );
+  if (!(await stat(codexPluginRoot)).isDirectory())
+    throw new Error(
+      "Codex marketplace source path did not resolve to the packaged plugin.",
+    );
+  const codexAdapter = JSON.parse(
+    await readFile(join(codexPluginRoot, ".mcp.json"), "utf8"),
+  );
+  if (
+    codexAdapter.mcpServers?.["autograph-app-builder"]?.url !==
+    `${endpoint}/mcp`
+  )
+    throw new Error("Codex marketplace did not bind the release endpoint.");
   const installs = join(temp, "installs");
   for (const client of ["vscode", "cursor", "codex"])
     await run("install-portable-plugin.mts", [
@@ -155,6 +211,12 @@ try {
   await mutateReceipt("archive basename traversal", (receipt) => {
     const archive = receipt.archive as { name: string };
     archive.name = `../${archive.name}`;
+  });
+  await mutateReceipt("marketplace archive digest drift", (receipt) => {
+    const marketplaceArchive = receipt.codexMarketplaceArchive as {
+      sha256: string;
+    };
+    marketplaceArchive.sha256 = "0".repeat(64);
   });
   await mutateReceipt("core digest drift", (receipt) => {
     const files = receipt.coreFiles as Record<string, string>;

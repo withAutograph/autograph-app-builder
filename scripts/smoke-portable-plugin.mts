@@ -21,7 +21,7 @@ const receipt = JSON.parse(
   await readFile(join(releaseRoot, "release-receipt.json"), "utf8"),
 );
 if (
-  receipt.format !== "autograph-portable-plugin-release-v2" ||
+  receipt.format !== "autograph-portable-plugin-release-v3" ||
   receipt.specification !== "1.0.0" ||
   !/^[0-9a-f]{40}$/u.test(receipt.source?.sha ?? "") ||
   !/^[0-9a-f]{40}$/u.test(receipt.source?.tree ?? "") ||
@@ -32,6 +32,11 @@ if (
 const archive = await readFile(join(releaseRoot, receipt.archive.name));
 if (sha256(archive) !== receipt.archive.sha256)
   throw new Error("Portable archive digest did not match its receipt.");
+const marketplaceArchive = await readFile(
+  join(releaseRoot, receipt.codexMarketplaceArchive.name),
+);
+if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
+  throw new Error("Codex marketplace digest did not match its receipt.");
 const discovery = JSON.parse(
   await readFile(join(releaseRoot, "mock/tools-list.json"), "utf8"),
 );

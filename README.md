@@ -9,6 +9,24 @@ The project is based on
 [`jasonmorganson/eve-agent-plugin`](https://github.com/jasonmorganson/eve-agent-plugin)
 without changing that source repository.
 
+## Install
+
+Before the shared marketplace is published, obtain the verified Codex
+marketplace archive and `SHA256SUMS` from an authorized GitHub release or an
+Autograph maintainer. After extracting the archive, install it with:
+
+```sh
+codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
+codex plugin add autograph-app-builder@autograph
+```
+
+Complete OAuth, open a new task, and mention `@Autograph App Builder`. A shared
+marketplace listing is a separate distribution action and is not implied by a
+GitHub release. If you cannot access an authorized release, external
+installation is not yet available. See
+[the complete installation guide](docs/installing.md) for every supported
+option.
+
 ## Current implemented workflow
 
 The current local slice supports an existing eligible checkout or an explicitly
@@ -269,12 +287,14 @@ declaration, Agent Skills, and license. It deliberately excludes
 distribution metadata rather than Agent Plugins core. The artifact is the
 canonical portable package; client-specific packages are derived adapters.
 
-That package shape is standards-conformant, but the repository does not yet
-claim cross-client runtime portability or release readiness. `mcp.json` retains
-a non-routable development endpoint, Agent Plugins 1.0.0 leaves OAuth and
-credentials to each client, and hosted OAuth, tenancy, durable storage, and
-non-Codex client proofs remain required before either claim. The standard also
-does not define client installation UX.
+The source `mcp.json` intentionally retains a loopback development endpoint.
+Versioned releases replace it with one literal hosted HTTPS origin and publish
+both the portable Agent Plugins package and a derived Codex marketplace archive.
+Each archive is deterministic and bound to the source SHA/tree and endpoint by
+`release-receipt.json` and `SHA256SUMS`. See
+[`docs/installing.md`](docs/installing.md) for installation and release
+instructions. Agent Plugins 1.0.0 leaves OAuth, credentials, and client-specific
+installation UX to each client; no credential is embedded in either archive.
 
 `mise run package:validate` verifies the source components against the vendored,
 digest-pinned Agent Plugins 1.0.0 schemas and the specification's version,

@@ -8,7 +8,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import {
@@ -141,6 +141,91 @@ const portable = JSON.parse(await readFile(join(core, "plugin.json"), "utf8"));
 const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(join(output, archiveName), archive);
 
+const marketplaceRoot = join(output, "codex-marketplace");
+const marketplacePluginRoot = join(marketplaceRoot, "plugins", portable.name);
+await mkdir(join(marketplacePluginRoot, ".codex-plugin"), {
+  recursive: true,
+  mode: 0o755,
+});
+await cp(core, marketplacePluginRoot, { recursive: true });
+const codexManifest = JSON.parse(
+  await readFile(resolve(".codex-plugin/plugin.json"), "utf8"),
+);
+if (
+  codexManifest.name !== portable.name ||
+  codexManifest.version !== portable.version
+)
+  throw new Error(
+    "The Codex adapter name and version must match the portable manifest.",
+  );
+await writeFile(
+  join(marketplacePluginRoot, ".codex-plugin", "plugin.json"),
+  `${JSON.stringify(codexManifest, null, 2)}\n`,
+);
+await writeFile(
+  join(marketplacePluginRoot, ".mcp.json"),
+  `${JSON.stringify(
+    {
+      mcpServers: {
+        [portable.name]: { type: "http", url: `${endpoint}/mcp` },
+      },
+    },
+    null,
+    2,
+  )}\n`,
+);
+const marketplacePath = join(
+  marketplaceRoot,
+  ".agents",
+  "plugins",
+  "marketplace.json",
+);
+await mkdir(dirname(marketplacePath), { recursive: true, mode: 0o755 });
+await writeFile(
+  marketplacePath,
+  `${JSON.stringify(
+    {
+      name: "autograph",
+      interface: { displayName: "Autograph" },
+      plugins: [
+        {
+          name: portable.name,
+          source: {
+            source: "local",
+            path: `./plugins/${portable.name}`,
+          },
+          policy: {
+            installation: "AVAILABLE",
+            authentication: "ON_INSTALL",
+          },
+          category: "Developer Tools",
+        },
+      ],
+    },
+    null,
+    2,
+  )}\n`,
+);
+const marketplaceFiles = new Map<string, Uint8Array>();
+async function collectMarketplace(directory: string) {
+  for (const entry of (await readdir(directory)).sort()) {
+    const path = join(directory, entry);
+    const info = await stat(path);
+    if (info.isDirectory()) await collectMarketplace(path);
+    else
+      marketplaceFiles.set(
+        relative(marketplaceRoot, path),
+        await readFile(path),
+      );
+  }
+}
+await collectMarketplace(marketplaceRoot);
+const marketplaceArchive = deterministicGzip(
+  deterministicTar(marketplaceFiles),
+);
+const marketplaceArchiveName = `${portable.name}-codex-marketplace-${portable.version}.tar.gz`;
+await writeFile(join(output, marketplaceArchiveName), marketplaceArchive);
+
 const auxiliaryFiles = new Map<string, Uint8Array>();
 for (const directory of [mockRoot, clientRoot]) {
   for (const entry of (await readdir(directory)).sort()) {
@@ -149,13 +234,17 @@ for (const directory of [mockRoot, clientRoot]) {
   }
 }
 const receipt = {
-  format: "autograph-portable-plugin-release-v2",
+  format: "autograph-portable-plugin-release-v3",
   specification: "1.0.0",
   name: portable.name,
   version: portable.version,
   source,
   endpoint: `${endpoint}/mcp`,
   archive: { name: archiveName, sha256: sha256(archive) },
+  codexMarketplaceArchive: {
+    name: marketplaceArchiveName,
+    sha256: sha256(marketplaceArchive),
+  },
   coreFiles: Object.fromEntries(
     [...files].sort().map(([path, content]) => [path, sha256(content)]),
   ),
@@ -169,6 +258,10 @@ const receipt = {
 await writeFile(
   join(output, "release-receipt.json"),
   `${JSON.stringify(receipt, null, 2)}\n`,
+);
+await writeFile(
+  join(output, "SHA256SUMS"),
+  `${receipt.archive.sha256}  ${receipt.archive.name}\n${receipt.codexMarketplaceArchive.sha256}  ${receipt.codexMarketplaceArchive.name}\n`,
 );
 if ((await realpath(core)) !== core)
   throw new Error("Portable core path was not canonical.");

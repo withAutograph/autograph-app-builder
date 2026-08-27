@@ -173,8 +173,11 @@ Hosted activation still requires separately authorized work:
 Preview JWT access tokens are intentionally not denylisted or introspected.
 They cannot be revoked immediately: removing a membership blocks the next MCP
 request through the live database check, while the token remains
-cryptographically valid for no more than five minutes. Do not claim immediate
-token revocation or extend this Preview policy to Production.
+cryptographically valid for no more than five minutes. Public clients receive
+an eight-hour, rotated refresh token only when they request `offline_access`;
+every MCP request made with a refreshed access token still passes the resource
+server's live membership check. Do not claim immediate token revocation or
+extend this Preview policy to Production.
 
 ## Preview database administration
 

@@ -4,7 +4,7 @@ import {
   buildPreviewCimdOptions,
   buildPreviewMcpOAuthOptions,
   previewEmailPasswordPolicy,
-  previewMcpScopes,
+  previewOAuthScopes,
   readPreviewOAuthContractConfig,
 } from "./preview-oauth-contract";
 
@@ -54,25 +54,27 @@ describe("Preview OAuth activation contract", () => {
       resource: config.resource,
       loginPage: "/auth/sign-in",
       consentPage: "/auth/consent",
-      grantTypes: ["authorization_code"],
+      grantTypes: ["authorization_code", "refresh_token"],
       accessTokenExpiresIn: 300,
+      refreshTokenExpiresIn: 28_800,
       clientRegistrationRequirePKCE: true,
       allowPublicClientPrelogin: true,
       allowDynamicClientRegistration: false,
       allowUnauthenticatedClientRegistration: false,
       clientRegistrationDefaultResources: [config.resource],
       clientRegistrationAllowedResources: [],
-      clientRegistrationDefaultScopes: ["eve:session"],
+      clientRegistrationDefaultScopes: ["eve:session", "offline_access"],
     });
-    expect(options.scopes).toEqual(previewMcpScopes);
+    expect(options.scopes).toEqual(previewOAuthScopes);
     expect(options.clientRegistrationAllowedScopes).toEqual(
-      previewMcpScopes.slice(1),
+      previewOAuthScopes.slice(1),
     );
     expect(options.resources).toEqual([
       {
         identifier: config.resource,
         accessTokenTtl: 300,
-        allowedScopes: [...previewMcpScopes],
+        refreshTokenTtl: 28_800,
+        allowedScopes: [...previewOAuthScopes],
         signingAlgorithm: "ES256",
       },
     ]);
@@ -220,7 +222,7 @@ describe("Preview OAuth activation contract", () => {
     });
   });
 
-  it("normalizes only the native Codex refresh capability to the closed server grant", async () => {
+  it("preserves the native Codex refresh capability", async () => {
     const fetchClientMetadataResource = vi.fn(async () =>
       Response.json({
         client_id: "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json",
@@ -245,7 +247,7 @@ describe("Preview OAuth activation contract", () => {
 
     await expect(response.json()).resolves.toMatchObject({
       token_endpoint_auth_method: "none",
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       redirect_uris: [
         "http://127.0.0.1/callback/4-bzS8rt42zJ",
         "http://localhost/callback/4-bzS8rt42zJ",

@@ -21,7 +21,7 @@ const digestRecord = z.record(z.string().min(1), hash);
 
 export const portableReleaseReceiptSchema = z
   .object({
-    format: z.literal("autograph-portable-plugin-release-v2"),
+    format: z.literal("autograph-portable-plugin-release-v3"),
     specification: z.literal("1.0.0"),
     name: z.literal("autograph-app-builder"),
     version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/u),
@@ -36,6 +36,9 @@ export const portableReleaseReceiptSchema = z
       .strict(),
     endpoint: z.string().url().startsWith("https://"),
     archive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
+    codexMarketplaceArchive: z
+      .object({ name: z.string().min(1), sha256: hash })
+      .strict(),
     coreFiles: digestRecord,
     auxiliaryFiles: digestRecord,
     tools: z.tuple([
@@ -175,6 +178,36 @@ export async function verifyPortableProofArtifact(input: {
     if (sha256(loose) !== receipt.coreFiles[path])
       throw new Error(`Loose core file drifted at ${path}.`);
   }
+  const marketplaceArchiveName = `${receipt.name}-codex-marketplace-${receipt.version}.tar.gz`;
+  if (
+    receipt.codexMarketplaceArchive.name !== marketplaceArchiveName ||
+    basename(receipt.codexMarketplaceArchive.name) !==
+      receipt.codexMarketplaceArchive.name
+  )
+    throw new Error("Codex marketplace archive basename was invalid.");
+  const marketplaceArchive = await regularFile(
+    join(releaseRoot, receipt.codexMarketplaceArchive.name),
+  );
+  if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
+    throw new Error(
+      "Codex marketplace archive digest did not match its receipt.",
+    );
+  const marketplaceFiles = archiveFiles(marketplaceArchive);
+  const marketplacePrefix = `plugins/${receipt.name}/`;
+  for (const path of archived.keys()) {
+    const relativePath = relative(receipt.name, path);
+    if (!marketplaceFiles.has(`${marketplacePrefix}${relativePath}`))
+      throw new Error(
+        `Codex marketplace omitted portable core file ${relativePath}.`,
+      );
+  }
+  for (const required of [
+    ".agents/plugins/marketplace.json",
+    `${marketplacePrefix}.codex-plugin/plugin.json`,
+    `${marketplacePrefix}.mcp.json`,
+  ])
+    if (!marketplaceFiles.has(required))
+      throw new Error(`Codex marketplace omitted ${required}.`);
   const auxiliaryPaths = [
     "clients/codex.client-harness.json",
     "clients/cursor.client-harness.json",

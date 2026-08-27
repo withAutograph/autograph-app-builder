@@ -55,6 +55,13 @@ export const previewMcpScopes = [
   "eve:cancel",
 ] as const;
 
+export const previewOAuthScopes = [
+  ...previewMcpScopes,
+  "offline_access",
+] as const;
+
+const refreshTokenLifetimeSeconds = 60 * 60 * 8;
+
 export const previewEmailPasswordPolicy = {
   enabled: true,
   disableSignUp: true,
@@ -93,22 +100,24 @@ export function buildPreviewMcpOAuthOptions(input: {
     resource: config.resource,
     loginPage: "/auth/sign-in",
     consentPage: "/auth/consent",
-    scopes: [...previewMcpScopes],
-    grantTypes: ["authorization_code"],
+    scopes: [...previewOAuthScopes],
+    grantTypes: ["authorization_code", "refresh_token"],
     accessTokenExpiresIn: 300,
+    refreshTokenExpiresIn: refreshTokenLifetimeSeconds,
     resources: [
       {
         identifier: config.resource,
         accessTokenTtl: 300,
-        allowedScopes: [...previewMcpScopes],
+        refreshTokenTtl: refreshTokenLifetimeSeconds,
+        allowedScopes: [...previewOAuthScopes],
         signingAlgorithm: "ES256",
       },
     ],
     resourceSeedMode: "overwrite",
     clientRegistrationDefaultResources: [config.resource],
     clientRegistrationAllowedResources: [],
-    clientRegistrationDefaultScopes: ["eve:session"],
-    clientRegistrationAllowedScopes: previewMcpScopes.slice(1),
+    clientRegistrationDefaultScopes: ["eve:session", "offline_access"],
+    clientRegistrationAllowedScopes: previewOAuthScopes.slice(1),
     clientRegistrationRequirePKCE: true,
     allowPublicClientPrelogin: true,
     clientPrivileges: async () => false,
@@ -204,27 +213,6 @@ export function buildPreviewCimdOptions(input: {
       if (record.token_endpoint_auth_method !== "none") {
         throw new Error(
           "Preview CIMD clients must use token_endpoint_auth_method none.",
-        );
-      }
-      // Native Codex advertises refresh_token as an optional client
-      // capability. Preview intentionally has no continuation credential and
-      // Better Auth requires every persisted client grant to be supported by
-      // the server. Intersect only this known metadata pair with the closed
-      // authorization-code grant; every other field still reaches Better Auth
-      // for its normal redirect, response-type, and public-client validation.
-      if (
-        record.application_type === "native" &&
-        Array.isArray(record.response_types) &&
-        record.response_types.length === 1 &&
-        record.response_types[0] === "code" &&
-        Array.isArray(record.grant_types) &&
-        record.grant_types.length === 2 &&
-        record.grant_types.includes("authorization_code") &&
-        record.grant_types.includes("refresh_token")
-      ) {
-        return Response.json(
-          { ...record, grant_types: ["authorization_code"] },
-          { status: response.status, statusText: response.statusText },
         );
       }
       return response;
