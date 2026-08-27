@@ -9,6 +9,25 @@ The project is based on
 [`jasonmorganson/eve-agent-plugin`](https://github.com/jasonmorganson/eve-agent-plugin)
 without changing that source repository.
 
+## Install
+
+For the standard installation, find **Autograph App Builder** in the shared
+Autograph Codex marketplace. Select **Install**, complete OAuth, then open a new
+task and mention `@Autograph App Builder`.
+
+If the `autograph` marketplace is already configured, the equivalent CLI
+command is:
+
+```sh
+codex plugin add autograph-app-builder@autograph
+```
+
+You don't need to download or extract an archive for the standard installation.
+Use versioned archives for offline/manual installation, other Agent Plugins
+clients, and release verification. See
+[the complete installation guide](docs/installing.md) for every supported
+option.
+
 ## Current implemented workflow
 
 The current local slice supports an existing eligible checkout or an explicitly
