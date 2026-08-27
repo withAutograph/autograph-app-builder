@@ -1,36 +1,44 @@
 # Installing Autograph App Builder
 
-## Recommended: install from the Codex marketplace
+## Recommended: install the verified Codex marketplace release
 
-Install Autograph App Builder from its listing in the shared Autograph
-marketplace:
+Download these files from the latest GitHub release:
 
-1. Open **Autograph App Builder** in the Codex plugin marketplace.
-2. Select **Install**.
-3. Complete OAuth when Codex prompts for access.
-4. Open a new Codex task and mention `@Autograph App Builder`.
+- `autograph-app-builder-codex-marketplace-VERSION.tar.gz`
+- `SHA256SUMS`
 
-You don't need to download an archive, extract files, register a Model Context
-Protocol (MCP) server, or manage a bearer token. The marketplace package defines
-the MCP origin. Codex handles OAuth through the origin's protected-resource and
-authorization-server metadata.
+Then verify, install, and open a new Codex task:
+
+```sh
+sha256sum --check SHA256SUMS --ignore-missing
+mkdir autograph-app-builder-marketplace
+tar -xzf autograph-app-builder-codex-marketplace-VERSION.tar.gz \
+  -C autograph-app-builder-marketplace
+codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
+codex plugin add autograph-app-builder@autograph
+```
+
+The release package defines the Model Context Protocol (MCP) origin and contains
+no credential. Codex completes OAuth against that origin's protected-resource
+and authorization-server metadata.
 
 Confirm that a new task exposes exactly `eve_start`, `eve_get`, `eve_send`,
 `eve_respond`, and `eve_cancel`. The bundled Eve skill is fail-closed: if any Eve
 tool is unavailable, it stops without using another app builder or editing a
 target directly.
 
-### Install with the Codex command-line interface
+### Install from a configured shared marketplace
 
-When the shared `autograph` marketplace is already configured, run the
-equivalent command-line interface (CLI) installation:
+When an administrator has separately configured a shared `autograph`
+marketplace, the installation command is:
 
 ```sh
 codex plugin add autograph-app-builder@autograph
 ```
 
-Open a new Codex task after installation. This command is an alternative to
-selecting **Install** in the UI; it is not a separate package format.
+Open a new Codex task after installation. A future catalog listing may present
+the same operation in the Codex UI, but the existence of a release does not by
+itself create that listing.
 
 ## Other Agent Plugins clients
 
@@ -51,10 +59,7 @@ Agent Plugins standardizes the portable package, not each client's catalog or
 installation UI. Use your client's documented plugin-install command when it
 doesn't offer a catalog listing.
 
-## Offline and manual installation
-
-Use archive installation only for offline environments, client testing, and
-release verification. It is not the normal installation path.
+## Release contents and manual installation
 
 Every release contains:
 
@@ -90,8 +95,8 @@ codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
 codex plugin add autograph-app-builder@autograph
 ```
 
-This creates a local marketplace only. Prefer the shared marketplace listing
-for ordinary installations and updates.
+This creates a local marketplace. It is the supported Codex installation path
+until a separately managed shared marketplace listing is published.
 
 ## Local development checkout
 
@@ -115,4 +120,5 @@ runs the release workflow. It validates and publishes deterministic portable
 and Codex marketplace archives plus their checksums and closed receipt.
 
 The archives are the immutable distribution payload behind marketplace and
-client installation. They are not the primary end-user instructions.
+client installation. Publishing a shared marketplace or client catalog entry
+is a separate distribution action.

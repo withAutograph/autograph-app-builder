@@ -11,20 +11,17 @@ without changing that source repository.
 
 ## Install
 
-For the standard installation, find **Autograph App Builder** in the shared
-Autograph Codex marketplace. Select **Install**, complete OAuth, then open a new
-task and mention `@Autograph App Builder`.
-
-If the `autograph` marketplace is already configured, the equivalent CLI
-command is:
+Download the verified Codex marketplace archive and `SHA256SUMS` from the
+latest GitHub release. After extracting the archive, install it with:
 
 ```sh
+codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
 codex plugin add autograph-app-builder@autograph
 ```
 
-You don't need to download or extract an archive for the standard installation.
-Use versioned archives for offline/manual installation, other Agent Plugins
-clients, and release verification. See
+Complete OAuth, open a new task, and mention `@Autograph App Builder`. A shared
+marketplace listing is a separate distribution action and is not implied by a
+GitHub release. See
 [the complete installation guide](docs/installing.md) for every supported
 option.
 
