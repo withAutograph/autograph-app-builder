@@ -14,6 +14,7 @@ import {
   type GitHubMutationAcknowledgement,
   type GitHubOperation,
   type GitHubPublicationAdapter,
+  type GitHubPublicationContent,
   type GitHubRepositoryObservation,
 } from "./github-publication";
 
@@ -144,9 +145,13 @@ export interface GitHubAppInstallationProvider {
   ): Promise<unknown>;
   createPrivateFreshHistoryRepository(
     proposal: FreshRepositoryProposal,
+    content: GitHubPublicationContent,
   ): Promise<unknown>;
   inspectDraftPublication(proposal: DraftPullRequestProposal): Promise<unknown>;
-  publishDraftPullRequest(proposal: DraftPullRequestProposal): Promise<unknown>;
+  publishDraftPullRequest(
+    proposal: DraftPullRequestProposal,
+    content: GitHubPublicationContent,
+  ): Promise<unknown>;
 }
 
 const hash = (value: unknown) =>
@@ -279,11 +284,11 @@ export function createGitHubAppPublicationAdapter(
       };
       return { ...unsigned, digest: hash(unsigned) };
     },
-    async createPrivateFreshHistoryRepository(proposal) {
+    async createPrivateFreshHistoryRepository(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(() =>
-          provider.createPrivateFreshHistoryRepository(proposal),
+          provider.createPrivateFreshHistoryRepository(proposal, content),
         ),
       ) as GitHubMutationAcknowledgement;
     },
@@ -308,11 +313,11 @@ export function createGitHubAppPublicationAdapter(
         digest: hash(unsigned),
       } as DraftPublicationReadBack;
     },
-    async publishDraftPullRequest(proposal) {
+    async publishDraftPullRequest(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(() =>
-          provider.publishDraftPullRequest(proposal),
+          provider.publishDraftPullRequest(proposal, content),
         ),
       ) as GitHubMutationAcknowledgement;
     },

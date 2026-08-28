@@ -16,7 +16,11 @@ The repository also contains a disabled-by-default runtime composition seam.
 requests the exact operation-scoped permission set, closes every provider
 snapshot before returning it, and sanitizes provider transport failures. The
 provider port—not Eve input—owns GitHub authentication, the fixed API origin,
-template materialization, and reviewed file bytes.
+and template materialization. Reviewed file bytes come only from a typed,
+read-only content source over the re-observed validated apply overlay. The
+runtime verifies every postimage path, mode, digest, and byte digest against the
+exact reviewed receipt before passing an ephemeral content bundle to the
+provider mutation port.
 
 `createPostgresGitHubPublicationStores` persists closed proposals and delegates
 mutation receipts to the single shared PostgreSQL CAS journal in the
@@ -42,6 +46,13 @@ environment variable, or database URL, and this slice performs no GitHub or
 database call. A later deployment composition must supply the credential-bound
 provider and database handle, then prove the behavior against GitHub before
 EXT-BLD-04 can be accepted.
+
+Publication content is never written to a proposal, workflow aggregate,
+database row, mutation receipt, or log. Both fresh-repository and draft-PR
+mutation calls require the live reviewed receipt and content source. A missing,
+mode-drifted, or digest-drifted postimage stops before provider dispatch. If a
+prior provider call has an exact successful read-back, lost-response recovery
+returns that receipt without reopening or rereading the overlay.
 
 The boundary supports four operations:
 

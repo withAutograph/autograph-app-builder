@@ -242,6 +242,52 @@ export type GitHubMutationAcknowledgement =
   | { status: "accepted"; requestId: string }
   | { status: "rejected"; code: string };
 
+type GitHubPublicationFileState = {
+  mode: string;
+  digest: Digest;
+};
+
+export type GitHubPublicationContentChange =
+  | {
+      path: string;
+      kind: "added";
+      after: GitHubPublicationFileState & { bytes: Uint8Array };
+    }
+  | {
+      path: string;
+      kind: "modified";
+      before: GitHubPublicationFileState;
+      after: GitHubPublicationFileState & { bytes: Uint8Array };
+    }
+  | {
+      path: string;
+      kind: "deleted";
+      before: GitHubPublicationFileState;
+    };
+
+/**
+ * Exact, ephemeral publication bytes. This value is passed directly to the
+ * provider mutation port and is deliberately absent from proposals, workflow
+ * state, and durable receipt storage.
+ */
+export type GitHubPublicationContent = {
+  version: 1;
+  reviewDigest: Digest;
+  changeSetDigest: Digest;
+  changedContentDigest: Digest;
+  approvedPaths: readonly string[];
+  changes: readonly GitHubPublicationContentChange[];
+};
+
+/** Read-only access to the already-approved apply overlay. */
+export interface GitHubPublicationContentSource {
+  readFile(path: string): Promise<{
+    mode: string;
+    digest: Digest;
+    bytes: Uint8Array;
+  } | null>;
+}
+
 export interface GitHubPublicationAdapter {
   inspectInstallation(
     operation: GitHubOperation,
@@ -260,12 +306,14 @@ export interface GitHubPublicationAdapter {
   ): Promise<FreshRepositoryReadBack | undefined>;
   createPrivateFreshHistoryRepository(
     proposal: FreshRepositoryProposal,
+    content: GitHubPublicationContent,
   ): Promise<GitHubMutationAcknowledgement>;
   inspectDraftPublication(
     proposal: DraftPullRequestProposal,
   ): Promise<DraftPublicationReadBack>;
   publishDraftPullRequest(
     proposal: DraftPullRequestProposal,
+    content: GitHubPublicationContent,
   ): Promise<GitHubMutationAcknowledgement>;
 }
 
@@ -288,6 +336,8 @@ export class GitHubOutcomeUnknownError extends Error {
 
 const digest = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const bytesDigest = (value: Uint8Array) =>
+  createHash("sha256").update(value).digest("hex");
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -451,6 +501,203 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
       JSON.stringify(review.changes.map(({ path }) => path))
   )
     throw new Error("The reviewed change-set receipt is non-canonical.");
+}
+
+function reviewForProposal(
+  proposal: FreshRepositoryProposal | DraftPullRequestProposal,
+  review: ReviewedChangeSetReceipt,
+): void {
+  assertCanonicalReview(review);
+  if (
+    proposal.reviewDigest !== review.digest ||
+    proposal.changeSetDigest !== review.changeSetDigest ||
+    (proposal.intendedOutcome ===
+      "publish-reviewed-change-set-as-draft-pull-request" &&
+      (proposal.changedContentDigest !== review.changedContentDigest ||
+        JSON.stringify(proposal.approvedPaths) !==
+          JSON.stringify(review.approvedPaths)))
+  )
+    throw new Error(
+      "The publication content review does not match the sealed proposal.",
+    );
+}
+
+function contentManifest(
+  changes: readonly GitHubPublicationContentChange[],
+): ReviewedChangeSetReceipt["changes"] {
+  return changes.map((change) => {
+    if (change.kind === "added") {
+      return {
+        path: change.path,
+        kind: change.kind,
+        after: { mode: change.after.mode, digest: change.after.digest },
+      };
+    }
+    if (change.kind === "modified") {
+      return {
+        path: change.path,
+        kind: change.kind,
+        before: change.before,
+        after: { mode: change.after.mode, digest: change.after.digest },
+      };
+    }
+    return {
+      path: change.path,
+      kind: change.kind,
+      before: change.before,
+    };
+  });
+}
+
+function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
+  const keys = includeBytes
+    ? (["mode", "digest", "bytes"] as const)
+    : (["mode", "digest"] as const);
+  if (!record(value) || !exactKeys(value, keys)) return false;
+  return (
+    typeof value.mode === "string" &&
+    /^[0-7]{3,4}$/u.test(value.mode) &&
+    isDigest(value.digest) &&
+    (!includeBytes || value.bytes instanceof Uint8Array)
+  );
+}
+
+function exactContentChange(change: unknown): boolean {
+  if (
+    !record(change) ||
+    typeof change.path !== "string" ||
+    !safeSourcePath(change.path)
+  )
+    return false;
+  if (change.kind === "added")
+    return (
+      exactKeys(change, ["path", "kind", "after"]) &&
+      exactContentFileState(change.after, true)
+    );
+  if (change.kind === "modified")
+    return (
+      exactKeys(change, ["path", "kind", "before", "after"]) &&
+      exactContentFileState(change.before, false) &&
+      exactContentFileState(change.after, true)
+    );
+  return (
+    change.kind === "deleted" &&
+    exactKeys(change, ["path", "kind", "before"]) &&
+    exactContentFileState(change.before, false)
+  );
+}
+
+export function assertExactGitHubPublicationContent(input: {
+  proposal: FreshRepositoryProposal | DraftPullRequestProposal;
+  review: ReviewedChangeSetReceipt;
+  content: GitHubPublicationContent;
+}): void {
+  reviewForProposal(input.proposal, input.review);
+  if (
+    !exactKeys(input.content, [
+      "version",
+      "reviewDigest",
+      "changeSetDigest",
+      "changedContentDigest",
+      "approvedPaths",
+      "changes",
+    ]) ||
+    !Array.isArray(input.content.approvedPaths) ||
+    !Array.isArray(input.content.changes) ||
+    input.content.changes.some((change) => !exactContentChange(change))
+  )
+    throw new Error("The publication content schema is not closed.");
+  const manifest = contentManifest(input.content.changes);
+  if (
+    input.content.version !== 1 ||
+    input.content.reviewDigest !== input.review.digest ||
+    input.content.changeSetDigest !== input.review.changeSetDigest ||
+    input.content.changedContentDigest !== input.review.changedContentDigest ||
+    JSON.stringify(input.content.approvedPaths) !==
+      JSON.stringify(input.review.approvedPaths) ||
+    JSON.stringify(manifest) !== JSON.stringify(input.review.changes) ||
+    digest(manifest) !== input.review.changedContentDigest ||
+    input.content.changes.some(
+      (change) =>
+        change.kind !== "deleted" &&
+        bytesDigest(change.after.bytes) !== change.after.digest,
+    )
+  )
+    throw new Error(
+      "The publication content does not match the approved reviewed overlay.",
+    );
+}
+
+export async function readExactGitHubPublicationContent(input: {
+  proposal: FreshRepositoryProposal | DraftPullRequestProposal;
+  review: ReviewedChangeSetReceipt;
+  source: GitHubPublicationContentSource;
+}): Promise<GitHubPublicationContent> {
+  reviewForProposal(input.proposal, input.review);
+  const changes: GitHubPublicationContentChange[] = [];
+  for (const change of input.review.changes) {
+    if (change.kind === "deleted") {
+      if (change.before === undefined)
+        throw new Error("The reviewed deletion preimage is missing.");
+      changes.push({
+        path: change.path,
+        kind: change.kind,
+        before: change.before,
+      });
+      continue;
+    }
+    if (change.after === undefined)
+      throw new Error("The reviewed publication postimage is missing.");
+    let observed: Awaited<ReturnType<typeof input.source.readFile>>;
+    try {
+      observed = await input.source.readFile(change.path);
+    } catch {
+      throw new Error("The approved publication content source failed.");
+    }
+    if (observed === null)
+      throw new Error(
+        `The approved publication postimage is missing for ${change.path}.`,
+      );
+    const bytes = observed.bytes.slice();
+    if (
+      observed.mode !== change.after.mode ||
+      observed.digest !== change.after.digest ||
+      bytesDigest(bytes) !== change.after.digest
+    )
+      throw new Error(
+        `The approved publication postimage changed for ${change.path}.`,
+      );
+    if (change.kind === "added") {
+      changes.push({
+        path: change.path,
+        kind: change.kind,
+        after: { ...change.after, bytes },
+      });
+      continue;
+    }
+    if (change.before === undefined)
+      throw new Error("The reviewed modification preimage is missing.");
+    changes.push({
+      path: change.path,
+      kind: change.kind,
+      before: change.before,
+      after: { ...change.after, bytes },
+    });
+  }
+  const content: GitHubPublicationContent = {
+    version: 1,
+    reviewDigest: input.review.digest,
+    changeSetDigest: input.review.changeSetDigest,
+    changedContentDigest: input.review.changedContentDigest,
+    approvedPaths: input.review.approvedPaths,
+    changes,
+  };
+  assertExactGitHubPublicationContent({
+    proposal: input.proposal,
+    review: input.review,
+    content,
+  });
+  return content;
 }
 
 function assertReviewedBinding(
@@ -1332,9 +1579,12 @@ export async function createApprovedFreshRepository(input: {
   adapter: GitHubPublicationAdapter;
   store: GitHubPublicationReceiptStore;
   proposal: FreshRepositoryProposal;
+  review: ReviewedChangeSetReceipt;
+  contentSource: GitHubPublicationContentSource;
   approvedByCallId: string;
 }): Promise<FreshRepositorySuccessReceipt> {
   assertExactFreshRepositoryProposal(input.proposal);
+  reviewForProposal(input.proposal, input.review);
   const prior = await readJournal(
     input.store,
     input.proposal,
@@ -1390,10 +1640,16 @@ export async function createApprovedFreshRepository(input: {
     destination !== "absent"
   )
     throw new Error("Fresh repository preconditions changed after approval.");
+  const content = await readExactGitHubPublicationContent({
+    proposal: input.proposal,
+    review: input.review,
+    source: input.contentSource,
+  });
   let acknowledgement: GitHubMutationAcknowledgement;
   try {
     acknowledgement = await input.adapter.createPrivateFreshHistoryRepository(
       input.proposal,
+      content,
     );
   } catch {
     throw new GitHubOutcomeUnknownError();
@@ -1439,9 +1695,12 @@ export async function publishApprovedDraftPullRequest(input: {
   adapter: GitHubPublicationAdapter;
   store: GitHubPublicationReceiptStore;
   proposal: DraftPullRequestProposal;
+  review: ReviewedChangeSetReceipt;
+  contentSource: GitHubPublicationContentSource;
   approvedByCallId: string;
 }): Promise<DraftPullRequestSuccessReceipt> {
   assertExactDraftPullRequestProposal(input.proposal);
+  reviewForProposal(input.proposal, input.review);
   const prior = await readJournal(
     input.store,
     input.proposal,
@@ -1496,10 +1755,16 @@ export async function publishApprovedDraftPullRequest(input: {
     !installation.selectedRepositoryIds.includes(input.proposal.repositoryId)
   )
     throw new Error("Draft pull-request installation authority changed.");
+  const content = await readExactGitHubPublicationContent({
+    proposal: input.proposal,
+    review: input.review,
+    source: input.contentSource,
+  });
   let acknowledgement: GitHubMutationAcknowledgement;
   try {
     acknowledgement = await input.adapter.publishDraftPullRequest(
       input.proposal,
+      content,
     );
   } catch {
     throw new GitHubOutcomeUnknownError();
