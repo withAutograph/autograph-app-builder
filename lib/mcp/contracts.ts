@@ -83,20 +83,43 @@ export const eveSendInputSchema = z.object({
   message: z.string().trim().min(1).max(32_000),
   clientRequestId: z.string().min(1).max(200),
 });
-export const eveRespondInputSchema = z.object({
-  sessionId: z.string().min(1),
-  requestId: z.string().min(1),
-  response: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("approve") }),
-    z.object({ kind: z.literal("deny") }),
-    z.object({
-      kind: z.literal("answer"),
-      value: z.string().max(16_000),
-      optionId: z.string().optional(),
-    }),
-  ]),
-  clientRequestId: z.string().min(1).max(200),
-});
+export const eveResponseSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("approve") }),
+  z.object({ kind: z.literal("deny") }),
+  z.object({
+    kind: z.literal("answer"),
+    value: z.string().max(16_000),
+    optionId: z.string().optional(),
+  }),
+]);
+
+export const eveRespondInputSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    responses: z
+      .array(
+        z.object({
+          requestId: z.string().min(1),
+          response: eveResponseSchema,
+        }),
+      )
+      .min(1)
+      .max(32),
+    clientRequestId: z.string().min(1).max(200),
+  })
+  .strict()
+  .superRefine(({ responses }, context) => {
+    const seen = new Set<string>();
+    for (const [index, { requestId }] of responses.entries()) {
+      if (seen.has(requestId))
+        context.addIssue({
+          code: "custom",
+          path: ["responses", index, "requestId"],
+          message: "Each Eve requestId must appear exactly once.",
+        });
+      seen.add(requestId);
+    }
+  });
 export const eveCancelInputSchema = z.object({
   sessionId: z.string().min(1),
   turnId: z.string().optional(),

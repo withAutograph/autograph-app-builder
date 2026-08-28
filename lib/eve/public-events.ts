@@ -16,6 +16,7 @@ export type InternalEveEvent = {
   code?: string;
   message?: string;
   status?: EveSessionStatus;
+  requestIds?: string[];
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
@@ -78,6 +79,22 @@ export function projectInstalledEveEvent(
         index,
         request: inputRequest(request),
       }));
+    case "input.resolved":
+      return [
+        {
+          type: "input.resolved",
+          index,
+          requestIds: event.data.resolutions.map(({ requestId }) => requestId),
+        },
+      ];
+    case "approval.settled":
+      return [
+        {
+          type: "input.resolved",
+          index,
+          requestIds: [event.data.requestId],
+        },
+      ];
     case "authorization.required":
       return [
         {
@@ -116,28 +133,73 @@ export function projectInstalledEveEvent(
   }
 }
 
+export function outstandingInstalledEveRequests(
+  events: readonly MessageStreamEvent[],
+): PublicInputRequest[] {
+  const outstanding = new Map<string, PublicInputRequest>();
+  for (const event of events) {
+    if (event.type === "input.requested")
+      for (const request of event.data.requests)
+        outstanding.set(request.requestId, inputRequest(request));
+    if (event.type === "input.resolved")
+      for (const resolution of event.data.resolutions)
+        outstanding.delete(resolution.requestId);
+    if (event.type === "approval.settled")
+      outstanding.delete(event.data.requestId);
+  }
+  return [...outstanding.values()];
+}
+
+export function outstandingInternalEveRequests(
+  events: readonly InternalEveEvent[],
+): PublicInputRequest[] {
+  const outstanding = new Map<string, PublicInputRequest>();
+  for (const event of events) {
+    if (event.type === "input.requested" && event.request !== undefined)
+      outstanding.set(event.request.requestId, event.request);
+    if (event.type === "input.resolved")
+      for (const requestId of event.requestIds ?? [])
+        outstanding.delete(requestId);
+  }
+  return [...outstanding.values()];
+}
+
 export function deriveInstalledEveStatus(
   events: readonly MessageStreamEvent[],
 ): EveSessionStatus {
-  const last = events.at(-1);
-  if (last?.type === "session.failed") return "failed";
-  if (last?.type === "session.completed") return "completed";
-  const lastInput = events.findLastIndex(
-    (event) => event.type === "input.requested",
-  );
-  const lastProgress = events.findLastIndex((event) =>
-    [
-      "approval.settled",
-      "message.completed",
-      "step.started",
-      "turn.cancelled",
-      "turn.completed",
-    ].includes(event.type),
-  );
-  if (lastInput > lastProgress) return "input_required";
-  if (last?.type === "session.waiting") return "waiting";
-  if (last?.type === "turn.cancelled") return "cancelled";
-  return "working";
+  const outstanding = new Set<string>();
+  let boundary: EveSessionStatus = "working";
+  for (const event of events) {
+    if (event.type === "input.requested")
+      for (const request of event.data.requests)
+        outstanding.add(request.requestId);
+    if (event.type === "input.resolved")
+      for (const resolution of event.data.resolutions)
+        outstanding.delete(resolution.requestId);
+    if (event.type === "approval.settled")
+      outstanding.delete(event.data.requestId);
+    if (event.type === "turn.cancelled") boundary = "cancelled";
+    if (event.type === "session.waiting") boundary = "waiting";
+    if (event.type === "session.completed") boundary = "completed";
+    if (event.type === "session.failed") boundary = "failed";
+    if (event.type === "step.started") boundary = "working";
+  }
+  if (boundary === "completed" || boundary === "failed") return boundary;
+  if (outstanding.size > 0) return "input_required";
+  return boundary;
+}
+
+/** Project one durable Eve stream into a dense, cursor-addressable public stream. */
+export function projectInstalledEveEvents(
+  events: readonly MessageStreamEvent[],
+): PublicEveEvent[] {
+  return events
+    .flatMap((event) => projectInstalledEveEvent(event, 0))
+    .flatMap((event) => {
+      const projected = toPublicEvent(event);
+      return projected === null ? [] : [projected];
+    })
+    .map((event, index) => ({ ...event, index }));
 }
 
 /** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */

@@ -75,7 +75,7 @@ describe("local Eve acceptance", () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps get and the remaining lifecycle calls independent of an unsettled stream", async () => {
+  it("keeps get, send, and cancel independent while rejecting a non-outstanding response", async () => {
     let publishCancellation!: () => void;
     const cancelled = new Promise<void>((resolve) => {
       publishCancellation = resolve;
@@ -126,11 +126,10 @@ describe("local Eve acceptance", () => {
     await expect(
       service.respond({
         sessionId: start.sessionId,
-        requestId: "request-1",
-        response: { kind: "approve" },
+        responses: [{ requestId: "request-1", response: { kind: "approve" } }],
         clientRequestId: "prompt-lifecycle-3",
       }),
-    ).resolves.toMatchObject({ status: "working" });
+    ).rejects.toThrow("complete outstanding Eve input batch");
     await expect(
       service.cancel({ sessionId: start.sessionId }),
     ).resolves.toMatchObject({ sessionId: start.sessionId });
@@ -145,7 +144,7 @@ describe("local Eve acceptance", () => {
       });
     });
     expect(session.send).toHaveBeenCalledTimes(1);
-    expect(session.respond).toHaveBeenCalledTimes(1);
+    expect(session.respond).not.toHaveBeenCalled();
     expect(response.cancel).toHaveBeenCalledTimes(1);
     expect(session.cancel).not.toHaveBeenCalled();
   });
@@ -194,17 +193,33 @@ describe("local Eve acceptance", () => {
         type: "input.requested",
         data: {
           turnId: "turn-follow-up",
-          requests: [
-            {
-              requestId: "request-source",
+          requests: ["request-source", "request-plan", "request-preview"].map(
+            (requestId) => ({
+              requestId,
               kind: "tool-approval",
-              prompt: "Allow source inspection?",
-            },
-          ],
+              prompt: requestId,
+            }),
+          ),
         },
       } as unknown as MessageStreamEvent,
     ]);
     const responded = stream([
+      {
+        type: "input.resolved",
+        data: {
+          turnId: "turn-follow-up",
+          resolutions: [
+            "request-source",
+            "request-plan",
+            "request-preview",
+          ].map((requestId) => ({
+            requestId,
+            kind: "tool-approval",
+            outcome: "approved",
+            response: { requestId, optionId: "approve" },
+          })),
+        },
+      } as unknown as MessageStreamEvent,
       {
         type: "step.completed",
         data: { turnId: "turn-follow-up" },
@@ -247,18 +262,23 @@ describe("local Eve acceptance", () => {
       await expect(
         service.get({ sessionId: started.sessionId, cursor: 1, limit: 100 }),
       ).resolves.toMatchObject({
-        cursor: 2,
+        cursor: 4,
         status: "input_required",
-        inputRequests: [
+        inputRequests: expect.arrayContaining([
           expect.objectContaining({ requestId: "request-source" }),
-        ],
+          expect.objectContaining({ requestId: "request-plan" }),
+          expect.objectContaining({ requestId: "request-preview" }),
+        ]),
       });
     });
 
     await service.respond({
       sessionId: started.sessionId,
-      requestId: "request-source",
-      response: { kind: "approve" },
+      responses: [
+        { requestId: "request-source", response: { kind: "approve" } },
+        { requestId: "request-plan", response: { kind: "approve" } },
+        { requestId: "request-preview", response: { kind: "approve" } },
+      ],
       clientRequestId: "rebind-respond",
     });
     expect(attach).toHaveBeenNthCalledWith(2, started.sessionId, {
@@ -270,7 +290,9 @@ describe("local Eve acceptance", () => {
         cursor: 0,
         limit: 100,
       });
-      expect(result.cursor).toBe(4);
+      expect(result.cursor).toBe(6);
+      expect(result.status).toBe("waiting");
+      expect(result.inputRequests).toBeUndefined();
       expect(
         result.events.filter(
           (event) => event.type === "status" && event.status === "waiting",
@@ -287,6 +309,8 @@ describe("local Eve acceptance", () => {
     });
     expect(rebound.respond).toHaveBeenCalledWith([
       { requestId: "request-source", optionId: "approve" },
+      { requestId: "request-plan", optionId: "approve" },
+      { requestId: "request-preview", optionId: "approve" },
     ]);
   });
 });

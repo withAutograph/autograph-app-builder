@@ -1,21 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { eveGetInputSchema, eveStartInputSchema } from "./contracts";
 
-describe("public MCP inputs", () => {
-  it("applies bounded catch-up defaults", () => {
-    expect(eveGetInputSchema.parse({ sessionId: "session_1" })).toEqual({
-      sessionId: "session_1",
-      cursor: 0,
-      limit: 100,
-    });
-  });
+import { eveRespondInputSchema } from "./contracts";
 
-  it("rejects blank prompts and oversized reads", () => {
+const response = (requestId: string) => ({
+  requestId,
+  response: { kind: "approve" as const },
+});
+
+describe("eveRespondInputSchema", () => {
+  it("accepts only one non-empty unique response batch", () => {
+    expect(
+      eveRespondInputSchema
+        .parse({
+          sessionId: "session_1",
+          clientRequestId: "client_1",
+          responses: [response("one"), response("two"), response("three")],
+        })
+        .responses.map(({ requestId }) => requestId),
+    ).toEqual(["one", "two", "three"]);
     expect(() =>
-      eveStartInputSchema.parse({ prompt: "  ", clientRequestId: "request_1" }),
+      eveRespondInputSchema.parse({
+        sessionId: "session_1",
+        clientRequestId: "client_1",
+        requestId: "legacy",
+        response: { kind: "approve" },
+      }),
     ).toThrow();
     expect(() =>
-      eveGetInputSchema.parse({ sessionId: "session_1", limit: 251 }),
+      eveRespondInputSchema.parse({
+        sessionId: "session_1",
+        clientRequestId: "client_1",
+        responses: [],
+      }),
+    ).toThrow();
+    expect(() =>
+      eveRespondInputSchema.parse({
+        sessionId: "session_1",
+        clientRequestId: "client_1",
+        responses: [response("same"), response("same")],
+      }),
     ).toThrow();
   });
 });

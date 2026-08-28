@@ -136,7 +136,7 @@ export function createEveMcpHandler(service: EveSessionService) {
       {
         title: "Respond to Eve request",
         description:
-          "Answer one specific outstanding input or approval request.",
+          "Answer one complete outstanding Eve input batch atomically.",
         inputSchema: eveRespondInputSchema,
         outputSchema: eveSessionResultSchema,
       },

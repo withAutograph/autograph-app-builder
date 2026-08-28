@@ -48,6 +48,22 @@ const snapshot: HostedEngineSnapshot = {
   ],
 };
 
+function approvalSnapshot(requestIds: string[]): HostedEngineSnapshot {
+  return {
+    status: "input_required",
+    events: requestIds.map((requestId, index) => ({
+      type: "input.requested",
+      index,
+      request: {
+        requestId,
+        kind: "approval",
+        title: requestId,
+        allowFreeform: false,
+      },
+    })),
+  };
+}
+
 function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
     start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
@@ -96,8 +112,7 @@ async function invokeHostedOperation(
     case "respond":
       return service.respond({
         sessionId: "session_1",
-        requestId: "request_1",
-        response: { kind: "deny" },
+        responses: [{ requestId: "request_1", response: { kind: "deny" } }],
         clientRequestId: "scope_respond",
       });
     case "cancel":
@@ -238,6 +253,9 @@ describe("hosted Eve service core", () => {
 
   it("implements all five operations and projects only allowlisted events", async () => {
     const { service, adapter, result } = await started();
+    vi.mocked(adapter.get)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValue(approvalSnapshot(["approval_1"]));
     expect(result.events).toEqual([
       {
         type: "assistant_message",
@@ -245,13 +263,13 @@ describe("hosted Eve service core", () => {
         turnId: "turn_1",
         text: "Ready.",
       },
-      { type: "status", index: 3, status: "waiting" },
+      { type: "status", index: 1, status: "waiting" },
     ]);
-    expect(result.cursor).toBe(4);
+    expect(result.cursor).toBe(2);
 
     await expect(
       service.get({ sessionId: result.sessionId, cursor: 1, limit: 2 }),
-    ).resolves.toMatchObject({ cursor: 3, events: [] });
+    ).resolves.toMatchObject({ cursor: 2, events: [{ index: 1 }] });
     await service.send({
       sessionId: result.sessionId,
       message: "Continue",
@@ -259,13 +277,12 @@ describe("hosted Eve service core", () => {
     });
     await service.respond({
       sessionId: result.sessionId,
-      requestId: "approval_1",
-      response: { kind: "approve" },
+      responses: [{ requestId: "approval_1", response: { kind: "approve" } }],
       clientRequestId: "request_3",
     });
     await service.cancel({ sessionId: result.sessionId, turnId: "turn_1" });
 
-    expect(adapter.get).toHaveBeenCalledTimes(1);
+    expect(adapter.get).toHaveBeenCalledTimes(2);
     expect(adapter.send).toHaveBeenCalledTimes(1);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
     expect(adapter.cancel).toHaveBeenCalledTimes(1);
@@ -326,6 +343,54 @@ describe("hosted Eve service core", () => {
       }),
     ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
     expect(adapter.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds respond idempotency to the exact ordered full batch", async () => {
+    const adapter = transport({
+      get: vi.fn(async () => approvalSnapshot(["one", "two", "three"])),
+    });
+    const { service, result } = await started({ transport: adapter });
+    const responses = [
+      { requestId: "one", response: { kind: "approve" as const } },
+      { requestId: "two", response: { kind: "deny" as const } },
+      {
+        requestId: "three",
+        response: { kind: "answer" as const, value: "Choice" },
+      },
+    ];
+    const request = {
+      sessionId: result.sessionId,
+      responses,
+      clientRequestId: "respond_batch",
+    };
+    await service.respond(request);
+    await service.respond(request);
+    expect(adapter.respond).toHaveBeenCalledTimes(1);
+    await expect(
+      service.respond({ ...request, responses: [...responses].reverse() }),
+    ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
+    expect(adapter.respond).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a missing member of the outstanding input batch", async () => {
+    const adapter = transport({
+      get: vi.fn(async () => approvalSnapshot(["one", "two", "three"])),
+    });
+    const { service, result } = await started({ transport: adapter });
+    await expect(
+      service.respond({
+        sessionId: result.sessionId,
+        clientRequestId: "incomplete_batch",
+        responses: [
+          { requestId: "one", response: { kind: "approve" } },
+          { requestId: "two", response: { kind: "approve" } },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      name: HostedRejectedOperationError.name,
+      code: "input_batch_changed",
+    });
+    expect(adapter.respond).not.toHaveBeenCalled();
   });
 
   it("never redispatches an operation whose submission outcome is unknown", async () => {

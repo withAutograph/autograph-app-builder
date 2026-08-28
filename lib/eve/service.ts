@@ -4,11 +4,11 @@ import {
   type MessageStreamEvent,
 } from "eve/client";
 
-import type { EveSessionResult, PublicEveEvent } from "@/lib/mcp/contracts";
+import type { EveSessionResult } from "@/lib/mcp/contracts";
 import {
   deriveInstalledEveStatus,
-  projectInstalledEveEvent,
-  toPublicEvent,
+  outstandingInstalledEveRequests,
+  projectInstalledEveEvents,
 } from "./public-events";
 
 export class AdapterNotConfiguredError extends Error {
@@ -37,11 +37,13 @@ export interface EveSessionService {
   }): Promise<EveSessionResult>;
   respond(input: {
     sessionId: string;
-    requestId: string;
-    response:
-      | { kind: "approve" }
-      | { kind: "deny" }
-      | { kind: "answer"; value: string; optionId?: string };
+    responses: Array<{
+      requestId: string;
+      response:
+        | { kind: "approve" }
+        | { kind: "deny" }
+        | { kind: "answer"; value: string; optionId?: string };
+    }>;
     clientRequestId: string;
   }): Promise<EveSessionResult>;
   cancel(input: {
@@ -69,6 +71,14 @@ export function toEveInputResponse(
         };
 }
 
+export function toEveInputResponses(
+  responses: Parameters<EveSessionService["respond"]>[0]["responses"],
+) {
+  return responses.map(({ requestId, response }) =>
+    toEveInputResponse(requestId, response),
+  );
+}
+
 const localRequests = new Map<string, string>();
 const localSessionEvents = new Map<string, MessageStreamEvent[]>();
 const localSessionHandles = new Map<string, ClientSession>();
@@ -77,33 +87,19 @@ type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
 };
 const localActiveResponses = new Map<string, CancellableResponse>();
 
-function projectEvent(
-  event: MessageStreamEvent,
-  index: number,
-): PublicEveEvent[] {
-  return projectInstalledEveEvent(event, index).flatMap((projected) => {
-    const publicEvent = toPublicEvent(projected);
-    return publicEvent === null ? [] : [publicEvent];
-  });
-}
-
 function resultForEvents(
   sessionId: string,
   snapshotEvents: readonly MessageStreamEvent[],
   cursor = 0,
   limit = 100,
 ): EveSessionResult {
-  const bounded = snapshotEvents.slice(cursor, cursor + limit);
-  const events = bounded.flatMap((event, offset) =>
-    projectEvent(event, cursor + offset),
-  );
-  const inputRequests = events.flatMap((event) =>
-    event.type === "input_required" ? [event.request] : [],
-  );
+  const projected = projectInstalledEveEvents(snapshotEvents);
+  const events = projected.slice(cursor, cursor + limit);
+  const inputRequests = outstandingInstalledEveRequests(snapshotEvents);
   return {
     sessionId,
     status: deriveInstalledEveStatus(snapshotEvents),
-    cursor: Math.min(cursor + bounded.length, snapshotEvents.length),
+    cursor: Math.min(cursor + events.length, projected.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
   };
@@ -184,11 +180,24 @@ export function createLocalEveSessionService(
       }
       return acceptedResult(sessionId);
     },
-    async respond({ sessionId, requestId, response, clientRequestId }) {
+    async respond({ sessionId, responses, clientRequestId }) {
       const key = `respond:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
-        const input = toEveInputResponse(requestId, response);
-        const result = await sessionAtBufferedTail(sessionId).respond([input]);
+        const expected = outstandingInstalledEveRequests(
+          localSessionEvents.get(sessionId) ?? [],
+        ).map(({ requestId }) => requestId);
+        if (
+          expected.length !== responses.length ||
+          expected.some(
+            (requestId, index) => responses[index]?.requestId !== requestId,
+          )
+        )
+          throw new Error(
+            "The complete outstanding Eve input batch is required.",
+          );
+        const result = await sessionAtBufferedTail(sessionId).respond(
+          toEveInputResponses(responses),
+        );
         consumeResponse(sessionId, result);
         localRequests.set(key, sessionId);
       }
