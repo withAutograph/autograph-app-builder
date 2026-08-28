@@ -67,7 +67,10 @@ export type SandboxLeaseReleaseReason = NonNullable<
 
 export type AcquireSandboxLeaseResult =
   | { disposition: "acquired" | "existing"; lease: SandboxExecutionLease }
-  | { disposition: "rejected"; reason: "subject-limit" | "workspace-limit" };
+  | {
+      disposition: "rejected";
+      reason: "subject-limit" | "workspace-limit" | "recovery-in-progress";
+    };
 
 export interface SandboxExecutionLeaseStore {
   acquire(input: {
@@ -98,15 +101,23 @@ export interface SandboxExecutionLeaseStore {
     reason: SandboxLeaseReleaseReason;
     nowEpochMs: number;
   }): Promise<SandboxExecutionLease>;
+  releaseCurrent(input: {
+    principal: HostedPrincipal;
+    adapterSessionId: string;
+    providerSandboxId: string;
+    policyDigest: string;
+    reason: SandboxLeaseReleaseReason;
+    nowEpochMs: number;
+  }): Promise<SandboxExecutionLease | null>;
   claimExpired(input: {
     nowEpochMs: number;
     limit: number;
   }): Promise<readonly SandboxExecutionLease[]>;
   settleRecovery(input: {
     lease: SandboxExecutionLease;
-    stopped: boolean;
+    providerOutcome: "stopped" | "stop-failed";
     nowEpochMs: number;
-  }): Promise<SandboxExecutionLease>;
+  }): Promise<SandboxExecutionLease | null>;
 }
 
 export function sandboxLeaseKey(
@@ -140,6 +151,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     const policyDigest = sandboxExecutionPolicyDigest(input.policy);
     const key = sandboxLeaseKey(principal, adapterSessionId);
     const existing = this.leases.get(key);
+    if (existing?.state === "orphaned") {
+      return { disposition: "rejected", reason: "recovery-in-progress" };
+    }
     if (
       existing?.state === "active" &&
       existing.expiresAtEpochMs > input.nowEpochMs
@@ -245,6 +259,28 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return structuredClone(lease);
   }
 
+  async releaseCurrent(
+    input: Parameters<SandboxExecutionLeaseStore["releaseCurrent"]>[0],
+  ): Promise<SandboxExecutionLease | null> {
+    const current = this.leases.get(
+      sandboxLeaseKey(input.principal, input.adapterSessionId),
+    );
+    if (current === undefined) return null;
+    if (
+      current.providerSandboxId !== input.providerSandboxId ||
+      current.policyDigest !== input.policyDigest
+    ) {
+      throw new Error("The sandbox execution lease authority is stale.");
+    }
+    return this.release({
+      principal: input.principal,
+      adapterSessionId: input.adapterSessionId,
+      epoch: current.epoch,
+      reason: input.reason,
+      nowEpochMs: input.nowEpochMs,
+    });
+  }
+
   async claimExpired(
     input: Parameters<SandboxExecutionLeaseStore["claimExpired"]>[0],
   ): Promise<readonly SandboxExecutionLease[]> {
@@ -252,13 +288,14 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     for (const [key, current] of [...this.leases.entries()].toSorted()) {
       if (
         claimed.length >= input.limit ||
-        current.state !== "active" ||
+        current.state === "released" ||
         current.expiresAtEpochMs > input.nowEpochMs
       )
         continue;
       const lease = sandboxExecutionLeaseSchema.parse({
         ...current,
         state: "orphaned",
+        epoch: current.state === "orphaned" ? current.epoch + 1 : current.epoch,
       });
       this.leases.set(key, lease);
       claimed.push(structuredClone(lease));
@@ -268,7 +305,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
 
   async settleRecovery(
     input: Parameters<SandboxExecutionLeaseStore["settleRecovery"]>[0],
-  ): Promise<SandboxExecutionLease> {
+  ): Promise<SandboxExecutionLease | null> {
     const key = sandboxLeaseKey(
       input.lease.principal,
       input.lease.adapterSessionId,
@@ -279,9 +316,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
       current.state !== "orphaned" ||
       current.epoch !== input.lease.epoch
     )
-      throw new Error("The orphan recovery claim is stale.");
+      return null;
     const lease = sandboxExecutionLeaseSchema.parse(
-      input.stopped
+      input.providerOutcome === "stopped"
         ? {
             ...current,
             state: "released",
@@ -306,24 +343,35 @@ export async function reconcileExpiredSandboxLeases(input: {
     limit: input.limit ?? 32,
   });
   const stopped: string[] = [];
-  const failed: string[] = [];
+  const providerFailed: string[] = [];
+  const settlementFailed: string[] = [];
+  const settlementRaced: string[] = [];
   for (const lease of leases) {
+    const digest = sandboxLeaseReceiptDigest(lease);
+    let providerOutcome: "stopped" | "stop-failed" = "stopped";
     try {
       await input.stopSandbox(lease.providerSandboxId);
-      await input.store.settleRecovery({
-        lease,
-        stopped: true,
-        nowEpochMs: input.nowEpochMs,
-      });
-      stopped.push(sandboxLeaseReceiptDigest(lease));
     } catch {
-      await input.store.settleRecovery({
+      providerOutcome = "stop-failed";
+      providerFailed.push(digest);
+    }
+    try {
+      const settled = await input.store.settleRecovery({
         lease,
-        stopped: false,
+        providerOutcome,
         nowEpochMs: input.nowEpochMs,
       });
-      failed.push(sandboxLeaseReceiptDigest(lease));
+      if (settled === null) settlementRaced.push(digest);
+      else if (providerOutcome === "stopped") stopped.push(digest);
+    } catch {
+      settlementFailed.push(digest);
     }
   }
-  return { claimed: leases.length, stopped, failed } as const;
+  return {
+    claimed: leases.length,
+    stopped,
+    providerFailed,
+    settlementFailed,
+    settlementRaced,
+  } as const;
 }

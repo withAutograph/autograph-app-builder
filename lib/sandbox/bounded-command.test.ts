@@ -74,6 +74,74 @@ describe("bounded sandbox command", () => {
     expect(fixture.kill).toHaveBeenCalledOnce();
   });
 
+  it("accounts stdout and stderr against one shared byte limit", async () => {
+    const fixture = processFixture(["1234"], ["5678"]);
+    await expect(
+      runBoundedSandboxCommand(
+        { spawn: async () => fixture.process },
+        { command: "generate" },
+        { outputBytes: 6 },
+      ),
+    ).rejects.toMatchObject({ code: "output-limit" });
+    expect(fixture.kill).toHaveBeenCalledOnce();
+  });
+
+  it("kills a command that produces no output before its wall timeout", async () => {
+    const idle = () => new ReadableStream<Uint8Array>({ start() {} });
+    const kill = vi.fn(async () => undefined);
+    const process = {
+      stdout: idle(),
+      stderr: idle(),
+      wait: () => new Promise<never>(() => undefined),
+      kill,
+    } as unknown as SandboxProcess;
+    await expect(
+      runBoundedSandboxCommand(
+        { spawn: async () => process },
+        { command: "idle" },
+        { noOutputTimeoutMs: 10, timeoutMs: 1_000 },
+      ),
+    ).rejects.toMatchObject({ code: "no-output-timeout" });
+    expect(kill).toHaveBeenCalledOnce();
+  });
+
+  it("rearms the no-output timeout after the last combined-stream chunk", async () => {
+    const oneThenIdle = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes("progress"));
+        },
+      });
+    const idle = () => new ReadableStream<Uint8Array>({ start() {} });
+    const kill = vi.fn(async () => undefined);
+    const process = {
+      stdout: oneThenIdle(),
+      stderr: idle(),
+      wait: () => new Promise<never>(() => undefined),
+      kill,
+    } as unknown as SandboxProcess;
+    await expect(
+      runBoundedSandboxCommand(
+        { spawn: async () => process },
+        { command: "progress-then-idle" },
+        { noOutputTimeoutMs: 10, timeoutMs: 1_000 },
+      ),
+    ).rejects.toMatchObject({ code: "no-output-timeout" });
+    expect(kill).toHaveBeenCalledOnce();
+  });
+
+  it("does not let a hung provider kill replace the original limit error", async () => {
+    const fixture = processFixture(["too much output"]);
+    fixture.process.kill = vi.fn(() => new Promise<never>(() => undefined));
+    await expect(
+      runBoundedSandboxCommand(
+        { spawn: async () => fixture.process },
+        { command: "generate" },
+        { outputBytes: 2, killCleanupTimeoutMs: 10 },
+      ),
+    ).rejects.toMatchObject({ code: "output-limit" });
+  });
+
   it("does not project parent environment credentials", async () => {
     const fixture = processFixture([]);
     const spawn = vi.fn(async (options: unknown) => {

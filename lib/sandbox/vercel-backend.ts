@@ -1,7 +1,9 @@
 import { vercel } from "eve/sandbox/vercel";
 
 import { HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS } from "./hosted-toolchain";
+import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
+import { createBoundedSandboxBackend } from "./sandbox-command-adapter";
 
 export interface HostedVercelBackendOptions {
   readonly networkPolicy: {
@@ -29,7 +31,7 @@ export function createHostedVercelBackend(
   // mounts. Keep the compatibility assertion isolated at this boundary.
   factory: HostedVercelBackendFactory = vercel as unknown as HostedVercelBackendFactory,
 ): ReturnType<typeof vercel> {
-  return factory({
+  const backend = factory({
     networkPolicy: { allow: [...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS] },
     resources: { vcpus: SANDBOX_EXECUTION_POLICY.provider.vcpus },
     timeout: SANDBOX_EXECUTION_POLICY.provider.timeoutMs,
@@ -40,4 +42,9 @@ export function createHostedVercelBackend(
       networkPolicy: SANDBOX_EXECUTION_POLICY.provider.networkPolicy,
     }),
   });
+  return createBoundedSandboxBackend({
+    backend,
+    authorizeSessionCommand: (sessionId) =>
+      assertHostedSandboxCommandAuthority({ sessionId }),
+  }) as ReturnType<typeof vercel>;
 }

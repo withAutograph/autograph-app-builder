@@ -88,8 +88,8 @@ describe("sandbox execution lease", () => {
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     });
     expect(receipt).toMatchObject({ claimed: 1, stopped: [] });
-    expect(receipt.failed).toHaveLength(1);
-    expect(receipt.failed[0]).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(receipt.providerFailed).toHaveLength(1);
+    expect(receipt.providerFailed[0]).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(JSON.stringify(receipt)).not.toContain("session_1");
     const retryStop = vi.fn(async () => undefined);
     const retried = await reconcileExpiredSandboxLeases({
@@ -97,7 +97,7 @@ describe("sandbox execution lease", () => {
       stopSandbox: retryStop,
       nowEpochMs: 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     });
-    expect(retried).toMatchObject({ claimed: 1, failed: [] });
+    expect(retried).toMatchObject({ claimed: 1, providerFailed: [] });
     expect(retried.stopped).toHaveLength(1);
     expect(
       await reconcileExpiredSandboxLeases({
@@ -105,6 +105,79 @@ describe("sandbox execution lease", () => {
         stopSandbox: retryStop,
         nowEpochMs: 3 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
       }),
-    ).toEqual({ claimed: 0, stopped: [], failed: [] });
+    ).toEqual({
+      claimed: 0,
+      stopped: [],
+      providerFailed: [],
+      settlementFailed: [],
+      settlementRaced: [],
+    });
+  });
+
+  it("makes recovery and reacquisition races retry-safe", async () => {
+    const store = new InMemorySandboxExecutionLeaseStore();
+    const first = await acquire(store, "user_1", "session_1", 1);
+    if (first.disposition === "rejected") throw new Error("unexpected");
+    const [claim] = await store.claimExpired({
+      nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      limit: 1,
+    });
+    expect(claim).toBeDefined();
+    await expect(
+      acquire(
+        store,
+        "user_1",
+        "session_1",
+        2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      ),
+    ).resolves.toEqual({
+      disposition: "rejected",
+      reason: "recovery-in-progress",
+    });
+    await store.settleRecovery({
+      lease: claim!,
+      providerOutcome: "stopped",
+      nowEpochMs: 3 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+    });
+    const reacquired = await acquire(
+      store,
+      "user_1",
+      "session_1",
+      4 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+    );
+    if (reacquired.disposition === "rejected") throw new Error("unexpected");
+    expect(reacquired.lease.epoch).toBe(2);
+    await expect(
+      store.settleRecovery({
+        lease: claim!,
+        providerOutcome: "stopped",
+        nowEpochMs: 5 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("separates provider stop from settlement and does not abort the batch", async () => {
+    const store = new InMemorySandboxExecutionLeaseStore();
+    await acquire(store, "user_1", "session_1", 1);
+    await acquire(store, "user_2", "session_2", 1);
+    const settle = vi.spyOn(store, "settleRecovery");
+    settle.mockRejectedValueOnce(new Error("settlement unavailable"));
+    const stopSandbox = vi.fn(async () => undefined);
+    const result = await reconcileExpiredSandboxLeases({
+      store,
+      stopSandbox,
+      nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+    });
+    expect(stopSandbox).toHaveBeenCalledTimes(2);
+    expect(result.settlementFailed).toHaveLength(1);
+    expect(result.stopped).toHaveLength(1);
+    expect(result.providerFailed).toEqual([]);
+    const retried = await reconcileExpiredSandboxLeases({
+      store,
+      stopSandbox,
+      nowEpochMs: 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+    });
+    expect(retried.claimed).toBe(1);
+    expect(retried.stopped).toHaveLength(1);
   });
 });

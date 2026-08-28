@@ -6,5 +6,6 @@ mise run format-check
 mise run lint
 mise run typecheck
 mise run test:unit
+mise run test:postgres-sandbox-leases
 mise run package:validate
 mise run package:test-portable

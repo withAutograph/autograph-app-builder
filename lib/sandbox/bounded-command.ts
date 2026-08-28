@@ -7,7 +7,10 @@ import type {
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 
 export class SandboxCommandLimitError extends Error {
-  constructor(readonly code: "timeout" | "output-limit" | "process-limit") {
+  constructor(
+    readonly code:
+      "timeout" | "no-output-timeout" | "output-limit" | "process-limit",
+  ) {
     super("The sandbox command exceeded its execution envelope.");
     this.name = "SandboxCommandLimitError";
   }
@@ -49,31 +52,67 @@ wait "$child"
   return `bash -lc ${shellQuote(script)}`;
 }
 
+type OutputReader = ReadableStreamDefaultReader<Uint8Array>;
+
 async function collectBounded(
-  stream: ReadableStream<Uint8Array>,
-  maximumBytes: number,
-  abort: () => void,
-): Promise<string> {
-  const reader = stream.getReader();
+  reader: OutputReader,
+  state: { bytes: number; readonly maximumBytes: number },
+  observed: () => void,
+): Promise<Uint8Array[]> {
   const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const next = await reader.read();
-      if (next.done) break;
-      size += next.value.byteLength;
-      if (size > maximumBytes) {
-        abort();
-        throw new SandboxCommandLimitError("output-limit");
-      }
-      chunks.push(next.value);
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) break;
+    state.bytes += next.value.byteLength;
+    observed();
+    if (state.bytes > state.maximumBytes) {
+      throw new SandboxCommandLimitError("output-limit");
     }
-  } finally {
-    reader.releaseLock();
+    chunks.push(next.value);
   }
+  return chunks;
+}
+
+function decodeChunks(chunks: readonly Uint8Array[]) {
   return new TextDecoder("utf-8", { fatal: true }).decode(
     Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))),
   );
+}
+
+function timeoutRejection(error: Error, timeoutMs: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(error), timeoutMs);
+    timeout.unref?.();
+  });
+  return { promise, clear: () => clearTimeout(timeout) };
+}
+
+function resettableTimeoutRejection(error: Error, timeoutMs: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let rejectPromise: (error: Error) => void = () => undefined;
+  const promise = new Promise<never>((_resolve, reject) => {
+    rejectPromise = reject;
+  });
+  const clear = () => clearTimeout(timeout);
+  const reset = () => {
+    clear();
+    timeout = setTimeout(() => rejectPromise(error), timeoutMs);
+    timeout.unref?.();
+  };
+  return { promise, clear, reset };
+}
+
+async function settleWithin(operation: Promise<unknown>, timeoutMs: number) {
+  const bounded = timeoutRejection(new Error("cleanup timed out"), timeoutMs);
+  try {
+    await Promise.race([operation.catch(() => undefined), bounded.promise]);
+  } catch {
+    // Cleanup evidence is the bounded return itself. The original command
+    // error remains authoritative and is never replaced by cleanup failure.
+  } finally {
+    bounded.clear();
+  }
 }
 
 export async function runBoundedSandboxCommand(
@@ -81,7 +120,12 @@ export async function runBoundedSandboxCommand(
   options: Omit<SandboxRunOptions, "abortSignal"> & {
     abortSignal?: AbortSignal;
   },
-  limits?: { timeoutMs?: number; outputBytes?: number },
+  limits?: {
+    timeoutMs?: number;
+    noOutputTimeoutMs?: number;
+    outputBytes?: number;
+    killCleanupTimeoutMs?: number;
+  },
 ): Promise<SandboxCommandResult> {
   const timeoutMs = Math.min(
     limits?.timeoutMs ?? SANDBOX_EXECUTION_POLICY.command.maximumWallTimeMs,
@@ -91,36 +135,93 @@ export async function runBoundedSandboxCommand(
     limits?.outputBytes ?? SANDBOX_EXECUTION_POLICY.command.maximumOutputBytes,
     SANDBOX_EXECUTION_POLICY.command.maximumOutputBytes,
   );
+  const noOutputTimeoutMs = Math.min(
+    limits?.noOutputTimeoutMs ??
+      SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs,
+    SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs,
+  );
+  const killCleanupTimeoutMs = Math.min(
+    limits?.killCleanupTimeoutMs ??
+      SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
+    SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
+  );
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(new SandboxCommandLimitError("timeout")),
+  const wallTimeout = timeoutRejection(
+    new SandboxCommandLimitError("timeout"),
     timeoutMs,
   );
   const signal = options.abortSignal
     ? AbortSignal.any([options.abortSignal, controller.signal])
     : controller.signal;
   let process: Awaited<ReturnType<SandboxSession["spawn"]>> | undefined;
+  let readers: readonly OutputReader[] = [];
+  const noOutputTimeout = resettableTimeoutRejection(
+    new SandboxCommandLimitError("no-output-timeout"),
+    noOutputTimeoutMs,
+  );
   try {
-    process = await sandbox.spawn({
-      ...options,
-      command: quotaWrappedSandboxCommand(options.command),
-      abortSignal: signal,
-    });
-    const abort = () =>
-      controller.abort(new SandboxCommandLimitError("output-limit"));
-    const [stdout, stderr, result] = await Promise.all([
-      collectBounded(process.stdout, outputBytes, abort),
-      collectBounded(process.stderr, outputBytes, abort),
+    const spawnPromise = Promise.resolve(
+      sandbox.spawn({
+        ...options,
+        command: quotaWrappedSandboxCommand(options.command),
+        abortSignal: signal,
+      }),
+    );
+    process = await Promise.race([spawnPromise, wallTimeout.promise]);
+    spawnPromise.catch(() => undefined);
+    const stdoutReader = process.stdout.getReader();
+    const stderrReader = process.stderr.getReader();
+    readers = [stdoutReader, stderrReader];
+    const outputState = { bytes: 0, maximumBytes: outputBytes };
+    const observed = () => {
+      noOutputTimeout.reset();
+    };
+    observed();
+    const stdoutPromise = collectBounded(stdoutReader, outputState, observed);
+    const stderrPromise = collectBounded(stderrReader, outputState, observed);
+    const completion = Promise.all([
+      stdoutPromise,
+      stderrPromise,
       Promise.resolve(process.wait()),
     ]);
-    return { exitCode: result.exitCode, stdout, stderr };
+    completion.catch(() => undefined);
+    const [stdout, stderr, result] = await Promise.race([
+      completion,
+      wallTimeout.promise,
+      noOutputTimeout.promise,
+      new Promise<never>((_resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+      }),
+    ]);
+    return {
+      exitCode: result.exitCode,
+      stdout: decodeChunks(stdout),
+      stderr: decodeChunks(stderr),
+    };
   } catch (error) {
-    if (process !== undefined)
-      await Promise.resolve(process.kill()).catch(() => undefined);
+    controller.abort(error);
+    const cleanup = [
+      ...readers.map((reader) => Promise.resolve(reader.cancel(error))),
+      ...(process === undefined ? [] : [Promise.resolve(process.kill())]),
+    ];
+    await settleWithin(Promise.allSettled(cleanup), killCleanupTimeoutMs);
+    if (error instanceof SandboxCommandLimitError) throw error;
     if (controller.signal.reason instanceof SandboxCommandLimitError)
       throw controller.signal.reason;
     throw error;
   } finally {
-    clearTimeout(timeout);
+    wallTimeout.clear();
+    noOutputTimeout.clear();
+    for (const reader of readers) {
+      try {
+        reader.releaseLock();
+      } catch {
+        // A cancelled reader may already have released its lock.
+      }
+    }
   }
 }
