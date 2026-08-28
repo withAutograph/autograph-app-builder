@@ -58,13 +58,36 @@ describe("Preview OAuth browser interaction", () => {
     ).rejects.toThrow("unsafe redirect");
     await expect(
       postPreviewOAuthInteraction({
-        endpoint: "/api/auth/sign-in/email",
+        endpoint: "/api/auth/sign-in/social",
         body: {},
         fetcher: vi.fn(async () =>
           Response.json({ error: "invalid" }, { status: 401 }),
         ),
       }),
     ).rejects.toThrow("rejected");
+  });
+
+  it("starts the signed OAuth continuation through GitHub without credentials", async () => {
+    installWindow();
+    const fetcher = vi.fn(async () =>
+      Response.json({ url: "https://github.com/login/oauth/authorize" }),
+    );
+    await expect(
+      postPreviewOAuthInteraction({
+        endpoint: "/api/auth/sign-in/social",
+        body: { provider: "github", oauth_query: "sig=signed" },
+        fetcher,
+      }),
+    ).resolves.toBe("https://github.com/login/oauth/authorize");
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/auth/sign-in/social",
+      expect.objectContaining({
+        body: JSON.stringify({
+          provider: "github",
+          oauth_query: "sig=signed",
+        }),
+      }),
+    );
   });
 
   it("posts denial and preserves the server access_denied redirect", async () => {

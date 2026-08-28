@@ -220,11 +220,12 @@ exact confirmation digest, then invoke only the matching task:
 - `hosted:oauth-initialize` initializes the single exact resource and ES256 JWKS
   through the real Better Auth handler and reports bounded pre/post row counts;
   and
-- `hosted:invited-user-provision` creates one verified operator-invited
-  credential user plus that user's sole active workspace membership in one SQL
+- `hosted:invited-user-provision` binds one operator-invited stable GitHub
+  account ID to a verified user plus that user's sole active workspace membership in one SQL
   transaction. The membership write follows migration `0002` exactly and uses
   `updated_at` as its lifecycle timestamp. Exact retries prove the stored
-  credential and return a no-op receipt; conflicts fail closed. A failed user,
+  GitHub identity and return a no-op receipt; conflicts fail closed. No user
+  password is accepted or stored. A failed user,
   account, or membership write rolls back the whole provisioning attempt.
 
 Secrets remain only in the owner-only request and the database URL remains on
@@ -239,8 +240,9 @@ sole active workspace. The scope contract does not advertise OpenID discovery.
 Construction is
 lazy and fail-closed: importing a route does not parse secrets, connect to the
 database, generate keys, register a client, or mint a grant. The policy selects
-operator-provisioned email/password login with public signup disabled,
-authorization code/S256 PKCE as the sole grant, explicit consent, CIMD-first
+operator-provisioned GitHub identity with public signup and implicit email
+linking disabled, authorization code/S256 PKCE plus rotated refresh tokens,
+explicit consent, CIMD-first
 client identity, public `none` client authentication, and exact resource/scope
 ceilings. Signed-query public-client prelogin verifies the client identity and
 exact requested scopes before consent, while every client/resource management

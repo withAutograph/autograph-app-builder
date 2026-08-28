@@ -15,15 +15,12 @@ export function SignInForm() {
     event.preventDefault();
     setPending(true);
     setError(undefined);
-    const form = new FormData(event.currentTarget);
     const oauthQuery = currentOAuthQuery(window.location.search);
     try {
       const signInRedirect = await postPreviewOAuthInteraction({
-        endpoint: "/api/auth/sign-in/email",
+        endpoint: "/api/auth/sign-in/social",
         body: {
-          email: form.get("email"),
-          password: form.get("password"),
-          rememberMe: false,
+          provider: "github",
           oauth_query: oauthQuery,
         },
       });
@@ -41,24 +38,12 @@ export function SignInForm() {
     <form onSubmit={submit} className="auth-card">
       <p className="eyebrow">Autograph App Builder</p>
       <h1>Sign in to Preview</h1>
-      <p>Use an invited account with one active App Builder workspace.</p>
-      <label>
-        Email
-        <input name="email" type="email" autoComplete="username" required />
-      </label>
-      <label>
-        Password
-        <input
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          minLength={12}
-          required
-        />
-      </label>
+      <p>
+        Use an invited GitHub account with one active App Builder workspace.
+      </p>
       {error ? <p role="alert">{error}</p> : null}
       <button type="submit" disabled={pending}>
-        {pending ? "Signing in…" : "Continue"}
+        {pending ? "Connecting…" : "Continue with GitHub"}
       </button>
     </form>
   );

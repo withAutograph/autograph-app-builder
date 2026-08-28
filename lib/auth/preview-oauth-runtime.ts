@@ -39,6 +39,16 @@ const previewOAuthRuntimeConfigSchema = z
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
     databaseUrl: databaseUrlSchema,
+    githubClientId: z
+      .string()
+      .min(1)
+      .max(512)
+      .refine((value) => !/[\0\r\n]/u.test(value)),
+    githubClientSecret: z
+      .string()
+      .min(1)
+      .max(512)
+      .refine((value) => !/[\0\r\n]/u.test(value)),
   })
   .strict()
   .superRefine((config, context) => {
@@ -88,6 +98,8 @@ export function readPreviewOAuthRuntimeConfig(
     resource: environment.MCP_RESOURCE_URL,
     secret: environment.BETTER_AUTH_SECRET,
     databaseUrl: environment.DATABASE_URL,
+    githubClientId: environment.GITHUB_CLIENT_ID,
+    githubClientSecret: environment.GITHUB_CLIENT_SECRET,
   });
 }
 
@@ -107,6 +119,18 @@ export function createPreviewOAuthServer(input: {
     database: input.database,
     trustedOrigins: [resourceOrigin],
     emailAndPassword: previewEmailPasswordPolicy,
+    socialProviders: {
+      github: {
+        clientId: config.githubClientId,
+        clientSecret: config.githubClientSecret,
+        disableSignUp: true,
+      },
+    },
+    account: {
+      accountLinking: {
+        enabled: false,
+      },
+    },
     session: {
       expiresIn: 60 * 60 * 8,
       updateAge: 60 * 60,

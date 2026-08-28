@@ -7,6 +7,10 @@ const instantSchema = z.string().datetime({ offset: true });
 const httpsUrlSchema = z.string().url().startsWith("https://");
 const identifierSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u);
 const roleSchema = z.string().regex(/^[a-z][a-z0-9_]{2,62}$/u);
+const githubAccountIdSchema = z.string().regex(/^[1-9][0-9]{0,19}$/u);
+const githubLoginSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u);
 const passwordSchema = z
   .string()
   .min(12)
@@ -30,8 +34,8 @@ const invitedUserSchema = z
       .string()
       .email()
       .transform((value) => value.toLowerCase()),
-    name: z.string().trim().min(1).max(128),
-    password: passwordSchema,
+    githubAccountId: githubAccountIdSchema,
+    githubLogin: githubLoginSchema,
   })
   .strict();
 
@@ -194,12 +198,16 @@ function canonicalRequest(request: PreviewActivationPlanRequest) {
   const secretDigest =
     request.action === "oauth.initialize"
       ? digest(request.authSecret)
-      : digest(request.password);
+      : request.action === "runtime-role.configure"
+        ? digest(request.password)
+        : undefined;
   return JSON.stringify({
     ...request,
     ...(request.action === "oauth.initialize"
       ? { authSecret: secretDigest }
-      : { password: secretDigest }),
+      : request.action === "runtime-role.configure"
+        ? { password: secretDigest }
+        : {}),
   });
 }
 
@@ -221,6 +229,8 @@ export function planPreviewActivation(input: unknown) {
             userId: request.userId,
             workspaceId: request.workspaceId,
             email: request.email,
+            githubAccountId: request.githubAccountId,
+            githubLogin: request.githubLogin,
           };
   return {
     version: 1 as const,
