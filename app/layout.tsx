@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Eve Agent Plugin",
-  description: "A durable Eve Agent Plugin starter.",
+  title: "Autograph App Builder",
+  description: "Design and plan supported applications through Eve.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
