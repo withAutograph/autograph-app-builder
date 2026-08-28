@@ -52,6 +52,15 @@ try {
     "https://example.com.",
     "https://agent.invalid.",
     "https://agent.localhost.",
+    "https://0",
+    "https://0.0.0.0",
+    "https://[::]",
+    "https://[::ffff:0:0]",
+    "https://[::ffff:7f00:1]",
+    "https://[::ffff:127.0.0.1]",
+    "https://mcp.autograph.dev/",
+    "https://MCP.autograph.dev",
+    "https://mcp.autograph.dev:443",
   ])
     await run(
       "build-portable-release.mts",

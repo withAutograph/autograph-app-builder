@@ -8,10 +8,11 @@ import {
   realpath,
   rm,
 } from "node:fs/promises";
-import { isIP } from "node:net";
 import { basename, relative, resolve, sep } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { isMap, parseDocument } from "yaml";
+
+import { isReservedPublicReleaseHostname } from "./public-release-endpoint.ts";
 
 const SPEC_VERSION = "1.0.0";
 export const AUTOGRAPH_PACKAGE_VERSION = "0.2.0";
@@ -110,27 +111,6 @@ const schemaVersion = (schema: unknown) => {
   return schema.match(/\/schemas\/([^/]+)\/(?:plugin|mcp)\.schema\.json$/)?.[1];
 };
 
-const isLoopback = (hostname: string) => {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "localhost") return true;
-  const family = isIP(host);
-  if (family === 4) return host.startsWith("127.");
-  return family === 6 && host === "::1";
-};
-
-const isReservedReleaseHost = (hostname: string) => {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  return (
-    isLoopback(host) ||
-    ["example.com", "example.net", "example.org"].some(
-      (name) => host === name || host.endsWith(`.${name}`),
-    ) ||
-    [".invalid", ".test", ".example", ".localhost", ".template"].some(
-      (suffix) => host.endsWith(suffix),
-    )
-  );
-};
-
 export const assertAutographMcpEndpoint = (
   value: unknown,
   { release }: { release: boolean },
@@ -165,7 +145,10 @@ export const assertAutographMcpEndpoint = (
       `${AUTOGRAPH_MCP_SERVER_NAME} URL hostname must not end with a DNS root dot.`,
     );
   if (release) {
-    if (url.protocol !== "https:" || isReservedReleaseHost(url.hostname))
+    if (
+      url.protocol !== "https:" ||
+      isReservedPublicReleaseHostname(url.hostname)
+    )
       throw new Error(
         `${AUTOGRAPH_MCP_SERVER_NAME} must use a deployed HTTPS endpoint for release.`,
       );
@@ -177,6 +160,10 @@ export const assertAutographMcpEndpoint = (
       `${AUTOGRAPH_MCP_SERVER_NAME} must use credential-free HTTPS or the fixed development endpoint.`,
     );
   }
+  if (value !== `${url.origin}/mcp`)
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} URL must use the exact canonical ${url.origin}/mcp form.`,
+    );
   return url;
 };
 

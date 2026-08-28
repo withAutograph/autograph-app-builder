@@ -139,6 +139,19 @@ describe("Agent Plugins package", () => {
     ["a trailing-dot example host", "https://example.com./mcp"],
     ["a trailing-dot reserved suffix", "https://agent.invalid./mcp"],
     ["a trailing-dot localhost suffix", "https://agent.localhost./mcp"],
+    ["a zero IPv4 alias", "https://0/mcp"],
+    ["the unspecified IPv4 address", "https://0.0.0.0/mcp"],
+    ["the unspecified IPv6 address", "https://[::]/mcp"],
+    ["an IPv4-mapped unspecified address", "https://[::ffff:0:0]/mcp"],
+    ["an IPv4-mapped loopback", "https://[::ffff:7f00:1]/mcp"],
+    ["a noncanonical IPv4-mapped loopback", "https://[::ffff:127.0.0.1]/mcp"],
+    ["a raw dot-segment alias", "https://preview.autograph.dev/a/../mcp"],
+    [
+      "a percent-encoded dot-segment alias",
+      "https://preview.autograph.dev/a/%2e%2e/mcp",
+    ],
+    ["a mixed-case hostname", "https://PREVIEW.autograph.dev/mcp"],
+    ["an explicit default port", "https://preview.autograph.dev:443/mcp"],
   ])("rejects %s", async (_name, endpoint) => {
     const root = await copyPortablePackage();
     await writeMcp(root, (mcp) => {

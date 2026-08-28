@@ -64,4 +64,27 @@ describe("portable release endpoint", () => {
       "credential-free, deployed, literal HTTPS origin",
     );
   });
+
+  it.each([
+    "https://0",
+    "https://0.0.0.0",
+    "https://[::]",
+    "https://[::ffff:0:0]",
+    "https://[::ffff:7f00:1]",
+    "https://[::ffff:127.0.0.1]",
+  ])("rejects a loopback or unspecified canonical address: %s", (endpoint) => {
+    expect(() => releaseEndpoint(endpoint)).toThrow(
+      "credential-free, deployed, literal HTTPS origin",
+    );
+  });
+
+  it.each([
+    "https://mcp.autograph.dev/",
+    "https://MCP.autograph.dev",
+    "https://mcp.autograph.dev:443",
+  ])("rejects a noncanonical origin spelling: %s", (endpoint) => {
+    expect(() => releaseEndpoint(endpoint)).toThrow(
+      "credential-free, deployed, literal HTTPS origin",
+    );
+  });
 });

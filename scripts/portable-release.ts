@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { isIP } from "node:net";
 import { gzipSync } from "node:zlib";
+
+import { isReservedPublicReleaseHostname } from "../lib/plugin/public-release-endpoint.ts";
 
 export const TOOL_NAMES = [
   "autograph_start",
@@ -34,23 +35,6 @@ export function hasCanonicalFetchRemote(
   });
 }
 
-const reservedReleaseHost = (hostname: string) => {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "localhost") return true;
-  const family = isIP(host);
-  if (family === 4 && host.startsWith("127.")) return true;
-  if (family === 6 && host === "::1") return true;
-  if (
-    ["example.com", "example.net", "example.org"].some(
-      (name) => host === name || host.endsWith(`.${name}`),
-    )
-  )
-    return true;
-  return [".invalid", ".test", ".example", ".localhost", ".template"].some(
-    (suffix) => host.endsWith(suffix),
-  );
-};
-
 export function releaseEndpoint(value: string | undefined) {
   if (!value) throw new Error("Usage: --endpoint https://agent.example.com");
   const endpoint = new URL(value);
@@ -62,7 +46,8 @@ export function releaseEndpoint(value: string | undefined) {
     endpoint.search ||
     endpoint.hash ||
     endpoint.hostname.endsWith(".") ||
-    reservedReleaseHost(endpoint.hostname)
+    isReservedPublicReleaseHostname(endpoint.hostname) ||
+    value !== endpoint.origin
   )
     throw new Error(
       "Endpoint must be a credential-free, deployed, literal HTTPS origin.",
