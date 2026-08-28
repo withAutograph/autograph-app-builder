@@ -31,8 +31,11 @@ missing operation with a raw shell command or generic file write.
    for target planning; never construct or guess a repository script path.
 
 3. After an eligible exact source receipt is resolved, automatically inspect
-   the source read-only and prepare its isolated builder-owned workspace. Inspect
-   existing workspace identities, current topology, and
+   the source read-only and prepare its isolated builder-owned workspace. Use
+   `workspace_status` to verify preparation, then perform known file reads under
+   the exact absolute `workspacePath` returned by preparation. Never pass that
+   sandbox path or an internal hosted artifact path to `inspect_repository`.
+   Inspect existing workspace identities, current topology, and
    `prototype/<app-id>/app-spec.md`. Do not request approval for supported-source
    inspection, workspace preparation, or non-published prototype artifacts.
    Preserve unrelated changes.
