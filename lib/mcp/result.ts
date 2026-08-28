@@ -50,7 +50,7 @@ export function safeToolError(error: unknown, sessionId = "") {
                 ? "operation_rejected"
                 : "internal_error";
   const message = notConfigured
-    ? "This starter is not connected to its production Eve adapter yet."
+    ? "Autograph App Builder is not connected to its production service yet."
     : notFound
       ? "The requested resource was not found."
       : forbidden

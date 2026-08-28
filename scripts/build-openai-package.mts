@@ -48,7 +48,7 @@ const manifest = {
   ...(endpoint ? { mcpServers: "./.mcp.json" } : {}),
   interface: {
     displayName: "Autograph App Builder",
-    shortDescription: "Design and create supported Autograph apps",
+    shortDescription: "Design and build supported apps",
     longDescription:
       "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in supported repositories.",
     developerName: portable.author.name,
@@ -58,7 +58,7 @@ const manifest = {
     defaultPrompt: [
       "Design a new app with Autograph App Builder. If eve_start is unavailable, stop without implementing directly.",
       "Create a supported app with Autograph App Builder. If eve_start is unavailable, stop without another app builder.",
-      "Continue my Autograph App Builder session. If its five tools are unavailable, stop and report the missing connection.",
+      "Continue my app build with Autograph App Builder. If its five tools are unavailable, stop and report the missing connection.",
     ],
     brandColor: "#111827",
     screenshots: [],

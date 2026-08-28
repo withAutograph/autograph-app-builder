@@ -1283,7 +1283,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         : "Preparation was canceled, but the workspace phase could not be confirmed empty.";
     }
     return status?.phase === "prepared"
-      ? "The reviewed repository was prepared inside the App Builder session workspace, and workspace status confirms the prepared phase."
+      ? "The reviewed repository was prepared inside the App Builder workspace, and workspace status confirms the prepared phase."
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {

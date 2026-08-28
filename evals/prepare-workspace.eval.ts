@@ -17,10 +17,7 @@ export default defineEval({
     t.succeeded();
     t.calledTool("prepare_workspace", { count: 1 });
     t.calledTool("workspace_status", { count: 1 });
-    t.check(
-      t.reply,
-      includes("prepared inside the App Builder session workspace"),
-    );
+    t.check(t.reply, includes("prepared inside the App Builder workspace"));
     t.check(t.reply, includes("confirms the prepared phase"));
   },
 });

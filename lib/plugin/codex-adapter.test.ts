@@ -26,6 +26,12 @@ describe("Codex adapter", () => {
     for (const prompt of manifest.interface.defaultPrompt) {
       expect(prompt.length).toBeLessThanOrEqual(128);
     }
+    expect(manifest.interface.shortDescription).toBe(
+      "Design and build supported apps",
+    );
+    expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
+      "App Builder session",
+    );
   });
 
   it("fails closed instead of invoking another app builder", async () => {

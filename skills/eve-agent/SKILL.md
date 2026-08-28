@@ -21,9 +21,9 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
 3. Use `eve_get` to obtain evidence; accepted work is not completed work.
 4. Call `eve_respond` once for the complete non-empty `inputRequests` batch,
    preserving every unique `requestId`. Never split one App Builder batch across calls.
-5. Send unrelated follow-ups with `eve_send` only while the session is `waiting` and no input is unresolved.
+5. Send unrelated follow-ups with `eve_send` only while the app build is `waiting` and no input is unresolved.
 6. Treat cancellation as cooperative. Poll until events prove the resulting state.
-7. Open the session UI when visual progress or input controls help.
+7. Open the App Builder progress view when visual progress or input controls help.
 8. After a successful App Builder call, fall back to its text or `structuredContent`
    response only for rendering when MCP Apps UI is unavailable.
 9. Never state that a side effect succeeded until a public event proves it.

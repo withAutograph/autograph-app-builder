@@ -25,6 +25,19 @@ describe("safe MCP tool errors", () => {
     expect(JSON.stringify(result)).not.toContain("secret provider detail");
     expect(result.isError).toBe(true);
   });
+
+  it("brands the public disconnected-state message", () => {
+    const result = safeToolError(new AdapterNotConfiguredError());
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: "Autograph App Builder is not connected to its production service yet.",
+      },
+    ]);
+    expect(result.structuredContent.error?.message).toBe(
+      "Autograph App Builder is not connected to its production service yet.",
+    );
+  });
 });
 
 describe("MCP App UI presentation", () => {
@@ -36,7 +49,7 @@ describe("MCP App UI presentation", () => {
         cursor: 0,
         events: [],
       },
-      "Eve accepted the objective.",
+      "Autograph App Builder started the app build.",
     );
 
     expect(result._meta).toBeUndefined();
@@ -58,7 +71,7 @@ describe("MCP App UI presentation", () => {
           },
         ],
       },
-      "Eve needs input.",
+      "Autograph App Builder needs input.",
     );
 
     expect(result._meta).toEqual({
