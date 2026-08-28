@@ -8,12 +8,16 @@ Until the shared marketplace is published, download these files from the public
 - `autograph-app-builder-codex-marketplace-VERSION.tar.gz`
 - `SHA256SUMS`
 
-Then verify, install, and open a new Codex task:
+Then verify, install, and open a new Codex task. The GitHub verification command
+checks the immutable release attestation, including the downloaded asset digest:
 
 ```sh
-sha256sum --check SHA256SUMS --ignore-missing
+gh release verify v0.1.1 --repo withAutograph/autograph-app-builder
+gh release verify-asset v0.1.1 \
+  autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
+  --repo withAutograph/autograph-app-builder
 mkdir autograph-app-builder-marketplace
-tar -xzf autograph-app-builder-codex-marketplace-VERSION.tar.gz \
+tar -xzf autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
   -C autograph-app-builder-marketplace
 codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
 codex plugin add autograph-app-builder@autograph
@@ -76,11 +80,13 @@ Every release contains:
 
 ### Portable archive
 
-Verify the files from the release directory and extract the portable package:
+Verify the immutable release and downloaded portable asset, then extract it:
 
 ```sh
-sha256sum --check SHA256SUMS --ignore-missing
-tar -xzf autograph-app-builder-VERSION.tar.gz
+gh release verify v0.1.1 --repo withAutograph/autograph-app-builder
+gh release verify-asset v0.1.1 autograph-app-builder-0.1.1.tar.gz \
+  --repo withAutograph/autograph-app-builder
+tar -xzf autograph-app-builder-0.1.1.tar.gz
 ```
 
 Add the extracted `autograph-app-builder/` directory using the client’s local
@@ -91,9 +97,12 @@ Agent Plugin installation procedure.
 For an offline or manually managed Codex installation:
 
 ```sh
-sha256sum --check SHA256SUMS --ignore-missing
+gh release verify v0.1.1 --repo withAutograph/autograph-app-builder
+gh release verify-asset v0.1.1 \
+  autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
+  --repo withAutograph/autograph-app-builder
 mkdir autograph-app-builder-marketplace
-tar -xzf autograph-app-builder-codex-marketplace-VERSION.tar.gz \
+tar -xzf autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
   -C autograph-app-builder-marketplace
 codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
 codex plugin add autograph-app-builder@autograph
@@ -101,6 +110,25 @@ codex plugin add autograph-app-builder@autograph
 
 This creates a local marketplace. It is the supported Codex installation path
 until a separately managed shared marketplace listing is published.
+
+### Upgrade a local Codex marketplace installation
+
+Download and verify the new release first. Then remove the installed plugin and
+old marketplace registration before adding the newly extracted, versioned
+marketplace directory:
+
+```sh
+codex plugin remove autograph-app-builder@autograph
+codex plugin marketplace remove autograph
+mkdir autograph-app-builder-marketplace-0.1.1
+tar -xzf autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
+  -C autograph-app-builder-marketplace-0.1.1
+codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.1.1"
+codex plugin add autograph-app-builder@autograph
+```
+
+Open a new Codex task after installation or upgrade so the client reloads the
+plugin and its MCP connection.
 
 ## Local development checkout
 
@@ -120,8 +148,15 @@ publish or redistribute source-checkout bytes as an endpoint-bound release.
 
 Maintainers set `AUTOGRAPH_APP_BUILDER_RELEASE_ORIGIN` to the exact deployed
 HTTPS origin. A `vMAJOR.MINOR.PATCH` tag whose version matches `plugin.json`
-runs the release workflow. It validates and publishes deterministic portable
-and Codex marketplace archives plus their checksums and closed receipt.
+runs the release workflow through the protected `release` environment. Before
+creating the tag, an administrator must enable and read back GitHub immutable
+releases, accept the exact-SHA hosted proof, and set
+`AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` to that SHA. The workflow requires the
+exact current `main`, successful exact-SHA CI, and the accepted proof SHA. It
+uses pinned Actions, validates the actual deterministic portable and Codex
+marketplace archives, creates a draft, verifies every uploaded digest, and only
+then publishes. It requires GitHub's immutable-release attestation and separate
+build-provenance attestations to verify before completing.
 
 The archives are the immutable distribution payload behind marketplace and
 client installation. Publishing a shared marketplace or client catalog entry

@@ -1,4 +1,7 @@
+import packageManifest from "../../package.json";
+
 export const MCP_APP_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
+export const APP_VERSION = packageManifest.version;
 
 export const sessionUiHtml = `<!doctype html>
 <html lang="en">
@@ -81,7 +84,7 @@ export const sessionUiHtml = `<!doctype html>
         }
         if(message.method==="ui/notifications/tool-result")update(message.params&&message.params.structuredContent);
       });
-      window.parent.postMessage({jsonrpc:"2.0",id:"eve-session-init",method:"ui/initialize",params:{protocolVersion,appInfo:{name:"Autograph App Builder",version:"0.1.1"},appCapabilities:{}}},"*");
+      window.parent.postMessage({jsonrpc:"2.0",id:"eve-session-init",method:"ui/initialize",params:{protocolVersion,appInfo:{name:"Autograph App Builder",version:"${APP_VERSION}"},appCapabilities:{}}},"*");
     })();
   </script>
 </body>
