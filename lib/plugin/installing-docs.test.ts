@@ -91,10 +91,10 @@ describe("public plugin installation documentation", () => {
 
       const auditLog = await runInstall(script, "none");
       expect(auditLog).toContain(
-        "tar -xzf autograph-app-builder-codex-marketplace-0.2.0.tar.gz",
+        "tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
       );
       expect(auditLog).toMatch(
-        /codex plugin marketplace add .*autograph-app-builder-marketplace-0\.2\.0/u,
+        /codex plugin marketplace add .*autograph-app-builder-marketplace-0\.2\.1/u,
       );
       expect(auditLog).toContain(
         "codex plugin add autograph-app-builder@autograph",
@@ -106,14 +106,23 @@ describe("public plugin installation documentation", () => {
     const documentation = await readDocumentation("docs/installing.md");
 
     expect(documentation).toContain(
-      "Once the pre-release `v0.2.0` GitHub release is published",
+      "Once the pre-release `v0.2.1` GitHub release is published",
     );
     expect(documentation).toMatch(
-      /These\s+commands fail closed until `v0\.2\.0` exists/u,
+      /These\s+commands fail closed until `v0\.2\.1` exists/u,
     );
-    expect(documentation).toContain("autograph-app-builder-0.2.0.tar.gz");
+    expect(documentation).toContain("autograph-app-builder-0.2.1.tar.gz");
     expect(documentation).toContain(
-      "autograph-app-builder-codex-marketplace-0.2.0.tar.gz",
+      "autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
+    );
+    expect(documentation).toContain(
+      "Publish `v0.2.1` only through the existing tag-triggered",
+    );
+    expect(documentation).toContain(
+      "`AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to",
+    );
+    expect(documentation).toMatch(
+      /Do not create or upload the release\s+manually\./u,
     );
   });
 });

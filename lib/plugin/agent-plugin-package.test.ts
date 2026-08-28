@@ -76,7 +76,7 @@ describe("Agent Plugins package", () => {
       }),
     ).resolves.toEqual({
       name: "autograph-app-builder",
-      version: "0.2.0",
+      version: "0.2.1",
       specification: "1.0.0",
       packageKind: "generated-artifact",
     });
@@ -118,14 +118,14 @@ describe("Agent Plugins package", () => {
     ).rejects.toThrow("deployed HTTPS endpoint");
   });
 
-  it.each(["0.1.0", "0.2.1", "1.0.0"])(
+  it.each(["0.1.0", "0.2.0", "1.0.0"])(
     "rejects package version %s",
     async (version) => {
       const root = await copyPortablePackage();
       await writePluginVersion(root, version);
       await expect(
         validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-      ).rejects.toThrow("version must be exactly 0.2.0");
+      ).rejects.toThrow("version must be exactly 0.2.1");
     },
   );
 

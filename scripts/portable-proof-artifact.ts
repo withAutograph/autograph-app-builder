@@ -24,7 +24,7 @@ export const portableReleaseReceiptSchema = z
     format: z.literal("autograph-portable-plugin-release-v3"),
     specification: z.literal("1.0.0"),
     name: z.literal("autograph-app-builder"),
-    version: z.literal("0.2.0"),
+    version: z.literal("0.2.1"),
     source: z
       .object({
         repository: z.literal(
@@ -232,11 +232,11 @@ export async function verifyPortableProofArtifact(input: {
   );
   if (
     codexManifest.name !== receipt.name ||
-    codexManifest.version !== "0.2.0" ||
+    codexManifest.version !== "0.2.1" ||
     codexManifest.mcpServers !== "./.mcp.json"
   )
     throw new Error(
-      "Codex marketplace manifest was not bound to package 0.2.0 and its sole MCP adapter.",
+      "Codex marketplace manifest was not bound to package 0.2.1 and its sole MCP adapter.",
     );
   const auxiliaryPaths = [
     "clients/codex.client-harness.json",
