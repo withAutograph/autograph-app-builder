@@ -1,9 +1,9 @@
 import Link from "next/link";
 
-import { ArrowIcon, BrandLockup, SessionMark } from "./ui/brand";
+import { ArrowIcon, BrandLockup, BrandMark } from "./ui/brand";
 import styles from "./ui/public-site.module.css";
 
-const sessionStages = [
+const appBuildStages = [
   { label: "Design", state: "complete" },
   { label: "Plan", state: "complete" },
   { label: "Create", state: "current" },
@@ -14,7 +14,7 @@ const workflow = [
   {
     number: "1",
     title: "Describe",
-    copy: "Tell Autograph what you want to build in your own words.",
+    copy: "Tell Autograph App Builder what you want to build in your own words.",
   },
   {
     number: "2",
@@ -24,7 +24,7 @@ const workflow = [
   {
     number: "3",
     title: "Continue",
-    copy: "Pick up where the builder left off, in the same session.",
+    copy: "Pick up where the app build left off.",
   },
 ] as const;
 
@@ -45,20 +45,20 @@ function SiteHeader() {
   );
 }
 
-function SessionPreview() {
+function ProgressPreview() {
   return (
-    <div
+    <section
       className={styles.previewComposition}
-      aria-label="App Builder session preview"
+      aria-label="Autograph App Builder progress"
     >
       <span className={styles.backdropLetter} aria-hidden="true">
         A
       </span>
       <section className={styles.sessionFrame}>
         <header className={styles.sessionHeader}>
-          <SessionMark />
+          <BrandMark />
           <div>
-            <strong>App Builder session</strong>
+            <strong>Autograph App Builder progress</strong>
             <span>Working</span>
           </div>
           <span className={styles.workingState}>
@@ -66,8 +66,11 @@ function SessionPreview() {
           </span>
         </header>
         <div className={styles.sessionBody}>
-          <ol className={styles.stageRail} aria-label="Builder workflow">
-            {sessionStages.map((stage) => (
+          <ol
+            className={styles.stageRail}
+            aria-label="Autograph App Builder workflow"
+          >
+            {appBuildStages.map((stage) => (
               <li key={stage.label} data-state={stage.state}>
                 <span className={styles.stageNode} aria-hidden="true">
                   {stage.state === "complete" ? "✓" : ""}
@@ -83,7 +86,7 @@ function SessionPreview() {
           </ol>
           <div className={styles.sessionCanvas}>
             <div className={styles.sessionMessage}>
-              <SessionMark />
+              <BrandMark />
               <div>
                 <span />
                 <span />
@@ -105,7 +108,7 @@ function SessionPreview() {
           </div>
         </div>
       </section>
-    </div>
+    </section>
   );
 }
 
@@ -121,8 +124,8 @@ export default function Home() {
             Keep the decisions.
           </h1>
           <p>
-            Design, plan, create, and validate supported apps with a durable
-            builder session.
+            Design, plan, create, and validate supported apps with a durable app
+            build.
           </p>
           <div className={styles.heroActions}>
             <Link className={styles.primaryAction} href="/workspace">
@@ -136,12 +139,12 @@ export default function Home() {
             <span />
           </div>
         </div>
-        <SessionPreview />
+        <ProgressPreview />
       </section>
 
       <section className={styles.workflowSection} id="workflow">
         <div className={styles.workflowHeading}>
-          <h2>A session that keeps its place</h2>
+          <h2>An app build that keeps its place</h2>
           <div className={styles.workflowPath} aria-hidden="true">
             <span />
           </div>

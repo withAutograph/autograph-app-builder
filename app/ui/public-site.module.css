@@ -20,8 +20,8 @@
   box-sizing: border-box;
 }
 
-.publicPage :global(.session-mark),
-.workspacePage :global(.session-mark) {
+.publicPage :global(.brand-mark),
+.workspacePage :global(.brand-mark) {
   display: grid;
   flex: 0 0 auto;
   width: 2.2rem;
@@ -66,8 +66,8 @@
   line-height: 1;
 }
 
-.publicPage :global(.brand-lockup[data-compact] .session-mark),
-.workspacePage :global(.brand-lockup[data-compact] .session-mark) {
+.publicPage :global(.brand-lockup[data-compact] .brand-mark),
+.workspacePage :global(.brand-lockup[data-compact] .brand-mark) {
   width: 1.8rem;
   height: 1.8rem;
   border-radius: 0.45rem;
@@ -304,8 +304,8 @@
   border-bottom: 1px solid var(--line);
 }
 
-.sessionHeader :global(.session-mark),
-.sessionMessage :global(.session-mark) {
+.sessionHeader :global(.brand-mark),
+.sessionMessage :global(.brand-mark) {
   width: 2rem;
   height: 2rem;
   border-radius: 0.48rem;
@@ -734,7 +734,7 @@
 
 .briefComposer textarea::placeholder,
 .briefComposer input::placeholder {
-  color: #898a98;
+  color: var(--muted);
   opacity: 1;
 }
 
@@ -759,11 +759,23 @@
 }
 
 .optionalFields small {
-  color: #9292a0;
+  color: var(--muted);
   font-size: 0.66rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .copyRow {
@@ -1129,7 +1141,7 @@
     padding: 0.85rem;
   }
 
-  .sessionMessage :global(.session-mark) {
+  .sessionMessage :global(.brand-mark) {
     width: 1.6rem;
     height: 1.6rem;
     font-size: 0.85rem;
@@ -1263,8 +1275,8 @@
   .headerAction,
   .primaryAction,
   .copyRow button,
-  .publicPage :global(.session-mark),
-  .workspacePage :global(.session-mark) {
+  .publicPage :global(.brand-mark),
+  .workspacePage :global(.brand-mark) {
     border: 1px solid ButtonText;
   }
 }

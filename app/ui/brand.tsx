@@ -29,9 +29,9 @@ export function CopyIcon({ className }: IconProps) {
   );
 }
 
-export function SessionMark() {
+export function BrandMark() {
   return (
-    <span className="session-mark" aria-hidden="true">
+    <span className="brand-mark" aria-hidden="true">
       A
     </span>
   );
@@ -40,7 +40,7 @@ export function SessionMark() {
 export function BrandLockup({ compact = false }: { compact?: boolean }) {
   return (
     <span className="brand-lockup" data-compact={compact || undefined}>
-      <SessionMark />
+      <BrandMark />
       <span>
         <strong>Autograph</strong>
         <small>App Builder</small>

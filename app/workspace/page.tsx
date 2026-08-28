@@ -7,7 +7,7 @@ import { WorkspaceBrief } from "./workspace-brief";
 const handoffSteps = [
   {
     title: "Install Autograph App Builder",
-    copy: "Add the MCP client to your preferred AI workspace.",
+    copy: "Add the Autograph App Builder MCP client to your preferred AI workspace.",
   },
   {
     title: "Open a new task",
@@ -15,7 +15,7 @@ const handoffSteps = [
   },
   {
     title: "Mention @Autograph App Builder and paste your brief",
-    copy: "Hand off the context you shaped here to the App Builder.",
+    copy: "Hand off the context you shaped here to Autograph App Builder.",
   },
 ] as const;
 

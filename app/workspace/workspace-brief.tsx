@@ -60,11 +60,14 @@ function PreviewValue({
   return value ? (
     <p>{value}</p>
   ) : (
-    <div className={styles.previewLines} aria-label={fallback}>
-      <span />
-      <span />
-      <span />
-    </div>
+    <>
+      <p className={styles.visuallyHidden}>{fallback}</p>
+      <div className={styles.previewLines} aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </>
   );
 }
 
@@ -95,8 +98,8 @@ export function WorkspaceBrief() {
       <div className={styles.briefComposer}>
         <h1 id="workspace-title">Start with a clear brief.</h1>
         <p className={styles.workspaceIntro}>
-          Shape the objective here, then take it to your connected App Builder
-          client.
+          Shape the objective here, then take it to your connected Autograph App
+          Builder client.
         </p>
         <form onSubmit={(event) => event.preventDefault()}>
           <label htmlFor="objective">What do you want to build?</label>
@@ -125,10 +128,12 @@ export function WorkspaceBrief() {
           </div>
           <div className={styles.copyRow}>
             <button type="button" onClick={copyBrief}>
-              <CopyIcon /> Copy builder brief
+              <CopyIcon /> Copy Autograph App Builder brief
             </button>
             <p className={styles.copyStatus} role="status" aria-live="polite">
-              {copyState === "copied" ? "Builder brief copied." : null}
+              {copyState === "copied"
+                ? "Autograph App Builder brief copied."
+                : null}
               {copyState === "failed"
                 ? "Copy isn’t available in this browser."
                 : null}
@@ -141,8 +146,11 @@ export function WorkspaceBrief() {
         </p>
       </div>
 
-      <aside className={styles.briefPreview} aria-label="Builder brief preview">
-        <h2>Builder brief</h2>
+      <section
+        className={styles.briefPreview}
+        aria-label="Autograph App Builder brief preview"
+      >
+        <h2>Autograph App Builder brief</h2>
         <div>
           <section>
             <h3>Objective</h3>
@@ -173,7 +181,7 @@ export function WorkspaceBrief() {
             />
           </section>
         </div>
-      </aside>
+      </section>
       <div className={styles.workspacePath} aria-hidden="true">
         <span />
         <span />
