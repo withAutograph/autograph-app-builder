@@ -131,6 +131,9 @@ export default defineTool({
           preparedByCallId: current.preparedByCallId,
           workspace: current.workspace,
           sourceReceipt: current.sourceReceipt,
+          ...(current.githubSource === undefined
+            ? {}
+            : { githubSource: current.githubSource }),
           artifacts: current.artifacts,
           appSpec: current.appSpec,
           dependencyReceipt: current.dependencyReceipt,
@@ -155,6 +158,9 @@ export default defineTool({
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
+        ...(current.githubSource === undefined
+          ? {}
+          : { githubSource: current.githubSource }),
         artifacts: current.artifacts,
         appSpec: current.appSpec,
         dependencyReceipt: current.dependencyReceipt,

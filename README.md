@@ -158,12 +158,21 @@ be taken over; only a still-running coordinator may mark it QUIESCED after all
 bounded helpers have returned. Exact-empty publication retains the swapped-out
 empty inode as a receipt-bound tombstone rather than deleting it by path.
 
-GitHub draft-PR publication,
-cloning and remote template acquisition
-remain fail-closed until
-their typed tools and approval receipts land. The skills describe the intended
-workflow, but they must use builder-owned operations; they do not authorize raw
-target commands.
+GitHub source resolution, draft-PR proposal sealing, and publication use typed,
+installation-bound operations and closed V2 approval receipts. They remain
+fail-closed unless the deployment composes the least-privilege adapter and
+durable proposal/receipt stores. A sealed proposal is also bound into the
+current workflow aggregate; publication rejects an older review, another
+session's source, or any changed proposal before provider mutation. A malformed
+receipt-bound approval batch becomes a public adapter failure rather than an
+actionable approval. Local AppSpec and change-set approvals instead expose a
+closed digest-only local subject derived from their exact tool input; they never
+project raw artifact content or changed-file payloads. An input-dependent Eve
+approval policy reads the current workflow first, so a missing or wrong-phase
+GitHub receipt is denied before Eve creates an approval request and cannot be
+reinterpreted as local. The shipped default runtime is still disabled until
+that live deployment composition is installed.
+The skills do not authorize raw target commands, tokens, or shell fallbacks.
 
 The initial adapter supports the known `withAutograph/arrusted-development`
 repository family and fails closed on drift. It deliberately does not infer

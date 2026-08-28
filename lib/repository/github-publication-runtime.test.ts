@@ -36,10 +36,23 @@ const sourceTree = "2".repeat(40);
 const branchSha = "3".repeat(40);
 const branchTree = "4".repeat(40);
 
-function source(): SourceReceiptEvidence {
+const approvalReceipt = (proposal: DraftPullRequestProposal) => ({
+  format: "autograph-eve-approval-receipt-v2" as const,
+  phase: "publication" as const,
+  outcome: "create-draft-pr" as const,
+  repositoryId: proposal.repositoryId,
+  repository: `${proposal.owner}/${proposal.name}`,
+  baseRef: `refs/heads/${proposal.baseBranch}`,
+  baseSha: proposal.baseSha,
+  subjectDigest: proposal.digest,
+});
+
+function source(
+  sourceKind: SourceReceiptEvidence["sourceKind"] = "fresh-template",
+): SourceReceiptEvidence {
   const unsigned = {
     version: 3 as const,
-    sourceKind: "fresh-template" as const,
+    sourceKind,
     sourceSha,
     sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
@@ -183,6 +196,10 @@ class Provider {
   draftOutcome: unknown;
   freshMutations = 0;
   draftMutations = 0;
+  readonly repositoryInspections: Array<{
+    repositoryId: string;
+    ref: string;
+  }> = [];
   addPermission = false;
   throwInspection = false;
 
@@ -230,7 +247,8 @@ class Provider {
     };
   }
 
-  async inspectRepository() {
+  async inspectRepository(input: { repositoryId: string; ref: string }) {
+    this.repositoryInspections.push(input);
     return this.repositorySnapshot();
   }
 
@@ -357,6 +375,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     });
     await expect(
       adapter.inspectRepository({
+        operation: "resolve-existing-source",
         repositoryId: "100",
         ref: "refs/heads/main",
       }),
@@ -367,7 +386,11 @@ describe("GitHub runtime adapter and durable-store composition", () => {
       credential_value: "provider-secret-marker",
     });
     const invalidResponse = await adapter
-      .inspectRepository({ repositoryId: "100", ref: "refs/heads/main" })
+      .inspectRepository({
+        operation: "resolve-existing-source",
+        repositoryId: "100",
+        ref: "refs/heads/main",
+      })
       .catch((error: unknown) => error);
     expect(invalidResponse).toBeInstanceOf(Error);
     expect((invalidResponse as Error).message).toBe(
@@ -416,11 +439,115 @@ describe("GitHub runtime adapter and durable-store composition", () => {
 
     const published = await runtime.publishDraftPullRequest({
       expectedProposalDigest: draft.digest,
+      approvalReceipt: approvalReceipt(draft),
       approvedByCallId: "publish-call",
     });
     expect(published.draft).toBe(true);
     expect(published.normalizedChangedPaths).toEqual(draft.approvedPaths);
     expect(provider.draftMutations).toBe(1);
+  });
+
+  it("seals and durably reads back a default-branch proposal without provider mutation", async () => {
+    const provider = new Provider();
+    const stores = new MemoryStores();
+    const runtime = composeGitHubPublicationRuntime({
+      enabled: true,
+      adapter: createGitHubAppPublicationAdapter(provider),
+      proposals: stores.proposalStore,
+      receipts: stores.receiptStore,
+    });
+    const githubSource = await runtime.resolveImmutableSource({
+      repositoryId: "100",
+      ref: "refs/heads/main",
+      expectedSha: sourceSha,
+      expectedTree: sourceTree,
+      approvedByCallId: "resolve-call",
+    });
+
+    const proposal = await runtime.sealDraftPullRequestProposal({
+      githubSource,
+      source: source("existing-repository"),
+      review: review(),
+      title: "Add demo",
+    });
+
+    await expect(stores.proposalStore.read(proposal.digest)).resolves.toEqual(
+      proposal,
+    );
+    expect(proposal.baseBranch).toBe("main");
+    expect(proposal.baseSha).toBe(sourceSha);
+    expect(proposal.baseTree).toBe(sourceTree);
+    expect(provider.repositoryInspections).toEqual([
+      { repositoryId: "100", ref: "refs/heads/main" },
+      { repositoryId: "100", ref: "refs/heads/main" },
+    ]);
+    expect(provider.draftMutations).toBe(0);
+  });
+
+  it("refuses to seal a proposal from a non-default immutable ref", async () => {
+    const provider = new Provider();
+    const stores = new MemoryStores();
+    const runtime = composeGitHubPublicationRuntime({
+      enabled: true,
+      adapter: createGitHubAppPublicationAdapter(provider),
+      proposals: stores.proposalStore,
+      receipts: stores.receiptStore,
+    });
+    const githubSource = await runtime.resolveImmutableSource({
+      repositoryId: "100",
+      ref: "refs/heads/feature",
+      expectedSha: sourceSha,
+      expectedTree: sourceTree,
+      approvedByCallId: "resolve-call",
+    });
+
+    await expect(
+      runtime.sealDraftPullRequestProposal({
+        githubSource,
+        source: source("existing-repository"),
+        review: review(),
+        title: "Add demo",
+      }),
+    ).rejects.toThrow(/immutable default-branch source/u);
+    expect(provider.repositoryInspections).toHaveLength(1);
+    expect(stores.proposals.size).toBe(0);
+    expect(provider.draftMutations).toBe(0);
+  });
+
+  it("refuses a stale default-branch observation before proposal persistence", async () => {
+    const provider = new Provider();
+    const stores = new MemoryStores();
+    const runtime = composeGitHubPublicationRuntime({
+      enabled: true,
+      adapter: createGitHubAppPublicationAdapter(provider),
+      proposals: stores.proposalStore,
+      receipts: stores.receiptStore,
+    });
+    const githubSource = await runtime.resolveImmutableSource({
+      repositoryId: "100",
+      ref: "refs/heads/main",
+      expectedSha: sourceSha,
+      expectedTree: sourceTree,
+      approvedByCallId: "resolve-call",
+    });
+    provider.inspectRepository = async (input) => {
+      provider.repositoryInspections.push(input);
+      return {
+        ...provider.repositorySnapshot(),
+        headSha: branchSha,
+      };
+    };
+
+    await expect(
+      runtime.sealDraftPullRequestProposal({
+        githubSource,
+        source: source("existing-repository"),
+        review: review(),
+        title: "Add demo",
+      }),
+    ).rejects.toThrow(/default branch changed/u);
+    expect(stores.proposals.size).toBe(0);
+    expect(provider.draftMutations).toBe(0);
   });
 
   it("rejects cross-kind proposal lookup before any mutation", async () => {
@@ -437,6 +564,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     await expect(
       runtime.publishDraftPullRequest({
         expectedProposalDigest: fresh.digest,
+        approvalReceipt: approvalReceipt(draftProposal()),
         approvedByCallId: "call",
       }),
     ).rejects.toThrow(/unavailable or changed/u);

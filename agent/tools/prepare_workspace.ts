@@ -11,6 +11,7 @@ import {
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
+import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
 import {
   hostedSourceReceipt,
@@ -31,6 +32,17 @@ export default defineTool({
     if (source.phase === "empty") throw new Error("No source was reviewed.");
     if (source.receipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source receipt does not match the reviewed source.");
+    if (source.githubSource !== undefined) {
+      assertExactImmutableGitHubSourceReceipt(source.githubSource);
+      if (
+        source.receipt.sourceKind !== "existing-repository" ||
+        source.githubSource.resolvedSha !== source.receipt.sourceSha ||
+        source.githubSource.resolvedTree !== source.receipt.sourceTree
+      )
+        throw new Error(
+          "The immutable GitHub receipt is not bound to the reviewed source.",
+        );
+    }
     if (
       source.receipt.sourceKind === "fresh-template" &&
       source.phase !== "acquisition_approved"
@@ -55,6 +67,13 @@ export default defineTool({
       eligibilityDigest: expectedEligibilityDigest,
     } = currentReceipt;
     const currentWorkspace = workflowWorkspace(current);
+    if (
+      current.phase !== "empty" &&
+      current.githubSource?.digest !== source.githubSource?.digest
+    )
+      throw new Error(
+        "This Eve session already owns a different GitHub source binding.",
+      );
     if (
       currentWorkspace !== undefined &&
       (currentWorkspace.sourceSha !== expectedSha ||
@@ -88,6 +107,9 @@ export default defineTool({
             preparedByCallId: ctx.callId,
             workspace,
             sourceReceipt: currentReceipt,
+            ...(source.githubSource === undefined
+              ? {}
+              : { githubSource: source.githubSource }),
             artifacts: [],
           }
         : current;

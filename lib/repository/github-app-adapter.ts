@@ -243,8 +243,9 @@ export function createGitHubAppPublicationAdapter(
   return {
     inspectInstallation,
     async inspectRepository(input) {
-      return observationFor("resolve-existing-source", () =>
-        provider.inspectRepository(input),
+      const { operation, repositoryId, ref } = input;
+      return observationFor(operation, () =>
+        provider.inspectRepository({ repositoryId, ref }),
       );
     },
     async inspectDestination(input) {

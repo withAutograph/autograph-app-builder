@@ -14,6 +14,15 @@ describe("canonical portable-release remotes", () => {
     },
   );
 
+  it("accepts the exact canonical fetch remote in a blobless partial clone", () => {
+    expect(
+      hasCanonicalFetchRemote(
+        `origin\t${repository}.git (fetch) [blob:none]`,
+        repository,
+      ),
+    ).toBe(true);
+  });
+
   it.each([
     `origin\t${repository.replace("withAutograph", "other-owner")} (fetch)`,
     `origin\t${repository} (push)`,
@@ -22,6 +31,8 @@ describe("canonical portable-release remotes", () => {
     `origin\thttps://user:pass@github.com/withAutograph/autograph-app-builder (fetch)`,
     `origin\thttps://github.com/withAutograph/autograph-app-builder-extra (fetch)`,
     `origin\thttps://github.com/withAutograph/autograph-app-builder.git (push)`,
+    `origin\t${repository}.git (fetch) [tree:0]`,
+    `origin\t${repository}.git (fetch) [blob:none] extra`,
   ])("rejects an out-of-contract remote: %s", (remote) => {
     expect(hasCanonicalFetchRemote(remote, repository)).toBe(false);
   });

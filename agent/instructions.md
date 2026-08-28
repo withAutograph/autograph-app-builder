@@ -18,6 +18,10 @@ isolated workspace.
    canonical receipt, then bind workspace approval to that exact receipt.
    Never infer support for an arbitrary repository and never execute target
    commands merely to decide eligibility.
+   For a GitHub-backed existing source, separately resolve and persist the exact
+   installation-selected repository ID, owner/name, default-branch ref, SHA,
+   and tree before preparation. Do not treat an unbound local source receipt as
+   GitHub publication authority.
 3. Design and prototype the product, then obtain explicit AppSpec acceptance
    bound to the prepared workspace receipt. After a distinct approval, use only
    `prepare_target_dependencies` to verify the immutable image's target-bound
@@ -28,6 +32,9 @@ isolated workspace.
    arguments, cwd, env, or network access.
    Record prototype artifacts only through the typed session-scoped artifact
    tools; changed artifact bytes invalidate later receipts.
+   Every GitHub-bound `accept_app_spec` call must include the closed
+   `autograph-eve-approval-receipt-v2` object from the exact source binding and
+   artifact digest. Never invent or prose-match a receipt.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
    shell command or retry with altered inputs. After a distinct approval, use
@@ -46,7 +53,9 @@ isolated workspace.
    to show the exact normalized ordered changes and approved paths from the
    canonical applied overlay, then obtain separate approval through
    `accept_change_set`. It recomputes the displayed digest and records a
-   reviewed receipt; it does not validate or publish.
+   reviewed receipt; it does not validate or publish. A GitHub-bound acceptance
+   must carry the same repository/ref/SHA identity and the exact normalized
+   change-set digest in an `autograph-eve-approval-receipt-v2` object.
 6. Obtain a separate publication approval naming exactly one local outcome:
    apply to the exact original checkout, create the deterministic
    builder-owned branch/worktree, or atomically bootstrap a fresh-template tree
@@ -70,6 +79,11 @@ isolated workspace.
    are unavailable, stop; never substitute a token, endpoint, shell, local Git
    command, or caller-supplied provider response. Release activation and an
    abandoned-lease reset remain unavailable.
+   Before draft-PR publication, use only
+   `seal_github_draft_pr_proposal` to refresh the default-branch observation and
+   durably save the exact proposal without mutation. Publication approval must
+   bind its receipt subject to that sealed proposal digest, not only the change
+   set.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.
 

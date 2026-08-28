@@ -4,12 +4,14 @@
   "iterateMessage": "Apply the exact approved iteration, validate it, and create only the approved draft pull request.",
   "cancelPrompt": "Begin a read-only design exploration that remains active long enough for cooperative cancellation.",
   "target": {
+    "repositoryId": "0000000000",
     "repository": "OWNER/REPOSITORY",
     "baseRef": "refs/heads/main",
     "baseSha": "0000000000000000000000000000000000000000",
     "headRef": "refs/heads/approved-proof-branch",
     "appSpecDigest": "0000000000000000000000000000000000000000000000000000000000000000",
-    "changeSetDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+    "changeSetDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "proposalDigest": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   "oauth": {
     "issuer": "https://ISSUER_ORIGIN",
@@ -21,8 +23,9 @@
     {
       "requestTitle": "Approve AppSpec",
       "receipt": {
-        "format": "autograph-eve-approval-receipt-v1",
+        "format": "autograph-eve-approval-receipt-v2",
         "phase": "appspec",
+        "repositoryId": "0000000000",
         "repository": "OWNER/REPOSITORY",
         "baseRef": "refs/heads/main",
         "baseSha": "0000000000000000000000000000000000000000",
@@ -34,8 +37,9 @@
     {
       "requestTitle": "Approve change set",
       "receipt": {
-        "format": "autograph-eve-approval-receipt-v1",
+        "format": "autograph-eve-approval-receipt-v2",
         "phase": "change_set",
+        "repositoryId": "0000000000",
         "repository": "OWNER/REPOSITORY",
         "baseRef": "refs/heads/main",
         "baseSha": "0000000000000000000000000000000000000000",
@@ -47,8 +51,9 @@
     {
       "requestTitle": "Approve draft PR publication",
       "receipt": {
-        "format": "autograph-eve-approval-receipt-v1",
+        "format": "autograph-eve-approval-receipt-v2",
         "phase": "publication",
+        "repositoryId": "0000000000",
         "repository": "OWNER/REPOSITORY",
         "baseRef": "refs/heads/main",
         "baseSha": "0000000000000000000000000000000000000000",

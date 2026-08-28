@@ -20,7 +20,12 @@ export function hasCanonicalFetchRemote(
 ) {
   return remoteOutput.split("\n").some((line) => {
     const fields = line.trim().split(/\s+/u);
-    if (fields.length !== 3 || fields[2] !== "(fetch)") return false;
+    if (
+      (fields.length !== 3 && fields.length !== 4) ||
+      fields[2] !== "(fetch)" ||
+      (fields.length === 4 && fields[3] !== "[blob:none]")
+    )
+      return false;
     const remoteUrl = fields[1];
     return (
       remoteUrl === expectedRepository ||

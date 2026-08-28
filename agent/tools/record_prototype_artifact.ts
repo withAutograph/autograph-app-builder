@@ -65,6 +65,9 @@ export default defineTool({
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
+        ...(current.githubSource === undefined
+          ? {}
+          : { githubSource: current.githubSource }),
         artifacts: recorded.artifacts,
       };
     });

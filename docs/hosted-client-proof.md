@@ -41,7 +41,7 @@ Copy `fixtures/hosted-proof/create-iterate-draft-pr.template.json` to a private
 input path and replace every repository, ref, SHA, digest, issuer, audience,
 resource, prompt, and request title with the exact approved values. The three
 approval descriptions emitted by Eve must each be one closed JSON
-`autograph-eve-approval-receipt-v1` value identical to the corresponding
+`autograph-eve-approval-receipt-v2` value identical to the corresponding
 scenario receipt. Prose matching cannot grant approval.
 
 ```sh
@@ -74,7 +74,9 @@ receipt:
   and `eve_cancel`;
 - an identical `eve_start` retry returns the same durable session;
 - the create and iterate phases consume all three exact AppSpec, change-set,
-  and draft-PR approval receipts;
+  and draft-PR approval receipts; each binds the stable repository ID and slug,
+  base ref/SHA, and exact subject digest, with publication bound to the sealed
+  proposal digest rather than only its change set;
 - the same session accepts an iteration through `eve_send`;
 - the iteration reaches `completed`, not merely `waiting`;
 - a public structural publication receipt proves a real draft GitHub URL plus

@@ -1,5 +1,6 @@
 import { defineState } from "eve/context";
 
+import type { ImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import type { SourceReceipt } from "@/lib/repository/source-receipt";
 
 export const APP_BUILDER_SOURCE_VERSION = 3 as const;
@@ -10,6 +11,7 @@ export type SourceWorkflowState =
       version: typeof APP_BUILDER_SOURCE_VERSION;
       phase: "reviewed" | "acquisition_approved";
       receipt: SourceReceipt;
+      githubSource?: ImmutableGitHubSourceReceipt;
       approvedByCallId?: string;
     };
 

@@ -1,17 +1,31 @@
 import {
+  assertExactDraftPullRequestProposal,
+  assertExactImmutableGitHubSourceReceipt,
+  createDraftPullRequestProposal,
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
   resolveImmutableExistingSource,
+  type DraftPullRequestProposal,
   type DraftPullRequestSuccessReceipt,
   type FreshRepositorySuccessReceipt,
   type GitHubPublicationAdapter,
   type GitHubPublicationReceiptStore,
   type ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
+import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
+import {
+  parseSourceReceiptEvidence,
+  type SourceReceiptEvidence,
+} from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import {
+  assertApprovalReceipt,
+  type ApprovalReceipt,
+} from "./approval-receipt";
 
 const supportedOperations = [
   "resolve-immutable-existing-source",
+  "seal-draft-pull-request-proposal",
   "create-approved-private-fresh-history-repository",
   "publish-approved-branch-and-draft-pull-request",
   "recover-lost-response-by-idempotency-key",
@@ -41,12 +55,19 @@ export interface GitHubPublicationRuntime {
     expectedTree: string;
     approvedByCallId: string;
   }): Promise<ImmutableGitHubSourceReceipt>;
+  sealDraftPullRequestProposal(input: {
+    githubSource: ImmutableGitHubSourceReceipt;
+    source: SourceReceiptEvidence;
+    review: ReviewedChangeSetReceipt;
+    title: string;
+  }): Promise<DraftPullRequestProposal>;
   createFreshRepository(input: {
     expectedProposalDigest: string;
     approvedByCallId: string;
   }): Promise<FreshRepositorySuccessReceipt>;
   publishDraftPullRequest(input: {
     expectedProposalDigest: string;
+    approvalReceipt: ApprovalReceipt;
     approvedByCallId: string;
   }): Promise<DraftPullRequestSuccessReceipt>;
 }
@@ -82,6 +103,9 @@ function disabledRuntime(): GitHubPublicationRuntime {
       return runtimeStatus(false);
     },
     async resolveImmutableSource() {
+      return unavailable();
+    },
+    async sealDraftPullRequestProposal() {
       return unavailable();
     },
     async createFreshRepository() {
@@ -132,6 +156,59 @@ export function composeGitHubPublicationRuntime(input: {
         resolvedByCallId: request.approvedByCallId,
       });
     },
+    async sealDraftPullRequestProposal(request) {
+      assertExactImmutableGitHubSourceReceipt(request.githubSource);
+      const source = parseSourceReceiptEvidence(request.source);
+      const expectedDefaultRef = `refs/heads/${request.githubSource.repository.defaultBranch}`;
+      if (
+        source.sourceKind !== "existing-repository" ||
+        request.githubSource.resolvedRef !== expectedDefaultRef ||
+        request.githubSource.resolvedSha !== source.sourceSha ||
+        request.githubSource.resolvedTree !== source.sourceTree ||
+        request.review.sourceSha !== source.sourceSha ||
+        request.review.sourceTree !== source.sourceTree
+      )
+        throw new Error(
+          "The reviewed change set is not bound to the immutable default-branch source.",
+        );
+
+      const installation = await adapter.inspectInstallation(
+        "publish-draft-pull-request",
+      );
+      const repository = await adapter.inspectRepository({
+        operation: "publish-draft-pull-request",
+        repositoryId: request.githubSource.repository.repositoryId,
+        ref: expectedDefaultRef,
+      });
+      if (
+        repository.repositoryId !==
+          request.githubSource.repository.repositoryId ||
+        repository.owner !== request.githubSource.repository.owner ||
+        repository.name !== request.githubSource.repository.name ||
+        repository.defaultBranch !==
+          request.githubSource.repository.defaultBranch ||
+        repository.headSha !== request.githubSource.resolvedSha ||
+        repository.headTree !== request.githubSource.resolvedTree
+      )
+        throw new Error(
+          "The GitHub default branch changed after immutable source review.",
+        );
+      const proposal = createDraftPullRequestProposal({
+        installation,
+        repository,
+        review: request.review,
+        changedPathsSinceBase: [],
+        title: request.title,
+      });
+      assertExactDraftPullRequestProposal(proposal);
+      await proposals.save(proposal);
+      const persisted = await proposals.read(proposal.digest);
+      if (JSON.stringify(persisted) !== JSON.stringify(proposal))
+        throw new Error(
+          "The sealed draft pull-request proposal did not persist exactly.",
+        );
+      return proposal;
+    },
     async createFreshRepository(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
       if (
@@ -162,6 +239,17 @@ export function composeGitHubPublicationRuntime(input: {
           "The exact draft-pull-request proposal is unavailable or changed.",
         );
       }
+      assertApprovalReceipt({
+        actual: request.approvalReceipt,
+        phase: "publication",
+        target: {
+          repositoryId: proposal.repositoryId,
+          repository: `${proposal.owner}/${proposal.name}`,
+          baseRef: `refs/heads/${proposal.baseBranch}`,
+          baseSha: proposal.baseSha,
+        },
+        subjectDigest: proposal.digest,
+      });
       return publishApprovedDraftPullRequest({
         adapter,
         store: receipts,

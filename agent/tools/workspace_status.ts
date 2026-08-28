@@ -59,6 +59,9 @@ function statusReceipt(
             digest: state.appSpec.digest,
             artifactRevision: state.appSpec.artifactRevision,
             acceptedByCallId: state.appSpec.acceptedByCallId,
+            ...(state.appSpec.approvalReceipt === undefined
+              ? {}
+              : { approvalReceipt: state.appSpec.approvalReceipt }),
           },
         }
       : {}),
@@ -147,6 +150,9 @@ function statusReceipt(
           review: {
             digest: state.reviewReceipt.digest,
             changeSetDigest: state.reviewReceipt.changeSetDigest,
+            ...(state.changeSetApprovalReceipt === undefined
+              ? {}
+              : { approvalReceipt: state.changeSetApprovalReceipt }),
           },
         }
       : {}),
