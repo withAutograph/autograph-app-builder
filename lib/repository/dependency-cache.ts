@@ -8,8 +8,8 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "c9a5faf2a5b042df708fb8deade12f399ef2547b";
-export const ARRUSTED_TARGET_TREE = "7f4cbdac458b74dd51a0c2a516c5da1c2f4d8755";
+export const ARRUSTED_TARGET_SHA = "2503b6ad5820f650b1469d72fc569260bee298a8";
+export const ARRUSTED_TARGET_TREE = "226cf97f187d50ba0db5877b62f7c38db95061da";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
 
@@ -32,22 +32,22 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     sha: gitObjectId,
     tree: gitObjectId,
     miseConfigSha256: z.literal(
-      "cf41b10e80b962d5519bcaa17ce4cf58a0a841bb08583a121c585278debc5351",
+      "563ef5a6a44ce320ce4833f61391ebd9f41b02ac542d4254f04087285ce449ae",
     ),
     miseLockSha256: z.literal(
-      "847ebdcfea49e4550ab80e909e61a855dea0fa8a12ff98c89d99f38fc9ea3ab2",
+      "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     ),
     bunLockSha256: z.literal(
-      "c82b398f634d1f07bf4dc5f369e26739ea7a5bef37dfc64123bc9492156c90ca",
+      "a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b",
     ),
     appIdentitySha256: z.literal(
       "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
     ),
     appContractSha256: z.literal(
-      "e391e032dcff5c63dea66c64e79c88be3ce4b9e1a00333b11cedb8836e109073",
+      "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     ),
     repositoryPreflightSha256: z.literal(
-      "5e2cf9854d73f3452dad5ada4720f0f7d009c137c0071845acc8892641126503",
+      "6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6",
     ),
     repositoryExecSha256: z.literal(
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
@@ -163,17 +163,17 @@ function fixtureManifest(
       sha: target.sourceSha,
       tree: target.sourceTree,
       miseConfigSha256:
-        "cf41b10e80b962d5519bcaa17ce4cf58a0a841bb08583a121c585278debc5351",
+        "563ef5a6a44ce320ce4833f61391ebd9f41b02ac542d4254f04087285ce449ae",
       miseLockSha256:
-        "847ebdcfea49e4550ab80e909e61a855dea0fa8a12ff98c89d99f38fc9ea3ab2",
+        "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
       bunLockSha256:
-        "c82b398f634d1f07bf4dc5f369e26739ea7a5bef37dfc64123bc9492156c90ca",
+        "a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b",
       appIdentitySha256:
         "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
       appContractSha256:
-        "e391e032dcff5c63dea66c64e79c88be3ce4b9e1a00333b11cedb8836e109073",
+        "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
       repositoryPreflightSha256:
-        "5e2cf9854d73f3452dad5ada4720f0f7d009c137c0071845acc8892641126503",
+        "6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6",
       repositoryExecSha256:
         "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
     },

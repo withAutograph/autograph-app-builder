@@ -4,23 +4,23 @@ import { join } from "node:path";
 
 export const HOSTED_ARTIFACT_CONTRACT_VERSION = 1;
 export const HOSTED_ARTIFACT_PATH =
-  "artifacts/hosted/arrusted-c9a5faf2-preview.tar.gz";
-export const HOSTED_ARTIFACT_BYTES = 5_490_966;
+  "artifacts/hosted/arrusted-2503b6ad-preview.tar.gz";
+export const HOSTED_ARTIFACT_BYTES = 5_609_441;
 export const HOSTED_ARTIFACT_SHA256 =
-  "26c40cc2313bbe2e14e1e1675cd44cc0f61958dfff08491ea5cb3fae1a51600d";
+  "4d4a68a40aa87c553ff97ec2b3fd1a17be6f475284bdf30d064f90e40b4651aa";
 export const HOSTED_SOURCE_PATH =
   "/opt/app-builder/hosted-source/arrusted-development";
 export const HOSTED_SOURCE_ARCHIVE_SHA256 =
-  "728dd05b23de874080ec8d795249a6350db472571bbd1bb9629d520e6263a7ef";
-export const HOSTED_SOURCE_ARCHIVE_BYTES = 3_923_701;
-export const HOSTED_SOURCE_ENTRY_COUNT = 1_713;
+  "70595eb3e4a923f49120a64e025c913fb8f247dae5392dbd8cb363a466693b36";
+export const HOSTED_SOURCE_ARCHIVE_BYTES = 4_023_766;
+export const HOSTED_SOURCE_ENTRY_COUNT = 1_744;
 export const HOSTED_SOURCE_WORKSPACE_DIGEST =
-  "a825a753e9d64ff9c70d62daf3b9518b8cea523f1663c17d15e86ede4e2ac46b";
+  "614452877b5271bc9c7c89bf19399a8241267a578987aee605996efd5fb4c57d";
 export const HOSTED_DEPENDENCY_MANIFEST_SHA256 =
-  "b85e7c3bc83685a10f7ccf372e0f074371977a62d1dbd726a7e0df9bdc2e7ef6";
+  "63190de081cc2388c6d25e1ad526277931d0bf1d814b9256b6459b5112c1651f";
 export const HOSTED_DEPENDENCY_ARCHIVE_SHA256 =
-  "c5820c64cdd4961a2f8a2ca1b0f73a615d9c938c87b5a8c2276dba59fd843afa";
-export const HOSTED_DEPENDENCY_ARCHIVE_BYTES = 1_343_984;
+  "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
+export const HOSTED_DEPENDENCY_ARCHIVE_BYTES = 1_356_765;
 
 const sha256 = (value: Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
