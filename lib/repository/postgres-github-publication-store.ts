@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import * as databaseSchema from "../db/schema";
-import { githubPublicationProposals } from "../db/schema";
+import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import { hostedGitHubPublicationProposals } from "../db/schema";
 import {
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
@@ -12,6 +13,7 @@ import {
   type GitHubPublicationReceiptStore,
 } from "./github-publication";
 import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-publication-receipt-store";
+import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type GitHubPublicationProposal =
@@ -87,17 +89,30 @@ function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
  */
 export function createPostgresGitHubPublicationStores(
   database: Database,
+  authorityInput: HostedGitHubTenantAuthority,
   now: () => Date = () => new Date(),
 ): {
   proposals: GitHubPublicationProposalStore;
   receipts: GitHubPublicationReceiptStore;
 } {
+  const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+  const tenantPredicate = and(
+    eq(hostedGitHubPublicationProposals.issuer, authority.issuer),
+    eq(hostedGitHubPublicationProposals.audience, authority.audience),
+    eq(hostedGitHubPublicationProposals.workspaceId, authority.workspaceId),
+    eq(hostedGitHubPublicationProposals.ownerUserId, authority.ownerUserId),
+  );
   const proposals: GitHubPublicationProposalStore = {
     async read(proposalDigest) {
       const rows = await database
         .select()
-        .from(githubPublicationProposals)
-        .where(eq(githubPublicationProposals.proposalDigest, proposalDigest))
+        .from(hostedGitHubPublicationProposals)
+        .where(
+          and(
+            tenantPredicate,
+            eq(hostedGitHubPublicationProposals.proposalDigest, proposalDigest),
+          ),
+        )
         .limit(1);
       return rows[0] === undefined
         ? undefined
@@ -106,8 +121,8 @@ export function createPostgresGitHubPublicationStores(
     async save(proposalInput) {
       const proposal = parseProposal(proposalInput);
       const inserted = await database
-        .insert(githubPublicationProposals)
-        .values(proposalValues(proposal, now()))
+        .insert(hostedGitHubPublicationProposals)
+        .values({ ...authority, ...proposalValues(proposal, now()) })
         .onConflictDoNothing()
         .returning();
       if (inserted.length === 1) {
@@ -122,7 +137,7 @@ export function createPostgresGitHubPublicationStores(
   };
 
   const receipts: GitHubPublicationReceiptStore =
-    createPostgresGitHubPublicationReceiptStore(database, now);
+    createPostgresGitHubPublicationReceiptStore(database, authority, now);
 
   return { proposals, receipts };
 }

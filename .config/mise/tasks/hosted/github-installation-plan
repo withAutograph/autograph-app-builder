@@ -1,0 +1,11 @@
+#!/bin/sh
+#MISE description="Plan one tenant-bound GitHub App installation binding"
+set -eu
+
+if [ "$#" -ne 2 ] || [ "$1" != "--request-file" ]; then
+  echo "usage: mise run hosted:github-installation-plan -- --request-file /absolute/owner-only.json" >&2
+  exit 64
+fi
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx lib/db/hosted-github-installation-cli.mts \
+  plan --request-file "$2"

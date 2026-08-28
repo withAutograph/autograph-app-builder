@@ -13,6 +13,12 @@ import {
 } from "./postgres-github-publication-receipt-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
+const authority = {
+  issuer: "https://builder.example.test/api/auth",
+  audience: "https://builder.example.test/mcp",
+  workspaceId: "workspace_one",
+  ownerUserId: "user_one",
+} as const;
 
 const sha256 = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -109,7 +115,10 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
   it("reads only one exact proposal-digest row", async () => {
     const receipt = pendingReceipt();
     const fixture = databaseFixture({ selected: [journalRow(receipt)] });
-    const store = createPostgresGitHubPublicationReceiptStore(fixture.database);
+    const store = createPostgresGitHubPublicationReceiptStore(
+      fixture.database,
+      authority,
+    );
     await expect(store.read(receipt.proposalDigest)).resolves.toEqual(receipt);
     expect(fixture.select).toHaveBeenCalledTimes(1);
     expect(fixture.limit).toHaveBeenCalledWith(1);
@@ -123,6 +132,7 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
     });
     const store = createPostgresGitHubPublicationReceiptStore(
       successful.database,
+      authority,
       () => new Date("2026-08-27T00:00:00.000Z"),
     );
     await expect(
@@ -136,6 +146,7 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
     await expect(
       createPostgresGitHubPublicationReceiptStore(
         collided.database,
+        authority,
       ).compareAndSet(receipt.proposalDigest, undefined, receipt),
     ).resolves.toBe(false);
   });
@@ -145,7 +156,10 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
     const fixture = databaseFixture({
       updated: [{ proposalDigest: receipt.proposalDigest }],
     });
-    const store = createPostgresGitHubPublicationReceiptStore(fixture.database);
+    const store = createPostgresGitHubPublicationReceiptStore(
+      fixture.database,
+      authority,
+    );
     await expect(
       store.compareAndSet(receipt.proposalDigest, "c".repeat(64), receipt),
     ).resolves.toBe(true);
@@ -163,21 +177,25 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
         "lib/repository/postgres-github-publication-receipt-store.ts",
         "utf8",
       ),
-      readFile("drizzle/0005_github_publication_journal.sql", "utf8"),
+      readFile("drizzle/0006_tenant_github_publication.sql", "utf8"),
     ]);
     expect(adapter).toContain(
-      "eq(githubPublicationJournals.proposalDigest, proposalDigest)",
+      "eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)",
     );
     expect(adapter).toContain(
-      "eq(githubPublicationJournals.receiptDigest, expectedDigest)",
+      "eq(hostedGitHubPublicationJournals.receiptDigest, expectedDigest)",
     );
     expect(adapter).toContain(
-      "eq(githubPublicationJournals.kind, receipt.kind)",
+      "eq(hostedGitHubPublicationJournals.kind, receipt.kind)",
     );
-    expect(adapter).toContain("githubPublicationJournals.idempotencyKey");
-    expect(migration).toContain('CREATE TABLE "github_publication_journal"');
+    expect(adapter).toContain("hostedGitHubPublicationJournals.idempotencyKey");
+    expect(adapter).toContain("hostedGitHubPublicationJournals.issuer");
+    expect(adapter).toContain("hostedGitHubPublicationJournals.workspaceId");
     expect(migration).toContain(
-      'CREATE UNIQUE INDEX "github_publication_journal_idempotency_idx"',
+      'CREATE TABLE "hosted_github_publication_journal"',
+    );
+    expect(migration).toContain(
+      'CREATE UNIQUE INDEX "hosted_github_publication_journal_idempotency_uidx"',
     );
     expect(migration).toContain(
       "CHECK (\"status\" IN ('pending', 'failed', 'succeeded'))",

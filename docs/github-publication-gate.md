@@ -20,11 +20,20 @@ template materialization, and reviewed file bytes.
 
 `createPostgresGitHubPublicationStores` persists closed proposals and delegates
 mutation receipts to the single shared PostgreSQL CAS journal in the
-Drizzle-owned `github_publication_proposal` and `github_publication_journal`
-tables. The JSON record is authoritative; duplicate index columns are rebound
-on every read, and receipt transitions use one SQL compare-and-set against the
-prior receipt digest. Migration remains the mise-owned `database:migrate`
-operation.
+Drizzle-owned tenant-scoped `hosted_github_publication_proposal` and
+`hosted_github_publication_journal` tables. Every primary key, idempotency
+index, read, insert, and compare-and-set includes the exact issuer, audience,
+workspace, and owner tuple. The JSON record is authoritative; duplicate index
+columns are rebound on every read, and receipt transitions use one SQL
+compare-and-set against the prior receipt digest. The earlier unscoped V5
+tables remain unused compatibility artifacts. Migration remains the mise-owned
+`database:migrate` operation.
+
+`hosted_github_installation` binds that same tenant tuple to one exact GitHub
+App installation and expected account identity. Binding is available only
+through the owner-only, confirmation-digest-bound
+`hosted:github-installation-bind` mise task. It stores no application private
+key, installation token, user OAuth token, or provider response.
 
 `composeGitHubPublicationRuntime` enables the typed tools only when an adapter,
 proposal store, and receipt store are all injected with `enabled: true`. The
