@@ -11,14 +11,14 @@ without changing that source repository.
 
 ## Install
 
-Once the pre-release `v0.2.0` GitHub release is published, download and verify
+Once the pre-release `v0.2.1` GitHub release is published, download and verify
 its complete asset set, extract the endpoint-bound Codex marketplace, and
 install it. These commands fail closed until that release exists:
 
 ```sh
 (
   set -eu
-  release_version=0.2.0
+  release_version=0.2.1
   release_dir="$PWD/autograph-app-builder-release-$release_version"
   marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
   mkdir "$release_dir" "$marketplace_dir"

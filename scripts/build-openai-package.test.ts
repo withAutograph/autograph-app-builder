@@ -36,7 +36,7 @@ const runGenerator = (cwd: string, endpoint: string) =>
 const writeFixture = async (
   root: string,
   {
-    version = "0.2.0",
+    version = "0.2.1",
     extraServer = false,
   }: { version?: string; extraServer?: boolean } = {},
 ) => {
@@ -97,7 +97,7 @@ describe("OpenAI package generator", () => {
       ]);
       expect(codex.mcpServers["autograph-app-builder"].url).toBe(endpoint);
       expect(Object.keys(codex.mcpServers)).toEqual(["autograph-app-builder"]);
-      expect(manifest.version).toBe("0.2.0");
+      expect(manifest.version).toBe("0.2.1");
       expect(manifest.interface).toMatchObject({
         displayName: "Autograph App Builder",
         shortDescription: "Design and create apps with Autograph",
@@ -178,7 +178,7 @@ describe("OpenAI package generator", () => {
     }
   });
 
-  it.each(["0.1.0", "0.2.1", "1.0.0"])(
+  it.each(["0.1.0", "0.2.0", "1.0.0"])(
     "rejects package version %s",
     async (version) => {
       const root = await mkdtemp(join(tmpdir(), "autograph-openai-package-"));

@@ -2,23 +2,23 @@
 
 ## Install before shared marketplace publication
 
-Once the pre-release `v0.2.0` GitHub release is published, use its public
+Once the pre-release `v0.2.1` GitHub release is published, use its public
 [release assets](https://github.com/withAutograph/autograph-app-builder/releases)
 until the shared marketplace is available. The release contains:
 
-- `autograph-app-builder-0.2.0.tar.gz`
-- `autograph-app-builder-codex-marketplace-0.2.0.tar.gz`
+- `autograph-app-builder-0.2.1.tar.gz`
+- `autograph-app-builder-codex-marketplace-0.2.1.tar.gz`
 - `release-receipt.json`
 - `SHA256SUMS`
 
 Download the complete asset set, verify both archive checksums and GitHub's
 immutable release attestations, install, and open a new Codex task. These
-commands fail closed until `v0.2.0` exists:
+commands fail closed until `v0.2.1` exists:
 
 ```sh
 (
   set -eu
-  release_version=0.2.0
+  release_version=0.2.1
   release_dir="$PWD/autograph-app-builder-release-$release_version"
   marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
   mkdir "$release_dir" "$marketplace_dir"
@@ -62,7 +62,7 @@ and install its `autograph` listing:
 (
   set -eu
   codex plugin marketplace add withAutograph/autograph-app-builder \
-    --ref codex-marketplace-v0.2.0
+    --ref codex-marketplace-v0.2.1
   codex plugin add autograph-app-builder@autograph
 )
 ```
@@ -95,8 +95,8 @@ doesn't offer a catalog listing.
 
 Every release contains:
 
-- `autograph-app-builder-0.2.0.tar.gz`, the portable Agent Plugins package
-- `autograph-app-builder-codex-marketplace-0.2.0.tar.gz`, a self-contained
+- `autograph-app-builder-0.2.1.tar.gz`, the portable Agent Plugins package
+- `autograph-app-builder-codex-marketplace-0.2.1.tar.gz`, a self-contained
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
@@ -110,7 +110,7 @@ then extract the portable archive:
 ```sh
 (
   set -eu
-  release_version=0.2.0
+  release_version=0.2.1
   release_dir="$PWD/autograph-app-builder-release-$release_version"
   mkdir "$release_dir"
   gh release download "v$release_version" \
@@ -149,10 +149,10 @@ marketplace directory:
   set -eu
   codex plugin remove autograph-app-builder@autograph
   codex plugin marketplace remove autograph
-  mkdir autograph-app-builder-marketplace-0.2.0
-  tar -xzf autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
-    -C autograph-app-builder-marketplace-0.2.0
-  codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.2.0"
+  mkdir autograph-app-builder-marketplace-0.2.1
+  tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz \
+    -C autograph-app-builder-marketplace-0.2.1
+  codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.2.1"
   codex plugin add autograph-app-builder@autograph
 )
 ```
@@ -175,6 +175,12 @@ The source `mcp.json` intentionally uses a loopback development endpoint. Do not
 publish or redistribute source-checkout bytes as an endpoint-bound release.
 
 ## Maintainer release flow
+
+Publish `v0.2.1` only through the existing tag-triggered
+`.github/workflows/release.yml` workflow. Do not create or upload the release
+manually. The tag may be created only after the exact release SHA has passed
+the hosted proof and `AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to
+that same accepted SHA.
 
 Maintainers set `AUTOGRAPH_APP_BUILDER_RELEASE_ORIGIN` to the exact deployed
 HTTPS origin. A `vMAJOR.MINOR.PATCH` tag whose version matches `plugin.json`
