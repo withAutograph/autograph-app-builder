@@ -71,7 +71,7 @@ async function fixture() {
     "branch publication fixture",
   ]);
   const source = await inspectSourceReceipt("existing-repository", root);
-  const topology = join(root, "apps/shell/microfrontends.json");
+  const topology = join(root, "microfrontends.json");
   const oldTopology = await readFile(topology);
   const nextTopology = Buffer.from('{"branch":true}\n');
   const added = Buffer.from("new branch file\n");
@@ -84,7 +84,7 @@ async function fixture() {
       after: { mode: "644", digest: hash(added) },
     },
     {
-      path: "apps/shell/microfrontends.json",
+      path: "microfrontends.json",
       kind: "modified",
       before: { mode: "644", digest: hash(oldTopology) },
       after: { mode: "644", digest: hash(nextTopology) },
@@ -122,7 +122,7 @@ async function fixture() {
       version: 1 as const,
       contractPath: "apps/example/app.contract.json",
       topology: {
-        path: "apps/shell/microfrontends.json",
+        path: "microfrontends.json",
         oldDigest: "5".repeat(64),
         newDigest: "6".repeat(64),
       },
@@ -137,7 +137,7 @@ async function fixture() {
   const review = createReviewedChangeSetReceipt(changeSet, "review-call");
   const overlay = new Map<string, Uint8Array>([
     ["apps/example/new.txt", added],
-    ["apps/shell/microfrontends.json", nextTopology],
+    ["microfrontends.json", nextTopology],
     [appSpecPath, acceptedAppSpec],
   ]);
   return {
@@ -288,9 +288,7 @@ describe(
         git(proposal.worktreePath, ["log", "-1", "--format=%s"]).trim(),
       ).toBe("branch publication fixture");
       expect(
-        await readFile(
-          join(proposal.worktreePath, "apps/shell/microfrontends.json"),
-        ),
+        await readFile(join(proposal.worktreePath, "microfrontends.json")),
       ).toEqual(input.nextTopology);
       expect(
         await readFile(join(proposal.worktreePath, input.appSpecPath)),

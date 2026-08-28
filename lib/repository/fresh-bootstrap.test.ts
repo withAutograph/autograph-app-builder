@@ -89,7 +89,7 @@ async function createTestSource(): Promise<string> {
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":
       "export default {};\n",
-    "apps/shell/microfrontends.json": "{}\n",
+    "microfrontends.json": "{}\n",
   };
   for (const [path, content] of Object.entries(files)) {
     const target = join(root, path);
@@ -136,7 +136,7 @@ async function fixture(
 ) {
   const sourceRoot = await createTestSource();
   const source = await inspectSourceReceipt("fresh-template", sourceRoot);
-  const changedPath = "apps/shell/microfrontends.json";
+  const changedPath = "microfrontends.json";
   const beforeBytes = Buffer.from("{}\n");
   const afterBytes = Buffer.from('{"apps":[]}\n');
   const changes = [
@@ -169,7 +169,7 @@ async function fixture(
       version: 1 as const,
       contractPath: "apps/example/app.contract.json",
       topology: {
-        path: "apps/shell/microfrontends.json",
+        path: "microfrontends.json",
         oldDigest: "5".repeat(64),
         newDigest: "6".repeat(64),
       },

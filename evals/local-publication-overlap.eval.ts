@@ -13,7 +13,7 @@ export default defineEval({
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(t, repository, "publication-overlap");
     await writeFile(
-      join(repository, "apps/shell/microfrontends.json"),
+      join(repository, "microfrontends.json"),
       "concurrent overlap\n",
     );
 

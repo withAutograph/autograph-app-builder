@@ -18,12 +18,12 @@ function sandboxFixture() {
     [
       ".app-builder/source-files.json",
       JSON.stringify([
-        { path: "apps/shell/microfrontends.json" },
+        { path: "microfrontends.json" },
         { path: "apps/shell/app/auth/[[...path]]/page.tsx" },
         { path: "docs/assets/Autograph FavIcon.png" },
       ]),
     ],
-    ["repository/apps/shell/microfrontends.json", "{}\n"],
+    ["repository/microfrontends.json", "{}\n"],
     ["repository/apps/shell/app/auth/[[...path]]/page.tsx", "export {};\n"],
     ["repository/docs/assets/Autograph FavIcon.png", "fixture\n"],
   ]);

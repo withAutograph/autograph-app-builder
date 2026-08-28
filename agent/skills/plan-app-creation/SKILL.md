@@ -21,7 +21,7 @@ through a generic shell.
    a generic “create an app” request as bare scaffolding.
 2. Read [the AppContractV1 reference](references/app-contract-v1.md) completely.
 3. Inspect the prepared target workspace's `git status --short`, workspace package identities, existing
-   `apps/<id>` directories, `apps/shell/microfrontends.json`, and the
+   `apps/<id>` directories, `microfrontends.json`, and the
    conventional `prototype/<id>/app-spec.md`. Do not modify production source
    or topology.
 4. Collect only the lowercase kebab-case app id as contract input. Do not ask

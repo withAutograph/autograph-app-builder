@@ -60,6 +60,6 @@ decisions belong in the accepted AppSpec; provider configuration remains a
 separate authority.
 
 The planner reads current repository state and
-`apps/shell/microfrontends.json`. It returns a proposal with `mutations: []`;
+`microfrontends.json`. It returns a proposal with `mutations: []`;
 it never creates the future directory or writes
 `apps/<id>/app.contract.json`.

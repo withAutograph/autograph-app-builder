@@ -17,7 +17,7 @@ export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 export const SUPPORTED_TEMPLATE_INPUT_PATHS = [
   ".config/mise/config.toml",
   ".github/workflows/cd.yml",
-  "apps/shell/microfrontends.json",
+  "microfrontends.json",
   ".config/mise/scripts/repository/app-contract.ts",
   ".config/mise/scripts/repository/app-identity.ts",
   ".config/mise/scripts/repository/repository-preflight.ts",
@@ -395,7 +395,7 @@ export async function inspectSupportedRepository(
       scaffoldCommand: expectedCommands.scaffold,
       applyCommand: expectedCommands.apply,
       repositoryPreflightCommand: expectedCommands.preflight,
-      topologyOwner: "apps/shell/microfrontends.json",
+      topologyOwner: "microfrontends.json",
       validationCommands: expectedCommands.validation,
       releaseGate: "REPOSITORY_RELEASE_ENABLED",
     },

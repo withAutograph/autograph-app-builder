@@ -23,14 +23,11 @@ export const targetApplyCommandReceiptSchema = z.strictObject({
   contractPath: repositoryPath,
   workspacePath: repositoryPath,
   topology: z.strictObject({
-    path: z.literal("apps/shell/microfrontends.json"),
+    path: z.literal("microfrontends.json"),
     oldDigest: digest,
     newDigest: digest,
   }),
-  mutations: z.tuple([
-    repositoryPath,
-    z.literal("apps/shell/microfrontends.json"),
-  ]),
+  mutations: z.tuple([repositoryPath, z.literal("microfrontends.json")]),
   recovered: z.boolean(),
   omittedAuthorities: z.tuple([
     z.literal("provider-provisioning"),
@@ -418,7 +415,7 @@ function allowedApplyChange(
 ): boolean {
   return (
     path === appSpecPath ||
-    path === "apps/shell/microfrontends.json" ||
+    path === "microfrontends.json" ||
     path.startsWith(`apps/${appId}/`)
   );
 }
@@ -478,7 +475,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       content: `${JSON.stringify({ name: `@autograph/${appId}` }, null, 2)}\n`,
     });
     await sandbox.writeTextFile({
-      path: `${relativeRoot}/apps/shell/microfrontends.json`,
+      path: `${relativeRoot}/microfrontends.json`,
       content: `${JSON.stringify({ applications: [appId] }, null, 2)}\n`,
     });
     if (appId === "apply-failure")
@@ -491,14 +488,11 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       contractPath: proposal.futurePath,
       workspacePath: proposal.plan.source.workspacePath,
       topology: {
-        path: "apps/shell/microfrontends.json",
+        path: "microfrontends.json",
         oldDigest,
         newDigest,
       },
-      mutations: [
-        proposal.plan.source.workspacePath,
-        "apps/shell/microfrontends.json",
-      ],
+      mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
       recovered: false,
       omittedAuthorities: [
         "provider-provisioning",

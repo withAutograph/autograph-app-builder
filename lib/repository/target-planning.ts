@@ -65,7 +65,7 @@ export const targetProposalSchema = z.strictObject({
       }),
     }),
     topology: z.strictObject({
-      configPath: z.literal("apps/shell/microfrontends.json"),
+      configPath: z.literal("microfrontends.json"),
       projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
       packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
       routes: z.array(z.string().startsWith("/")),
@@ -309,7 +309,7 @@ export function fixtureTargetCommandExecutor(): TargetCommandExecutor {
           optionalCapabilities: { integrations: [], hostedResources: [] },
         },
         topology: {
-          configPath: "apps/shell/microfrontends.json",
+          configPath: "microfrontends.json",
           projectName: identity.projectName,
           packageName: identity.packageName,
           routes: identity.baseRoutes,

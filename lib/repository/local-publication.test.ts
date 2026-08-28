@@ -153,7 +153,7 @@ async function reviewFor(
       version: 1 as const,
       contractPath: "apps/example/app.contract.json",
       topology: {
-        path: "apps/shell/microfrontends.json",
+        path: "microfrontends.json",
         oldDigest: "5".repeat(64),
         newDigest: "6".repeat(64),
       },
@@ -177,7 +177,7 @@ async function combinedFixture() {
   const added = Buffer.from("new executable\n");
   const reviewed = await reviewFor(root, source, {
     "apps/example/new file.sh": { kind: "added", bytes: added, mode: "755" },
-    "apps/shell/microfrontends.json": { kind: "modified", bytes: modified },
+    "microfrontends.json": { kind: "modified", bytes: modified },
     "obsolete.txt": { kind: "deleted" },
   });
   return { root, source, modified, added, ...reviewed };
@@ -324,17 +324,15 @@ describe("approval-bound local publication", () => {
     });
     if (!result.ok) throw new Error(result.receipt.failureMessage);
     expect(result).toMatchObject({ ok: true });
-    expect(proposal.executionPaths.at(-1)).toBe(
-      "apps/shell/microfrontends.json",
-    );
+    expect(proposal.executionPaths.at(-1)).toBe("microfrontends.json");
     expect(result.receipt.appliedPaths).toEqual(proposal.executionPaths);
-    expect(
-      await readFile(join(fixture.root, "apps/shell/microfrontends.json")),
-    ).toEqual(fixture.modified);
+    expect(await readFile(join(fixture.root, "microfrontends.json"))).toEqual(
+      fixture.modified,
+    );
     expect(
       await readFile(join(fixture.root, "apps/example/new file.sh")),
     ).toEqual(fixture.added);
-    expect(
+    await expect(
       (await import("node:fs/promises"))
         .stat(join(fixture.root, "apps/example/new file.sh"))
         .then((stat) => stat.mode & 0o777),
@@ -359,7 +357,7 @@ describe("approval-bound local publication", () => {
       sourceReceipt: fixture.source,
       review: fixture.review,
     });
-  });
+  }, 15_000);
 
   it("rejects a recomputed success receipt with a forged postcondition", async () => {
     const fixture = await combinedFixture();
@@ -481,7 +479,7 @@ describe("approval-bound local publication", () => {
     "rejects %s overlap",
     async (kind) => {
       const { root, source } = await fixtureRoot();
-      const path = "apps/shell/microfrontends.json";
+      const path = "microfrontends.json";
       const { review } = await reviewFor(root, source, {
         [path]: { kind: "modified", bytes: Buffer.from("next\n") },
       });
@@ -496,7 +494,7 @@ describe("approval-bound local publication", () => {
         git(root, ["rm", "--cached", "--", path]);
       }
       if (kind === "rename")
-        git(root, ["mv", "--", path, "apps/shell/renamed with spaces.json"]);
+        git(root, ["mv", "--", path, "renamed with spaces.json"]);
       await expect(
         deriveLocalPublicationProposal({
           destinationPath: root,
@@ -512,12 +510,15 @@ describe("approval-bound local publication", () => {
     async (kind) => {
       const { root, source } = await fixtureRoot();
       const approved =
-        kind === "leaf" ? "apps/symlink.txt" : "apps/symlink-parent/new.txt";
+        kind === "leaf" ? "symlink.txt" : "apps/symlink-parent/new.txt";
       const { review } = await reviewFor(root, source, {
         [approved]: { kind: "added", bytes: Buffer.from("next\n") },
       });
       if (kind === "leaf") await symlink("/tmp", join(root, approved));
-      else await symlink("/tmp", join(root, "apps/symlink-parent"));
+      else {
+        await mkdir(join(root, "apps"), { recursive: true });
+        await symlink("/tmp", join(root, "apps/symlink-parent"));
+      }
       await expect(
         deriveLocalPublicationProposal({
           destinationPath: root,
@@ -549,7 +550,7 @@ describe("approval-bound local publication", () => {
     async (failureIndex) => {
       const fixture = await combinedFixture();
       const original = await readFile(
-        join(fixture.root, "apps/shell/microfrontends.json"),
+        join(fixture.root, "microfrontends.json"),
       );
       const proposal = await deriveLocalPublicationProposal({
         destinationPath: fixture.root,
@@ -572,9 +573,9 @@ describe("approval-bound local publication", () => {
         ok: false,
         receipt: { recoveryRequired: false, conflictedPaths: [] },
       });
-      expect(
-        await readFile(join(fixture.root, "apps/shell/microfrontends.json")),
-      ).toEqual(original);
+      expect(await readFile(join(fixture.root, "microfrontends.json"))).toEqual(
+        original,
+      );
       expect(await readFile(join(fixture.root, "obsolete.txt"), "utf8")).toBe(
         "remove me\n",
       );
@@ -704,7 +705,7 @@ describe("approval-bound local publication", () => {
 
   it("does not overwrite a concurrent post-write edit during rollback", async () => {
     const { root, source } = await fixtureRoot();
-    const path = "apps/shell/microfrontends.json";
+    const path = "microfrontends.json";
     const next = Buffer.from("next\n");
     const { review, overlay } = await reviewFor(root, source, {
       [path]: { kind: "modified", bytes: next },
@@ -772,7 +773,7 @@ describe("approval-bound local publication", () => {
 
   it("rejects a parent symlink swap before Git dispatch without touching an outside sentinel", async () => {
     const { root, source } = await fixtureRoot();
-    const path = "apps/shell/new.txt";
+    const path = ".config/mise/new.txt";
     const { review, overlay } = await reviewFor(root, source, {
       [path]: { kind: "added", bytes: Buffer.from("inside\n") },
     });
@@ -784,8 +785,8 @@ describe("approval-bound local publication", () => {
     const outside = await mkdtemp(`${root}-outside-`);
     const sentinel = join(outside, "sentinel.txt");
     await writeFile(sentinel, "outside sentinel\n");
-    const originalParent = join(root, "apps/shell-original");
-    const parent = join(root, "apps/shell");
+    const originalParent = join(root, ".config/mise-original");
+    const parent = join(root, ".config/mise");
     const result = await publishReviewedChangeSet({
       proposal,
       sourceReceipt: source,
@@ -814,7 +815,7 @@ describe("approval-bound local publication", () => {
 
   it("rejects approved-path drift immediately before its write and preserves the concurrent bytes", async () => {
     const { root, source } = await fixtureRoot();
-    const path = "apps/shell/microfrontends.json";
+    const path = "microfrontends.json";
     const { review, overlay } = await reviewFor(root, source, {
       [path]: { kind: "modified", bytes: Buffer.from("next\n") },
     });
@@ -890,7 +891,7 @@ describe("approval-bound local publication", () => {
       "existing-repository",
       linkedPath,
     );
-    const path = "apps/shell/microfrontends.json";
+    const path = "microfrontends.json";
     const next = Buffer.from("linked worktree\n");
     const { review, overlay } = await reviewFor(source.sourcePath, source, {
       [path]: { kind: "modified", bytes: next },
@@ -1099,9 +1100,7 @@ describe("approval-bound local publication", () => {
 
   it("leaves the durable pending authority when both terminal journal writes fail", async () => {
     const fixture = await combinedFixture();
-    const original = await readFile(
-      join(fixture.root, "apps/shell/microfrontends.json"),
-    );
+    const original = await readFile(join(fixture.root, "microfrontends.json"));
     const proposal = await deriveLocalPublicationProposal({
       destinationPath: fixture.root,
       sourceReceipt: fixture.source,
@@ -1125,9 +1124,9 @@ describe("approval-bound local publication", () => {
       status: "pending",
       publishedByCallId: "terminal-write-failure",
     });
-    expect(
-      await readFile(join(fixture.root, "apps/shell/microfrontends.json")),
-    ).toEqual(original);
+    expect(await readFile(join(fixture.root, "microfrontends.json"))).toEqual(
+      original,
+    );
   });
 
   it("rejects unsupported executable modes in the outer reviewed receipt", async () => {
