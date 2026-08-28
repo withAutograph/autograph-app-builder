@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import {
   deriveInstalledEveStatus,
+  latestInstalledImplementationPlan,
   latestInstalledPrototype,
   projectInstalledEveEvents,
   projectInstalledEveEvent,
@@ -20,6 +21,7 @@ function recordedPrototypeEvents(input?: {
   callId?: string;
   content?: string;
   outputDigest?: string;
+  invalidated?: boolean;
   resultStatus?: "completed" | "failed" | "rejected";
   resultToolName?: string;
 }): MessageStreamEvent[] {
@@ -65,6 +67,107 @@ function recordedPrototypeEvents(input?: {
             recordedByCallId: callId,
             size: Buffer.byteLength(content),
             reused: false,
+            ...(input?.invalidated === undefined
+              ? {}
+              : { invalidated: input.invalidated }),
+          },
+        },
+      },
+    }),
+  ];
+}
+
+function recordedPlanEvents(input?: {
+  callId?: string;
+  expectedAppSpecDigest?: string;
+  outputAppSpecDigest?: string;
+  outputDigest?: string;
+  resultStatus?: "completed" | "failed" | "rejected";
+  resultToolName?: string;
+  imageDigest?: string;
+  blockers?: string[];
+}): MessageStreamEvent[] {
+  const callId = input?.callId ?? "call_plan";
+  const expectedAppSpecDigest = input?.expectedAppSpecDigest ?? "a".repeat(64);
+  const outputAppSpecDigest =
+    input?.outputAppSpecDigest ?? expectedAppSpecDigest;
+  const target = {
+    contract: {
+      version: 1 as const,
+      appId: "vendor-onboarding",
+      appSpec: {
+        path: "prototype/vendor-onboarding/app-spec.md",
+        sha256: outputAppSpecDigest,
+      },
+    },
+    futurePath: "apps/vendor-onboarding/app.contract.json",
+    plan: {
+      source: {
+        workspacePath: "apps/vendor-onboarding",
+        runtime: "nextjs" as const,
+        packageName: "@autograph/vendor-onboarding",
+        schema: { kind: "none" as const },
+      },
+      product: {
+        owner: "operations",
+        appSpec: {
+          path: "prototype/vendor-onboarding/app-spec.md",
+          sha256: outputAppSpecDigest,
+        },
+        optionalCapabilities: { integrations: [], hostedResources: [] },
+      },
+      topology: {
+        configPath: "microfrontends.json" as const,
+        projectName: "apps-vendor-onboarding",
+        packageName: "@autograph/vendor-onboarding",
+        routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      },
+    },
+    blockers: input?.blockers ?? [],
+    mutations: [] as [],
+  };
+  const unsigned = {
+    version: 1 as const,
+    sourceSha: "1".repeat(40),
+    sourceTree: "2".repeat(40),
+    eligibilityDigest: "3".repeat(64),
+    workspaceDigest: "4".repeat(64),
+    imageDigest:
+      input?.imageDigest ?? `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
+    dependencyCacheDigest: "6".repeat(64),
+    appSpecDigest: outputAppSpecDigest,
+    artifactRevision: "7".repeat(64),
+    identityDigest: "8".repeat(64),
+    contractDigest: digest(JSON.stringify(target.contract)),
+    target,
+    plannedByCallId: callId,
+  };
+  return [
+    installedEvent({
+      type: "actions.requested",
+      data: {
+        actions: [
+          {
+            kind: "tool-call",
+            callId,
+            toolName: "plan_app_creation",
+            input: { expectedAppSpecDigest },
+          },
+        ],
+      },
+    }),
+    installedEvent({
+      type: "action.result",
+      data: {
+        status: input?.resultStatus ?? "completed",
+        result: {
+          kind: "tool-result",
+          callId,
+          toolName: input?.resultToolName ?? "plan_app_creation",
+          output: {
+            ...unsigned,
+            digest: input?.outputDigest ?? digest(JSON.stringify(unsigned)),
+            reused: false,
           },
         },
       },
@@ -100,6 +203,68 @@ describe("toPublicEvent", () => {
 });
 
 describe("installed Eve 0.43 projection", () => {
+  it("projects only a receipt-bound read-only target implementation plan", () => {
+    expect(latestInstalledImplementationPlan(recordedPlanEvents())).toEqual({
+      appId: "vendor-onboarding",
+      runtime: "nextjs",
+      workspacePath: "apps/vendor-onboarding",
+      packageName: "@autograph/vendor-onboarding",
+      projectName: "apps-vendor-onboarding",
+      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      sourceSha: "1".repeat(40),
+      sourceTree: "2".repeat(40),
+      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      readOnly: true,
+    });
+  });
+
+  it("rejects unbound, failed, stale, blocked, fixture, and invalidated plans", () => {
+    const valid = recordedPlanEvents();
+    expect(latestInstalledImplementationPlan([valid[1]!])).toBeUndefined();
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({ resultStatus: "failed" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({ resultToolName: "another_tool" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({ outputAppSpecDigest: "b".repeat(64) }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({ outputDigest: "c".repeat(64) }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({ blockers: ["missing product owner"] }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({
+          imageDigest: `fixture@sha256:${"d".repeat(64)}`,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledImplementationPlan([
+        ...valid,
+        ...recordedPrototypeEvents({
+          callId: "call_revised_artifact",
+          content: "<!doctype html><html><body>Revised</body></html>",
+          invalidated: true,
+        }),
+      ]),
+    ).toBeUndefined();
+  });
+
   it("recovers only the latest receipt-bound HTML prototype", () => {
     const first = recordedPrototypeEvents();
     const second = recordedPrototypeEvents({

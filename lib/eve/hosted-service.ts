@@ -28,6 +28,7 @@ import {
 } from "./public-events";
 import {
   eveSessionResultSchema,
+  publicImplementationPlanSchema,
   publicPrototypeSchema,
   publicEveEventSchema,
   sessionStatusSchema,
@@ -40,6 +41,7 @@ const hostedSnapshotSchema = z
     status: sessionStatusSchema,
     events: z.array(z.unknown()).max(100_000),
     prototype: publicPrototypeSchema.optional(),
+    implementationPlan: publicImplementationPlanSchema.optional(),
   })
   .strict();
 
@@ -202,6 +204,9 @@ function projectSnapshot(
     ...(snapshot.prototype === undefined
       ? {}
       : { prototype: snapshot.prototype }),
+    ...(snapshot.implementationPlan === undefined
+      ? {}
+      : { implementationPlan: snapshot.implementationPlan }),
   });
 }
 

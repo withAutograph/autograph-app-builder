@@ -99,10 +99,16 @@ sudo install --owner=root --group=root --mode=0444 "$artifact/source-files.json"
 sudo install --owner=root --group=root --mode=0444 "$artifact/source-checksums.sha256" /opt/app-builder/hosted-source/arrusted-development/source-checksums.sha256
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/manifest.json" /opt/app-builder/dependency-cache/manifest.json
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
+rm -rf /workspace/repository
+install -d -m 0755 /workspace/repository /workspace/.app-builder
+tar --extract --gzip --file "$artifact/source-tree.tar.gz" --directory /workspace/repository --no-same-owner --no-same-permissions
+install -m 0644 "$artifact/source-files.json" /workspace/.app-builder/source-files.json
+install -m 0644 "$artifact/source-checksums.sha256" /workspace/.app-builder/source-checksums.sha256
 git --version
 mise --version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
-bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/opt/app-builder/hosted-source/arrusted-development/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/portable"||cache.target.sha!=="77dce48833e7d6e05e086f18ca11b77d9214da9e"||cache.target.tree!=="2ed91119a0101ce053a4eb2122624efa1fff6ecd") process.exit(1)'`;
+bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/portable"||cache.target.sha!=="77dce48833e7d6e05e086f18ca11b77d9214da9e"||cache.target.tree!=="2ed91119a0101ce053a4eb2122624efa1fff6ecd") process.exit(1)' \
+  && (cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)`;
 }
 
 export function hostedArtifactWorkspaceInstallCommand(): string {

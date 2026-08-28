@@ -38,6 +38,21 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).not.toMatch(/token|password|authorization/iu);
   });
 
+  it("seeds the model-facing workspace with the exact hosted source tree", () => {
+    const command = hostedToolchainBootstrapCommand();
+    expect(command).toContain("rm -rf /workspace/repository");
+    expect(command).toContain(
+      'tar --extract --gzip --file "$artifact/source-tree.tar.gz" --directory /workspace/repository',
+    );
+    expect(command).toContain("/workspace/.app-builder/source-files.json");
+    expect(command).toContain(
+      "/workspace/.app-builder/source-checksums.sha256",
+    );
+    expect(command).toContain(
+      "(cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)",
+    );
+  });
+
   it("binds snapshot revalidation to the contract, inputs, and exact command bytes", () => {
     expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(3);
     expect(hostedToolchainRevalidationKey()).toMatch(

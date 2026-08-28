@@ -20,10 +20,11 @@ through a generic shell.
    to `$scaffold-app-workspace` and stop this route-owned flow. Do not interpret
    a generic “create an app” request as bare scaffolding.
 2. Read [the AppContractV1 reference](references/app-contract-v1.md) completely.
-3. Inspect the prepared target workspace's `git status --short`, workspace package identities, existing
-   `apps/<id>` directories, `microfrontends.json`, and the
-   conventional `prototype/<id>/app-spec.md`. Do not modify production source
-   or topology.
+3. Read only the known product and design references needed from the exact
+   prepared `workspacePath`. The typed planning operation owns target identity,
+   collision, package, route, and topology inspection; do not run generic Git
+   status or pass a sandbox path to the app-runtime `inspect_repository` tool.
+   Do not modify production source or topology.
 4. Use the lowercase kebab-case app id already preserved or inferred by the
    active `$create-app` workflow as the only authored contract input. Do not ask
    for it again. When invoked directly and no id exists, apply the same

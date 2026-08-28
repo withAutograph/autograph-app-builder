@@ -7,6 +7,7 @@ import {
 import type { EveSessionResult } from "@/lib/mcp/contracts";
 import {
   deriveInstalledEveStatus,
+  latestInstalledImplementationPlan,
   latestInstalledPrototype,
   outstandingInstalledEveRequests,
   projectInstalledEveEvents,
@@ -98,6 +99,7 @@ function resultForEvents(
   const events = projected.slice(cursor, cursor + limit);
   const inputRequests = outstandingInstalledEveRequests(snapshotEvents);
   const prototype = latestInstalledPrototype(snapshotEvents);
+  const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
     sessionId,
     status: deriveInstalledEveStatus(snapshotEvents),
@@ -105,6 +107,7 @@ function resultForEvents(
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(prototype === undefined ? {} : { prototype }),
+    ...(implementationPlan === undefined ? {} : { implementationPlan }),
   };
 }
 
@@ -113,12 +116,14 @@ function acceptedResult(
   snapshotEvents: readonly MessageStreamEvent[] = [],
 ): EveSessionResult {
   const prototype = latestInstalledPrototype(snapshotEvents);
+  const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
     sessionId,
     status: "working",
     cursor: 0,
     events: [],
     ...(prototype === undefined ? {} : { prototype }),
+    ...(implementationPlan === undefined ? {} : { implementationPlan }),
   };
 }
 
