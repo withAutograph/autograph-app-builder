@@ -27,8 +27,10 @@ describe("Codex adapter", () => {
       expect(prompt.length).toBeLessThanOrEqual(128);
     }
     expect(manifest.interface.shortDescription).toBe(
-      "Design and build supported apps",
+      "Design and create apps with Autograph",
     );
+    expect(manifest.interface.logo).toBe("./assets/autograph-icon.png");
+    expect(manifest.interface.composerIcon).toBe("./assets/autograph-icon.png");
     expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
       "App Builder session",
     );

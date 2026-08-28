@@ -14,9 +14,13 @@ execute the adapter command through a generic shell.
 
 ## Input
 
-Require exactly one app id. It must match `^[a-z][a-z0-9-]*$` and be one path
-segment. Reject any id containing whitespace, `/`, `@autograph/`, `apps/`, or
-characters outside that pattern; do not normalize it.
+Resolve exactly one app id. Preserve an explicitly supplied valid id. When it is
+omitted, infer it deterministically from the concise user-facing app name by
+lowercasing it, replacing each run of non-alphanumeric characters with one
+hyphen, and trimming hyphens; briefly tell the user and continue. It must match
+`^[a-z][a-z0-9-]*$` and be one path segment. Reject an explicitly supplied id
+containing whitespace, `/`, `@autograph/`, `apps/`, or characters outside that
+pattern; do not normalize explicit invalid input.
 
 Before mutating, inspect the working tree and verify that neither
 `apps/<app-id>` nor `@autograph/<app-id>` already exists. Preserve unrelated

@@ -10,21 +10,11 @@ export default defineEval({
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare supported repository at ${repository}`);
-    t.requireInputRequest({ toolName: "prepare_workspace" });
-    await t.respondAll("approve");
     await t.send(
       `Accept build-ready AppSpec for validation-failure:\n${BUILD_READY_APP_SPEC}`,
     );
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
-    await t.respondAll("approve");
-    t.requireInputRequest({ toolName: "accept_app_spec" });
-    await t.respondAll("approve");
     await t.send("Prepare offline target dependencies.");
-    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
-    await t.respondAll("approve");
     await t.send("Run target identity and planning.");
-    t.requireInputRequest({ toolName: "plan_app_creation" });
-    await t.respondAll("approve");
     await t.send("Apply the current creation proposal.");
     t.requireInputRequest({ toolName: "apply_app_creation" });
     await t.respondAll("approve");

@@ -5,16 +5,14 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "A fresh local template requires acquisition approval before workspace preparation approval.",
+    "A fresh local template binds and prepares automatically without internal approval prompts.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare fresh template at ${repository}`);
     t.calledTool("inspect_source", { count: 1 });
-    t.requireInputRequest({ toolName: "approve_source_acquisition" });
-    await t.respondAll("approve");
-    t.requireInputRequest({ toolName: "prepare_workspace" });
-    await t.respondAll("approve");
     t.succeeded();
+    t.notEvent("input.requested");
+    t.calledTool("approve_source_acquisition", { count: 1 });
     t.calledTool("prepare_workspace", { count: 1 });
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

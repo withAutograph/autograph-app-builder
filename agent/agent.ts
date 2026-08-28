@@ -4,8 +4,336 @@ import { mockModel } from "eve/evals";
 import { sha256 } from "@/lib/agent/workflow-state";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+const vendorOnboardingPrototype = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vendor Onboarding</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #17211b; background: #f4f7f4; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { padding: 24px 32px 18px; background: #173f31; color: white; }
+    header p { margin: 6px 0 0; color: #c8ddd4; }
+    main { display: grid; grid-template-columns: minmax(320px, 0.9fr) minmax(380px, 1.1fr); gap: 20px; padding: 24px 32px; }
+    section { background: white; border: 1px solid #dce5df; border-radius: 16px; box-shadow: 0 8px 24px #163b2d12; }
+    .section-heading { padding: 18px 20px; border-bottom: 1px solid #e6ece8; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 0; font-size: 24px; }
+    h2 { margin-bottom: 4px; font-size: 17px; }
+    .muted { color: #617067; font-size: 14px; }
+    .filters { display: flex; gap: 8px; padding: 14px 20px; }
+    button { border: 1px solid #c8d4cd; border-radius: 999px; background: white; color: #244438; padding: 8px 12px; font: inherit; cursor: pointer; }
+    button[aria-pressed="true"] { background: #d9eee4; border-color: #74a88f; }
+    .queue { list-style: none; margin: 0; padding: 0 12px 14px; }
+    .queue button { width: 100%; border: 0; border-radius: 12px; padding: 14px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; text-align: left; }
+    .queue button:hover, .queue button[aria-current="true"] { background: #edf6f1; }
+    .queue strong { font-size: 15px; }
+    .status { align-self: center; color: #8a4c10; background: #fff1db; border-radius: 999px; padding: 4px 8px; font-size: 12px; }
+    .detail { padding: 20px; }
+    .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .fact { padding: 12px; background: #f5f8f6; border-radius: 10px; }
+    .fact span { display: block; color: #617067; font-size: 12px; margin-bottom: 3px; }
+    .steps { list-style: none; margin: 0; padding: 0; }
+    .steps li { position: relative; padding: 12px 12px 12px 42px; border-top: 1px solid #edf1ee; }
+    .steps li::before { content: ""; position: absolute; left: 14px; top: 15px; width: 16px; height: 16px; border: 2px solid #77a28e; border-radius: 50%; }
+    .steps li.done::before { background: #2d7557; border-color: #2d7557; box-shadow: inset 0 0 0 3px white; }
+    .steps li.conditional { background: #fff9ee; }
+    .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+    .primary { background: #1f684d; border-color: #1f684d; color: white; }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } header { padding: 20px 16px; } .facts { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header><h1>Vendor Onboarding</h1><p>Review new vendors, resolve exceptions, and send complete records forward.</p></header>
+  <main>
+    <section aria-labelledby="queue-title">
+      <div class="section-heading"><h2 id="queue-title">Operations review queue</h2><p class="muted">3 vendors need attention</p></div>
+      <div class="filters" aria-label="Queue filters"><button aria-pressed="true">Needs review</button><button aria-pressed="false">Waiting</button><button aria-pressed="false">Ready</button></div>
+      <ul class="queue">
+        <li><button aria-current="true" data-name="Northstar Logistics" data-type="US corporation" data-tax="required"><strong>Northstar Logistics</strong><span class="status">Tax check</span><span class="muted">Submitted 2h ago</span></button></li>
+        <li><button data-name="Cedar Creative Studio" data-type="US individual" data-tax="required"><strong>Cedar Creative Studio</strong><span class="status">Missing W-9</span><span class="muted">Submitted yesterday</span></button></li>
+        <li><button data-name="Kiteworks GmbH" data-type="International company" data-tax="not-required"><strong>Kiteworks GmbH</strong><span class="status">Bank review</span><span class="muted">Submitted yesterday</span></button></li>
+      </ul>
+    </section>
+    <section aria-labelledby="detail-title">
+      <div class="section-heading"><h2 id="detail-title">Northstar Logistics</h2><p class="muted" id="vendor-type">US corporation</p></div>
+      <div class="detail">
+        <div class="facts"><div class="fact"><span>Requested by</span>Field Operations</div><div class="fact"><span>Risk tier</span>Standard</div></div>
+        <h3>Review steps</h3>
+        <ol class="steps"><li class="done">Business details complete</li><li class="done">Payment contact verified</li><li class="conditional" id="tax-step"><strong>Finance: verify tax information</strong><br><span class="muted">Required for tax-reportable US vendors</span></li><li>Final operations approval</li></ol>
+        <div class="actions"><button>Request changes</button><button class="primary">Send to finance</button></div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const rows = document.querySelectorAll('.queue button');
+    rows.forEach((row) => row.addEventListener('click', () => {
+      rows.forEach((candidate) => candidate.removeAttribute('aria-current'));
+      row.setAttribute('aria-current', 'true');
+      document.querySelector('#detail-title').textContent = row.dataset.name;
+      document.querySelector('#vendor-type').textContent = row.dataset.type;
+      document.querySelector('#tax-step').hidden = row.dataset.tax !== 'required';
+    }));
+  </script>
+</body>
+</html>`;
+
+const vendorOnboardingDecisions = `# Vendor Onboarding decisions
+
+- \`agent_inferred\`: The product name is **Vendor Onboarding** and the app id is \`vendor-onboarding\`.
+- \`agent_inferred\`: Operations starts from a review queue because the job is to move multiple submissions through exceptions efficiently.
+- \`agent_inferred\`: Selecting a vendor opens an in-context detail panel so reviewers keep their queue position.
+- \`agent_inferred\`: Finance tax verification appears only for tax-reportable vendors; other vendors skip that step.
+- \`deferred\`: Final tax rules, approval roles, and system-of-record integrations remain product-review decisions.
+`;
+
+const vendorOnboardingAppSpec = `## Status and prototype
+
+Exploring. The usable prototype is at prototype/vendor-onboarding/index.html.
+
+## User and outcome
+
+Operations reviewers move submitted vendors through exceptions to a complete handoff.
+
+## Interfaces and navigation
+
+An operations review queue opens an in-context vendor detail panel.
+
+## Controls and behavior
+
+Queue filters and vendor selection are interactive. Review actions remain provisional.
+
+## Data model
+
+Vendor submissions, review steps, exceptions, and accountable teams are provisional objects.
+
+## Integrations and reconciliation
+
+Tax and payment systems are deferred until product review.
+
+## Temporal semantics
+
+Submission age is visible; effective dating is unresolved.
+
+## Writes, review, and authority
+
+The prototype shows reviewed handoffs and does not define production write authority.
+
+## Access and tenancy
+
+Operations and Finance roles are provisional and tenant-scoped.
+
+## Agent behavior
+
+The agent may summarize missing evidence but cannot approve vendors.
+
+## Operational states
+
+Needs-review, waiting, ready, missing-document, and conditional-step states are represented.
+
+## Defaults, non-goals, and risks
+
+The queue, detail panel, and conditional Finance step are revisable inferred defaults.
+
+## Acceptance walkthrough
+
+Review the queue, open each vendor, and confirm that tax verification appears only when required.
+`;
+
+const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
+## Build handoff
+
+\`\`\`json
+{
+  "status": "build-ready",
+  "owner": "operations",
+  "schema": { "kind": "kernel" },
+  "additionalPublicRoutes": [],
+  "optionalCapabilities": {
+    "integrations": [],
+    "hostedResources": []
+  }
+}
+\`\`\``;
+
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("uncertain vendor workflow brief"))
+    return "These lead to meaningfully different products. Which outcome should lead the first version: getting each new vendor approved once (recommended, because it delivers the fastest operational value), or continuously monitoring vendors after approval (broader scope with recurring compliance work)?";
+  if (message.includes("anonymous public vendor portal"))
+    return "An anonymous public vendor portal is unavailable in this product path. The recommended alternative is an internal **Vendor Intake** experience with an operations review queue and vendor detail panel, paired with secure upload requests sent through your existing intake channel.";
+  if (message.includes("internal vendor-onboarding workflow")) {
+    const path = lastUserMessage?.match(
+      /supported repository at (\/\S+)/iu,
+    )?.[1];
+    if (path === undefined)
+      return "I need the supported project location before I can start this prototype.";
+    const inspection = toolResults.find(
+      ({ name }) => name === "inspect_source",
+    );
+    if (inspection === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "inspect_source",
+            input: { path, sourceKind: "existing-repository" },
+          },
+        ],
+      };
+    if (inspection.isError)
+      return "I couldn't use this project because it is not currently eligible for app creation.";
+    const source = inspection.output as { digest?: string } | undefined;
+    const preparation = toolResults.find(
+      ({ name }) => name === "prepare_workspace",
+    );
+    if (preparation === undefined) {
+      if (source?.digest === undefined)
+        return "I couldn't verify this project for app creation.";
+      return {
+        toolCalls: [
+          {
+            name: "prepare_workspace",
+            input: { expectedSourceReceiptDigest: source.digest },
+          },
+        ],
+      };
+    }
+    if (preparation.isError)
+      return "The project changed while I was getting it ready, so I stopped before designing against stale information.";
+    const artifacts = toolResults.filter(
+      ({ name }) => name === "record_prototype_artifact",
+    );
+    const recordedPaths = new Set(
+      artifacts.flatMap((artifact) => {
+        const path = (artifact.output as { path?: string } | undefined)?.path;
+        return artifact.isError || path === undefined ? [] : [path];
+      }),
+    );
+    const missingArtifact = [
+      {
+        path: "prototype/vendor-onboarding/index.html",
+        mediaType: "text/html" as const,
+        content: vendorOnboardingPrototype,
+      },
+      {
+        path: "prototype/vendor-onboarding/decisions.md",
+        mediaType: "text/markdown" as const,
+        content: vendorOnboardingDecisions,
+      },
+      {
+        path: "prototype/vendor-onboarding/app-spec.md",
+        mediaType: "text/markdown" as const,
+        content: vendorOnboardingAppSpec,
+      },
+    ].find(({ path: artifactPath }) => !recordedPaths.has(artifactPath));
+    if (missingArtifact !== undefined)
+      return {
+        toolCalls: [
+          {
+            name: "record_prototype_artifact",
+            input: missingArtifact,
+          },
+        ],
+      };
+    if (artifacts.some(({ isError }) => isError))
+      return "I couldn't finish the first prototype artifact, so I stopped without treating it as reviewable.";
+    const appSpecArtifacts = artifacts.filter(
+      (artifact) =>
+        (artifact.output as { path?: string } | undefined)?.path ===
+        "prototype/vendor-onboarding/app-spec.md",
+    );
+    const acceptanceResults = toolResults.filter(
+      ({ name }) => name === "accept_app_spec",
+    );
+    const latestAcceptance = acceptanceResults.at(-1);
+    if (
+      latestAcceptance?.isError === true &&
+      appSpecArtifacts.length === 1 &&
+      acceptanceResults.length === 1
+    )
+      return {
+        toolCalls: [
+          {
+            name: "record_prototype_artifact",
+            input: {
+              path: "prototype/vendor-onboarding/app-spec.md",
+              mediaType: "text/markdown",
+              content: vendorOnboardingCompleteAppSpec,
+            },
+          },
+        ],
+      };
+    const currentAppSpec = appSpecArtifacts.at(-1)?.output as
+      { digest?: string; revision?: string } | undefined;
+    const workspace = preparation.output as
+      | {
+          sourceSha?: string;
+          sourceTree?: string;
+          eligibilityDigest?: string;
+          workspaceDigest?: string;
+        }
+      | undefined;
+    if (
+      acceptanceResults.length < appSpecArtifacts.length &&
+      currentAppSpec?.digest !== undefined &&
+      currentAppSpec.revision !== undefined &&
+      workspace?.sourceSha !== undefined &&
+      workspace.sourceTree !== undefined &&
+      workspace.eligibilityDigest !== undefined &&
+      workspace.workspaceDigest !== undefined
+    )
+      return {
+        toolCalls: [
+          {
+            name: "accept_app_spec",
+            input: {
+              appId: "vendor-onboarding",
+              expectedArtifactDigest: currentAppSpec.digest,
+              expectedArtifactRevision: currentAppSpec.revision,
+              expectedSourceSha: workspace.sourceSha,
+              expectedSourceTree: workspace.sourceTree,
+              expectedEligibilityDigest: workspace.eligibilityDigest,
+              expectedWorkspaceDigest: workspace.workspaceDigest,
+            },
+          },
+        ],
+      };
+    if (latestAcceptance?.isError === true)
+      return "One product decision is still too unclear to produce a reliable implementation plan.";
+    const accepted = latestAcceptance?.output as
+      { digest?: string } | undefined;
+    if (accepted?.digest === undefined)
+      return "The product direction is not complete enough to plan reliably yet.";
+    const dependencies = toolResults.find(
+      ({ name }) => name === "prepare_target_dependencies",
+    );
+    if (dependencies === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "prepare_target_dependencies",
+            input: { expectedAppSpecDigest: accepted.digest },
+          },
+        ],
+      };
+    if (dependencies.isError)
+      return "This product direction cannot yet be planned with the available project capabilities.";
+    const plan = toolResults.find(({ name }) => name === "plan_app_creation");
+    if (plan === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "plan_app_creation",
+            input: { expectedAppSpecDigest: accepted.digest },
+          },
+        ],
+      };
+    if (plan.isError)
+      return "A real project conflict prevents this product direction from becoming a reliable plan.";
+    return "I inferred **Vendor Onboarding** with app ID `vendor-onboarding`. I started with an operations review queue and an in-context vendor detail panel so reviewers can work exceptions quickly; tax-reportable vendors get a conditional Finance verification step. A usable visual prototype and validated implementation plan are ready for review.";
+  }
   if (message.includes("record three prototype artifacts in parallel")) {
     const recorded = toolResults.filter(
       ({ name }) => name === "record_prototype_artifact",
@@ -1197,7 +1525,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     if (acceptanceResult.isError)
       return "The AppSpec acceptance could not be recorded.";
-    return "The build-ready AppSpec was accepted. Target identity and planning require a separate explicit request and approval.";
+    return "The product direction is complete and ready for automatic implementation planning.";
   }
   if (
     message.includes("prepare supported repository at ") ||
@@ -1287,23 +1615,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
-    const localPublication =
-      process.env.APP_BUILDER_LOCAL_PUBLICATION === "1"
-        ? " After one further approval, I can apply that exact reviewed set only to a named existing local checkout with base, preimage, status, and postimage verification; it never commits, changes history, or publishes remotely."
-        : " Local checkout publication is disabled on this host; I can still produce and review the exact change set without mutating the checkout.";
-    const branchPublication =
-      process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1"
-        ? " As a distinct outcome with another approval, I can create a deterministic uncommitted branch/worktree at the exact reviewed base, apply only the reviewed paths there, preserve the original checkout, and require a separate digest-bound approval for partial-failure or lost-response recovery."
-        : " Branch/worktree publication is disabled on this host.";
-    const freshBootstrap =
-      process.env.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED === "1" &&
-      process.env.APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT !== undefined &&
-      process.env.APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT !== undefined
-        ? " With another approval, fresh local bootstrap is enabled for an exact absent or exact-empty destination under the configured owner-only root; it creates one release-disabled parentless commit and never configures a remote."
-        : " Fresh local bootstrap publication is disabled on this host.";
-    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated App Builder workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication}${branchPublication}${freshBootstrap} A typed least-privilege GitHub acquisition/private-repository/draft-PR contract is defined, but live GitHub calls remain disabled until an installation-bound adapter and durable receipt store are configured. Generic shell access is never a GitHub fallback.`;
+    return "I can turn a product brief into a usable visual prototype and a reviewable implementation plan. I infer sensible names, routes, roles, and workflow defaults, explain the choices that shape the experience, and ask only when an answer would materially change the product. Before I change application code or publish, deploy, release, or alter a connected service, I will ask for approval in plain language. If an outcome is unavailable, I will explain the product limitation and recommend the closest useful alternative.";
   }
-  return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
+  return "Tell me what you want the app to help someone accomplish. I will infer a sensible starting experience and show you something reviewable.";
 });
 
 export default defineAgent({

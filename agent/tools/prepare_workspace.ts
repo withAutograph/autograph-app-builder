@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import {
@@ -20,11 +19,10 @@ import {
 
 export default defineTool({
   description:
-    "Materialize an already-reviewed eligible source tree inside the current app build's isolated workspace. This requires its own approval bound to the exact canonical source receipt.",
+    "Materialize an eligible exact source tree inside the current app build's isolated workspace. This is automatic, read-only with respect to the source, and remains bound to the canonical source receipt.",
   inputSchema: z.object({
     expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  approval: always(),
   async execute({ expectedSourceReceiptDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");

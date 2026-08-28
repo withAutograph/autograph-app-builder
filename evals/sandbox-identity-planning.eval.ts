@@ -13,28 +13,18 @@ export default defineEval({
       throw new Error("The signed sandbox proof source root is missing.");
 
     await t.send(`Prepare supported repository at ${repository}`);
-    t.requireInputRequest({ toolName: "prepare_workspace" });
-    await t.respondAll("approve");
     t.succeeded();
 
     await t.send(
       `Accept build-ready AppSpec for builder-proof:\n${BUILD_READY_APP_SPEC}`,
     );
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
-    await t.respondAll("approve");
-    t.requireInputRequest({ toolName: "accept_app_spec" });
-    await t.respondAll("approve");
     t.succeeded();
 
     await t.send("Prepare offline target dependencies.");
-    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("target-bound offline dependency closure"));
 
     await t.send("Run target identity and planning.");
-    t.requireInputRequest({ toolName: "plan_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("target identity and planning commands"));
     t.check(t.reply, includes("no apply, validation, or target mutation"));
