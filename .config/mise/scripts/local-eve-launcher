@@ -70,7 +70,7 @@ verify_file() {
   fi
 }
 
-pinned_node="$account_home/.local/share/mise/installs/node/26.8.1/bin/node"
+pinned_node="$account_home/.local/share/mise/installs/node/24.18.0/bin/node"
 verify_file "$pinned_node" executable
 verify_file "$repository_root/.env.local" secret
 verify_file "$repository_root/.vercel/project.json" public

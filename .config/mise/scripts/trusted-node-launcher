@@ -30,7 +30,7 @@ if [ -z "$account_home" ] || [ ! -d "$account_home" ]; then
   echo "trusted-node-launcher: OS account home was unavailable" >&2
   exit 78
 fi
-pinned_node="$account_home/.local/share/mise/installs/node/26.8.1/bin/node"
+pinned_node="$account_home/.local/share/mise/installs/node/24.18.0/bin/node"
 pinned_pnpm="$account_home/.local/share/mise/installs/pnpm/11.7.0/pnpm"
 case "$executable" in
   "$pinned_node") kind=node ;;
@@ -80,7 +80,7 @@ verify_pinned_executable() {
 
 verify_pinned_executable "$executable"
 working_directory=$(/bin/pwd -P)
-child_path="$account_home/.local/share/mise/installs/node/26.8.1/bin:/usr/bin:/bin"
+child_path="$account_home/.local/share/mise/installs/node/24.18.0/bin:/usr/bin:/bin"
 if [ "$kind" = pnpm ]; then
   verify_pinned_executable "$pinned_node"
 fi

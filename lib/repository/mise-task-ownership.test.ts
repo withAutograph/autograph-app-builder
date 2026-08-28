@@ -43,7 +43,7 @@ describe("mise-owned repository operations", () => {
       expect(job.steps).toContainEqual({
         uses: "actions/setup-node@v4",
         with: {
-          "node-version": "26.8.1",
+          "node-version": "24.18.0",
           cache: "pnpm",
           "cache-dependency-path": "pnpm-lock.yaml",
         },
