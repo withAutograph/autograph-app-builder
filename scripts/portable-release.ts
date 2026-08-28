@@ -61,6 +61,7 @@ export function releaseEndpoint(value: string | undefined) {
     endpoint.pathname !== "/" ||
     endpoint.search ||
     endpoint.hash ||
+    endpoint.hostname.endsWith(".") ||
     reservedReleaseHost(endpoint.hostname)
   )
     throw new Error(

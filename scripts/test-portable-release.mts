@@ -48,6 +48,10 @@ try {
     "https://mcp-endpoint.template",
     "https://localhost",
     "https://agent.example.com",
+    "https://localhost.",
+    "https://example.com.",
+    "https://agent.invalid.",
+    "https://agent.localhost.",
   ])
     await run(
       "build-portable-release.mts",

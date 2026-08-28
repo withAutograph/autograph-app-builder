@@ -160,6 +160,10 @@ export const assertAutographMcpEndpoint = (
     throw new Error(
       `${AUTOGRAPH_MCP_SERVER_NAME} URL pathname must be exactly /mcp.`,
     );
+  if (url.hostname.endsWith("."))
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} URL hostname must not end with a DNS root dot.`,
+    );
   if (release) {
     if (url.protocol !== "https:" || isReservedReleaseHost(url.hostname))
       throw new Error(

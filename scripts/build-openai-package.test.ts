@@ -132,6 +132,10 @@ describe("OpenAI package generator", () => {
     ["an MCP query", "https://preview.autograph.dev/mcp?tenant=public"],
     ["an MCP fragment", "https://preview.autograph.dev/mcp#tools"],
     ["URL credentials", "https://user:secret@preview.autograph.dev/mcp"],
+    ["a trailing-dot localhost", "https://localhost./mcp"],
+    ["a trailing-dot example host", "https://example.com./mcp"],
+    ["a trailing-dot reserved suffix", "https://agent.invalid./mcp"],
+    ["a trailing-dot localhost suffix", "https://agent.localhost./mcp"],
   ])("rejects %s", async (_name, endpoint) => {
     const root = await mkdtemp(join(tmpdir(), "autograph-openai-package-"));
     try {

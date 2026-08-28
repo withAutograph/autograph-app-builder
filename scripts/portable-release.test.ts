@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasCanonicalFetchRemote } from "./portable-release";
+import { hasCanonicalFetchRemote, releaseEndpoint } from "./portable-release";
 
 const repository = "https://github.com/withAutograph/autograph-app-builder";
 
@@ -50,5 +50,18 @@ describe("canonical portable-release remotes", () => {
         repository,
       ),
     ).toBe(false);
+  });
+});
+
+describe("portable release endpoint", () => {
+  it.each([
+    "https://localhost.",
+    "https://example.com.",
+    "https://agent.invalid.",
+    "https://agent.localhost.",
+  ])("rejects a terminal DNS root dot: %s", (endpoint) => {
+    expect(() => releaseEndpoint(endpoint)).toThrow(
+      "credential-free, deployed, literal HTTPS origin",
+    );
   });
 });
