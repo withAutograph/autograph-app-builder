@@ -211,4 +211,15 @@ describe("PostgreSQL hosted Eve row authority", () => {
       ],
     });
   });
+
+  it("excludes idle and maximum-lifetime-expired sessions from admission", async () => {
+    const source = await readFile(
+      new URL("./postgres-hosted-store.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("sessionTimeoutPolicy.idleTimeoutMs");
+    expect(source).toContain("sessionTimeoutPolicy.maxLifetimeMs");
+    expect(source).toContain("gt(agentSessions.updatedAt, idleCutoff)");
+    expect(source).toContain("gt(agentSessions.createdAt, lifetimeCutoff)");
+  });
 });

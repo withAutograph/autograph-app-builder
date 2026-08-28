@@ -15,6 +15,38 @@ export const hostedOperationStateSchema = z.enum([
   "rejected",
 ]);
 
+export const HOSTED_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
+export const HOSTED_SESSION_MAX_LIFETIME_MS = 24 * 60 * 60 * 1_000;
+
+export const hostedSessionTimeoutPolicySchema = z
+  .object({
+    idleTimeoutMs: z
+      .number()
+      .int()
+      .min(60_000)
+      .max(24 * 60 * 60 * 1_000),
+    maxLifetimeMs: z
+      .number()
+      .int()
+      .min(60_000)
+      .max(7 * 24 * 60 * 60 * 1_000),
+  })
+  .strict()
+  .refine(
+    ({ idleTimeoutMs, maxLifetimeMs }) => idleTimeoutMs <= maxLifetimeMs,
+    "Hosted session idle timeout cannot exceed its maximum lifetime.",
+  );
+
+export type HostedSessionTimeoutPolicy = z.infer<
+  typeof hostedSessionTimeoutPolicySchema
+>;
+
+export const DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY =
+  hostedSessionTimeoutPolicySchema.parse({
+    idleTimeoutMs: HOSTED_SESSION_IDLE_TIMEOUT_MS,
+    maxLifetimeMs: HOSTED_SESSION_MAX_LIFETIME_MS,
+  });
+
 export const hostedSessionRecordSchema = z
   .object({
     version: z.literal(1),
@@ -25,9 +57,29 @@ export const hostedSessionRecordSchema = z
     createdAtEpochMs: z.number().int().nonnegative(),
     updatedAtEpochMs: z.number().int().nonnegative(),
   })
-  .strict();
+  .strict()
+  .refine(
+    ({ createdAtEpochMs, updatedAtEpochMs }) =>
+      updatedAtEpochMs >= createdAtEpochMs,
+    "Hosted session updates cannot precede creation.",
+  );
 
 export type HostedSessionRecord = z.infer<typeof hostedSessionRecordSchema>;
+
+export function isHostedSessionExpired(input: {
+  record: HostedSessionRecord;
+  nowEpochMs: number;
+  policy?: HostedSessionTimeoutPolicy;
+}) {
+  const record = hostedSessionRecordSchema.parse(input.record);
+  const policy = hostedSessionTimeoutPolicySchema.parse(
+    input.policy ?? DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
+  );
+  return (
+    input.nowEpochMs >= record.updatedAtEpochMs + policy.idleTimeoutMs ||
+    input.nowEpochMs >= record.createdAtEpochMs + policy.maxLifetimeMs
+  );
+}
 
 function canonicalRecordValue(value: unknown): string {
   if (Array.isArray(value)) {
@@ -190,6 +242,7 @@ export interface HostedEveStore {
     admission?: {
       binding: HostedPreviewAdmissionControlBinding;
       nowEpochMs: number;
+      sessionTimeoutPolicy: HostedSessionTimeoutPolicy;
     },
   ): Promise<ReserveOperationResult>;
   settleSucceeded(input: {
@@ -231,6 +284,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     admission?: {
       binding: HostedPreviewAdmissionControlBinding;
       nowEpochMs: number;
+      sessionTimeoutPolicy: HostedSessionTimeoutPolicy;
     },
   ): Promise<ReserveOperationResult> {
     const parsed = hostedOperationRecordSchema.parse(candidate);
@@ -267,6 +321,11 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       ).length;
       const subjectConcurrent = [...this.sessions.values()].filter(
         (record) =>
+          !isHostedSessionExpired({
+            record,
+            nowEpochMs: admission.nowEpochMs,
+            policy: admission.sessionTimeoutPolicy,
+          }) &&
           record.principal.issuer === principal.issuer &&
           record.principal.audience === principal.audience &&
           record.principal.workspaceId === principal.workspaceId &&
@@ -275,6 +334,11 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       ).length;
       const workspaceActive = [...this.sessions.values()].filter(
         (record) =>
+          !isHostedSessionExpired({
+            record,
+            nowEpochMs: admission.nowEpochMs,
+            policy: admission.sessionTimeoutPolicy,
+          }) &&
           record.principal.issuer === principal.issuer &&
           record.principal.audience === principal.audience &&
           record.principal.workspaceId === principal.workspaceId &&

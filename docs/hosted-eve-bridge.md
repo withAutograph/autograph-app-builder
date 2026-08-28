@@ -101,6 +101,13 @@ and likewise require no continuation credential. Adding any new credential
 field requires a new closed contract and migration rather than reusing `record`
 as an opaque secret container.
 
+Hosted session handles expire after 30 minutes without an observed request and
+after 24 hours regardless of activity. Both checks use the durable session's
+existing creation and update timestamps, run before Eve transport access, and
+also exclude expired active rows from new-start admission counts. Expiry does
+not delete history; the separately confirmed retention task remains the only
+age-based deletion path.
+
 ## Idempotency and uncertain submissions
 
 `start`, `send`, and `respond` reserve a tenant-bound operation before dispatch.
@@ -182,6 +189,14 @@ an eight-hour, rotated refresh token only when they request `offline_access`;
 every MCP request made with a refreshed access token still passes the resource
 server's live membership check. Do not claim immediate token revocation or a
 Production activation without separate live evidence.
+
+The closed `autograph-ext-bld-05-evidence-v1` receipt aggregates only accepted
+digest references for the exact source SHA/tree: a two-subject live lifecycle,
+membership revocation, retention, drained tenant deletion, public-response plus
+provider-log disclosure scans, and exact-source validation of timeout and Eve
+0.43 session-ID-only continuation semantics. It contains no subject, workspace,
+endpoint, token, or database value and explicitly cannot claim Production
+readiness.
 
 ## Preview database administration
 

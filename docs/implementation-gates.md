@@ -327,6 +327,10 @@ Before enabling real MCP mutations:
 9. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
 10. Complete the MCP Apps host bridge. The iframe must invoke tools through the host, never call Eve or private endpoints directly.
 11. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
+12. Enforce the fixed 30-minute idle and 24-hour maximum hosted session
+    lifetimes before transport access, and omit expired rows from admission
+    counts. Expiry is not deletion; retention and drained tenant deletion remain
+    separately confirmed operations.
 
 The provider-neutral service prerequisite is documented in
 [`hosted-eve-bridge.md`](hosted-eve-bridge.md). It implements the closed

@@ -48,6 +48,7 @@ function service(input: {
   ownerUserId: string;
   binding: HostedPreviewAdmissionControlBinding;
   status?: "working" | "waiting";
+  now?: () => number;
 }) {
   let sequence = 0;
   const transport: HostedEveTransport = {
@@ -76,7 +77,7 @@ function service(input: {
     store: input.store,
     transport,
     admissionControl: input.binding,
-    now: () => now,
+    now: input.now ?? (() => now),
   });
 }
 
@@ -139,5 +140,27 @@ describe("hosted start admission enforcement", () => {
         clientRequestId: "two",
       }),
     ).rejects.toBeInstanceOf(HostedAdmissionDeniedError);
+  });
+
+  it("does not count expired active sessions against admission ceilings", async () => {
+    let current = now;
+    const store = new InMemoryHostedEveStore();
+    const binding = {
+      ...baseBinding,
+      maxConcurrentSessionsPerSubject: 1,
+      maxActiveSessionsPerWorkspace: 1,
+    };
+    const hosted = service({
+      store,
+      ownerUserId: "user_one",
+      binding,
+      status: "working",
+      now: () => current,
+    });
+    await hosted.start({ prompt: "Build", clientRequestId: "one" });
+    current += 30 * 60 * 1_000;
+    await expect(
+      hosted.start({ prompt: "Build again", clientRequestId: "two" }),
+    ).resolves.toMatchObject({ sessionId: expect.any(String) });
   });
 });
