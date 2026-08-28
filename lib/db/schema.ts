@@ -514,3 +514,205 @@ export const githubPublicationJournals = pgTable(
     ),
   ],
 );
+
+const hostedGitHubTenantColumns = {
+  issuer: text("issuer").notNull(),
+  audience: text("audience").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  ownerUserId: text("owner_user_id").notNull(),
+};
+
+export const hostedGitHubInstallations = pgTable(
+  "hosted_github_installation",
+  {
+    ...hostedGitHubTenantColumns,
+    installationId: text("installation_id").notNull(),
+    accountId: text("account_id").notNull(),
+    accountLogin: text("account_login").notNull(),
+    accountType: text("account_type").notNull(),
+    active: boolean("active").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_github_installation_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+      ],
+    }),
+    uniqueIndex("hosted_github_installation_id_tenant_uidx").on(
+      table.installationId,
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+    ),
+    uniqueIndex("hosted_github_installation_id_uidx").on(table.installationId),
+    check(
+      "hosted_github_installation_id_check",
+      sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_installation_account_id_check",
+      sql`${table.accountId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_installation_account_type_check",
+      sql`${table.accountType} IN ('Organization', 'User')`,
+    ),
+  ],
+);
+
+export const githubInstallationAuthorizationStates = pgTable(
+  "github_installation_authorization_state",
+  {
+    stateDigest: text("state_digest").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    authorityDigest: text("authority_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("github_installation_authorization_state_expiry_idx").on(
+      table.expiresAt,
+    ),
+    check(
+      "github_installation_authorization_state_digest_check",
+      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "github_installation_authorization_authority_digest_check",
+      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "github_installation_authorization_state_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "github_installation_authorization_state_consumed_check",
+      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
+    ),
+  ],
+);
+
+export const hostedGitHubPublicationProposals = pgTable(
+  "hosted_github_publication_proposal",
+  {
+    ...hostedGitHubTenantColumns,
+    proposalDigest: text("proposal_digest").notNull(),
+    kind: text("kind").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    proposal: jsonb("proposal").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_github_publication_proposal_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.proposalDigest,
+      ],
+    }),
+    uniqueIndex("hosted_github_publication_proposal_idempotency_uidx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.kind,
+      table.idempotencyKey,
+    ),
+    check(
+      "hosted_github_publication_proposal_digest_check",
+      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_publication_proposal_idempotency_check",
+      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_publication_proposal_kind_check",
+      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`,
+    ),
+    check(
+      "hosted_github_publication_proposal_record_check",
+      sql`jsonb_typeof(${table.proposal}) = 'object'`,
+    ),
+  ],
+);
+
+export const hostedGitHubPublicationJournals = pgTable(
+  "hosted_github_publication_journal",
+  {
+    ...hostedGitHubTenantColumns,
+    proposalDigest: text("proposal_digest").notNull(),
+    kind: text("kind").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    receiptDigest: text("receipt_digest").notNull(),
+    status: text("status").notNull(),
+    record: jsonb("record").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_github_publication_journal_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.proposalDigest,
+      ],
+    }),
+    uniqueIndex("hosted_github_publication_journal_idempotency_uidx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.idempotencyKey,
+    ),
+    index("hosted_github_publication_journal_status_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.status,
+      table.updatedAt,
+    ),
+    check(
+      "hosted_github_publication_journal_proposal_digest_check",
+      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_publication_journal_receipt_digest_check",
+      sql`${table.receiptDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_publication_journal_idempotency_check",
+      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_publication_journal_kind_check",
+      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`,
+    ),
+    check(
+      "hosted_github_publication_journal_status_check",
+      sql`${table.status} IN ('pending', 'failed', 'succeeded')`,
+    ),
+    check(
+      "hosted_github_publication_journal_record_check",
+      sql`jsonb_typeof(${table.record}) = 'object'`,
+    ),
+    check(
+      "hosted_github_publication_journal_timestamp_check",
+      sql`${table.createdAt} <= ${table.updatedAt}`,
+    ),
+  ],
+);

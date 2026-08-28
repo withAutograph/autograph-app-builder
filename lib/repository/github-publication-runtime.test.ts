@@ -14,6 +14,8 @@ import {
   type FreshRepositoryProposal,
   type GitHubMutationReceipt,
   type GitHubOperation,
+  type GitHubDraftPullRequestContent,
+  type GitHubFreshRepositoryContent,
   type GitHubPublicationReceiptStore,
 } from "./github-publication";
 import {
@@ -32,9 +34,53 @@ import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sourceSha = "1".repeat(40);
-const sourceTree = "2".repeat(40);
+const templateBytes = new TextEncoder().encode("# Template\n");
+const templateDigest = createHash("sha256").update(templateBytes).digest("hex");
+const templateObjectId = createHash("sha1")
+  .update(Buffer.from(`blob ${templateBytes.byteLength}\0`))
+  .update(templateBytes)
+  .digest("hex");
+const templateTreeContent = Buffer.concat([
+  Buffer.from("100644 README.md\0"),
+  Buffer.from(templateObjectId, "hex"),
+]);
+const sourceTree = createHash("sha1")
+  .update(Buffer.from(`tree ${templateTreeContent.byteLength}\0`))
+  .update(templateTreeContent)
+  .digest("hex");
 const branchSha = "3".repeat(40);
 const branchTree = "4".repeat(40);
+const reviewedBytes = new TextEncoder().encode("export default 'demo';\n");
+const reviewedBytesDigest = createHash("sha256")
+  .update(reviewedBytes)
+  .digest("hex");
+
+const publicationContentSource = () => ({
+  async readFreshTree() {
+    return {
+      version: 1 as const,
+      kind: "fresh-repository-source-tree" as const,
+      sourceSha,
+      sourceTree,
+      files: [
+        {
+          path: "README.md",
+          mode: "100644" as const,
+          objectId: templateObjectId,
+          digest: templateDigest,
+          bytes: templateBytes,
+        },
+      ],
+    };
+  },
+  async readFile() {
+    return {
+      mode: "644",
+      digest: reviewedBytesDigest,
+      bytes: reviewedBytes,
+    };
+  },
+});
 
 const approvalReceipt = (proposal: DraftPullRequestProposal) => ({
   format: "autograph-eve-approval-receipt-v2" as const,
@@ -64,6 +110,13 @@ function source(
 }
 
 function review() {
+  const changes = [
+    {
+      path: "apps/demo/page.tsx",
+      kind: "added" as const,
+      after: { mode: "644", digest: reviewedBytesDigest },
+    },
+  ];
   const unsigned = {
     version: 2 as const,
     validationDigest: "6".repeat(64),
@@ -93,14 +146,8 @@ function review() {
     },
     preTreeDigest: "3".repeat(64),
     postTreeDigest: "4".repeat(64),
-    changedContentDigest: "5".repeat(64),
-    changes: [
-      {
-        path: "apps/demo/page.tsx",
-        kind: "added" as const,
-        after: { mode: "644", digest: "6".repeat(64) },
-      },
-    ],
+    changedContentDigest: hash(changes),
+    changes,
     approvedPaths: ["apps/demo/page.tsx"],
   };
   const changeSet: NormalizedChangeSet = {
@@ -196,6 +243,8 @@ class Provider {
   draftOutcome: unknown;
   freshMutations = 0;
   draftMutations = 0;
+  freshContent: GitHubFreshRepositoryContent | undefined;
+  draftContent: GitHubDraftPullRequestContent | undefined;
   readonly repositoryInspections: Array<{
     repositoryId: string;
     ref: string;
@@ -260,8 +309,12 @@ class Provider {
     return this.freshOutcome;
   }
 
-  async createPrivateFreshHistoryRepository(proposal: FreshRepositoryProposal) {
+  async createPrivateFreshHistoryRepository(
+    proposal: FreshRepositoryProposal,
+    content: GitHubFreshRepositoryContent,
+  ) {
     this.freshMutations += 1;
+    this.freshContent = content;
     this.freshOutcome = {
       idempotencyKey: proposal.idempotencyKey,
       repository: this.repositorySnapshot(proposal.destinationName, "101"),
@@ -282,8 +335,12 @@ class Provider {
     );
   }
 
-  async publishDraftPullRequest(proposal: DraftPullRequestProposal) {
+  async publishDraftPullRequest(
+    proposal: DraftPullRequestProposal,
+    content: GitHubDraftPullRequestContent,
+  ) {
     this.draftMutations += 1;
+    this.draftContent = content;
     this.draftOutcome = {
       idempotencyKey: proposal.idempotencyKey,
       repository: this.repositorySnapshot(),
@@ -330,6 +387,8 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     await expect(
       disabled.createFreshRepository({
         expectedProposalDigest: "a".repeat(64),
+        review: review(),
+        contentSource: publicationContentSource(),
         approvedByCallId: "call",
       }),
     ).rejects.toThrow(/disabled/u);
@@ -347,6 +406,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     expect(identity.permissions).toEqual({
       metadata: "read",
       contents: "write",
+      workflows: "write",
       pullRequests: "write",
       administration: "none",
       variables: "read",
@@ -427,24 +487,49 @@ describe("GitHub runtime adapter and durable-store composition", () => {
 
     const created = await runtime.createFreshRepository({
       expectedProposalDigest: fresh.digest,
+      review: review(),
+      contentSource: publicationContentSource(),
       approvedByCallId: "create-call",
     });
     const retried = await runtime.createFreshRepository({
       expectedProposalDigest: fresh.digest,
+      review: review(),
+      contentSource: publicationContentSource(),
       approvedByCallId: "retry-call",
     });
     expect(created.parentCount).toBe(0);
     expect(retried).toEqual(created);
     expect(provider.freshMutations).toBe(1);
+    expect(provider.freshContent?.files[0]).toMatchObject({
+      path: "README.md",
+      mode: "100644",
+      objectId: templateObjectId,
+      digest: templateDigest,
+    });
 
     const published = await runtime.publishDraftPullRequest({
       expectedProposalDigest: draft.digest,
       approvalReceipt: approvalReceipt(draft),
+      review: review(),
+      contentSource: publicationContentSource(),
       approvedByCallId: "publish-call",
     });
     expect(published.draft).toBe(true);
     expect(published.normalizedChangedPaths).toEqual(draft.approvedPaths);
     expect(provider.draftMutations).toBe(1);
+    expect(provider.draftContent?.changes[0]).toMatchObject({
+      path: "apps/demo/page.tsx",
+      kind: "added",
+      after: { mode: "644", digest: reviewedBytesDigest },
+    });
+    expect(stores.proposals.get(fresh.digest)).toEqual(fresh);
+    expect(stores.proposals.get(draft.digest)).toEqual(draft);
+    expect(JSON.stringify([...stores.proposals.values()])).not.toContain(
+      '"bytes"',
+    );
+    expect(JSON.stringify([...stores.receipts.values()])).not.toContain(
+      '"bytes"',
+    );
   });
 
   it("seals and durably reads back a default-branch proposal without provider mutation", async () => {
@@ -565,6 +650,8 @@ describe("GitHub runtime adapter and durable-store composition", () => {
       runtime.publishDraftPullRequest({
         expectedProposalDigest: fresh.digest,
         approvalReceipt: approvalReceipt(draftProposal()),
+        review: review(),
+        contentSource: publicationContentSource(),
         approvedByCallId: "call",
       }),
     ).rejects.toThrow(/unavailable or changed/u);

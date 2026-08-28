@@ -3,12 +3,14 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import * as databaseSchema from "../db/schema";
-import { githubPublicationJournals } from "../db/schema";
+import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import { hostedGitHubPublicationJournals } from "../db/schema";
 import {
   assertCanonicalGitHubMutationReceipt,
   type GitHubMutationReceipt,
   type GitHubPublicationReceiptStore,
 } from "./github-publication";
+import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
@@ -63,8 +65,16 @@ function journalValues(receipt: GitHubMutationReceipt, now: Date) {
  * operation because deleting them could authorize a duplicate side effect. */
 export function createPostgresGitHubPublicationReceiptStore(
   database: Database,
+  authorityInput: HostedGitHubTenantAuthority,
   now: () => Date = () => new Date(),
 ): GitHubPublicationReceiptStore {
+  const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+  const tenantPredicate = and(
+    eq(hostedGitHubPublicationJournals.issuer, authority.issuer),
+    eq(hostedGitHubPublicationJournals.audience, authority.audience),
+    eq(hostedGitHubPublicationJournals.workspaceId, authority.workspaceId),
+    eq(hostedGitHubPublicationJournals.ownerUserId, authority.ownerUserId),
+  );
   return {
     async read(proposalDigest) {
       if (!/^[0-9a-f]{64}$/u.test(proposalDigest)) {
@@ -72,8 +82,13 @@ export function createPostgresGitHubPublicationReceiptStore(
       }
       const rows = await database
         .select()
-        .from(githubPublicationJournals)
-        .where(eq(githubPublicationJournals.proposalDigest, proposalDigest))
+        .from(hostedGitHubPublicationJournals)
+        .where(
+          and(
+            tenantPredicate,
+            eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest),
+          ),
+        )
         .limit(1);
       return rows[0] === undefined
         ? undefined
@@ -96,16 +111,16 @@ export function createPostgresGitHubPublicationReceiptStore(
       const values = journalValues(receipt, timestamp);
       if (expectedDigest === undefined) {
         const inserted = await database
-          .insert(githubPublicationJournals)
-          .values(values)
+          .insert(hostedGitHubPublicationJournals)
+          .values({ ...authority, ...values })
           .onConflictDoNothing()
           .returning({
-            proposalDigest: githubPublicationJournals.proposalDigest,
+            proposalDigest: hostedGitHubPublicationJournals.proposalDigest,
           });
         return inserted.length === 1;
       }
       const updated = await database
-        .update(githubPublicationJournals)
+        .update(hostedGitHubPublicationJournals)
         .set({
           receiptDigest: values.receiptDigest,
           idempotencyKey: values.idempotencyKey,
@@ -116,17 +131,18 @@ export function createPostgresGitHubPublicationReceiptStore(
         })
         .where(
           and(
-            eq(githubPublicationJournals.proposalDigest, proposalDigest),
-            eq(githubPublicationJournals.receiptDigest, expectedDigest),
-            eq(githubPublicationJournals.kind, receipt.kind),
+            tenantPredicate,
+            eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest),
+            eq(hostedGitHubPublicationJournals.receiptDigest, expectedDigest),
+            eq(hostedGitHubPublicationJournals.kind, receipt.kind),
             eq(
-              githubPublicationJournals.idempotencyKey,
+              hostedGitHubPublicationJournals.idempotencyKey,
               receipt.idempotencyKey,
             ),
           ),
         )
         .returning({
-          proposalDigest: githubPublicationJournals.proposalDigest,
+          proposalDigest: hostedGitHubPublicationJournals.proposalDigest,
         });
       return updated.length === 1;
     },

@@ -36,6 +36,20 @@
       "when": 1787803200000,
       "tag": "0005_github_publication_journal",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787893200000,
+      "tag": "0006_tenant_github_publication",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787896800000,
+      "tag": "0007_github_installation_authorization",
+      "breakpoints": true
     }
   ]
 }

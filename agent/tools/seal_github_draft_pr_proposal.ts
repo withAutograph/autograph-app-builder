@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { githubPublicationRuntime } from "@/lib/agent/github-publication-runtime";
+import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import {
   appBuilderWorkflowState,
   assertExactWorkflowState,
@@ -18,7 +18,7 @@ export default defineTool({
     expectedReviewDigest: digest,
     title: z.string().trim().min(1).max(120),
   }),
-  async execute(input) {
+  async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined)
       throw new Error(
@@ -31,13 +31,13 @@ export default defineTool({
       throw new Error(
         "The proposal request is not bound to the exact GitHub source and review receipts.",
       );
-    const proposal =
-      await githubPublicationRuntime.sealDraftPullRequestProposal({
-        githubSource: state.githubSource,
-        source: sourceReceiptEvidence(state.sourceReceipt),
-        review: state.reviewReceipt,
-        title: input.title,
-      });
+    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    const proposal = await runtime.sealDraftPullRequestProposal({
+      githubSource: state.githubSource,
+      source: sourceReceiptEvidence(state.sourceReceipt),
+      review: state.reviewReceipt,
+      title: input.title,
+    });
     if (
       proposal.reviewDigest !== state.reviewReceipt.digest ||
       proposal.changeSetDigest !== state.reviewReceipt.changeSetDigest ||

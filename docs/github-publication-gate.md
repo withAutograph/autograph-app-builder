@@ -16,15 +16,57 @@ The repository also contains a disabled-by-default runtime composition seam.
 requests the exact operation-scoped permission set, closes every provider
 snapshot before returning it, and sanitizes provider transport failures. The
 provider port—not Eve input—owns GitHub authentication, the fixed API origin,
-template materialization, and reviewed file bytes.
+and template materialization. Reviewed file bytes come only from a typed,
+read-only content source over the re-observed validated apply overlay. The
+runtime verifies every postimage path, mode, digest, and byte digest against the
+exact reviewed receipt before passing an ephemeral content bundle to the
+provider mutation port.
 
 `createPostgresGitHubPublicationStores` persists closed proposals and delegates
 mutation receipts to the single shared PostgreSQL CAS journal in the
-Drizzle-owned `github_publication_proposal` and `github_publication_journal`
-tables. The JSON record is authoritative; duplicate index columns are rebound
-on every read, and receipt transitions use one SQL compare-and-set against the
-prior receipt digest. Migration remains the mise-owned `database:migrate`
-operation.
+Drizzle-owned tenant-scoped `hosted_github_publication_proposal` and
+`hosted_github_publication_journal` tables. Every primary key, idempotency
+index, read, insert, and compare-and-set includes the exact issuer, audience,
+workspace, and owner tuple. The JSON record is authoritative; duplicate index
+columns are rebound on every read, and receipt transitions use one SQL
+compare-and-set against the prior receipt digest. The earlier unscoped V5
+tables remain unused compatibility artifacts. Migration remains the mise-owned
+`database:migrate` operation.
+
+`hosted_github_installation` binds that same tenant tuple to one exact GitHub
+App installation and expected account identity. Binding is available only
+through the owner-only, confirmation-digest-bound
+`hosted:github-installation-bind` mise task. It stores no application private
+key, installation token, user OAuth token, or provider response.
+
+Public self-service installation uses a separate fail-closed authorization
+boundary at `/github/installations`. A same-origin form POST creates a
+ten-minute HMAC-signed state containing only an opaque nonce and the digest of
+the current authenticated issuer, audience, workspace, and user tuple. Only
+the state digest and tenant tuple are stored. The GitHub callback must present
+the same live Preview session and workspace membership. The setup callback
+atomically consumes the installation state, creates a second tenant-bound
+authorization state, and redirects through GitHub's web authorization flow
+with S256 PKCE. The authorization callback atomically consumes that second
+state before exchanging the one-time code and derived verifier. The returned
+GitHub user token is request-local: the callback uses it only against the fixed
+`api.github.com` `/user` and paginated `/user/installations` endpoints, accepts
+only one unambiguous active selected-repository installation for the configured
+App ID, checks personal installations against the caller, rechecks live App
+Builder membership, and then writes the existing tenant installation binding.
+It never persists or returns the code, client secret, user token, refresh
+token, raw provider response, or authorization header. A replay, tenant change,
+provider drift, membership change, suspended installation, or all-repository
+selection fails closed without a binding.
+
+This route adds the exact Preview-only environment fields
+`GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
+`GITHUB_APP_INSTALL_STATE_SECRET`. The existing `GITHUB_CLIENT_ID` and
+`GITHUB_CLIENT_SECRET` remain the separate invited-user sign-in provider.
+`GITHUB_TOKEN` and `GITHUB_API_URL` are forbidden ambient overrides. Migration
+`0007_github_installation_authorization` owns the digest-only, one-time state
+table. The owner-only mise binding remains an operator recovery path; it is not
+the public installation flow.
 
 `composeGitHubPublicationRuntime` enables the typed tools only when an adapter,
 proposal store, and receipt store are all injected with `enabled: true`. The
@@ -33,6 +75,13 @@ environment variable, or database URL, and this slice performs no GitHub or
 database call. A later deployment composition must supply the credential-bound
 provider and database handle, then prove the behavior against GitHub before
 EXT-BLD-04 can be accepted.
+
+Publication content is never written to a proposal, workflow aggregate,
+database row, mutation receipt, or log. Both fresh-repository and draft-PR
+mutation calls require the live reviewed receipt and content source. A missing,
+mode-drifted, or digest-drifted postimage stops before provider dispatch. If a
+prior provider call has an exact successful read-back, lost-response recovery
+returns that receipt without reopening or rereading the overlay.
 
 The boundary supports four operations:
 
@@ -60,8 +109,36 @@ postcondition, or terminal-store failure remains pending and is reconciled by
 exact idempotency read-back. Only an explicit provider rejection becomes a
 bounded sanitized failure receipt and requires explicit recovery.
 
-The repository now supplies the PostgreSQL CAS store and its additive schema,
-but the fail-closed runtime does not compose it with a live GitHub App yet. A
+The repository now supplies the PostgreSQL CAS store, its additive schema, and
+a fixed-`api.github.com` HTTP provider. Preview deployment composition is
+enabled only by exact `APP_BUILDER_GITHUB_PUBLICATION_ENABLED=1` together with
+the hosted Preview bindings, bounded `DATABASE_URL`, `GITHUB_APP_ID`, and
+`GITHUB_APP_PRIVATE_KEY`. `GITHUB_APP_INSTALLATION_ID`, `GITHUB_TOKEN`, and
+`GITHUB_API_URL` are forbidden. The installation ID is read live from the exact
+issuer/audience/workspace/owner database binding after current and initiating
+forwarded authority plus membership are revalidated for the session. Local,
+unconfigured, non-Preview, service, mismatched, inactive, or ambient authority
+remains fail-closed. The provider creates short-lived App JWTs and mints a
+fresh installation token with the exact permissions for each operation. The runtime
+passes a closed, discriminated, ephemeral content value directly into the
+provider mutation: fresh creation receives the complete immutable prepared
+source manifest and bytes at `sourceTree`, while draft publication receives
+only the reviewed validated-overlay changes. The HTTP provider has no second
+material source and verifies modes, blob identities, byte digests, and the
+exact Git tree before mutation. Tokens, endpoints, raw responses, raw content,
+and raw errors never enter a proposal or receipt. Composition makes the typed
+capability available; it does not itself prove a live installation, GitHub
+mutation, or provider postcondition.
+
+The permission contract omits the workflows permission for source inspection
+and requires `workflows: write` only for fresh-history or reviewed draft-PR
+mutation. This is required because a complete supported template can include
+approved files under `.github/workflows`; contents permission alone cannot
+write those paths.
+The provider creates a parentless initial Git commit from the full immutable
+template material rather than asking GitHub to resolve a mutable template ref.
+
+A
 proposal digest is the journal authority key; duplicated digest, idempotency,
 kind, and status columns are rebound to the closed JSON receipt. The hosted
 tenant retention task cannot delete these rows. `hosted:storage-verify` proves

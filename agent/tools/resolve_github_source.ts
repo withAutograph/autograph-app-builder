@@ -2,7 +2,7 @@ import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
-import { githubPublicationRuntime } from "@/lib/agent/github-publication-runtime";
+import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 
@@ -52,7 +52,8 @@ export default defineTool({
       return source.githubSource;
     }
 
-    const receipt = await githubPublicationRuntime.resolveImmutableSource({
+    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    const receipt = await runtime.resolveImmutableSource({
       repositoryId: input.repositoryId,
       ref: input.ref,
       expectedSha: input.expectedSha,

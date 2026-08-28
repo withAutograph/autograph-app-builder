@@ -1,0 +1,31 @@
+type Props = {
+  searchParams: Promise<{ status?: string }>;
+};
+
+export default async function GitHubInstallationsPage({ searchParams }: Props) {
+  const { status } = await searchParams;
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <p className="eyebrow">Autograph App Builder</p>
+        <h1>Connect a GitHub App installation</h1>
+        <p>
+          Choose only the repositories this workspace may inspect or update.
+          GitHub will ask you to confirm the installation and return here.
+        </p>
+        {status === "connected" ? (
+          <p role="status">The GitHub App installation is connected.</p>
+        ) : null}
+        {status === "failed" ? (
+          <p role="alert">
+            The GitHub App installation could not be connected. Start a new
+            authorization attempt.
+          </p>
+        ) : null}
+        <form method="post" action="/github/installations/start">
+          <button type="submit">Install or update GitHub access</button>
+        </form>
+      </section>
+    </main>
+  );
+}

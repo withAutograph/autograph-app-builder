@@ -8,6 +8,8 @@ import {
   type DraftPullRequestProposal,
   type DraftPullRequestSuccessReceipt,
   type FreshRepositorySuccessReceipt,
+  type GitHubDraftPullRequestContentSource,
+  type GitHubFreshRepositoryContentSource,
   type GitHubPublicationAdapter,
   type GitHubPublicationReceiptStore,
   type ImmutableGitHubSourceReceipt,
@@ -63,11 +65,15 @@ export interface GitHubPublicationRuntime {
   }): Promise<DraftPullRequestProposal>;
   createFreshRepository(input: {
     expectedProposalDigest: string;
+    review: ReviewedChangeSetReceipt;
+    contentSource: GitHubFreshRepositoryContentSource;
     approvedByCallId: string;
   }): Promise<FreshRepositorySuccessReceipt>;
   publishDraftPullRequest(input: {
     expectedProposalDigest: string;
     approvalReceipt: ApprovalReceipt;
+    review: ReviewedChangeSetReceipt;
+    contentSource: GitHubDraftPullRequestContentSource;
     approvedByCallId: string;
   }): Promise<DraftPullRequestSuccessReceipt>;
 }
@@ -224,6 +230,8 @@ export function composeGitHubPublicationRuntime(input: {
         adapter,
         store: receipts,
         proposal,
+        review: request.review,
+        contentSource: request.contentSource,
         approvedByCallId: request.approvedByCallId,
       });
     },
@@ -254,6 +262,8 @@ export function composeGitHubPublicationRuntime(input: {
         adapter,
         store: receipts,
         proposal,
+        review: request.review,
+        contentSource: request.contentSource,
         approvedByCallId: request.approvedByCallId,
       });
     },
