@@ -14,6 +14,7 @@ import {
   sha256,
   TOOL_NAMES,
 } from "./portable-release";
+import { readTrackedTreeBlob } from "./git-tree-blob";
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/u);
 const sourceHash = z.string().regex(/^[0-9a-f]{40}$/u);
@@ -39,6 +40,7 @@ export const portableReleaseReceiptSchema = z
     codexMarketplaceArchive: z
       .object({ name: z.string().min(1), sha256: hash })
       .strict(),
+    codexMarketplaceAssets: digestRecord,
     coreFiles: digestRecord,
     auxiliaryFiles: digestRecord,
     tools: z.tuple([
@@ -66,7 +68,7 @@ function safeRelative(path: string) {
   );
 }
 
-function archiveFiles(archive: Uint8Array) {
+export function archiveFiles(archive: Uint8Array) {
   const tar = gunzipSync(archive);
   const files = new Map<string, Uint8Array>();
   let offset = 0;
@@ -238,6 +240,42 @@ export async function verifyPortableProofArtifact(input: {
     throw new Error(
       "Codex marketplace manifest was not bound to package 0.2.1 and its sole MCP adapter.",
     );
+  const codexMarketplaceAssetPaths: string[] = [];
+  for (const reference of new Set([
+    codexManifest.interface?.composerIcon,
+    codexManifest.interface?.logo,
+  ])) {
+    if (
+      typeof reference !== "string" ||
+      !reference.startsWith("./") ||
+      !safeRelative(reference.slice(2))
+    )
+      throw new Error(
+        "Codex marketplace manifest asset reference was not a safe relative path.",
+      );
+    const path = `${marketplacePrefix}${reference.slice(2)}`;
+    const content = marketplaceFiles.get(path);
+    if (!content)
+      throw new Error(
+        `Codex marketplace omitted referenced asset ${reference}.`,
+      );
+    codexMarketplaceAssetPaths.push(path);
+    const sourceDigest = sha256(
+      readTrackedTreeBlob({
+        repositoryRoot,
+        tree: receipt.source.tree,
+        path: reference.slice(2),
+      }).bytes,
+    );
+    if (
+      receipt.codexMarketplaceAssets[path] !== sourceDigest ||
+      sha256(content) !== sourceDigest
+    )
+      throw new Error(
+        `Codex marketplace referenced asset did not match immutable source bytes at ${reference}.`,
+      );
+  }
+  exactKeys(receipt.codexMarketplaceAssets, codexMarketplaceAssetPaths);
   const auxiliaryPaths = [
     "clients/codex.client-harness.json",
     "clients/cursor.client-harness.json",

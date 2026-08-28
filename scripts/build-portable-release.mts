@@ -19,6 +19,7 @@ import {
   releaseEndpoint,
   sha256,
 } from "./portable-release";
+import { readTrackedTreeBlob } from "./git-tree-blob";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
@@ -158,6 +159,37 @@ if (
   throw new Error(
     "The Codex adapter name and version must match the portable manifest.",
   );
+const codexAssetReferences = [
+  codexManifest.interface?.composerIcon,
+  codexManifest.interface?.logo,
+];
+const codexMarketplaceAssetPaths: string[] = [];
+for (const reference of new Set(codexAssetReferences)) {
+  if (
+    typeof reference !== "string" ||
+    !reference.startsWith("./") ||
+    reference.includes("\\") ||
+    reference
+      .slice(2)
+      .split("/")
+      .some((part: string) => part === "" || part === "." || part === "..")
+  )
+    throw new Error(
+      "Codex manifest asset references must be safe relative paths.",
+    );
+  const relativeAssetPath = reference.slice(2);
+  const sourceAsset = readTrackedTreeBlob({
+    repositoryRoot,
+    tree: source.tree,
+    path: relativeAssetPath,
+  });
+  const destinationAsset = join(marketplacePluginRoot, relativeAssetPath);
+  await mkdir(dirname(destinationAsset), { recursive: true, mode: 0o755 });
+  await writeFile(destinationAsset, sourceAsset.bytes, { mode: 0o644 });
+  codexMarketplaceAssetPaths.push(
+    `plugins/${portable.name}/${relativeAssetPath}`,
+  );
+}
 await writeFile(
   join(marketplacePluginRoot, ".codex-plugin", "plugin.json"),
   `${JSON.stringify(codexManifest, null, 2)}\n`,
@@ -245,6 +277,14 @@ const receipt = {
     name: marketplaceArchiveName,
     sha256: sha256(marketplaceArchive),
   },
+  codexMarketplaceAssets: Object.fromEntries(
+    codexMarketplaceAssetPaths.toSorted().map((path) => {
+      const content = marketplaceFiles.get(path);
+      if (!content)
+        throw new Error(`Codex marketplace omitted referenced asset ${path}.`);
+      return [path, sha256(content)];
+    }),
+  ),
   coreFiles: Object.fromEntries(
     [...files].sort().map(([path, content]) => [path, sha256(content)]),
   ),
