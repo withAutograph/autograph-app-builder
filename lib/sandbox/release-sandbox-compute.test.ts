@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import hook from "./release-sandbox-compute";
+import hook from "../../agent/hooks/release-sandbox-compute";
 import {
   clearHostedSandboxExecutionLeaseCacheForTest,
   setHostedSandboxExecutionLeaseDependenciesForTest,
-} from "../../lib/sandbox/deployment-execution-lease";
+} from "./deployment-execution-lease";
 
 const originalEnvironment = {
   EVE_HOSTED_ADAPTER: process.env.EVE_HOSTED_ADAPTER,
