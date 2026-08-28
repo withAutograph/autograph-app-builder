@@ -2,6 +2,14 @@ import packageManifest from "../../package.json";
 
 export const MCP_APP_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 export const APP_VERSION = packageManifest.version;
+const prototypeDocumentCsp =
+  "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; base-uri 'none'; connect-src 'none'; form-action 'none'; frame-src 'none'; img-src data:; media-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">";
+const prototypeDocumentPrefix = `<!doctype html><html><head>${prototypeDocumentCsp}<meta charset="utf-8"></head><body>`;
+const prototypeDocumentSuffix = "</body></html>";
+
+export function sandboxedPrototypeDocument(html: string): string {
+  return `${prototypeDocumentPrefix}${html}${prototypeDocumentSuffix}`;
+}
 
 export const sessionUiHtml = `<!doctype html>
 <html lang="en">
@@ -56,11 +64,11 @@ export const sessionUiHtml = `<!doctype html>
       const count=document.getElementById("count");
       const labels={working:"Working",input_required:"Needs input",waiting:"Waiting",completed:"Complete",failed:"Failed",cancelled:"Cancelled"};
       const icons={assistant_message:"E",progress:"·",input_required:"?",status:"·",error:"!"};
-      const prototypeCsp='<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; base-uri \'none\'; connect-src \'none\'; form-action \'none\'; frame-src \'none\'; img-src data:; media-src data:; font-src data:; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'">';
+      const prototypeDocumentPrefix=${JSON.stringify(prototypeDocumentPrefix)};
+      const prototypeDocumentSuffix=${JSON.stringify(prototypeDocumentSuffix)};
       function text(value){return typeof value==="string"?value:""}
       function prototypeDocument(html){
-        const head=/<head[^>]*>/iu.exec(html);
-        return head?html.slice(0,head.index+head[0].length)+prototypeCsp+html.slice(head.index+head[0].length):prototypeCsp+html;
+        return prototypeDocumentPrefix+html+prototypeDocumentSuffix;
       }
       function renderPrototype(value){
         if(!value||value.mediaType!=="text/html"||typeof value.content!=="string"||typeof value.digest!=="string"){

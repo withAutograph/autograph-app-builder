@@ -36,6 +36,18 @@ import {
 import { safeToolError, SESSION_RESOURCE_URI, toolResult } from "./result";
 import { MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
 
+const sessionResourceMeta = {
+  ui: {
+    prefersBorder: false,
+    csp: {
+      connectDomains: [],
+      resourceDomains: [],
+      frameDomains: ["about:"],
+      baseUriDomains: [],
+    },
+  },
+} as const;
+
 export interface HostedWorkspaceMembership {
   isMember(input: {
     principal: HostedPrincipal;
@@ -62,7 +74,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
         title: "Autograph App Builder progress",
         description: "Live progress and requests from Autograph App Builder.",
         mimeType: MCP_APP_RESOURCE_MIME_TYPE,
-        _meta: { ui: { prefersBorder: false } },
+        _meta: sessionResourceMeta,
       },
       async (uri) => ({
         contents: [
@@ -70,7 +82,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
             uri: uri.href,
             mimeType: MCP_APP_RESOURCE_MIME_TYPE,
             text: sessionUiHtml,
-            _meta: { ui: { prefersBorder: false } },
+            _meta: sessionResourceMeta,
           },
         ],
       }),

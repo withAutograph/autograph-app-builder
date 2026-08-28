@@ -1,3 +1,4 @@
+import { McpUiResourceMetaSchema } from "@modelcontextprotocol/ext-apps";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HostedEveTransport } from "../eve/hosted-service";
@@ -109,6 +110,7 @@ function runtime(
 function mcpRequest(
   headers: Record<string, string> = {},
   method = "tools/list",
+  params: Record<string, unknown> = {},
 ): Request {
   return new Request(auth.resourceUrl, {
     method: "POST",
@@ -121,7 +123,7 @@ function mcpRequest(
       jsonrpc: "2.0",
       id: 1,
       method,
-      params: {},
+      params,
     }),
   });
 }
@@ -454,8 +456,14 @@ describe("request-scoped MCP service selection", () => {
     const handler = createMcpRequestHandler({ environment: {} });
     const toolResponse = await handler(mcpRequest());
     const resourceResponse = await handler(mcpRequest({}, "resources/list"));
+    const resourceReadResponse = await handler(
+      mcpRequest({}, "resources/read", {
+        uri: "ui://autograph-app-builder/session.html",
+      }),
+    );
     expect(toolResponse.status).toBe(200);
     expect(resourceResponse.status).toBe(200);
+    expect(resourceReadResponse.status).toBe(200);
 
     const toolResult = await mcpResult<{
       tools: Array<{ name: string; title?: string; description?: string }>;
@@ -492,14 +500,41 @@ describe("request-scoped MCP service selection", () => {
     });
 
     const resourceResult = await mcpResult<{
-      resources: Array<{ name: string; title?: string; description?: string }>;
+      resources: Array<{
+        name: string;
+        title?: string;
+        description?: string;
+        _meta?: { ui?: unknown };
+      }>;
     }>(resourceResponse);
     expect(resourceResult.resources).toContainEqual(
       expect.objectContaining({
         name: "autograph-session",
         title: "Autograph App Builder progress",
         description: "Live progress and requests from Autograph App Builder.",
+        _meta: {
+          ui: {
+            prefersBorder: false,
+            csp: {
+              connectDomains: [],
+              resourceDomains: [],
+              frameDomains: ["about:"],
+              baseUriDomains: [],
+            },
+          },
+        },
       }),
     );
+    const resourceMeta = resourceResult.resources[0]?._meta?.ui;
+    expect(McpUiResourceMetaSchema.parse(resourceMeta)).toEqual(resourceMeta);
+
+    const resourceRead = await mcpResult<{
+      contents: Array<{ _meta?: { ui?: unknown } }>;
+    }>(resourceReadResponse);
+    expect(resourceRead.contents).toHaveLength(1);
+    expect(resourceRead.contents[0]?._meta?.ui).toEqual(resourceMeta);
+    expect(
+      McpUiResourceMetaSchema.parse(resourceRead.contents[0]?._meta?.ui),
+    ).toEqual(resourceMeta);
   });
 });
