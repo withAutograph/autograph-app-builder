@@ -1643,7 +1643,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
 });
 
 export default defineAgent({
-  model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-terra",
+  model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-sol",
   modelContextWindowTokens: 128_000,
   reasoning: "high",
   limits: {
