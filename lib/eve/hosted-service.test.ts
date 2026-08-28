@@ -22,6 +22,7 @@ import {
   type HostedEveStore,
   type HostedOperationRecord,
   type ReserveOperationResult,
+  type HostedSessionTimeoutPolicy,
 } from "./hosted-store";
 import type { EveSessionService } from "./service";
 
@@ -124,6 +125,8 @@ async function started(input?: {
   store?: InMemoryHostedEveStore;
   principal?: HostedPrincipal;
   transport?: HostedEveTransport;
+  now?: () => number;
+  sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
 }) {
   const store = input?.store ?? new InMemoryHostedEveStore();
   const adapter = input?.transport ?? transport();
@@ -131,7 +134,10 @@ async function started(input?: {
     principal: input?.principal ?? principal,
     store,
     transport: adapter,
-    now: () => 1_000,
+    now: input?.now ?? (() => 1_000),
+    ...(input?.sessionTimeoutPolicy === undefined
+      ? {}
+      : { sessionTimeoutPolicy: input.sessionTimeoutPolicy }),
   });
   const result = await service.start({
     prompt: "Build an app",
@@ -297,6 +303,64 @@ describe("hosted Eve service core", () => {
     });
     expect(retried).toEqual(result);
     expect(adapter.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails an idle-expired session closed before transport access", async () => {
+    let now = 1_000;
+    const adapter = transport();
+    const first = await started({
+      transport: adapter,
+      now: () => now,
+      sessionTimeoutPolicy: {
+        idleTimeoutMs: 60_000,
+        maxLifetimeMs: 120_000,
+      },
+    });
+    now = 62_000;
+
+    await expect(
+      first.service.get({
+        sessionId: first.result.sessionId,
+        cursor: 0,
+        limit: 1,
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
+    await expect(
+      first.service.start({
+        prompt: "Build an app",
+        clientRequestId: "request_1",
+      }),
+    ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(adapter.start).toHaveBeenCalledTimes(1);
+    expect(adapter.get).not.toHaveBeenCalled();
+  });
+
+  it("enforces maximum lifetime even when reads refresh idle activity", async () => {
+    let now = 1_000;
+    const adapter = transport();
+    const first = await started({
+      transport: adapter,
+      now: () => now,
+      sessionTimeoutPolicy: {
+        idleTimeoutMs: 120_000,
+        maxLifetimeMs: 120_000,
+      },
+    });
+    now = 61_000;
+    await first.service.get({
+      sessionId: first.result.sessionId,
+      cursor: 0,
+      limit: 1,
+    });
+    now = 122_000;
+    await expect(
+      first.service.get({
+        sessionId: first.result.sessionId,
+        cursor: 0,
+        limit: 1,
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
+    expect(adapter.get).toHaveBeenCalledTimes(1);
   });
 
   it.each(["missing", "mismatched"] as const)(

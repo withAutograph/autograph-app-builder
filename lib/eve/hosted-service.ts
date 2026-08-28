@@ -10,12 +10,16 @@ import {
 } from "./hosted-auth";
 import {
   hostedOperationRecordSchema,
+  DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
   hostedSessionRecordDigest,
   hostedSessionRecordSchema,
+  hostedSessionTimeoutPolicySchema,
+  isHostedSessionExpired,
   reserveOperationResultSchema,
   type HostedEveStore,
   type HostedOperationKind,
   type HostedOperationRecord,
+  type HostedSessionTimeoutPolicy,
 } from "./hosted-store";
 import {
   outstandingInternalEveRequests,
@@ -202,9 +206,28 @@ export function createHostedEveSessionService(input: {
   transport: HostedEveTransport;
   now?: () => number;
   admissionControl?: HostedPreviewAdmissionControlBinding;
+  sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
 }): EveSessionService {
   const principal = hostedPrincipalSchema.parse(input.principal);
   const now = input.now ?? Date.now;
+  const sessionTimeoutPolicy = hostedSessionTimeoutPolicySchema.parse(
+    input.sessionTimeoutPolicy ?? DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
+  );
+
+  function requireUnexpiredSession(
+    session: z.infer<typeof hostedSessionRecordSchema>,
+  ) {
+    if (
+      isHostedSessionExpired({
+        record: session,
+        nowEpochMs: now(),
+        policy: sessionTimeoutPolicy,
+      })
+    ) {
+      throw new HostedSessionNotFoundError();
+    }
+    return session;
+  }
 
   function requireOwnedOperation(
     operationInput: unknown,
@@ -244,7 +267,7 @@ export function createHostedEveSessionService(input: {
     ) {
       throw new HostedSessionNotFoundError();
     }
-    return parsed;
+    return requireUnexpiredSession(parsed);
   }
 
   async function requireBoundSucceededStartSession(
@@ -274,7 +297,7 @@ export function createHostedEveSessionService(input: {
       ) {
         throw new HostedSubmissionUnknownError();
       }
-      return verifiedSession;
+      return requireUnexpiredSession(verifiedSession);
     } catch {
       throw new HostedSubmissionUnknownError();
     }
@@ -326,7 +349,11 @@ export function createHostedEveSessionService(input: {
           principal,
           candidate,
           options.kind === "start" && input.admissionControl !== undefined
-            ? { binding: input.admissionControl, nowEpochMs: timestamp }
+            ? {
+                binding: input.admissionControl,
+                nowEpochMs: timestamp,
+                sessionTimeoutPolicy,
+              }
             : undefined,
         ),
       );

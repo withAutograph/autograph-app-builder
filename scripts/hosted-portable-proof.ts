@@ -125,6 +125,27 @@ export type HostedProofScenario = z.infer<typeof hostedProofScenarioSchema>;
 export const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
+function canonicalPublicResult(value: unknown): string {
+  if (Array.isArray(value))
+    return `[${value.map(canonicalPublicResult).join(",")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(
+        ([key, entry]) =>
+          `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`,
+      )
+      .join(",")}}`;
+  const primitive = JSON.stringify(value);
+  if (primitive === undefined)
+    throw new Error("Public tool result was not canonical JSON.");
+  return primitive;
+}
+
+function publicResultFingerprint(result: EveSessionResult) {
+  return digest(canonicalPublicResult(result));
+}
+
 const tokenClaimsSchema = z
   .object({
     iss: z.string().url().startsWith("https://"),
@@ -288,6 +309,11 @@ export interface ProofHttpResult {
 export class HostedMcpProofClient {
   private requestId = 0;
   private sessionId?: string;
+  private readonly responseBodies: string[] = [];
+  private discardedResult?: {
+    name: (typeof TOOL_NAMES)[number];
+    fingerprint: string;
+  };
 
   constructor(
     readonly endpoint: string,
@@ -324,6 +350,7 @@ export class HostedMcpProofClient {
     const returnedSession = response.headers.get("mcp-session-id");
     if (returnedSession !== null) this.sessionId = returnedSession;
     const text = await response.text();
+    this.responseBodies.push(text);
     return {
       status: response.status,
       headers: response.headers,
@@ -381,6 +408,51 @@ export class HostedMcpProofClient {
     };
   }
 
+  async callToolAndDiscardResult(
+    name: (typeof TOOL_NAMES)[number],
+    args: unknown,
+  ) {
+    const response = await this.post("tools/call", { name, arguments: args });
+    if (response.status !== 200 || response.payload?.error !== undefined)
+      throw new Error(`${name} failed with HTTP ${response.status}.`);
+    const result = z
+      .object({
+        isError: z.boolean().optional(),
+        structuredContent: z.unknown(),
+      })
+      .passthrough()
+      .parse(response.payload?.result);
+    if (result.isError === true)
+      throw new Error(`${name} returned an error before result loss.`);
+    const publicResult = eveSessionResultSchema.parse(result.structuredContent);
+    // Retain only a private canonical fingerprint. This models a caller that
+    // loses the successful operation result before it can retain the public
+    // session identity while still binding a retry to the discarded result.
+    this.discardedResult = {
+      name,
+      fingerprint: publicResultFingerprint(publicResult),
+    };
+  }
+
+  async callToolMatchingDiscardedResult(
+    name: (typeof TOOL_NAMES)[number],
+    args: unknown,
+  ) {
+    const discarded = this.discardedResult;
+    if (discarded === undefined || discarded.name !== name)
+      throw new Error("No matching discarded tool result was recorded.");
+    const result = await this.callTool(name, args);
+    if (
+      !result.isError &&
+      result.session?.success === true &&
+      publicResultFingerprint(result.session.data) !== discarded.fingerprint
+    )
+      throw new Error(
+        "Lost-response retry did not match the discarded hosted session result.",
+      );
+    return result;
+  }
+
   rawInitialize(authenticate = true) {
     return this.post(
       "initialize",
@@ -391,6 +463,23 @@ export class HostedMcpProofClient {
       },
       { authenticate },
     );
+  }
+
+  disclosureEvidence(forbiddenValues: readonly string[]) {
+    const joined = this.responseBodies.join("\n");
+    if (
+      forbiddenValues.some((value) => value !== "" && joined.includes(value)) ||
+      /\bwrun_[A-Za-z0-9]+\b/u.test(joined) ||
+      joined.includes("x-vercel-trusted-oidc-idp-token")
+    ) {
+      throw new Error(
+        "Hosted public responses disclosed private runtime material.",
+      );
+    }
+    return {
+      publicResponsesScanned: this.responseBodies.length,
+      publicResponseDisclosureScanDigest: digest(joined),
+    };
   }
 }
 
@@ -498,6 +587,7 @@ async function pollUntilSettled(input: {
   let cursor = input.cursor;
   let allText = "";
   let responseCount = 0;
+  let responseBatchCount = 0;
   const approvalPhases: string[] = [];
   for (let poll = 0; poll < input.scenario.maxPolls; poll += 1) {
     const page = toolSession(
@@ -510,24 +600,28 @@ async function pollUntilSettled(input: {
     );
     cursor = page.cursor;
     allText += `\n${assistantText(page)}`;
-    for (const request of page.inputRequests ?? []) {
+    const responses = (page.inputRequests ?? []).map((request) => {
       const selected = responseFor(
         request,
         input.scenario,
         input.permitApprovals,
       );
-      if (selected.approvalPhase !== undefined)
+      if (selected.approvalPhase !== undefined) {
         approvalPhases.push(selected.approvalPhase);
+      }
+      return { requestId: request.requestId, response: selected.response };
+    });
+    if (responses.length > 0) {
       toolSession(
         "eve_respond",
         await input.client.callTool("eve_respond", {
           sessionId: input.sessionId,
-          requestId: request.requestId,
-          response: selected.response,
-          clientRequestId: `${input.requestPrefix}-respond-${responseCount}`,
+          responses,
+          clientRequestId: `${input.requestPrefix}-respond-batch-${responseBatchCount}`,
         }),
       );
-      responseCount += 1;
+      responseCount += responses.length;
+      responseBatchCount += 1;
     }
     if (
       page.status === "waiting" ||
@@ -535,7 +629,14 @@ async function pollUntilSettled(input: {
       page.status === "failed" ||
       page.status === "cancelled"
     )
-      return { page, cursor, allText, responseCount, approvalPhases };
+      return {
+        page,
+        cursor,
+        allText,
+        responseCount,
+        responseBatchCount,
+        approvalPhases,
+      };
     await new Promise((resolve) =>
       setTimeout(resolve, input.scenario.pollIntervalMs),
     );
@@ -558,13 +659,17 @@ export interface HostedProofResult {
   primaryIdentityDigest: string;
   secondaryIdentityDigest: string;
   idempotentStart: boolean;
+  discardedStartResponseRecovered: boolean;
   responseCount: number;
+  responseBatchCount: number;
   iterationProved: boolean;
   publicationEvidenceProved: boolean;
   draftPrEvidenceDigest: string;
   staleSessionRejected: boolean;
   mutualWorkspaceDenial: boolean;
   cancellationProved: boolean;
+  publicResponsesScanned: number;
+  publicResponseDisclosureScanDigest: string;
   sessionEvidenceDigest: string;
 }
 
@@ -634,16 +739,15 @@ export async function runHostedProof(input: {
     prompt: input.scenario.createPrompt,
     clientRequestId: `hosted-create-${proofId}`,
   };
+  await client.callToolAndDiscardResult("eve_start", startArgs);
   const first = toolSession(
     "eve_start",
-    await client.callTool("eve_start", startArgs),
+    await client.callToolMatchingDiscardedResult("eve_start", startArgs),
   );
-  const retry = toolSession(
+  toolSession(
     "eve_start",
-    await client.callTool("eve_start", startArgs),
+    await client.callToolMatchingDiscardedResult("eve_start", startArgs),
   );
-  if (first.sessionId !== retry.sessionId)
-    throw new Error("Lost-response retry created a second hosted session.");
   const created = await pollUntilSettled({
     client,
     scenario: input.scenario,
@@ -744,6 +848,14 @@ export async function runHostedProof(input: {
     throw new Error(
       "Cooperative cancellation was not proven by public events.",
     );
+  const primaryDisclosure = client.disclosureEvidence([
+    input.token,
+    input.crossTenantToken,
+  ]);
+  const secondaryDisclosure = crossTenant.disclosureEvidence([
+    input.token,
+    input.crossTenantToken,
+  ]);
 
   return {
     sourceSha: input.sourceSha,
@@ -757,13 +869,22 @@ export async function runHostedProof(input: {
     oauthMetadataDigest: metadata.digest,
     ...tokenPair,
     idempotentStart: true,
+    discardedStartResponseRecovered: true,
     responseCount: created.responseCount + iterated.responseCount,
+    responseBatchCount:
+      created.responseBatchCount + iterated.responseBatchCount,
     iterationProved: sent.sessionId === first.sessionId,
     publicationEvidenceProved: true,
     draftPrEvidenceDigest: draftPr.evidenceDigest,
     staleSessionRejected: true,
     mutualWorkspaceDenial: true,
     cancellationProved: true,
+    publicResponsesScanned:
+      primaryDisclosure.publicResponsesScanned +
+      secondaryDisclosure.publicResponsesScanned,
+    publicResponseDisclosureScanDigest: digest(
+      `${primaryDisclosure.publicResponseDisclosureScanDigest}\0${secondaryDisclosure.publicResponseDisclosureScanDigest}`,
+    ),
     sessionEvidenceDigest: digest(
       `${first.sessionId}\0${created.allText}\0${iterated.allText}\0${cancelled.page.status}`,
     ),

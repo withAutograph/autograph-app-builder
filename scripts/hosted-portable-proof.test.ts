@@ -116,11 +116,13 @@ function hostedFixture(
       direction: "primary-reads-secondary" | "secondary-reads-primary";
       kind: "transport" | "http500" | "malformed";
     };
+    discardedStartRetryDrift?: boolean;
   } = {},
 ) {
   const approved = new Set<string>();
   let createIterated = false;
   let cancelRequested = false;
+  let primaryStartCount = 0;
   return async (urlInput: string | URL | Request, init?: RequestInit) => {
     const url = String(urlInput);
     if (url.endsWith("/.well-known/oauth-protected-resource"))
@@ -180,16 +182,32 @@ function hostedFixture(
         structuredContent: session(String(args.sessionId), "working", 0),
       });
     };
-    if (name === "eve_start")
+    if (name === "eve_start") {
+      if (!secondary) primaryStartCount += 1;
       return tool(
         session(
-          secondary ? "secondary-session" : "primary-session",
+          secondary
+            ? "secondary-session"
+            : options.discardedStartRetryDrift && primaryStartCount === 1
+              ? "discarded-session-a"
+              : "primary-session",
           "working",
           0,
         ),
       );
+    }
     if (name === "eve_respond") {
-      approved.add(String(args.requestId));
+      if (!Array.isArray(args.responses) || args.responses.length === 0)
+        return tool(session("primary-session", "working", 0), true);
+      for (const response of args.responses) {
+        if (
+          response === null ||
+          typeof response !== "object" ||
+          typeof (response as { requestId?: unknown }).requestId !== "string"
+        )
+          return tool(session("primary-session", "working", 0), true);
+        approved.add((response as { requestId: string }).requestId);
+      }
       return tool(session("primary-session", "working", 0));
     }
     if (name === "eve_send") {
@@ -229,33 +247,37 @@ function hostedFixture(
           ? tool(session("primary-session", "working", 0))
           : tool(session("primary-session", "working", 0), true);
       }
-      const pendingPhase = !approved.has("approve-appspec")
-        ? "appspec"
-        : !approved.has("approve-change_set")
-          ? "change_set"
-          : createIterated && !approved.has("approve-publication")
-            ? "publication"
-            : undefined;
-      if (pendingPhase !== undefined) {
-        const expected = receipt(pendingPhase);
-        const described =
-          options.approvalDigestDrift && pendingPhase === "appspec"
-            ? { ...expected, subjectDigest: "d".repeat(64) }
-            : expected;
-        const request = {
-          requestId: `approve-${pendingPhase}`,
-          kind: "approval",
-          title: `Approve ${pendingPhase}`,
-          description: JSON.stringify(described),
-          allowFreeform: false,
-        };
+      const pendingPhases = (
+        createIterated
+          ? (["publication"] as const)
+          : (["appspec", "change_set"] as const)
+      ).filter((phase) => !approved.has(`approve-${phase}`));
+      if (pendingPhases.length > 0) {
+        const requests = pendingPhases.map((phase) => {
+          const expected = receipt(phase);
+          const described =
+            options.approvalDigestDrift && phase === "appspec"
+              ? { ...expected, subjectDigest: "d".repeat(64) }
+              : expected;
+          return {
+            requestId: `approve-${phase}`,
+            kind: "approval",
+            title: `Approve ${phase}`,
+            description: JSON.stringify(described),
+            allowFreeform: false,
+          };
+        });
         return tool(
           session(
             "primary-session",
             "input_required",
             approved.size + 1,
-            [{ type: "input_required", index: approved.size, request }],
-            [request],
+            requests.map((request, index) => ({
+              type: "input_required",
+              index: approved.size + index,
+              request,
+            })),
+            requests,
           ),
         );
       }
@@ -333,13 +355,62 @@ describe("hosted portable fresh-client proof", () => {
       invalidAuthRejected: true,
       oauthMetadataBound: true,
       idempotentStart: true,
+      discardedStartResponseRecovered: true,
       responseCount: 3,
+      responseBatchCount: 2,
       iterationProved: true,
       publicationEvidenceProved: true,
       staleSessionRejected: true,
       mutualWorkspaceDenial: true,
       cancellationProved: true,
+      publicResponsesScanned: expect.any(Number),
+      publicResponseDisclosureScanDigest:
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
+    expect(
+      Object.keys(result).some((key) =>
+        /discarded.*(?:digest|fingerprint)/iu.test(key),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects retries that differ from the discarded start result", async () => {
+    await expect(
+      runHostedProof(
+        proofInput(
+          hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch,
+        ),
+      ),
+    ).rejects.toThrow(
+      "Lost-response retry did not match the discarded hosted session result",
+    );
+  });
+
+  it("rejects a bearer or adapter session disclosure in public responses", async () => {
+    const leaking = hostedFixture() as typeof fetch;
+    const fetcher: typeof fetch = async (url, init) => {
+      const response = await leaking(url, init);
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        method?: string;
+        params?: { name?: string };
+      };
+      if (body.method !== "tools/call" || body.params?.name !== "eve_get") {
+        return response;
+      }
+      const payload = JSON.parse(await response.text()) as {
+        result?: { structuredContent?: { events?: unknown[] } };
+      };
+      payload.result?.structuredContent?.events?.push({
+        type: "assistant_message",
+        index: 99,
+        turnId: "leak",
+        text: `private ${primaryToken} wrun_PRIVATE`,
+      });
+      return Response.json(payload);
+    };
+    await expect(runHostedProof(proofInput(fetcher))).rejects.toThrow(
+      "disclosed private runtime material",
+    );
   });
 
   it("rejects approval digest drift and missing approval authority", async () => {

@@ -1,4 +1,4 @@
-import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, eq, gt, gte, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -17,6 +17,7 @@ import {
   type HostedEveStore,
   type HostedOperationRecord,
   type HostedSessionRecord,
+  type HostedSessionTimeoutPolicy,
 } from "./hosted-store";
 import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
@@ -94,6 +95,7 @@ async function exceedsAdmissionLimit(
   principal: HostedPrincipal,
   binding: HostedPreviewAdmissionControlBinding,
   nowEpochMs: number,
+  sessionTimeoutPolicy: HostedSessionTimeoutPolicy,
 ) {
   if (binding.monthlySpendUsedUsdCents >= binding.monthlySpendLimitUsdCents) {
     return true;
@@ -107,6 +109,10 @@ async function exceedsAdmissionLimit(
     sql`select pg_advisory_xact_lock(hashtextextended(${subjectKey}, 0))`,
   );
   const minuteStart = new Date(nowEpochMs - 60_000);
+  const idleCutoff = new Date(nowEpochMs - sessionTimeoutPolicy.idleTimeoutMs);
+  const lifetimeCutoff = new Date(
+    nowEpochMs - sessionTimeoutPolicy.maxLifetimeMs,
+  );
   const activeStatuses = ["working", "input_required", "waiting"];
   const [subjectStarts, workspaceStarts, subjectConcurrent, workspaceActive] =
     await Promise.all([
@@ -136,6 +142,8 @@ async function exceedsAdmissionLimit(
         .where(
           and(
             sessionTenantPredicate(principal),
+            gt(agentSessions.updatedAt, idleCutoff),
+            gt(agentSessions.createdAt, lifetimeCutoff),
             sql`${agentSessions.record}->>'status' = 'working'`,
           ),
         ),
@@ -145,6 +153,8 @@ async function exceedsAdmissionLimit(
         .where(
           and(
             workspaceSessionPredicate(principal),
+            gt(agentSessions.updatedAt, idleCutoff),
+            gt(agentSessions.createdAt, lifetimeCutoff),
             inArray(sql`${agentSessions.record}->>'status'`, activeStatuses),
           ),
         ),
@@ -368,6 +378,7 @@ export function createPostgresHostedEveStore(
               principal,
               admission.binding,
               admission.nowEpochMs,
+              admission.sessionTimeoutPolicy,
             )))
         ) {
           return {
