@@ -112,8 +112,7 @@ function verifiedImplementationPlan(
     plannedByCallId: result.plannedByCallId,
   };
   if (
-    result.reused ||
-    result.plannedByCallId !== callId ||
+    (!result.reused && result.plannedByCallId !== callId) ||
     result.appSpecDigest !== expectedAppSpecDigest ||
     target.contract.appSpec.sha256 !== expectedAppSpecDigest ||
     target.plan.product.appSpec.sha256 !== expectedAppSpecDigest ||
