@@ -883,6 +883,9 @@ function Builder({
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
     null,
   );
+  const [connectedConnections, setConnectedConnections] = useState<string[]>(
+    [],
+  );
   const baseConnections =
     showAllConnections || search
       ? allConnectionNames
@@ -905,19 +908,29 @@ function Builder({
     return normalizedSearch.split("").every((letter) => lower.includes(letter));
   });
   const canSubmit = Boolean(form.brief.trim());
-  const removeConnection = (name: string) =>
+  const addConnection = (name: string) =>
+    setForm((current) => ({
+      ...current,
+      connections: current.connections.includes(name)
+        ? current.connections
+        : [...current.connections, name],
+    }));
+  const removeConnection = (name: string) => {
     setForm((current) => ({
       ...current,
       connections: current.connections.filter((item) => item !== name),
     }));
+    setConnectedConnections((current) =>
+      current.filter((item) => item !== name),
+    );
+  };
   const completeConnection = () => {
     if (!connectionFlow) return;
-    setForm((current) => ({
-      ...current,
-      connections: current.connections.includes(connectionFlow.name)
-        ? current.connections
-        : [...current.connections, connectionFlow.name],
-    }));
+    setConnectedConnections((current) =>
+      current.includes(connectionFlow.name)
+        ? current
+        : [...current, connectionFlow.name],
+    );
     setConnectionFlow(null);
   };
   useEffect(() => {
@@ -1135,7 +1148,7 @@ function Builder({
                   type="button"
                   key={name}
                   aria-label={`Add ${name}`}
-                  onClick={() => setConnectionFlow({ name, stage: "connect" })}
+                  onClick={() => addConnection(name)}
                 >
                   <ConnectionIcon kind={connectionKind.get(name)} name={name} />
                   {name}
@@ -1171,10 +1184,17 @@ function Builder({
                   <button
                     type="button"
                     onClick={() =>
-                      setConnectionFlow({ name, stage: "configure" })
+                      setConnectionFlow({
+                        name,
+                        stage: connectedConnections.includes(name)
+                          ? "configure"
+                          : "connect",
+                      })
                     }
                   >
-                    Customize
+                    {connectedConnections.includes(name)
+                      ? "Customize"
+                      : "Connect"}
                   </button>
                   <button
                     type="button"

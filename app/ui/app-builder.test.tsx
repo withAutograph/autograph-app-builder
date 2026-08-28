@@ -195,6 +195,22 @@ describe("Vercel-faithful App Builder flow", () => {
     await click(
       view.querySelector<HTMLButtonElement>('[aria-label="Add Vercel"]')!,
     );
+    expect(view.querySelector("#connection-drawer-title")).toBeNull();
+    expect(
+      view.querySelector('[aria-label="Added connections"]'),
+    ).not.toBeNull();
+    expect(view.querySelector('[aria-label="Remove Vercel"]')).not.toBeNull();
+    expect(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Connect",
+      ),
+    ).not.toBeUndefined();
+
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Connect",
+      )!,
+    );
     expect(view.querySelector("#connection-drawer-title")?.textContent).toBe(
       "Add Connection",
     );
@@ -233,5 +249,12 @@ describe("Vercel-faithful App Builder flow", () => {
       view.querySelector('[aria-label="Added connections"]'),
     ).not.toBeNull();
     expect(view.querySelector('[aria-label="Remove Vercel"]')).not.toBeNull();
+    expect(view.textContent).toContain("Customize");
+
+    await click(
+      view.querySelector<HTMLButtonElement>('[aria-label="Remove Vercel"]')!,
+    );
+    expect(view.querySelector('[aria-label="Remove Vercel"]')).toBeNull();
+    expect(view.querySelector('[aria-label="Add Vercel"]')).not.toBeNull();
   });
 });

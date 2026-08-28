@@ -60,11 +60,11 @@ Chrome and the in-app browser verified menu expansion, filtering, selection, pub
 
 The supplied connection drawer, authorization success, configuration, and connected-card references were compared directly with the implementation at matching states.
 
-- Selecting any catalog provider opens a responsive right-side Add Connection drawer over the builder.
-- Every provider uses the explicit Connect action requested for Autograph rather than Vercel's connect-on-first-use exception.
+- Selecting any catalog provider adds a pending connection card and removes that provider from the available catalog.
+- Every pending card has the requested explicit Connect action and an independent remove action; only Connect opens the responsive right-side Add Connection drawer.
 - Connect opens a dedicated Connection successful state with the matching check and Return action.
 - Return restores the drawer at Configure; Continue reveals Customize; Add Connection returns to the builder with a detailed connected card.
-- Connected cards support Customize and Remove, and added providers are removed from the available catalog.
+- Connected cards replace Connect with Customize while retaining Remove; removing either a pending or connected card restores the provider to the catalog.
 - The prototype states plainly that the local flow does not persist credentials or claim real provider authorization.
 
 No actionable P0, P1, or P2 differences remain in the tested connection flow. The provider-specific configuration vocabulary is intentionally normalized for a frontend prototype; future live integrations can replace those fields with provider-owned schemas.
@@ -76,7 +76,7 @@ No actionable P0, P1, or P2 differences remain in the tested connection flow. Th
 - Account menu, system/light/dark theme controls, status link, and logout form verified.
 - Preparing, validating, copying, connected-client, and completion states verified.
 - Completion copy controls, dismissible install card, next steps, and Create Another App verified.
-- Connection drawer close, Connect, success, Return, Configure, Customize, Add Connection, reopen, and Remove states verified.
+- Catalog add, pending Connect/Remove, connection drawer close, success, Return, Configure, Customize, Add Connection, reopen, and connected Remove states verified.
 - Keyboard focus styles, skip links, native select semantics, reduced-motion behavior, and unsaved-change warning reviewed.
 - Browser console error log was empty in the verified states.
 
