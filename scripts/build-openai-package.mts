@@ -73,7 +73,7 @@ const manifest = {
     displayName: "Autograph App Builder",
     shortDescription: "Design and create apps with Autograph",
     longDescription:
-      "Use Autograph App Builder to design, plan, create, validate, and separately publish any app.",
+      "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
     developerName: portable.author.name,
     category: "Developer Tools",
     capabilities: ["Interactive", "Read", "Write"],

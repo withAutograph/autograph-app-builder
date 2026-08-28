@@ -42,7 +42,9 @@ commands fail closed until `v0.2.1` exists:
 
 The release package defines the Model Context Protocol (MCP) origin and contains
 no credential. Codex completes OAuth against that origin's protected-resource
-and authorization-server metadata.
+and authorization-server metadata. Its creation and publication capabilities
+apply only to repositories that satisfy the App Builder's explicit supported
+repository contract; it does not claim support for arbitrary repositories.
 
 Confirm that a new task exposes exactly `autograph_start`, `autograph_get`, `autograph_send`,
 `autograph_respond`, and `autograph_cancel`. The bundled App Builder skill is fail-closed:
@@ -191,8 +193,9 @@ releases, accept the exact-SHA hosted proof, and set
 exact current `main`, successful exact-SHA CI, and the accepted proof SHA. It
 uses pinned Actions, validates the actual deterministic portable and Codex
 marketplace archives, creates a draft, verifies every uploaded digest, and only
-then publishes. It requires GitHub's immutable-release attestation and separate
-build-provenance attestations to verify before completing.
+then publishes the version as a prerelease without marking it latest. It
+requires GitHub's immutable-release attestation and separate build-provenance
+attestations to verify before completing.
 
 The archives are the immutable distribution payload behind marketplace and
 client installation. Publishing a shared marketplace or client catalog entry

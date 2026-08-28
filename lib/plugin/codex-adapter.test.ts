@@ -29,6 +29,9 @@ describe("Codex adapter", () => {
     expect(manifest.interface.shortDescription).toBe(
       "Design and create apps with Autograph",
     );
+    expect(manifest.interface.longDescription).toBe(
+      "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
+    );
     expect(manifest.interface.logo).toBe("./assets/autograph-icon.png");
     expect(manifest.interface.composerIcon).toBe("./assets/autograph-icon.png");
     expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(

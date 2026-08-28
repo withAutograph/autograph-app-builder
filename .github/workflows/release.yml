@@ -77,6 +77,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --draft \
+            --prerelease \
             --verify-tag \
             --title "Autograph App Builder $GITHUB_REF_NAME" \
             --generate-notes \
@@ -84,7 +85,7 @@ jobs:
             .artifacts/release/release-receipt.json \
             .artifacts/release/SHA256SUMS
 
-          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '.isDraft and .isPrerelease')" = true
           test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')" -eq 4
           for asset in \
             .artifacts/release/autograph-app-builder-*.tar.gz \
@@ -103,8 +104,8 @@ jobs:
           test "$ci_sha" = "$tag_commit"
           test "$RELEASE_PROOF_SHA" = "$tag_commit"
 
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
-          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '(.isDraft | not) and .isPrerelease')" = true
           test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq .isImmutable)" = true
           gh release verify "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
           for asset in \

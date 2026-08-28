@@ -11,7 +11,15 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { verifyPortableProofArtifact } from "./portable-proof-artifact";
+import {
+  archiveFiles,
+  verifyPortableProofArtifact,
+} from "./portable-proof-artifact";
+import {
+  deterministicGzip,
+  deterministicTar,
+  sha256,
+} from "./portable-release";
 
 const run = (script: string, args: string[], expected = 0) =>
   new Promise<void>((resolveRun, rejectRun) => {
@@ -166,6 +174,20 @@ try {
     `${endpoint}/mcp`
   )
     throw new Error("Codex marketplace did not bind the release endpoint.");
+  const codexManifest = JSON.parse(
+    await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf8"),
+  );
+  for (const reference of [
+    codexManifest.interface?.composerIcon,
+    codexManifest.interface?.logo,
+  ]) {
+    if (typeof reference !== "string" || !reference.startsWith("./"))
+      throw new Error("Codex marketplace asset reference was invalid.");
+    if (!(await stat(join(codexPluginRoot, reference))).isFile())
+      throw new Error(
+        `Codex marketplace omitted referenced asset ${reference}.`,
+      );
+  }
   const installs = join(temp, "installs");
   for (const client of ["vscode", "cursor", "codex"])
     await run("install-portable-plugin.mts", [
@@ -244,6 +266,158 @@ try {
     const path = Object.keys(files)[0];
     files[path] = "0".repeat(64);
   });
+
+  const missingMarketplaceAsset = join(temp, "missing-marketplace-asset");
+  await cp(first, missingMarketplaceAsset, { recursive: true });
+  const missingAssetArchivePath = join(
+    missingMarketplaceAsset,
+    marketplaceArchiveName,
+  );
+  const missingAssetFiles = archiveFiles(
+    await readFile(missingAssetArchivePath),
+  );
+  const missingAssetPath =
+    "plugins/autograph-app-builder/assets/autograph-icon.png";
+  if (!missingAssetFiles.delete(missingAssetPath))
+    throw new Error("Expected generated marketplace asset was absent.");
+  const missingAssetArchive = deterministicGzip(
+    deterministicTar(missingAssetFiles),
+  );
+  await writeFile(missingAssetArchivePath, missingAssetArchive);
+  const missingAssetReceiptPath = join(
+    missingMarketplaceAsset,
+    "release-receipt.json",
+  );
+  const missingAssetReceipt = JSON.parse(
+    await readFile(missingAssetReceiptPath, "utf8"),
+  );
+  missingAssetReceipt.codexMarketplaceArchive.sha256 =
+    sha256(missingAssetArchive);
+  await writeFile(
+    missingAssetReceiptPath,
+    `${JSON.stringify(missingAssetReceipt, null, 2)}\n`,
+  );
+  await expectRejected(
+    () =>
+      verifyPortableProofArtifact({
+        releaseRoot: missingMarketplaceAsset,
+        installRoot: installs,
+        repositoryRoot: resolve("."),
+      }),
+    "marketplace archive with a missing manifest-referenced asset",
+  );
+
+  const tamperedMarketplaceAsset = join(temp, "tampered-marketplace-asset");
+  await cp(first, tamperedMarketplaceAsset, { recursive: true });
+  const tamperedAssetArchivePath = join(
+    tamperedMarketplaceAsset,
+    marketplaceArchiveName,
+  );
+  const tamperedAssetFiles = archiveFiles(
+    await readFile(tamperedAssetArchivePath),
+  );
+  tamperedAssetFiles.set(
+    missingAssetPath,
+    Buffer.from("tampered manifest-referenced asset"),
+  );
+  const tamperedAssetArchive = deterministicGzip(
+    deterministicTar(tamperedAssetFiles),
+  );
+  await writeFile(tamperedAssetArchivePath, tamperedAssetArchive);
+  const tamperedAssetReceiptPath = join(
+    tamperedMarketplaceAsset,
+    "release-receipt.json",
+  );
+  const tamperedAssetReceipt = JSON.parse(
+    await readFile(tamperedAssetReceiptPath, "utf8"),
+  );
+  tamperedAssetReceipt.codexMarketplaceArchive.sha256 =
+    sha256(tamperedAssetArchive);
+  tamperedAssetReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(
+    tamperedAssetFiles.get(missingAssetPath)!,
+  );
+  await writeFile(
+    tamperedAssetReceiptPath,
+    `${JSON.stringify(tamperedAssetReceipt, null, 2)}\n`,
+  );
+  await expectRejected(
+    () =>
+      verifyPortableProofArtifact({
+        releaseRoot: tamperedMarketplaceAsset,
+        installRoot: installs,
+        repositoryRoot: resolve("."),
+      }),
+    "marketplace archive with tampered manifest-referenced asset bytes and a fully rebound receipt",
+  );
+
+  const checkoutDriftRepository = join(temp, "checkout-drift-repository");
+  execFileSync(
+    "/usr/bin/git",
+    [
+      "clone",
+      "--quiet",
+      "--no-hardlinks",
+      resolve("."),
+      checkoutDriftRepository,
+    ],
+    {
+      stdio: "inherit",
+      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+    },
+  );
+  execFileSync(
+    "/usr/bin/git",
+    [
+      "-C",
+      checkoutDriftRepository,
+      "remote",
+      "add",
+      "canonical-release",
+      "https://github.com/withAutograph/autograph-app-builder.git",
+    ],
+    {
+      stdio: "inherit",
+      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+    },
+  );
+  const fullyReboundTreeDrift = join(temp, "fully-rebound-tree-drift");
+  await cp(first, fullyReboundTreeDrift, { recursive: true });
+  const treeDriftArchivePath = join(
+    fullyReboundTreeDrift,
+    marketplaceArchiveName,
+  );
+  const treeDriftFiles = archiveFiles(await readFile(treeDriftArchivePath));
+  const treeDriftBytes = Buffer.from("fully rebound checkout-drift asset");
+  treeDriftFiles.set(missingAssetPath, treeDriftBytes);
+  const treeDriftArchive = deterministicGzip(deterministicTar(treeDriftFiles));
+  await writeFile(treeDriftArchivePath, treeDriftArchive);
+  const treeDriftReceiptPath = join(
+    fullyReboundTreeDrift,
+    "release-receipt.json",
+  );
+  const treeDriftReceipt = JSON.parse(
+    await readFile(treeDriftReceiptPath, "utf8"),
+  );
+  treeDriftReceipt.codexMarketplaceArchive.sha256 = sha256(treeDriftArchive);
+  treeDriftReceipt.codexMarketplaceAssets[missingAssetPath] =
+    sha256(treeDriftBytes);
+  await writeFile(
+    treeDriftReceiptPath,
+    `${JSON.stringify(treeDriftReceipt, null, 2)}\n`,
+  );
+  await writeFile(
+    join(checkoutDriftRepository, "assets", "autograph-icon.png"),
+    treeDriftBytes,
+  );
+  await expectRejected(
+    () =>
+      verifyPortableProofArtifact({
+        releaseRoot: fullyReboundTreeDrift,
+        installRoot: installs,
+        repositoryRoot: checkoutDriftRepository,
+      }),
+    "marketplace archive and receipt rebound to checkout bytes that differ from the receipt tree",
+  );
 
   const archiveTamper = join(temp, "tampered-archive");
   await cp(first, archiveTamper, { recursive: true });
