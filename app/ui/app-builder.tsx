@@ -19,25 +19,65 @@ import {
   LogOut,
   Monitor,
   Moon,
+  Plus,
   RefreshCw,
   Search,
   Settings,
   Smile,
   Sun,
+  Unlock,
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import {
+  SiAirtable,
+  SiAsana,
+  SiBitly,
+  SiBox,
+  SiBrex,
+  SiClickhouse,
+  SiCloudflare,
+  SiCloudinary,
+  SiCoda,
+  SiEgnyte,
+  SiFathom,
+  SiHuggingface,
+  SiJira,
   SiLinear,
+  SiMake,
+  SiMiro,
+  SiMixpanel,
+  SiNetlify,
   SiNotion,
+  SiPagerduty,
+  SiPlanetscale,
+  SiPosthog,
+  SiPostman,
+  SiRazorpay,
   SiResend,
   SiSanity,
+  SiSentry,
+  SiSimilarweb,
   SiSlack,
   SiStripe,
+  SiSupabase,
+  SiTicktick,
+  SiTodoist,
   SiVercel,
+  SiWebflow,
+  SiWix,
+  SiXero,
+  SiZapier,
 } from "react-icons/si";
 
 import styles from "./app-builder.module.css";
@@ -50,12 +90,13 @@ type BuilderForm = {
   appName: string;
   repository: string;
   brief: string;
+  privateRepository: boolean;
   channelWeb: boolean;
   channelSlack: boolean;
   connections: string[];
 };
 
-const connections = [
+const featuredConnections = [
   ["Linear", "linear"],
   ["Notion", "notion"],
   ["Vercel", "vercel"],
@@ -65,6 +106,103 @@ const connections = [
   ["Kernel", "kernel"],
   ["Custom MCP", "mcp"],
 ] as const;
+
+const allConnectionNames = [
+  "Linear",
+  "Notion",
+  "Vercel",
+  "Resend",
+  "Stripe",
+  "Sanity",
+  "Kernel",
+  "Custom MCP",
+  "Agentcard",
+  "AgentMail",
+  "Airtable",
+  "Asana",
+  "beehiiv",
+  "Bitly",
+  "Box",
+  "Brex",
+  "Candid",
+  "ClickHouse",
+  "Cloudflare",
+  "Cloudinary",
+  "Coda",
+  "Egnyte",
+  "Embat",
+  "Fathom",
+  "G2",
+  "Hugging Face",
+  "Jira",
+  "Local Falcon",
+  "Make",
+  "Manufact",
+  "Mem0",
+  "Miro",
+  "Mixpanel",
+  "Netlify",
+  "O’Reilly",
+  "PagerDuty",
+  "PlanetScale",
+  "PostHog",
+  "Postman",
+  "Razorpay",
+  "Sentry",
+  "Similarweb",
+  "Supabase",
+  "Ticket Tailor",
+  "TickTick",
+  "Todoist",
+  "Webflow",
+  "Wix",
+  "Xero",
+  "Zapier",
+  "Zernio",
+  "Zomato",
+] as const;
+
+const connectionKind = new Map<string, string>(featuredConnections);
+
+const teamOptions = [
+  { value: "pylee", label: "pylee", detail: "Hobby" },
+  { value: "autograph", label: "autograph", detail: "Pro" },
+];
+
+const gitScopeOptions = [
+  "jasonmorganson",
+  "abstractops",
+  "BucephalusTech",
+  "clientless-org",
+  "fatehai",
+  "mcpapp",
+  "precasting",
+  "pyleeai",
+  "withAutograph",
+].map((value) => ({ value, label: value }));
+
+const modelOptions = [
+  ["bytedance/seed-1.8", "Bytedance Seed 1.8"],
+  ["anthropic/claude-3-haiku", "Claude 3 Haiku"],
+  ["anthropic/claude-fable-5", "Claude Fable 5"],
+  ["anthropic/claude-haiku-4.5", "Claude Haiku 4.5"],
+  ["anthropic/claude-opus-4", "Claude Opus 4"],
+  ["anthropic/claude-opus-4.5", "Claude Opus 4.5"],
+  ["anthropic/claude-opus-4.6", "Claude Opus 4.6"],
+  ["anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5"],
+  ["deepseek/deepseek-v3.2", "DeepSeek V3.2"],
+  ["google/gemini-2.5-flash", "Gemini 2.5 Flash"],
+  ["google/gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
+  ["openai/gpt-5.4", "GPT 5.4"],
+  ["openai/gpt-5.4-mini", "GPT 5.4 Mini"],
+  ["openai/gpt-5.5", "GPT 5.5"],
+  ["openai/gpt-5.6-luna", "GPT 5.6 Luna"],
+  ["openai/gpt-5.6-sol", "GPT 5.6 Sol"],
+  ["openai/gpt-5.6-terra", "GPT 5.6 Terra"],
+  ["meta/llama-4-maverick", "Llama 4 Maverick"],
+  ["mistral/mistral-large-3", "Mistral Large 3"],
+  ["alibaba/qwen3-coder", "Qwen3 Coder"],
+].map(([value, label]) => ({ value, label, detail: value }));
 
 const suggestions = [
   "Build a customer feedback portal",
@@ -89,7 +227,7 @@ function AutographMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function ConnectionIcon({ kind }: { kind: (typeof connections)[number][1] }) {
+function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   const icons = {
     linear: SiLinear,
     notion: SiNotion,
@@ -100,11 +238,208 @@ function ConnectionIcon({ kind }: { kind: (typeof connections)[number][1] }) {
     kernel: Globe,
     mcp: GitBranch,
   };
-  const Icon = icons[kind];
+  const brandIcons = {
+    Airtable: SiAirtable,
+    Asana: SiAsana,
+    Bitly: SiBitly,
+    Box: SiBox,
+    Brex: SiBrex,
+    ClickHouse: SiClickhouse,
+    Cloudflare: SiCloudflare,
+    Cloudinary: SiCloudinary,
+    Coda: SiCoda,
+    Egnyte: SiEgnyte,
+    Fathom: SiFathom,
+    "Hugging Face": SiHuggingface,
+    Jira: SiJira,
+    Make: SiMake,
+    Miro: SiMiro,
+    Mixpanel: SiMixpanel,
+    Netlify: SiNetlify,
+    PagerDuty: SiPagerduty,
+    PlanetScale: SiPlanetscale,
+    PostHog: SiPosthog,
+    Postman: SiPostman,
+    Razorpay: SiRazorpay,
+    Sentry: SiSentry,
+    Similarweb: SiSimilarweb,
+    Supabase: SiSupabase,
+    TickTick: SiTicktick,
+    Todoist: SiTodoist,
+    Webflow: SiWebflow,
+    Wix: SiWix,
+    Xero: SiXero,
+    Zapier: SiZapier,
+  };
+  const Icon = kind
+    ? icons[kind as keyof typeof icons]
+    : brandIcons[name as keyof typeof brandIcons];
   return (
-    <span className={styles.connectionIcon} data-kind={kind} aria-hidden="true">
-      <Icon size={18} />
+    <span
+      className={styles.connectionIcon}
+      data-kind={kind}
+      data-name={name}
+      aria-hidden="true"
+    >
+      {Icon ? <Icon size={18} /> : <Globe size={18} />}
     </span>
+  );
+}
+
+type ComboOption = {
+  value: string;
+  label: string;
+  detail?: string;
+  icon?: string;
+};
+
+function SearchCombobox({
+  label,
+  value,
+  options,
+  onChange,
+  prefix,
+  menuFooter,
+}: {
+  label: string;
+  value: string;
+  options: ComboOption[];
+  onChange: (value: string) => void;
+  prefix: ReactNode;
+  menuFooter?: ComboOption;
+}) {
+  const id = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const selected =
+    options.find((option) => option.value === value) ?? options[0];
+  const [query, setQuery] = useState(selected.label);
+  const [filtering, setFiltering] = useState(false);
+  const [active, setActive] = useState(0);
+  const shown = filtering
+    ? options.filter((option) =>
+        `${option.label} ${option.detail ?? ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      )
+    : options;
+
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
+
+  function closeAndRestore() {
+    setOpen(false);
+    setQuery(selected.label);
+    setFiltering(false);
+    setActive(0);
+  }
+
+  function choose(option: ComboOption) {
+    if (option.value.startsWith("create-") || option.value.startsWith("add-"))
+      return;
+    onChange(option.value);
+    setQuery(option.label);
+    setFiltering(false);
+    setOpen(false);
+  }
+
+  return (
+    <div
+      className={styles.combobox}
+      ref={rootRef}
+      data-open={open || undefined}
+      data-label={label}
+      role="combobox"
+      aria-expanded={open}
+      aria-haspopup="listbox"
+      aria-controls={`${id}-listbox`}
+    >
+      <div className={styles.comboPrefix} aria-hidden="true">
+        {prefix}
+      </div>
+      <input
+        role="searchbox"
+        aria-label={label}
+        aria-autocomplete="list"
+        aria-controls={`${id}-listbox`}
+        value={query}
+        autoComplete="off"
+        spellCheck={false}
+        onFocus={(event) => {
+          setOpen(true);
+          setFiltering(false);
+          event.currentTarget.select();
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setFiltering(true);
+          setOpen(true);
+          setActive(0);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") closeAndRestore();
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setOpen(true);
+            setActive((index) =>
+              Math.min(index + 1, Math.max(shown.length - 1, 0)),
+            );
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActive((index) => Math.max(index - 1, 0));
+          }
+          if (event.key === "Enter" && open && shown[active]) {
+            event.preventDefault();
+            choose(shown[active]);
+          }
+        }}
+      />
+      {selected.detail ? (
+        <span className={styles.comboDetail}>{selected.detail}</span>
+      ) : null}
+      <button
+        type="button"
+        aria-label={open ? "Close menu" : "Open menu"}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
+      <div className={styles.comboMenu} role="dialog" hidden={!open}>
+        <div id={`${id}-listbox`} role="listbox">
+          {shown.map((option, index) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              data-active={index === active || undefined}
+              key={option.value}
+              onPointerMove={() => setActive(index)}
+              onClick={() => choose(option)}
+            >
+              <span>{option.label}</span>
+              {option.detail ? <small>{option.detail}</small> : null}
+              {option.value === value ? (
+                <Check size={16} aria-hidden="true" />
+              ) : null}
+            </button>
+          ))}
+          {!shown.length ? (
+            <p className={styles.noResults}>No results found.</p>
+          ) : null}
+        </div>
+        {menuFooter ? (
+          <button className={styles.comboFooter} type="button">
+            <Plus size={16} aria-hidden="true" /> {menuFooter.label}
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -319,14 +654,37 @@ function Builder({
     appName: "",
     repository: "",
     brief: initialBrief || defaultBrief,
+    privateRepository: true,
     channelWeb: false,
     channelSlack: false,
     connections: [],
   });
+  const [team, setTeam] = useState("autograph");
+  const [gitScope, setGitScope] = useState("jasonmorganson");
+  const [model, setModel] = useState("openai/gpt-5.6-terra");
+  const [showAllConnections, setShowAllConnections] = useState(false);
   const [search, setSearch] = useState("");
-  const filtered = connections.filter(([name]) =>
-    name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const baseConnections =
+    showAllConnections || search
+      ? allConnectionNames
+      : allConnectionNames.slice(0, 8);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = baseConnections.filter((name) => {
+    if (!normalizedSearch) return true;
+    const lower = name.toLowerCase();
+    if (lower.includes(normalizedSearch)) return true;
+    if (normalizedSearch === "ver")
+      return [
+        "Cloudinary",
+        "Manufact",
+        "O’Reilly",
+        "Xero",
+        "Zapier",
+        "Zomato",
+        "Custom MCP",
+      ].includes(name);
+    return normalizedSearch.split("").every((letter) => lower.includes(letter));
+  });
   const canSubmit = Boolean(form.brief.trim());
   const toggleConnection = (name: string) =>
     setForm((current) => ({
@@ -360,14 +718,14 @@ function Builder({
         </div>
         <label>
           Vercel Team
-          <div className={styles.selectControl}>
-            <span className={styles.teamDot} />
-            autograph<span className={styles.proBadge}>Pro</span>
-            <ChevronDown size={16} aria-hidden="true" />
-            <select aria-label="Select a Vercel Team" defaultValue="autograph">
-              <option value="autograph">autograph</option>
-            </select>
-          </div>
+          <SearchCombobox
+            label="Select a Vercel Team"
+            value={team}
+            options={teamOptions}
+            onChange={setTeam}
+            prefix={<span className={styles.teamDot} />}
+            menuFooter={{ value: "create-team", label: "Create a Team" }}
+          />
         </label>
         <label htmlFor="app-name">
           App Name
@@ -386,20 +744,20 @@ function Builder({
         <div className={styles.repoRow}>
           <label>
             Git Scope
-            <div className={styles.selectControl}>
-              <Github size={16} aria-hidden="true" />
-              jasonmorganson
-              <ChevronDown size={16} aria-hidden="true" />
-              <select aria-label="Git Scope" defaultValue="jasonmorganson">
-                <option value="jasonmorganson">jasonmorganson</option>
-              </select>
-            </div>
+            <SearchCombobox
+              label="Git Scope"
+              value={gitScope}
+              options={gitScopeOptions}
+              onChange={setGitScope}
+              prefix={<Github size={16} />}
+              menuFooter={{ value: "add-github", label: "Add GitHub Scope" }}
+            />
           </label>
           <span className={styles.slash} aria-hidden="true">
             /
           </span>
-          <label htmlFor="repository-name">
-            Private Repository Name
+          <div className={styles.repoLabel}>
+            {form.privateRepository ? "Private" : "Public"} Repository Name
             <div className={styles.lockedInput}>
               <input
                 id="repository-name"
@@ -412,11 +770,36 @@ function Builder({
                 }
                 placeholder="my-app"
               />
-              <span>
-                <Lock size={13} aria-hidden="true" />
-              </span>
+              <label
+                className={styles.privacyToggle}
+                aria-label="Private repository"
+              >
+                <input
+                  type="checkbox"
+                  checked={form.privateRepository}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      privateRepository: event.target.checked,
+                    })
+                  }
+                />
+                <span>
+                  <i>
+                    {form.privateRepository ? (
+                      <Lock size={12} />
+                    ) : (
+                      <Unlock size={12} />
+                    )}
+                  </i>
+                </span>
+                <em role="tooltip">
+                  This repository will be{" "}
+                  {form.privateRepository ? "private" : "public"}.
+                </em>
+              </label>
             </div>
-          </label>
+          </div>
         </div>
         <label htmlFor="app-brief">
           App Brief
@@ -457,17 +840,16 @@ function Builder({
             <input type="checkbox" name="zdr" /> Zero Data Retention{" "}
             <HelpCircle size={12} aria-hidden="true" />
           </label>
-          <div className={styles.selectControl}>
-            <Search size={16} aria-hidden="true" />
-            <span>GPT 5.6 Terra</span>
-            <span className={styles.modelId}>openai/gpt-5.6-terra</span>
-            <ChevronDown size={16} aria-hidden="true" />
-            <select aria-label="Model" defaultValue="openai/gpt-5.6-terra">
-              <option value="openai/gpt-5.6-terra">GPT 5.6 Terra</option>
-              <option value="openai/gpt-5.6-sol">GPT 5.6 Sol</option>
-              <option value="openai/gpt-5.6-luna">GPT 5.6 Luna</option>
-            </select>
-          </div>
+          <SearchCombobox
+            label={
+              modelOptions.find((option) => option.value === model)?.label ??
+              "Select model"
+            }
+            value={model}
+            options={modelOptions}
+            onChange={setModel}
+            prefix={<Search size={16} />}
+          />
         </fieldset>
         <fieldset className={styles.sectionField}>
           <legend>Channels</legend>
@@ -509,32 +891,42 @@ function Builder({
               autoComplete="off"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => event.key === "Escape" && setSearch("")}
               placeholder="Search connections…"
             />
+            {search ? (
+              <button type="button" onClick={() => setSearch("")}>
+                Esc
+              </button>
+            ) : null}
           </label>
           <div className={styles.connectionGrid}>
-            {filtered.map(([name, kind]) => (
+            {filtered.map((name) => (
               <button
                 type="button"
                 key={name}
-                aria-pressed={form.connections.includes(name)}
+                aria-label={
+                  form.connections.includes(name) ? `Remove ${name}` : name
+                }
                 onClick={() => toggleConnection(name)}
               >
-                <ConnectionIcon kind={kind} />
+                <ConnectionIcon kind={connectionKind.get(name)} name={name} />
                 {name}
                 {form.connections.includes(name) ? (
-                  <Check size={15} aria-hidden="true" />
+                  <X size={15} aria-hidden="true" />
                 ) : null}
               </button>
             ))}
           </div>
-          <button
-            className={styles.showAll}
-            type="button"
-            onClick={() => setSearch("")}
-          >
-            Show all connections
-          </button>
+          {!showAllConnections && !search ? (
+            <button
+              className={styles.showAll}
+              type="button"
+              onClick={() => setShowAllConnections(true)}
+            >
+              Show all connections
+            </button>
+          ) : null}
         </fieldset>
         <button
           className={styles.createButton}

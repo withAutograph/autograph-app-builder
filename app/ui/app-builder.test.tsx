@@ -150,4 +150,37 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
+
+  it("matches the repository privacy and connection-browser interactions", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    const privacy = view.querySelector<HTMLInputElement>(
+      '[aria-label="Private repository"] input',
+    )!;
+    expect(privacy.checked).toBe(true);
+    expect(view.textContent).toContain("Private Repository Name");
+    await click(privacy);
+    expect(privacy.checked).toBe(false);
+    expect(view.textContent).toContain("Public Repository Name");
+
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Show all connections",
+      )!,
+    );
+    expect(view.textContent).toContain("Zomato");
+
+    const connectionSearch = view.querySelector<HTMLInputElement>(
+      'input[placeholder="Search connections…"]',
+    )!;
+    await fill(connectionSearch, "ver");
+    expect(view.textContent).toContain("Vercel");
+    expect(view.textContent).toContain("Cloudinary");
+    expect(view.textContent).not.toContain("Linear");
+  });
 });

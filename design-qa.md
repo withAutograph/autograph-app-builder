@@ -14,6 +14,8 @@
 - Full-view builder comparison: `.artifacts/design-qa/source-vs-implementation-authenticated-final.jpg`
 - Focused form comparison: `.artifacts/design-qa/source-vs-implementation-form-detail-v2.png`
 - Completion comparison: `.artifacts/design-qa/source-vs-implementation-ready-final.jpg`
+- Dynamic source captures: `.artifacts/vercel-dynamic/source-*.png`
+- Dynamic implementation captures: `.artifacts/vercel-dynamic/implementation-*.png`
 
 The authenticated builder comparison used the source viewport of 1699 x 1600 at DPR 1, with both experiences in the authenticated light-theme state. The completion comparison used the same light theme and the completed handoff state.
 
@@ -37,10 +39,24 @@ Accepted P3 differences:
 - The Slack mark is rendered in a single foreground color rather than the source's multicolor brand asset.
 - The handoff reports real local preparation and connected-client actions rather than claiming a Vercel deployment.
 
+### Dynamic interaction pass
+
+The live authenticated Vercel experience was exercised in Chrome, Safari, and the in-app browser. DOM and accessibility inspection confirmed that Vercel uses custom Geist Design System primitives rather than stock shadcn/ui for the builder controls.
+
+Implemented and compared against the captured live states:
+
+- Searchable Vercel Team picker with plan badges and Create a Team footer.
+- Searchable Git Scope picker with the complete captured scope list and Add GitHub Scope footer.
+- Searchable, keyboard-operable model picker with provider identifiers and a constrained scrolling menu.
+- Vercel-sized 40 x 24 repository privacy switch with lock/unlock states, private/public label changes, amber public state, and matching tooltips.
+- Expandable 52-item connection catalog, branded icons where available, source-matched filtering, Escape-to-clear, and selected/remove states.
+
+Chrome and the in-app browser verified menu expansion, filtering, selection, public/private state transitions, and the full connection catalog. Safari verified the same semantic structure, current values, labels, checkboxes, comboboxes, and primary action through its native accessibility tree.
+
 ## Interaction and state QA
 
 - Anonymous prompt, suggestion chips, disabled and enabled Continue states, and sign-in handoff verified.
-- Authenticated App Name, Git Scope, repository, App Brief, model, channels, and connection filtering/selection verified.
+- Authenticated App Name, searchable Team/Git Scope/model pickers, repository privacy, App Brief, channels, and connection filtering/selection verified.
 - Account menu, system/light/dark theme controls, status link, and logout form verified.
 - Preparing, validating, copying, connected-client, and completion states verified.
 - Completion copy controls, dismissible install card, next steps, and Create Another App verified.

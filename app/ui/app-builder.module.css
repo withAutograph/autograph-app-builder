@@ -256,8 +256,14 @@
   text-wrap: balance;
 }
 .builderCard > label,
-.repoRow label {
+.repoRow > label,
+.repoLabel {
   display: grid;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.repoLabel {
   gap: 9px;
   font-size: 13px;
   color: var(--muted);
@@ -284,6 +290,146 @@
   color: var(--text);
   font-size: 14px;
   position: relative;
+}
+.combobox {
+  height: 38px;
+  position: relative;
+  color: var(--text);
+  font-size: 14px;
+  z-index: 3;
+}
+.combobox > input {
+  width: 100%;
+  height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 38px 0 40px;
+  box-shadow: 0 0 0 1px var(--border);
+  outline: 0;
+  transition: box-shadow 150ms ease;
+}
+.combobox > input:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border), var(--text) 20%);
+}
+.combobox > input:focus,
+.combobox[data-open] > input {
+  outline: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--border), var(--text) 30%),
+    0 0 0 4px rgb(0 0 0/0.16);
+}
+:global(html[data-theme="dark"]) .combobox > input:focus,
+:global(html[data-theme="dark"]) .combobox[data-open] > input {
+  box-shadow:
+    0 0 0 1px #555,
+    0 0 0 4px rgb(255 255 255/0.24);
+}
+.comboPrefix {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.combobox > button {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.combobox[data-open] > button svg {
+  transform: rotate(180deg);
+}
+.comboDetail {
+  position: absolute;
+  right: 39px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+.combobox[data-label="Select a Vercel Team"] .comboDetail {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #0672ce;
+  background: #e2f2ff;
+  font-size: 12px;
+}
+.combobox[data-label="Select a Vercel Team"] > input {
+  padding-right: 96px;
+}
+.combobox[data-label="GPT 5.6 Terra"] > input,
+.modelField .combobox > input {
+  padding-right: 205px;
+}
+.comboMenu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  background: var(--surface);
+  box-shadow: 0 8px 30px rgb(0 0 0/0.12);
+  z-index: 30;
+  overflow: hidden;
+}
+.comboMenu > div {
+  max-height: 205px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.comboMenu button {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.comboMenu button[data-active],
+.comboMenu button:hover {
+  background: var(--hover);
+}
+.comboMenu button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.comboMenu button small {
+  color: var(--muted);
+  font-size: 13px;
+}
+.comboFooter {
+  border-top: 1px solid var(--border) !important;
+  border-radius: 0 0 6px 6px !important;
+  grid-template-columns: auto 1fr !important;
+  margin-top: 4px;
+}
+.noResults {
+  margin: 0;
+  padding: 12px;
+  color: var(--muted);
 }
 .selectControl select {
   position: absolute;
@@ -347,6 +493,80 @@
   display: grid;
   place-items: center;
   background: var(--soft);
+}
+.privacyToggle {
+  width: 40px !important;
+  height: 30px !important;
+  display: grid !important;
+  place-items: center;
+  position: relative;
+  flex: 0 0 40px;
+  cursor: pointer;
+}
+.privacyToggle > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.privacyToggle > span {
+  width: 40px;
+  height: 24px;
+  border-radius: 14px;
+  background: #f2f2f2;
+  position: relative;
+  transition: background 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+.privacyToggle > span > i {
+  position: absolute;
+  left: 2px;
+  top: 1.5px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: #000;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 3px -1px rgb(0 0 0/0.24),
+    0 0 0.5px rgb(0 0 0/0.16),
+    -0.5px 2px 3px -2px rgb(0 0 0/0.36);
+  transition: transform 150ms ease-in-out;
+}
+.privacyToggle > input:checked + span > i {
+  transform: translateX(16px);
+}
+.privacyToggle > input:not(:checked) + span {
+  background: #f5a800;
+}
+.privacyToggle > input:focus-visible + span {
+  box-shadow: 0 0 0 4px rgb(0 0 0/0.16);
+}
+.privacyToggle em {
+  position: absolute;
+  right: -4px;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 210px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #171717;
+  color: #fff;
+  font-size: 12px;
+  font-style: normal;
+  opacity: 0;
+  transform: translateY(3px);
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  z-index: 40;
+}
+.privacyToggle:hover em,
+.privacyToggle:focus-within em {
+  opacity: 1;
+  transform: translateY(0);
 }
 .briefField {
   height: 188px;
@@ -415,7 +635,16 @@
 .checkLine input:checked,
 .optionGrid input:checked {
   background: #171717;
-  box-shadow: inset 0 0 0 3px #fff;
+  box-shadow: inset 0 0 0 1px #171717;
+}
+.checkLine input:checked::after,
+.optionGrid input:checked::after {
+  content: "✓";
+  display: block;
+  color: #fff;
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
 }
 .modelId {
   margin-left: auto;
@@ -480,12 +709,21 @@
   min-width: 0;
   padding: 0 !important;
 }
+.searchBox > button {
+  height: 24px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
 .connectionGrid button {
   cursor: pointer;
   text-align: left;
 }
 .connectionGrid button:hover,
-.connectionGrid button[aria-pressed="true"] {
+.connectionGrid button[aria-label^="Remove "] {
   background: var(--hover);
 }
 .connectionGrid button > svg {
@@ -505,6 +743,32 @@
 }
 .connectionIcon[data-kind="sanity"] {
   color: #f03;
+}
+.connectionIcon[data-name="Airtable"],
+.connectionIcon[data-name="Cloudinary"],
+.connectionIcon[data-name="Jira"],
+.connectionIcon[data-name="Webflow"] {
+  color: #1689ee;
+}
+.connectionIcon[data-name="Asana"],
+.connectionIcon[data-name="Postman"],
+.connectionIcon[data-name="Todoist"],
+.connectionIcon[data-name="Zapier"] {
+  color: #f05a47;
+}
+.connectionIcon[data-name="ClickHouse"],
+.connectionIcon[data-name="Hugging Face"] {
+  color: #f7c600;
+}
+.connectionIcon[data-name="Cloudflare"] {
+  color: #f48120;
+}
+.connectionIcon[data-name="Mixpanel"] {
+  color: #7856ff;
+}
+.connectionIcon[data-name="Netlify"],
+.connectionIcon[data-name="Supabase"] {
+  color: #2ebf91;
 }
 .showAll {
   height: 34px;
@@ -935,4 +1199,7 @@
   .previewPane {
     height: 280px;
   }
+}
+.appShell .combobox > input:focus-visible {
+  outline: 0;
 }
