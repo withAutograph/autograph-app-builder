@@ -1,7 +1,7 @@
 {
   "name": "autograph-app-builder",
   "version": "0.2.0",
-  "description": "Design and create apps in supported repositories with Autograph App Builder.",
+  "description": "Design and create apps with Autograph App Builder.",
   "author": { "name": "Autograph", "url": "https://github.com/withAutograph" },
   "homepage": "https://github.com/withAutograph/autograph-app-builder",
   "repository": "https://github.com/withAutograph/autograph-app-builder",
@@ -11,16 +11,18 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Autograph App Builder",
-    "shortDescription": "Design and build supported apps",
-    "longDescription": "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in supported repositories.",
+    "shortDescription": "Design and create apps with Autograph",
+    "longDescription": "Use Autograph App Builder to design, plan, create, validate, and separately publish any app.",
     "developerName": "Autograph",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Read", "Write"],
+    "composerIcon": "./assets/autograph-icon.png",
+    "logo": "./assets/autograph-icon.png",
     "websiteURL": "https://github.com/withAutograph/autograph-app-builder",
     "defaultPrompt": [
-      "Design a new app with Autograph App Builder. If autograph_start is unavailable, stop without implementing directly.",
-      "Create a supported app with Autograph App Builder. If autograph_start is unavailable, stop without another app builder.",
-      "Continue my app build with Autograph App Builder. If its five tools are unavailable, stop and report the missing connection."
+      "Create a polished personal finance dashboard",
+      "Build an event planning app for coordinating guests, schedules, and tasks",
+      "Design a customer feedback app with a clear review workflow"
     ],
     "brandColor": "#111827",
     "screenshots": []

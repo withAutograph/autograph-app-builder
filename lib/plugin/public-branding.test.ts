@@ -11,7 +11,7 @@ describe("Autograph App Builder public branding", () => {
     const layout = await readFile(resolve("app/layout.tsx"), "utf8");
 
     expect(portable.description).toBe(
-      "Design and create apps in supported repositories with Autograph App Builder.",
+      "Design and create apps with Autograph App Builder.",
     );
     expect(packageManifest.description).toBe(
       "Autograph App Builder designs and creates apps in supported repositories.",
