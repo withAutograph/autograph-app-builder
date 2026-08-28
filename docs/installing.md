@@ -2,8 +2,8 @@
 
 ## Install before shared marketplace publication
 
-Until the shared marketplace is published, obtain these files from an
-authorized GitHub release or directly from an Autograph maintainer:
+Until the shared marketplace is published, download these files from the public
+[GitHub releases](https://github.com/withAutograph/autograph-app-builder/releases):
 
 - `autograph-app-builder-codex-marketplace-VERSION.tar.gz`
 - `SHA256SUMS`
@@ -28,9 +28,8 @@ Confirm that a new task exposes exactly `eve_start`, `eve_get`, `eve_send`,
 tool is unavailable, it stops without using another app builder or editing a
 target directly.
 
-The App Builder repository and its releases may require GitHub access during
-this pre-marketplace period. If you cannot access an authorized release asset,
-there is no supported external installation until the shared marketplace is
+The repository and release assets are public. The release archive is the
+supported external installation path until the shared marketplace is
 published.
 
 ## Install from the shared marketplace after publication

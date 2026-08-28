@@ -81,7 +81,7 @@ export const sessionUiHtml = `<!doctype html>
         }
         if(message.method==="ui/notifications/tool-result")update(message.params&&message.params.structuredContent);
       });
-      window.parent.postMessage({jsonrpc:"2.0",id:"eve-session-init",method:"ui/initialize",params:{protocolVersion,appInfo:{name:"Autograph App Builder",version:"0.1.0"},appCapabilities:{}}},"*");
+      window.parent.postMessage({jsonrpc:"2.0",id:"eve-session-init",method:"ui/initialize",params:{protocolVersion,appInfo:{name:"Autograph App Builder",version:"0.1.1"},appCapabilities:{}}},"*");
     })();
   </script>
 </body>
