@@ -2,12 +2,6 @@ import type { NextConfig } from "next";
 import { withEve } from "eve/next";
 
 const nextConfig: NextConfig = {
-  outputFileTracingIncludes: {
-    "/*": [
-      "./agent/skills/**/*",
-      "./artifacts/hosted/arrusted-77dce488-preview.tar.gz",
-    ],
-  },
   async headers() {
     return [
       {

@@ -1,24 +1,14 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   HOSTED_MANAGED_SKILLS_SOURCE,
   HOSTED_MANAGED_SKILLS_TARGET,
   readHostedManagedSeedFiles,
 } from "./hosted-managed-seeds";
-
-const temporaryRoots: string[] = [];
+import { HOSTED_MANAGED_SKILL_CONTENTS } from "./hosted-managed-seeds.generated";
 
 function listFiles(directory: string, relativeDirectory = "."): string[] {
   const files: string[] = [];
@@ -30,11 +20,6 @@ function listFiles(directory: string, relativeDirectory = "."): string[] {
   }
   return files.sort((left, right) => left.localeCompare(right));
 }
-
-afterEach(() => {
-  for (const root of temporaryRoots.splice(0))
-    rmSync(root, { force: true, recursive: true });
-});
 
 describe("hosted managed sandbox seeds", () => {
   it("replays every managed skill path and byte from the authored package", () => {
@@ -52,21 +37,29 @@ describe("hosted managed sandbox seeds", () => {
       );
   });
 
-  it("rejects unsupported entries instead of following them", () => {
-    const root = mkdtempSync(join(tmpdir(), "hosted-managed-seeds-"));
-    temporaryRoots.push(root);
-    const skills = join(root, HOSTED_MANAGED_SKILLS_SOURCE);
-    mkdirSync(skills, { recursive: true });
-    writeFileSync(join(skills, "SKILL.md"), "safe");
-    symlinkSync(join(root, "outside"), join(skills, "linked"));
-
-    expect(() => readHostedManagedSeedFiles(root)).toThrow(
-      /unsupported entry/u,
+  it("keeps the closed bundle manifest aligned with every authored skill file", () => {
+    const sourceRoot = join(process.cwd(), HOSTED_MANAGED_SKILLS_SOURCE);
+    expect(HOSTED_MANAGED_SKILL_CONTENTS.map(({ path }) => path)).toEqual(
+      listFiles(sourceRoot),
     );
   });
 
-  it("keeps the managed source available to every traced server route", () => {
+  it("reads embedded managed skill bytes without a runtime source tree", () => {
+    const seeds = readHostedManagedSeedFiles();
+    expect(seeds).toHaveLength(HOSTED_MANAGED_SKILL_CONTENTS.length);
+    expect(seeds.map(({ path }) => path)).toEqual(
+      HOSTED_MANAGED_SKILL_CONTENTS.map(({ path }) =>
+        posix.join(HOSTED_MANAGED_SKILLS_TARGET, path),
+      ),
+    );
+    for (const [index, source] of HOSTED_MANAGED_SKILL_CONTENTS.entries())
+      expect(seeds[index]?.content).toEqual(
+        Buffer.from(source.content, "utf8"),
+      );
+  });
+
+  it("does not misclassify Eve service assets as Next.js route assets", () => {
     const nextConfig = readFileSync("next.config.ts", "utf8");
-    expect(nextConfig).toContain('"./agent/skills/**/*"');
+    expect(nextConfig).not.toContain('"./agent/skills/**/*"');
   });
 });

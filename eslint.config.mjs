@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     ".eve/**",
     ".output/**",
+    "lib/sandbox/hosted-artifact.generated.ts",
     "out/**",
     "build/**",
     "next-env.d.ts",
