@@ -208,6 +208,9 @@ try {
   await mutateReceipt("source tree drift", (receipt) => {
     (receipt.source as { tree: string }).tree = "0".repeat(40);
   });
+  await mutateReceipt("package version drift", (receipt) => {
+    receipt.version = "0.1.0";
+  });
   await mutateReceipt("archive basename traversal", (receipt) => {
     const archive = receipt.archive as { name: string };
     archive.name = `../${archive.name}`;

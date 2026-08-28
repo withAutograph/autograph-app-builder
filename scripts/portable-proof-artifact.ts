@@ -24,7 +24,7 @@ export const portableReleaseReceiptSchema = z
     format: z.literal("autograph-portable-plugin-release-v3"),
     specification: z.literal("1.0.0"),
     name: z.literal("autograph-app-builder"),
-    version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/u),
+    version: z.literal("0.2.0"),
     source: z
       .object({
         repository: z.literal(
@@ -208,6 +208,36 @@ export async function verifyPortableProofArtifact(input: {
   ])
     if (!marketplaceFiles.has(required))
       throw new Error(`Codex marketplace omitted ${required}.`);
+  const marketplaceAdapterPath = `${marketplacePrefix}.mcp.json`;
+  const marketplaceAdapter = JSON.parse(
+    Buffer.from(marketplaceFiles.get(marketplaceAdapterPath)!).toString("utf8"),
+  );
+  if (
+    JSON.stringify(marketplaceAdapter) !==
+    JSON.stringify({
+      mcpServers: {
+        "autograph-app-builder": {
+          type: "http",
+          url: receipt.endpoint,
+        },
+      },
+    })
+  )
+    throw new Error(
+      "Codex marketplace adapter must declare exactly one /mcp server.",
+    );
+  const codexManifestPath = `${marketplacePrefix}.codex-plugin/plugin.json`;
+  const codexManifest = JSON.parse(
+    Buffer.from(marketplaceFiles.get(codexManifestPath)!).toString("utf8"),
+  );
+  if (
+    codexManifest.name !== receipt.name ||
+    codexManifest.version !== "0.2.0" ||
+    codexManifest.mcpServers !== "./.mcp.json"
+  )
+    throw new Error(
+      "Codex marketplace manifest was not bound to package 0.2.0 and its sole MCP adapter.",
+    );
   const auxiliaryPaths = [
     "clients/codex.client-harness.json",
     "clients/cursor.client-harness.json",

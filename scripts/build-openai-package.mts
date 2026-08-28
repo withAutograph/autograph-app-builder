@@ -1,6 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { format } from "prettier";
+import {
+  assertAutographMcpEndpoint,
+  AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT,
+  AUTOGRAPH_MCP_SERVER_NAME,
+  AUTOGRAPH_PACKAGE_VERSION,
+} from "../lib/plugin/agent-plugin-package.ts";
 
 const portable = JSON.parse(await readFile(resolve("plugin.json"), "utf8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
@@ -10,29 +16,46 @@ const endpointIndex = process.argv.indexOf("--endpoint");
 const suppliedEndpoint =
   endpointIndex >= 0 ? process.argv[endpointIndex + 1] : undefined;
 const endpoint =
-  suppliedEndpoint ?? (connectionId ? undefined : "http://127.0.0.1:3000/mcp");
+  suppliedEndpoint ??
+  (connectionId ? undefined : AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT);
+
+if (connectionIndex >= 0 && !connectionId)
+  throw new Error("Missing value for --connection-id.");
+if (endpointIndex >= 0 && !suppliedEndpoint)
+  throw new Error("Missing value for --endpoint.");
 
 if (connectionId && suppliedEndpoint) {
   throw new Error("Pass either --connection-id or --endpoint, not both.");
 }
 
-if (endpoint) {
-  const url = new URL(endpoint);
-  const isLoopback =
-    url.protocol === "http:" &&
-    (url.hostname === "127.0.0.1" || url.hostname === "localhost");
-  if (
-    (url.protocol !== "https:" && !isLoopback) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new Error(
-      "--endpoint must be credential-free HTTPS or an HTTP loopback URL.",
-    );
-  }
-}
+if (portable.version !== AUTOGRAPH_PACKAGE_VERSION)
+  throw new Error(
+    `plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`,
+  );
+
+if (suppliedEndpoint)
+  assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
+
+const portableMcpPath = resolve("mcp.json");
+const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf8"));
+const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
+if (
+  portableServerNames.length !== 1 ||
+  portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME
+)
+  throw new Error(
+    `mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`,
+  );
+const portableServer = portableMcp.mcpServers[AUTOGRAPH_MCP_SERVER_NAME];
+if (
+  !portableServer ||
+  typeof portableServer !== "object" ||
+  portableServer.type !== "streamable-http"
+)
+  throw new Error(
+    `${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`,
+  );
+assertAutographMcpEndpoint(portableServer.url, { release: false });
 
 const manifest = {
   name: portable.name,
@@ -73,14 +96,6 @@ await writeFile(
   await format(JSON.stringify(manifest), { parser: "json" }),
 );
 if (endpoint) {
-  const portableMcpPath = resolve("mcp.json");
-  const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf8"));
-  const portableServer = portableMcp.mcpServers?.["autograph-app-builder"];
-  if (!portableServer || typeof portableServer !== "object") {
-    throw new Error(
-      "mcp.json must declare the autograph-app-builder MCP server.",
-    );
-  }
   portableServer.url = endpoint;
   await writeFile(
     portableMcpPath,
@@ -91,7 +106,7 @@ if (endpoint) {
     await format(
       JSON.stringify({
         mcpServers: {
-          "autograph-app-builder": { type: "http", url: endpoint },
+          [AUTOGRAPH_MCP_SERVER_NAME]: { type: "http", url: endpoint },
         },
       }),
       { parser: "json" },

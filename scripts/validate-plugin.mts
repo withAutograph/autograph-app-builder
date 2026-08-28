@@ -17,6 +17,6 @@ const result = await validateAgentPluginPackage({
 });
 console.log(
   result.packageKind === "source"
-    ? `Portable source components for ${result.name} satisfy Agent Plugins ${result.version} pre-build checks.`
-    : `Generated portable Agent Plugin artifact ${result.name} conforms to Agent Plugins ${result.version}.`,
+    ? `Portable source components for ${result.name} ${result.version} satisfy Agent Plugins ${result.specification} pre-build checks.`
+    : `Generated portable Agent Plugin artifact ${result.name} ${result.version} conforms to Agent Plugins ${result.specification}.`,
 );
