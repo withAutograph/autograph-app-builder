@@ -329,7 +329,7 @@ export function assertExactProposal(proposal: LocalPublicationProposal): void {
     throw new Error("The local-publication execution order is malformed.");
 }
 
-const topologyPath = "apps/shell/microfrontends.json";
+const topologyPath = "microfrontends.json";
 
 export function executionOrder(paths: readonly string[]): readonly string[] {
   return [

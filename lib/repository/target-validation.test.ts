@@ -64,11 +64,11 @@ const apply: TargetApplyReceipt = {
     contractPath: "apps/example/app.contract.json",
     workspacePath: "apps/example",
     topology: {
-      path: "apps/shell/microfrontends.json",
+      path: "microfrontends.json",
       oldDigest: digest("1"),
       newDigest: digest("2"),
     },
-    mutations: ["apps/example", "apps/shell/microfrontends.json"],
+    mutations: ["apps/example", "microfrontends.json"],
     recovered: false,
     omittedAuthorities: [
       "provider-provisioning",

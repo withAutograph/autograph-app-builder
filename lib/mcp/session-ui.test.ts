@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
+import codexManifest from "../../.codex-plugin/plugin.json";
+import packageManifest from "../../package.json";
+import portableManifest from "../../plugin.json";
+import {
+  APP_VERSION,
+  MCP_APP_RESOURCE_MIME_TYPE,
+  sessionUiHtml,
+} from "./session-ui";
 
 describe("Eve MCP App session UI", () => {
   it("uses the MCP Apps resource profile and protocol handshake", () => {
@@ -8,6 +15,13 @@ describe("Eve MCP App session UI", () => {
     expect(sessionUiHtml).toContain('method:"ui/initialize"');
     expect(sessionUiHtml).toContain('"ui/notifications/tool-result"');
     expect(sessionUiHtml).toContain('"ui/notifications/initialized"');
+  });
+
+  it("keeps the package, portable, Codex, and runtime versions aligned", () => {
+    expect(APP_VERSION).toBe(packageManifest.version);
+    expect(portableManifest.version).toBe(packageManifest.version);
+    expect(codexManifest.version).toBe(packageManifest.version);
+    expect(sessionUiHtml).toContain(`version:"${packageManifest.version}"`);
   });
 
   it("keeps a stable viewport and respects reduced motion", () => {

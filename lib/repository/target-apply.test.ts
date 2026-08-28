@@ -46,7 +46,7 @@ const proposal: TargetProposal = {
       optionalCapabilities: { integrations: [], hostedResources: [] },
     },
     topology: {
-      configPath: "apps/shell/microfrontends.json",
+      configPath: "microfrontends.json",
       projectName: "apps-expense-review",
       packageName: "@autograph/expense-review",
       routes: ["/expense-review", "/expense-review/:path*"],
@@ -77,7 +77,7 @@ const before: OverlaySnapshot = {
   treeDigest: "a".repeat(64),
   files: [
     {
-      path: "apps/shell/microfrontends.json",
+      path: "microfrontends.json",
       mode: "644",
       digest: "b".repeat(64),
     },
@@ -121,7 +121,7 @@ const after: OverlaySnapshot = {
       digest: "d".repeat(64),
     },
     {
-      path: "apps/shell/microfrontends.json",
+      path: "microfrontends.json",
       mode: "644",
       digest: "e".repeat(64),
     },
@@ -140,11 +140,11 @@ function commandReceipt(): TargetApplyCommandReceipt {
     contractPath: "apps/expense-review/app.contract.json",
     workspacePath: "apps/expense-review",
     topology: {
-      path: "apps/shell/microfrontends.json",
+      path: "microfrontends.json",
       oldDigest: "b".repeat(64),
       newDigest: "c".repeat(64),
     },
-    mutations: ["apps/expense-review", "apps/shell/microfrontends.json"],
+    mutations: ["apps/expense-review", "microfrontends.json"],
     recovered: false,
     omittedAuthorities: [
       "provider-provisioning",
@@ -384,7 +384,7 @@ describe("proposal-bound target apply", () => {
     expect(result.receipt.postTree).toEqual(after.files);
     expect(result.receipt.changes.map(({ path }) => path)).toEqual([
       "apps/expense-review/app.contract.json",
-      "apps/shell/microfrontends.json",
+      "microfrontends.json",
       "prototype/expense-review/app-spec.md",
     ]);
     expect(result.receipt.targetReceipt).toEqual(commandReceipt());

@@ -6,41 +6,115 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
+  actions: read
+  attestations: write
   contents: write
+  id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: release
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.18.0
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
+      - name: Require exact-main release authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PROOF_SHA: ${{ vars.AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA }}
+        run: |
+          tag_commit="$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")"
+          event_commit="$(git rev-parse "$GITHUB_SHA^{commit}")"
+          main_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          test "$tag_commit" = "$event_commit"
+          test "$main_commit" = "$event_commit"
+          test "$RELEASE_PROOF_SHA" = "$event_commit"
+          ci_sha="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$event_commit" --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
+          test "$ci_sha" = "$event_commit"
       - run: mise run dependencies:install
       - name: Require tag and manifest version agreement
         run: |
-          version="$(node -p 'require("./plugin.json").version')"
+          version="$(node -e 'const packageManifest=require("./package.json"); const portable=require("./plugin.json"); const codex=require("./.codex-plugin/plugin.json"); if (packageManifest.version !== portable.version || portable.version !== codex.version) process.exit(1); process.stdout.write(portable.version)')"
           test "${GITHUB_REF_NAME}" = "v${version}"
       - name: Build deterministic endpoint-bound release
         env:
           RELEASE_ORIGIN: ${{ vars.AUTOGRAPH_APP_BUILDER_RELEASE_ORIGIN }}
         run: |
           test -n "$RELEASE_ORIGIN"
+          mise run package:test-portable
           mise run package:build-portable-release -- \
             --endpoint "$RELEASE_ORIGIN" \
             --output .artifacts/release
-          mise run package:test-portable
+          for client in vscode cursor codex; do
+            mise run package:install-portable -- \
+              --client "$client" \
+              --source .artifacts/release \
+              --destination .artifacts/release-install
+          done
+          mise run package:smoke-portable -- \
+            --release .artifacts/release \
+            --install-root .artifacts/release-install
+      - name: Attest release build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            .artifacts/release/autograph-app-builder-*.tar.gz
+            .artifacts/release/release-receipt.json
+            .artifacts/release/SHA256SUMS
       - name: Publish immutable release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_PROOF_SHA: ${{ vars.AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --verify-tag \
             --title "Autograph App Builder $GITHUB_REF_NAME" \
             --generate-notes \
             .artifacts/release/autograph-app-builder-*.tar.gz \
             .artifacts/release/release-receipt.json \
             .artifacts/release/SHA256SUMS
+
+          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')" -eq 4
+          for asset in \
+            .artifacts/release/autograph-app-builder-*.tar.gz \
+            .artifacts/release/release-receipt.json \
+            .artifacts/release/SHA256SUMS; do
+            asset_name="$(basename "$asset")"
+            local_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
+            remote_digest="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq ".assets[] | select(.name == \"$asset_name\") | .digest")"
+            test "$remote_digest" = "$local_digest"
+          done
+
+          tag_commit="$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")"
+          main_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          ci_sha="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$tag_commit" --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
+          test "$main_commit" = "$tag_commit"
+          test "$ci_sha" = "$tag_commit"
+          test "$RELEASE_PROOF_SHA" = "$tag_commit"
+
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false
+          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq .isImmutable)" = true
+          gh release verify "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
+          for asset in \
+            .artifacts/release/autograph-app-builder-*.tar.gz \
+            .artifacts/release/release-receipt.json \
+            .artifacts/release/SHA256SUMS; do
+            gh release verify-asset "$GITHUB_REF_NAME" "$asset" --repo "$GITHUB_REPOSITORY"
+            gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$tag_commit" \
+              --source-ref "$GITHUB_REF"
+          done

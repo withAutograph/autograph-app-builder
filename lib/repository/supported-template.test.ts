@@ -94,7 +94,7 @@ function fixture(): string {
       "    needs: template-safety",
       "    if: needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository",
     ].join("\n"),
-    "apps/shell/microfrontends.json": "{}\n",
+    "microfrontends.json": "{}\n",
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":
@@ -491,6 +491,35 @@ describe("supported-template adapter", () => {
     expect(drifted.digest).not.toBe(reviewed.digest);
   });
 
+  it("rejects the retired shell-owned topology path", async () => {
+    const root = fixture();
+    const topology = join(root, "microfrontends.json");
+    const retiredTopology = join(root, "apps/shell/microfrontends.json");
+    mkdirSync(resolve(retiredTopology, ".."), { recursive: true });
+    writeFileSync(retiredTopology, readFileSync(topology));
+    unlinkSync(topology);
+    fixtureGit(root, ["add", "--all"]);
+    fixtureGit(root, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "restore retired topology path",
+    ]);
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+
+    const eligibility = await inspectSupportedRepository(root);
+
+    expect(eligibility.eligible).toBe(false);
+    expect(eligibility.failures).toContain(
+      "missing required path microfrontends.json",
+    );
+  });
+
   it("accepts only the closed V0 surface and prepares the exact SHA", async () => {
     const root = fixture();
     process.env.REPOSITORY_LOCAL_ROOTS = root;
@@ -513,10 +542,7 @@ describe("supported-template adapter", () => {
     );
     expect(
       readFileSync(
-        resolve(
-          sandbox.resolvePath("repository"),
-          "apps/shell/microfrontends.json",
-        ),
+        resolve(sandbox.resolvePath("repository"), "microfrontends.json"),
         "utf8",
       ),
     ).toBe("{}\n");
@@ -537,10 +563,7 @@ describe("supported-template adapter", () => {
     ).resolves.toEqual(prepared);
 
     writeFileSync(
-      resolve(
-        sandbox.resolvePath("repository"),
-        "apps/shell/microfrontends.json",
-      ),
+      resolve(sandbox.resolvePath("repository"), "microfrontends.json"),
       "tampered\n",
     );
     await expect(
@@ -570,10 +593,7 @@ describe("supported-template adapter", () => {
 
     expect(
       readFileSync(
-        resolve(
-          sandbox.resolvePath("repository"),
-          "apps/shell/microfrontends.json",
-        ),
+        resolve(sandbox.resolvePath("repository"), "microfrontends.json"),
         "utf8",
       ),
     ).toBe("{}\n");

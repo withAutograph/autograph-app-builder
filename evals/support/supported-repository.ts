@@ -63,7 +63,7 @@ export function createSupportedRepositoryFixture(): string {
       "run = 'turbo gen --config .config/turbo/generators/config.ts app --args \"$usage_app_id\"'",
     ].join("\n"),
     ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
-    "apps/shell/microfrontends.json": "{}\n",
+    "microfrontends.json": "{}\n",
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":

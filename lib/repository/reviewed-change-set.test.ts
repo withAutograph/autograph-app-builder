@@ -72,7 +72,7 @@ const apply = {
     version: 1,
     contractPath: "apps/example/app.contract.json",
     topology: {
-      path: "apps/shell/microfrontends.json",
+      path: "microfrontends.json",
       oldDigest: digest("a"),
       newDigest: digest("b"),
     },

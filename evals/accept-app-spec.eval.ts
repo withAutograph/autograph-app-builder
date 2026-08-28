@@ -326,7 +326,7 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const topologyPath = join(repository, "apps/shell/microfrontends.json");
+    const topologyPath = join(repository, "microfrontends.json");
     const topologyBeforeOverlap = await readFile(topologyPath);
     await writeFile(topologyPath, "concurrent overlap\n");
     await t.send("Publish reviewed change set locally with dirty overlap.");

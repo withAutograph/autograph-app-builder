@@ -1,6 +1,6 @@
 {
   "name": "autograph-app-builder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Autograph App Builder: a durable Eve agent for designing and creating supported applications.",
   "private": true,
   "license": "MIT",
