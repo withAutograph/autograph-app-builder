@@ -10,6 +10,7 @@ import {
   Copy,
   DollarSign,
   Edit,
+  ExternalLink,
   GitBranch,
   Github,
   Globe,
@@ -95,6 +96,8 @@ type BuilderForm = {
   channelSlack: boolean;
   connections: string[];
 };
+type ConnectionStage = "connect" | "configure" | "customize";
+type ConnectionFlow = { name: string; stage: ConnectionStage };
 
 const featuredConnections = [
   ["Linear", "linear"],
@@ -163,6 +166,24 @@ const allConnectionNames = [
 ] as const;
 
 const connectionKind = new Map<string, string>(featuredConnections);
+
+const connectionDescriptions: Record<string, string> = {
+  Linear: "Create and manage issues from any conversation",
+  Notion: "Search and update your team knowledge",
+  Vercel: "Manage projects, deployments, and domains",
+  Resend: "Send transactional email from your app",
+  Stripe: "Access customers, payments, and subscriptions",
+  Sanity: "Read and manage structured content",
+  Kernel: "Run secure browser and compute sessions",
+  "Custom MCP": "Connect your own tools through MCP",
+  Xero: "Access your Xero financials from any conversation",
+};
+
+function connectionDescription(name: string) {
+  return (
+    connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`
+  );
+}
 
 const teamOptions = [
   { value: "pylee", label: "pylee", detail: "Hobby" },
@@ -579,6 +600,201 @@ function Header({
   );
 }
 
+function ConnectionDrawer({
+  flow,
+  onClose,
+  onStageChange,
+  onConnected,
+}: {
+  flow: ConnectionFlow;
+  onClose: () => void;
+  onStageChange: (stage: ConnectionStage) => void;
+  onConnected: () => void;
+}) {
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [connectionName, setConnectionName] = useState(
+    flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-"),
+  );
+  const [description, setDescription] = useState(
+    connectionDescription(flow.name),
+  );
+  const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  if (showSuccess)
+    return (
+      <div className={styles.connectionSuccess} role="dialog" aria-modal="true">
+        <div>
+          <h2>Connection successful</h2>
+          <p>You can close this window and return to where you started.</p>
+          <span aria-hidden="true">
+            <Check size={20} />
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setShowSuccess(false);
+              onStageChange("configure");
+            }}
+          >
+            Return
+          </button>
+        </div>
+      </div>
+    );
+
+  return (
+    <div className={styles.drawerBackdrop} onMouseDown={onClose}>
+      <div
+        className={styles.connectionDrawer}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="connection-drawer-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <h2 id="connection-drawer-title">Add Connection</h2>
+          <button type="button" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className={styles.drawerProvider}>
+          <ConnectionIcon
+            kind={connectionKind.get(flow.name)}
+            name={flow.name}
+          />
+          <strong>{flow.name}</strong>
+        </div>
+
+        <section className={styles.connectionStep} data-active="true">
+          <h3>
+            <span>2</span> Configure
+          </h3>
+          {flow.stage === "connect" ? (
+            <div className={styles.connectPrompt}>
+              <div className={styles.connectionMarks} aria-hidden="true">
+                <span>
+                  <ConnectionIcon
+                    kind={connectionKind.get(flow.name)}
+                    name={flow.name}
+                  />
+                </span>
+                <span>
+                  <Image src={autographIcon} width={28} height={28} alt="" />
+                </span>
+              </div>
+              <h4>Connect your {flow.name} account</h4>
+              <p>Authorize Autograph to access {flow.name} on your behalf.</p>
+              <button type="button" onClick={() => setShowSuccess(true)}>
+                Connect {flow.name}{" "}
+                <ExternalLink size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+            <div className={styles.configureFields}>
+              <label>
+                {accountLabel}
+                <button type="button" className={styles.accountSelect}>
+                  <ConnectionIcon
+                    kind={connectionKind.get(flow.name)}
+                    name={flow.name}
+                  />
+                  Autograph
+                  <ChevronDown size={16} aria-hidden="true" />
+                </button>
+              </label>
+              <label>
+                <span>
+                  Connection Name <em>*</em>
+                </span>
+                <input
+                  value={connectionName}
+                  onChange={(event) => setConnectionName(event.target.value)}
+                />
+              </label>
+              <div className={styles.scopeRow}>
+                <span>
+                  App Permissions
+                  <small>Permissions granted to this app.</small>
+                </span>
+                <button type="button">
+                  Recommended <ChevronDown size={16} />
+                </button>
+              </div>
+              <footer>
+                <button
+                  type="button"
+                  disabled={!connectionName.trim()}
+                  onClick={() => onStageChange("customize")}
+                >
+                  Continue
+                </button>
+              </footer>
+            </div>
+          )}
+        </section>
+
+        <section
+          className={styles.connectionStep}
+          data-active={flow.stage === "customize" || undefined}
+        >
+          <h3>
+            <span>3</span> Customize
+          </h3>
+          {flow.stage === "customize" ? (
+            <div className={styles.configureFields}>
+              <label>
+                Display Name
+                <input
+                  value={connectionName}
+                  onChange={(event) => setConnectionName(event.target.value)}
+                />
+              </label>
+              <label>
+                Description
+                <textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              </label>
+              <label className={styles.defaultConnection}>
+                <span>
+                  Use as default
+                  <small>
+                    Prefer this connection when {flow.name} is used.
+                  </small>
+                </span>
+                <input type="checkbox" />
+              </label>
+              <footer>
+                <button type="button" onClick={onConnected}>
+                  Add Connection
+                </button>
+              </footer>
+            </div>
+          ) : null}
+        </section>
+        <p className={styles.connectionTerms}>
+          This connection is prepared locally. External authorization and
+          credentials are not stored by this prototype.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AnonymousBuilder({
   onContinue,
 }: {
@@ -664,6 +880,9 @@ function Builder({
   const [model, setModel] = useState("openai/gpt-5.6-terra");
   const [showAllConnections, setShowAllConnections] = useState(false);
   const [search, setSearch] = useState("");
+  const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
+    null,
+  );
   const baseConnections =
     showAllConnections || search
       ? allConnectionNames
@@ -686,13 +905,21 @@ function Builder({
     return normalizedSearch.split("").every((letter) => lower.includes(letter));
   });
   const canSubmit = Boolean(form.brief.trim());
-  const toggleConnection = (name: string) =>
+  const removeConnection = (name: string) =>
     setForm((current) => ({
       ...current,
-      connections: current.connections.includes(name)
-        ? current.connections.filter((item) => item !== name)
-        : [...current.connections, name],
+      connections: current.connections.filter((item) => item !== name),
     }));
+  const completeConnection = () => {
+    if (!connectionFlow) return;
+    setForm((current) => ({
+      ...current,
+      connections: current.connections.includes(connectionFlow.name)
+        ? current.connections
+        : [...current.connections, connectionFlow.name],
+    }));
+    setConnectionFlow(null);
+  };
   useEffect(() => {
     if (!form.appName && !form.repository) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -901,22 +1128,19 @@ function Builder({
             ) : null}
           </label>
           <div className={styles.connectionGrid}>
-            {filtered.map((name) => (
-              <button
-                type="button"
-                key={name}
-                aria-label={
-                  form.connections.includes(name) ? `Remove ${name}` : name
-                }
-                onClick={() => toggleConnection(name)}
-              >
-                <ConnectionIcon kind={connectionKind.get(name)} name={name} />
-                {name}
-                {form.connections.includes(name) ? (
-                  <X size={15} aria-hidden="true" />
-                ) : null}
-              </button>
-            ))}
+            {filtered
+              .filter((name) => !form.connections.includes(name))
+              .map((name) => (
+                <button
+                  type="button"
+                  key={name}
+                  aria-label={`Add ${name}`}
+                  onClick={() => setConnectionFlow({ name, stage: "connect" })}
+                >
+                  <ConnectionIcon kind={connectionKind.get(name)} name={name} />
+                  {name}
+                </button>
+              ))}
           </div>
           {!showAllConnections && !search ? (
             <button
@@ -927,6 +1151,42 @@ function Builder({
               Show all connections
             </button>
           ) : null}
+          {form.connections.length ? (
+            <div
+              className={styles.connectedList}
+              aria-label="Added connections"
+            >
+              {form.connections.map((name) => (
+                <article key={name}>
+                  <span>
+                    <ConnectionIcon
+                      kind={connectionKind.get(name)}
+                      name={name}
+                    />
+                  </span>
+                  <div>
+                    <strong>{name}</strong>
+                    <p>{connectionDescription(name)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConnectionFlow({ name, stage: "configure" })
+                    }
+                  >
+                    Customize
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${name}`}
+                    onClick={() => removeConnection(name)}
+                  >
+                    <X size={17} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : null}
         </fieldset>
         <button
           className={styles.createButton}
@@ -936,6 +1196,18 @@ function Builder({
           Create App
         </button>
       </form>
+      {connectionFlow ? (
+        <ConnectionDrawer
+          flow={connectionFlow}
+          onClose={() => setConnectionFlow(null)}
+          onStageChange={(stage) =>
+            setConnectionFlow((current) =>
+              current ? { ...current, stage } : current,
+            )
+          }
+          onConnected={completeConnection}
+        />
+      ) : null}
     </main>
   );
 }

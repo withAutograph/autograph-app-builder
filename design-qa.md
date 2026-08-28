@@ -16,6 +16,9 @@
 - Completion comparison: `.artifacts/design-qa/source-vs-implementation-ready-final.jpg`
 - Dynamic source captures: `.artifacts/vercel-dynamic/source-*.png`
 - Dynamic implementation captures: `.artifacts/vercel-dynamic/implementation-*.png`
+- Connection flow sources: the five `17.25`–`17.34` screenshots supplied on 2026-08-28.
+- Connection drawer implementation: `.artifacts/connection-flow/implementation-connect.png`
+- Connection success implementation: `.artifacts/connection-flow/implementation-success.png`
 
 The authenticated builder comparison used the source viewport of 1699 x 1600 at DPR 1, with both experiences in the authenticated light-theme state. The completion comparison used the same light theme and the completed handoff state.
 
@@ -53,6 +56,19 @@ Implemented and compared against the captured live states:
 
 Chrome and the in-app browser verified menu expansion, filtering, selection, public/private state transitions, and the full connection catalog. Safari verified the same semantic structure, current values, labels, checkboxes, comboboxes, and primary action through its native accessibility tree.
 
+### Connection flow pass
+
+The supplied connection drawer, authorization success, configuration, and connected-card references were compared directly with the implementation at matching states.
+
+- Selecting any catalog provider opens a responsive right-side Add Connection drawer over the builder.
+- Every provider uses the explicit Connect action requested for Autograph rather than Vercel's connect-on-first-use exception.
+- Connect opens a dedicated Connection successful state with the matching check and Return action.
+- Return restores the drawer at Configure; Continue reveals Customize; Add Connection returns to the builder with a detailed connected card.
+- Connected cards support Customize and Remove, and added providers are removed from the available catalog.
+- The prototype states plainly that the local flow does not persist credentials or claim real provider authorization.
+
+No actionable P0, P1, or P2 differences remain in the tested connection flow. The provider-specific configuration vocabulary is intentionally normalized for a frontend prototype; future live integrations can replace those fields with provider-owned schemas.
+
 ## Interaction and state QA
 
 - Anonymous prompt, suggestion chips, disabled and enabled Continue states, and sign-in handoff verified.
@@ -60,6 +76,7 @@ Chrome and the in-app browser verified menu expansion, filtering, selection, pub
 - Account menu, system/light/dark theme controls, status link, and logout form verified.
 - Preparing, validating, copying, connected-client, and completion states verified.
 - Completion copy controls, dismissible install card, next steps, and Create Another App verified.
+- Connection drawer close, Connect, success, Return, Configure, Customize, Add Connection, reopen, and Remove states verified.
 - Keyboard focus styles, skip links, native select semantics, reduced-motion behavior, and unsaved-change warning reviewed.
 - Browser console error log was empty in the verified states.
 

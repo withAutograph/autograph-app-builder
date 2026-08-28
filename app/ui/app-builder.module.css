@@ -778,6 +778,343 @@
   font-weight: 500;
   cursor: pointer;
 }
+.connectedList {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.connectedList article {
+  min-height: 74px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+.connectedList article > span {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--hover);
+}
+.connectedList article > div {
+  min-width: 0;
+  flex: 1;
+}
+.connectedList strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+}
+.connectedList p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.connectedList button {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.connectedList article > button:first-of-type {
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+}
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgb(0 0 0 / 0.12);
+  backdrop-filter: blur(1px);
+  display: flex;
+  justify-content: flex-end;
+}
+.connectionDrawer {
+  width: min(660px, calc(100vw - 24px));
+  height: calc(100vh - 16px);
+  margin: 8px 8px 8px 0;
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.14);
+  animation: drawerIn 180ms ease-out;
+}
+@keyframes drawerIn {
+  from {
+    transform: translateX(18px);
+    opacity: 0;
+  }
+}
+.connectionDrawer > header {
+  height: 32px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.connectionDrawer h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+.connectionDrawer > header button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.connectionDrawer > header button:hover {
+  background: var(--hover);
+}
+.drawerProvider {
+  height: 66px;
+  padding: 0 24px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 16px;
+}
+.drawerProvider strong {
+  font-weight: 500;
+}
+.connectionStep {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--faint);
+  overflow: hidden;
+}
+.connectionStep[data-active="true"] {
+  color: var(--text);
+}
+.connectionStep h3 {
+  height: 58px;
+  margin: 0;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.connectionStep h3 > span {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--faint);
+  color: var(--surface);
+  font-size: 12px;
+}
+.connectionStep[data-active="true"] h3 > span {
+  background: var(--text);
+}
+.connectPrompt {
+  min-height: 284px;
+  padding: 46px 24px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.connectionMarks {
+  display: flex;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.connectionMarks > span {
+  width: 62px;
+  height: 62px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+}
+.connectionMarks > span + span {
+  margin-left: -10px;
+}
+.connectPrompt h4 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+}
+.connectPrompt p {
+  margin: 7px 0 18px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.connectPrompt > button,
+.configureFields footer > button {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--text);
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.configureFields {
+  padding: 10px 24px 0;
+}
+.configureFields > label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 22px;
+  color: var(--text);
+  font-size: 14px;
+}
+.configureFields label em {
+  color: #e5484d;
+  font-style: normal;
+}
+.configureFields input,
+.configureFields textarea,
+.accountSelect {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+  font: inherit;
+}
+.configureFields textarea {
+  min-height: 84px;
+  padding-block: 10px;
+  resize: vertical;
+}
+.accountSelect {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+}
+.accountSelect > svg:last-child {
+  margin-left: auto;
+}
+.scopeRow {
+  min-height: 62px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.scopeRow > span,
+.defaultConnection > span {
+  display: grid;
+  gap: 3px;
+}
+.scopeRow small,
+.defaultConnection small {
+  color: var(--muted);
+  font-size: 13px;
+}
+.scopeRow button {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.configureFields footer {
+  margin: 18px -24px 0;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--hover);
+  display: flex;
+  justify-content: flex-end;
+}
+.configureFields footer > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.defaultConnection {
+  grid-template-columns: 1fr auto !important;
+  align-items: center;
+}
+.defaultConnection input {
+  width: 16px;
+  min-height: 16px;
+}
+.connectionTerms {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.connectionSuccess {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+}
+.connectionSuccess > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.connectionSuccess h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+.connectionSuccess p {
+  margin: 14px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.connectionSuccess span {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--text);
+  color: var(--bg);
+}
+.connectionSuccess button {
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  cursor: pointer;
+}
 .createButton {
   height: 38px;
   border: 1px solid var(--text);
@@ -1153,6 +1490,9 @@
     animation: none;
     border-top-color: var(--border);
   }
+  .connectionDrawer {
+    animation: none;
+  }
 }
 @media (max-width: 700px) {
   .header {
@@ -1198,6 +1538,29 @@
   }
   .previewPane {
     height: 280px;
+  }
+  .connectionDrawer {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 20px 16px;
+    border-radius: 0;
+  }
+  .drawerProvider,
+  .connectionStep h3,
+  .configureFields {
+    padding-inline: 16px;
+  }
+  .configureFields footer {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+  .connectedList article {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .connectedList article > div {
+    width: calc(100% - 48px);
   }
 }
 .appShell .combobox > input:focus-visible {

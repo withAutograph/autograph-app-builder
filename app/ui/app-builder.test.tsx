@@ -183,4 +183,55 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Cloudinary");
     expect(view.textContent).not.toContain("Linear");
   });
+
+  it("runs the connection authorization, configuration, and customization flow", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await click(
+      view.querySelector<HTMLButtonElement>('[aria-label="Add Vercel"]')!,
+    );
+    expect(view.querySelector("#connection-drawer-title")?.textContent).toBe(
+      "Add Connection",
+    );
+    expect(view.textContent).toContain("Connect Vercel");
+
+    const drawerAccessibility = await axe.run(view, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(drawerAccessibility.violations).toEqual([]);
+
+    await click(
+      [...view.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes("Connect Vercel"),
+      )!,
+    );
+    expect(view.textContent).toContain("Connection successful");
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Return",
+      )!,
+    );
+    expect(view.textContent).toContain("Connection Name");
+
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Continue",
+      )!,
+    );
+    expect(view.textContent).toContain("Display Name");
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Add Connection",
+      )!,
+    );
+    expect(
+      view.querySelector('[aria-label="Added connections"]'),
+    ).not.toBeNull();
+    expect(view.querySelector('[aria-label="Remove Vercel"]')).not.toBeNull();
+  });
 });
