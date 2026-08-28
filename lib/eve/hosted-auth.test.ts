@@ -10,7 +10,7 @@ const claims = {
   audience: "https://builder.example.test/mcp",
   subject: "user_1",
   workspaceId: "workspace_1",
-  scopes: ["eve:session", "eve:respond"],
+  scopes: ["autograph:session", "autograph:respond"],
 };
 
 function authorize(verifiedClaims: unknown = claims) {
@@ -18,7 +18,7 @@ function authorize(verifiedClaims: unknown = claims) {
     verifiedClaims,
     expectedIssuer: claims.issuer,
     expectedAudience: claims.audience,
-    requiredScopes: ["eve:session", "eve:respond"],
+    requiredScopes: ["autograph:session", "autograph:respond"],
   });
 }
 
@@ -29,14 +29,14 @@ describe("hosted Eve authorization", () => {
       audience: claims.audience,
       workspaceId: claims.workspaceId,
       ownerUserId: claims.subject,
-      scopes: ["eve:respond", "eve:session"],
+      scopes: ["autograph:respond", "autograph:session"],
     });
   });
 
   it.each([
     ["issuer_mismatch", { ...claims, issuer: "https://other.example.test" }],
     ["audience_mismatch", { ...claims, audience: "another-client" }],
-    ["insufficient_scope", { ...claims, scopes: ["eve:session"] }],
+    ["insufficient_scope", { ...claims, scopes: ["autograph:session"] }],
     ["invalid_claims", { ...claims, unexpected: "claim" }],
     ["invalid_claims", { ...claims, audience: [claims.audience] }],
   ])("rejects %s claims", (code, candidate) => {

@@ -69,7 +69,8 @@ function jwt(subject: string, workspaceId: string) {
     aud: scenario.oauth.audience,
     sub: subject,
     workspace_id: workspaceId,
-    scope: "eve:session eve:start eve:get eve:send eve:respond eve:cancel",
+    scope:
+      "autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel",
     nbf: 1_900,
     exp: 2_100,
   })}.signature`;
@@ -131,12 +132,12 @@ function hostedFixture(
         authorization_servers: [scenario.oauth.issuer],
         bearer_methods_supported: ["header"],
         scopes_supported: [
-          "eve:session",
-          "eve:start",
-          "eve:get",
-          "eve:send",
-          "eve:respond",
-          "eve:cancel",
+          "autograph:session",
+          "autograph:start",
+          "autograph:get",
+          "autograph:send",
+          "autograph:respond",
+          "autograph:cancel",
         ],
       });
     const headers = new Headers(init?.headers);
@@ -182,7 +183,7 @@ function hostedFixture(
         structuredContent: session(String(args.sessionId), "working", 0),
       });
     };
-    if (name === "eve_start") {
+    if (name === "autograph_start") {
       if (!secondary) primaryStartCount += 1;
       return tool(
         session(
@@ -196,7 +197,7 @@ function hostedFixture(
         ),
       );
     }
-    if (name === "eve_respond") {
+    if (name === "autograph_respond") {
       if (!Array.isArray(args.responses) || args.responses.length === 0)
         return tool(session("primary-session", "working", 0), true);
       for (const response of args.responses) {
@@ -210,17 +211,17 @@ function hostedFixture(
       }
       return tool(session("primary-session", "working", 0));
     }
-    if (name === "eve_send") {
+    if (name === "autograph_send") {
       createIterated = true;
       return tool(session("primary-session", "working", 0));
     }
-    if (name === "eve_cancel") {
+    if (name === "autograph_cancel") {
       cancelRequested = true;
       return tool(session("secondary-session", "working", 0));
     }
-    if (name === "eve_get" && String(args.sessionId).startsWith("stale-"))
+    if (name === "autograph_get" && String(args.sessionId).startsWith("stale-"))
       return tool(session(String(args.sessionId), "working", 0), true);
-    if (name === "eve_get" && args.sessionId === "secondary-session") {
+    if (name === "autograph_get" && args.sessionId === "secondary-session") {
       if (!secondary) {
         const failure = denialFailure("primary-reads-secondary");
         if (failure !== undefined) return failure;
@@ -239,7 +240,7 @@ function hostedFixture(
         ),
       );
     }
-    if (name === "eve_get" && args.sessionId === "primary-session") {
+    if (name === "autograph_get" && args.sessionId === "primary-session") {
       if (secondary) {
         const failure = denialFailure("secondary-reads-primary");
         if (failure !== undefined) return failure;
@@ -394,7 +395,10 @@ describe("hosted portable fresh-client proof", () => {
         method?: string;
         params?: { name?: string };
       };
-      if (body.method !== "tools/call" || body.params?.name !== "eve_get") {
+      if (
+        body.method !== "tools/call" ||
+        body.params?.name !== "autograph_get"
+      ) {
         return response;
       }
       const payload = JSON.parse(await response.text()) as {
@@ -493,10 +497,18 @@ describe("hosted portable fresh-client proof", () => {
 
   it.each([
     ["primary-reads-secondary", "transport", "fixture transport failure"],
-    ["primary-reads-secondary", "http500", "eve_get failed with HTTP 500"],
+    [
+      "primary-reads-secondary",
+      "http500",
+      "autograph_get failed with HTTP 500",
+    ],
     ["primary-reads-secondary", "malformed", "expected boolean"],
     ["secondary-reads-primary", "transport", "fixture transport failure"],
-    ["secondary-reads-primary", "http500", "eve_get failed with HTTP 500"],
+    [
+      "secondary-reads-primary",
+      "http500",
+      "autograph_get failed with HTTP 500",
+    ],
     ["secondary-reads-primary", "malformed", "expected boolean"],
   ] as const)(
     "does not treat %s %s failure as workspace denial",

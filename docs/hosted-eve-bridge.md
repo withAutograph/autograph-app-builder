@@ -19,7 +19,7 @@ boundaries:
    performs a live exact subject/workspace membership read on every request.
    Missing, inactive, or unavailable membership fails closed before store or
    Eve access. Unknown claims fail closed instead of becoming implicit authority. The service additionally
-   requires `eve:start`, `eve:get`, `eve:send`, `eve:respond`, or `eve:cancel`
+   requires `autograph:start`, `autograph:get`, `autograph:send`, `autograph:respond`, or `autograph:cancel`
    immediately before the corresponding operation and before store access.
 3. The durable PostgreSQL `HostedEveStore` implementation scopes every session and operation
    predicate by issuer, audience, workspace, and owner. The interface has no

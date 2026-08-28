@@ -48,6 +48,19 @@ try {
     "https://mcp-endpoint.template",
     "https://localhost",
     "https://agent.example.com",
+    "https://localhost.",
+    "https://example.com.",
+    "https://agent.invalid.",
+    "https://agent.localhost.",
+    "https://0",
+    "https://0.0.0.0",
+    "https://[::]",
+    "https://[::ffff:0:0]",
+    "https://[::ffff:7f00:1]",
+    "https://[::ffff:127.0.0.1]",
+    "https://mcp.autograph.dev/",
+    "https://MCP.autograph.dev",
+    "https://mcp.autograph.dev:443",
   ])
     await run(
       "build-portable-release.mts",
@@ -207,6 +220,9 @@ try {
   });
   await mutateReceipt("source tree drift", (receipt) => {
     (receipt.source as { tree: string }).tree = "0".repeat(40);
+  });
+  await mutateReceipt("package version drift", (receipt) => {
+    receipt.version = "0.1.0";
   });
   await mutateReceipt("archive basename traversal", (receipt) => {
     const archive = receipt.archive as { name: string };

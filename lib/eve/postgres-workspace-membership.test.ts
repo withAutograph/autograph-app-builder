@@ -15,7 +15,7 @@ const principal: HostedPrincipal = {
   audience: "https://builder.example.test/mcp",
   workspaceId: "workspace_1",
   ownerUserId: "user_1",
-  scopes: ["eve:session"],
+  scopes: ["autograph:session"],
 };
 
 function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {

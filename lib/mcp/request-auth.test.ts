@@ -68,12 +68,12 @@ describe("hosted MCP request authentication", () => {
       authorization_servers: [config.issuer],
       bearer_methods_supported: ["header"],
       scopes_supported: [
-        "eve:session",
-        "eve:start",
-        "eve:get",
-        "eve:send",
-        "eve:respond",
-        "eve:cancel",
+        "autograph:session",
+        "autograph:start",
+        "autograph:get",
+        "autograph:send",
+        "autograph:respond",
+        "autograph:cancel",
       ],
     });
   });
@@ -93,7 +93,7 @@ describe("hosted MCP request authentication", () => {
     });
     const now = 2_000_000_000;
     const token = await new SignJWT({
-      scope: "eve:session eve:get",
+      scope: "autograph:session autograph:get",
       workspace_id: "workspace-one",
     })
       .setProtectedHeader({ alg: "ES256", kid: "key-1" })
@@ -112,7 +112,7 @@ describe("hosted MCP request authentication", () => {
       audience: config.audience,
       subject: "user-one",
       workspaceId: "workspace-one",
-      scopes: ["eve:session", "eve:get"],
+      scopes: ["autograph:session", "autograph:get"],
     });
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]?.[0]).toBe(config.jwksUrl);
@@ -147,7 +147,7 @@ describe("hosted MCP request authentication", () => {
     const now = 2_000_000_000;
     const omitKid = Object.hasOwn(override, "kid");
     const signer = new SignJWT({
-      scope: "eve:session",
+      scope: "autograph:session",
       workspace_id: "workspace-one",
     })
       .setProtectedHeader({
@@ -177,7 +177,7 @@ describe("hosted MCP request authentication", () => {
         }),
     });
     const token = await new SignJWT({
-      scope: "eve:session",
+      scope: "autograph:session",
       workspace_id: "workspace-one",
     })
       .setProtectedHeader({ alg: "ES256", kid: "key-1" })

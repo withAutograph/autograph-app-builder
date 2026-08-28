@@ -42,7 +42,7 @@ const forwarded = {
   attributes: {
     "eve:forwarded-by": "owner:autographing:project:autograph-app-builder",
     "mcp:audience": authority.audience,
-    "mcp:scopes": ["eve:session"],
+    "mcp:scopes": ["autograph:session"],
     "mcp:workspace-id": authority.workspaceId,
   },
   authenticator: "mcp-oauth-jwks",

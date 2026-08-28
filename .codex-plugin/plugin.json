@@ -1,12 +1,12 @@
 {
   "name": "autograph-app-builder",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Design and create apps in supported repositories with Autograph App Builder.",
   "author": { "name": "Autograph", "url": "https://github.com/withAutograph" },
   "homepage": "https://github.com/withAutograph/autograph-app-builder",
   "repository": "https://github.com/withAutograph/autograph-app-builder",
   "license": "MIT",
-  "keywords": ["eve", "agent", "mcp", "agent-plugins", "app-builder"],
+  "keywords": ["autograph", "agent", "mcp", "agent-plugins", "app-builder"],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
@@ -18,8 +18,8 @@
     "capabilities": ["Interactive", "Read", "Write"],
     "websiteURL": "https://github.com/withAutograph/autograph-app-builder",
     "defaultPrompt": [
-      "Design a new app with Autograph App Builder. If eve_start is unavailable, stop without implementing directly.",
-      "Create a supported app with Autograph App Builder. If eve_start is unavailable, stop without another app builder.",
+      "Design a new app with Autograph App Builder. If autograph_start is unavailable, stop without implementing directly.",
+      "Create a supported app with Autograph App Builder. If autograph_start is unavailable, stop without another app builder.",
       "Continue my app build with Autograph App Builder. If its five tools are unavailable, stop and report the missing connection."
     ],
     "brandColor": "#111827",

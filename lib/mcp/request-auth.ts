@@ -213,12 +213,12 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
     authorization_servers: [config.issuer],
     bearer_methods_supported: ["header"],
     scopes_supported: [
-      "eve:session",
-      "eve:start",
-      "eve:get",
-      "eve:send",
-      "eve:respond",
-      "eve:cancel",
+      "autograph:session",
+      "autograph:start",
+      "autograph:get",
+      "autograph:send",
+      "autograph:respond",
+      "autograph:cancel",
     ],
   };
 }
@@ -255,7 +255,7 @@ export function forbiddenResponse(config: HostedMcpAuthConfig): Response {
         "Cache-Control": "no-store",
         "WWW-Authenticate": challenge(config, [
           'error="insufficient_scope"',
-          'scope="eve:session"',
+          'scope="autograph:session"',
         ]),
       },
     },

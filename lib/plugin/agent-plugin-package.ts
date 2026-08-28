@@ -8,12 +8,16 @@ import {
   realpath,
   rm,
 } from "node:fs/promises";
-import { isIP } from "node:net";
 import { basename, relative, resolve, sep } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { isMap, parseDocument } from "yaml";
 
+import { isReservedPublicReleaseHostname } from "./public-release-endpoint.ts";
+
 const SPEC_VERSION = "1.0.0";
+export const AUTOGRAPH_PACKAGE_VERSION = "0.2.0";
+export const AUTOGRAPH_MCP_SERVER_NAME = "autograph-app-builder";
+export const AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT = "http://127.0.0.1:3000/mcp";
 const PLUGIN_SCHEMA = `https://agent-plugins.org/schemas/${SPEC_VERSION}/plugin.schema.json`;
 const MCP_SCHEMA = `https://agent-plugins.org/schemas/${SPEC_VERSION}/mcp.schema.json`;
 const SCHEMA_DIGESTS = {
@@ -107,25 +111,60 @@ const schemaVersion = (schema: unknown) => {
   return schema.match(/\/schemas\/([^/]+)\/(?:plugin|mcp)\.schema\.json$/)?.[1];
 };
 
-const isLoopback = (hostname: string) => {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "localhost") return true;
-  const family = isIP(host);
-  if (family === 4) return host.startsWith("127.");
-  return family === 6 && host === "::1";
-};
-
-const isReservedReleaseHost = (hostname: string) => {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  return (
-    isLoopback(host) ||
-    ["example.com", "example.net", "example.org"].some(
-      (name) => host === name || host.endsWith(`.${name}`),
-    ) ||
-    [".invalid", ".test", ".example", ".localhost", ".template"].some(
-      (suffix) => host.endsWith(suffix),
+export const assertAutographMcpEndpoint = (
+  value: unknown,
+  { release }: { release: boolean },
+) => {
+  if (typeof value !== "string")
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`,
+    );
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`,
+    );
+  }
+  if (
+    url.username ||
+    url.password ||
+    value.includes("?") ||
+    value.includes("#")
+  )
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} URL must not contain credentials, a query, or a fragment.`,
+    );
+  if (url.pathname !== "/mcp")
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} URL pathname must be exactly /mcp.`,
+    );
+  if (url.hostname.endsWith("."))
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} URL hostname must not end with a DNS root dot.`,
+    );
+  if (release) {
+    if (
+      url.protocol !== "https:" ||
+      isReservedPublicReleaseHostname(url.hostname)
     )
-  );
+      throw new Error(
+        `${AUTOGRAPH_MCP_SERVER_NAME} must use a deployed HTTPS endpoint for release.`,
+      );
+  } else if (
+    url.protocol !== "https:" &&
+    value !== AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT
+  ) {
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} must use credential-free HTTPS or the fixed development endpoint.`,
+    );
+  }
+  if (value !== `${url.origin}/mcp`)
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} URL must use the exact canonical ${url.origin}/mcp form.`,
+    );
+  return url;
 };
 
 const requireString = ({
@@ -357,26 +396,27 @@ export const validateAgentPluginPackage = async ({
       "plugin.json and mcp.json must target the same Agent Plugins version.",
     );
 
+  if (plugin.version !== AUTOGRAPH_PACKAGE_VERSION)
+    throw new Error(
+      `plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`,
+    );
+
   const servers = mcp.mcpServers as Record<string, JsonObject>;
-  for (const [name, server] of Object.entries(servers)) {
-    if (server.type === "streamable-http" || server.type === "sse") {
-      const url = new URL(server.url as string);
-      if (!(["http:", "https:"] as string[]).includes(url.protocol))
-        throw new Error(`${name} must use an absolute HTTP or HTTPS URL.`);
-      if (url.username || url.password || url.hash)
-        throw new Error(
-          `${name} URL must not contain credentials or a fragment.`,
-        );
-      if (!isLoopback(url.hostname) && url.protocol !== "https:")
-        throw new Error(`${name} must use HTTPS outside loopback.`);
-      const headers = (server.headers ?? {}) as Record<string, string>;
-      validateHeaders(name, headers);
-      if (release && isReservedReleaseHost(url.hostname))
-        throw new Error(
-          `${name} must use a deployed HTTPS endpoint for release.`,
-        );
-    }
-  }
+  if (
+    Object.keys(servers).length !== 1 ||
+    !Object.hasOwn(servers, AUTOGRAPH_MCP_SERVER_NAME)
+  )
+    throw new Error(
+      `mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`,
+    );
+  const server = servers[AUTOGRAPH_MCP_SERVER_NAME];
+  if (server.type !== "streamable-http")
+    throw new Error(
+      `${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`,
+    );
+  assertAutographMcpEndpoint(server.url, { release });
+  const headers = (server.headers ?? {}) as Record<string, string>;
+  validateHeaders(AUTOGRAPH_MCP_SERVER_NAME, headers);
 
   const skillsRoot = resolve(resolvedPluginRoot, "skills");
   await assertDirectory(resolvedPluginRoot, skillsRoot);
@@ -391,7 +431,8 @@ export const validateAgentPluginPackage = async ({
     );
   return {
     name: plugin.name as string,
-    version: SPEC_VERSION,
+    version: plugin.version as string,
+    specification: SPEC_VERSION,
     packageKind,
   };
 };

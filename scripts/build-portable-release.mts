@@ -15,7 +15,7 @@ import {
   deterministicGzip,
   deterministicTar,
   hasCanonicalFetchRemote,
-  registeredEveToolNames,
+  registeredAutographToolNames,
   releaseEndpoint,
   sha256,
 } from "./portable-release";
@@ -88,7 +88,7 @@ const handlerSource = await readFile(
   resolve("lib/mcp/request-handler.ts"),
   "utf8",
 );
-const tools = registeredEveToolNames(handlerSource);
+const tools = registeredAutographToolNames(handlerSource);
 const mockRoot = join(output, "mock");
 await mkdir(mockRoot);
 await writeFile(

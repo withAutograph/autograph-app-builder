@@ -35,11 +35,11 @@ export const hostedPrincipalSchema = z
 export type HostedPrincipal = z.infer<typeof hostedPrincipalSchema>;
 
 export const hostedEveOperationScopes = {
-  start: "eve:start",
-  get: "eve:get",
-  send: "eve:send",
-  respond: "eve:respond",
-  cancel: "eve:cancel",
+  start: "autograph:start",
+  get: "autograph:get",
+  send: "autograph:send",
+  respond: "autograph:respond",
+  cancel: "autograph:cancel",
 } as const;
 
 export type HostedEveOperation = keyof typeof hostedEveOperationScopes;

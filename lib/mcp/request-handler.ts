@@ -53,10 +53,10 @@ export interface HostedMcpRuntime {
   now?: () => number;
 }
 
-export function createEveMcpHandler(service: EveSessionService) {
+export function createAutographMcpHandler(service: EveSessionService) {
   return createMcpHandler((server) => {
     server.registerResource(
-      "eve-session",
+      "autograph-session",
       SESSION_RESOURCE_URI,
       {
         title: "Autograph App Builder progress",
@@ -77,7 +77,7 @@ export function createEveMcpHandler(service: EveSessionService) {
     );
 
     server.registerTool(
-      "eve_start",
+      "autograph_start",
       {
         title: "Start with Autograph App Builder",
         description:
@@ -97,7 +97,7 @@ export function createEveMcpHandler(service: EveSessionService) {
       },
     );
     server.registerTool(
-      "eve_get",
+      "autograph_get",
       {
         title: "Check App Builder progress",
         description:
@@ -117,7 +117,7 @@ export function createEveMcpHandler(service: EveSessionService) {
       },
     );
     server.registerTool(
-      "eve_send",
+      "autograph_send",
       {
         title: "Send App Builder feedback",
         description:
@@ -137,7 +137,7 @@ export function createEveMcpHandler(service: EveSessionService) {
       },
     );
     server.registerTool(
-      "eve_respond",
+      "autograph_respond",
       {
         title: "Answer App Builder questions",
         description:
@@ -157,7 +157,7 @@ export function createEveMcpHandler(service: EveSessionService) {
       },
     );
     server.registerTool(
-      "eve_cancel",
+      "autograph_cancel",
       {
         title: "Stop App Builder work",
         description: "Request cancellation of the active app build.",
@@ -224,7 +224,7 @@ async function hostedServiceForRequest(
       verifiedClaims,
       expectedIssuer: auth.issuer,
       expectedAudience: auth.audience,
-      requiredScopes: ["eve:session"],
+      requiredScopes: ["autograph:session"],
     });
   } catch (error) {
     if (
@@ -277,17 +277,19 @@ export function createMcpRequestHandler(
         input.hostedRuntime,
       );
       if (selected instanceof Response) return selected;
-      return createEveMcpHandler(selected)(request);
+      return createAutographMcpHandler(selected)(request);
     }
     if (mode === "local") {
       try {
-        return createEveMcpHandler(createEveSessionService(environment))(
+        return createAutographMcpHandler(createEveSessionService(environment))(
           request,
         );
       } catch {
         return unavailableResponse();
       }
     }
-    return createEveMcpHandler(createEveSessionService(environment))(request);
+    return createAutographMcpHandler(createEveSessionService(environment))(
+      request,
+    );
   };
 }

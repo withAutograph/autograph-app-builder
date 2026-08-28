@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasCanonicalFetchRemote } from "./portable-release";
+import { hasCanonicalFetchRemote, releaseEndpoint } from "./portable-release";
 
 const repository = "https://github.com/withAutograph/autograph-app-builder";
 
@@ -50,5 +50,41 @@ describe("canonical portable-release remotes", () => {
         repository,
       ),
     ).toBe(false);
+  });
+});
+
+describe("portable release endpoint", () => {
+  it.each([
+    "https://localhost.",
+    "https://example.com.",
+    "https://agent.invalid.",
+    "https://agent.localhost.",
+  ])("rejects a terminal DNS root dot: %s", (endpoint) => {
+    expect(() => releaseEndpoint(endpoint)).toThrow(
+      "credential-free, deployed, literal HTTPS origin",
+    );
+  });
+
+  it.each([
+    "https://0",
+    "https://0.0.0.0",
+    "https://[::]",
+    "https://[::ffff:0:0]",
+    "https://[::ffff:7f00:1]",
+    "https://[::ffff:127.0.0.1]",
+  ])("rejects a loopback or unspecified canonical address: %s", (endpoint) => {
+    expect(() => releaseEndpoint(endpoint)).toThrow(
+      "credential-free, deployed, literal HTTPS origin",
+    );
+  });
+
+  it.each([
+    "https://mcp.autograph.dev/",
+    "https://MCP.autograph.dev",
+    "https://mcp.autograph.dev:443",
+  ])("rejects a noncanonical origin spelling: %s", (endpoint) => {
+    expect(() => releaseEndpoint(endpoint)).toThrow(
+      "credential-free, deployed, literal HTTPS origin",
+    );
   });
 });
