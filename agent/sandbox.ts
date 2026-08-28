@@ -16,6 +16,7 @@ import {
   sandboxRevalidationKey,
 } from "@/lib/sandbox/toolchain";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
+import { acquireHostedSandboxExecutionLease } from "@/lib/sandbox/deployment-execution-lease";
 import { readHostedArtifactBytes } from "@/lib/sandbox/hosted-artifact";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { ensureSandboxDirectories } from "@/lib/repository/sandbox-filesystem";
@@ -50,9 +51,15 @@ function createVercelDefinition() {
           "The pinned Vercel Sandbox toolchain failed to install.",
         );
     },
-    async onSession({ use }) {
+    async onSession({ ctx, use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       await use({ networkPolicy: "deny-all" });
+      const sandbox = await ctx.getSandbox();
+      await acquireHostedSandboxExecutionLease({
+        sessionId: ctx.session.id,
+        sessionAuth: ctx.session.auth,
+        sandbox,
+      });
     },
     revalidationKey: hostedToolchainRevalidationKey,
   });

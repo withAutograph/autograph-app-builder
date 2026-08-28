@@ -21,6 +21,9 @@ describe("hosted Vercel sandbox backend", () => {
     expect(options!.networkPolicy).toEqual({
       allow: ["github.com", "release-assets.githubusercontent.com"],
     });
+    expect(options!.resources).toEqual({ vcpus: 2 });
+    expect(options!.timeout).toBe(900_000);
+    expect(options!.ports).toEqual([]);
 
     const initialSession = options!.sessionCreateOptions();
     const providerLossReplacement = options!.sessionCreateOptions();
