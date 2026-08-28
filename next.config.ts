@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/*": [
       "./agent/skills/**/*",
-      "./artifacts/hosted/arrusted-c9a5faf2-preview.tar.gz",
+      "./artifacts/hosted/arrusted-2503b6ad-preview.tar.gz",
     ],
   },
   async headers() {

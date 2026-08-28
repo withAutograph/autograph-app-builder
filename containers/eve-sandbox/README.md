@@ -6,7 +6,7 @@ environment. It pins its Eve runtime base, Git, mise `2026.8.12`, and Bun
 It also builds the exact external dependency closure needed by Arrusted's
 read-only app planner, including `@vercel/microfrontends` `2.4.0`, from a clean
 checkout of Arrusted commit
-`c9a5faf2a5b042df708fb8deade12f399ef2547b`.
+`2503b6ad5820f650b1469d72fc569260bee298a8`.
 
 The final image contains no Arrusted source tree, credentials, or provider
 configuration. It contains a normalized, deterministically gzip-compressed
@@ -84,27 +84,27 @@ mise run image:verify-sources -- --arrusted-root /absolute/path/to/standalone-ar
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e
 mise run image:build -- --arrusted-root /absolute/path/to/standalone-arrusted \
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e
 mise run image:inspect-local -- --arrusted-root /absolute/path/to/standalone-arrusted \
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e
 mise run image:push -- --arrusted-root /absolute/path/to/standalone-arrusted \
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e
 mise run image:inspect-remote -- --arrusted-root /absolute/path/to/standalone-arrusted \
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e
 ```
 
 The tasks derive the transient tag from the first 12 hex characters of the
@@ -118,7 +118,7 @@ closed manifest shape, labels, and rootfs identity must match before the task
 emits the platform digest-only reference. The selected platform manifest
 digest, not the transient tag or top-level index, remains runtime authority.
 For this exact Dockerfile and Arrusted source, the transient tag is
-`dockerfile-<dockerfile-sha-prefix>-arrusted-c9a5faf2-arm64-v2`; it is only a publication
+`dockerfile-<dockerfile-sha-prefix>-arrusted-2503b6ad-arm64-v2`; it is only a publication
 handle and never runtime authority.
 
 The build fails on target SHA/tree or contract/lock drift. It performs the
@@ -173,18 +173,18 @@ mise run image:preload -- --arrusted-root /absolute/path/to/standalone-arrusted 
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910 \
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e \
   --image ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:REPLACE_WITH_VERIFIED_DIGEST
 mise run image:prepare-proof-runtime -- --arrusted-root /absolute/path/to/standalone-arrusted \
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e
 mise run image:prove -- --arrusted-root /absolute/path/to/standalone-arrusted \
   --state-root /absolute/path/to/private-image-lifecycle-state \
   --builder-commit REPLACE_WITH_ACCEPTED_BUILDER_COMMIT \
   --builder-tree REPLACE_WITH_ACCEPTED_BUILDER_TREE \
-  --dockerfile-sha256 e388e007984d0dcd4a3f23a2a8e3951958d31f639cd87071c9375f8f488d6910 \
+  --dockerfile-sha256 25ad747f170ff2404c26c884c10ab59d4eba34f0b48565fd7bc10f57b9949c9e \
   --image ghcr.io/withautograph/autograph-app-builder-sandbox@sha256:REPLACE_WITH_VERIFIED_DIGEST
 ```
 
