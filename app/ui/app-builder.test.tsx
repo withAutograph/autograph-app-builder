@@ -81,6 +81,20 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Connections");
     expect(view.textContent).not.toContain("Agent Name");
 
+    const orderedControls = [
+      view.querySelector("#app-name"),
+      view.querySelector("#app-brief"),
+      view.querySelector('[aria-label="Select a Vercel Team"]'),
+      view.querySelector('[aria-label="Git Scope"]'),
+    ];
+    for (let index = 0; index < orderedControls.length - 1; index += 1) {
+      expect(
+        orderedControls[index]!.compareDocumentPosition(
+          orderedControls[index + 1]!,
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+
     const accessibility = await axe.run(view, {
       rules: { "color-contrast": { enabled: false } },
     });

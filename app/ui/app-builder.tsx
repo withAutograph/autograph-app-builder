@@ -993,6 +993,53 @@ function Builder({
           <h1>Build an app</h1>
           <AutographMark compact />
         </div>
+        <label htmlFor="app-name">
+          App Name
+          <input
+            id="app-name"
+            name="app-name"
+            autoComplete="off"
+            spellCheck={false}
+            value={form.appName}
+            onChange={(event) =>
+              setForm({ ...form, appName: event.target.value })
+            }
+            placeholder="support-app"
+          />
+        </label>
+        <label htmlFor="app-brief">
+          App Brief
+          <div className={styles.briefField}>
+            <textarea
+              id="app-brief"
+              name="app-brief"
+              autoComplete="off"
+              value={form.brief}
+              onChange={(event) =>
+                setForm({ ...form, brief: event.target.value })
+              }
+              placeholder="# Product\n\nDescribe the app you want to build…"
+            />
+            <button
+              type="button"
+              aria-label="Try another app brief example"
+              onClick={() => setForm({ ...form, brief: defaultBrief })}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </label>
+        <p className={styles.helpText}>
+          Define this app’s users, workflow, constraints, and desired outcome.{" "}
+          <a
+            href="https://github.com/withAutograph/autograph-app-builder"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Read the App Builder docs ↗
+          </a>
+          .
+        </p>
         <label>
           Vercel Team
           <SearchCombobox
@@ -1007,20 +1054,6 @@ function Builder({
             )}
             footerIcon={<PlusCircle size={18} />}
             detailPills
-          />
-        </label>
-        <label htmlFor="app-name">
-          App Name
-          <input
-            id="app-name"
-            name="app-name"
-            autoComplete="off"
-            spellCheck={false}
-            value={form.appName}
-            onChange={(event) =>
-              setForm({ ...form, appName: event.target.value })
-            }
-            placeholder="support-app"
           />
         </label>
         <div className={styles.repoRow}>
@@ -1085,39 +1118,6 @@ function Builder({
             </div>
           </div>
         </div>
-        <label htmlFor="app-brief">
-          App Brief
-          <div className={styles.briefField}>
-            <textarea
-              id="app-brief"
-              name="app-brief"
-              autoComplete="off"
-              value={form.brief}
-              onChange={(event) =>
-                setForm({ ...form, brief: event.target.value })
-              }
-              placeholder="# Product\n\nDescribe the app you want to build…"
-            />
-            <button
-              type="button"
-              aria-label="Try another app brief example"
-              onClick={() => setForm({ ...form, brief: defaultBrief })}
-            >
-              <RefreshCw size={16} aria-hidden="true" />
-            </button>
-          </div>
-        </label>
-        <p className={styles.helpText}>
-          Define this app’s users, workflow, constraints, and desired outcome.{" "}
-          <a
-            href="https://github.com/withAutograph/autograph-app-builder"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Read the App Builder docs ↗
-          </a>
-          .
-        </p>
         <fieldset className={styles.modelField}>
           <legend>Model</legend>
           <label className={styles.checkLine}>
