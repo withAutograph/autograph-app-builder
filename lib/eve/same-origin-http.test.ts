@@ -57,7 +57,128 @@ function stream(
   );
 }
 
+function plannedEvents() {
+  const callId = "call_plan";
+  const appSpecDigest = "a".repeat(64);
+  const target = {
+    contract: {
+      version: 1,
+      appId: "vendor-onboarding",
+      appSpec: {
+        path: "prototype/vendor-onboarding/app-spec.md",
+        sha256: appSpecDigest,
+      },
+    },
+    futurePath: "apps/vendor-onboarding/app.contract.json",
+    plan: {
+      source: {
+        workspacePath: "apps/vendor-onboarding",
+        runtime: "nextjs",
+        packageName: "@autograph/vendor-onboarding",
+        schema: { kind: "none" },
+      },
+      product: {
+        owner: "operations",
+        appSpec: {
+          path: "prototype/vendor-onboarding/app-spec.md",
+          sha256: appSpecDigest,
+        },
+        optionalCapabilities: { integrations: [], hostedResources: [] },
+      },
+      topology: {
+        configPath: "microfrontends.json",
+        projectName: "apps-vendor-onboarding",
+        packageName: "@autograph/vendor-onboarding",
+        routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      },
+    },
+    blockers: [],
+    mutations: [],
+  };
+  const hash = (value: string) =>
+    createHash("sha256").update(value).digest("hex");
+  const unsigned = {
+    version: 1,
+    sourceSha: "1".repeat(40),
+    sourceTree: "2".repeat(40),
+    eligibilityDigest: "3".repeat(64),
+    workspaceDigest: "4".repeat(64),
+    imageDigest: `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
+    dependencyCacheDigest: "6".repeat(64),
+    appSpecDigest,
+    artifactRevision: "7".repeat(64),
+    identityDigest: "8".repeat(64),
+    contractDigest: hash(JSON.stringify(target.contract)),
+    target,
+    plannedByCallId: callId,
+  };
+  return [
+    {
+      type: "actions.requested",
+      data: {
+        actions: [
+          {
+            kind: "tool-call",
+            callId,
+            toolName: "plan_app_creation",
+            input: { expectedAppSpecDigest: appSpecDigest },
+          },
+        ],
+      },
+    },
+    {
+      type: "action.result",
+      data: {
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId,
+          toolName: "plan_app_creation",
+          output: {
+            ...unsigned,
+            digest: hash(JSON.stringify(unsigned)),
+            reused: false,
+          },
+        },
+      },
+    },
+  ];
+}
+
 describe("same-origin canonical Eve transport", () => {
+  it("carries a verified target plan without projecting raw planning output", async () => {
+    const events = [
+      ...plannedEvents(),
+      { type: "session.completed", data: {} },
+    ];
+    const transport = createSameOriginEveTransport({
+      config,
+      workloadIdentity: identity(),
+      fetchImplementation: vi.fn(async () => stream(events)),
+    });
+
+    const snapshot = await transport.get({
+      principal,
+      adapterSessionId: "wrun_1",
+    });
+    expect(snapshot.implementationPlan).toEqual({
+      appId: "vendor-onboarding",
+      runtime: "nextjs",
+      workspacePath: "apps/vendor-onboarding",
+      packageName: "@autograph/vendor-onboarding",
+      projectName: "apps-vendor-onboarding",
+      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      sourceSha: "1".repeat(40),
+      sourceTree: "2".repeat(40),
+      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      readOnly: true,
+    });
+    expect(JSON.stringify(snapshot.events)).not.toContain("proposalDigest");
+    expect(snapshot.events).toEqual([
+      { index: 0, status: "completed", type: "status" },
+    ]);
+  });
+
   it("carries verified prototype HTML without projecting raw action events", async () => {
     const content =
       "<!doctype html><html><body><button>Approve vendor</button></body></html>";

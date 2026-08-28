@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 
 import {
+  publicImplementationPlanSchema,
   publicPrototypeSchema,
   type EveSessionStatus,
   type PublicEveEvent,
+  type PublicImplementationPlan,
   type PublicInputRequest,
   type PublicPrototype,
 } from "../mcp/contracts";
+import { targetProposalSchema } from "../repository/target-planning";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
@@ -32,6 +35,10 @@ const maximumPrototypeBytes = 262_144;
 const prototypePathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
+const immutableExecutionArtifactSchema = z
+  .string()
+  .regex(/^(?!fixture@).+@sha256:[a-f0-9]{64}$/u);
 const prototypeRequestSchema = z
   .object({
     path: z.string().regex(prototypePathPattern),
@@ -53,9 +60,141 @@ const prototypeResultSchema = z
     invalidated: z.boolean().optional(),
   })
   .strict();
+const planRequestSchema = z
+  .object({ expectedAppSpecDigest: lowercaseSha256Schema })
+  .strict();
+const planResultSchema = z
+  .object({
+    version: z.literal(1),
+    sourceSha: gitObjectIdSchema,
+    sourceTree: gitObjectIdSchema,
+    eligibilityDigest: lowercaseSha256Schema,
+    workspaceDigest: lowercaseSha256Schema,
+    imageDigest: immutableExecutionArtifactSchema,
+    dependencyCacheDigest: lowercaseSha256Schema,
+    appSpecDigest: lowercaseSha256Schema,
+    artifactRevision: lowercaseSha256Schema,
+    identityDigest: lowercaseSha256Schema,
+    contractDigest: lowercaseSha256Schema,
+    target: targetProposalSchema,
+    plannedByCallId: z.string().min(1),
+    digest: lowercaseSha256Schema,
+    reused: z.boolean(),
+  })
+  .strict();
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function verifiedImplementationPlan(
+  callId: string,
+  expectedAppSpecDigest: string,
+  candidate: unknown,
+): PublicImplementationPlan | undefined {
+  const parsed = planResultSchema.safeParse(candidate);
+  if (!parsed.success) return undefined;
+  const result = parsed.data;
+  const target = result.target;
+  const unsigned = {
+    version: result.version,
+    sourceSha: result.sourceSha,
+    sourceTree: result.sourceTree,
+    eligibilityDigest: result.eligibilityDigest,
+    workspaceDigest: result.workspaceDigest,
+    imageDigest: result.imageDigest,
+    dependencyCacheDigest: result.dependencyCacheDigest,
+    appSpecDigest: result.appSpecDigest,
+    artifactRevision: result.artifactRevision,
+    identityDigest: result.identityDigest,
+    contractDigest: result.contractDigest,
+    target,
+    plannedByCallId: result.plannedByCallId,
+  };
+  if (
+    result.reused ||
+    result.plannedByCallId !== callId ||
+    result.appSpecDigest !== expectedAppSpecDigest ||
+    target.contract.appSpec.sha256 !== expectedAppSpecDigest ||
+    target.plan.product.appSpec.sha256 !== expectedAppSpecDigest ||
+    result.contractDigest !== sha256(JSON.stringify(target.contract)) ||
+    result.digest !== sha256(JSON.stringify(unsigned)) ||
+    target.blockers.length !== 0 ||
+    target.mutations.length !== 0
+  )
+    return undefined;
+  return publicImplementationPlanSchema.parse({
+    appId: target.contract.appId,
+    runtime: target.plan.source.runtime,
+    workspacePath: target.plan.source.workspacePath,
+    packageName: target.plan.source.packageName,
+    projectName: target.plan.topology.projectName,
+    routes: target.plan.topology.routes,
+    sourceSha: result.sourceSha,
+    sourceTree: result.sourceTree,
+    proposalDigest: result.digest,
+    readOnly: true,
+  });
+}
+
+/**
+ * Projects a compact product plan only after the installed runtime durably
+ * completes its fixed target-planning tool with exact request/result bindings.
+ */
+export function latestInstalledImplementationPlan(
+  events: readonly MessageStreamEvent[],
+): PublicImplementationPlan | undefined {
+  const requested = new Map<string, z.infer<typeof planRequestSchema>>();
+  let latest: PublicImplementationPlan | undefined;
+
+  for (const event of events) {
+    if (event.type === "actions.requested") {
+      for (const action of event.data.actions) {
+        if (action.kind !== "tool-call") continue;
+        if (action.toolName !== "plan_app_creation") {
+          requested.delete(action.callId);
+          continue;
+        }
+        const parsed = planRequestSchema.safeParse(action.input);
+        if (parsed.success) requested.set(action.callId, parsed.data);
+        else requested.delete(action.callId);
+      }
+      continue;
+    }
+
+    if (
+      event.type !== "action.result" ||
+      event.data.status !== "completed" ||
+      event.data.result.kind !== "tool-result" ||
+      event.data.result.isError === true
+    )
+      continue;
+
+    if (event.data.result.toolName === "record_prototype_artifact") {
+      const output = event.data.result.output;
+      if (
+        typeof output === "object" &&
+        output !== null &&
+        "invalidated" in output &&
+        output.invalidated === true
+      )
+        latest = undefined;
+      continue;
+    }
+    if (event.data.result.toolName !== "plan_app_creation") continue;
+
+    const callId = event.data.result.callId;
+    const input = requested.get(callId);
+    if (input === undefined) continue;
+    const plan = verifiedImplementationPlan(
+      callId,
+      input.expectedAppSpecDigest,
+      event.data.result.output,
+    );
+    if (plan !== undefined) latest = plan;
+  }
+
+  return latest;
 }
 
 /**

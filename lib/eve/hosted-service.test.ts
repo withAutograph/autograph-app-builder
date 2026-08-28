@@ -148,6 +148,39 @@ async function started(input?: {
 }
 
 describe("hosted Eve service core", () => {
+  it("keeps the verified implementation plan outside cursor pagination", () => {
+    const implementationPlan = {
+      appId: "vendor-onboarding",
+      runtime: "nextjs" as const,
+      workspacePath: "apps/vendor-onboarding",
+      packageName: "@autograph/vendor-onboarding",
+      projectName: "apps-vendor-onboarding",
+      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      sourceSha: "a".repeat(40),
+      sourceTree: "b".repeat(40),
+      proposalDigest: "c".repeat(64),
+      readOnly: true as const,
+    };
+    expect(
+      hostedEveProjectionForTesting(
+        "session_1",
+        {
+          status: "completed",
+          events: [{ type: "status", index: 0, status: "completed" }],
+          implementationPlan,
+        },
+        1,
+        100,
+      ),
+    ).toEqual({
+      sessionId: "session_1",
+      status: "completed",
+      cursor: 1,
+      events: [],
+      implementationPlan,
+    });
+  });
+
   it("keeps the latest prototype outside cursor pagination", () => {
     const prototype = {
       path: "prototype/vendor-onboarding/index.html",

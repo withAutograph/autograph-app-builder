@@ -59,6 +59,10 @@ export const publicEveEventSchema = z.discriminatedUnion("type", [
 export type PublicEveEvent = z.infer<typeof publicEveEventSchema>;
 
 const sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
+const repositoryPathSchema = z
+  .string()
+  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
 
 export const publicPrototypeSchema = z
   .object({
@@ -81,6 +85,25 @@ export const publicPrototypeSchema = z
 
 export type PublicPrototype = z.infer<typeof publicPrototypeSchema>;
 
+export const publicImplementationPlanSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    runtime: z.literal("nextjs"),
+    workspacePath: repositoryPathSchema,
+    packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
+    projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
+    routes: z.array(z.string().startsWith("/")).min(1),
+    sourceSha: gitObjectIdSchema,
+    sourceTree: gitObjectIdSchema,
+    proposalDigest: sha256DigestSchema,
+    readOnly: z.literal(true),
+  })
+  .strict();
+
+export type PublicImplementationPlan = z.infer<
+  typeof publicImplementationPlanSchema
+>;
+
 export const eveSessionResultSchema = z
   .object({
     sessionId: z.string(),
@@ -89,6 +112,7 @@ export const eveSessionResultSchema = z
     events: z.array(publicEveEventSchema),
     inputRequests: z.array(publicInputRequestSchema).optional(),
     prototype: publicPrototypeSchema.optional(),
+    implementationPlan: publicImplementationPlanSchema.optional(),
     error: z
       .object({ code: z.string(), message: z.string() })
       .strict()

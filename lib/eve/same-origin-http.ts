@@ -12,6 +12,7 @@ import {
 } from "./hosted-service";
 import {
   deriveInstalledEveStatus,
+  latestInstalledImplementationPlan,
   latestInstalledPrototype,
   projectInstalledEveEvent,
 } from "./public-events";
@@ -316,11 +317,13 @@ async function readInstalledSnapshot(input: {
     .flatMap((event) => projectInstalledEveEvent(event, 0))
     .map((event, index) => ({ ...event, index }));
   const prototype = latestInstalledPrototype(events);
+  const implementationPlan = latestInstalledImplementationPlan(events);
   return {
     snapshot: {
       status: deriveInstalledEveStatus(events),
       events: projected,
       ...(prototype === undefined ? {} : { prototype }),
+      ...(implementationPlan === undefined ? {} : { implementationPlan }),
     },
     installed: events,
   };
