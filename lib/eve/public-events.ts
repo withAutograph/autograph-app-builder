@@ -1,9 +1,14 @@
-import type {
-  EveSessionStatus,
-  PublicEveEvent,
-  PublicInputRequest,
-} from "@/lib/mcp/contracts";
+import { createHash } from "node:crypto";
+
+import {
+  publicPrototypeSchema,
+  type EveSessionStatus,
+  type PublicEveEvent,
+  type PublicInputRequest,
+  type PublicPrototype,
+} from "../mcp/contracts";
 import type { MessageStreamEvent } from "eve/client";
+import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
 
 export type InternalEveEvent = {
@@ -23,6 +28,109 @@ export type InternalEveEvent = {
 const progressStates = new Set(["started", "completed", "failed"]);
 const invalidApprovalReceiptMessage =
   "A required approval receipt was missing or invalid; the request was not exposed.";
+const maximumPrototypeBytes = 262_144;
+const prototypePathPattern =
+  /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
+const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const prototypeRequestSchema = z
+  .object({
+    path: z.string().regex(prototypePathPattern),
+    mediaType: z.literal("text/html"),
+    content: z.string().min(1).max(maximumPrototypeBytes),
+  })
+  .strict();
+const prototypeResultSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    path: z.string().regex(prototypePathPattern),
+    mediaType: z.literal("text/html"),
+    digest: lowercaseSha256Schema,
+    revision: lowercaseSha256Schema,
+    sessionId: z.string().min(1),
+    recordedByCallId: z.string().min(1),
+    size: z.number().int().min(1).max(maximumPrototypeBytes),
+    reused: z.boolean(),
+    invalidated: z.boolean().optional(),
+  })
+  .strict();
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+/**
+ * Recovers only a successfully recorded HTML prototype from Eve's durable
+ * action stream. Raw tool input is never projected without its matching,
+ * completed receipt.
+ */
+export function latestInstalledPrototype(
+  events: readonly MessageStreamEvent[],
+): PublicPrototype | undefined {
+  const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+  let latest: PublicPrototype | undefined;
+
+  for (const event of events) {
+    if (event.type === "actions.requested") {
+      for (const action of event.data.actions) {
+        if (action.kind !== "tool-call") continue;
+        if (action.toolName !== "record_prototype_artifact") {
+          requested.delete(action.callId);
+          continue;
+        }
+        const parsed = prototypeRequestSchema.safeParse(action.input);
+        if (parsed.success) requested.set(action.callId, parsed.data);
+        else requested.delete(action.callId);
+      }
+      continue;
+    }
+
+    if (
+      event.type !== "action.result" ||
+      event.data.status !== "completed" ||
+      event.data.result.kind !== "tool-result" ||
+      event.data.result.toolName !== "record_prototype_artifact" ||
+      event.data.result.isError === true
+    )
+      continue;
+
+    const callId = event.data.result.callId;
+    const input = requested.get(callId);
+    const output = prototypeResultSchema.safeParse(event.data.result.output);
+    if (input === undefined || !output.success) continue;
+
+    const appId = prototypePathPattern.exec(input.path)?.[1];
+    const digest = sha256(input.content);
+    const revision = sha256(
+      JSON.stringify({
+        path: input.path,
+        mediaType: input.mediaType,
+        digest,
+      }),
+    );
+    const size = Buffer.byteLength(input.content, "utf8");
+    if (
+      size > maximumPrototypeBytes ||
+      output.data.appId !== appId ||
+      output.data.path !== input.path ||
+      output.data.mediaType !== input.mediaType ||
+      output.data.digest !== digest ||
+      output.data.revision !== revision ||
+      output.data.size !== size ||
+      output.data.recordedByCallId !== callId
+    )
+      continue;
+
+    latest = publicPrototypeSchema.parse({
+      path: input.path,
+      mediaType: input.mediaType,
+      content: input.content,
+      digest,
+      revision,
+    });
+  }
+
+  return latest;
+}
 
 function inputRequest(request: {
   requestId: string;

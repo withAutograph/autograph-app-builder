@@ -1,13 +1,76 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import {
   deriveInstalledEveStatus,
+  latestInstalledPrototype,
   projectInstalledEveEvents,
   projectInstalledEveEvent,
   toPublicEvent,
 } from "./public-events";
 
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
+
+function digest(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function recordedPrototypeEvents(input?: {
+  callId?: string;
+  content?: string;
+  outputDigest?: string;
+  resultStatus?: "completed" | "failed" | "rejected";
+  resultToolName?: string;
+}): MessageStreamEvent[] {
+  const callId = input?.callId ?? "call_prototype";
+  const content =
+    input?.content ??
+    "<!doctype html><html><body><button>Review vendor</button></body></html>";
+  const path = "prototype/vendor-onboarding/index.html";
+  const mediaType = "text/html";
+  const artifactDigest = digest(content);
+  const revision = digest(
+    JSON.stringify({ path, mediaType, digest: artifactDigest }),
+  );
+  return [
+    installedEvent({
+      type: "actions.requested",
+      data: {
+        actions: [
+          {
+            kind: "tool-call",
+            callId,
+            toolName: "record_prototype_artifact",
+            input: { path, mediaType, content },
+          },
+        ],
+      },
+    }),
+    installedEvent({
+      type: "action.result",
+      data: {
+        status: input?.resultStatus ?? "completed",
+        result: {
+          kind: "tool-result",
+          callId,
+          toolName: input?.resultToolName ?? "record_prototype_artifact",
+          output: {
+            appId: "vendor-onboarding",
+            path,
+            mediaType,
+            digest: input?.outputDigest ?? artifactDigest,
+            revision,
+            sessionId: "wrun_1",
+            recordedByCallId: callId,
+            size: Buffer.byteLength(content),
+            reused: false,
+          },
+        },
+      },
+    }),
+  ];
+}
 
 describe("toPublicEvent", () => {
   it("publishes an allowlisted assistant message", () => {
@@ -37,6 +100,61 @@ describe("toPublicEvent", () => {
 });
 
 describe("installed Eve 0.43 projection", () => {
+  it("recovers only the latest receipt-bound HTML prototype", () => {
+    const first = recordedPrototypeEvents();
+    const second = recordedPrototypeEvents({
+      callId: "call_prototype_2",
+      content: "<!doctype html><html><body>Updated review queue</body></html>",
+    });
+    const expected = second[0] as MessageStreamEvent & {
+      data: { actions: [{ input: { content: string } }] };
+    };
+
+    expect(latestInstalledPrototype([...first, ...second])).toMatchObject({
+      path: "prototype/vendor-onboarding/index.html",
+      mediaType: "text/html",
+      content: expected.data.actions[0].input.content,
+    });
+    expect(
+      latestInstalledPrototype([
+        ...first,
+        ...recordedPrototypeEvents({
+          callId: "call_failed",
+          content: "<html>failed replacement</html>",
+          resultStatus: "failed",
+        }),
+      ]),
+    ).toEqual(latestInstalledPrototype(first));
+  });
+
+  it("rejects unmatched, failed, wrong-tool, and digest-mismatched prototypes", () => {
+    const valid = recordedPrototypeEvents();
+    expect(latestInstalledPrototype([valid[1]!])).toBeUndefined();
+    expect(
+      latestInstalledPrototype(
+        recordedPrototypeEvents({ resultStatus: "rejected" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledPrototype(
+        recordedPrototypeEvents({ resultToolName: "another_tool" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      latestInstalledPrototype(
+        recordedPrototypeEvents({ outputDigest: "f".repeat(64) }),
+      ),
+    ).toBeUndefined();
+
+    const malformedRequest = structuredClone(valid);
+    const requested = malformedRequest[0] as MessageStreamEvent & {
+      data: { actions: [{ input: { path: string } }] };
+    };
+    requested.data.actions[0].input.path =
+      "prototype/vendor-onboarding/app-spec.md";
+    expect(latestInstalledPrototype(malformedRequest)).toBeUndefined();
+  });
+
   it("projects a stable title and only a closed approval receipt", () => {
     const receipt = {
       format: "autograph-eve-approval-receipt-v2",

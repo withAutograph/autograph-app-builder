@@ -36,6 +36,18 @@ import {
 import { safeToolError, SESSION_RESOURCE_URI, toolResult } from "./result";
 import { MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
 
+const sessionResourceMeta = {
+  ui: {
+    prefersBorder: false,
+    csp: {
+      connectDomains: [],
+      resourceDomains: [],
+      frameDomains: ["about:"],
+      baseUriDomains: [],
+    },
+  },
+} as const;
+
 export interface HostedWorkspaceMembership {
   isMember(input: {
     principal: HostedPrincipal;
@@ -62,7 +74,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
         title: "Autograph App Builder progress",
         description: "Live progress and requests from Autograph App Builder.",
         mimeType: MCP_APP_RESOURCE_MIME_TYPE,
-        _meta: { ui: { prefersBorder: false } },
+        _meta: sessionResourceMeta,
       },
       async (uri) => ({
         contents: [
@@ -70,7 +82,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
             uri: uri.href,
             mimeType: MCP_APP_RESOURCE_MIME_TYPE,
             text: sessionUiHtml,
-            _meta: { ui: { prefersBorder: false } },
+            _meta: sessionResourceMeta,
           },
         ],
       }),
@@ -84,6 +96,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
           "Start a durable app build and return immediately; check progress separately.",
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
+        _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
       },
       async (input) => {
         try {
@@ -104,6 +117,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
           "Read the next page of progress and requests for the current app build.",
         inputSchema: eveGetInputSchema,
         outputSchema: eveSessionResultSchema,
+        _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
       },
       async (input) => {
         try {
@@ -124,6 +138,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
           "Send additional direction while the current app build is waiting.",
         inputSchema: eveSendInputSchema,
         outputSchema: eveSessionResultSchema,
+        _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
       },
       async (input) => {
         try {
@@ -144,6 +159,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
           "Answer the complete outstanding set of App Builder questions in one response.",
         inputSchema: eveRespondInputSchema,
         outputSchema: eveSessionResultSchema,
+        _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
       },
       async (input) => {
         try {
@@ -163,6 +179,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
         description: "Request cancellation of the active app build.",
         inputSchema: eveCancelInputSchema,
         outputSchema: eveSessionResultSchema,
+        _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
       },
       async (input) => {
         try {

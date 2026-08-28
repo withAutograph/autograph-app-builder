@@ -7,6 +7,7 @@ import {
 } from "./hosted-auth";
 import {
   createHostedEveSessionService,
+  hostedEveProjectionForTesting,
   HostedIdempotencyConflictError,
   HostedSessionNotFoundError,
   HostedSubmissionUnknownError,
@@ -147,6 +148,34 @@ async function started(input?: {
 }
 
 describe("hosted Eve service core", () => {
+  it("keeps the latest prototype outside cursor pagination", () => {
+    const prototype = {
+      path: "prototype/vendor-onboarding/index.html",
+      mediaType: "text/html" as const,
+      content: "<!doctype html><html><body>Vendor queue</body></html>",
+      digest: "a".repeat(64),
+      revision: "b".repeat(64),
+    };
+    expect(
+      hostedEveProjectionForTesting(
+        "session_1",
+        {
+          status: "completed",
+          events: [{ type: "status", index: 0, status: "completed" }],
+          prototype,
+        },
+        1,
+        100,
+      ),
+    ).toEqual({
+      sessionId: "session_1",
+      status: "completed",
+      cursor: 1,
+      events: [],
+      prototype,
+    });
+  });
+
   it("rejects a non-closed principal before any store or transport access", () => {
     expect(() =>
       createHostedEveSessionService({

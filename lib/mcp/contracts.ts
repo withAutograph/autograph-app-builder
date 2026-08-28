@@ -58,14 +58,43 @@ export const publicEveEventSchema = z.discriminatedUnion("type", [
 
 export type PublicEveEvent = z.infer<typeof publicEveEventSchema>;
 
-export const eveSessionResultSchema = z.object({
-  sessionId: z.string(),
-  status: sessionStatusSchema,
-  cursor: z.number().int().nonnegative(),
-  events: z.array(publicEveEventSchema),
-  inputRequests: z.array(publicInputRequestSchema).optional(),
-  error: z.object({ code: z.string(), message: z.string() }).optional(),
-});
+const sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+
+export const publicPrototypeSchema = z
+  .object({
+    path: z
+      .string()
+      .regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
+    mediaType: z.literal("text/html"),
+    content: z
+      .string()
+      .min(1)
+      .max(262_144)
+      .refine(
+        (content) => new TextEncoder().encode(content).byteLength <= 262_144,
+        "Prototype HTML must be at most 262144 bytes.",
+      ),
+    digest: sha256DigestSchema,
+    revision: sha256DigestSchema,
+  })
+  .strict();
+
+export type PublicPrototype = z.infer<typeof publicPrototypeSchema>;
+
+export const eveSessionResultSchema = z
+  .object({
+    sessionId: z.string(),
+    status: sessionStatusSchema,
+    cursor: z.number().int().nonnegative(),
+    events: z.array(publicEveEventSchema),
+    inputRequests: z.array(publicInputRequestSchema).optional(),
+    prototype: publicPrototypeSchema.optional(),
+    error: z
+      .object({ code: z.string(), message: z.string() })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 export type EveSessionResult = z.infer<typeof eveSessionResultSchema>;
 
