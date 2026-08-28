@@ -61,8 +61,25 @@ describe("OpenAI package generator", () => {
         await readFile(join(root, "mcp.json"), "utf8"),
       );
       const codex = JSON.parse(await readFile(join(root, ".mcp.json"), "utf8"));
+      const manifest = JSON.parse(
+        await readFile(join(root, ".codex-plugin/plugin.json"), "utf8"),
+      );
       expect(portable.mcpServers["autograph-app-builder"].url).toBe(endpoint);
       expect(codex.mcpServers["autograph-app-builder"].url).toBe(endpoint);
+      expect(manifest.interface).toMatchObject({
+        displayName: "Autograph App Builder",
+        longDescription:
+          "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in supported repositories.",
+      });
+      expect(manifest.interface.defaultPrompt).toHaveLength(3);
+      for (const prompt of manifest.interface.defaultPrompt) {
+        expect(prompt).toContain("Autograph App Builder");
+        expect(prompt.length).toBeLessThanOrEqual(128);
+      }
+      expect(manifest.interface.defaultPrompt.join(" ")).toContain("eve_start");
+      expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
+        "through Eve",
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

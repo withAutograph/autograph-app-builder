@@ -8,7 +8,7 @@ export const sessionUiHtml = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Eve session</title>
+  <title>Autograph App Builder</title>
   <style>
     :root{color-scheme:light dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--bg:var(--color-background-primary,#fff);--surface:var(--color-background-secondary,#f7f7f5);--text:var(--color-text-primary,#1d1d1f);--muted:var(--color-text-secondary,#686866);--line:var(--color-border-secondary,rgba(28,28,26,.12));--accent:var(--color-accent-primary,#6c4df6);--danger:#c63c3c}
     *{box-sizing:border-box}
@@ -33,9 +33,9 @@ export const sessionUiHtml = `<!doctype html>
   </style>
 </head>
 <body>
-  <section class="shell" aria-label="Eve session">
-    <header><div class="mark" aria-hidden="true">E</div><div class="title"><strong>Eve session</strong><span id="subtitle">Autograph App Builder</span></div><div class="state working" id="state"><span class="dot"></span><span id="state-label">Connecting</span></div></header>
-    <main id="log"><div class="empty" id="empty"><strong>Connecting to Eve</strong><span>Session updates will appear here.</span></div><div class="events" id="events" hidden></div></main>
+  <section class="shell" aria-label="Autograph App Builder session">
+    <header><div class="mark" aria-hidden="true">A</div><div class="title"><strong>Autograph App Builder</strong><span id="subtitle">Session</span></div><div class="state working" id="state"><span class="dot"></span><span id="state-label">Connecting</span></div></header>
+    <main id="log"><div class="empty" id="empty"><strong>Connecting to App Builder</strong><span>Session updates will appear here.</span></div><div class="events" id="events" hidden></div></main>
     <footer><span id="summary">Waiting for the first update</span><span class="count" id="count">0 events</span></footer>
   </section>
   <script>
@@ -57,7 +57,7 @@ export const sessionUiHtml = `<!doctype html>
         const copy=document.createElement("div");copy.className="event-copy";
         const label=document.createElement("small");
         let body="";
-        if(event.type==="assistant_message"){label.textContent="Eve";body=text(event.text)}
+        if(event.type==="assistant_message"){label.textContent="App Builder";body=text(event.text)}
         else if(event.type==="progress"){label.textContent=event.state==="completed"?"Completed":event.state==="failed"?"Failed":"In progress";body=text(event.label)}
         else if(event.type==="input_required"){label.textContent="Input requested";body=text(event.request&&event.request.title)}
         else if(event.type==="error"){label.textContent=text(event.code)||"Error";body=text(event.message)}
@@ -70,7 +70,7 @@ export const sessionUiHtml = `<!doctype html>
         const ordered=[...events.values()].sort((a,b)=>a.index-b.index);
         eventList.replaceChildren(...ordered.map(renderEvent));eventList.hidden=ordered.length===0;empty.hidden=ordered.length!==0;
         const status=labels[result.status]?result.status:"working";state.className="state "+status;stateLabel.textContent=labels[status];
-        summary.textContent=status==="input_required"?"Eve is waiting for your response":status==="completed"?"Session finished":status==="failed"?text(result.error&&result.error.message)||"Session stopped":status==="cancelled"?"Session cancelled":"Updates stream as Eve works";
+        summary.textContent=status==="input_required"?"App Builder is waiting for your response":status==="completed"?"Session finished":status==="failed"?text(result.error&&result.error.message)||"Session stopped":status==="cancelled"?"Session cancelled":"Updates stream as App Builder works";
         count.textContent=ordered.length+" event"+(ordered.length===1?"":"s");
         requestAnimationFrame(()=>{document.getElementById("log").scrollTop=document.getElementById("log").scrollHeight});
       }

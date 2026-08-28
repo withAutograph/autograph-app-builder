@@ -1,7 +1,7 @@
 {
   "name": "autograph-app-builder",
   "version": "0.1.1",
-  "description": "Design and create apps in supported repositories through a durable Eve agent.",
+  "description": "Design and create apps in supported repositories with Autograph App Builder.",
   "author": { "name": "Autograph", "url": "https://github.com/withAutograph" },
   "homepage": "https://github.com/withAutograph/autograph-app-builder",
   "repository": "https://github.com/withAutograph/autograph-app-builder",
@@ -12,15 +12,15 @@
   "interface": {
     "displayName": "Autograph App Builder",
     "shortDescription": "Design and create supported Autograph apps",
-    "longDescription": "Use a durable Eve agent to design, plan, create, validate, and separately publish apps in supported repositories.",
+    "longDescription": "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in supported repositories.",
     "developerName": "Autograph",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Read", "Write"],
     "websiteURL": "https://github.com/withAutograph/autograph-app-builder",
     "defaultPrompt": [
-      "Design a new app only through Eve. If eve_start is unavailable, stop without implementing directly.",
-      "Create a supported app only through Eve. If eve_start is unavailable, stop without another app builder.",
-      "Continue my Eve session. If the Eve tools are unavailable, stop and report the missing connection."
+      "Design a new app with Autograph App Builder. If eve_start is unavailable, stop without implementing directly.",
+      "Create a supported app with Autograph App Builder. If eve_start is unavailable, stop without another app builder.",
+      "Continue my Autograph App Builder session. If its five tools are unavailable, stop and report the missing connection."
     ],
     "brandColor": "#111827",
     "screenshots": []
