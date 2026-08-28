@@ -16,6 +16,7 @@ import {
   createGitHubInstallationIdentity,
   createRepositoryObservation,
   publishApprovedDraftPullRequest,
+  readExactGitHubFreshRepositoryContent,
   readExactGitHubPublicationContent,
   resolveImmutableExistingSource,
   type DraftPublicationReadBack,
@@ -27,7 +28,8 @@ import {
   type GitHubMutationReceipt,
   type GitHubOperation,
   type GitHubPublicationAdapter,
-  type GitHubPublicationContent,
+  type GitHubDraftPullRequestContent,
+  type GitHubFreshRepositoryContent,
   type GitHubPublicationReceiptStore,
   type GitHubRepositoryObservation,
 } from "./github-publication";
@@ -41,7 +43,20 @@ import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sha = "1".repeat(40);
-const tree = "2".repeat(40);
+const templateBytes = new TextEncoder().encode("# Template\n");
+const templateDigest = createHash("sha256").update(templateBytes).digest("hex");
+const templateObjectId = createHash("sha1")
+  .update(Buffer.from(`blob ${templateBytes.byteLength}\0`))
+  .update(templateBytes)
+  .digest("hex");
+const treeContent = Buffer.concat([
+  Buffer.from("100644 README.md\0"),
+  Buffer.from(templateObjectId, "hex"),
+]);
+const tree = createHash("sha1")
+  .update(Buffer.from(`tree ${treeContent.byteLength}\0`))
+  .update(treeContent)
+  .digest("hex");
 const branchSha = "3".repeat(40);
 const branchTree = "4".repeat(40);
 const reviewedBytes = new TextEncoder().encode("export default 'demo';\n");
@@ -55,6 +70,24 @@ function publicationContentSource(
   mode = "644",
 ) {
   return {
+    async readFreshTree() {
+      onRead?.("README.md");
+      return {
+        version: 1 as const,
+        kind: "fresh-repository-source-tree" as const,
+        sourceSha: sha,
+        sourceTree: tree,
+        files: [
+          {
+            path: "README.md",
+            mode: "100644" as const,
+            objectId: templateObjectId,
+            digest: templateDigest,
+            bytes: templateBytes,
+          },
+        ],
+      };
+    },
     async readFile(path: string) {
       onRead?.(path);
       return bytes === null
@@ -280,8 +313,8 @@ class Adapter implements GitHubPublicationAdapter {
   throwDraftMutation = false;
   throwFreshReadBack = false;
   throwDraftReadBack = false;
-  freshContent: GitHubPublicationContent | undefined;
-  draftContent: GitHubPublicationContent | undefined;
+  freshContent: GitHubFreshRepositoryContent | undefined;
+  draftContent: GitHubDraftPullRequestContent | undefined;
 
   async inspectInstallation(operation: GitHubOperation) {
     return operation === "resolve-existing-source"
@@ -306,7 +339,7 @@ class Adapter implements GitHubPublicationAdapter {
 
   async createPrivateFreshHistoryRepository(
     proposal: FreshRepositoryProposal,
-    content: GitHubPublicationContent,
+    content: GitHubFreshRepositoryContent,
   ) {
     this.freshCalls += 1;
     this.freshContent = content;
@@ -323,7 +356,7 @@ class Adapter implements GitHubPublicationAdapter {
 
   async publishDraftPullRequest(
     proposal: DraftPullRequestProposal,
-    content: GitHubPublicationContent,
+    content: GitHubDraftPullRequestContent,
   ) {
     this.draftCalls += 1;
     this.draftContent = content;
@@ -362,7 +395,7 @@ describe("closed GitHub publication contract", () => {
     expect(resolve.permissions).toEqual({
       metadata: "read",
       contents: "read",
-      workflows: "read",
+      workflows: "none",
       pullRequests: "none",
       administration: "none",
       variables: "read",
@@ -496,13 +529,15 @@ describe("closed GitHub publication contract", () => {
     expect(result.initialCommitTree).toBe(proposal.sourceTree);
     expect(result.repository.defaultBranch).toBe("main");
     expect(result.releaseGateAbsent).toBe(true);
-    const freshChange = adapter.freshContent?.changes[0];
-    expect(freshChange?.kind).toBe("added");
-    if (freshChange?.kind === "added") {
-      expect(freshChange.after.mode).toBe("644");
-      expect(freshChange.after.digest).toBe(reviewedBytesDigest);
-      expect(freshChange.after.bytes).toEqual(reviewedBytes);
-    }
+    expect(adapter.freshContent?.files).toEqual([
+      {
+        path: "README.md",
+        mode: "100644",
+        objectId: templateObjectId,
+        digest: templateDigest,
+        bytes: templateBytes,
+      },
+    ]);
     assertCanonicalGitHubMutationReceipt(result);
   });
 
@@ -527,6 +562,58 @@ describe("closed GitHub publication contract", () => {
         content: { ...content, token: "secret" } as never,
       }),
     ).toThrow(/schema is not closed/u);
+  });
+
+  it("accepts only the exact immutable source manifest and defensively copies fresh bytes", async () => {
+    const adapter = new Adapter();
+    const proposal = freshProposal(adapter);
+    const mutable = templateBytes.slice();
+    const content = await readExactGitHubFreshRepositoryContent({
+      proposal,
+      source: {
+        async readFreshTree() {
+          return {
+            ...(await publicationContentSource().readFreshTree()),
+            files: [
+              {
+                ...(await publicationContentSource().readFreshTree()).files[0]!,
+                bytes: mutable,
+              },
+            ],
+          };
+        },
+      },
+    });
+    mutable.fill(0);
+    expect(content.files[0]?.bytes).toEqual(templateBytes);
+
+    for (const drift of ["mode", "object", "bytes", "tree"] as const) {
+      await expect(
+        readExactGitHubFreshRepositoryContent({
+          proposal,
+          source: {
+            async readFreshTree() {
+              const exact = await publicationContentSource().readFreshTree();
+              const file = exact.files[0]!;
+              return {
+                ...exact,
+                ...(drift === "tree" ? { sourceTree: "0".repeat(40) } : {}),
+                files: [
+                  {
+                    ...file,
+                    ...(drift === "mode" ? { mode: "100755" as const } : {}),
+                    ...(drift === "object" ? { objectId: "0".repeat(40) } : {}),
+                    ...(drift === "bytes"
+                      ? { bytes: new TextEncoder().encode("drift\n") }
+                      : {}),
+                  },
+                ],
+              };
+            },
+          },
+        }),
+      ).rejects.toThrow(/fresh repository content/u);
+    }
   });
 
   it("returns the exact terminal receipt on idempotent retry", async () => {

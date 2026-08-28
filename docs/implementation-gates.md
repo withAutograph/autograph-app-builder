@@ -213,12 +213,15 @@ Before enabling GitHub or hosted repository publication:
    reset in this slice. The typed GitHub proposal and publication boundary is
    implemented, but the shipped runtime remains unavailable until a deployment
    explicitly composes its least-privilege GitHub App adapter and durable
-   stores. Each fresh-repository or draft-PR provider mutation also requires a
-   live, read-only content source over the re-observed validated apply overlay.
-   The runtime checks exact approved paths, modes, digests, and bytes before
-   dispatch, passes the resulting content only to the provider call, and never
-   persists it in workflow, proposal, or journal state. Exact successful
-   read-back recovery does not reread that content source.
+   stores. Fresh-repository mutation reads the complete prepared immutable
+   source manifest and bytes and proves its exact Git tree; it deliberately
+   excludes app changes. Draft-PR mutation instead reads only the reviewed
+   changes from the re-observed validated apply overlay. The runtime checks
+   exact paths, modes, object identities, digests, and bytes before dispatch,
+   passes the closed discriminated content only to the provider call, and never
+   persists it in workflow, proposal, or journal state. The HTTP provider has
+   no independent material source. Exact successful read-back recovery does
+   not reread either content source.
    Local operators expose this production capability only with `mise run
 local:start -- <owner-only-state-root> <owner-only-destination-root>
 <canonical-local-source-root>`; direct

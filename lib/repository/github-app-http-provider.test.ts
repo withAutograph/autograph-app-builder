@@ -8,7 +8,6 @@ import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderConfig,
   readGitHubAppHttpProviderEnvironment,
-  type GitHubPublicationMaterialSource,
 } from "./github-app-http-provider";
 import {
   GITHUB_PUBLICATION_VERSION,
@@ -58,15 +57,6 @@ function freshProposal(): FreshRepositoryProposal {
   };
   return { ...unsigned, digest: hash(unsigned) };
 }
-
-const materialSource: GitHubPublicationMaterialSource = {
-  async readFreshTree() {
-    throw new Error("not-used");
-  },
-  async readDraftChanges() {
-    throw new Error("not-used");
-  },
-};
 
 function json(value: unknown, status = 200, requestId = "REQUEST_1") {
   return new Response(JSON.stringify(value), {
@@ -122,7 +112,6 @@ function createProvider(fetchImplementation: typeof fetch) {
       installationId: "456",
       privateKey: privateKeyPem,
     },
-    materialSource,
     fetch: fetchImplementation,
     now: () => Date.UTC(2026, 7, 28, 12, 0, 0),
   });
@@ -167,7 +156,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
   });
 
   it.each([
-    ["resolve-existing-source", "read", "read", undefined, undefined],
+    ["resolve-existing-source", "read", "none", undefined, undefined],
     ["create-fresh-repository", "write", "write", undefined, "write"],
     ["publish-draft-pull-request", "write", "write", "write", undefined],
   ] as const)(
@@ -203,7 +192,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         permissions: {
           metadata: "read",
           contents,
-          workflows,
+          ...(workflows === "write" ? { workflows } : {}),
           actions_variables: "read",
           ...(pullRequests === undefined
             ? {}
@@ -251,24 +240,25 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         installationId: "456",
         privateKey: privateKeyPem,
       },
-      materialSource: {
-        async readFreshTree() {
-          return [
-            {
-              path: ".github/workflows/ci.yml",
-              mode: "100644",
-              content: new TextEncoder().encode("name: CI\n"),
-            },
-          ];
-        },
-        async readDraftChanges() {
-          throw new Error("not-used");
-        },
-      },
       fetch: mock.implementation,
     });
+    const bytes = new TextEncoder().encode("name: CI\n");
     await expect(
-      provider.createPrivateFreshHistoryRepository(freshProposal()),
+      provider.createPrivateFreshHistoryRepository(freshProposal(), {
+        version: 1,
+        kind: "fresh-repository-source-tree",
+        sourceSha: "4".repeat(40),
+        sourceTree: "5".repeat(40),
+        files: [
+          {
+            path: ".github/workflows/ci.yml",
+            mode: "100644",
+            objectId: "0".repeat(40),
+            digest: createHash("sha256").update(bytes).digest("hex"),
+            bytes,
+          },
+        ],
+      }),
     ).resolves.toEqual({
       status: "rejected",
       code: "invalid-publication-material",

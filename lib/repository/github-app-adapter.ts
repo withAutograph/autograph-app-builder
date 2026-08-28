@@ -14,7 +14,8 @@ import {
   type GitHubMutationAcknowledgement,
   type GitHubOperation,
   type GitHubPublicationAdapter,
-  type GitHubPublicationContent,
+  type GitHubDraftPullRequestContent,
+  type GitHubFreshRepositoryContent,
   type GitHubRepositoryObservation,
 } from "./github-publication";
 
@@ -27,7 +28,7 @@ const permissionSnapshotSchema = z
   .object({
     metadata: z.literal("read"),
     contents: z.enum(["read", "write"]),
-    workflows: z.enum(["read", "write"]),
+    workflows: z.enum(["none", "write"]),
     pullRequests: z.enum(["none", "write"]),
     administration: z.enum(["none", "write"]),
     variables: z.literal("read"),
@@ -145,12 +146,12 @@ export interface GitHubAppInstallationProvider {
   ): Promise<unknown>;
   createPrivateFreshHistoryRepository(
     proposal: FreshRepositoryProposal,
-    content: GitHubPublicationContent,
+    content: GitHubFreshRepositoryContent,
   ): Promise<unknown>;
   inspectDraftPublication(proposal: DraftPullRequestProposal): Promise<unknown>;
   publishDraftPullRequest(
     proposal: DraftPullRequestProposal,
-    content: GitHubPublicationContent,
+    content: GitHubDraftPullRequestContent,
   ): Promise<unknown>;
 }
 

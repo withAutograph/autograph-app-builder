@@ -5,10 +5,11 @@ import { z } from "zod";
 
 import type { GitHubAppInstallationProvider } from "./github-app-adapter";
 import {
+  assertExactGitHubFreshRepositoryContent,
+  assertExactGitHubDraftPullRequestContent,
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
   type DraftPullRequestProposal,
-  type FreshRepositoryProposal,
 } from "./github-publication";
 import { safeSourcePath } from "./source-path";
 
@@ -71,28 +72,11 @@ export type GitHubPublicationFile = {
   content: Uint8Array;
 };
 
-export type GitHubDraftPublicationChange = {
-  path: string;
-  kind: "added" | "modified" | "deleted";
-  before?: { mode: "644" | "755"; digest: string };
-  after?: GitHubPublicationFile;
-};
-
-/** Supplies immutable bytes from the builder-owned reviewed workspace. */
-export interface GitHubPublicationMaterialSource {
-  readFreshTree(
-    proposal: FreshRepositoryProposal,
-  ): Promise<readonly GitHubPublicationFile[]>;
-  readDraftChanges(
-    proposal: DraftPullRequestProposal,
-  ): Promise<readonly GitHubDraftPublicationChange[]>;
-}
-
 type Fetch = typeof fetch;
 type PermissionSnapshot = {
   metadata: "read";
   contents: "read" | "write";
-  workflows: "read" | "write";
+  workflows: "none" | "write";
   pullRequests: "none" | "write";
   administration: "none" | "write";
   variables: "read";
@@ -181,72 +165,13 @@ function canonicalFiles(
   );
 }
 
-type GitTreeNode =
-  | { kind: "directory"; children: Map<string, GitTreeNode> }
-  | { kind: "file"; file: GitHubPublicationFile };
-
-function gitObjectId(
-  type: "blob" | "tree",
-  content: Uint8Array,
-  algorithm: "sha1" | "sha256",
-): Buffer {
-  const header = Buffer.from(`${type} ${content.byteLength}\0`);
-  return createHash(algorithm).update(header).update(content).digest();
-}
-
-function gitTreeObjectId(
-  files: readonly GitHubPublicationFile[],
-  expectedLength: number,
-): string {
-  const root: GitTreeNode = { kind: "directory", children: new Map() };
-  for (const file of files) {
-    const segments = file.path.split("/");
-    let directory = root;
-    for (const segment of segments.slice(0, -1)) {
-      if (directory.kind !== "directory") throw new Error("invalid-material");
-      const existing = directory.children.get(segment);
-      if (existing?.kind === "file") throw new Error("invalid-material");
-      const child = existing ?? {
-        kind: "directory" as const,
-        children: new Map(),
-      };
-      directory.children.set(segment, child);
-      directory = child;
-    }
-    if (directory.kind !== "directory") throw new Error("invalid-material");
-    directory.children.set(segments.at(-1)!, { kind: "file", file });
-  }
-  const algorithm = expectedLength === 64 ? "sha256" : "sha1";
-  const encodeTree = (
-    directory: Extract<GitTreeNode, { kind: "directory" }>,
-  ): Buffer => {
-    const entries = [...directory.children.entries()].toSorted(
-      ([leftName, left], [rightName, right]) =>
-        Buffer.compare(
-          Buffer.from(`${leftName}${left.kind === "directory" ? "/" : ""}`),
-          Buffer.from(`${rightName}${right.kind === "directory" ? "/" : ""}`),
-        ),
-    );
-    const content = Buffer.concat(
-      entries.map(([entryName, entry]) => {
-        const mode = entry.kind === "file" ? entry.file.mode : "40000";
-        const oid =
-          entry.kind === "file"
-            ? gitObjectId("blob", entry.file.content, algorithm)
-            : gitObjectId("tree", encodeTree(entry), algorithm);
-        return Buffer.concat([Buffer.from(`${mode} ${entryName}\0`), oid]);
-      }),
-    );
-    return content;
-  };
-  return gitObjectId("tree", encodeTree(root), algorithm).toString("hex");
-}
-
 function permissionRequest(permission: PermissionSnapshot) {
   return {
     metadata: "read" as const,
     contents: permission.contents,
-    workflows: permission.workflows,
+    ...(permission.workflows === "write"
+      ? { workflows: "write" as const }
+      : {}),
     ...(permission.pullRequests === "write"
       ? { pull_requests: "write" as const }
       : {}),
@@ -271,14 +196,14 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
     throw new Error("invalid-response");
   const metadata = value.metadata;
   const contents = value.contents;
-  const workflows = value.workflows;
+  const workflows = value.workflows ?? "none";
   const pullRequests = value.pull_requests ?? "none";
   const administration = value.administration ?? "none";
   const variables = value.actions_variables;
   if (
     metadata !== "read" ||
     (contents !== "read" && contents !== "write") ||
-    (workflows !== "read" && workflows !== "write") ||
+    (workflows !== "none" && workflows !== "write") ||
     (pullRequests !== "none" && pullRequests !== "write") ||
     (administration !== "none" && administration !== "write") ||
     variables !== "read"
@@ -333,7 +258,6 @@ async function boundedResponseBytes(response: Response): Promise<Uint8Array> {
 
 export function createGitHubAppHttpProvider(input: {
   config: GitHubAppHttpProviderConfig;
-  materialSource: GitHubPublicationMaterialSource;
   fetch?: Fetch;
   now?: () => number;
 }): GitHubAppInstallationProvider {
@@ -674,7 +598,7 @@ export function createGitHubAppHttpProvider(input: {
       const permissions: PermissionSnapshot = {
         metadata: "read",
         contents: "read",
-        workflows: "read",
+        workflows: "none",
         pullRequests: "none",
         administration: "none",
         variables: "read",
@@ -743,21 +667,21 @@ export function createGitHubAppHttpProvider(input: {
       };
     },
 
-    async createPrivateFreshHistoryRepository(proposal) {
+    async createPrivateFreshHistoryRepository(proposal, content) {
       assertExactFreshRepositoryProposal(proposal);
       const identity = await installation();
       if (identity.accountLogin !== proposal.destinationOwner)
         return { status: "rejected", code: "destination-owner" };
       let files: readonly GitHubPublicationFile[];
       try {
+        assertExactGitHubFreshRepositoryContent({ proposal, content });
         files = canonicalFiles(
-          await input.materialSource.readFreshTree(proposal),
+          content.files.map((file) => ({
+            path: file.path,
+            mode: file.mode,
+            content: file.bytes,
+          })),
         );
-        if (
-          gitTreeObjectId(files, proposal.sourceTree.length) !==
-          proposal.sourceTree
-        )
-          throw new Error("invalid-material");
       } catch {
         return {
           status: "rejected",
@@ -944,11 +868,30 @@ export function createGitHubAppHttpProvider(input: {
       };
     },
 
-    async publishDraftPullRequest(proposal) {
+    async publishDraftPullRequest(proposal, content) {
       assertExactDraftPullRequestProposal(proposal);
-      let changes: readonly GitHubDraftPublicationChange[];
+      let changes: readonly {
+        path: string;
+        kind: "added" | "modified" | "deleted";
+        before?: { mode: string; digest: string };
+        after?: GitHubPublicationFile;
+      }[];
       try {
-        changes = await input.materialSource.readDraftChanges(proposal);
+        assertExactGitHubDraftPullRequestContent({ proposal, content });
+        changes = content.changes.map((change) => ({
+          path: change.path,
+          kind: change.kind,
+          ...(change.kind === "added" ? {} : { before: change.before }),
+          ...(change.kind === "deleted"
+            ? {}
+            : {
+                after: {
+                  path: change.path,
+                  mode: change.after.mode === "755" ? "100755" : "100644",
+                  content: change.after.bytes,
+                },
+              }),
+        }));
         if (
           changes.length === 0 ||
           changes.length > MAX_FILES ||

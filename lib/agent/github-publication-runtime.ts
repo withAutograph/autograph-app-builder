@@ -8,7 +8,8 @@ import {
   type DraftPullRequestProposal,
   type DraftPullRequestSuccessReceipt,
   type FreshRepositorySuccessReceipt,
-  type GitHubPublicationContentSource,
+  type GitHubDraftPullRequestContentSource,
+  type GitHubFreshRepositoryContentSource,
   type GitHubPublicationAdapter,
   type GitHubPublicationReceiptStore,
   type ImmutableGitHubSourceReceipt,
@@ -65,14 +66,14 @@ export interface GitHubPublicationRuntime {
   createFreshRepository(input: {
     expectedProposalDigest: string;
     review: ReviewedChangeSetReceipt;
-    contentSource: GitHubPublicationContentSource;
+    contentSource: GitHubFreshRepositoryContentSource;
     approvedByCallId: string;
   }): Promise<FreshRepositorySuccessReceipt>;
   publishDraftPullRequest(input: {
     expectedProposalDigest: string;
     approvalReceipt: ApprovalReceipt;
     review: ReviewedChangeSetReceipt;
-    contentSource: GitHubPublicationContentSource;
+    contentSource: GitHubDraftPullRequestContentSource;
     approvedByCallId: string;
   }): Promise<DraftPullRequestSuccessReceipt>;
 }
