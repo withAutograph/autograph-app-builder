@@ -59,8 +59,8 @@ export function createEveMcpHandler(service: EveSessionService) {
       "eve-session",
       SESSION_RESOURCE_URI,
       {
-        title: "Autograph App Builder session",
-        description: "A stable live view of Autograph App Builder work.",
+        title: "Autograph App Builder progress",
+        description: "Live progress and requests from Autograph App Builder.",
         mimeType: MCP_APP_RESOURCE_MIME_TYPE,
         _meta: { ui: { prefersBorder: false } },
       },
@@ -79,9 +79,9 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_start",
       {
-        title: "Start App Builder work",
+        title: "Start with Autograph App Builder",
         description:
-          "Start a new durable App Builder objective and return immediately.",
+          "Start a durable app build and return immediately; check progress separately.",
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
       },
@@ -89,7 +89,7 @@ export function createEveMcpHandler(service: EveSessionService) {
         try {
           return toolResult(
             await service.start(input),
-            "Autograph App Builder accepted the objective.",
+            "Autograph App Builder started the app build.",
           );
         } catch (error) {
           return safeToolError(error);
@@ -99,8 +99,9 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_get",
       {
-        title: "Get App Builder session",
-        description: "Read the next bounded page of public session events.",
+        title: "Check App Builder progress",
+        description:
+          "Read the next page of progress and requests for the current app build.",
         inputSchema: eveGetInputSchema,
         outputSchema: eveSessionResultSchema,
       },
@@ -108,7 +109,7 @@ export function createEveMcpHandler(service: EveSessionService) {
         try {
           return toolResult(
             await service.get(input),
-            "Fetched the App Builder session.",
+            "Autograph App Builder returned the latest progress.",
           );
         } catch (error) {
           return safeToolError(error, input.sessionId);
@@ -118,14 +119,18 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_send",
       {
-        title: "Send App Builder follow-up",
-        description: "Send a follow-up while an owned session is waiting.",
+        title: "Send App Builder feedback",
+        description:
+          "Send additional direction while the current app build is waiting.",
         inputSchema: eveSendInputSchema,
         outputSchema: eveSessionResultSchema,
       },
       async (input) => {
         try {
-          return toolResult(await service.send(input), "Sent the follow-up.");
+          return toolResult(
+            await service.send(input),
+            "Autograph App Builder received the feedback.",
+          );
         } catch (error) {
           return safeToolError(error, input.sessionId);
         }
@@ -134,9 +139,9 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_respond",
       {
-        title: "Respond to App Builder request",
+        title: "Answer App Builder questions",
         description:
-          "Answer one complete outstanding App Builder input batch atomically.",
+          "Answer the complete outstanding set of App Builder questions in one response.",
         inputSchema: eveRespondInputSchema,
         outputSchema: eveSessionResultSchema,
       },
@@ -144,7 +149,7 @@ export function createEveMcpHandler(service: EveSessionService) {
         try {
           return toolResult(
             await service.respond(input),
-            "Recorded the response.",
+            "Autograph App Builder recorded the answers.",
           );
         } catch (error) {
           return safeToolError(error, input.sessionId);
@@ -154,9 +159,8 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_cancel",
       {
-        title: "Cancel App Builder turn",
-        description:
-          "Request cooperative cancellation of the active App Builder turn.",
+        title: "Stop App Builder work",
+        description: "Request cancellation of the active app build.",
         inputSchema: eveCancelInputSchema,
         outputSchema: eveSessionResultSchema,
       },
@@ -164,7 +168,7 @@ export function createEveMcpHandler(service: EveSessionService) {
         try {
           return toolResult(
             await service.cancel(input),
-            "Cancellation was requested.",
+            "Autograph App Builder received the stop request.",
           );
         } catch (error) {
           return safeToolError(error, input.sessionId);

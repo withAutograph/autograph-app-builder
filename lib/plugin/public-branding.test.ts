@@ -24,8 +24,13 @@ describe("Autograph App Builder public branding", () => {
   it("uses product language in public installation and discovery copy", async () => {
     const readme = await readFile(resolve("README.md"), "utf8");
     const installing = await readFile(resolve("docs/installing.md"), "utf8");
+    const imageReadme = await readFile(
+      resolve("containers/eve-sandbox/README.md"),
+      "utf8",
+    );
 
     expect(readme).toContain("Autograph App Builder is a durable, portable");
+    expect(readme).toContain("for designing, planning, creating,");
     expect(readme).toContain("## Run Autograph App Builder locally");
     expect(readme).toContain(
       "For a non-interactive smoke test through App Builder itself:",
@@ -34,5 +39,8 @@ describe("Autograph App Builder public branding", () => {
       "The bundled App Builder skill is fail-closed",
     );
     expect(installing).toContain("if any App Builder tool is unavailable");
+    expect(imageReadme).toContain(
+      "# Autograph App Builder execution image (linux/arm64)",
+    );
   });
 });

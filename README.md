@@ -1,8 +1,9 @@
 # Autograph App Builder
 
 Autograph App Builder is a durable, portable
-[Agent Plugin](https://agent-plugins.org/) for designing and creating apps in
-explicitly supported repositories. Codex is the first user-facing entrypoint.
+[Agent Plugin](https://agent-plugins.org/) for designing, planning, creating,
+and validating apps in explicitly supported repositories. Codex is the first
+user-facing entrypoint.
 
 The project is based on
 [`jasonmorganson/eve-agent-plugin`](https://github.com/jasonmorganson/eve-agent-plugin)
@@ -36,8 +37,8 @@ allowlisted fresh-template checkout:
    supported-template contract, and release-disabled state;
 3. for a fresh-template source, require a separate acquisition approval that
    does not clone, copy, or create a destination repository;
-4. materialize that exact approved receipt at `/workspace/repository` inside the Eve
-   session sandbox; and
+4. materialize that exact approved receipt at `/workspace/repository` inside the
+   App Builder's isolated workspace; and
 5. persist the prepared phase in durable Eve state and expose a verified,
    read-only workspace-status receipt while unrestricted shell and file writes
    remain disabled;
@@ -195,7 +196,7 @@ template manifest.
   mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
   ```
 
-- An approval-gated, digest-bound Eve sandbox workspace tool.
+- An approval-gated, digest-bound isolated App Builder workspace tool.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
 - Approval-bound, session-scoped prototype artifact receipts with exact-digest
   readback and a content-free workflow-status receipt.
@@ -329,7 +330,7 @@ For a non-interactive smoke test through App Builder itself:
 mise run local:smoke
 ```
 
-To inspect the fixed tool allowlist through Eve's real sandbox backend:
+To inspect the fixed tool allowlist through App Builder's real sandbox backend:
 
 ```bash
 mise run test:sandbox-toolchain
@@ -386,7 +387,7 @@ For local source access, set `REPOSITORY_LOCAL_ROOTS` to a platform-delimited
 allowlist of absolute roots. Fresh-template acquisition means approving one
 exact local checkout receipt; it never means cloning or creating a destination
 repository. A separately approved preparation copies the reviewed tree into the
-durable Eve session sandbox; the source checkout is not mutated.
+durable App Builder workspace; the source checkout is not mutated.
 
 To enable the branch/worktree publication outcome, pre-create a canonical
 builder-owned directory, set its absolute path in

@@ -26,6 +26,12 @@ describe("Codex adapter", () => {
     for (const prompt of manifest.interface.defaultPrompt) {
       expect(prompt.length).toBeLessThanOrEqual(128);
     }
+    expect(manifest.interface.shortDescription).toBe(
+      "Design and build supported apps",
+    );
+    expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
+      "App Builder session",
+    );
   });
 
   it("fails closed instead of invoking another app builder", async () => {
@@ -43,7 +49,11 @@ describe("Codex adapter", () => {
     expect(skill).toContain("Do not invoke another app-building skill");
     expect(skill).toContain("edit the target repository directly");
     expect(skill).toContain("# Autograph App Builder orchestration");
+    expect(skill).toContain("Before starting an app build");
+    expect(skill).toContain("Start every new app build with `eve_start`");
     expect(skill).toContain("Never split one App Builder batch across calls");
+    expect(skill).not.toContain("Before doing any app-building work");
+    expect(skill).not.toContain("new app-building objective");
     expect(skill).not.toContain("# Eve agent orchestration");
   });
 });

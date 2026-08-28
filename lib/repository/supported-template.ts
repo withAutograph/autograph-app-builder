@@ -638,7 +638,7 @@ export async function prepareSupportedSandboxWorkspace(
       existing.sourceTree !== sourceTree ||
       existing.eligibilityDigest !== expectedEligibilityDigest
     ) {
-      throw new Error("This Eve session already owns a different workspace.");
+      throw new Error("This app build already owns a different workspace.");
     }
     await verifyPreparedSandboxWorkspace(sandbox, existing);
     return existing;
@@ -796,7 +796,7 @@ export async function prepareFixedHostedSandboxWorkspace(input: {
       workspaceId !== input.sandbox.id ||
       JSON.stringify(observed) !== JSON.stringify(expected)
     )
-      throw new Error("This Eve session already owns a different workspace.");
+      throw new Error("This app build already owns a different workspace.");
     await verifyPreparedSandboxWorkspace(input.sandbox, existing);
     return existing;
   }

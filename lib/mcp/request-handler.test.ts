@@ -339,18 +339,27 @@ describe("request-scoped MCP service selection", () => {
         toolResult.tools.map(({ name, title }) => [name, title]),
       ),
     ).toEqual({
-      eve_start: "Start App Builder work",
-      eve_get: "Get App Builder session",
-      eve_send: "Send App Builder follow-up",
-      eve_respond: "Respond to App Builder request",
-      eve_cancel: "Cancel App Builder turn",
+      eve_start: "Start with Autograph App Builder",
+      eve_get: "Check App Builder progress",
+      eve_send: "Send App Builder feedback",
+      eve_respond: "Answer App Builder questions",
+      eve_cancel: "Stop App Builder work",
     });
-    for (const tool of toolResult.tools) {
-      expect(tool.description).not.toMatch(/\bEve\b/u);
-    }
     expect(
-      toolResult.tools.find(({ name }) => name === "eve_respond")?.description,
-    ).toContain("one complete outstanding App Builder input batch atomically");
+      Object.fromEntries(
+        toolResult.tools.map(({ name, description }) => [name, description]),
+      ),
+    ).toEqual({
+      eve_start:
+        "Start a durable app build and return immediately; check progress separately.",
+      eve_get:
+        "Read the next page of progress and requests for the current app build.",
+      eve_send:
+        "Send additional direction while the current app build is waiting.",
+      eve_respond:
+        "Answer the complete outstanding set of App Builder questions in one response.",
+      eve_cancel: "Request cancellation of the active app build.",
+    });
 
     const resourceResult = await mcpResult<{
       resources: Array<{ name: string; title?: string; description?: string }>;
@@ -358,8 +367,8 @@ describe("request-scoped MCP service selection", () => {
     expect(resourceResult.resources).toContainEqual(
       expect.objectContaining({
         name: "eve-session",
-        title: "Autograph App Builder session",
-        description: "A stable live view of Autograph App Builder work.",
+        title: "Autograph App Builder progress",
+        description: "Live progress and requests from Autograph App Builder.",
       }),
     );
   });

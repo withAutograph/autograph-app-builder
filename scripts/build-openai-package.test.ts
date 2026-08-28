@@ -68,6 +68,7 @@ describe("OpenAI package generator", () => {
       expect(codex.mcpServers["autograph-app-builder"].url).toBe(endpoint);
       expect(manifest.interface).toMatchObject({
         displayName: "Autograph App Builder",
+        shortDescription: "Design and build supported apps",
         longDescription:
           "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in supported repositories.",
       });
@@ -77,6 +78,12 @@ describe("OpenAI package generator", () => {
         expect(prompt.length).toBeLessThanOrEqual(128);
       }
       expect(manifest.interface.defaultPrompt.join(" ")).toContain("eve_start");
+      expect(manifest.interface.defaultPrompt.join(" ")).toContain(
+        "Continue my app build with Autograph App Builder",
+      );
+      expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
+        "App Builder session",
+      );
       expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
         "through Eve",
       );

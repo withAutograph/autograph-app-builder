@@ -1,7 +1,8 @@
-# Eve sandbox image (linux/arm64)
+# Autograph App Builder execution image (linux/arm64)
 
-This image is the App Builder's externally built, target-bound execution
-environment. It pins the Eve base, Git, mise `2026.8.12`, and Bun `1.3.14`.
+This image is Autograph App Builder's externally built, target-bound execution
+environment. It pins its Eve runtime base, Git, mise `2026.8.12`, and Bun
+`1.3.14`.
 It also builds the exact external dependency closure needed by Arrusted's
 read-only app planner, including `@vercel/microfrontends` `2.4.0`, from a clean
 checkout of Arrusted commit

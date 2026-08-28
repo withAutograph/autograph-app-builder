@@ -115,7 +115,7 @@ export const eveRespondInputSchema = z
         context.addIssue({
           code: "custom",
           path: ["responses", index, "requestId"],
-          message: "Each Eve requestId must appear exactly once.",
+          message: "Each requestId must appear exactly once.",
         });
       seen.add(requestId);
     }
