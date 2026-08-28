@@ -907,40 +907,25 @@
   display: grid;
   place-items: center;
 }
-.connectionIcon[data-kind="stripe"] {
-  color: #635bff;
+.connectionIcon[data-kind="quickbooks"] {
+  color: #2ca01c;
 }
-.connectionIcon[data-kind="kernel"] {
-  color: #65a30d;
+.connectionIcon[data-kind="ramp"] {
+  background: center / 20px 20px no-repeat
+    url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAPoAAAD6AG1e1JrAAADt0lEQVR4nL2XXWhUVxDHjwHBF1vQ0uxudjd3Z67ZED+wTYwtxbfWfhhabIs+NNCCL0rpx0PfG6Wt+iJF0Ly0kVIpJQ8tFJsqLY2pVqhdsbE2BERjcs7ZJqb5uHOyKVTdKWcXNi7r3r27Gz3w58Jlzvxm5p6PuUIEGMxixdgtJ5RecN9Q5PYpDy8pwn+0gTtWimAm/87tk57bbW3tnCC+fYd1MrWQ3KQX8IQimFUEWUXAftIEWenBvCL8Qs2t21xzINJrW6MNHlUeZCpBfbRofUhuW1MVXM2t26wM/lkHuEiS8KrOuE8GgqepZZs2OLVc8MKnMThlffvDM9guCaeXG74kvKUz7hPlMn9ME448OHghiBFFrWuL4MxihTLYW6/z1GiCh1KJyrYe9hbtjnQm2aEM/FtvAP2nmrm9I8wDQ46/rYFF+7lz8B4WDcrDr5ejvD2fxDja1MgbNoT43GX/SmiDX1m2kIstTZqA6oWPzwE/uz2cC8Dq9Dn/KmgCz7KFpMSe5cj+u58cdprz8NbWEA9fr7wW5Ly7R2gDJ+vOfhb4tV2RQvZdr0R4Yj7Q3C+FIhiuN4DPTsY5Hs/DrT7tjQeba2BYSLIXR+3wwYsOb9wUKsA7OkI8IoPNlR7MiSA3XDn99leCn9m2tPBi0UY+9nnA7PPKCkV4uxb492cd7uxcglt1v9nEN2er8YO3bQUmqwGPauADh2Pc0rJUdqvtL0T46niAU7BYk0J6+GuQPX5xJMEHj8S4c2s4V+p74V0vR/jytarhtgIXRK7pKGPw4wWH970b5eeejzBiccZWCaeR3/sgylduJPjI8TjvPxgraOBsheM4fxoeFcqDHeUW4o1p4L3vREsytmC770/97PCVsQR3v9VUYtPWFuJvzzT7LkBF0CWuz8KjyuBEOUMbxNvvR3lLZ4hf3RXhA4diPPi7k/ssp39x+MUdEV6/PnRfPfV0mM+UPZJRzcy4j+RbMA8/8iuV9CB3stnnve/tOxuIn8qfiPhx4Tq+mWkOK4J0LduxRk1OZJKR4kbUwF5FcPchwO8qA/tKWrJUqn2lIuh/CAH0p7h9Zdl/AUVw/kHBNeF523v6dsaTBh+XBEPa1H5HlIANZCXhoPUtgoxpTq62jaMi/K9euLQ+PDg+Op1cLaoZPT2iYZygSxH8UeONmVUGL0kPXqrrR5XZWaUN7taEPygPTIVgsvn+Egf+Nu7rY+ysqhlcGohosHs3TbhTeu5+RXhCG/wmJ3L7tIEPJeFOa2Ntgzr+H0EGPzjL0LPSAAAAAElFTkSuQmCC");
 }
-.connectionIcon[data-kind="sanity"] {
-  color: #f03;
+.connectionIcon[data-kind="netsuite"] {
+  width: 18px;
+  height: 18px;
+  background: #0082ca;
+  mask: center / contain no-repeat
+    url("data:image/svg+xml,%3Csvg%20fill='none'%20height='24'%20width='24'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cpath%20d='M0%200v24h24V0zm18.6%2018.019h-4.631L8.53%209.356h-.037v8.663H5.4V5.98h4.594l5.475%208.663h.037V5.98H18.6z'%20fill='%23161513'/%3E%3C/svg%3E");
 }
-.connectionIcon[data-name="Airtable"],
-.connectionIcon[data-name="Cloudinary"],
-.connectionIcon[data-name="Jira"],
-.connectionIcon[data-name="Webflow"] {
-  color: #1689ee;
+.connectionIcon[data-kind="xero"] {
+  color: #13b5ea;
 }
-.connectionIcon[data-name="Asana"],
-.connectionIcon[data-name="Postman"],
-.connectionIcon[data-name="Todoist"],
-.connectionIcon[data-name="Zapier"] {
-  color: #f05a47;
-}
-.connectionIcon[data-name="ClickHouse"],
-.connectionIcon[data-name="Hugging Face"] {
-  color: #f7c600;
-}
-.connectionIcon[data-name="Cloudflare"] {
-  color: #f48120;
-}
-.connectionIcon[data-name="Mixpanel"] {
-  color: #7856ff;
-}
-.connectionIcon[data-name="Netlify"],
-.connectionIcon[data-name="Supabase"] {
-  color: #2ebf91;
+.connectionIcon[data-kind="sage-intacct"] {
+  color: #00d639;
 }
 .showAll {
   height: 34px;

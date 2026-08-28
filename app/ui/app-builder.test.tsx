@@ -202,6 +202,17 @@ describe("Vercel-faithful App Builder flow", () => {
     ]) {
       expect(view.textContent).toContain(connection);
     }
+    for (const kind of [
+      "quickbooks",
+      "ramp",
+      "netsuite",
+      "xero",
+      "sage-intacct",
+    ]) {
+      expect(view.querySelector(`[data-kind="${kind}"]`)).not.toBeNull();
+    }
+    expect(view.querySelector('[data-kind="ramp"] svg')).toBeNull();
+    expect(view.querySelector('[data-kind="netsuite"] svg')).toBeNull();
     expect(view.textContent).not.toContain("Show all connections");
     expect(view.querySelector('[aria-label="Add Vercel"]')).toBeNull();
 

@@ -40,13 +40,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import {
-  SiOracle,
-  SiQuickbooks,
-  SiSage,
-  SiSlack,
-  SiXero,
-} from "react-icons/si";
+import { SiQuickbooks, SiSage, SiSlack, SiXero } from "react-icons/si";
 
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
@@ -173,12 +167,11 @@ function InfoTooltip({ children }: { children: string }) {
 function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   const icons = {
     quickbooks: SiQuickbooks,
-    ramp: DollarSign,
-    netsuite: SiOracle,
     xero: SiXero,
     "sage-intacct": SiSage,
   };
   const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
+  const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
     <span
       className={styles.connectionIcon}
@@ -186,7 +179,7 @@ function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
       data-name={name}
       aria-hidden="true"
     >
-      {Icon ? <Icon size={18} /> : <Globe size={18} />}
+      {Icon ? <Icon size={18} /> : hasBrandAsset ? null : <Globe size={18} />}
     </span>
   );
 }
