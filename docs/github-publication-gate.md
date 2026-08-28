@@ -81,18 +81,25 @@ exact idempotency read-back. Only an explicit provider rejection becomes a
 bounded sanitized failure receipt and requires explicit recovery.
 
 The repository now supplies the PostgreSQL CAS store, its additive schema, and
-a fixed-`api.github.com` HTTP provider. The provider reads only the closed
-`GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and `GITHUB_APP_PRIVATE_KEY`
-credential contract, creates short-lived App JWTs, and mints a fresh
-installation token with the exact permissions for each operation. The runtime
+a fixed-`api.github.com` HTTP provider. Preview deployment composition is
+enabled only by exact `APP_BUILDER_GITHUB_PUBLICATION_ENABLED=1` together with
+the hosted Preview bindings, bounded `DATABASE_URL`, `GITHUB_APP_ID`, and
+`GITHUB_APP_PRIVATE_KEY`. `GITHUB_APP_INSTALLATION_ID`, `GITHUB_TOKEN`, and
+`GITHUB_API_URL` are forbidden. The installation ID is read live from the exact
+issuer/audience/workspace/owner database binding after current and initiating
+forwarded authority plus membership are revalidated for the session. Local,
+unconfigured, non-Preview, service, mismatched, inactive, or ambient authority
+remains fail-closed. The provider creates short-lived App JWTs and mints a
+fresh installation token with the exact permissions for each operation. The runtime
 passes a closed, discriminated, ephemeral content value directly into the
 provider mutation: fresh creation receives the complete immutable prepared
 source manifest and bytes at `sourceTree`, while draft publication receives
 only the reviewed validated-overlay changes. The HTTP provider has no second
 material source and verifies modes, blob identities, byte digests, and the
 exact Git tree before mutation. Tokens, endpoints, raw responses, raw content,
-and raw errors never enter a proposal or receipt. The fail-closed runtime still
-does not compose these pieces with live credentials.
+and raw errors never enter a proposal or receipt. Composition makes the typed
+capability available; it does not itself prove a live installation, GitHub
+mutation, or provider postcondition.
 
 The permission contract omits the workflows permission for source inspection
 and requires `workflows: write` only for fresh-history or reviewed draft-PR

@@ -2,7 +2,7 @@ import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
-import { githubPublicationRuntime } from "@/lib/agent/github-publication-runtime";
+import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-publication-content-source";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
@@ -20,13 +20,15 @@ export default defineTool({
         "An exact reviewed change set is required before repository creation.",
       );
     const sandbox = await ctx.getSandbox();
-    return githubPublicationRuntime.createFreshRepository({
+    const contentSource = await publicationContentSourceForReviewedWorkflow({
+      state,
+      sandbox,
+    });
+    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    return runtime.createFreshRepository({
       ...input,
       review: state.reviewReceipt,
-      contentSource: await publicationContentSourceForReviewedWorkflow({
-        state,
-        sandbox,
-      }),
+      contentSource,
       approvedByCallId: ctx.callId,
     });
   },

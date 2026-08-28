@@ -73,7 +73,7 @@ type PublicationStores = {
   receipts: GitHubPublicationReceiptStore;
 };
 
-type ResolverDependencies = {
+export type HostedGitHubPublicationRuntimeResolverDependencies = {
   membership: (database: Database) => HostedWorkspaceMembership;
   installations: (database: Database) => HostedGitHubInstallationStore;
   publicationStores: (
@@ -82,11 +82,12 @@ type ResolverDependencies = {
   ) => PublicationStores;
 };
 
-const defaultDependencies: ResolverDependencies = {
-  membership: createPostgresWorkspaceMembership,
-  installations: createPostgresHostedGitHubInstallationStore,
-  publicationStores: createPostgresGitHubPublicationStores,
-};
+const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies =
+  {
+    membership: createPostgresWorkspaceMembership,
+    installations: createPostgresHostedGitHubInstallationStore,
+    publicationStores: createPostgresGitHubPublicationStores,
+  };
 
 function exactForwardedAuthority(sessionAuth: unknown): {
   authority: HostedGitHubTenantAuthority;
@@ -160,7 +161,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
   enabled: boolean;
   openDatabase?: () => Database | Promise<Database>;
   providerFactory?: HostedGitHubPublicationProviderFactory;
-  dependencies?: Partial<ResolverDependencies>;
+  dependencies?: Partial<HostedGitHubPublicationRuntimeResolverDependencies>;
 }): HostedGitHubPublicationRuntimeResolver {
   let databasePromise: Promise<Database> | undefined;
   const dependencies = { ...defaultDependencies, ...input.dependencies };

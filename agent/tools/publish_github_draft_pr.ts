@@ -7,8 +7,8 @@ import {
   approvalTargetFromGitHubSource,
   assertApprovalReceipt,
 } from "@/lib/agent/approval-receipt";
+import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-publication-content-source";
-import { githubPublicationRuntime } from "@/lib/agent/github-publication-runtime";
 import {
   appBuilderWorkflowState,
   assertCurrentGitHubDraftProposal,
@@ -43,14 +43,16 @@ export default defineTool({
       subjectDigest: input.expectedProposalDigest,
     });
     const sandbox = await ctx.getSandbox();
-    return githubPublicationRuntime.publishDraftPullRequest({
+    const contentSource = await publicationContentSourceForReviewedWorkflow({
+      state,
+      sandbox,
+    });
+    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    return runtime.publishDraftPullRequest({
       expectedProposalDigest: input.expectedProposalDigest,
       approvalReceipt: input.approvalReceipt,
       review: state.reviewReceipt,
-      contentSource: await publicationContentSourceForReviewedWorkflow({
-        state,
-        sandbox,
-      }),
+      contentSource,
       approvedByCallId: ctx.callId,
     });
   },

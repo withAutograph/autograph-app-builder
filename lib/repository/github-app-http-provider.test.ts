@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import { createGitHubAppPublicationAdapter } from "./github-app-adapter";
 import {
   createGitHubAppHttpProvider,
+  parseGitHubAppHttpProviderCredentials,
   parseGitHubAppHttpProviderConfig,
-  readGitHubAppHttpProviderEnvironment,
 } from "./github-app-http-provider";
 import {
   GITHUB_PUBLICATION_VERSION,
@@ -120,6 +120,12 @@ function createProvider(fetchImplementation: typeof fetch) {
 describe("GitHub App fixed-origin HTTP provider", () => {
   it("parses only the closed credential contract and rejects endpoint or token overrides", () => {
     expect(
+      parseGitHubAppHttpProviderCredentials({
+        appId: "123",
+        privateKey: privateKeyPem,
+      }),
+    ).toEqual({ appId: "123", privateKey: privateKeyPem });
+    expect(
       parseGitHubAppHttpProviderConfig({
         appId: "123",
         installationId: "456",
@@ -139,7 +145,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       }),
     ).toThrow("configuration is invalid");
     expect(() =>
-      readGitHubAppHttpProviderEnvironment({
+      parseGitHubAppHttpProviderCredentials({
         GITHUB_APP_ID: "123",
         GITHUB_APP_INSTALLATION_ID: "456",
         GITHUB_APP_PRIVATE_KEY: privateKeyPem,
@@ -147,10 +153,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       }),
     ).toThrow("configuration is invalid");
     expect(() =>
-      readGitHubAppHttpProviderEnvironment({
-        GITHUB_APP_ID: "123",
-        GITHUB_APP_INSTALLATION_ID: "456",
-        GITHUB_APP_PRIVATE_KEY: "not-a-key",
+      parseGitHubAppHttpProviderCredentials({
+        appId: "123",
+        privateKey: "not-a-key",
       }),
     ).toThrow("configuration is invalid");
   });

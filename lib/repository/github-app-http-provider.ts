@@ -36,10 +36,15 @@ const configSchema = z
 
 export type GitHubAppHttpProviderConfig = z.infer<typeof configSchema>;
 
-export function parseGitHubAppHttpProviderConfig(
+const credentialsSchema = configSchema.omit({ installationId: true });
+export type GitHubAppHttpProviderCredentials = z.infer<
+  typeof credentialsSchema
+>;
+
+export function parseGitHubAppHttpProviderCredentials(
   input: unknown,
-): GitHubAppHttpProviderConfig {
-  const parsed = configSchema.safeParse(input);
+): GitHubAppHttpProviderCredentials {
+  const parsed = credentialsSchema.safeParse(input);
   if (!parsed.success)
     throw new Error("GitHub App provider configuration is invalid.");
   try {
@@ -51,19 +56,17 @@ export function parseGitHubAppHttpProviderConfig(
   return parsed.data;
 }
 
-export function readGitHubAppHttpProviderEnvironment(
-  environment: Readonly<Record<string, string | undefined>>,
+export function parseGitHubAppHttpProviderConfig(
+  input: unknown,
 ): GitHubAppHttpProviderConfig {
-  if (
-    environment.GITHUB_API_URL !== undefined ||
-    environment.GITHUB_TOKEN !== undefined
-  )
+  const parsed = configSchema.safeParse(input);
+  if (!parsed.success)
     throw new Error("GitHub App provider configuration is invalid.");
-  return parseGitHubAppHttpProviderConfig({
-    appId: environment.GITHUB_APP_ID,
-    installationId: environment.GITHUB_APP_INSTALLATION_ID,
-    privateKey: environment.GITHUB_APP_PRIVATE_KEY,
+  const credentials = parseGitHubAppHttpProviderCredentials({
+    appId: parsed.data.appId,
+    privateKey: parsed.data.privateKey,
   });
+  return { ...credentials, installationId: parsed.data.installationId };
 }
 
 export type GitHubPublicationFile = {
