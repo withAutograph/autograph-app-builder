@@ -86,8 +86,11 @@ function recordedPlanEvents(input?: {
   resultToolName?: string;
   imageDigest?: string;
   blockers?: string[];
+  plannedByCallId?: string;
+  reused?: boolean;
 }): MessageStreamEvent[] {
   const callId = input?.callId ?? "call_plan";
+  const plannedByCallId = input?.plannedByCallId ?? callId;
   const expectedAppSpecDigest = input?.expectedAppSpecDigest ?? "a".repeat(64);
   const outputAppSpecDigest =
     input?.outputAppSpecDigest ?? expectedAppSpecDigest;
@@ -140,7 +143,7 @@ function recordedPlanEvents(input?: {
     identityDigest: "8".repeat(64),
     contractDigest: digest(JSON.stringify(target.contract)),
     target,
-    plannedByCallId: callId,
+    plannedByCallId,
   };
   return [
     installedEvent({
@@ -167,7 +170,7 @@ function recordedPlanEvents(input?: {
           output: {
             ...unsigned,
             digest: input?.outputDigest ?? digest(JSON.stringify(unsigned)),
-            reused: false,
+            reused: input?.reused ?? false,
           },
         },
       },
@@ -216,6 +219,30 @@ describe("installed Eve 0.43 projection", () => {
       proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
+  });
+
+  it("projects an exact digest-bound idempotent planning retry", () => {
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({
+          callId: "call_plan_retry",
+          plannedByCallId: "call_plan_original",
+          reused: true,
+        }),
+      ),
+    ).toMatchObject({
+      appId: "vendor-onboarding",
+      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      readOnly: true,
+    });
+  });
+
+  it("rejects a fresh plan bound to another call", () => {
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({ plannedByCallId: "call_plan_other" }),
+      ),
+    ).toBeUndefined();
   });
 
   it("rejects unbound, failed, stale, blocked, fixture, and invalidated plans", () => {
