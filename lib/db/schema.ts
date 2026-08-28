@@ -550,6 +550,7 @@ export const hostedGitHubInstallations = pgTable(
       table.workspaceId,
       table.ownerUserId,
     ),
+    uniqueIndex("hosted_github_installation_id_uidx").on(table.installationId),
     check(
       "hosted_github_installation_id_check",
       sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
@@ -561,6 +562,39 @@ export const hostedGitHubInstallations = pgTable(
     check(
       "hosted_github_installation_account_type_check",
       sql`${table.accountType} IN ('Organization', 'User')`,
+    ),
+  ],
+);
+
+export const githubInstallationAuthorizationStates = pgTable(
+  "github_installation_authorization_state",
+  {
+    stateDigest: text("state_digest").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    authorityDigest: text("authority_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("github_installation_authorization_state_expiry_idx").on(
+      table.expiresAt,
+    ),
+    check(
+      "github_installation_authorization_state_digest_check",
+      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "github_installation_authorization_authority_digest_check",
+      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "github_installation_authorization_state_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "github_installation_authorization_state_consumed_check",
+      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
     ),
   ],
 );

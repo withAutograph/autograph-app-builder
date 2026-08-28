@@ -54,7 +54,7 @@ describe("hosted storage read-only readiness", () => {
         maxConnections: 1,
       },
       migrations: {
-        count: 6,
+        count: 7,
         exactOrder: true,
         noPendingMigration: true,
         additiveOnly: true,
@@ -153,6 +153,7 @@ describe("hosted storage read-only readiness", () => {
     expect(cli).toContain("SET TRANSACTION READ ONLY");
     expect(cli).toContain("constraint_record.contype <> 'n'");
     expect(cli).toContain("'github_publication_proposal'");
+    expect(cli).toContain("'github_installation_authorization_state'");
     expect(cli).toContain("'hosted_github_installation'");
     expect(cli).toContain("'hosted_github_publication_journal'");
     expect(cli).toContain("'hosted_github_publication_proposal'");

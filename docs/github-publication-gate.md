@@ -39,6 +39,35 @@ through the owner-only, confirmation-digest-bound
 `hosted:github-installation-bind` mise task. It stores no application private
 key, installation token, user OAuth token, or provider response.
 
+Public self-service installation uses a separate fail-closed authorization
+boundary at `/github/installations`. A same-origin form POST creates a
+ten-minute HMAC-signed state containing only an opaque nonce and the digest of
+the current authenticated issuer, audience, workspace, and user tuple. Only
+the state digest and tenant tuple are stored. The GitHub callback must present
+the same live Preview session and workspace membership. The setup callback
+atomically consumes the installation state, creates a second tenant-bound
+authorization state, and redirects through GitHub's web authorization flow
+with S256 PKCE. The authorization callback atomically consumes that second
+state before exchanging the one-time code and derived verifier. The returned
+GitHub user token is request-local: the callback uses it only against the fixed
+`api.github.com` `/user` and paginated `/user/installations` endpoints, accepts
+only one unambiguous active selected-repository installation for the configured
+App ID, checks personal installations against the caller, rechecks live App
+Builder membership, and then writes the existing tenant installation binding.
+It never persists or returns the code, client secret, user token, refresh
+token, raw provider response, or authorization header. A replay, tenant change,
+provider drift, membership change, suspended installation, or all-repository
+selection fails closed without a binding.
+
+This route adds the exact Preview-only environment fields
+`GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
+`GITHUB_APP_INSTALL_STATE_SECRET`. The existing `GITHUB_CLIENT_ID` and
+`GITHUB_CLIENT_SECRET` remain the separate invited-user sign-in provider.
+`GITHUB_TOKEN` and `GITHUB_API_URL` are forbidden ambient overrides. Migration
+`0007_github_installation_authorization` owns the digest-only, one-time state
+table. The owner-only mise binding remains an operator recovery path; it is not
+the public installation flow.
+
 `composeGitHubPublicationRuntime` enables the typed tools only when an adapter,
 proposal store, and receipt store are all injected with `enabled: true`. The
 shipped singleton passes `enabled: false`. It reads no token, endpoint,

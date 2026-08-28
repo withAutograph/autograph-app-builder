@@ -75,4 +75,23 @@ describe("database migration secret boundary", () => {
       '"issuer", "audience", "workspace_id", "owner_user_id"',
     );
   });
+
+  it("persists only a digest-bound one-time GitHub installation state", async () => {
+    const migration = await readFile(
+      "drizzle/0007_github_installation_authorization.sql",
+      "utf8",
+    );
+    expect(migration).toContain(
+      'CREATE TABLE "github_installation_authorization_state"',
+    );
+    expect(migration).toContain('"state_digest" text PRIMARY KEY NOT NULL');
+    expect(migration).toContain(
+      '"issuer" text NOT NULL,\n  "audience" text NOT NULL,\n  "workspace_id" text NOT NULL,\n  "owner_user_id" text NOT NULL',
+    );
+    expect(migration).toContain('"consumed_at" timestamptz');
+    expect(migration).toContain(
+      'CREATE UNIQUE INDEX "hosted_github_installation_id_uidx" ON "hosted_github_installation" ("installation_id")',
+    );
+    expect(migration).not.toMatch(/token|client_secret|private_key/iu);
+  });
 });

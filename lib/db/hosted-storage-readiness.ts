@@ -14,6 +14,7 @@ export const hostedStorageMigrationTags = [
   "0004_preview_oauth",
   "0005_github_publication_journal",
   "0006_tenant_github_publication",
+  "0007_github_installation_authorization",
 ] as const;
 
 const contractSourcePaths = [
@@ -21,6 +22,7 @@ const contractSourcePaths = [
   "lib/db/postgres-hosted-admin.ts",
   "lib/eve/postgres-hosted-store.ts",
   "lib/eve/postgres-workspace-membership.ts",
+  "lib/auth/postgres-github-installation-state.ts",
   "lib/repository/postgres-github-publication-receipt-store.ts",
   "lib/repository/postgres-github-publication-store.ts",
   "lib/repository/postgres-github-installation-store.ts",
@@ -63,6 +65,30 @@ export const hostedStorageExpectedColumns = [
   ["agent_session", "session_id", "text", true],
   ["agent_session", "updated_at", "timestamp with time zone", true],
   ["agent_session", "workspace_id", "text", true],
+  ["github_installation_authorization_state", "audience", "text", true],
+  ["github_installation_authorization_state", "authority_digest", "text", true],
+  [
+    "github_installation_authorization_state",
+    "consumed_at",
+    "timestamp with time zone",
+    false,
+  ],
+  [
+    "github_installation_authorization_state",
+    "created_at",
+    "timestamp with time zone",
+    true,
+  ],
+  [
+    "github_installation_authorization_state",
+    "expires_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["github_installation_authorization_state", "issuer", "text", true],
+  ["github_installation_authorization_state", "owner_user_id", "text", true],
+  ["github_installation_authorization_state", "state_digest", "text", true],
+  ["github_installation_authorization_state", "workspace_id", "text", true],
   [
     "github_publication_journal",
     "created_at",
@@ -299,6 +325,14 @@ export const hostedStorageExpectedIndexes = [
   ["agent_session", "agent_session_owner_idx"],
   ["agent_session", "agent_session_retention_idx"],
   ["agent_session", "agent_session_tenant_pk"],
+  [
+    "github_installation_authorization_state",
+    "github_installation_authorization_state_expiry_idx",
+  ],
+  [
+    "github_installation_authorization_state",
+    "github_installation_authorization_state_pkey",
+  ],
   ["github_publication_journal", "github_publication_journal_idempotency_idx"],
   ["github_publication_journal", "github_publication_journal_pk"],
   ["github_publication_journal", "github_publication_journal_status_idx"],
@@ -308,6 +342,7 @@ export const hostedStorageExpectedIndexes = [
   ],
   ["github_publication_proposal", "github_publication_proposal_pk"],
   ["hosted_github_installation", "hosted_github_installation_id_tenant_uidx"],
+  ["hosted_github_installation", "hosted_github_installation_id_uidx"],
   ["hosted_github_installation", "hosted_github_installation_pk"],
   [
     "hosted_github_publication_journal",
@@ -368,6 +403,26 @@ export const hostedStorageExpectedConstraints = [
   ["account", "account_user_id_fkey"],
   ["agent_operation", "agent_operation_tenant_pk"],
   ["agent_session", "agent_session_tenant_pk"],
+  [
+    "github_installation_authorization_state",
+    "github_installation_authorization_authority_digest_check",
+  ],
+  [
+    "github_installation_authorization_state",
+    "github_installation_authorization_state_consumed_check",
+  ],
+  [
+    "github_installation_authorization_state",
+    "github_installation_authorization_state_digest_check",
+  ],
+  [
+    "github_installation_authorization_state",
+    "github_installation_authorization_state_pkey",
+  ],
+  [
+    "github_installation_authorization_state",
+    "github_installation_authorization_state_time_check",
+  ],
   [
     "github_publication_journal",
     "github_publication_journal_idempotency_key_check",
