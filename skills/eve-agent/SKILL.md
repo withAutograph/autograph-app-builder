@@ -7,7 +7,7 @@ description: Use Autograph App Builder to design, plan, create, and validate sup
 
 ## Required preflight
 
-Before doing any app-building work, verify that all five App Builder tools are callable:
+Before starting an app build, verify that all five App Builder tools are callable:
 `eve_start`, `eve_get`, `eve_send`, `eve_respond`, and `eve_cancel`.
 
 If any tool is unavailable, stop and report that the Autograph App Builder MCP
@@ -16,7 +16,7 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
 
 ## Workflow
 
-1. Start every new app-building objective with `eve_start`.
+1. Start every new app build with `eve_start`.
 2. Preserve the returned `sessionId` and `cursor`.
 3. Use `eve_get` to obtain evidence; accepted work is not completed work.
 4. Call `eve_respond` once for the complete non-empty `inputRequests` batch,

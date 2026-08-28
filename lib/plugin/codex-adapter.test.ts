@@ -49,7 +49,11 @@ describe("Codex adapter", () => {
     expect(skill).toContain("Do not invoke another app-building skill");
     expect(skill).toContain("edit the target repository directly");
     expect(skill).toContain("# Autograph App Builder orchestration");
+    expect(skill).toContain("Before starting an app build");
+    expect(skill).toContain("Start every new app build with `eve_start`");
     expect(skill).toContain("Never split one App Builder batch across calls");
+    expect(skill).not.toContain("Before doing any app-building work");
+    expect(skill).not.toContain("new app-building objective");
     expect(skill).not.toContain("# Eve agent orchestration");
   });
 });
