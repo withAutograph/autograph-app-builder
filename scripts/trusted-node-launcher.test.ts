@@ -107,6 +107,22 @@ describe("trusted Node launcher", () => {
     expect(result.stdout).toBe(input);
   });
 
+  it("lets trusted Node programs spawn the same pinned Node by name", () => {
+    const cleanEnvironment = { ...process.env };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        'require("node:child_process").spawnSync("node", ["-p", "process.execPath"], { stdio: "inherit" })',
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe(pinnedNode);
+  });
+
   it("runs a clean frozen pnpm lifecycle with only the exact pinned Node", () => {
     const scratch = mkdtempSync(join(tmpdir(), "trusted-pnpm-lifecycle-"));
     const fixture = join(scratch, "fixture");
@@ -383,14 +399,17 @@ describe("trusted Node launcher", () => {
     const result = spawnSync(
       launcher,
       [
-        pinnedNode,
-        "-e",
-        "process.stdout.write(JSON.stringify({path:process.env.PATH,bash:process.env.BASH_ENV,node:process.env.NODE_PATH,npm:process.env.NPM_CONFIG_USERCONFIG,pnpm:process.env.PNPM_HOME,mise:process.env.MISE_CONFIG_FILE,loader:process.env.LD_LIBRARY_PATH,dyld:process.env.DYLD_INSERT_LIBRARIES,tsx:process.env.TSX_TSCONFIG_PATH,vitest:process.env.VITEST_POOL_ID,uv:process.env.UV_THREADPOOL_SIZE,openssl:process.env.OPENSSL_CONF}))",
+      pinnedNode,
+      "-e",
+      "process.stdout.write(JSON.stringify({path:process.env.PATH,pwd:process.env.PWD,bash:process.env.BASH_ENV,node:process.env.NODE_PATH,npm:process.env.NPM_CONFIG_USERCONFIG,pnpm:process.env.PNPM_HOME,mise:process.env.MISE_CONFIG_FILE,loader:process.env.LD_LIBRARY_PATH,dyld:process.env.DYLD_INSERT_LIBRARIES,tsx:process.env.TSX_TSCONFIG_PATH,vitest:process.env.VITEST_POOL_ID,uv:process.env.UV_THREADPOOL_SIZE,openssl:process.env.OPENSSL_CONF}))",
       ],
       { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
     );
     expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({ path: "/usr/bin:/bin" });
+    expect(JSON.parse(result.stdout)).toEqual({
+      path: `${dirname(pinnedNode)}:/usr/bin:/bin`,
+      pwd: repositoryRoot,
+    });
     expect(result.stdout).not.toContain("shell-hook-ran");
   });
 });
