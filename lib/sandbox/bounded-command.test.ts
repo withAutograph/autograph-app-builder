@@ -40,6 +40,7 @@ describe("bounded sandbox command", () => {
       "kill -KILL -- -",
     ])
       expect(command).toContain(required);
+    expect(command).toContain("ulimit -f 131072");
   });
 
   it("collects bounded output through spawn rather than buffered run", async () => {

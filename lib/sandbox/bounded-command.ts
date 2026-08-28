@@ -16,13 +16,18 @@ export class SandboxCommandLimitError extends Error {
   }
 }
 
+// Bash defines the `ulimit -f` block size as 1024 bytes.
+const BASH_ULIMIT_FILE_BLOCK_BYTES = 1_024;
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`;
 }
 
 export function quotaWrappedSandboxCommand(command: string): string {
   const quota = SANDBOX_EXECUTION_POLICY.command;
-  const maximumFileBlocks = Math.floor(quota.maximumFileBytes / 512);
+  const maximumFileBlocks = Math.floor(
+    quota.maximumFileBytes / BASH_ULIMIT_FILE_BLOCK_BYTES,
+  );
   const script = `
 set -euo pipefail
 ulimit -t ${Math.ceil(quota.maximumWallTimeMs / 1_000)}

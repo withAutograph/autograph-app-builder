@@ -48,15 +48,20 @@ type RuntimeDependencies = {
 const commandAuthorities = new Map<string, CommandAuthority>();
 let database: ReturnType<typeof openHostedPostgresDatabase> | undefined;
 
+export function isHostedSandboxExecutionEnabled(
+  environment: Readonly<Record<string, string | undefined>>,
+) {
+  return (
+    environment.EVE_HOSTED_ADAPTER === "1" &&
+    environment.EVE_HOSTED_SANDBOX_EXECUTION ===
+      HOSTED_SANDBOX_EXECUTION_ACTIVATION
+  );
+}
+
 function hostedLeaseEnabled(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
-  if (environment.EVE_HOSTED_ADAPTER !== "1") return false;
-  if (
-    environment.EVE_HOSTED_SANDBOX_EXECUTION !==
-    HOSTED_SANDBOX_EXECUTION_ACTIVATION
-  )
-    return false;
+  if (!isHostedSandboxExecutionEnabled(environment)) return false;
   readHostedDeploymentEnvironment(environment);
   return true;
 }

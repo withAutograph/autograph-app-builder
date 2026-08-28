@@ -325,7 +325,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
             releasedAtEpochMs: input.nowEpochMs,
             releaseReason: "expired",
           }
-        : { ...current, state: "active" },
+        : current,
     );
     this.leases.set(key, lease);
     return structuredClone(lease);

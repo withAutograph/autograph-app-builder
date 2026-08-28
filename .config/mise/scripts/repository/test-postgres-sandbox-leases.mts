@@ -7,6 +7,10 @@ import postgres from "postgres";
 import * as databaseSchema from "../../../../lib/db/schema";
 import type { HostedPrincipal } from "../../../../lib/eve/hosted-auth";
 import {
+  reconcileExpiredSandboxLeases,
+  type SandboxExecutionLease,
+} from "../../../../lib/sandbox/execution-lease";
+import {
   SANDBOX_EXECUTION_POLICY,
   sandboxExecutionPolicyDigest,
 } from "../../../../lib/sandbox/execution-policy";
@@ -61,6 +65,26 @@ function acquire(owner: string, session: string, workspace = "workspace_1") {
 
 async function clear() {
   await client`truncate table sandbox_execution_lease`;
+}
+
+async function expire(lease: SandboxExecutionLease) {
+  const expiresAtEpochMs = Date.now() - 1_000;
+  const heartbeatAtEpochMs = expiresAtEpochMs - 1_000;
+  const acquiredAtEpochMs = heartbeatAtEpochMs - 1_000;
+  const record = {
+    ...lease,
+    acquiredAtEpochMs,
+    heartbeatAtEpochMs,
+    expiresAtEpochMs,
+  };
+  await client`
+    update sandbox_execution_lease
+    set acquired_at = ${new Date(acquiredAtEpochMs).toISOString()}::timestamptz,
+        heartbeat_at = ${new Date(heartbeatAtEpochMs).toISOString()}::timestamptz,
+        expires_at = ${new Date(expiresAtEpochMs).toISOString()}::timestamptz,
+        record = ${JSON.stringify(record)}::jsonb
+    where adapter_session_id = ${lease.adapterSessionId}
+  `;
 }
 
 try {
@@ -145,26 +169,38 @@ try {
     policy.lease.ttlMs,
   );
 
-  const expiredAt = Date.now() - 1_000;
-  const heartbeatAt = expiredAt - 1_000;
-  const acquiredAt = heartbeatAt - 1_000;
-  const expiredRecord = {
-    ...heartbeat,
-    acquiredAtEpochMs: acquiredAt,
-    heartbeatAtEpochMs: heartbeatAt,
-    expiresAtEpochMs: expiredAt,
-  };
-  await client`
-    update sandbox_execution_lease
-    set acquired_at = ${new Date(acquiredAt).toISOString()}::timestamptz,
-        heartbeat_at = ${new Date(heartbeatAt).toISOString()}::timestamptz,
-        expires_at = ${new Date(expiredAt).toISOString()}::timestamptz,
-        record = ${JSON.stringify(expiredRecord)}::jsonb
-    where adapter_session_id = ${heartbeat.adapterSessionId}
-  `;
+  await expire(heartbeat);
   const [claimed] = await store.claimExpired({ nowEpochMs: 0, limit: 1 });
   assert(claimed);
   assert.equal(claimed.state, "orphaned");
+  const stopFailed = await store.settleRecovery({
+    lease: claimed,
+    providerOutcome: "stop-failed",
+    nowEpochMs: 0,
+  });
+  assert.equal(stopFailed?.state, "orphaned");
+  assert.deepEqual(
+    await Promise.all([
+      store.acquire({
+        principal: claimed.principal,
+        adapterSessionId: claimed.adapterSessionId,
+        providerSandboxId: claimed.providerSandboxId,
+        policy,
+        nowEpochMs: 0,
+      }),
+      store.acquire({
+        principal: claimed.principal,
+        adapterSessionId: claimed.adapterSessionId,
+        providerSandboxId: claimed.providerSandboxId,
+        policy,
+        nowEpochMs: 0,
+      }),
+    ]),
+    [
+      { disposition: "rejected", reason: "recovery-in-progress" },
+      { disposition: "rejected", reason: "recovery-in-progress" },
+    ],
+  );
   const [reclaimed] = await store.claimExpired({ nowEpochMs: 0, limit: 1 });
   assert(reclaimed);
   assert.equal(reclaimed.epoch, claimed.epoch + 1);
@@ -211,6 +247,48 @@ try {
   );
   assert.equal(recovered.lease.policyDigest, policyDigest);
 
+  await clear();
+  const batchFailed = await acquire("user_failed", "batch_failed");
+  const batchStopped = await acquire("user_stopped", "batch_stopped");
+  assert(batchFailed.disposition === "acquired");
+  assert(batchStopped.disposition === "acquired");
+  await expire(batchFailed.lease);
+  await expire(batchStopped.lease);
+  const batch = await reconcileExpiredSandboxLeases({
+    store,
+    async stopSandbox(providerSandboxId) {
+      if (providerSandboxId === batchFailed.lease.providerSandboxId)
+        throw new Error("provider unavailable");
+    },
+    nowEpochMs: 0,
+  });
+  assert.equal(batch.claimed, 2);
+  assert.equal(batch.providerFailed.length, 1);
+  assert.equal(batch.stopped.length, 1);
+  assert.deepEqual(
+    await Promise.all([
+      acquire("user_failed", "batch_failed"),
+      acquire("user_failed", "batch_failed"),
+    ]),
+    [
+      { disposition: "rejected", reason: "recovery-in-progress" },
+      { disposition: "rejected", reason: "recovery-in-progress" },
+    ],
+  );
+  const stoppedReacquired = await acquire("user_stopped", "batch_stopped");
+  assert.equal(stoppedReacquired.disposition, "acquired");
+  const retry = await reconcileExpiredSandboxLeases({
+    store,
+    stopSandbox: async () => undefined,
+    nowEpochMs: 0,
+  });
+  assert.equal(retry.claimed, 1);
+  assert.equal(retry.stopped.length, 1);
+  assert.equal(
+    (await acquire("user_failed", "batch_failed")).disposition,
+    "acquired",
+  );
+
   process.stdout.write(
     JSON.stringify({
       databaseClock: true,
@@ -220,6 +298,8 @@ try {
       recoveryRace: true,
       rollback: true,
       sameSubject: true,
+      stopFailureAdmission: true,
+      stopFailureBatch: true,
       workspaceCap: true,
     }) + "\n",
   );

@@ -161,9 +161,11 @@ gate. It acquires at `turn.started`, reasserts the current PostgreSQL epoch
 before each command, and releases at terminal turn boundaries rather than at
 an interim `session.waiting` authorization park. The Mise-owned PostgreSQL
 behavioral task proves admission concurrency, replay, rollback, expiry,
-heartbeat, and recovery races. It does not prove or activate provider-side
-orphan lookup and stop, so hosted enforcement and Production readiness remain
-unclaimed.
+heartbeat, recovery races, and fail-closed admission after a provider stop
+failure. Failed stops remain fenced and orphaned while the rest of the batch
+continues; only successful stops release their leases. This does not prove or
+activate provider-side orphan lookup and stop, so hosted enforcement and
+Production readiness remain unclaimed.
 
 Hosted activation still requires separately authorized work:
 

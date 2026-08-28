@@ -76,7 +76,7 @@ describe("sandbox execution lease", () => {
     expect(next.lease.epoch).toBe(2);
   });
 
-  it("claims expired work once and reports stop failures without identifiers", async () => {
+  it("keeps stop failures orphaned and admission-blocking until a successful retry", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     await acquire(store, "user_1", "session_1", 1);
     const stopSandbox = vi.fn(async () => {
@@ -91,6 +91,25 @@ describe("sandbox execution lease", () => {
     expect(receipt.providerFailed).toHaveLength(1);
     expect(receipt.providerFailed[0]).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(JSON.stringify(receipt)).not.toContain("session_1");
+    await expect(
+      Promise.all([
+        acquire(
+          store,
+          "user_1",
+          "session_1",
+          2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+        ),
+        acquire(
+          store,
+          "user_1",
+          "session_1",
+          2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+        ),
+      ]),
+    ).resolves.toEqual([
+      { disposition: "rejected", reason: "recovery-in-progress" },
+      { disposition: "rejected", reason: "recovery-in-progress" },
+    ]);
     const retryStop = vi.fn(async () => undefined);
     const retried = await reconcileExpiredSandboxLeases({
       store,
@@ -112,6 +131,43 @@ describe("sandbox execution lease", () => {
       settlementFailed: [],
       settlementRaced: [],
     });
+  });
+
+  it("continues a recovery batch while only successful provider stops release", async () => {
+    const store = new InMemorySandboxExecutionLeaseStore();
+    await acquire(store, "user_1", "session_1", 1);
+    await acquire(store, "user_2", "session_2", 1);
+    const stopSandbox = vi.fn(async (providerSandboxId: string) => {
+      if (providerSandboxId === "sandbox_session_1")
+        throw new Error("provider unavailable");
+    });
+    const result = await reconcileExpiredSandboxLeases({
+      store,
+      stopSandbox,
+      nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+    });
+    expect(stopSandbox).toHaveBeenCalledTimes(2);
+    expect(result.providerFailed).toHaveLength(1);
+    expect(result.stopped).toHaveLength(1);
+    await expect(
+      acquire(
+        store,
+        "user_1",
+        "session_1",
+        2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      ),
+    ).resolves.toEqual({
+      disposition: "rejected",
+      reason: "recovery-in-progress",
+    });
+    await expect(
+      acquire(
+        store,
+        "user_2",
+        "session_2",
+        2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      ),
+    ).resolves.toMatchObject({ disposition: "acquired" });
   });
 
   it("makes recovery and reacquisition races retry-safe", async () => {

@@ -103,8 +103,11 @@ Before enabling GitHub or hosted repository publication:
    an in-turn authorization park. `mise run test:postgres-sandbox-leases`
    proves same-subject serialization, the workspace cap, idempotent replay,
    rollback, expiry, heartbeat, and recovery/reacquisition races against an
-   ephemeral digest-pinned PostgreSQL container. This source proof does not
-   activate the gate or prove provider-side orphan lookup and stop.
+   ephemeral digest-pinned PostgreSQL container. A provider stop failure keeps
+   the fenced lease orphaned and admission-blocking; only a successful stop may
+   settle it as released, and one failed stop does not abort the remaining
+   recovery batch. This source proof does not activate the gate or prove
+   provider-side orphan lookup and stop.
    The combined `hosted:artifact-prove-typed` gate first proves those exact
    artifact commands offline, then exercises the approval-bound Eve tool flow
    to terminal `planned` and emits its asserted called/forbidden tool trace.

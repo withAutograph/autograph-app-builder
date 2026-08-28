@@ -421,16 +421,13 @@ export function createPostgresSandboxExecutionLeaseStore(
           current.epoch !== input.lease.epoch
         )
           return null;
-        const lease = sandboxExecutionLeaseSchema.parse(
-          input.providerOutcome === "stopped"
-            ? {
-                ...current,
-                state: "released",
-                releasedAtEpochMs: nowEpochMs,
-                releaseReason: "expired",
-              }
-            : { ...current, state: "active" },
-        );
+        if (input.providerOutcome === "stop-failed") return current;
+        const lease = sandboxExecutionLeaseSchema.parse({
+          ...current,
+          state: "released",
+          releasedAtEpochMs: nowEpochMs,
+          releaseReason: "expired",
+        });
         const rows = await transaction
           .update(sandboxExecutionLeases)
           .set(leaseValues(lease))

@@ -2,8 +2,9 @@ import { defineHook, type HookContext } from "eve/hooks";
 
 import {
   acquireHostedSandboxExecutionLease,
+  isHostedSandboxExecutionEnabled,
   releaseHostedSandboxExecutionLease,
-} from "@/lib/sandbox/deployment-execution-lease";
+} from "../../lib/sandbox/deployment-execution-lease";
 
 async function release(
   ctx: HookContext,
@@ -14,11 +15,14 @@ async function release(
     | "session-completed"
     | "session-failed",
 ) {
+  const environment = process.env;
+  if (!isHostedSandboxExecutionEnabled(environment)) return;
   try {
     await releaseHostedSandboxExecutionLease({
       sessionId: ctx.session.id,
       sessionAuth: ctx.session.auth,
       sandbox: await ctx.getSandbox(),
+      environment,
       reason,
     });
   } catch {
@@ -30,10 +34,13 @@ async function release(
 export default defineHook({
   events: {
     async "turn.started"(_event, ctx) {
+      const environment = process.env;
+      if (!isHostedSandboxExecutionEnabled(environment)) return;
       await acquireHostedSandboxExecutionLease({
         sessionId: ctx.session.id,
         sessionAuth: ctx.session.auth,
         sandbox: await ctx.getSandbox(),
+        environment,
       });
     },
     "turn.completed"(_event, ctx) {
