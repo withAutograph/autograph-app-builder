@@ -193,27 +193,34 @@ describe("Vercel-faithful App Builder flow", () => {
       "This repository will be public.",
     );
 
-    for (const connection of [
-      "QuickBooks",
-      "Ramp",
-      "NetSuite",
-      "Xero",
-      "Sage Intacct",
-    ]) {
+    for (const connection of ["QuickBooks", "Ramp"]) {
       expect(view.textContent).toContain(connection);
     }
-    for (const kind of [
-      "quickbooks",
-      "ramp",
-      "netsuite",
-      "xero",
-      "sage-intacct",
-    ]) {
+    for (const kind of ["quickbooks", "ramp"]) {
       expect(view.querySelector(`[data-kind="${kind}"]`)).not.toBeNull();
     }
     expect(view.querySelector('[data-kind="ramp"] svg')).toBeNull();
+    expect(view.textContent).not.toContain("NetSuite");
+    expect(view.textContent).not.toContain("Xero");
+    expect(view.textContent).not.toContain("Sage Intacct");
+    const ramp = view.querySelector<HTMLButtonElement>(
+      '[aria-label="Ramp coming soon"]',
+    )!;
+    expect(ramp.disabled).toBe(true);
+    expect(ramp.textContent).toContain("Coming soon");
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Show more connections",
+      )!,
+    );
+    for (const connection of ["NetSuite", "Xero", "Sage Intacct"]) {
+      const button = view.querySelector<HTMLButtonElement>(
+        `[aria-label="${connection} coming soon"]`,
+      )!;
+      expect(button.disabled).toBe(true);
+      expect(button.textContent).toContain("Coming soon");
+    }
     expect(view.querySelector('[data-kind="netsuite"] svg')).toBeNull();
-    expect(view.textContent).not.toContain("Show all connections");
     expect(view.querySelector('[aria-label="Add Vercel"]')).toBeNull();
 
     const connectionSearch = view.querySelector<HTMLInputElement>(

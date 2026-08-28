@@ -69,6 +69,12 @@ const featuredConnections = [
 ] as const;
 
 const allConnectionNames = featuredConnections.map(([name]) => name);
+const comingSoonConnections = new Set([
+  "Ramp",
+  "NetSuite",
+  "Xero",
+  "Sage Intacct",
+]);
 
 const connectionKind = new Map<string, string>(featuredConnections);
 
@@ -777,6 +783,7 @@ function Builder({
   const [team, setTeam] = useState("autograph");
   const [gitScope, setGitScope] = useState("jasonmorganson");
   const [model, setModel] = useState("openai/gpt-5.6-terra");
+  const [showMoreConnections, setShowMoreConnections] = useState(false);
   const [search, setSearch] = useState("");
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
     null,
@@ -785,7 +792,11 @@ function Builder({
     [],
   );
   const normalizedSearch = search.trim().toLowerCase();
-  const filtered = allConnectionNames.filter((name) => {
+  const availableConnections =
+    showMoreConnections || normalizedSearch
+      ? allConnectionNames
+      : allConnectionNames.slice(0, 2);
+  const filtered = availableConnections.filter((name) => {
     if (!normalizedSearch) return true;
     return name.toLowerCase().includes(normalizedSearch);
   });
@@ -1035,18 +1046,39 @@ function Builder({
           <div className={styles.connectionGrid}>
             {filtered
               .filter((name) => !form.connections.includes(name))
-              .map((name) => (
-                <button
-                  type="button"
-                  key={name}
-                  aria-label={`Add ${name}`}
-                  onClick={() => addConnection(name)}
-                >
-                  <ConnectionIcon kind={connectionKind.get(name)} name={name} />
-                  {name}
-                </button>
-              ))}
+              .map((name) => {
+                const comingSoon = comingSoonConnections.has(name);
+                return (
+                  <button
+                    type="button"
+                    key={name}
+                    aria-label={
+                      comingSoon ? `${name} coming soon` : `Add ${name}`
+                    }
+                    disabled={comingSoon}
+                    onClick={() => addConnection(name)}
+                  >
+                    <ConnectionIcon
+                      kind={connectionKind.get(name)}
+                      name={name}
+                    />
+                    {name}
+                    {comingSoon ? (
+                      <span className={styles.comingSoon}>Coming soon</span>
+                    ) : null}
+                  </button>
+                );
+              })}
           </div>
+          {!showMoreConnections && !search ? (
+            <button
+              className={styles.showAll}
+              type="button"
+              onClick={() => setShowMoreConnections(true)}
+            >
+              Show more connections
+            </button>
+          ) : null}
           {form.connections.length ? (
             <div
               className={styles.connectedList}
