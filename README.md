@@ -11,13 +11,31 @@ without changing that source repository.
 
 ## Install
 
-Before the shared marketplace is published, download the verified Codex
-marketplace archive and `SHA256SUMS` from the public
-[GitHub releases](https://github.com/withAutograph/autograph-app-builder/releases).
-After extracting the archive, install it with:
+Once the pre-release `v0.2.0` GitHub release is published, download and verify
+its complete asset set, extract the endpoint-bound Codex marketplace, and
+install it. These commands fail closed until that release exists:
 
 ```sh
-codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
+release_version=0.2.0
+release_dir="$PWD/autograph-app-builder-release-$release_version"
+marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
+mkdir "$release_dir" "$marketplace_dir"
+gh release download "v$release_version" \
+  --repo withAutograph/autograph-app-builder \
+  --dir "$release_dir"
+(
+  cd "$release_dir"
+  shasum -a 256 -c SHA256SUMS
+  gh release verify "v$release_version" \
+    --repo withAutograph/autograph-app-builder
+  gh release verify-asset "v$release_version" \
+    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    --repo withAutograph/autograph-app-builder
+  tar -xzf \
+    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    -C "$marketplace_dir"
+)
+codex plugin marketplace add "$marketplace_dir"
 codex plugin add autograph-app-builder@autograph
 ```
 
