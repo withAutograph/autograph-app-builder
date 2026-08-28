@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  appSpecRepairDiagnostic,
+  BUILD_READY_HANDOFF_EXAMPLE,
+  REQUIRED_APP_SPEC_HEADINGS,
+  validateBuildReadyAppSpec,
+} from "./app-spec-validation";
+
+function completeAppSpec(
+  handoff: unknown = BUILD_READY_HANDOFF_EXAMPLE,
+): string {
+  return `${REQUIRED_APP_SPEC_HEADINGS.filter(
+    (heading) => heading !== "Build handoff",
+  )
+    .map((heading) => `## ${heading}\n\nProduct decision.`)
+    .join("\n\n")}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(
+    handoff,
+    null,
+    2,
+  )}\n\`\`\``;
+}
+
+describe("build-ready AppSpec validation", () => {
+  it("accepts the complete closed handoff contract", () => {
+    expect(validateBuildReadyAppSpec(completeAppSpec())).toEqual({
+      valid: true,
+    });
+  });
+
+  it("returns exact repair instructions for missing sections and handoff", () => {
+    const result = validateBuildReadyAppSpec(
+      "## Status and prototype\n\nA first prototype.",
+    );
+    expect(result.valid).toBe(false);
+    if (result.valid) throw new Error("expected invalid AppSpec");
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing_heading",
+          path: "User and outcome",
+          message: 'Add exactly one "## User and outcome" section.',
+        }),
+        expect.objectContaining({
+          code: "build_handoff_format",
+          path: "Build handoff",
+        }),
+      ]),
+    );
+    const diagnostic = JSON.parse(appSpecRepairDiagnostic(result)) as {
+      code: string;
+      instruction: string;
+      requiredHeadings: string[];
+      buildHandoffExample: unknown;
+    };
+    expect(diagnostic).toMatchObject({
+      code: "app_spec_invalid",
+      instruction: expect.stringContaining("without asking the user"),
+      buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
+    });
+    expect(diagnostic.requiredHeadings).toHaveLength(14);
+  });
+
+  it("identifies malformed JSON and closed-shape errors without raw content", () => {
+    const malformed = completeAppSpec().replace(
+      JSON.stringify(BUILD_READY_HANDOFF_EXAMPLE, null, 2),
+      "{ invalid",
+    );
+    expect(validateBuildReadyAppSpec(malformed)).toMatchObject({
+      valid: false,
+      issues: [{ code: "build_handoff_json", path: "Build handoff" }],
+    });
+
+    const extra = completeAppSpec({
+      ...BUILD_READY_HANDOFF_EXAMPLE,
+      additionalPublicRoutes: ["/z", "/a", "/a"],
+      unexpected: "private-value",
+    });
+    const result = validateBuildReadyAppSpec(extra);
+    expect(result.valid).toBe(false);
+    if (result.valid) throw new Error("expected invalid AppSpec");
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "build_handoff_shape",
+          path: "Build handoff.additionalPublicRoutes",
+        }),
+        expect.objectContaining({
+          code: "build_handoff_shape",
+          path: "Build handoff",
+        }),
+      ]),
+    );
+    expect(appSpecRepairDiagnostic(result)).not.toContain("private-value");
+  });
+});

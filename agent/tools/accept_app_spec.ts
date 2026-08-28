@@ -9,6 +9,10 @@ import {
 } from "@/lib/agent/approval-receipt";
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
+  appSpecRepairDiagnostic,
+  validateBuildReadyAppSpec,
+} from "@/lib/agent/app-spec-validation";
+import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   assertExactWorkflowState,
@@ -16,51 +20,9 @@ import {
   validAppId,
 } from "@/lib/agent/workflow-state";
 
-function validBuildReadyAppSpec(content: string): boolean {
-  const headings = [
-    "Status and prototype",
-    "User and outcome",
-    "Interfaces and navigation",
-    "Controls and behavior",
-    "Data model",
-    "Integrations and reconciliation",
-    "Temporal semantics",
-    "Writes, review, and authority",
-    "Access and tenancy",
-    "Agent behavior",
-    "Operational states",
-    "Defaults, non-goals, and risks",
-    "Acceptance walkthrough",
-    "Build handoff",
-  ];
-  if (
-    headings.some(
-      (heading) =>
-        (content.match(new RegExp(`^## ${heading}$`, "gmu")) ?? []).length !==
-        1,
-    )
-  )
-    return false;
-  const block = /^## Build handoff\n\n```json\n([\s\S]*?)\n```$/mu.exec(
-    content,
-  );
-  if (block?.[1] === undefined) return false;
-  try {
-    const handoff = JSON.parse(block[1]) as unknown;
-    return (
-      typeof handoff === "object" &&
-      handoff !== null &&
-      !Array.isArray(handoff) &&
-      (handoff as { status?: unknown }).status === "build-ready"
-    );
-  } catch {
-    return false;
-  }
-}
-
 export default defineTool({
   description:
-    "Silently validate and record one complete build-ready AppSpec as internal planning state. It remains bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
+    "Silently validate and record one complete build-ready AppSpec as internal planning state. The Markdown must contain each of the 14 exact level-two headings from the design-app AppSpec reference once and end with its closed build-ready JSON handoff. On rejection, use the structured app_spec_invalid issues and exact example to replace the complete artifact and retry without asking the user. It remains bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
   inputSchema: z.strictObject({
     appId: z.string().min(1),
     expectedArtifactDigest: z.string().regex(/^[0-9a-f]{64}$/u),
@@ -106,10 +68,8 @@ export default defineTool({
     });
     if (artifact.mediaType !== "text/markdown")
       throw new Error("The accepted AppSpec artifact media type is invalid.");
-    if (!validBuildReadyAppSpec(artifact.content))
-      throw new Error(
-        "AppSpec artifact is not a complete build-ready AppSpec.",
-      );
+    const validation = validateBuildReadyAppSpec(artifact.content);
+    if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
     if (
       workspace.sourceSha !== expectedSourceSha ||
       workspace.sourceTree !== expectedSourceTree ||

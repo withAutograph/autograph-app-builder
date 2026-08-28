@@ -47,9 +47,14 @@ isolated workspace.
    defaults, then use `accept_app_spec` silently as internal validation and
    durable planning state. If validation fails, interpret the schema or
    completeness errors, repair the artifact, and retry without exposing
-   validator mechanics. Ask only when the missing choice materially changes the
-   product; if validation remains impossible, surface one plain-language product
-   question or actionable product limitation.
+   validator mechanics. An `app_spec_invalid` result lists the exact missing or
+   duplicate headings, handoff path errors, and the complete closed handoff
+   example. Replace the complete Markdown artifact using those diagnostics,
+   then retry with the new artifact digest and revision. Never retry identical
+   invalid bytes or ask the user to repair this internal document. Ask only when
+   the missing choice materially changes the product; if validation remains
+   impossible, surface one plain-language product question or actionable
+   product limitation.
    Continue automatically with `prepare_target_dependencies` to verify the
    immutable image's target-bound
    cache and materialize its exact external dependency closure in builder-owned

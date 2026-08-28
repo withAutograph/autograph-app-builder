@@ -67,7 +67,6 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.notCalledTool("apply_app_creation");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
-
     t.check(t.reply, includes("Vendor Onboarding"));
     t.check(t.reply, includes("`vendor-onboarding`"));
     t.check(t.reply, includes("operations review queue"));
