@@ -55,7 +55,7 @@ describe("MCP App UI presentation", () => {
     expect(result._meta).toBeUndefined();
   });
 
-  it("offers the session UI for a formal outstanding input request", () => {
+  it("offers Autograph App Builder progress for an outstanding input request", () => {
     const result = toolResult(
       {
         sessionId: "session-one",

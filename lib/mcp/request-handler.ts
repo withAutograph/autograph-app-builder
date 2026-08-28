@@ -81,7 +81,7 @@ export function createEveMcpHandler(service: EveSessionService) {
       {
         title: "Start with Autograph App Builder",
         description:
-          "Start a durable app-building objective and return its first progress update.",
+          "Start a durable app build and return immediately; check progress separately.",
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
       },

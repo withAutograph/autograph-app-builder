@@ -46,8 +46,9 @@ describe("Autograph App Builder MCP App progress UI", () => {
     );
     expect(sessionUiHtml).toContain("Autograph App Builder is working");
     expect(sessionUiHtml).toContain("App build finished");
-    expect(sessionUiHtml).toContain("App build stopped");
+    expect(sessionUiHtml).toContain("App build failed");
     expect(sessionUiHtml).toContain("App build cancelled");
+    expect(sessionUiHtml).not.toContain("App build stopped");
     expect(sessionUiHtml).toContain('id:"eve-session-init"');
     expect(sessionUiHtml).not.toContain("Eve session");
     expect(sessionUiHtml).not.toContain("Connecting to Eve");

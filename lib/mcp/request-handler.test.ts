@@ -351,7 +351,7 @@ describe("request-scoped MCP service selection", () => {
       ),
     ).toEqual({
       eve_start:
-        "Start a durable app-building objective and return its first progress update.",
+        "Start a durable app build and return immediately; check progress separately.",
       eve_get:
         "Read the next page of progress and requests for the current app build.",
       eve_send:

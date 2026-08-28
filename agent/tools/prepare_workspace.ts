@@ -20,7 +20,7 @@ import {
 
 export default defineTool({
   description:
-    "Materialize an already-reviewed eligible source tree inside this App Builder run's isolated workspace. This requires its own approval bound to the exact canonical source receipt.",
+    "Materialize an already-reviewed eligible source tree inside the current app build's isolated workspace. This requires its own approval bound to the exact canonical source receipt.",
   inputSchema: z.object({
     expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
@@ -72,7 +72,7 @@ export default defineTool({
       current.githubSource?.digest !== source.githubSource?.digest
     )
       throw new Error(
-        "This App Builder run already owns a different GitHub source binding.",
+        "This app build already owns a different GitHub source binding.",
       );
     if (
       currentWorkspace !== undefined &&
@@ -80,9 +80,7 @@ export default defineTool({
         currentWorkspace.sourceTree !== expectedTree ||
         currentWorkspace.eligibilityDigest !== expectedEligibilityDigest)
     )
-      throw new Error(
-        "This App Builder run already owns a different workspace.",
-      );
+      throw new Error("This app build already owns a different workspace.");
     const sandbox = await ctx.getSandbox();
     const workspace =
       hostedReceipt === undefined

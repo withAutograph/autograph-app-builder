@@ -79,9 +79,7 @@ export function recordPrototypeArtifactRevision(input: {
     throw new Error("Prototype artifact state contains multiple app ids.");
   const recordedAppId = input.artifacts[0]?.appId;
   if (recordedAppId !== undefined && recordedAppId !== appId)
-    throw new Error(
-      "This App Builder run already owns a different prototype app.",
-    );
+    throw new Error("This app build already owns a different prototype app.");
 
   const digest = sha256(input.content);
   const revision = sha256(

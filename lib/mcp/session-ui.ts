@@ -70,7 +70,7 @@ export const sessionUiHtml = `<!doctype html>
         const ordered=[...events.values()].sort((a,b)=>a.index-b.index);
         eventList.replaceChildren(...ordered.map(renderEvent));eventList.hidden=ordered.length===0;empty.hidden=ordered.length!==0;
         const status=labels[result.status]?result.status:"working";state.className="state "+status;stateLabel.textContent=labels[status];
-        summary.textContent=status==="input_required"?"Autograph App Builder is waiting for your response":status==="completed"?"App build finished":status==="failed"?text(result.error&&result.error.message)||"App build stopped":status==="cancelled"?"App build cancelled":"Autograph App Builder is working";
+        summary.textContent=status==="input_required"?"Autograph App Builder is waiting for your response":status==="completed"?"App build finished":status==="failed"?text(result.error&&result.error.message)||"App build failed":status==="cancelled"?"App build cancelled":"Autograph App Builder is working";
         count.textContent=ordered.length+" event"+(ordered.length===1?"":"s");
         requestAnimationFrame(()=>{document.getElementById("log").scrollTop=document.getElementById("log").scrollHeight});
       }
