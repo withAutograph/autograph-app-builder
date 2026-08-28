@@ -2,11 +2,13 @@
 
 ## Recommendation
 
-Use a public Git-backed Autograph marketplace, hosted in the existing
-`withAutograph/autograph-app-builder` repository (or, if the team wants a
-catalog independent of the product repository, a separate public
-`withAutograph/codex-plugins` repository). Do not make users download or unpack
-the release tarball. Codex can clone/track a Git marketplace and install the
+Use a public Git-backed Autograph marketplace in the existing
+`withAutograph/autograph-app-builder` repository, but publish it as a
+marketplace-only orphan commit containing the generated archive files. Do not
+point the marketplace at the product checkout root on `main` or `v0.1.1`: its
+root `mcp.json` intentionally points at loopback and is not a production
+installation source. Do not make users download or unpack the release tarball;
+Codex can clone/track the immutable marketplace ref and install the generated
 plugin from its catalog with `codex plugin add`.
 
 This is the correct first production path because it is immediately supported
@@ -39,34 +41,34 @@ add` accepts a local path, `owner/repo[@ref]`, HTTPS Git URL, or SSH URL.
 
 ## Exact repository layout
 
-Prefer this layout in the existing repository:
+The marketplace ref is an orphan, marketplace-only tree in the existing
+repository. It contains the eight generated archive files from the tested
+release export, including the marketplace catalog and generated plugin
+package; it must not expose the loopback-bound source checkout as its plugin
+source. The tested fixture tree is `0d466b268c4b638af4b621ae3a406916bf2b8460`.
+
+The source repository's normal checkout remains the development tree. The
+marketplace ref is a separately generated distribution tree:
 
 ```text
-autograph-app-builder/
-├── .agents/plugins/marketplace.json
-├── .codex-plugin/plugin.json
-├── .mcp.json
-├── skills/
-├── assets/                         # optional listing assets
-├── docs/installing.md
-└── .github/workflows/release.yml
+marketplace-only orphan tree/
+├── marketplace.json
+└── generated archive files (eight total)
 ```
 
-The catalog should contain one Git-backed entry (paths are relative to the
-marketplace root):
+The catalog should use the tested generated archive/package source and expose
+the marketplace name `autograph`:
 
 ```json
 {
-  "name": "withautograph-codex-plugins",
+  "name": "autograph",
   "interface": { "displayName": "Autograph Plugins" },
   "plugins": [
     {
       "name": "autograph-app-builder",
       "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/withAutograph/autograph-app-builder.git",
-        "path": "./",
-        "ref": "v0.1.0"
+        "source": "url",
+        "url": "<generated archive source from the marketplace export>"
       },
       "policy": {
         "installation": "AVAILABLE",
@@ -78,10 +80,12 @@ marketplace root):
 }
 ```
 
-If the catalog is moved to a separate repository, use
-`./plugins/autograph-app-builder` for `source.path`, and keep the plugin's
-`.codex-plugin/plugin.json` at that directory's root. Pin catalog entries to an
-immutable release tag or commit SHA; advance the catalog in a reviewed PR.
+The archive source and all generated files must be produced by the release
+export, not hand-assembled. Pin the marketplace tree immutably as
+`codex-marketplace-v0.1.1`; the supplied audit receipt is
+`/private/tmp/abb-git-marketplace-v0.1.1-receipt.json` with SHA-256
+`5f9c70779186173647600021344af01d500e98583ee598f90c73bfaae08de5a9`.
+Do not create or publish that tag as part of this PR.
 
 ## Release automation
 
@@ -106,27 +110,25 @@ are not part of the normal user installation UX.
 CLI:
 
 ```bash
-codex plugin marketplace add withAutograph/autograph-app-builder --ref main
+codex plugin marketplace add withAutograph/autograph-app-builder --ref codex-marketplace-v0.1.1
 codex plugin list
-codex plugin add autograph-app-builder@withautograph-codex-plugins
+codex plugin add autograph-app-builder@autograph
 ```
 
-For a reproducible production command, document a versioned catalog/ref once
-the catalog repository exists, then use `/plugins` in Codex to inspect and
-install. Start a new Codex session after installation. The ChatGPT desktop app
-can browse the same configured marketplace; the IDE extension is not a plugin
-installation surface.
+For a reproducible production command, use the immutable marketplace ref above,
+then use `/plugins` in Codex to inspect and install. Start a new Codex session
+after installation. The ChatGPT desktop app can browse the same configured
+marketplace; the IDE extension is not a plugin installation surface.
 
 ## Distribution choices and required authority
 
 ### Public Git-backed marketplace (recommended now)
 
-Requires the GitHub organization owner's approval to make the catalog and plugin
-repository public (if not already public), permission to merge the catalog and
-release workflow, and production MCP hosting/configuration. No OpenAI catalog
-submission is required. Anyone with the public Git URL can configure the
-marketplace; this is distribution by explicit source, not universal-directory
-listing.
+Requires the GitHub organization owner's approval to make the marketplace ref
+public, permission to create the orphan commit and immutable tag, and
+production MCP hosting/configuration. No OpenAI catalog submission is required.
+Anyone with the public Git URL can configure the marketplace; this is
+distribution by explicit source, not universal-directory listing.
 
 ### Organization/workspace distribution
 
@@ -161,13 +163,14 @@ version submission.
 - Document the Eve-only boundary and fail-closed behavior in the listing and
   skill instructions; do not imply that offline package discovery proves a
   live hosted connection.
-- Pin production marketplace entries to tags/SHAs, require protected-branch
-  review, and retain checksums/release receipts for rollback and audit.
+- Pin production marketplace entries to the immutable orphan marketplace
+  ref/tag, require protected-branch/tag review, and retain checksums/release
+  receipts for rollback and audit.
 
 ## Decision required before publication
 
-Approve (a) public visibility of the chosen Git repository, (b) whether the
-catalog lives in this repository or a separate `withAutograph` repository, (c)
-the first release tag, and (d) whether to submit separately to OpenAI's public
-directory. Until those approvals, do not create/alter repositories, change
-visibility, publish a package, modify PR #67, or submit the plugin.
+Approve (a) public visibility of the marketplace ref, (b) creation and
+publication of the immutable `codex-marketplace-v0.1.1` tag, and (c) whether to
+submit separately to OpenAI's public directory. Until those approvals, do not
+create/alter repositories, change visibility, publish a package, modify PR #67,
+or submit the plugin.
