@@ -11,10 +11,16 @@ import type { EveSessionResult } from "./contracts";
 export const SESSION_RESOURCE_URI = "ui://eve-agent/session.html";
 
 export function toolResult(result: EveSessionResult, text: string) {
+  const needsInteractiveSessionUi =
+    result.status === "input_required" &&
+    (result.inputRequests?.length ?? 0) > 0;
+
   return {
     content: [{ type: "text" as const, text }],
     structuredContent: result,
-    _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } },
+    ...(needsInteractiveSessionUi
+      ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } }
+      : {}),
   };
 }
 
