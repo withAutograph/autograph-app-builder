@@ -30,7 +30,7 @@ review.
   developer-initiated publication. Approval does not publish automatically.
 - Local CLI verification on 2026-08-27: `codex-cli 0.150.1` exposes
   `plugin marketplace add/list/upgrade/remove` and `plugin add`; `marketplace
-  add` accepts a local path, `owner/repo[@ref]`, HTTPS Git URL, or SSH URL.
+add` accepts a local path, `owner/repo[@ref]`, HTTPS Git URL, or SSH URL.
 - PR [#67](https://github.com/withAutograph/autograph-app-builder/pull/67) is
   open and mergeable at head `a0aa25f0d9d4a66d5550028c9a5e1bcb9b8753b9`.
   It adds `.codex-plugin/plugin.json`, `.mcp.json`, and a tag-triggered
@@ -171,5 +171,3 @@ catalog lives in this repository or a separate `withAutograph` repository, (c)
 the first release tag, and (d) whether to submit separately to OpenAI's public
 directory. Until those approvals, do not create/alter repositories, change
 visibility, publish a package, modify PR #67, or submit the plugin.
-
-
