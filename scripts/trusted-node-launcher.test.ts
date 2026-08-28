@@ -76,7 +76,7 @@ describe("trusted Node launcher", () => {
     expect(rejected.status).toBe(78);
     expect(rejected.stdout).toBe("");
     const fakeRoot = mkdtempSync(join(tmpdir(), "fake-mise-root-"));
-    const fakeNode = join(fakeRoot, "mise/installs/node/24.18.0/bin/node");
+    const fakeNode = join(fakeRoot, "mise/installs/node/26.8.1/bin/node");
     mkdirSync(resolve(fakeNode, ".."), { recursive: true });
     writeFileSync(fakeNode, "#!/bin/sh\necho fake\n");
     chmodSync(fakeNode, 0o755);

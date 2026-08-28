@@ -23,7 +23,7 @@ jobs:
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.18.0
+          node-version: 26.8.1
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Require exact-main release authority

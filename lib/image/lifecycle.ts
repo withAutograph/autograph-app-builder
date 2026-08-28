@@ -30,7 +30,7 @@ export const IMAGE_TOOL_VERSIONS = {
   docker: "29.4.0",
   "docker-buildx": "0.33.0",
   msb: "0.6.14",
-  node: "24.18.0",
+  node: "26.8.1",
   pnpm: "11.7.0",
 } as const;
 
