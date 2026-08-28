@@ -3,4 +3,4 @@
 set -eu
 
 mise run agent:build
-exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" node_modules/next/dist/bin/next build --webpack
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" node_modules/next/dist/bin/next build

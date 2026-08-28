@@ -79,10 +79,10 @@ verify_pinned_executable() {
 }
 
 verify_pinned_executable "$executable"
-child_path=/usr/bin:/bin
+working_directory=$(/bin/pwd -P)
+child_path="$account_home/.local/share/mise/installs/node/24.18.0/bin:/usr/bin:/bin"
 if [ "$kind" = pnpm ]; then
   verify_pinned_executable "$pinned_node"
-  child_path="$account_home/.local/share/mise/installs/node/24.18.0/bin:/usr/bin:/bin"
 fi
 
 case "$kind" in
@@ -90,6 +90,7 @@ case "$kind" in
     exec 3<&0
     /usr/bin/env -i \
       PATH="$child_path" \
+      PWD="$working_directory" \
       HOME="$account_home" \
       TMPDIR="${TMPDIR:-/tmp}" \
       LANG="${LANG:-C}" \
