@@ -100,21 +100,21 @@ describe("OpenAI package generator", () => {
       expect(manifest.version).toBe("0.2.0");
       expect(manifest.interface).toMatchObject({
         displayName: "Autograph App Builder",
-        shortDescription: "Design and build supported apps",
+        shortDescription: "Design and create apps with Autograph",
         longDescription:
-          "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in supported repositories.",
+          "Use Autograph App Builder to design, plan, create, validate, and separately publish any app.",
+        composerIcon: "./assets/autograph-icon.png",
+        logo: "./assets/autograph-icon.png",
       });
       expect(manifest.interface.defaultPrompt).toHaveLength(3);
       for (const prompt of manifest.interface.defaultPrompt) {
-        expect(prompt).toContain("Autograph App Builder");
         expect(prompt.length).toBeLessThanOrEqual(128);
       }
-      expect(manifest.interface.defaultPrompt.join(" ")).toContain(
-        "autograph_start",
-      );
-      expect(manifest.interface.defaultPrompt.join(" ")).toContain(
-        "Continue my app build with Autograph App Builder",
-      );
+      expect(manifest.interface.defaultPrompt).toEqual([
+        "Create a polished personal finance dashboard",
+        "Build an event planning app for coordinating guests, schedules, and tasks",
+        "Design a customer feedback app with a clear review workflow",
+      ]);
       expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
         "App Builder session",
       );
