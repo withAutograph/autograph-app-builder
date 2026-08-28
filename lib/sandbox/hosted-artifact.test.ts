@@ -22,9 +22,11 @@ const sha256 = (value: Uint8Array) =>
 describe("hosted Arrusted artifact", () => {
   it("keeps exact artifact bytes embedded in the Eve service bundle", () => {
     const content = readHostedArtifactBytes();
+    const authoredContent = readFileSync(HOSTED_ARTIFACT_PATH);
     expect(content.byteLength).toBe(HOSTED_ARTIFACT_BYTES);
     expect(sha256(content)).toBe(HOSTED_ARTIFACT_SHA256);
-    expect(content).toEqual(readFileSync(HOSTED_ARTIFACT_PATH));
+    expect(authoredContent.byteLength).toBe(HOSTED_ARTIFACT_BYTES);
+    expect(sha256(authoredContent)).toBe(HOSTED_ARTIFACT_SHA256);
     expect(HOSTED_ARTIFACT_PATH).toMatch(/^artifacts\/hosted\//u);
     expect(HOSTED_ARTIFACT_PATH).not.toMatch(/^public\//u);
     expect(existsSync("public/hosted-artifacts")).toBe(false);
