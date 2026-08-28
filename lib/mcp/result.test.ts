@@ -78,4 +78,27 @@ describe("MCP App UI presentation", () => {
       ui: { resourceUri: "ui://autograph-app-builder/session.html" },
     });
   });
+
+  it("offers the App Builder UI whenever a prototype is available", () => {
+    const result = toolResult(
+      {
+        sessionId: "session-one",
+        status: "completed",
+        cursor: 42,
+        events: [],
+        prototype: {
+          path: "prototype/vendor-onboarding/index.html",
+          mediaType: "text/html",
+          content: "<!doctype html><html><body>Vendor queue</body></html>",
+          digest: "a".repeat(64),
+          revision: "b".repeat(64),
+        },
+      },
+      "Autograph App Builder returned the latest progress.",
+    );
+
+    expect(result._meta).toEqual({
+      ui: { resourceUri: "ui://autograph-app-builder/session.html" },
+    });
+  });
 });

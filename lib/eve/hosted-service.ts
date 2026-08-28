@@ -28,6 +28,7 @@ import {
 } from "./public-events";
 import {
   eveSessionResultSchema,
+  publicPrototypeSchema,
   publicEveEventSchema,
   sessionStatusSchema,
   type EveSessionResult,
@@ -38,6 +39,7 @@ const hostedSnapshotSchema = z
   .object({
     status: sessionStatusSchema,
     events: z.array(z.unknown()).max(100_000),
+    prototype: publicPrototypeSchema.optional(),
   })
   .strict();
 
@@ -197,6 +199,9 @@ function projectSnapshot(
     cursor: Math.min(cursor + events.length, projected.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
+    ...(snapshot.prototype === undefined
+      ? {}
+      : { prototype: snapshot.prototype }),
   });
 }
 

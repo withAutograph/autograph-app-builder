@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { eveRespondInputSchema } from "./contracts";
+import { eveRespondInputSchema, publicPrototypeSchema } from "./contracts";
 
 const response = (requestId: string) => ({
   requestId,
@@ -46,5 +46,35 @@ describe("eveRespondInputSchema", () => {
           message: "Each requestId must appear exactly once.",
         }),
       );
+  });
+});
+
+describe("publicPrototypeSchema", () => {
+  const prototype = {
+    path: "prototype/vendor-onboarding/index.html",
+    mediaType: "text/html" as const,
+    content: "<!doctype html><html><body>Vendor queue</body></html>",
+    digest: "a".repeat(64),
+    revision: "b".repeat(64),
+  };
+
+  it("accepts only the closed bounded HTML delivery shape", () => {
+    expect(publicPrototypeSchema.parse(prototype)).toEqual(prototype);
+    expect(
+      publicPrototypeSchema.safeParse({ ...prototype, internalPath: "/tmp" })
+        .success,
+    ).toBe(false);
+    expect(
+      publicPrototypeSchema.safeParse({
+        ...prototype,
+        path: "prototype/vendor-onboarding/app-spec.md",
+      }).success,
+    ).toBe(false);
+    expect(
+      publicPrototypeSchema.safeParse({
+        ...prototype,
+        content: "é".repeat(131_073),
+      }).success,
+    ).toBe(false);
   });
 });

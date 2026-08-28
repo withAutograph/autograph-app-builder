@@ -161,6 +161,33 @@ async function toolNames(response: Response): Promise<string[]> {
 }
 
 describe("branded public tool mapping", () => {
+  it("links each exact public tool to the shared MCP App resource", async () => {
+    const handler = createAutographMcpHandler({} as EveSessionService);
+    const response = await handler(mcpRequest());
+    const result = await mcpResult<{
+      tools?: Array<{
+        name?: string;
+        _meta?: { ui?: { resourceUri?: string } };
+      }>;
+    }>(response);
+
+    expect((result.tools ?? []).map(({ name }) => name).sort()).toEqual(
+      exactTools,
+    );
+    expect(
+      (result.tools ?? [])
+        .toSorted((left, right) =>
+          (left.name ?? "").localeCompare(right.name ?? ""),
+        )
+        .map(({ _meta }) => _meta?.ui?.resourceUri),
+    ).toEqual(
+      Array.from(
+        { length: exactTools.length },
+        () => "ui://autograph-app-builder/session.html",
+      ),
+    );
+  });
+
   it("maps each public operation to the unchanged Eve session service", async () => {
     const calls: Array<{ operation: string; input: unknown }> = [];
     const result = {

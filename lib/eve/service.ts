@@ -7,6 +7,7 @@ import {
 import type { EveSessionResult } from "@/lib/mcp/contracts";
 import {
   deriveInstalledEveStatus,
+  latestInstalledPrototype,
   outstandingInstalledEveRequests,
   projectInstalledEveEvents,
 } from "./public-events";
@@ -96,17 +97,29 @@ function resultForEvents(
   const projected = projectInstalledEveEvents(snapshotEvents);
   const events = projected.slice(cursor, cursor + limit);
   const inputRequests = outstandingInstalledEveRequests(snapshotEvents);
+  const prototype = latestInstalledPrototype(snapshotEvents);
   return {
     sessionId,
     status: deriveInstalledEveStatus(snapshotEvents),
     cursor: Math.min(cursor + events.length, projected.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
+    ...(prototype === undefined ? {} : { prototype }),
   };
 }
 
-function acceptedResult(sessionId: string): EveSessionResult {
-  return { sessionId, status: "working", cursor: 0, events: [] };
+function acceptedResult(
+  sessionId: string,
+  snapshotEvents: readonly MessageStreamEvent[] = [],
+): EveSessionResult {
+  const prototype = latestInstalledPrototype(snapshotEvents);
+  return {
+    sessionId,
+    status: "working",
+    cursor: 0,
+    events: [],
+    ...(prototype === undefined ? {} : { prototype }),
+  };
 }
 
 function consumeResponse(
@@ -153,7 +166,8 @@ export function createLocalEveSessionService(
     async start({ prompt, clientRequestId }) {
       const key = `start:${clientRequestId}`;
       const existing = localRequests.get(key);
-      if (existing !== undefined) return acceptedResult(existing);
+      if (existing !== undefined)
+        return acceptedResult(existing, localSessionEvents.get(existing));
       const { session, response } = await client.sessions.create({
         message: prompt,
       });
@@ -161,7 +175,7 @@ export function createLocalEveSessionService(
       localRequests.set(key, sessionId);
       localSessionHandles.set(sessionId, session);
       consumeResponse(sessionId, response);
-      return acceptedResult(sessionId);
+      return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async get({ sessionId, cursor, limit }) {
       return resultForEvents(
@@ -178,7 +192,7 @@ export function createLocalEveSessionService(
         consumeResponse(sessionId, response);
         localRequests.set(key, sessionId);
       }
-      return acceptedResult(sessionId);
+      return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async respond({ sessionId, responses, clientRequestId }) {
       const key = `respond:${sessionId}:${clientRequestId}`;
@@ -201,7 +215,7 @@ export function createLocalEveSessionService(
         consumeResponse(sessionId, result);
         localRequests.set(key, sessionId);
       }
-      return acceptedResult(sessionId);
+      return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async cancel({ sessionId, turnId }) {
       const active = localActiveResponses.get(sessionId);

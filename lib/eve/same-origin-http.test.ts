@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
@@ -56,6 +58,76 @@ function stream(
 }
 
 describe("same-origin canonical Eve transport", () => {
+  it("carries verified prototype HTML without projecting raw action events", async () => {
+    const content =
+      "<!doctype html><html><body><button>Approve vendor</button></body></html>";
+    const path = "prototype/vendor-onboarding/index.html";
+    const mediaType = "text/html";
+    const digest = createHash("sha256").update(content).digest("hex");
+    const revision = createHash("sha256")
+      .update(JSON.stringify({ path, mediaType, digest }))
+      .digest("hex");
+    const events = [
+      {
+        type: "actions.requested",
+        data: {
+          actions: [
+            {
+              kind: "tool-call",
+              callId: "call_prototype",
+              toolName: "record_prototype_artifact",
+              input: { path, mediaType, content },
+            },
+          ],
+        },
+      },
+      {
+        type: "action.result",
+        data: {
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            callId: "call_prototype",
+            toolName: "record_prototype_artifact",
+            output: {
+              appId: "vendor-onboarding",
+              path,
+              mediaType,
+              digest,
+              revision,
+              sessionId: "wrun_1",
+              recordedByCallId: "call_prototype",
+              size: Buffer.byteLength(content),
+              reused: false,
+            },
+          },
+        },
+      },
+      { type: "session.completed", data: {} },
+    ];
+    const transport = createSameOriginEveTransport({
+      config,
+      workloadIdentity: identity(),
+      fetchImplementation: vi.fn(async () => stream(events)),
+    });
+
+    const snapshot = await transport.get({
+      principal,
+      adapterSessionId: "wrun_1",
+    });
+    expect(snapshot.prototype).toEqual({
+      path,
+      mediaType,
+      content,
+      digest,
+      revision,
+    });
+    expect(JSON.stringify(snapshot.events)).not.toContain(content);
+    expect(snapshot.events).toEqual([
+      { index: 0, status: "completed", type: "status" },
+    ]);
+  });
+
   it("uses fresh project OIDC and canonical create/stream routes", async () => {
     const workloadIdentity = identity();
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {

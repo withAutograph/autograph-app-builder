@@ -59,4 +59,20 @@ describe("Autograph App Builder MCP App progress UI", () => {
     expect(sessionUiHtml).not.toContain("innerHTML");
     expect(sessionUiHtml).not.toContain("Complete the production bridge");
   });
+
+  it("renders verified prototypes in a network-denied opaque sandbox", () => {
+    expect(sessionUiHtml).toContain(
+      'frame.setAttribute("sandbox","allow-scripts")',
+    );
+    expect(sessionUiHtml).not.toContain("allow-same-origin");
+    expect(sessionUiHtml).toContain(
+      "frame.srcdoc=prototypeDocument(value.content)",
+    );
+    expect(sessionUiHtml).toContain("default-src 'none'");
+    expect(sessionUiHtml).toContain("connect-src 'none'");
+    expect(sessionUiHtml).toContain("form-action 'none'");
+    expect(sessionUiHtml).toContain(
+      'frame.setAttribute("referrerpolicy","no-referrer")',
+    );
+  });
 });

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { MessageStreamEvent } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -33,6 +35,96 @@ describe("Eve input response mapping", () => {
 });
 
 describe("local Eve acceptance", () => {
+  it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
+    const content = "<!doctype html><html><body>Vendor queue</body></html>";
+    const path = "prototype/vendor-onboarding/index.html";
+    const mediaType = "text/html";
+    const digest = createHash("sha256").update(content).digest("hex");
+    const revision = createHash("sha256")
+      .update(JSON.stringify({ path, mediaType, digest }))
+      .digest("hex");
+    const events = [
+      {
+        type: "actions.requested",
+        data: {
+          actions: [
+            {
+              kind: "tool-call",
+              callId: "call_prototype",
+              toolName: "record_prototype_artifact",
+              input: { path, mediaType, content },
+            },
+          ],
+        },
+      },
+      {
+        type: "action.result",
+        data: {
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            callId: "call_prototype",
+            toolName: "record_prototype_artifact",
+            output: {
+              appId: "vendor-onboarding",
+              path,
+              mediaType,
+              digest,
+              revision,
+              sessionId: "wrun_prototype",
+              recordedByCallId: "call_prototype",
+              size: Buffer.byteLength(content),
+              reused: false,
+            },
+          },
+        },
+      },
+      { type: "session.waiting", data: {} },
+    ] as unknown as MessageStreamEvent[];
+    const response = (entries: MessageStreamEvent[]) => ({
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        for (const event of entries) yield event;
+      },
+    });
+    const session = {
+      state: { sessionId: "wrun_prototype" },
+      send: vi.fn(async () => response([])),
+      respond: vi.fn(async () => response([])),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const service = createLocalEveSessionService({
+      sessions: {
+        create: vi.fn(async () => ({ session, response: response(events) })),
+        attach: vi.fn(() => session),
+      } as never,
+    });
+    const started = await service.start({
+      prompt: "Build",
+      clientRequestId: "prototype-start",
+    });
+
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 1, limit: 100 }),
+      ).resolves.toMatchObject({
+        cursor: 1,
+        events: [],
+        prototype: { path, mediaType, content, digest, revision },
+      });
+    });
+    await expect(
+      service.send({
+        sessionId: started.sessionId,
+        message: "Continue",
+        clientRequestId: "prototype-send",
+      }),
+    ).resolves.toMatchObject({
+      status: "working",
+      prototype: { path, mediaType, content, digest, revision },
+    });
+  });
+
   it("returns one stable public handle without waiting for the active turn", async () => {
     const never = new Promise<void>(() => undefined);
     const response = {
