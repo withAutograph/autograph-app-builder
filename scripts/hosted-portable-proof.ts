@@ -125,6 +125,27 @@ export type HostedProofScenario = z.infer<typeof hostedProofScenarioSchema>;
 export const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
+function canonicalPublicResult(value: unknown): string {
+  if (Array.isArray(value))
+    return `[${value.map(canonicalPublicResult).join(",")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(
+        ([key, entry]) =>
+          `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`,
+      )
+      .join(",")}}`;
+  const primitive = JSON.stringify(value);
+  if (primitive === undefined)
+    throw new Error("Public tool result was not canonical JSON.");
+  return primitive;
+}
+
+function publicResultFingerprint(result: EveSessionResult) {
+  return digest(canonicalPublicResult(result));
+}
+
 const tokenClaimsSchema = z
   .object({
     iss: z.string().url().startsWith("https://"),
@@ -289,6 +310,10 @@ export class HostedMcpProofClient {
   private requestId = 0;
   private sessionId?: string;
   private readonly responseBodies: string[] = [];
+  private discardedResult?: {
+    name: (typeof TOOL_NAMES)[number];
+    fingerprint: string;
+  };
 
   constructor(
     readonly endpoint: string,
@@ -399,10 +424,33 @@ export class HostedMcpProofClient {
       .parse(response.payload?.result);
     if (result.isError === true)
       throw new Error(`${name} returned an error before result loss.`);
-    eveSessionResultSchema.parse(result.structuredContent);
-    // Deliberately do not inspect or return structuredContent. This models a
-    // caller that loses the successful operation result before it can retain
-    // the public session identity.
+    const publicResult = eveSessionResultSchema.parse(result.structuredContent);
+    // Retain only a private canonical fingerprint. This models a caller that
+    // loses the successful operation result before it can retain the public
+    // session identity while still binding a retry to the discarded result.
+    this.discardedResult = {
+      name,
+      fingerprint: publicResultFingerprint(publicResult),
+    };
+  }
+
+  async callToolMatchingDiscardedResult(
+    name: (typeof TOOL_NAMES)[number],
+    args: unknown,
+  ) {
+    const discarded = this.discardedResult;
+    if (discarded === undefined || discarded.name !== name)
+      throw new Error("No matching discarded tool result was recorded.");
+    const result = await this.callTool(name, args);
+    if (
+      !result.isError &&
+      result.session?.success === true &&
+      publicResultFingerprint(result.session.data) !== discarded.fingerprint
+    )
+      throw new Error(
+        "Lost-response retry did not match the discarded hosted session result.",
+      );
+    return result;
   }
 
   rawInitialize(authenticate = true) {
@@ -694,14 +742,12 @@ export async function runHostedProof(input: {
   await client.callToolAndDiscardResult("eve_start", startArgs);
   const first = toolSession(
     "eve_start",
-    await client.callTool("eve_start", startArgs),
+    await client.callToolMatchingDiscardedResult("eve_start", startArgs),
   );
-  const retry = toolSession(
+  toolSession(
     "eve_start",
-    await client.callTool("eve_start", startArgs),
+    await client.callToolMatchingDiscardedResult("eve_start", startArgs),
   );
-  if (first.sessionId !== retry.sessionId)
-    throw new Error("Lost-response retry created a second hosted session.");
   const created = await pollUntilSettled({
     client,
     scenario: input.scenario,

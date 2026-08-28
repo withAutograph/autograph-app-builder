@@ -73,8 +73,10 @@ receipt:
 - discovery returns exactly `eve_start`, `eve_get`, `eve_send`, `eve_respond`,
   and `eve_cancel`;
 - the first successful `eve_start` result is deliberately discarded before an
-  exact retry recovers the durable session, and a subsequent retry remains
-  identical;
+  exact retry recovers the durable session; the proof retains only a private
+  canonical fingerprint of the discarded public result, requires both retries
+  to match it exactly, and never includes that fingerprint in its public
+  receipt;
 - the create and iterate phases consume all three exact AppSpec, change-set,
   and draft-PR approval receipts; each binds the stable repository ID and slug,
   base ref/SHA, and exact subject digest, with publication bound to the sealed

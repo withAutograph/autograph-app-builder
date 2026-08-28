@@ -116,11 +116,13 @@ function hostedFixture(
       direction: "primary-reads-secondary" | "secondary-reads-primary";
       kind: "transport" | "http500" | "malformed";
     };
+    discardedStartRetryDrift?: boolean;
   } = {},
 ) {
   const approved = new Set<string>();
   let createIterated = false;
   let cancelRequested = false;
+  let primaryStartCount = 0;
   return async (urlInput: string | URL | Request, init?: RequestInit) => {
     const url = String(urlInput);
     if (url.endsWith("/.well-known/oauth-protected-resource"))
@@ -180,14 +182,20 @@ function hostedFixture(
         structuredContent: session(String(args.sessionId), "working", 0),
       });
     };
-    if (name === "eve_start")
+    if (name === "eve_start") {
+      if (!secondary) primaryStartCount += 1;
       return tool(
         session(
-          secondary ? "secondary-session" : "primary-session",
+          secondary
+            ? "secondary-session"
+            : options.discardedStartRetryDrift && primaryStartCount === 1
+              ? "discarded-session-a"
+              : "primary-session",
           "working",
           0,
         ),
       );
+    }
     if (name === "eve_respond") {
       if (!Array.isArray(args.responses) || args.responses.length === 0)
         return tool(session("primary-session", "working", 0), true);
@@ -359,6 +367,23 @@ describe("hosted portable fresh-client proof", () => {
       publicResponseDisclosureScanDigest:
         expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
+    expect(
+      Object.keys(result).some((key) =>
+        /discarded.*(?:digest|fingerprint)/iu.test(key),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects retries that differ from the discarded start result", async () => {
+    await expect(
+      runHostedProof(
+        proofInput(
+          hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch,
+        ),
+      ),
+    ).rejects.toThrow(
+      "Lost-response retry did not match the discarded hosted session result",
+    );
   });
 
   it("rejects a bearer or adapter session disclosure in public responses", async () => {
