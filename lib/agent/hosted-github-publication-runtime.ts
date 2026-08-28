@@ -4,6 +4,7 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import * as databaseSchema from "../db/schema";
 import {
+  hostedIdentifierSchema,
   hostedPrincipalSchema,
   type HostedPrincipal,
 } from "../eve/hosted-auth";
@@ -36,6 +37,7 @@ const forwardedAttributesSchema = z
     "mcp:audience": z.string().url().startsWith("https://"),
     "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
     "mcp:workspace-id": z.string().min(1).max(200),
+    "eve:forwarded-by": hostedIdentifierSchema.optional(),
   })
   .strict();
 
@@ -97,31 +99,53 @@ function exactForwardedAuthority(sessionAuth: unknown): {
     );
   }
   const { current, initiator } = parsed.data;
-  if (JSON.stringify(current) !== JSON.stringify(initiator)) {
+  function authorityInput(context: typeof current) {
+    if (context.principalId !== context.subject) {
+      throw new Error(
+        "Hosted GitHub publication requires one exact forwarded user subject.",
+      );
+    }
+    return {
+      issuer: context.issuer,
+      audience: context.attributes["mcp:audience"],
+      workspaceId: context.attributes["mcp:workspace-id"],
+      ownerUserId: context.subject,
+    };
+  }
+
+  const currentAuthorityInput = authorityInput(current);
+  const initiatorAuthorityInput = authorityInput(initiator);
+  if (
+    JSON.stringify(currentAuthorityInput) !==
+    JSON.stringify(initiatorAuthorityInput)
+  ) {
     throw new Error(
       "Hosted GitHub publication requires matching current and initiating authority.",
     );
   }
-  if (
-    current.principalId !== current.subject ||
-    initiator.principalId !== initiator.subject
-  ) {
+  const authorityResult = hostedTenantAuthoritySchema.safeParse(
+    currentAuthorityInput,
+  );
+  if (!authorityResult.success) {
     throw new Error(
-      "Hosted GitHub publication requires one exact forwarded user subject.",
+      "Hosted GitHub publication requires exact forwarded user authority.",
     );
   }
-
-  const authority = hostedTenantAuthoritySchema.parse({
-    issuer: current.issuer,
-    audience: current.attributes["mcp:audience"],
-    workspaceId: current.attributes["mcp:workspace-id"],
-    ownerUserId: current.subject,
-  });
-  const principal = hostedPrincipalSchema.parse({
+  const authority = authorityResult.data;
+  const currentPrincipal = hostedPrincipalSchema.safeParse({
     ...authority,
     scopes: current.attributes["mcp:scopes"],
   });
-  return { authority, principal };
+  const initiatorPrincipal = hostedPrincipalSchema.safeParse({
+    ...authority,
+    scopes: initiator.attributes["mcp:scopes"],
+  });
+  if (!currentPrincipal.success || !initiatorPrincipal.success) {
+    throw new Error(
+      "Hosted GitHub publication requires exact forwarded user authority.",
+    );
+  }
+  return { authority, principal: currentPrincipal.data };
 }
 
 /**
@@ -173,12 +197,16 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
         throw new Error("Hosted GitHub publication membership is not active.");
       }
 
-      const installation = hostedGitHubInstallationBindingSchema.parse(
-        await dependencies.installations(pool).read(authority),
-      );
-      if (!installation.active) {
-        throw new Error("Hosted GitHub publication installation is inactive.");
+      const installationResult =
+        hostedGitHubInstallationBindingSchema.safeParse(
+          await dependencies.installations(pool).read(authority),
+        );
+      if (!installationResult.success || !installationResult.data.active) {
+        throw new Error(
+          "Hosted GitHub publication installation is inactive or unavailable.",
+        );
       }
+      const installation = installationResult.data;
 
       const stores = dependencies.publicationStores(pool, authority);
       const adapter = await input.providerFactory({ authority, installation });

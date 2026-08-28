@@ -22,6 +22,7 @@ const authority = {
 
 const forwarded = {
   attributes: {
+    "eve:forwarded-by": "owner:autographing:project:app-builder",
     "mcp:audience": authority.audience,
     "mcp:scopes": ["eve:session", "eve:start"],
     "mcp:workspace-id": authority.workspaceId,
@@ -69,13 +70,17 @@ const adapter = {} as GitHubPublicationAdapter;
 
 function dependencies(input?: {
   activeMember?: boolean;
-  boundInstallation?: typeof installation;
+  boundInstallation?: typeof installation | null;
 }) {
   const membership = vi.fn(() => ({
     isMember: vi.fn(async () => input?.activeMember ?? true),
   }));
   const installationStore: HostedGitHubInstallationStore = {
-    read: vi.fn(async () => input?.boundInstallation ?? installation),
+    read: vi.fn(async () =>
+      input !== undefined && "boundInstallation" in input
+        ? (input.boundInstallation ?? undefined)
+        : installation,
+    ),
     bind: vi.fn(),
   };
   const installations = vi.fn(() => installationStore);
@@ -141,6 +146,32 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     );
   });
 
+  it("accepts the live forwarded-by shape and independently validates both scope sets", async () => {
+    const providerFactory = vi.fn(async () => adapter);
+    const injected = dependencies();
+    const auth = {
+      ...sessionAuth(),
+      initiator: {
+        ...forwarded,
+        attributes: {
+          ...forwarded.attributes,
+          "mcp:scopes": ["eve:session"],
+        },
+      },
+    };
+    const resolver = createHostedGitHubPublicationRuntimeResolver({
+      enabled: true,
+      openDatabase: async () => ({}) as never,
+      providerFactory,
+      dependencies: injected.dependencies,
+    });
+
+    await expect(
+      resolver.resolve(auth).then((runtime) => runtime.status()),
+    ).resolves.toMatchObject({ enabled: true });
+    expect(providerFactory).toHaveBeenCalledWith({ authority, installation });
+  });
+
   it.each([
     ["missing", null],
     [
@@ -170,6 +201,25 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
         initiator: { ...forwarded, credential: "forbidden" },
       },
     ],
+    [
+      "invalid-forwarder",
+      {
+        current: {
+          ...forwarded,
+          attributes: {
+            ...forwarded.attributes,
+            "eve:forwarded-by": "invalid forwarder",
+          },
+        },
+        initiator: {
+          ...forwarded,
+          attributes: {
+            ...forwarded.attributes,
+            "eve:forwarded-by": "invalid forwarder",
+          },
+        },
+      },
+    ],
   ])("rejects %s authority before opening the pool", async (_name, auth) => {
     const openDatabase = vi.fn(async () => ({}) as never);
     const providerFactory = vi.fn(async () => adapter);
@@ -186,31 +236,57 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     expect(providerFactory).not.toHaveBeenCalled();
   });
 
-  it("rejects current and initiator tenant drift before opening the pool", async () => {
-    const openDatabase = vi.fn(async () => ({}) as never);
-    const providerFactory = vi.fn(async () => adapter);
-    const auth = {
-      ...sessionAuth(),
-      current: {
+  it.each([
+    [
+      "workspace",
+      {
         ...forwarded,
         attributes: {
           ...forwarded.attributes,
           "mcp:workspace-id": "workspace_other",
         },
       },
-    };
-    const resolver = createHostedGitHubPublicationRuntimeResolver({
-      enabled: true,
-      openDatabase,
-      providerFactory,
-    });
+    ],
+    [
+      "audience",
+      {
+        ...forwarded,
+        attributes: {
+          ...forwarded.attributes,
+          "mcp:audience": "https://other.example.test/mcp",
+        },
+      },
+    ],
+    [
+      "owner",
+      {
+        ...forwarded,
+        principalId: "user_other",
+        subject: "user_other",
+      },
+    ],
+  ])(
+    "rejects current and initiator %s drift before opening the pool",
+    async (_name, current) => {
+      const openDatabase = vi.fn(async () => ({}) as never);
+      const providerFactory = vi.fn(async () => adapter);
+      const auth = {
+        ...sessionAuth(),
+        current,
+      };
+      const resolver = createHostedGitHubPublicationRuntimeResolver({
+        enabled: true,
+        openDatabase,
+        providerFactory,
+      });
 
-    await expect(resolver.resolve(auth)).rejects.toThrow(
-      "matching current and initiating authority",
-    );
-    expect(openDatabase).not.toHaveBeenCalled();
-    expect(providerFactory).not.toHaveBeenCalled();
-  });
+      await expect(resolver.resolve(auth)).rejects.toThrow(
+        "matching current and initiating authority",
+      );
+      expect(openDatabase).not.toHaveBeenCalled();
+      expect(providerFactory).not.toHaveBeenCalled();
+    },
+  );
 
   it("requires live membership before reading an installation", async () => {
     const providerFactory = vi.fn(async () => adapter);
@@ -243,9 +319,26 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     });
 
     await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
-      "installation is inactive",
+      "installation is inactive or unavailable",
     );
     expect(injected.installationStore.read).toHaveBeenCalledWith(authority);
+    expect(injected.publicationStores).not.toHaveBeenCalled();
+    expect(providerFactory).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a missing tenant installation to the unavailable boundary", async () => {
+    const providerFactory = vi.fn(async () => adapter);
+    const injected = dependencies({ boundInstallation: null });
+    const resolver = createHostedGitHubPublicationRuntimeResolver({
+      enabled: true,
+      openDatabase: async () => ({}) as never,
+      providerFactory,
+      dependencies: injected.dependencies,
+    });
+
+    await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
+      "installation is inactive or unavailable",
+    );
     expect(injected.publicationStores).not.toHaveBeenCalled();
     expect(providerFactory).not.toHaveBeenCalled();
   });
