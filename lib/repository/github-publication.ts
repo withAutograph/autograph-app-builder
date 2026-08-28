@@ -20,6 +20,7 @@ export type GitHubOperation =
 type GitHubPermissions = {
   metadata: "read";
   contents: "read" | "write";
+  workflows: "read" | "write";
   pullRequests: "none" | "write";
   administration: "none" | "write";
   variables: "read";
@@ -370,6 +371,7 @@ export function githubPermissionsFor(
       return {
         metadata: "read",
         contents: "read",
+        workflows: "read",
         pullRequests: "none",
         administration: "none",
         variables: "read",
@@ -378,6 +380,7 @@ export function githubPermissionsFor(
       return {
         metadata: "read",
         contents: "write",
+        workflows: "write",
         pullRequests: "none",
         administration: "write",
         variables: "read",
@@ -386,6 +389,7 @@ export function githubPermissionsFor(
       return {
         metadata: "read",
         contents: "write",
+        workflows: "write",
         pullRequests: "write",
         administration: "none",
         variables: "read",
@@ -482,6 +486,7 @@ const installationKeys = [
 const permissionKeys = [
   "metadata",
   "contents",
+  "workflows",
   "pullRequests",
   "administration",
   "variables",

@@ -69,8 +69,24 @@ postcondition, or terminal-store failure remains pending and is reconciled by
 exact idempotency read-back. Only an explicit provider rejection becomes a
 bounded sanitized failure receipt and requires explicit recovery.
 
-The repository now supplies the PostgreSQL CAS store and its additive schema,
-but the fail-closed runtime does not compose it with a live GitHub App yet. A
+The repository now supplies the PostgreSQL CAS store, its additive schema, and
+a fixed-`api.github.com` HTTP provider. The provider reads only the closed
+`GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and `GITHUB_APP_PRIVATE_KEY`
+credential contract, creates short-lived App JWTs, and mints a fresh
+installation token with the exact permissions for each operation. It accepts
+immutable template or reviewed-change bytes only through an injected,
+digest-verified material source; tokens, endpoints, raw responses, and raw
+errors never enter a proposal or receipt. The fail-closed runtime still does
+not compose these pieces with live credentials.
+
+The permission contract includes `workflows: read` for source inspection and
+`workflows: write` only for fresh-history or reviewed draft-PR mutation. This is
+required because a complete supported template can include approved files
+under `.github/workflows`; contents permission alone cannot write those paths.
+The provider creates a parentless initial Git commit from the full immutable
+template material rather than asking GitHub to resolve a mutable template ref.
+
+A
 proposal digest is the journal authority key; duplicated digest, idempotency,
 kind, and status columns are rebound to the closed JSON receipt. The hosted
 tenant retention task cannot delete these rows. `hosted:storage-verify` proves

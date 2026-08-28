@@ -347,6 +347,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     expect(identity.permissions).toEqual({
       metadata: "read",
       contents: "write",
+      workflows: "write",
       pullRequests: "write",
       administration: "none",
       variables: "read",

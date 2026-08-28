@@ -26,6 +26,7 @@ const permissionSnapshotSchema = z
   .object({
     metadata: z.literal("read"),
     contents: z.enum(["read", "write"]),
+    workflows: z.enum(["read", "write"]),
     pullRequests: z.enum(["none", "write"]),
     administration: z.enum(["none", "write"]),
     variables: z.literal("read"),

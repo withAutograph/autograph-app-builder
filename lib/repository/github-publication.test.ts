@@ -329,14 +329,17 @@ describe("closed GitHub publication contract", () => {
     expect(resolve.permissions).toEqual({
       metadata: "read",
       contents: "read",
+      workflows: "read",
       pullRequests: "none",
       administration: "none",
       variables: "read",
     });
     expect(create.permissions.pullRequests).toBe("none");
     expect(create.permissions.administration).toBe("write");
+    expect(create.permissions.workflows).toBe("write");
     expect(publish.permissions.administration).toBe("none");
     expect(publish.permissions.pullRequests).toBe("write");
+    expect(publish.permissions.workflows).toBe("write");
   });
 
   it("rejects unknown keys and permission escalation", () => {
