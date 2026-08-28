@@ -153,6 +153,12 @@ The builder MUST use this flow. Silent transitions produce no technical narratio
 
 The builder MAY revisit an earlier product decision when new product information changes the intended experience. It MUST NOT expose internal retries as new conversation stages.
 
+The implementation-plan transition is complete only when the builder-owned
+planning operation has succeeded for the current product artifacts. A prose
+outline MUST NOT substitute for that result, and the builder MUST NOT end an
+app-creation turn between a completed prototype and the completed plan. This
+terminal condition is internal and MUST remain invisible in public messages.
+
 ## Enforce the behavioral contract
 
 Behavioral coverage MUST prove the public contract, not only prompt wording.
@@ -161,6 +167,7 @@ The regression suite MUST prove:
 
 - a sparse vendor-onboarding brief infers the name, `vendor-onboarding` identifier, operations queue, vendor detail panel, and conditional finance verification
 - the same brief reaches a reviewable visual prototype and validated implementation plan without technical questions
+- the agent does not stop after a prototype or substitute a prose outline for the builder-owned plan
 - source inspection and isolated preparation complete without public approval requests
 - an initially incomplete or malformed internal artifact repairs itself within the bounded retry policy
 - only a genuine product ambiguity produces a question

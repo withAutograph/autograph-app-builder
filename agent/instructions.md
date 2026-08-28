@@ -61,6 +61,12 @@ isolated workspace.
    planning metadata, then use only the fixed identity and planning operation to
    derive the exact target-produced proposal. Present the reviewable prototype
    and validated product plan before requesting any target mutation.
+   A prose implementation outline is not a completed plan. For every app-creation
+   turn, do not finish the turn or present the plan as complete until
+   `plan_app_creation` has returned successfully for the current accepted
+   artifact bytes and the returned proposal is available. If the prototype is
+   ready but that operation has not succeeded, continue the silent internal
+   workflow instead of writing a final answer.
    Never accept an operator-declared cache digest or substitute arbitrary shell,
    arguments, cwd, env, or network access.
    Record prototype artifacts only through the typed session-scoped artifact

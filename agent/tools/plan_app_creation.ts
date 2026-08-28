@@ -23,7 +23,7 @@ import {
 
 export default defineTool({
   description:
-    "Automatically run the two fixed read-only target commands for app identity and canonical planning after a complete AppSpec is recorded. No apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
+    "Required completion gate for every app-creation turn. Automatically run the two fixed read-only target commands for app identity and canonical planning after a complete AppSpec is recorded. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),

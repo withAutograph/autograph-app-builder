@@ -47,8 +47,11 @@ missing operation with a raw shell command or generic file write.
    unresolved choice materially changes the product; otherwise do not prompt
    for artifact recording or formal AppSpec acceptance.
 5. Follow [$plan-app-creation](../plan-app-creation/SKILL.md) automatically to
-   produce the canonical validated proposal. Return only product blockers
-   without workarounds or internal validator mechanics.
+   produce the canonical validated proposal. A prose outline is not a plan:
+   never finish an app-creation turn or claim the plan is ready until
+   `plan_app_creation` succeeds for the current artifact bytes. If the visual
+   prototype is ready first, continue the silent workflow. Return only product
+   blockers without workarounds or internal validator mechanics.
 6. Present the usable prototype and complete proposal, then request the first
    distinct, explicit approval for
    the builder-owned apply operation. Do not apply on AppSpec acceptance alone,
