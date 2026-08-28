@@ -20,7 +20,7 @@ import {
   unlinkSync,
   writeSync,
 } from "node:fs";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { arch, homedir, platform } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -211,9 +211,22 @@ function containsPath(root: string, candidate: string): boolean {
   return path === "" || (!path.startsWith(`..${sep}`) && path !== "..");
 }
 
-function lifecycleLockPort(stateRoot: string): number {
+function lifecycleLockPort(stateRoot: string, attempt = 0): number {
   const value = createHash("sha256").update(stateRoot).digest().readUInt16BE(0);
-  return 32_768 + (value % 24_000);
+  return 32_768 + ((value + attempt) % 24_000);
+}
+
+async function portIsOurLock(port: number, identity: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host: "127.0.0.1", port });
+    let data = "";
+    socket.setEncoding("utf8");
+    socket.setTimeout(100);
+    socket.on("data", (chunk) => (data += chunk));
+    socket.once("close", () => resolve(data === identity));
+    socket.once("error", () => resolve(false));
+    socket.once("timeout", () => socket.destroy());
+  });
 }
 
 export async function withLifecycleLock<T>(
@@ -221,26 +234,30 @@ export async function withLifecycleLock<T>(
   operation: () => T | Promise<T>,
 ): Promise<T> {
   assertAbsoluteInput(stateRoot, "Image lifecycle state root");
-  const server = createServer((socket) => socket.destroy());
-  await new Promise<void>((resolveLock, rejectLock) => {
-    server.once("error", (error: NodeJS.ErrnoException) => {
-      rejectLock(
-        error.code === "EADDRINUSE"
-          ? new Error(
-              "Another image lifecycle operation holds the exclusive external-operation lock.",
-            )
-          : error,
-      );
+  const identity = createHash("sha256").update(stateRoot).digest("hex");
+  const server = createServer((socket) => socket.end(identity));
+  for (let attempt = 0; ; attempt += 1) {
+    const port = lifecycleLockPort(stateRoot, attempt);
+    const acquired = await new Promise<boolean>((resolve, reject) => {
+      const onError = (error: NodeJS.ErrnoException) => {
+        server.removeListener("listening", onListening);
+        if (error.code !== "EADDRINUSE") reject(error);
+        else resolve(false);
+      };
+      const onListening = () => {
+        server.removeListener("error", onError);
+        resolve(true);
+      };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen({ host: "127.0.0.1", port, exclusive: true });
     });
-    server.listen(
-      {
-        host: "127.0.0.1",
-        port: lifecycleLockPort(stateRoot),
-        exclusive: true,
-      },
-      resolveLock,
-    );
-  });
+    if (acquired) break;
+    if (await portIsOurLock(port, identity))
+      throw new Error(
+        "Another image lifecycle operation holds the exclusive external-operation lock.",
+      );
+  }
   server.unref();
   try {
     return await operation();
