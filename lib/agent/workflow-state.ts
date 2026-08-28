@@ -33,6 +33,11 @@ import type {
   FreshBootstrapProposal,
   FreshBootstrapSuccessReceipt,
 } from "@/lib/repository/fresh-bootstrap";
+import type {
+  DraftPullRequestProposal,
+  ImmutableGitHubSourceReceipt,
+} from "@/lib/repository/github-publication";
+import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 
 export const APP_BUILDER_WORKFLOW_VERSION = 14 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
@@ -45,6 +50,7 @@ export type AcceptedAppSpec = {
   digest: string;
   acceptedByCallId: string;
   artifactRevision: string;
+  approvalReceipt?: ApprovalReceipt;
 };
 
 export type PrototypeArtifact = {
@@ -98,8 +104,15 @@ export type AppCreationProposal = TargetExecutionBinding & {
 type WorkspacePhase = {
   workspace: PreparedSandboxWorkspace;
   sourceReceipt: SourceReceipt;
+  githubSource?: ImmutableGitHubSourceReceipt;
   preparedByCallId: string;
   artifacts: readonly PrototypeArtifact[];
+};
+
+export type GitHubDraftProposalBinding = {
+  proposal: DraftPullRequestProposal;
+  sourceReceiptDigest: string;
+  githubSourceDigest: string;
 };
 
 type ReviewedPhase = WorkspacePhase & {
@@ -110,6 +123,8 @@ type ReviewedPhase = WorkspacePhase & {
   applyReceipt: TargetApplyReceipt;
   validationReceipt: TargetValidationReceipt;
   reviewReceipt: ReviewedChangeSetReceipt;
+  changeSetApprovalReceipt?: ApprovalReceipt;
+  githubDraftProposal?: GitHubDraftProposalBinding;
 };
 
 export type AppBuilderWorkflowState =
@@ -299,6 +314,37 @@ export function assertExactWorkflowState(
 ): void {
   if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected)))
     throw new Error(`The workflow changed concurrently before ${operation}.`);
+}
+
+export function assertCurrentGitHubDraftProposal(input: {
+  binding: GitHubDraftProposalBinding | undefined;
+  expectedProposalDigest: string;
+  reviewDigest: string;
+  changeSetDigest: string;
+  sourceReceiptDigest: string;
+  githubSource: ImmutableGitHubSourceReceipt;
+}): DraftPullRequestProposal {
+  const binding = input.binding;
+  const proposal = binding?.proposal;
+  if (
+    binding === undefined ||
+    proposal === undefined ||
+    proposal.digest !== input.expectedProposalDigest ||
+    proposal.reviewDigest !== input.reviewDigest ||
+    proposal.changeSetDigest !== input.changeSetDigest ||
+    binding.sourceReceiptDigest !== input.sourceReceiptDigest ||
+    binding.githubSourceDigest !== input.githubSource.digest ||
+    proposal.repositoryId !== input.githubSource.repository.repositoryId ||
+    proposal.owner !== input.githubSource.repository.owner ||
+    proposal.name !== input.githubSource.repository.name ||
+    proposal.baseBranch !== input.githubSource.repository.defaultBranch ||
+    proposal.baseSha !== input.githubSource.resolvedSha ||
+    proposal.baseTree !== input.githubSource.resolvedTree
+  )
+    throw new Error(
+      "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
+    );
+  return proposal;
 }
 
 export function assertPublicationJournalStatus(

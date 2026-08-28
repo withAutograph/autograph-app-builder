@@ -171,7 +171,19 @@ Before enabling GitHub or hosted repository publication:
    applied overlay and passed validation receipt. `change_set_status` is
    read-only; `accept_change_set` separately approves its digest and rechecks
    the same overlay before recording the durable reviewed receipt. Neither
-   validates, executes a target command, or publishes. The implemented
+   validates, executes a target command, or publishes. GitHub-bound AppSpec,
+   change-set, and publication approvals expose only a canonical closed V2
+   receipt. The first two bind the persisted immutable source identity to their
+   artifact/change-set digest; publication binds the refreshed, durably sealed
+   draft-PR proposal digest. The sealed proposal is stored in the current
+   workflow aggregate with its source and review bindings, so an older proposal
+   or another session's source cannot be adopted for publication. Missing or
+   malformed GitHub receipt-bound approval batches fail publicly without
+   exposing an actionable request. Local AppSpec and change-set approvals expose
+   a distinct closed digest-only local subject instead of raw tool input. Their
+   input-dependent Eve approval policies read the workflow target before
+   requesting approval, denying missing, stale, or wrong-phase GitHub receipts
+   before a request exists. The implemented
    `target_execution_status` rechecks the exact planned proposal, prepared
    workspace, and immutable toolchain receipt before any future target command;
    gate every mutating operation in code.
@@ -198,8 +210,10 @@ Before enabling GitHub or hosted repository publication:
    still-running coordinator write an exact QUIESCED marker and recovery receipt;
    recovery must name that exact digest under the kernel lock. Parent death
    leaves ACTIVE state fail-closed, and a pre-journal abandoned marker has no
-   reset in this slice. GitHub
-   draft-PR publication and remote template acquisition remain unavailable.
+   reset in this slice. The typed GitHub proposal and publication boundary is
+   implemented, but the shipped runtime remains unavailable until a deployment
+   explicitly composes its least-privilege GitHub App adapter and durable
+   stores.
    Local operators expose this production capability only with `mise run
 local:start -- <owner-only-state-root> <owner-only-destination-root>
 <canonical-local-source-root>`; direct

@@ -4,6 +4,7 @@ import type {
   PublicInputRequest,
 } from "@/lib/mcp/contracts";
 import type { MessageStreamEvent } from "eve/client";
+import { publicApprovalDescription } from "../agent/approval-receipt";
 
 export type InternalEveEvent = {
   type: string;
@@ -20,6 +21,8 @@ export type InternalEveEvent = {
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
+const invalidApprovalReceiptMessage =
+  "A required approval receipt was missing or invalid; the request was not exposed.";
 
 function inputRequest(request: {
   requestId: string;
@@ -27,11 +30,42 @@ function inputRequest(request: {
   prompt: string;
   options?: readonly { id: string; label: string }[];
   allowFreeform?: boolean;
-}): PublicInputRequest {
+  action?: {
+    kind: "tool-call";
+    toolName: string;
+    input: unknown;
+  };
+}): PublicInputRequest | undefined {
+  const approvalTitles = {
+    accept_app_spec: "Approve AppSpec",
+    accept_change_set: "Approve change set",
+    publish_github_draft_pr: "Approve draft PR publication",
+  } as const;
+  const toolName = request.action?.toolName;
+  const title =
+    request.kind === "tool-approval" &&
+    toolName !== undefined &&
+    toolName in approvalTitles
+      ? approvalTitles[toolName as keyof typeof approvalTitles]
+      : request.prompt;
+  const description =
+    request.kind === "tool-approval" &&
+    toolName !== undefined &&
+    toolName in approvalTitles
+      ? publicApprovalDescription(request.action?.input, toolName)
+      : undefined;
+  if (
+    request.kind === "tool-approval" &&
+    toolName !== undefined &&
+    toolName in approvalTitles &&
+    description === undefined
+  )
+    return undefined;
   return {
     requestId: request.requestId,
     kind: request.kind === "tool-approval" ? "approval" : "question",
-    title: request.prompt,
+    title,
+    ...(description === undefined ? {} : { description }),
     ...(request.options === undefined
       ? {}
       : { options: request.options.map(({ id, label }) => ({ id, label })) }),
@@ -74,11 +108,22 @@ export function projectInstalledEveEvent(
         },
       ];
     case "input.requested":
-      return event.data.requests.map((request) => ({
-        type: "input.requested",
-        index,
-        request: inputRequest(request),
-      }));
+      const projectedRequests = event.data.requests.map(inputRequest);
+      return projectedRequests.some((request) => request === undefined)
+        ? [
+            {
+              type: "error.public",
+              index,
+              code: "approval_receipt_invalid",
+              message: invalidApprovalReceiptMessage,
+            },
+            { type: "status", index, status: "failed" },
+          ]
+        : projectedRequests.map((request) => ({
+            type: "input.requested" as const,
+            index,
+            request,
+          }));
     case "input.resolved":
       return [
         {
@@ -138,9 +183,15 @@ export function outstandingInstalledEveRequests(
 ): PublicInputRequest[] {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === "input.requested")
-      for (const request of event.data.requests)
-        outstanding.set(request.requestId, inputRequest(request));
+    if (event.type === "input.requested") {
+      const projected = event.data.requests.map(inputRequest);
+      if (projected.some((request) => request === undefined)) return [];
+      for (const request of event.data.requests) {
+        const publicRequest = inputRequest(request);
+        if (publicRequest !== undefined)
+          outstanding.set(request.requestId, publicRequest);
+      }
+    }
     if (event.type === "input.resolved")
       for (const resolution of event.data.resolutions)
         outstanding.delete(resolution.requestId);
@@ -170,9 +221,12 @@ export function deriveInstalledEveStatus(
   const outstanding = new Set<string>();
   let boundary: EveSessionStatus = "working";
   for (const event of events) {
-    if (event.type === "input.requested")
-      for (const request of event.data.requests)
-        outstanding.add(request.requestId);
+    if (event.type === "input.requested") {
+      const projected = event.data.requests.map(inputRequest);
+      if (projected.some((request) => request === undefined)) return "failed";
+      for (const request of projected)
+        if (request !== undefined) outstanding.add(request.requestId);
+    }
     if (event.type === "input.resolved")
       for (const resolution of event.data.resolutions)
         outstanding.delete(resolution.requestId);

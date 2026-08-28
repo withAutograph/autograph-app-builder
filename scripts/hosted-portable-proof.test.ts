@@ -9,21 +9,28 @@ import {
 import { TOOL_NAMES } from "./portable-release";
 
 const target = {
+  repositoryId: "1234",
   repository: "withAutograph/proof-target",
   baseRef: "refs/heads/main",
   baseSha: "a".repeat(40),
   headRef: "refs/heads/autograph/proof",
   appSpecDigest: "b".repeat(64),
   changeSetDigest: "c".repeat(64),
+  proposalDigest: "d".repeat(64),
 };
 const receipt = (phase: "appspec" | "change_set" | "publication") => ({
-  format: "autograph-eve-approval-receipt-v1" as const,
+  format: "autograph-eve-approval-receipt-v2" as const,
   phase,
+  repositoryId: target.repositoryId,
   repository: target.repository,
   baseRef: target.baseRef,
   baseSha: target.baseSha,
   subjectDigest:
-    phase === "appspec" ? target.appSpecDigest : target.changeSetDigest,
+    phase === "appspec"
+      ? target.appSpecDigest
+      : phase === "change_set"
+        ? target.changeSetDigest
+        : target.proposalDigest,
   outcome:
     phase === "appspec"
       ? ("accept-appspec" as const)
@@ -303,6 +310,19 @@ const proofInput = (fetcher: typeof fetch) => ({
 });
 
 describe("hosted portable fresh-client proof", () => {
+  it("accepts a SHA-256 GitHub object id for the target and every receipt", () => {
+    const sha256Target = { ...target, baseSha: "a".repeat(64) };
+    const parsed = hostedProofScenarioSchema.parse({
+      ...scenario,
+      target: sha256Target,
+      approvalReceipts: scenario.approvalReceipts.map((approval) => ({
+        ...approval,
+        receipt: { ...approval.receipt, baseSha: sha256Target.baseSha },
+      })),
+    });
+    expect(parsed.target.baseSha).toHaveLength(64);
+  });
+
   it("proves exact approvals, metadata, identities, publication, and five tools", async () => {
     const result = await runHostedProof(
       proofInput(hostedFixture() as typeof fetch),

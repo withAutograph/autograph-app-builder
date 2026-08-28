@@ -6,12 +6,18 @@ import { describe, expect, it } from "vitest";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   APP_BUILDER_WORKFLOW_STATE_KEY,
+  assertCurrentGitHubDraftProposal,
   assertExactWorkflowState,
   assertFreshBootstrapJournalStatus,
   assertPublicationJournalStatus,
   assertUpstreamMutationAllowed,
   type AppBuilderWorkflowState,
+  type GitHubDraftProposalBinding,
 } from "./workflow-state";
+import type {
+  DraftPullRequestProposal,
+  ImmutableGitHubSourceReceipt,
+} from "@/lib/repository/github-publication";
 
 const state = (phase: AppBuilderWorkflowState["phase"]) =>
   ({
@@ -20,6 +26,42 @@ const state = (phase: AppBuilderWorkflowState["phase"]) =>
   }) as AppBuilderWorkflowState;
 
 describe(`workflow V${APP_BUILDER_WORKFLOW_VERSION} aggregate boundary`, () => {
+  const githubSource = {
+    digest: "1".repeat(64),
+    repository: {
+      repositoryId: "1234",
+      owner: "withAutograph",
+      name: "arrusted-development",
+      defaultBranch: "main",
+    },
+    resolvedSha: "a".repeat(40),
+    resolvedTree: "b".repeat(40),
+  } as ImmutableGitHubSourceReceipt;
+  const proposal = {
+    digest: "2".repeat(64),
+    reviewDigest: "3".repeat(64),
+    changeSetDigest: "4".repeat(64),
+    repositoryId: "1234",
+    owner: "withAutograph",
+    name: "arrusted-development",
+    baseBranch: "main",
+    baseSha: githubSource.resolvedSha,
+    baseTree: githubSource.resolvedTree,
+  } as DraftPullRequestProposal;
+  const binding: GitHubDraftProposalBinding = {
+    proposal,
+    sourceReceiptDigest: "5".repeat(64),
+    githubSourceDigest: githubSource.digest,
+  };
+  const exactProposalInput = {
+    binding,
+    expectedProposalDigest: proposal.digest,
+    reviewDigest: proposal.reviewDigest,
+    changeSetDigest: proposal.changeSetDigest,
+    sourceReceiptDigest: binding.sourceReceiptDigest,
+    githubSource,
+  };
+
   it("uses a new durable key so earlier aggregates cannot be reinterpreted", () => {
     expect(APP_BUILDER_WORKFLOW_STATE_KEY).toBe(
       `autograph-app-builder.workflow.v${APP_BUILDER_WORKFLOW_VERSION}`,
@@ -76,6 +118,31 @@ describe(`workflow V${APP_BUILDER_WORKFLOW_VERSION} aggregate boundary`, () => {
         "prototype artifact recording",
       ),
     ).toThrow(/changed concurrently/u);
+  });
+
+  it("accepts only the proposal sealed into the current reviewed workflow", () => {
+    expect(assertCurrentGitHubDraftProposal(exactProposalInput)).toBe(proposal);
+  });
+
+  it("rejects an old proposal after a new review without provider mutation", () => {
+    expect(() =>
+      assertCurrentGitHubDraftProposal({
+        ...exactProposalInput,
+        reviewDigest: "6".repeat(64),
+      }),
+    ).toThrow(/not the exact proposal/u);
+  });
+
+  it("rejects cross-session proposal adoption through a different source binding", () => {
+    expect(() =>
+      assertCurrentGitHubDraftProposal({
+        ...exactProposalInput,
+        githubSource: {
+          ...githubSource,
+          digest: "7".repeat(64),
+        },
+      }),
+    ).toThrow(/not the exact proposal/u);
   });
 
   it.each([

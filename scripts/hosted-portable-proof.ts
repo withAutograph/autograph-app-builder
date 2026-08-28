@@ -7,23 +7,14 @@ import {
   type EveSessionResult,
 } from "../lib/mcp/contracts";
 import { TOOL_NAMES } from "./portable-release";
+import { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
-const hex40 = z.string().regex(/^[0-9a-f]{40}$/u);
+export { approvalReceiptSchema } from "../lib/agent/approval-receipt";
+
+const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryName = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 const gitRef = z.string().regex(/^refs\/(?:heads|tags)\/[A-Za-z0-9._/-]+$/u);
-
-export const approvalReceiptSchema = z
-  .object({
-    format: z.literal("autograph-eve-approval-receipt-v1"),
-    phase: z.enum(["appspec", "change_set", "publication"]),
-    repository: repositoryName,
-    baseRef: gitRef,
-    baseSha: hex40,
-    subjectDigest: hex64,
-    outcome: z.enum(["accept-appspec", "accept-change-set", "create-draft-pr"]),
-  })
-  .strict();
 
 const expectedApprovalSchema = z
   .object({
@@ -35,12 +26,14 @@ const expectedApprovalSchema = z
 
 const targetProofSchema = z
   .object({
+    repositoryId: z.string().regex(/^\d+$/u),
     repository: repositoryName,
     baseRef: gitRef,
-    baseSha: hex40,
+    baseSha: objectId,
     headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
     appSpecDigest: hex64,
     changeSetDigest: hex64,
+    proposalDigest: hex64,
   })
   .strict();
 
@@ -93,6 +86,7 @@ export const hostedProofScenarioSchema = z
     for (const expected of scenario.approvalReceipts) {
       const receipt = expected.receipt;
       if (
+        receipt.repositoryId !== scenario.target.repositoryId ||
         receipt.repository !== scenario.target.repository ||
         receipt.baseRef !== scenario.target.baseRef ||
         receipt.baseSha !== scenario.target.baseSha
@@ -105,7 +99,9 @@ export const hostedProofScenarioSchema = z
       const expectedDigest =
         receipt.phase === "appspec"
           ? scenario.target.appSpecDigest
-          : scenario.target.changeSetDigest;
+          : receipt.phase === "change_set"
+            ? scenario.target.changeSetDigest
+            : scenario.target.proposalDigest;
       const expectedOutcome =
         receipt.phase === "appspec"
           ? "accept-appspec"
@@ -221,9 +217,9 @@ const draftPrReceiptSchema = z
     draft: z.literal(true),
     repository: repositoryName,
     baseRef: gitRef,
-    baseSha: hex40,
+    baseSha: objectId,
     headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
-    headSha: hex40,
+    headSha: objectId,
     changeSetDigest: hex64,
     outcome: z.literal("draft-pr-created"),
   })

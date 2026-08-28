@@ -1,7 +1,12 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
+import {
+  approvalReceiptSchema,
+  approvalRequestDecision,
+  approvalTargetFromGitHubSource,
+  assertApprovalReceipt,
+} from "@/lib/agent/approval-receipt";
 import { exactNormalizedChangeSet } from "./change_set_status";
 import { assertAtomicReviewedChangeSetReuse } from "@/lib/agent/reviewed-change-set-reuse";
 import {
@@ -32,9 +37,29 @@ const changeSetPayload = z.strictObject({
 export default defineTool({
   description:
     "Accept the exact previously displayed normalized change set after successful validation. This separate approval recomputes the canonical applied-overlay proposal and records a durable reviewed receipt; it never executes, validates, publishes, or mutates the prepared source.",
-  inputSchema: z.strictObject({ changeSet: changeSetPayload }),
-  approval: always(),
-  async execute({ changeSet: expectedChangeSet }, ctx) {
+  inputSchema: z.strictObject({
+    changeSet: changeSetPayload,
+    approvalReceipt: approvalReceiptSchema.optional(),
+  }),
+  approval: ({ toolInput }) => {
+    const state = appBuilderWorkflowState.get();
+    if (
+      toolInput === undefined ||
+      (state.phase !== "validated" && state.phase !== "reviewed")
+    )
+      return {
+        type: "denied",
+        reason: "A validated change set is required before approval.",
+      };
+    return approvalRequestDecision({
+      phase: "change_set",
+      toolName: "accept_change_set",
+      toolInput,
+      githubSource: state.githubSource,
+      subjectDigest: toolInput.changeSet.digest,
+    });
+  },
+  async execute({ changeSet: expectedChangeSet, approvalReceipt }, ctx) {
     const state = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(state, "reviewed change-set acceptance");
     if (state.phase !== "validated" && state.phase !== "reviewed")
@@ -55,7 +80,33 @@ export default defineTool({
       throw new Error(
         "The normalized change set changed before review acceptance.",
       );
+    if (state.githubSource === undefined && approvalReceipt !== undefined)
+      throw new Error(
+        "A change-set approval receipt requires an immutable GitHub source binding.",
+      );
+    const exactApprovalReceipt =
+      state.githubSource === undefined
+        ? undefined
+        : assertApprovalReceipt({
+            actual:
+              approvalReceipt ??
+              (() => {
+                throw new Error(
+                  "The GitHub-bound change-set approval receipt is missing.",
+                );
+              })(),
+            phase: "change_set",
+            target: approvalTargetFromGitHubSource(state.githubSource),
+            subjectDigest: changeSet.digest,
+          });
     if (state.phase === "reviewed") {
+      if (
+        JSON.stringify(state.changeSetApprovalReceipt) !==
+        JSON.stringify(exactApprovalReceipt)
+      )
+        throw new Error(
+          "The change-set approval receipt changed after acceptance.",
+        );
       const expectedReceipt = createReviewedChangeSetReceipt(
         changeSet,
         state.reviewReceipt.reviewedByCallId,
@@ -97,6 +148,9 @@ export default defineTool({
         preparedByCallId: latest.preparedByCallId,
         workspace: latest.workspace,
         sourceReceipt: latest.sourceReceipt,
+        ...(latest.githubSource === undefined
+          ? {}
+          : { githubSource: latest.githubSource }),
         artifacts: latest.artifacts,
         appSpec: latest.appSpec,
         dependencyReceipt: latest.dependencyReceipt,
@@ -105,6 +159,9 @@ export default defineTool({
         applyReceipt: latest.applyReceipt,
         validationReceipt: latest.validationReceipt,
         reviewReceipt: receipt,
+        ...(exactApprovalReceipt === undefined
+          ? {}
+          : { changeSetApprovalReceipt: exactApprovalReceipt }),
       };
     });
     return { ...receipt, reused: false };

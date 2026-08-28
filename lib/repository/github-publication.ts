@@ -246,6 +246,7 @@ export interface GitHubPublicationAdapter {
     operation: GitHubOperation,
   ): Promise<GitHubInstallationIdentity>;
   inspectRepository(input: {
+    operation: "resolve-existing-source" | "publish-draft-pull-request";
     repositoryId: string;
     ref: string;
   }): Promise<GitHubRepositoryObservation>;
@@ -623,6 +624,7 @@ export async function resolveImmutableExistingSource(input: {
   )
     throw new Error("The installation is not selected for source resolution.");
   const repository = await input.adapter.inspectRepository({
+    operation: "resolve-existing-source",
     repositoryId: input.repositoryId,
     ref: input.ref,
   });
@@ -647,6 +649,42 @@ export async function resolveImmutableExistingSource(input: {
     resolvedByCallId: input.resolvedByCallId,
   };
   return { ...unsigned, digest: digest(unsigned) };
+}
+
+const immutableSourceReceiptKeys = [
+  "version",
+  "repository",
+  "resolvedRef",
+  "resolvedSha",
+  "resolvedTree",
+  "installationIdentityDigest",
+  "resolvedByCallId",
+  "digest",
+] as const;
+
+export function assertExactImmutableGitHubSourceReceipt(
+  receipt: ImmutableGitHubSourceReceipt,
+): void {
+  if (!exactKeys(receipt, immutableSourceReceiptKeys))
+    throw new Error(
+      "The immutable GitHub source receipt schema is not closed.",
+    );
+  assertExactRepositoryObservation(receipt.repository);
+  exactDigest(receipt, "Immutable GitHub source receipt");
+  if (
+    receipt.version !== GITHUB_PUBLICATION_VERSION ||
+    !safeHeadRef(receipt.resolvedRef) ||
+    !isObjectId(receipt.resolvedSha) ||
+    !isObjectId(receipt.resolvedTree) ||
+    !isDigest(receipt.installationIdentityDigest) ||
+    receipt.resolvedByCallId.trim().length === 0 ||
+    receipt.repository.headSha !== receipt.resolvedSha ||
+    receipt.repository.headTree !== receipt.resolvedTree ||
+    receipt.repository.installationIdentityDigest !==
+      receipt.installationIdentityDigest ||
+    !releaseGateAbsent(receipt.repository)
+  )
+    throw new Error("The immutable GitHub source receipt is malformed.");
 }
 
 const freshProposalKeys = [
