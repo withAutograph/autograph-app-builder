@@ -8,8 +8,8 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "2503b6ad5820f650b1469d72fc569260bee298a8";
-export const ARRUSTED_TARGET_TREE = "226cf97f187d50ba0db5877b62f7c38db95061da";
+export const ARRUSTED_TARGET_SHA = "77dce48833e7d6e05e086f18ca11b77d9214da9e";
+export const ARRUSTED_TARGET_TREE = "2ed91119a0101ce053a4eb2122624efa1fff6ecd";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
 
@@ -32,7 +32,7 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     sha: gitObjectId,
     tree: gitObjectId,
     miseConfigSha256: z.literal(
-      "563ef5a6a44ce320ce4833f61391ebd9f41b02ac542d4254f04087285ce449ae",
+      "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
     ),
     miseLockSha256: z.literal(
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
@@ -163,7 +163,7 @@ function fixtureManifest(
       sha: target.sourceSha,
       tree: target.sourceTree,
       miseConfigSha256:
-        "563ef5a6a44ce320ce4833f61391ebd9f41b02ac542d4254f04087285ce449ae",
+        "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
       miseLockSha256:
         "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
       bunLockSha256:
