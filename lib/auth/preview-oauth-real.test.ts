@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { cimd } from "@better-auth/cimd";
 import { mcp } from "@better-auth/mcp";
+import type { BetterAuthOptions } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { getTestInstance } from "better-auth/test";
 import { createLocalJWKSet, jwtVerify } from "jose";
@@ -11,6 +12,7 @@ import {
   buildPreviewCimdOptions,
   buildPreviewMcpOAuthOptions,
 } from "./preview-oauth-contract";
+import { previewOAuthRateLimit } from "./preview-oauth-runtime";
 
 const origin = "https://builder.example.test";
 const issuer = `${origin}/api/auth`;
@@ -71,6 +73,7 @@ async function setup(
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
   },
+  rateLimit: BetterAuthOptions["rateLimit"] = { enabled: false },
 ) {
   const membershipState = { activeWorkspaces };
   const fetchClientMetadata = vi.fn(async (input: RequestInfo | URL) =>
@@ -99,7 +102,7 @@ async function setup(
       secret: "test-secret-that-is-long-enough-for-better-auth",
       emailAndPassword: { enabled: true },
       logger: { disabled: true },
-      rateLimit: { enabled: false },
+      rateLimit,
       plugins: [
         jwt({
           jwks: { keyPairConfig: { alg: "ES256" }, jwksPath: "/jwks" },
@@ -333,6 +336,122 @@ describe("real Better Auth Preview OAuth handler", () => {
       clientId,
       expect.any(Object),
     );
+  });
+
+  it("keeps a Codex token exchange standards-shaped after a retry burst", async () => {
+    const { customFetchImpl, signIn } = await setup(
+      ["workspace_1"],
+      codexClientMetadata,
+      previewOAuthRateLimit,
+    );
+    const signedIn = await signIn();
+    const verifier = "r".repeat(64);
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const authorize = await customFetchImpl(
+      authorizationUrl(challenge, "state_codex_retry", {
+        id: codexClientId,
+        redirectUri: codexRedirectUris[0],
+      }),
+      { headers: signedIn, redirect: "manual" },
+    );
+    const consentLocation = new URL(authorize.headers.get("location")!, origin);
+    const consent = await customFetchImpl(`${issuer}/oauth2/consent`, {
+      method: "POST",
+      headers: new Headers({
+        ...Object.fromEntries(signedIn.entries()),
+        origin,
+        "content-type": "application/json",
+      }),
+      body: JSON.stringify({
+        accept: true,
+        oauth_query: consentLocation.search.slice(1),
+      }),
+    });
+    const consentBody = (await consent.json()) as {
+      redirect_uri?: string;
+      url?: string;
+    };
+    const code = new URL(
+      consentBody.redirect_uri ?? consentBody.url!,
+    ).searchParams.get("code");
+    expect(code).toMatch(/^[A-Za-z0-9_-]+$/u);
+
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const retry = await customFetchImpl(`${issuer}/oauth2/token`, {
+        method: "POST",
+        headers: {
+          origin,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: codexClientId,
+          code: `discarded-retry-${attempt}`,
+          code_verifier: verifier,
+          redirect_uri: codexRedirectUris[0],
+          resource,
+        }),
+      });
+      expect(retry.status).not.toBe(429);
+    }
+
+    const token = await customFetchImpl(`${issuer}/oauth2/token`, {
+      method: "POST",
+      headers: {
+        origin,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: codexClientId,
+        code: code!,
+        code_verifier: verifier,
+        redirect_uri: codexRedirectUris[0],
+        resource,
+      }),
+    });
+    expect(token.status).toBe(200);
+    const tokenBody = (await token.json()) as Record<string, unknown>;
+    expect(tokenBody).toMatchObject({
+      access_token: expect.any(String),
+      expires_in: 300,
+      refresh_token: expect.any(String),
+      scope: requestedScope,
+      token_type: "Bearer",
+    });
+    expect(tokenBody).not.toHaveProperty("accessToken");
+    expect(tokenBody).not.toHaveProperty("expiresIn");
+    expect(tokenBody).not.toHaveProperty("tokenType");
+
+    const signInStatuses: number[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await customFetchImpl(`${issuer}/sign-in/email`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify({
+          email: `unknown-${attempt}@example.test`,
+          password: "not-a-valid-password",
+        }),
+      });
+      signInStatuses.push(response.status);
+    }
+    expect(signInStatuses.at(-1)).toBe(429);
+
+    const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
+    const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
+    await expect(
+      jwtVerify(tokenBody.access_token as string, createLocalJWKSet(jwks), {
+        issuer,
+        audience: resource,
+        algorithms: ["ES256"],
+      }),
+    ).resolves.toMatchObject({
+      payload: {
+        aud: resource,
+        iss: issuer,
+        workspace_id: "workspace_1",
+      },
+    });
   });
 
   it("accepts the native Codex CIMD metadata without weakening PKCE or redirects", async () => {

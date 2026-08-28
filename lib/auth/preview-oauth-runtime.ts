@@ -90,6 +90,21 @@ export type PreviewOAuthRuntimeConfig = z.infer<
   typeof previewOAuthRuntimeConfigSchema
 >;
 
+/**
+ * Codex can retry the public-client code exchange while its loopback callback
+ * settles. Keep the authorization server's default limit everywhere else, but
+ * give the one-time-code/refresh-token endpoint enough room for those bounded
+ * retries instead of sharing the much smaller general Preview bucket.
+ */
+export const previewOAuthRateLimit = {
+  enabled: true,
+  window: 60,
+  max: 60,
+  customRules: {
+    "/oauth2/token": { window: 60, max: 180 },
+  },
+} satisfies NonNullable<BetterAuthOptions["rateLimit"]>;
+
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
@@ -141,11 +156,7 @@ export function createPreviewOAuthServer(input: {
       expiresIn: 60 * 60 * 8,
       updateAge: 60 * 60,
     },
-    rateLimit: {
-      enabled: true,
-      window: 60,
-      max: 60,
-    },
+    rateLimit: previewOAuthRateLimit,
     advanced: {
       cookiePrefix:
         config.environment === "preview"
