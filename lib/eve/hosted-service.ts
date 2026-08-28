@@ -17,7 +17,11 @@ import {
   type HostedOperationKind,
   type HostedOperationRecord,
 } from "./hosted-store";
-import { toPublicEvent, type InternalEveEvent } from "./public-events";
+import {
+  outstandingInternalEveRequests,
+  toPublicEvent,
+  type InternalEveEvent,
+} from "./public-events";
 import {
   eveSessionResultSchema,
   publicEveEventSchema,
@@ -55,11 +59,13 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
-    requestId: string;
-    response:
-      | { kind: "approve" }
-      | { kind: "deny" }
-      | { kind: "answer"; value: string; optionId?: string };
+    responses: Array<{
+      requestId: string;
+      response:
+        | { kind: "approve" }
+        | { kind: "deny" }
+        | { kind: "answer"; value: string; optionId?: string };
+    }>;
   }): Promise<HostedEngineSnapshot>;
   cancel(input: {
     principal: HostedPrincipal;
@@ -88,6 +94,13 @@ export class HostedSubmissionUnknownError extends Error {
       "The hosted Eve submission outcome is unknown and will not be replayed.",
     );
     this.name = "HostedSubmissionUnknownError";
+  }
+}
+
+export class HostedCancellationUnsettledError extends Error {
+  constructor() {
+    super("Cancellation was accepted but has not settled; use eve_get.");
+    this.name = "HostedCancellationUnsettledError";
   }
 }
 
@@ -158,21 +171,26 @@ function projectSnapshot(
   limit = 100,
 ): EveSessionResult {
   const snapshot = hostedSnapshotSchema.parse(snapshotInput);
-  const candidates = snapshot.events.slice(cursor, cursor + limit);
-  const events = candidates.flatMap((candidate) => {
-    if (candidate === null || typeof candidate !== "object") return [];
-    const projected = toPublicEvent(candidate as InternalEveEvent);
-    if (projected === null) return [];
-    const parsed = publicEveEventSchema.safeParse(projected);
-    return parsed.success ? [parsed.data] : [];
-  });
-  const inputRequests = events.flatMap((event) =>
-    event.type === "input_required" ? [event.request] : [],
+  const projected = snapshot.events
+    .flatMap((candidate) => {
+      if (candidate === null || typeof candidate !== "object") return [];
+      const projected = toPublicEvent(candidate as InternalEveEvent);
+      if (projected === null) return [];
+      const parsed = publicEveEventSchema.safeParse(projected);
+      return parsed.success ? [parsed.data] : [];
+    })
+    .map((event, index) => ({ ...event, index }));
+  const events = projected.slice(cursor, cursor + limit);
+  const inputRequests = outstandingInternalEveRequests(
+    snapshot.events.filter(
+      (event): event is InternalEveEvent =>
+        event !== null && typeof event === "object",
+    ),
   );
   return eveSessionResultSchema.parse({
     sessionId,
     status: snapshot.status,
-    cursor: Math.min(cursor + candidates.length, snapshot.events.length),
+    cursor: Math.min(cursor + events.length, projected.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
   });
@@ -555,12 +573,31 @@ export function createHostedEveSessionService(input: {
         request,
         sessionId: request.sessionId,
         async dispatch(operationId) {
+          const before = await input.transport.get({
+            principal,
+            adapterSessionId: session.adapterSessionId,
+          });
+          const expected = outstandingInternalEveRequests(
+            before.events.filter(
+              (event): event is InternalEveEvent =>
+                event !== null && typeof event === "object",
+            ),
+          ).map(({ requestId }) => requestId);
+          if (
+            expected.length !== request.responses.length ||
+            expected.some(
+              (requestId, index) =>
+                request.responses[index]?.requestId !== requestId,
+            )
+          )
+            throw new SubmissionRejectedBeforeDispatchError(
+              "input_batch_changed",
+            );
           const snapshot = await input.transport.respond({
             principal,
             operationId,
             adapterSessionId: session.adapterSessionId,
-            requestId: request.requestId,
-            response: request.response,
+            responses: request.responses,
           });
           const result = projectSnapshot(request.sessionId, snapshot);
           await input.store.observeSession?.({

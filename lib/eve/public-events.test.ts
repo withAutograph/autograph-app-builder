@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import {
   deriveInstalledEveStatus,
+  projectInstalledEveEvents,
   projectInstalledEveEvent,
   toPublicEvent,
 } from "./public-events";
@@ -92,16 +93,74 @@ describe("installed Eve 0.43 projection", () => {
     ).toEqual([]);
   });
 
-  it("derives waiting and outstanding-input status from installed events", () => {
+  it("keeps a multi-request batch input-required until every id resolves", () => {
+    const requested = installedEvent({
+      type: "input.requested",
+      data: {
+        requests: ["one", "two", "three"].map((requestId) => ({
+          requestId,
+          kind: "tool-approval",
+          prompt: requestId,
+        })),
+      },
+    });
+    expect(deriveInstalledEveStatus([requested])).toBe("input_required");
+    for (const count of [1, 2]) {
+      expect(
+        deriveInstalledEveStatus([
+          requested,
+          installedEvent({
+            type: "input.resolved",
+            data: {
+              resolutions: ["one", "two", "three"]
+                .slice(0, count)
+                .map((requestId) => ({ requestId })),
+            },
+          }),
+          installedEvent({ type: "session.waiting", data: {} }),
+        ]),
+      ).toBe("input_required");
+    }
     expect(
       deriveInstalledEveStatus([
-        installedEvent({ type: "input.requested", data: { requests: [] } }),
-      ]),
-    ).toBe("input_required");
-    expect(
-      deriveInstalledEveStatus([
+        requested,
+        installedEvent({
+          type: "input.resolved",
+          data: {
+            resolutions: ["one", "two", "three"].map((requestId) => ({
+              requestId,
+            })),
+          },
+        }),
         installedEvent({ type: "session.waiting", data: {} }),
       ]),
     ).toBe("waiting");
+  });
+
+  it("assigns dense unique public indices to sibling requests and errors", () => {
+    const projected = projectInstalledEveEvents([
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: ["one", "two", "three"].map((requestId) => ({
+            requestId,
+            kind: "tool-approval",
+            prompt: requestId,
+          })),
+        },
+      }),
+      installedEvent({
+        type: "session.failed",
+        data: { code: "failed", message: "Stopped" },
+      }),
+    ]);
+    expect(projected.map(({ index }) => index)).toEqual([0, 1, 2, 3, 4]);
+    expect(projected.map(({ type }) => type)).toEqual([
+      "input_required",
+      "input_required",
+      "input_required",
+      "error",
+      "status",
+    ]);
   });
 });

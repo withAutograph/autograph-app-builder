@@ -130,8 +130,14 @@ describe("same-origin canonical Eve transport", () => {
       principal,
       operationId: "op_respond",
       adapterSessionId: "wrun_1",
-      requestId: "req_1",
-      response: { kind: "deny" },
+      responses: [
+        { requestId: "req_1", response: { kind: "deny" } },
+        { requestId: "req_2", response: { kind: "approve" } },
+        {
+          requestId: "req_3",
+          response: { kind: "answer", value: "Choice" },
+        },
+      ],
     });
 
     expect(bodies[0]).toMatchObject({
@@ -139,22 +145,36 @@ describe("same-origin canonical Eve transport", () => {
       turnPolicy: "queue",
     });
     expect(bodies[1]).toMatchObject({
-      inputResponses: [{ requestId: "req_1", optionId: "cancel" }],
+      inputResponses: [
+        { requestId: "req_1", optionId: "cancel" },
+        { requestId: "req_2", optionId: "approve" },
+        { requestId: "req_3", text: "Choice" },
+      ],
     });
+    expect(bodies).toHaveLength(2);
     expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
       "https://builder.example.test/eve/v1/session/wrun_1",
     );
   });
 
-  it("accepts canonical 202 cancellation and rejects inconsistent cancellation replies", async () => {
-    const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+  it("waits for a new guarded cancel and waiting boundary", async () => {
+    const active = [{ type: "step.started", data: { turnId: "turn_1" } }];
+    const settled = [
+      ...active,
+      { type: "turn.cancelled", data: { turnId: "turn_1" } },
+      { type: "session.waiting", data: {} },
+    ];
+    let streamReads = 0;
+    const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).endsWith("/cancel")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
           { status: 202 },
         );
       }
-      return stream();
+      streamReads += 1;
+      return stream(streamReads < 3 ? active : settled);
     });
     await expect(
       createSameOriginEveTransport({
@@ -163,17 +183,73 @@ describe("same-origin canonical Eve transport", () => {
         fetchImplementation,
       }).cancel({ principal, adapterSessionId: "wrun_1" }),
     ).resolves.toMatchObject({ status: "waiting" });
+  });
 
+  it("does not accept stale or historical cancellation and times out honestly", async () => {
+    const historical = [
+      { type: "turn.cancelled", data: { turnId: "turn_old" } },
+      { type: "session.waiting", data: {} },
+      { type: "step.started", data: { turnId: "turn_new" } },
+    ];
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      String(url).endsWith("/cancel")
+        ? Response.json(
+            { ok: true, sessionId: "wrun_1", status: "accepted" },
+            { status: 202 },
+          )
+        : stream(historical),
+    );
     await expect(
       createSameOriginEveTransport({
         config,
         workloadIdentity: identity(),
-        fetchImplementation: vi.fn(async () =>
-          Response.json(
-            { ok: true, status: "no_active_turn" },
-            { status: 202 },
-          ),
-        ),
+        fetchImplementation,
+      }).cancel({ principal, adapterSessionId: "wrun_1" }),
+    ).rejects.toMatchObject({ name: "HostedCancellationUnsettledError" });
+  });
+
+  it("rejects a stale guarded turn and keeps no-active-turn observational", async () => {
+    const active = [{ type: "step.started", data: { turnId: "turn_new" } }];
+    const staleGuardFetch = vi.fn<typeof fetch>(async () => stream(active));
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation: staleGuardFetch,
+      }).cancel({
+        principal,
+        adapterSessionId: "wrun_1",
+        turnId: "turn_old",
+      }),
+    ).rejects.toMatchObject({ code: "turn_changed" });
+    expect(staleGuardFetch).toHaveBeenCalledTimes(1);
+
+    const waiting = [{ type: "session.waiting", data: {} }];
+    const noActiveFetch = vi.fn<typeof fetch>(async (url) =>
+      String(url).endsWith("/cancel")
+        ? Response.json({ ok: true, status: "no_active_turn" })
+        : stream(waiting),
+    );
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation: noActiveFetch,
+      }).cancel({ principal, adapterSessionId: "wrun_1" }),
+    ).resolves.toMatchObject({ status: "waiting" });
+  });
+
+  it("rejects inconsistent canonical cancellation replies", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      String(url).endsWith("/cancel")
+        ? Response.json({ ok: true, status: "no_active_turn" }, { status: 202 })
+        : stream([{ type: "step.started", data: { turnId: "turn_1" } }]),
+    );
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation,
       }).cancel({ principal, adapterSessionId: "wrun_1" }),
     ).rejects.toThrow("status was inconsistent");
   });

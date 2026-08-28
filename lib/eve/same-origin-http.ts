@@ -4,6 +4,7 @@ import { z } from "zod";
 import { sessionStatusSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema, type HostedPrincipal } from "./hosted-auth";
 import {
+  HostedCancellationUnsettledError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
   type HostedEngineSnapshot,
@@ -217,12 +218,15 @@ async function authenticatedFetch(input: {
   });
 }
 
-async function readSnapshot(input: {
+async function readInstalledSnapshot(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation: typeof fetch;
   sessionId: string;
-}): Promise<HostedEngineSnapshot> {
+}): Promise<{
+  snapshot: HostedEngineSnapshot;
+  installed: MessageStreamEvent[];
+}> {
   const path = `/eve/v1/session/${encodeURIComponent(input.sessionId)}/stream?startIndex=0&includeTailIndex=1`;
   const response = await authenticatedFetch({ ...input, path });
   if (response.status >= 300 && response.status < 400) {
@@ -254,7 +258,10 @@ async function readSnapshot(input: {
   }
   if (tail === -1) {
     await response.body.cancel().catch(() => undefined);
-    return { status: sessionStatusSchema.parse("working"), events: [] };
+    return {
+      snapshot: { status: sessionStatusSchema.parse("working"), events: [] },
+      installed: [],
+    };
   }
 
   const reader = response.body.getReader();
@@ -304,12 +311,70 @@ async function readSnapshot(input: {
     reader.releaseLock();
   }
 
+  const projected = events
+    .flatMap((event) => projectInstalledEveEvent(event, 0))
+    .map((event, index) => ({ ...event, index }));
   return {
-    status: deriveInstalledEveStatus(events),
-    events: events.flatMap((event, index) =>
-      projectInstalledEveEvent(event, index),
-    ),
+    snapshot: {
+      status: deriveInstalledEveStatus(events),
+      events: projected,
+    },
+    installed: events,
   };
+}
+
+async function readSnapshot(
+  input: Parameters<typeof readInstalledSnapshot>[0],
+): Promise<HostedEngineSnapshot> {
+  return (await readInstalledSnapshot(input)).snapshot;
+}
+
+function activeTurnId(
+  events: readonly MessageStreamEvent[],
+): string | undefined {
+  let active: string | undefined;
+  for (const event of events) {
+    const turnId =
+      "data" in event && "turnId" in event.data
+        ? (event.data.turnId as string | undefined)
+        : undefined;
+    if (
+      turnId !== undefined &&
+      !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+    )
+      active = turnId;
+    if (
+      ["turn.completed", "turn.failed", "turn.cancelled"].includes(
+        event.type,
+      ) &&
+      (turnId === undefined || turnId === active)
+    )
+      active = undefined;
+    if (
+      ["session.waiting", "session.completed", "session.failed"].includes(
+        event.type,
+      )
+    )
+      active = undefined;
+  }
+  return active;
+}
+
+function cancellationSettled(
+  events: readonly MessageStreamEvent[],
+  startIndex: number,
+  turnId: string,
+): boolean {
+  const next = events.slice(startIndex);
+  const cancelledAt = next.findIndex(
+    (event) => event.type === "turn.cancelled" && event.data.turnId === turnId,
+  );
+  return (
+    cancelledAt >= 0 &&
+    next
+      .slice(cancelledAt + 1)
+      .some((event) => event.type === "session.waiting")
+  );
 }
 
 export function createSameOriginEveTransport(input: {
@@ -360,18 +425,18 @@ export function createSameOriginEveTransport(input: {
         path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
         principal: request.principal,
         body: {
-          inputResponses: [
-            request.response.kind === "approve"
-              ? { requestId: request.requestId, optionId: "approve" }
-              : request.response.kind === "deny"
-                ? { requestId: request.requestId, optionId: "cancel" }
+          inputResponses: request.responses.map(({ requestId, response }) =>
+            response.kind === "approve"
+              ? { requestId, optionId: "approve" }
+              : response.kind === "deny"
+                ? { requestId, optionId: "cancel" }
                 : {
-                    requestId: request.requestId,
-                    ...(request.response.optionId === undefined
-                      ? { text: request.response.value }
-                      : { optionId: request.response.optionId }),
+                    requestId,
+                    ...(response.optionId === undefined
+                      ? { text: response.value }
+                      : { optionId: response.optionId }),
                   },
-          ],
+          ),
         },
       });
       if (accepted.sessionId !== request.adapterSessionId) {
@@ -380,6 +445,15 @@ export function createSameOriginEveTransport(input: {
       return readSnapshot({ ...common, sessionId: request.adapterSessionId });
     },
     async cancel(request) {
+      const before = await readInstalledSnapshot({
+        ...common,
+        sessionId: request.adapterSessionId,
+      });
+      const observedTurnId = activeTurnId(before.installed);
+      if (request.turnId !== undefined && request.turnId !== observedTurnId) {
+        throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      }
+      const guardedTurnId = request.turnId ?? observedTurnId;
       const response = await authenticatedFetch({
         ...common,
         path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}/cancel`,
@@ -390,7 +464,7 @@ export function createSameOriginEveTransport(input: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(
-            request.turnId === undefined ? {} : { turnId: request.turnId },
+            guardedTurnId === undefined ? {} : { turnId: guardedTurnId },
           ),
         },
       });
@@ -410,7 +484,27 @@ export function createSameOriginEveTransport(input: {
       ) {
         throw new Error("Canonical Eve cancellation changed the session.");
       }
-      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+      if (cancelled.status === "no_active_turn") return before.snapshot;
+      if (guardedTurnId === undefined)
+        throw new HostedCancellationUnsettledError();
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const observed = await readInstalledSnapshot({
+          ...common,
+          sessionId: request.adapterSessionId,
+        });
+        if (
+          cancellationSettled(
+            observed.installed,
+            before.installed.length,
+            guardedTurnId,
+          )
+        )
+          return observed.snapshot;
+        const newerTurn = activeTurnId(observed.installed);
+        if (newerTurn !== undefined && newerTurn !== guardedTurnId)
+          throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      }
+      throw new HostedCancellationUnsettledError();
     },
   };
 }

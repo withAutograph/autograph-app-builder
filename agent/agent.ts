@@ -6,6 +6,43 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("record three prototype artifacts in parallel")) {
+    const recorded = toolResults.filter(
+      ({ name }) => name === "record_prototype_artifact",
+    );
+    if (recorded.length === 0)
+      return {
+        toolCalls: [
+          {
+            name: "record_prototype_artifact",
+            input: {
+              path: "prototype/parallel-proof/app-spec.md",
+              mediaType: "text/markdown",
+              content: "# Build handoff\n",
+            },
+          },
+          {
+            name: "record_prototype_artifact",
+            input: {
+              path: "prototype/parallel-proof/decisions.md",
+              mediaType: "text/markdown",
+              content: "# Decisions\n",
+            },
+          },
+          {
+            name: "record_prototype_artifact",
+            input: {
+              path: "prototype/parallel-proof/index.html",
+              mediaType: "text/html",
+              content: "<!doctype html><title>Proof</title>",
+            },
+          },
+        ],
+      };
+    return recorded.length === 3 && recorded.every(({ isError }) => !isError)
+      ? "All three prototype artifacts were recorded."
+      : "The parallel prototype artifact batch did not settle atomically.";
+  }
   if (message.includes("github publication status")) {
     const result = toolResults.at(-1);
     if (result?.name !== "github_publication_status")

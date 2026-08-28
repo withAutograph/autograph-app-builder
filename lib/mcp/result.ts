@@ -1,6 +1,7 @@
 import { AdapterNotConfiguredError } from "../eve/service";
 import { HostedAuthorizationError } from "../eve/hosted-auth";
 import {
+  HostedCancellationUnsettledError,
   HostedIdempotencyConflictError,
   HostedRejectedOperationError,
   HostedSessionNotFoundError,
@@ -31,6 +32,8 @@ export function safeToolError(error: unknown, sessionId = "") {
   const conflict = error instanceof HostedIdempotencyConflictError;
   const unknown = error instanceof HostedSubmissionUnknownError;
   const rejected = error instanceof HostedRejectedOperationError;
+  const cancellationUnsettled =
+    error instanceof HostedCancellationUnsettledError;
   const code = notConfigured
     ? "adapter_not_configured"
     : notFound
@@ -41,9 +44,11 @@ export function safeToolError(error: unknown, sessionId = "") {
           ? "request_conflict"
           : unknown
             ? "submission_unknown"
-            : rejected
-              ? "operation_rejected"
-              : "internal_error";
+            : cancellationUnsettled
+              ? "cancellation_unsettled"
+              : rejected
+                ? "operation_rejected"
+                : "internal_error";
   const message = notConfigured
     ? "This starter is not connected to its production Eve adapter yet."
     : notFound
@@ -54,9 +59,11 @@ export function safeToolError(error: unknown, sessionId = "") {
           ? "The client request conflicts with an existing operation."
           : unknown
             ? "The submission outcome is unknown and was not replayed."
-            : rejected
-              ? "The operation was rejected before a durable result."
-              : "The operation failed safely.";
+            : cancellationUnsettled
+              ? "Cancellation was accepted but has not settled. Continue with eve_get."
+              : rejected
+                ? "The operation was rejected before a durable result."
+                : "The operation failed safely.";
   const result: EveSessionResult = {
     sessionId,
     status: "failed",
