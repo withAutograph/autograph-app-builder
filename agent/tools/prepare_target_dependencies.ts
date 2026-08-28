@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
@@ -22,11 +21,10 @@ import {
 
 export default defineTool({
   description:
-    "Materialize the fixed verified offline dependency closure into the builder-owned planning overlay. Approval is bound to the accepted AppSpec; no target command, network, apply, validation, or prepared-target mutation is available.",
+    "Automatically materialize the fixed verified offline dependency closure into the builder-owned planning overlay after a complete AppSpec is recorded. No target mutation, network, apply, validation, or prepared-source mutation is available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  approval: always(),
   async execute({ expectedAppSpecDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target dependency preparation");

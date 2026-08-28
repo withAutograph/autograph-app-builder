@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import {
@@ -17,13 +16,12 @@ import {
 
 export default defineTool({
   description:
-    "Record a bounded, session-scoped prototype artifact receipt. It never writes the target workspace.",
+    "Record a bounded, session-scoped non-published prototype artifact receipt without pausing for approval. It never writes the target workspace.",
   inputSchema: z.object({
     path: z.string().regex(prototypeArtifactPathPattern),
     mediaType: z.enum(prototypeArtifactMediaTypes),
     content: z.string().min(1).max(262144),
   }),
-  approval: always(),
   async execute({ path, mediaType, content }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "prototype artifact recording");

@@ -24,27 +24,37 @@ through a generic shell.
    `apps/<id>` directories, `microfrontends.json`, and the
    conventional `prototype/<id>/app-spec.md`. Do not modify production source
    or topology.
-4. Collect only the lowercase kebab-case app id as contract input. Do not ask
-   for or copy mechanical identities, routes, ports, schema paths,
-   authorization summaries, dependencies, capabilities, or provider choices
-   into the contract.
-5. Require exactly one valid, explicitly accepted `Build handoff` block. If
-   the AppSpec is missing or not build-ready, direct the active `$create-app`
-   workflow to [$design-app](../design-app/SKILL.md). When invoked directly,
-   report the missing product authority and stop; never infer or silently repair
-   product policy.
+4. Use the lowercase kebab-case app id already preserved or inferred by the
+   active `$create-app` workflow as the only authored contract input. Do not ask
+   for it again. When invoked directly and no id exists, apply the same
+   deterministic inference rule from `$create-app`; ask only for an unsupported
+   identifier, real collision, or material ambiguity. Do not copy mechanical
+   identities, routes, ports, schema paths, authorization summaries,
+   dependencies, capabilities, or provider choices into the contract.
+5. Require exactly one valid, internally validated `Build handoff` block. If the
+   AppSpec is missing or incomplete, direct the active `$create-app` workflow to
+   [$design-app](../design-app/SKILL.md), repair technical completeness, and
+   retry silently. Ask only when an unresolved choice materially changes the
+   product; never invent product authority.
 6. Give `{ "version": 1, "appId": "<id>" }` to the builder-owned planning
    operation. The selected adapter owns the exact target command; never
    construct or guess a repository script path.
 
-7. If validation reports blockers, return them precisely. Do not work around
-   AppSpec, identity, topology, or authority failures.
+7. If internal planning reports a safe mechanical completeness issue, repair and
+   retry boundedly. If a material product choice is unresolved, ask one
+   product-domain question with a visible tradeoff and recommended default. If
+   no product answer can resolve the constraint, explain the unavailable outcome
+   and offer a product-level alternative. Never expose internal validator,
+   specification, receipt, digest, workspace, source-contract, protocol, or
+   blocker terminology.
 8. If validation succeeds, return the canonical `contract`, including its exact
    AppSpec path and SHA-256 digest, the `futurePath`, derived
    product/source/topology `plan`, empty `blockers`, and `mutations: []`.
-9. State explicitly that nothing was created, written, routed, provisioned,
-   admitted, or deployed. `$create-app` may persist and apply this exact
-   proposal only after a separate source/topology approval gate.
+9. Present the product-relevant proposal and the next meaningful approval in
+   plain language. Keep all internal mechanics and no-mutation boilerplate out
+   of public messages. `$create-app`
+   may persist and apply this exact proposal only after a separate
+   source/topology approval gate.
 
 ## Boundaries
 

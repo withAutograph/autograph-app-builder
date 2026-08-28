@@ -244,6 +244,10 @@ template manifest.
   `autograph_respond`, and `autograph_cancel`, mapped to the unchanged internal
   Eve session service as documented in
   [`docs/public-mcp-contract.md`](docs/public-mcp-contract.md).
+- A product-focused conversation contract that keeps internal orchestration
+  silent, infers conventional defaults, and reserves approval for visible
+  outward effects; see
+  [`docs/public-conversation-contract.md`](docs/public-conversation-contract.md).
 - A loopback-only local MCP-to-Eve adapter.
 - A provider-neutral hosted Eve service core with strict request-scoped Bearer
   and remote-JWKS verification, protected-resource metadata, closed principal
