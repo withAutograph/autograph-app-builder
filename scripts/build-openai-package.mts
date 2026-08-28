@@ -56,8 +56,8 @@ const manifest = {
     capabilities: ["Interactive", "Read", "Write"],
     websiteURL: portable.homepage,
     defaultPrompt: [
-      "Design a new app with Autograph App Builder. If eve_start is unavailable, stop without implementing directly.",
-      "Create a supported app with Autograph App Builder. If eve_start is unavailable, stop without another app builder.",
+      "Design a new app with Autograph App Builder. If autograph_start is unavailable, stop without implementing directly.",
+      "Create a supported app with Autograph App Builder. If autograph_start is unavailable, stop without another app builder.",
       "Continue my app build with Autograph App Builder. If its five tools are unavailable, stop and report the missing connection.",
     ],
     brandColor: "#111827",
@@ -65,7 +65,7 @@ const manifest = {
   },
 };
 const apps = connectionId
-  ? { apps: { "eve-agent": { id: connectionId } } }
+  ? { apps: { "autograph-app-builder": { id: connectionId } } }
   : { apps: {} };
 await mkdir(resolve(".codex-plugin"), { recursive: true });
 await writeFile(

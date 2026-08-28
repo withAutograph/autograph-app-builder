@@ -75,7 +75,7 @@ describe("MCP App UI presentation", () => {
     );
 
     expect(result._meta).toEqual({
-      ui: { resourceUri: "ui://eve-agent/session.html" },
+      ui: { resourceUri: "ui://autograph-app-builder/session.html" },
     });
   });
 });

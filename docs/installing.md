@@ -12,12 +12,12 @@ Then verify, install, and open a new Codex task. The GitHub verification command
 checks the immutable release attestation, including the downloaded asset digest:
 
 ```sh
-gh release verify v0.1.1 --repo withAutograph/autograph-app-builder
-gh release verify-asset v0.1.1 \
-  autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
+gh release verify v0.2.0 --repo withAutograph/autograph-app-builder
+gh release verify-asset v0.2.0 \
+  autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
   --repo withAutograph/autograph-app-builder
 mkdir autograph-app-builder-marketplace
-tar -xzf autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
+tar -xzf autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
   -C autograph-app-builder-marketplace
 codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
 codex plugin add autograph-app-builder@autograph
@@ -27,8 +27,8 @@ The release package defines the Model Context Protocol (MCP) origin and contains
 no credential. Codex completes OAuth against that origin's protected-resource
 and authorization-server metadata.
 
-Confirm that a new task exposes exactly `eve_start`, `eve_get`, `eve_send`,
-`eve_respond`, and `eve_cancel`. The bundled App Builder skill is fail-closed:
+Confirm that a new task exposes exactly `autograph_start`, `autograph_get`, `autograph_send`,
+`autograph_respond`, and `autograph_cancel`. The bundled App Builder skill is fail-closed:
 if any App Builder tool is unavailable, it stops without using another app
 builder or editing a target directly.
 
@@ -43,7 +43,7 @@ and install its `autograph` listing:
 
 ```sh
 codex plugin marketplace add withAutograph/autograph-app-builder \
-  --ref codex-marketplace-v0.1.1
+  --ref codex-marketplace-v0.2.0
 codex plugin add autograph-app-builder@autograph
 ```
 
@@ -80,17 +80,17 @@ Every release contains:
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
-  origin, archive digests, and exact five Eve tools
+  origin, archive digests, and exact five Autograph tools
 
 ### Portable archive
 
 Verify the immutable release and downloaded portable asset, then extract it:
 
 ```sh
-gh release verify v0.1.1 --repo withAutograph/autograph-app-builder
-gh release verify-asset v0.1.1 autograph-app-builder-0.1.1.tar.gz \
+gh release verify v0.2.0 --repo withAutograph/autograph-app-builder
+gh release verify-asset v0.2.0 autograph-app-builder-0.2.0.tar.gz \
   --repo withAutograph/autograph-app-builder
-tar -xzf autograph-app-builder-0.1.1.tar.gz
+tar -xzf autograph-app-builder-0.2.0.tar.gz
 ```
 
 Add the extracted `autograph-app-builder/` directory using the client’s local
@@ -101,12 +101,12 @@ Agent Plugin installation procedure.
 For an offline or manually managed Codex installation:
 
 ```sh
-gh release verify v0.1.1 --repo withAutograph/autograph-app-builder
-gh release verify-asset v0.1.1 \
-  autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
+gh release verify v0.2.0 --repo withAutograph/autograph-app-builder
+gh release verify-asset v0.2.0 \
+  autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
   --repo withAutograph/autograph-app-builder
 mkdir autograph-app-builder-marketplace
-tar -xzf autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
+tar -xzf autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
   -C autograph-app-builder-marketplace
 codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
 codex plugin add autograph-app-builder@autograph
@@ -124,10 +124,10 @@ marketplace directory:
 ```sh
 codex plugin remove autograph-app-builder@autograph
 codex plugin marketplace remove autograph
-mkdir autograph-app-builder-marketplace-0.1.1
-tar -xzf autograph-app-builder-codex-marketplace-0.1.1.tar.gz \
-  -C autograph-app-builder-marketplace-0.1.1
-codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.1.1"
+mkdir autograph-app-builder-marketplace-0.2.0
+tar -xzf autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
+  -C autograph-app-builder-marketplace-0.2.0
+codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.2.0"
 codex plugin add autograph-app-builder@autograph
 ```
 

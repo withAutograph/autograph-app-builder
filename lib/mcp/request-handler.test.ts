@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import { InMemoryHostedEveStore } from "../eve/hosted-store";
 import type { VerifiedHostedClaims } from "../eve/hosted-auth";
+import type { EveSessionService } from "../eve/service";
 import {
+  createAutographMcpHandler,
   createMcpRequestHandler,
   type HostedMcpRuntime,
 } from "./request-handler";
@@ -32,11 +34,11 @@ const admissionControl = {
 };
 
 const exactTools = [
-  "eve_cancel",
-  "eve_get",
-  "eve_respond",
-  "eve_send",
-  "eve_start",
+  "autograph_cancel",
+  "autograph_get",
+  "autograph_respond",
+  "autograph_send",
+  "autograph_start",
 ];
 
 function claims(
@@ -48,12 +50,12 @@ function claims(
     subject: "user-one",
     workspaceId: "workspace-one",
     scopes: [
-      "eve:session",
-      "eve:start",
-      "eve:get",
-      "eve:send",
-      "eve:respond",
-      "eve:cancel",
+      "autograph:session",
+      "autograph:start",
+      "autograph:get",
+      "autograph:send",
+      "autograph:respond",
+      "autograph:cancel",
     ],
     ...input,
   };
@@ -124,6 +126,22 @@ function mcpRequest(
   });
 }
 
+function mcpToolRequest(name: string, args: Record<string, unknown>): Request {
+  return new Request(auth.resourceUrl, {
+    method: "POST",
+    headers: {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+  });
+}
+
 async function mcpResult<T>(response: Response): Promise<T> {
   const body = await response.text();
   const data = body
@@ -141,6 +159,88 @@ async function toolNames(response: Response): Promise<string[]> {
   }>(response);
   return (result.tools ?? []).map((tool) => tool.name ?? "").sort();
 }
+
+describe("branded public tool mapping", () => {
+  it("maps each public operation to the unchanged Eve session service", async () => {
+    const calls: Array<{ operation: string; input: unknown }> = [];
+    const result = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 1,
+      events: [],
+    };
+    const service: EveSessionService = {
+      async start(input) {
+        calls.push({ operation: "start", input });
+        return result;
+      },
+      async get(input) {
+        calls.push({ operation: "get", input });
+        return result;
+      },
+      async send(input) {
+        calls.push({ operation: "send", input });
+        return result;
+      },
+      async respond(input) {
+        calls.push({ operation: "respond", input });
+        return result;
+      },
+      async cancel(input) {
+        calls.push({ operation: "cancel", input });
+        return result;
+      },
+    };
+    const handler = createAutographMcpHandler(service);
+    const invocations = [
+      [
+        "autograph_start",
+        { prompt: "Build an app", clientRequestId: "start-one" },
+      ],
+      ["autograph_get", { sessionId: "session-one", cursor: 0, limit: 25 }],
+      [
+        "autograph_send",
+        {
+          sessionId: "session-one",
+          message: "Use the compact layout",
+          clientRequestId: "send-one",
+        },
+      ],
+      [
+        "autograph_respond",
+        {
+          sessionId: "session-one",
+          responses: [
+            { requestId: "approval-one", response: { kind: "approve" } },
+            {
+              requestId: "question-one",
+              response: { kind: "answer", value: "Compact" },
+            },
+          ],
+          clientRequestId: "respond-one",
+        },
+      ],
+      ["autograph_cancel", { sessionId: "session-one", turnId: "turn-one" }],
+    ] as const;
+
+    for (const [name, args] of invocations) {
+      const response = await handler(mcpToolRequest(name, args));
+      expect(response.status).toBe(200);
+      const callResult = await mcpResult<{ structuredContent?: unknown }>(
+        response,
+      );
+      expect(callResult.structuredContent).toEqual(result);
+    }
+
+    expect(calls).toEqual([
+      { operation: "start", input: invocations[0][1] },
+      { operation: "get", input: invocations[1][1] },
+      { operation: "send", input: invocations[2][1] },
+      { operation: "respond", input: invocations[3][1] },
+      { operation: "cancel", input: invocations[4][1] },
+    ]);
+  });
+});
 
 describe("request-scoped MCP service selection", () => {
   it("does not fall back to local or unconfigured service in hosted mode", async () => {
@@ -211,7 +311,7 @@ describe("request-scoped MCP service selection", () => {
     const insufficient = createMcpRequestHandler({
       environment: { EVE_HOSTED_ADAPTER: "1" },
       hostedRuntime: runtime({
-        verifiedClaims: claims({ scopes: ["eve:get"] }),
+        verifiedClaims: claims({ scopes: ["autograph:get"] }),
       }),
     });
     const insufficientResponse = await insufficient(
@@ -323,7 +423,7 @@ describe("request-scoped MCP service selection", () => {
     expect(await toolNames(unconfiguredResponse)).toEqual(exactTools);
   });
 
-  it("brands public MCP discovery without renaming its protocol surface", async () => {
+  it("exposes only the branded public MCP contract", async () => {
     const handler = createMcpRequestHandler({ environment: {} });
     const toolResponse = await handler(mcpRequest());
     const resourceResponse = await handler(mcpRequest({}, "resources/list"));
@@ -334,31 +434,34 @@ describe("request-scoped MCP service selection", () => {
       tools: Array<{ name: string; title?: string; description?: string }>;
     }>(toolResponse);
     expect(toolResult.tools.map(({ name }) => name).sort()).toEqual(exactTools);
+    expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(
+      true,
+    );
     expect(
       Object.fromEntries(
         toolResult.tools.map(({ name, title }) => [name, title]),
       ),
     ).toEqual({
-      eve_start: "Start with Autograph App Builder",
-      eve_get: "Check App Builder progress",
-      eve_send: "Send App Builder feedback",
-      eve_respond: "Answer App Builder questions",
-      eve_cancel: "Stop App Builder work",
+      autograph_start: "Start with Autograph App Builder",
+      autograph_get: "Check App Builder progress",
+      autograph_send: "Send App Builder feedback",
+      autograph_respond: "Answer App Builder questions",
+      autograph_cancel: "Stop App Builder work",
     });
     expect(
       Object.fromEntries(
         toolResult.tools.map(({ name, description }) => [name, description]),
       ),
     ).toEqual({
-      eve_start:
+      autograph_start:
         "Start a durable app build and return immediately; check progress separately.",
-      eve_get:
+      autograph_get:
         "Read the next page of progress and requests for the current app build.",
-      eve_send:
+      autograph_send:
         "Send additional direction while the current app build is waiting.",
-      eve_respond:
+      autograph_respond:
         "Answer the complete outstanding set of App Builder questions in one response.",
-      eve_cancel: "Request cancellation of the active app build.",
+      autograph_cancel: "Request cancellation of the active app build.",
     });
 
     const resourceResult = await mcpResult<{
@@ -366,7 +469,7 @@ describe("request-scoped MCP service selection", () => {
     }>(resourceResponse);
     expect(resourceResult.resources).toContainEqual(
       expect.objectContaining({
-        name: "eve-session",
+        name: "autograph-session",
         title: "Autograph App Builder progress",
         description: "Live progress and requests from Autograph App Builder.",
       }),

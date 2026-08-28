@@ -131,14 +131,14 @@ describe("Preview OAuth browser interaction", () => {
     await expect(
       loadPreviewConsentContext({
         search:
-          "?client_id=https%3A%2F%2Fclient.example%2Fmetadata.json&scope=eve%3Asession+eve%3Aget&sig=signed",
+          "?client_id=https%3A%2F%2Fclient.example%2Fmetadata.json&scope=autograph%3Asession+autograph%3Aget&sig=signed",
         fetcher,
       }),
     ).resolves.toEqual({
       clientId: "https://client.example/metadata.json",
       clientName: "Portable client",
       clientUri: "https://client.example",
-      requestedScopes: ["eve:session", "eve:get"],
+      requestedScopes: ["autograph:session", "autograph:get"],
     });
     expect(fetcher).toHaveBeenCalledWith(
       "/api/auth/oauth2/public-client-prelogin",
@@ -151,16 +151,18 @@ describe("Preview OAuth browser interaction", () => {
 
   it("rejects unsigned, duplicate-scope, and rebound client context", async () => {
     await expect(
-      loadPreviewConsentContext({ search: "?client_id=one&scope=eve:get" }),
+      loadPreviewConsentContext({
+        search: "?client_id=one&scope=autograph:get",
+      }),
     ).rejects.toThrow("signed authorization request");
     await expect(
       loadPreviewConsentContext({
-        search: "?client_id=one&scope=eve:get+eve:get&sig=signed",
+        search: "?client_id=one&scope=autograph:get+autograph:get&sig=signed",
       }),
     ).rejects.toThrow("authorization scopes");
     await expect(
       loadPreviewConsentContext({
-        search: "?client_id=one&scope=eve:get&sig=signed",
+        search: "?client_id=one&scope=autograph:get&sig=signed",
         fetcher: vi.fn(async () => Response.json({ client_id: "two" })),
       }),
     ).rejects.toThrow("identity changed");

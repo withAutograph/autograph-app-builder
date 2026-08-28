@@ -95,7 +95,9 @@ describe("Agent Plugins package", () => {
 
   it("rejects package symlinks", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-link-"));
-    await mkdir(resolve(root, "skills/eve-agent"), { recursive: true });
+    await mkdir(resolve(root, "skills/autograph-app-builder"), {
+      recursive: true,
+    });
     await writeFile(
       resolve(root, "plugin.json"),
       await readFile(resolve(repositoryRoot, "plugin.json")),
@@ -105,8 +107,8 @@ describe("Agent Plugins package", () => {
       await readFile(resolve(repositoryRoot, "mcp.json")),
     );
     await symlink(
-      resolve(repositoryRoot, "skills/eve-agent/SKILL.md"),
-      resolve(root, "skills/eve-agent/SKILL.md"),
+      resolve(repositoryRoot, "skills/autograph-app-builder/SKILL.md"),
+      resolve(root, "skills/autograph-app-builder/SKILL.md"),
     );
     await expect(
       validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
@@ -116,9 +118,9 @@ describe("Agent Plugins package", () => {
   it("parses quoted and multiline Agent Skills frontmatter", async () => {
     const root = await copyPortablePackage();
     await writeFile(
-      resolve(root, "skills/eve-agent/SKILL.md"),
+      resolve(root, "skills/autograph-app-builder/SKILL.md"),
       `---
-name: "eve-agent"
+name: "autograph-app-builder"
 description: >-
   Start and continue durable Eve sessions
   when app-building work needs orchestration.
@@ -128,7 +130,7 @@ compatibility: >-
 metadata:
   owner: "Autograph"
   version: "1.0"
-allowed-tools: "eve_start eve_get"
+allowed-tools: "autograph_start autograph_get"
 ---
 
 # Eve agent orchestration
@@ -147,32 +149,35 @@ allowed-tools: "eve_start eve_get"
     ],
     [
       "an unsupported frontmatter field",
-      "---\nname: eve-agent\ndescription: valid\nextra: value\n---\n",
+      "---\nname: autograph-app-builder\ndescription: valid\nextra: value\n---\n",
       "unsupported frontmatter fields",
     ],
     [
       "a non-string optional field",
-      "---\nname: eve-agent\ndescription: valid\nallowed-tools:\n  - eve_get\n---\n",
+      "---\nname: autograph-app-builder\ndescription: valid\nallowed-tools:\n  - autograph_get\n---\n",
       "allowed-tools must be a string",
     ],
     [
       "duplicate YAML keys",
-      "---\nname: eve-agent\nname: other\ndescription: valid\n---\n",
+      "---\nname: autograph-app-builder\nname: other\ndescription: valid\n---\n",
       "valid YAML mapping",
     ],
     [
       "overlong compatibility text",
-      `---\nname: eve-agent\ndescription: valid\ncompatibility: ${"a".repeat(501)}\n---\n`,
+      `---\nname: autograph-app-builder\ndescription: valid\ncompatibility: ${"a".repeat(501)}\n---\n`,
       "at most 500 characters",
     ],
     [
       "non-string metadata values",
-      "---\nname: eve-agent\ndescription: valid\nmetadata:\n  version: 1\n---\n",
+      "---\nname: autograph-app-builder\ndescription: valid\nmetadata:\n  version: 1\n---\n",
       "metadata must map string keys to string values",
     ],
   ])("rejects %s", async (_name, skill, message) => {
     const root = await copyPortablePackage();
-    await writeFile(resolve(root, "skills/eve-agent/SKILL.md"), skill);
+    await writeFile(
+      resolve(root, "skills/autograph-app-builder/SKILL.md"),
+      skill,
+    );
     await expect(
       validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
     ).rejects.toThrow(message);

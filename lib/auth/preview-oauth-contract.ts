@@ -47,12 +47,12 @@ const previewOAuthConfigSchema = z
   });
 
 export const previewMcpScopes = [
-  "eve:session",
-  "eve:start",
-  "eve:get",
-  "eve:send",
-  "eve:respond",
-  "eve:cancel",
+  "autograph:session",
+  "autograph:start",
+  "autograph:get",
+  "autograph:send",
+  "autograph:respond",
+  "autograph:cancel",
 ] as const;
 
 export const previewOAuthScopes = [
@@ -111,7 +111,7 @@ export function buildPreviewMcpOAuthOptions(input: {
     resourceSeedMode: "overwrite",
     clientRegistrationDefaultResources: [config.resource],
     clientRegistrationAllowedResources: [],
-    clientRegistrationDefaultScopes: ["eve:session", "offline_access"],
+    clientRegistrationDefaultScopes: ["autograph:session", "offline_access"],
     clientRegistrationAllowedScopes: previewOAuthScopes.slice(1),
     clientRegistrationRequirePKCE: true,
     allowPublicClientPrelogin: true,

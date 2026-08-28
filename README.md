@@ -221,8 +221,10 @@ template manifest.
   recovery receipts.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
-- Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
-  `eve_respond`, and `eve_cancel`.
+- Five public MCP operations: `autograph_start`, `autograph_get`, `autograph_send`,
+  `autograph_respond`, and `autograph_cancel`, mapped to the unchanged internal
+  Eve session service as documented in
+  [`docs/public-mcp-contract.md`](docs/public-mcp-contract.md).
 - A loopback-only local MCP-to-Eve adapter.
 - A provider-neutral hosted Eve service core with strict request-scoped Bearer
   and remote-JWKS verification, protected-resource metadata, closed principal

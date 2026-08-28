@@ -77,7 +77,9 @@ describe("OpenAI package generator", () => {
         expect(prompt).toContain("Autograph App Builder");
         expect(prompt.length).toBeLessThanOrEqual(128);
       }
-      expect(manifest.interface.defaultPrompt.join(" ")).toContain("eve_start");
+      expect(manifest.interface.defaultPrompt.join(" ")).toContain(
+        "autograph_start",
+      );
       expect(manifest.interface.defaultPrompt.join(" ")).toContain(
         "Continue my app build with Autograph App Builder",
       );

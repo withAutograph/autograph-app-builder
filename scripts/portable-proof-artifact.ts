@@ -42,11 +42,11 @@ export const portableReleaseReceiptSchema = z
     coreFiles: digestRecord,
     auxiliaryFiles: digestRecord,
     tools: z.tuple([
-      z.literal("eve_start"),
-      z.literal("eve_get"),
-      z.literal("eve_send"),
-      z.literal("eve_respond"),
-      z.literal("eve_cancel"),
+      z.literal("autograph_start"),
+      z.literal("autograph_get"),
+      z.literal("autograph_send"),
+      z.literal("autograph_respond"),
+      z.literal("autograph_cancel"),
     ]),
   })
   .strict();
@@ -299,6 +299,6 @@ export async function verifyPortableProofArtifact(input: {
       throw new Error("Installed client receipt drifted.");
   }
   if (JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES))
-    throw new Error("Release did not bind the exact five Eve tools.");
+    throw new Error("Release did not bind the exact five Autograph tools.");
   return { receipt, receiptSha256: sha256(receiptBytes) };
 }

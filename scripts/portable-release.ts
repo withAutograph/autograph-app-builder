@@ -3,11 +3,11 @@ import { isIP } from "node:net";
 import { gzipSync } from "node:zlib";
 
 export const TOOL_NAMES = [
-  "eve_start",
-  "eve_get",
-  "eve_send",
-  "eve_respond",
-  "eve_cancel",
+  "autograph_start",
+  "autograph_get",
+  "autograph_send",
+  "autograph_respond",
+  "autograph_cancel",
 ] as const;
 
 export const sha256 = (value: Uint8Array | string) =>
@@ -69,7 +69,7 @@ export function releaseEndpoint(value: string | undefined) {
   return endpoint.origin;
 }
 
-export function registeredEveToolNames(handlerSource: string) {
+export function registeredAutographToolNames(handlerSource: string) {
   const names = [
     ...handlerSource.matchAll(/server\.registerTool\(\s*"([^"]+)"/gu),
   ].map((match) => match[1]);

@@ -15,7 +15,7 @@ const principal: HostedPrincipal = {
   audience: "eve-hosted",
   workspaceId: "workspace_1",
   ownerUserId: "user_1",
-  scopes: ["eve:session", ...Object.values(hostedEveOperationScopes)],
+  scopes: ["autograph:session", ...Object.values(hostedEveOperationScopes)],
 };
 
 const config = { baseUrl: "https://builder.example.test" };
