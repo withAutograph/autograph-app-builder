@@ -17,6 +17,7 @@ const environment = {
 describe("Preview OAuth runtime configuration", () => {
   it("requires the GitHub identity provider alongside the Preview bindings", () => {
     expect(readPreviewOAuthRuntimeConfig(environment)).toMatchObject({
+      environment: "preview",
       githubClientId: "github-client-id",
       githubClientSecret: "github-client-secret",
     });
@@ -25,6 +26,23 @@ describe("Preview OAuth runtime configuration", () => {
         readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
       ).toThrow();
     }
+  });
+
+  it("accepts Production only when Vercel and the configured environment agree", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        VERCEL_ENV: "production",
+        EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+      }),
+    ).toMatchObject({ environment: "production" });
+
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        VERCEL_ENV: "production",
+      }),
+    ).toThrow("exact matching Preview or Production");
   });
 
   it("rejects malformed provider credentials without echoing them", () => {

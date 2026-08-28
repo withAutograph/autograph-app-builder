@@ -306,8 +306,7 @@ function createStore(sql: Sql): PreviewActivationStore {
       const auth = createPreviewOAuthServer({
         config: {
           hostedAdapter: "1",
-          vercelEnvironment: "preview",
-          configuredEnvironment: "preview",
+          environment: "preview",
           issuer: input.issuer,
           resource: input.resource,
           secret: input.authSecret,

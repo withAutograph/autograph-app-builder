@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { readHostedPreviewAdmissionControlBinding } from "./admission-control";
+import {
+  readHostedAdmissionControlBinding,
+  readHostedPreviewAdmissionControlBinding,
+} from "./admission-control";
 
 const nowEpochMs = Date.parse("2026-08-27T01:00:00.000Z");
 const binding = {
@@ -19,14 +22,38 @@ const binding = {
   readbackDigest: `sha256:${"a".repeat(64)}`,
 } as const;
 
+const deploymentEnvironment = {
+  EVE_HOSTED_ADAPTER: "1",
+  VERCEL_ENV: "preview",
+  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+} as const;
+
 describe("hosted Preview admission-control binding", () => {
   it("accepts one fresh closed provider-readback binding", () => {
     expect(
       readHostedPreviewAdmissionControlBinding(
-        { EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify(binding) },
+        {
+          ...deploymentEnvironment,
+          EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify(binding),
+        },
         nowEpochMs,
       ),
     ).toEqual(binding);
+  });
+
+  it("accepts a Production binding only for an exact Production deployment", () => {
+    const production = { ...binding, environment: "production" } as const;
+    expect(
+      readHostedAdmissionControlBinding(
+        {
+          EVE_HOSTED_ADAPTER: "1",
+          VERCEL_ENV: "production",
+          EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+          EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify(production),
+        },
+        nowEpochMs,
+      ),
+    ).toEqual(production);
   });
 
   it("fails closed on absent, stale, non-Preview, unbounded, or unknown controls", () => {
@@ -40,10 +67,28 @@ describe("hosted Preview admission-control binding", () => {
     ]) {
       expect(() =>
         readHostedPreviewAdmissionControlBinding(
-          { EVE_HOSTED_ADMISSION_CONTROL: candidate },
+          {
+            ...deploymentEnvironment,
+            EVE_HOSTED_ADMISSION_CONTROL: candidate,
+          },
           nowEpochMs,
         ),
       ).toThrow();
     }
+  });
+
+  it("rejects an admission binding that differs from the deployment", () => {
+    expect(() =>
+      readHostedAdmissionControlBinding(
+        {
+          ...deploymentEnvironment,
+          EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify({
+            ...binding,
+            environment: "production",
+          }),
+        },
+        nowEpochMs,
+      ),
+    ).toThrow("must match the deployment environment");
   });
 });

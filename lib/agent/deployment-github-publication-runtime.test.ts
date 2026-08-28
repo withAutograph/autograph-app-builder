@@ -103,6 +103,19 @@ describe("deployment GitHub publication composition", () => {
     }
   });
 
+  it("accepts the same tenant-bound composition in an exact Production deployment", () => {
+    const production = {
+      ...environment,
+      VERCEL_ENV: "production",
+      EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+    };
+    expect(readDeploymentGitHubPublicationConfig(production)).toMatchObject({
+      enabled: true,
+      forwarderSubject:
+        "owner:autographing:project:autograph-app-builder:environment:production",
+    });
+  });
+
   it.each(["GITHUB_APP_INSTALLATION_ID", "GITHUB_TOKEN", "GITHUB_API_URL"])(
     "rejects forbidden ambient %s authority even when disabled",
     (key) => {

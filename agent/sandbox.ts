@@ -113,5 +113,5 @@ function createNonExecutingDefinition() {
 export default selectSandboxDefinition(plan.kind, {
   localMicrosandbox: createMicrosandboxDefinition,
   nonExecuting: createNonExecutingDefinition,
-  vercelPreview: createVercelDefinition,
+  vercelHosted: createVercelDefinition,
 });

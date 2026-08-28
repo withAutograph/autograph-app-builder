@@ -12,6 +12,7 @@ const nowEpochMs = Date.parse("2026-08-27T01:00:00.000Z");
 
 const environment = {
   EVE_HOSTED_ADAPTER: "1",
+  VERCEL_ENV: "preview",
   EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
   EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
   EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
@@ -63,6 +64,26 @@ function request() {
 }
 
 describe("hosted route composition", () => {
+  it("accepts an exact Production runtime binding without changing its authority shape", () => {
+    const productionEnvironment = {
+      ...environment,
+      VERCEL_ENV: "production",
+      EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+      EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify({
+        ...JSON.parse(environment.EVE_HOSTED_ADMISSION_CONTROL),
+        environment: "production",
+      }),
+    };
+    const config = readHostedDeploymentConfig(
+      productionEnvironment,
+      nowEpochMs,
+    );
+    expect(config.forwarderSubject).toBe(
+      "owner:withautograph:project:autograph-app-builder:environment:production",
+    );
+    expect(config.admissionControl.environment).toBe("production");
+  });
+
   it("opens no connection during construction and reuses one principal-free runtime", async () => {
     const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({

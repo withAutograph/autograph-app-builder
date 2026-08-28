@@ -74,7 +74,9 @@ Before enabling GitHub or hosted repository publication:
    to match every pinned version before any target-owned command can run. With
    no configured image, the agent selects just-bash and is deliberately not
    toolchain-ready.
-   A Vercel Preview instead selects Eve 0.43's native Vercel Sandbox backend.
+   A supported Vercel hosted deployment instead selects Eve 0.43's native
+   Vercel Sandbox backend only when its exact Preview or Production binding
+   agrees with `VERCEL_ENV`.
    That backend fixes its sandbox to Eve's Vercel Container Registry image and
    strips author image/runtime fields, so the approved private GHCR image is
    not hosted execution authority. The reusable Vercel template installs the
@@ -84,8 +86,9 @@ Before enabling GitHub or hosted repository publication:
    closure; its source, cache, and artifact digests are part of the template
    revalidation key. The bootstrap installs those bytes before every live
    session changes to deny-all networking. The artifact is never a public
-   route or static asset. Preview can run only the fixed read-only identity and
-   planning commands; other Vercel environments use the non-executing backend.
+   route or static asset. The hosted backend can run only the fixed read-only
+   identity and planning commands; missing, Development, or mismatched Vercel
+   environments use the non-executing backend.
    The combined `hosted:artifact-prove-typed` gate first proves those exact
    artifact commands offline, then exercises the approval-bound Eve tool flow
    to terminal `planned` and emits its asserted called/forbidden tool trace.
@@ -259,14 +262,15 @@ never enter argv, environment, receipts, or persistent files.
 
 Before enabling real MCP mutations:
 
-1. Configure and prove the checked-in Preview OAuth authorization server with
+1. Configure and prove the checked-in hosted OAuth authorization server with
    CIMD, authorization code plus S256 PKCE, consent, and invite-only GitHub
    sign-in. The App Builder stores no user password and disables implicit
    email-based account linking; a pre-provisioned stable GitHub account ID is
    the identity authority. Its routes are mounted but remain fail-closed until
-   the exact Preview environment and unapplied schema are separately activated.
+   the exact supported environment and unapplied schema are separately
+   activated.
    It must mint an exact-resource, five-minute JWT with integer `nbf`
-   and a consent-bound `workspace_id`; Preview does not claim immediate token
+   and a consent-bound `workspace_id`; the hosted policy does not claim immediate token
    revocation and has a residual window of at most five minutes. Activating CIMD
    can create, persist, or refresh a discovery-owned authorization-server client
    record and therefore requires the same separate mutation authority as live
@@ -286,11 +290,13 @@ Before enabling real MCP mutations:
    implemented boundary derives `workspaceId` and `ownerUserId` only from
    verified claims and performs a live exact active-membership read for that
    subject/workspace on every MCP request before store or Eve access.
-3. Bind Preview to one origin: `/api/auth` is the issuer,
+3. Bind each hosted environment to one origin: `/api/auth` is the issuer,
    `/api/auth/jwks` is its key source, `/mcp` is audience/resource, and the
    canonical Eve 0.43 routes remain under `/eve/v1/*` on that origin. The
-   trusted-forwarder environment must be exactly `preview`; Production and
-   Development values fail closed.
+   trusted-forwarder environment must be exactly `preview` or `production`,
+   and must exactly equal `VERCEL_ENV`. Missing, Development, wildcard, and
+   mismatched values fail closed. This source support is not Production
+   activation evidence.
 4. Establish an approved Preview database restore point, then apply the five
    checked-in additive Drizzle-derived migrations with
    `mise run database:migrate`. Run `mise run hosted:storage-verify` afterward;
@@ -332,7 +338,7 @@ same-origin canonical Eve transport, token-only workspace selection, and local
 conformance tests. The MCP route selects a request-scoped service without a
 hosted-to-local fallback, lazily composes the bounded PostgreSQL store, and
 obtains Vercel workload identity only during a request-context hop. The
-Preview-only Better Auth route, RFC OAuth AS discovery rewrite, JWKS, sign-in,
+hosted Better Auth route, RFC OAuth AS discovery rewrite, JWKS, sign-in,
 verified-client consent with single-active-workspace binding are mounted
 lazily and fail closed
 before an approved migration and exact environment are present.

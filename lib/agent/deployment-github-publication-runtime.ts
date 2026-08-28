@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
+import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createGitHubAppPublicationAdapter } from "../repository/github-app-adapter";
 import {
@@ -57,19 +58,11 @@ export function readDeploymentGitHubPublicationConfig(
     );
   }
   if (enabled.data === "0") return { enabled: false };
-  if (
-    environment.EVE_HOSTED_ADAPTER !== "1" ||
-    environment.VERCEL_ENV !== "preview" ||
-    environment.EVE_HOSTED_VERCEL_ENVIRONMENT !== "preview"
-  ) {
-    throw new Error(
-      "Hosted GitHub publication requires the exact Preview hosted deployment.",
-    );
-  }
+  readHostedDeploymentEnvironment(environment);
   const forwarderSubject = readHostedForwarderSubject(environment);
   if (forwarderSubject === undefined) {
     throw new Error(
-      "Hosted GitHub publication requires the exact Preview forwarder binding.",
+      "Hosted GitHub publication requires the exact hosted forwarder binding.",
     );
   }
   const providerCredentials = parseGitHubAppHttpProviderCredentials({

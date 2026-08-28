@@ -16,6 +16,7 @@ import {
 } from "../sandbox/hosted-artifact";
 import { isHostedVercelRuntime } from "../sandbox/backend";
 import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "./dependency-cache";
+import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
 export const HOSTED_ELIGIBILITY_DIGEST =
   "2d7503a9c959d3fadfa53dc46abc0edfa54540db4ca5cb2d22932aaaa7e52b78";
@@ -43,11 +44,10 @@ export function hostedSourceReceipt(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): SourceReceipt | undefined {
   if (!isHostedVercelRuntime(environment)) return undefined;
-  if (environment.VERCEL_ENV !== "preview")
-    throw new Error("The hosted source is available only in Vercel Preview.");
+  readHostedDeploymentEnvironment(environment);
   if (sourceKind !== "existing-repository" || path !== HOSTED_SOURCE_PATH)
     throw new Error(
-      `Hosted Preview supports only the fixed source ${HOSTED_SOURCE_PATH}.`,
+      `Hosted App Builder supports only the fixed source ${HOSTED_SOURCE_PATH}.`,
     );
   return receipt;
 }

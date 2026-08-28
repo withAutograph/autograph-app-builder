@@ -9,7 +9,7 @@ import {
 } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
-import { readHostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
+import { readHostedAdmissionControlBinding } from "../hosted/admission-control";
 import { composeHostedMcpRuntime } from "./hosted-runtime";
 import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
 import { createMcpRequestHandler } from "./request-handler";
@@ -32,7 +32,7 @@ export function readHostedDeploymentConfig(
   return {
     auth,
     databaseUrl: parseHostedDatabaseUrl(environment.DATABASE_URL),
-    admissionControl: readHostedPreviewAdmissionControlBinding(
+    admissionControl: readHostedAdmissionControlBinding(
       environment,
       nowEpochMs,
     ),
