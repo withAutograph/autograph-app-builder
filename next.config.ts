@@ -3,7 +3,10 @@ import { withEve } from "eve/next";
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
-    "/*": ["./artifacts/hosted/arrusted-c9a5faf2-preview.tar.gz"],
+    "/*": [
+      "./agent/skills/**/*",
+      "./artifacts/hosted/arrusted-c9a5faf2-preview.tar.gz",
+    ],
   },
   async headers() {
     return [

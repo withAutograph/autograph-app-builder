@@ -1,4 +1,4 @@
-import { defineSandbox } from "eve/sandbox";
+import { defineSandbox, type SandboxBackendPrewarmInput } from "eve/sandbox";
 import { justbash } from "eve/sandbox/just-bash";
 import { microsandbox } from "eve/sandbox/microsandbox";
 
@@ -17,6 +17,7 @@ import {
 } from "@/lib/sandbox/toolchain";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
 import { readHostedArtifactBytes } from "@/lib/sandbox/hosted-artifact";
+import { readHostedManagedSeedFiles } from "@/lib/sandbox/hosted-managed-seeds";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { ensureSandboxDirectories } from "@/lib/repository/sandbox-filesystem";
 
@@ -30,26 +31,33 @@ const plan = sandboxBackendPlan({
   localImageConfigured: image !== undefined,
 });
 
+const bootstrapHostedVercelSandbox: NonNullable<
+  SandboxBackendPrewarmInput["bootstrap"]
+> = async ({ use }) => {
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
+  const sandbox = await use();
+  await ensureSandboxDirectories(sandbox, [".app-builder"]);
+  await sandbox.writeBinaryFile({
+    path: ".app-builder/hosted-seed.tar.gz",
+    content: readHostedArtifactBytes(),
+  });
+  const result = await sandbox.run({
+    command: hostedToolchainBootstrapCommand(),
+    abortSignal: AbortSignal.timeout(120_000),
+  });
+  if (result.exitCode !== 0)
+    throw new Error("The pinned Vercel Sandbox toolchain failed to install.");
+};
+
 function createVercelDefinition() {
   return defineSandbox({
-    backend: createHostedVercelBackend(),
-    async bootstrap({ use }) {
-      // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-      const sandbox = await use();
-      await ensureSandboxDirectories(sandbox, [".app-builder"]);
-      await sandbox.writeBinaryFile({
-        path: ".app-builder/hosted-seed.tar.gz",
-        content: readHostedArtifactBytes(),
-      });
-      const result = await sandbox.run({
-        command: hostedToolchainBootstrapCommand(),
-        abortSignal: AbortSignal.timeout(120_000),
-      });
-      if (result.exitCode !== 0)
-        throw new Error(
-          "The pinned Vercel Sandbox toolchain failed to install.",
-        );
-    },
+    backend: createHostedVercelBackend({
+      runtimeRecoveryPrewarmInput: () => ({
+        bootstrap: bootstrapHostedVercelSandbox,
+        seedFiles: readHostedManagedSeedFiles(),
+      }),
+    }),
+    bootstrap: bootstrapHostedVercelSandbox,
     async onSession({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       await use({ networkPolicy: "deny-all" });

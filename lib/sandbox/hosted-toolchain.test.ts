@@ -65,7 +65,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
 
   it("narrows live sessions after the bootstrap snapshot", () => {
     const definition = readFileSync("agent/sandbox.ts", "utf8");
-    expect(definition).toContain("backend: createHostedVercelBackend()");
+    expect(definition).toContain("backend: createHostedVercelBackend({");
+    expect(definition).toContain("runtimeRecoveryPrewarmInput: () => ({");
+    expect(definition).toContain("bootstrap: bootstrapHostedVercelSandbox");
+    expect(definition).toContain("seedFiles: readHostedManagedSeedFiles()");
     expect(definition).toContain("readHostedArtifactBytes()");
     expect(definition).toContain('await use({ networkPolicy: "deny-all" })');
     expect(definition).toContain(
