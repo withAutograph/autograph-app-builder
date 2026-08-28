@@ -79,10 +79,7 @@ describe("Preview OAuth activation contract", () => {
       },
     ]);
     expect(previewEmailPasswordPolicy).toEqual({
-      enabled: true,
-      disableSignUp: true,
-      minPasswordLength: 12,
-      maxPasswordLength: 128,
+      enabled: false,
     });
     for (const action of [
       "create",

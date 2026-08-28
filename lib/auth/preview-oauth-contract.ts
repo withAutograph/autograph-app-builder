@@ -62,12 +62,7 @@ export const previewOAuthScopes = [
 
 const refreshTokenLifetimeSeconds = 60 * 60 * 8;
 
-export const previewEmailPasswordPolicy = {
-  enabled: true,
-  disableSignUp: true,
-  minPasswordLength: 12,
-  maxPasswordLength: 128,
-} as const;
+export const previewEmailPasswordPolicy = { enabled: false } as const;
 
 export interface PreviewOAuthMembershipAuthority {
   activeWorkspaceForUser(input: {

@@ -3,7 +3,6 @@ import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres, { type Sql } from "postgres";
 
@@ -90,7 +89,10 @@ function createStore(sql: Sql): PreviewActivationStore {
             email_verified: boolean;
           }[]
         >`select id, name, email, email_verified from "user" where id = ${input.userId} or email = ${input.email} for update`;
-        const accountId = stableId("account", input.userId);
+        const accountId = stableId(
+          "account",
+          `github:${input.githubAccountId}`,
+        );
         const accounts = await transaction<
           {
             id: string;
@@ -100,7 +102,7 @@ function createStore(sql: Sql): PreviewActivationStore {
             user_id: string;
             password: string | null;
           }[]
-        >`select id, issuer, account_id, provider_id, user_id, password from account where id = ${accountId} or (issuer = 'local:credential' and account_id = ${input.userId}) for update`;
+        >`select id, issuer, account_id, provider_id, user_id, password from account where id = ${accountId} or (issuer = 'local:oauth:github' and account_id = ${input.githubAccountId}) for update`;
         const memberships = await transaction<
           {
             active: boolean;
@@ -111,13 +113,13 @@ function createStore(sql: Sql): PreviewActivationStore {
         let membershipRowsAffected = 0;
         if (users.length === 0) {
           const now = new Date(input.requestedAt);
-          await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${input.userId}, ${input.name}, ${input.email}, true, ${now}, ${now})`;
+          await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${input.userId}, ${input.githubLogin}, ${input.email}, true, ${now}, ${now})`;
           userRowsAffected = 1;
         } else if (
           users.length !== 1 ||
           users[0]?.id !== input.userId ||
           users[0]?.email !== input.email ||
-          users[0]?.name !== input.name ||
+          users[0]?.name !== input.githubLogin ||
           users[0]?.email_verified !== true
         ) {
           throw new Error(
@@ -126,26 +128,21 @@ function createStore(sql: Sql): PreviewActivationStore {
         }
         if (accounts.length === 0) {
           const now = new Date(input.requestedAt);
-          const password = await hashPassword(input.password);
-          await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, 'local:credential', ${input.userId}, 'credential', ${input.userId}, ${password}, ${now}, ${now})`;
+          await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, 'local:oauth:github', ${input.githubAccountId}, 'github', ${input.userId}, null, ${now}, ${now})`;
           accountRowsAffected = 1;
         } else {
           const account = accounts[0];
           if (
             accounts.length !== 1 ||
             account?.id !== accountId ||
-            account.issuer !== "local:credential" ||
-            account.account_id !== input.userId ||
-            account.provider_id !== "credential" ||
+            account.issuer !== "local:oauth:github" ||
+            account.account_id !== input.githubAccountId ||
+            account.provider_id !== "github" ||
             account.user_id !== input.userId ||
-            account.password === null ||
-            !(await verifyPassword({
-              hash: account.password,
-              password: input.password,
-            }))
+            account.password !== null
           ) {
             throw new Error(
-              "Invited user credential conflicts with an existing row.",
+              "Invited GitHub identity conflicts with an existing row.",
             );
           }
         }
@@ -315,6 +312,8 @@ function createStore(sql: Sql): PreviewActivationStore {
           resource: input.resource,
           secret: input.authSecret,
           databaseUrl: "postgresql://task-scoped.invalid/database",
+          githubClientId: "task-scoped-oauth-initialization",
+          githubClientSecret: "task-scoped-oauth-initialization",
         },
         database: drizzleAdapter(database, {
           provider: "pg",

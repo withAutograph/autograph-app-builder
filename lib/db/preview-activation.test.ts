@@ -48,14 +48,13 @@ const invite = {
   userId: "user_one",
   workspaceId: "workspace_one",
   email: "User@One.Example",
-  name: "User One",
-  password: "correct horse battery staple",
+  githubAccountId: "128727",
+  githubLogin: "jasonmorganson",
 };
 
 describe("Preview activation prerequisite contract", () => {
-  it("plans and executes invited users without disclosing identity or password", async () => {
+  it("plans and executes invited GitHub users without disclosing identity", async () => {
     const plan = planPreviewActivation(invite);
-    expect(JSON.stringify(plan)).not.toContain(invite.password);
     expect(JSON.stringify(plan)).not.toContain(invite.email);
     const receipt = await executePreviewActivation({
       request: {
@@ -71,7 +70,6 @@ describe("Preview activation prerequisite contract", () => {
       membershipRowsAffected: 1,
     });
     const serialized = JSON.stringify(receipt);
-    expect(serialized).not.toContain(invite.password);
     expect(serialized).not.toContain(invite.email);
     expect(serialized).not.toContain(invite.workspaceId);
   });
@@ -200,6 +198,9 @@ describe("Preview activation prerequisite contract", () => {
     expect(provision).toContain(
       "insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at)",
     );
+    expect(provision).toContain("'local:oauth:github'");
+    expect(provision).toContain("'github'");
+    expect(provision).not.toContain("hashPassword");
     expect(provision).not.toMatch(
       /hosted_workspace_membership[^;]*created_at/u,
     );

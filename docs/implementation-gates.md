@@ -238,8 +238,10 @@ never enter argv, environment, receipts, or persistent files.
 Before enabling real MCP mutations:
 
 1. Configure and prove the checked-in Preview OAuth authorization server with
-   CIMD, authorization code plus S256 PKCE, consent, and invited-account
-   email/password sign-in. Its routes are mounted but remain fail-closed until
+   CIMD, authorization code plus S256 PKCE, consent, and invite-only GitHub
+   sign-in. The App Builder stores no user password and disables implicit
+   email-based account linking; a pre-provisioned stable GitHub account ID is
+   the identity authority. Its routes are mounted but remain fail-closed until
    the exact Preview environment and unapplied schema are separately activated.
    It must mint an exact-resource, five-minute JWT with integer `nbf`
    and a consent-bound `workspace_id`; Preview does not claim immediate token
@@ -252,7 +254,8 @@ Before enabling real MCP mutations:
    scopes before consent. The first configured request may overwrite the exact
    resource seed and create the first ES256 JWKS key pair; each is a separately
    authorized database mutation. The scope contract does not advertise OpenID
-   discovery, and the only grant type is authorization code with S256 PKCE.
+   discovery. Authorization code with S256 PKCE is the interactive grant and
+   rotating refresh tokens continue a previously approved session.
    The memory-adapter handler proof covers GET-query and POST-form
    authorization, CIMD, signed consent, allow/deny, S256 exchange, exact
    five-minute ES256 claims, and membership drift. It is source proof only;

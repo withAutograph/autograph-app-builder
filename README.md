@@ -471,6 +471,11 @@ authenticated user action.
 Those routes construct lazily and fail closed until the checked-in schema is
 separately applied and the exact Preview environment is configured; their
 presence does not create a client, consent, grant, key, membership, or token.
+Preview identity uses invite-only GitHub sign-in. The App Builder does not
+accept or store a user password, public signup is disabled, and accounts are
+bound to a pre-provisioned stable GitHub account ID rather than implicitly
+linked by email. GitHub proves user identity only; repository mutation remains
+a separate approval-bound capability.
 Activating the checked-in CIMD policy remains separately authorized because
 discovery may create, persist, or refresh an authorization-server client record;
 DCR remains disabled. The checked-in MCP and store contracts contain no
