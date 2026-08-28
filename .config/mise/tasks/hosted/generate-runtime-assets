@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="Regenerate Eve-bundled hosted runtime assets"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/generate-hosted-runtime-assets.mts

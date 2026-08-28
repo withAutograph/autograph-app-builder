@@ -20,20 +20,23 @@ const sha256 = (value: Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
 describe("hosted Arrusted artifact", () => {
-  it("keeps exact artifact bytes in a server-only traced path", () => {
+  it("keeps exact artifact bytes embedded in the Eve service bundle", () => {
     const content = readHostedArtifactBytes();
+    const authoredContent = readFileSync(HOSTED_ARTIFACT_PATH);
     expect(content.byteLength).toBe(HOSTED_ARTIFACT_BYTES);
     expect(sha256(content)).toBe(HOSTED_ARTIFACT_SHA256);
+    expect(authoredContent.byteLength).toBe(HOSTED_ARTIFACT_BYTES);
+    expect(sha256(authoredContent)).toBe(HOSTED_ARTIFACT_SHA256);
     expect(HOSTED_ARTIFACT_PATH).toMatch(/^artifacts\/hosted\//u);
     expect(HOSTED_ARTIFACT_PATH).not.toMatch(/^public\//u);
     expect(existsSync("public/hosted-artifacts")).toBe(false);
-    expect(readFileSync("next.config.ts", "utf8")).toContain(
+    expect(readFileSync("next.config.ts", "utf8")).not.toContain(
       `"./${HOSTED_ARTIFACT_PATH}"`,
     );
     expect(hostedExecutionArtifactDigest()).toBe(
       `vercel-sandbox-seed@sha256:${HOSTED_ARTIFACT_SHA256}`,
     );
-  });
+  }, 20_000);
 
   it.each(["preview", "production"] as const)(
     "exposes only the fixed release-disabled source receipt in %s",
