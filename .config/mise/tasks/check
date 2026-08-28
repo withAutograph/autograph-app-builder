@@ -2,10 +2,12 @@
 #MISE description="Run the complete repository validation with the pinned Node runtime"
 set -eu
 
+# Portable release provenance requires the source checkout to be pristine.
+# Run it before test fixtures that exercise repository mutation workflows.
+mise run package:test-portable
 mise run format-check
 mise run lint
 mise run typecheck
 mise run test:unit
 mise run test:postgres-sandbox-leases
 mise run package:validate
-mise run package:test-portable
