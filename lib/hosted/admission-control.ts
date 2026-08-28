@@ -1,12 +1,17 @@
 import { z } from "zod";
 
+import {
+  hostedDeploymentEnvironmentSchema,
+  readHostedDeploymentEnvironment,
+} from "./deployment-environment";
+
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const instantSchema = z.string().datetime({ offset: true });
 
-export const hostedPreviewAdmissionControlBindingSchema = z
+export const hostedAdmissionControlBindingSchema = z
   .object({
     version: z.literal(1),
-    environment: z.literal("preview"),
+    environment: hostedDeploymentEnvironmentSchema,
     enforcement: z.literal("provider-readback"),
     scope: z.literal("issuer-audience-workspace-subject"),
     startsPerSubjectPerMinute: z.number().int().min(1).max(60),
@@ -43,14 +48,25 @@ export const hostedPreviewAdmissionControlBindingSchema = z
     }
   });
 
+export type HostedAdmissionControlBinding = z.infer<
+  typeof hostedAdmissionControlBindingSchema
+>;
+
+export const hostedPreviewAdmissionControlBindingSchema =
+  hostedAdmissionControlBindingSchema.refine(
+    (binding) => binding.environment === "preview",
+    "Preview admission control must bind the Preview environment.",
+  );
+
 export type HostedPreviewAdmissionControlBinding = z.infer<
   typeof hostedPreviewAdmissionControlBindingSchema
 >;
 
-export function readHostedPreviewAdmissionControlBinding(
+export function readHostedAdmissionControlBinding(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
   nowEpochMs = Date.now(),
-): HostedPreviewAdmissionControlBinding {
+): HostedAdmissionControlBinding {
+  const deploymentEnvironment = readHostedDeploymentEnvironment(environment);
   const serialized = environment.EVE_HOSTED_ADMISSION_CONTROL;
   if (
     serialized === undefined ||
@@ -61,13 +77,27 @@ export function readHostedPreviewAdmissionControlBinding(
     throw new Error("A bounded hosted admission-control readback is required.");
   }
 
-  const binding = hostedPreviewAdmissionControlBindingSchema.parse(
+  const binding = hostedAdmissionControlBindingSchema.parse(
     JSON.parse(serialized),
   );
+  if (binding.environment !== deploymentEnvironment) {
+    throw new Error(
+      "Hosted admission control must match the deployment environment.",
+    );
+  }
   const observedAt = Date.parse(binding.observedAt);
   const expiresAt = Date.parse(binding.expiresAt);
   if (observedAt > nowEpochMs + 30_000 || nowEpochMs >= expiresAt) {
     throw new Error("Hosted admission-control readback is stale.");
   }
   return binding;
+}
+
+export function readHostedPreviewAdmissionControlBinding(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  nowEpochMs = Date.now(),
+): HostedPreviewAdmissionControlBinding {
+  return hostedPreviewAdmissionControlBindingSchema.parse(
+    readHostedAdmissionControlBinding(environment, nowEpochMs),
+  );
 }

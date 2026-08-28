@@ -44,7 +44,7 @@ boundary at `/github/installations`. A same-origin form POST creates a
 ten-minute HMAC-signed state containing only an opaque nonce and the digest of
 the current authenticated issuer, audience, workspace, and user tuple. Only
 the state digest and tenant tuple are stored. The GitHub callback must present
-the same live Preview session and workspace membership. The setup callback
+the same live hosted session and workspace membership. The setup callback
 atomically consumes the installation state, creates a second tenant-bound
 authorization state, and redirects through GitHub's web authorization flow
 with S256 PKCE. The authorization callback atomically consumes that second
@@ -59,7 +59,7 @@ token, raw provider response, or authorization header. A replay, tenant change,
 provider drift, membership change, suspended installation, or all-repository
 selection fails closed without a binding.
 
-This route adds the exact Preview-only environment fields
+This route adds the exact hosted environment fields
 `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
 `GITHUB_APP_INSTALL_STATE_SECRET`. The existing `GITHUB_CLIENT_ID` and
 `GITHUB_CLIENT_SECRET` remain the separate invited-user sign-in provider.
@@ -110,14 +110,15 @@ exact idempotency read-back. Only an explicit provider rejection becomes a
 bounded sanitized failure receipt and requires explicit recovery.
 
 The repository now supplies the PostgreSQL CAS store, its additive schema, and
-a fixed-`api.github.com` HTTP provider. Preview deployment composition is
+a fixed-`api.github.com` HTTP provider. Hosted deployment composition is
 enabled only by exact `APP_BUILDER_GITHUB_PUBLICATION_ENABLED=1` together with
-the hosted Preview bindings, bounded `DATABASE_URL`, `GITHUB_APP_ID`, and
+an exact matching `VERCEL_ENV` and `EVE_HOSTED_VERCEL_ENVIRONMENT` of either
+`preview` or `production`, bounded `DATABASE_URL`, `GITHUB_APP_ID`, and
 `GITHUB_APP_PRIVATE_KEY`. `GITHUB_APP_INSTALLATION_ID`, `GITHUB_TOKEN`, and
 `GITHUB_API_URL` are forbidden. The installation ID is read live from the exact
 issuer/audience/workspace/owner database binding after current and initiating
 forwarded authority plus membership are revalidated for the session. Local,
-unconfigured, non-Preview, service, mismatched, inactive, or ambient authority
+unconfigured, unsupported, service, mismatched, inactive, or ambient authority
 remains fail-closed. The provider creates short-lived App JWTs and mints a
 fresh installation token with the exact permissions for each operation. The runtime
 passes a closed, discriminated, ephemeral content value directly into the

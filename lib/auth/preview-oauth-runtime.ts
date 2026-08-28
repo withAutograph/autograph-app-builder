@@ -12,6 +12,10 @@ import {
   type PreviewOAuthMembershipAuthority,
 } from "./preview-oauth-contract";
 import { fetchPreviewClientMetadataResource } from "./preview-cimd-transport";
+import {
+  hostedDeploymentEnvironmentSchema,
+  readHostedDeploymentEnvironment,
+} from "../hosted/deployment-environment";
 
 const databaseUrlSchema = z
   .string()
@@ -29,8 +33,7 @@ const databaseUrlSchema = z
 const previewOAuthRuntimeConfigSchema = z
   .object({
     hostedAdapter: z.literal("1"),
-    vercelEnvironment: z.literal("preview"),
-    configuredEnvironment: z.literal("preview"),
+    environment: hostedDeploymentEnvironmentSchema,
     issuer: z.string().url().startsWith("https://"),
     resource: z.string().url().startsWith("https://"),
     secret: z
@@ -90,10 +93,10 @@ export type PreviewOAuthRuntimeConfig = z.infer<
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
+  const deploymentEnvironment = readHostedDeploymentEnvironment(environment);
   return previewOAuthRuntimeConfigSchema.parse({
     hostedAdapter: environment.EVE_HOSTED_ADAPTER,
-    vercelEnvironment: environment.VERCEL_ENV,
-    configuredEnvironment: environment.EVE_HOSTED_VERCEL_ENVIRONMENT,
+    environment: deploymentEnvironment,
     issuer: environment.BETTER_AUTH_URL,
     resource: environment.MCP_RESOURCE_URL,
     secret: environment.BETTER_AUTH_SECRET,
@@ -112,7 +115,10 @@ export function createPreviewOAuthServer(input: {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
   const resourceOrigin = new URL(config.resource).origin;
   return betterAuth({
-    appName: "Autograph App Builder Preview",
+    appName:
+      config.environment === "preview"
+        ? "Autograph App Builder Preview"
+        : "Autograph App Builder",
     baseURL: resourceOrigin,
     basePath: "/api/auth",
     secret: config.secret,
@@ -141,7 +147,10 @@ export function createPreviewOAuthServer(input: {
       max: 60,
     },
     advanced: {
-      cookiePrefix: "autograph_preview",
+      cookiePrefix:
+        config.environment === "preview"
+          ? "autograph_preview"
+          : "autograph_app_builder",
       useSecureCookies: true,
     },
     plugins: [

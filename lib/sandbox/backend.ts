@@ -1,8 +1,14 @@
+import {
+  readHostedDeploymentEnvironment,
+  type HostedDeploymentEnvironment,
+} from "../hosted/deployment-environment";
+
 export type SandboxBackendKind =
   | "fixture-just-bash"
   | "local-just-bash"
   | "local-microsandbox"
   | "vercel-preview"
+  | "vercel-production"
   | "unsupported-vercel";
 
 export type SandboxBackendPlan = {
@@ -25,14 +31,24 @@ export function sandboxBackendPlan(input: {
   const environment = input.environment ?? process.env;
   if (input.fixture) return { kind: "fixture-just-bash", blockers: [] };
   if (isHostedVercelRuntime(environment)) {
-    if (environment.VERCEL_ENV !== "preview")
+    let deploymentEnvironment: HostedDeploymentEnvironment;
+    try {
+      deploymentEnvironment = readHostedDeploymentEnvironment(environment);
+    } catch {
       return {
         kind: "unsupported-vercel",
         blockers: [
-          "The hosted App Builder sandbox is enabled only for Vercel Preview.",
+          "The hosted App Builder sandbox requires an exact matching Preview or Production environment binding.",
         ],
       };
-    return { kind: "vercel-preview", blockers: [] };
+    }
+    return {
+      kind:
+        deploymentEnvironment === "preview"
+          ? "vercel-preview"
+          : "vercel-production",
+      blockers: [],
+    };
   }
   if (input.localImageConfigured)
     return { kind: "local-microsandbox", blockers: [] };
@@ -48,10 +64,16 @@ export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
   factories: {
     localMicrosandbox: () => Local;
     nonExecuting: () => NonExecuting;
-    vercelPreview: () => Hosted;
+    vercelHosted: () => Hosted;
   },
 ): Hosted | Local | NonExecuting {
-  if (kind === "vercel-preview") return factories.vercelPreview();
+  if (isHostedVercelSandboxBackend(kind)) return factories.vercelHosted();
   if (kind === "local-microsandbox") return factories.localMicrosandbox();
   return factories.nonExecuting();
+}
+
+export function isHostedVercelSandboxBackend(
+  kind: SandboxBackendKind,
+): kind is "vercel-preview" | "vercel-production" {
+  return kind === "vercel-preview" || kind === "vercel-production";
 }

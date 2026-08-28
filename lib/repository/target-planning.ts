@@ -14,7 +14,10 @@ import {
   type ObservedDependencyCache,
 } from "./dependency-cache";
 import { configuredToolchainImage } from "../sandbox/toolchain";
-import { sandboxBackendPlan } from "../sandbox/backend";
+import {
+  isHostedVercelSandboxBackend,
+  sandboxBackendPlan,
+} from "../sandbox/backend";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -156,7 +159,10 @@ export function targetExecutionBinding(
       fixture: false,
       localImageConfigured: false,
     });
-    if (backend.kind === "vercel-preview" && backend.blockers.length === 0)
+    if (
+      isHostedVercelSandboxBackend(backend.kind) &&
+      backend.blockers.length === 0
+    )
       return {
         imageDigest: hostedExecutionArtifactDigest(),
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),

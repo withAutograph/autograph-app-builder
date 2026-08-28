@@ -353,8 +353,9 @@ gates](docs/implementation-gates.md). The reproducible `linux/arm64` image
 source and its digest-resolution procedure are documented in
 [`containers/eve-sandbox`](containers/eve-sandbox/README.md).
 
-On a Vercel Preview deployment the agent selects Eve 0.43's supported Vercel
-Sandbox backend instead of attempting to start local microsandbox. Eve's
+On an exact matching Vercel Preview or Production deployment the agent selects
+Eve 0.43's supported Vercel Sandbox backend instead of attempting to start
+local microsandbox. Eve's
 Vercel backend fixes the runtime to its Vercel Container Registry
 `vercel/eve:latest` image and removes author-supplied image/runtime fields. It
 therefore cannot consume `APP_BUILDER_SANDBOX_IMAGE`, which is the private GHCR
@@ -366,10 +367,11 @@ server-only, digest-bound seed containing the exact supported Arrusted Git tree
 and a platform-portable planning-only dependency closure. The seed is included
 in the server function trace, is never placed under `public/`, and is copied
 into the reusable template before every live session switches to deny-all
-networking. Preview can therefore run the fixed read-only identity and planning
+networking. The hosted runtime can therefore run the fixed read-only identity and planning
 commands against `/opt/app-builder/hosted-source/arrusted-development` without
-claiming the private GHCR image as hosted authority. Production and other
-hosted environments use the non-executing fallback.
+claiming the private GHCR image as hosted authority. Missing, Development, and
+mismatched environment bindings use the non-executing fallback. Production
+support here is source capability, not activation evidence.
 
 Rebuild the seed with `mise run hosted:artifact-build -- --arrusted-root
 <exact-clean-checkout> --output artifacts/hosted/arrusted-c9a5faf2-preview.tar.gz`.
@@ -451,9 +453,12 @@ canonical Eve 0.43 session routes in the same Vercel project and origin as
 `/mcp`; each request-context hop presents a fresh project OIDC token directly
 to those routes. The verified MCP user crosses that hop only through Eve's
 closed forwarded-principal field, accepted from the configured exact Vercel
-team/project/Preview environment. Production and Development forwarder subjects
-fail closed; this boundary does not authorize either environment. It never falls
-back to the local adapter. Hosted composition also requires a fresh, closed
+team/project/environment. The environment must be exactly `preview` or
+`production`, and `VERCEL_ENV` must match the explicit
+`EVE_HOSTED_VERCEL_ENVIRONMENT`; missing, Development, wildcard, and mismatched
+bindings fail closed. Production still requires separate activation evidence.
+This boundary never falls back to the local adapter. Hosted composition also
+requires a fresh, closed
 `EVE_HOSTED_ADMISSION_CONTROL` JSON binding to an exact provider readback. That
 binding names bounded per-subject and per-workspace start/session ceilings plus
 current monthly spend and its ceiling, and expires within 24 hours. Starts are
@@ -463,13 +468,13 @@ OAuth resource metadata is served from
 `/.well-known/oauth-protected-resource`. The signed, consent-bound
 `workspace_id` access-token claim is the sole workspace selector. OAuth
 authorization-server discovery is rewritten from the RFC well-known path. The
-Preview scope contract does not advertise OpenID discovery. Its `aud`
+Hosted scope contract does not advertise OpenID discovery. Its `aud`
 must equal the canonical `/mcp` resource URL, and the resource server accepts
 only tokens with an integer `nbf`/`iat` and at most a five-minute lifetime. A
 live exact subject/workspace membership row is required on every MCP request
 before the tenant-scoped store or Eve transport can run. Importing the route
 does not create a database connection or obtain a workload credential. The
-Preview-only Better Auth issuer is mounted at `/api/auth`, with exact OAuth AS
+hosted Better Auth issuer is mounted at `/api/auth`, with exact OAuth AS
 discovery, JWKS, explicit sign-in, and sole-workspace confirmation on the
 single consent surface. The consent reference is re-read from the user's sole
 active workspace immediately before consent and token issuance. Signed-query
@@ -477,9 +482,9 @@ public-client prelogin verifies the CIMD client identity and exact requested
 scopes before consent; client and resource management endpoints deny every
 authenticated user action.
 Those routes construct lazily and fail closed until the checked-in schema is
-separately applied and the exact Preview environment is configured; their
+separately applied and the exact supported environment is configured; their
 presence does not create a client, consent, grant, key, membership, or token.
-Preview identity uses invite-only GitHub sign-in. The App Builder does not
+Hosted identity uses invite-only GitHub sign-in. The App Builder does not
 accept or store a user password, public signup is disabled, and accounts are
 bound to a pre-provisioned stable GitHub account ID rather than implicitly
 linked by email. GitHub proves user identity only; repository mutation remains

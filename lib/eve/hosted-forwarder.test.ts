@@ -14,6 +14,7 @@ describe("hosted Eve forwarder binding", () => {
     expect(
       readHostedForwarderSubject({
         EVE_HOSTED_ADAPTER: "1",
+        VERCEL_ENV: "preview",
         EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
         EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
@@ -23,29 +24,47 @@ describe("hosted Eve forwarder binding", () => {
     );
   });
 
+  it("binds the exact Production subject only when both environments agree", () => {
+    expect(
+      readHostedForwarderSubject({
+        EVE_HOSTED_ADAPTER: "1",
+        VERCEL_ENV: "production",
+        EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+        EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
+        EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+      }),
+    ).toBe(
+      "owner:withautograph:project:autograph-app-builder:environment:production",
+    );
+  });
+
   it("fails closed on missing, wildcard, or unsupported bindings", () => {
     for (const environment of [
       { EVE_HOSTED_ADAPTER: "1" },
       {
         EVE_HOSTED_ADAPTER: "1",
+        VERCEL_ENV: "preview",
         EVE_HOSTED_VERCEL_TEAM_SLUG: "*",
         EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
       },
       {
         EVE_HOSTED_ADAPTER: "1",
+        VERCEL_ENV: "preview",
         EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
         EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "*",
       },
       {
         EVE_HOSTED_ADAPTER: "1",
+        VERCEL_ENV: "preview",
         EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
         EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
       },
       {
         EVE_HOSTED_ADAPTER: "1",
+        VERCEL_ENV: "development",
         EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
         EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "development",

@@ -35,25 +35,43 @@ describe("hosted Arrusted artifact", () => {
     );
   });
 
-  it("exposes only the fixed release-disabled source receipt in Preview", () => {
-    const receipt = hostedSourceReceipt(
-      "existing-repository",
-      HOSTED_SOURCE_PATH,
-      {
-        VERCEL: "1",
-        VERCEL_ENV: "preview",
-      },
-    );
-    expect(receipt?.digest).toBe(HOSTED_SOURCE_RECEIPT_DIGEST);
-    expect(receipt?.releaseEnabled).toBe(false);
+  it.each(["preview", "production"] as const)(
+    "exposes only the fixed release-disabled source receipt in %s",
+    (environmentName) => {
+      const receipt = hostedSourceReceipt(
+        "existing-repository",
+        HOSTED_SOURCE_PATH,
+        {
+          VERCEL: "1",
+          EVE_HOSTED_ADAPTER: "1",
+          VERCEL_ENV: environmentName,
+          EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
+        },
+      );
+      expect(receipt?.digest).toBe(HOSTED_SOURCE_RECEIPT_DIGEST);
+      expect(receipt?.releaseEnabled).toBe(false);
+      expect(() =>
+        hostedSourceReceipt("existing-repository", "/tmp/other", {
+          VERCEL: "1",
+          EVE_HOSTED_ADAPTER: "1",
+          VERCEL_ENV: environmentName,
+          EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
+        }),
+      ).toThrow("supports only the fixed source");
+      expect(
+        hostedSourceReceipt("existing-repository", HOSTED_SOURCE_PATH, {}),
+      ).toBeUndefined();
+    },
+  );
+
+  it("rejects a hosted source before inspection when environments differ", () => {
     expect(() =>
-      hostedSourceReceipt("existing-repository", "/tmp/other", {
+      hostedSourceReceipt("existing-repository", HOSTED_SOURCE_PATH, {
         VERCEL: "1",
-        VERCEL_ENV: "preview",
+        EVE_HOSTED_ADAPTER: "1",
+        VERCEL_ENV: "production",
+        EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
       }),
-    ).toThrow("supports only the fixed source");
-    expect(
-      hostedSourceReceipt("existing-repository", HOSTED_SOURCE_PATH, {}),
-    ).toBeUndefined();
+    ).toThrow("exact matching Preview or Production");
   });
 });

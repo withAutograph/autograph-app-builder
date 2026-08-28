@@ -53,19 +53,22 @@ in module-global state. Hosted selection is explicit through
 `EVE_HOSTED_ADAPTER=1`; it never falls back to the loopback or unconfigured
 adapter. The signed, consent-bound `workspace_id` claim is the only workspace
 selector; no independent client header can select or override the tenant. The
-Preview auth database is the live membership authority. Invalid credentials return a 401
-Bearer challenge, missing session scope returns the corresponding 403
+configured hosted auth database is the live membership authority. Invalid
+credentials return a 401 Bearer challenge, missing session scope returns the corresponding 403
 challenge, and missing, mismatched, denied, or failed workspace lookups share
 one content-free 404 projection. The protected-resource metadata endpoint is
 `/.well-known/oauth-protected-resource`.
 
-Preview configuration is one exact-origin contract: `/api/auth` is the issuer,
+Hosted configuration is one exact-origin contract: `/api/auth` is the issuer,
 `/api/auth/jwks` is its non-redirecting key source, and `/mcp` is both audience
 and resource. A separately hosted issuer, alternate path, query, credential,
 or fragment is a configuration failure rather than an implied topology.
-The forwarder environment is exactly `preview`; `production` and `development`
-are rejected by the runtime parser rather than treated as future implied
-authority.
+The runtime accepts only `preview` or `production`, and only when Vercel's
+`VERCEL_ENV` exactly equals `EVE_HOSTED_VERCEL_ENVIRONMENT`. The exact team and
+project remain part of the trusted-forwarder subject. Missing, Development,
+wildcard, or mismatched bindings fail closed. This source capability is not a
+Production activation or deployment receipt; the existing checked-in live
+activation receipt remains Preview-only.
 
 The checked-in Next.js route now supplies the deployment composition without
 weakening the provider-neutral service boundary. Constructing the route reads
@@ -86,8 +89,9 @@ Hosted composition additionally requires a fresh closed admission-control
 binding in `EVE_HOSTED_ADMISSION_CONTROL`. It binds exact per-subject and
 per-workspace start limits, active/concurrent session ceilings, a monthly spend
 observation plus ceiling, an observation window of at most 24 hours, and the
-SHA-256 digest of the provider readback. Missing, stale, non-Preview, unknown,
-or out-of-range bindings return 503 before storage opens. The durable start
+SHA-256 digest of the provider readback. Missing, stale,
+environment-mismatched, unknown, or out-of-range bindings return 503 before
+storage opens. The durable start
 reservation serializes and enforces the rate/session fields before Eve
 dispatch, and every observed public session result refreshes active status.
 
@@ -170,14 +174,14 @@ Hosted activation still requires separately authorized work:
 - publish an immutable Agent Plugins package pointing at that proven endpoint, and run
   Codex and non-Codex installation smokes.
 
-Preview JWT access tokens are intentionally not denylisted or introspected.
+Hosted JWT access tokens are intentionally not denylisted or introspected.
 They cannot be revoked immediately: removing a membership blocks the next MCP
 request through the live database check, while the token remains
 cryptographically valid for no more than five minutes. Public clients receive
 an eight-hour, rotated refresh token only when they request `offline_access`;
 every MCP request made with a refreshed access token still passes the resource
-server's live membership check. Do not claim immediate token revocation or
-extend this Preview policy to Production.
+server's live membership check. Do not claim immediate token revocation or a
+Production activation without separate live evidence.
 
 ## Preview database administration
 
@@ -233,7 +237,7 @@ task-scoped stdin. Public signup stays disabled by the closed runtime policy.
 Repository tests use pure stores and never invoke these mutating adapters.
 
 The aligned Better Auth 1.7.1 MCP, CIMD, and OAuth Provider packages and the
-Preview-only issuer are checked in. The issuer is mounted at `/api/auth`, with
+hosted issuer are checked in. The issuer is mounted at `/api/auth`, with
 an RFC OAuth authorization-server discovery rewrite, `/api/auth/jwks`, and
 explicit sign-in and a single verified-client consent surface that binds the
 sole active workspace. The scope contract does not advertise OpenID discovery.
