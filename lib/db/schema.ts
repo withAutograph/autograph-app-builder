@@ -423,6 +423,57 @@ export const agentOperations = pgTable(
   ],
 );
 
+export const sandboxExecutionLeases = pgTable(
+  "sandbox_execution_lease",
+  {
+    issuer: text("issuer").notNull(),
+    audience: text("audience").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    adapterSessionId: text("adapter_session_id").notNull(),
+    providerSandboxId: text("provider_sandbox_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    state: text("state").notNull(),
+    policyDigest: text("policy_digest").notNull(),
+    record: jsonb("record").notNull(),
+    acquiredAt: timestamp("acquired_at", { withTimezone: true }).notNull(),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({
+      name: "sandbox_execution_lease_tenant_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.adapterSessionId,
+      ],
+    }),
+    index("sandbox_execution_lease_workspace_active_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.state,
+      table.expiresAt,
+    ),
+    index("sandbox_execution_lease_subject_active_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.state,
+      table.expiresAt,
+    ),
+    index("sandbox_execution_lease_orphan_idx").on(
+      table.state,
+      table.expiresAt,
+    ),
+  ],
+);
+
 export const githubPublicationProposals = pgTable(
   "github_publication_proposal",
   {

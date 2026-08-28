@@ -54,7 +54,7 @@ describe("hosted storage read-only readiness", () => {
         maxConnections: 1,
       },
       migrations: {
-        count: 7,
+        count: 8,
         exactOrder: true,
         noPendingMigration: true,
         additiveOnly: true,
@@ -65,6 +65,7 @@ describe("hosted storage read-only readiness", () => {
         githubJournalCompareAndSetBound: true,
         githubJournalExcludedFromTenantRetention: true,
         oauthAuthorizationSchemaBound: true,
+        sandboxExecutionLeaseBound: true,
       },
       rollback: {
         destructiveMigrationDetected: false,

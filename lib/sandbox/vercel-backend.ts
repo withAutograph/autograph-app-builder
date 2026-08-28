@@ -1,12 +1,17 @@
 import { vercel } from "eve/sandbox/vercel";
 
 import { HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS } from "./hosted-toolchain";
+import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
+import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
+import { createBoundedSandboxBackend } from "./sandbox-command-adapter";
 
 export interface HostedVercelBackendOptions {
   readonly networkPolicy: {
     readonly allow: readonly string[];
   };
   readonly resources: { readonly vcpus: 2 };
+  readonly timeout: 900_000;
+  readonly ports: readonly [];
   readonly sessionCreateOptions: () => {
     readonly networkPolicy: "deny-all";
   };
@@ -26,11 +31,20 @@ export function createHostedVercelBackend(
   // mounts. Keep the compatibility assertion isolated at this boundary.
   factory: HostedVercelBackendFactory = vercel as unknown as HostedVercelBackendFactory,
 ): ReturnType<typeof vercel> {
-  return factory({
+  const backend = factory({
     networkPolicy: { allow: [...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS] },
-    resources: { vcpus: 2 },
+    resources: { vcpus: SANDBOX_EXECUTION_POLICY.provider.vcpus },
+    timeout: SANDBOX_EXECUTION_POLICY.provider.timeoutMs,
+    ports: SANDBOX_EXECUTION_POLICY.provider.ports,
     // Eve resolves this for every fresh live session, including a replacement
     // created after the provider loses the previously recorded sandbox.
-    sessionCreateOptions: () => ({ networkPolicy: "deny-all" }),
+    sessionCreateOptions: () => ({
+      networkPolicy: SANDBOX_EXECUTION_POLICY.provider.networkPolicy,
+    }),
   });
+  return createBoundedSandboxBackend({
+    backend,
+    authorizeSessionCommand: (sessionId) =>
+      assertHostedSandboxCommandAuthority({ sessionId }),
+  }) as ReturnType<typeof vercel>;
 }

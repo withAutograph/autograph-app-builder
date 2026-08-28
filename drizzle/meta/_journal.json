@@ -50,6 +50,13 @@
       "when": 1787896800000,
       "tag": "0007_github_installation_authorization",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787983200000,
+      "tag": "0008_sandbox_execution_lease",
+      "breakpoints": true
     }
   ]
 }

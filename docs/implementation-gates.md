@@ -89,6 +89,25 @@ Before enabling GitHub or hosted repository publication:
    route or static asset. The hosted backend can run only the fixed read-only
    identity and planning commands; missing, Development, or mismatched Vercel
    environments use the non-executing backend.
+   The bounded command backend is active for every hosted template and live
+   session command. It shares one stdout/stderr byte budget, rejects direct
+   authored process spawning, enforces wall and no-output deadlines, actively
+   kills the process, cancels stream readers, and bounds kill cleanup. Eve
+   0.43 exposes no provider-native per-command timeout on its public sandbox
+   session surface, so no such timeout is claimed.
+   Durable per-turn execution leasing remains dormant unless a deployment sets
+   the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` gate. The awaited
+   `turn.started` hook acquires before dynamic tools and each command reasserts
+   its PostgreSQL epoch; terminal turn hooks stop compute before releasing.
+   `session.waiting` is deliberately not a release boundary because it may be
+   an in-turn authorization park. `mise run test:postgres-sandbox-leases`
+   proves same-subject serialization, the workspace cap, idempotent replay,
+   rollback, expiry, heartbeat, and recovery/reacquisition races against an
+   ephemeral digest-pinned PostgreSQL container. A provider stop failure keeps
+   the fenced lease orphaned and admission-blocking; only a successful stop may
+   settle it as released, and one failed stop does not abort the remaining
+   recovery batch. This source proof does not activate the gate or prove
+   provider-side orphan lookup and stop.
    The combined `hosted:artifact-prove-typed` gate first proves those exact
    artifact commands offline, then exercises the approval-bound Eve tool flow
    to terminal `planned` and emits its asserted called/forbidden tool trace.
