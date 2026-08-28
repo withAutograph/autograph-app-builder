@@ -12,27 +12,26 @@ import {
   Edit,
   ExternalLink,
   GitBranch,
-  Github,
   Globe,
   HelpCircle,
   Home,
   Info,
-  Lock,
   LogOut,
   Monitor,
   Moon,
   Plus,
+  PlusCircle,
   RefreshCw,
   Search,
   Settings,
   Smile,
   Sun,
-  Unlock,
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import {
   useEffect,
   useId,
@@ -337,6 +336,10 @@ function SearchCombobox({
   onChange,
   prefix,
   menuFooter,
+  optionIcon,
+  footerIcon,
+  detailPills = false,
+  showSelectedCheck = true,
 }: {
   label: string;
   value: string;
@@ -344,6 +347,10 @@ function SearchCombobox({
   onChange: (value: string) => void;
   prefix: ReactNode;
   menuFooter?: ComboOption;
+  optionIcon?: (option: ComboOption) => ReactNode;
+  footerIcon?: ReactNode;
+  detailPills?: boolean;
+  showSelectedCheck?: boolean;
 }) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -454,14 +461,25 @@ function SearchCombobox({
               type="button"
               role="option"
               aria-selected={option.value === value}
+              data-has-icon={optionIcon ? "" : undefined}
+              data-option-value={option.value}
               data-active={index === active || undefined}
               key={option.value}
               onPointerMove={() => setActive(index)}
               onClick={() => choose(option)}
             >
-              <span>{option.label}</span>
-              {option.detail ? <small>{option.detail}</small> : null}
-              {option.value === value ? (
+              {optionIcon ? (
+                <span className={styles.comboOptionIcon} aria-hidden="true">
+                  {optionIcon(option)}
+                </span>
+              ) : null}
+              <span className={styles.comboOptionLabel}>{option.label}</span>
+              {option.detail ? (
+                <small data-pill={detailPills || undefined}>
+                  {option.detail}
+                </small>
+              ) : null}
+              {showSelectedCheck && option.value === value ? (
                 <Check size={16} aria-hidden="true" />
               ) : null}
             </button>
@@ -472,7 +490,10 @@ function SearchCombobox({
         </div>
         {menuFooter ? (
           <button className={styles.comboFooter} type="button">
-            <Plus size={16} aria-hidden="true" /> {menuFooter.label}
+            <span className={styles.comboOptionIcon} aria-hidden="true">
+              {footerIcon ?? <Plus size={20} />}
+            </span>
+            <span className={styles.comboOptionLabel}>{menuFooter.label}</span>
           </button>
         ) : null}
       </div>
@@ -979,8 +1000,13 @@ function Builder({
             value={team}
             options={teamOptions}
             onChange={setTeam}
-            prefix={<span className={styles.teamDot} />}
+            prefix={<span className={styles.teamDot} data-team={team} />}
             menuFooter={{ value: "create-team", label: "Create a Team" }}
+            optionIcon={(option) => (
+              <span className={styles.teamDot} data-team={option.value} />
+            )}
+            footerIcon={<PlusCircle size={18} />}
+            detailPills
           />
         </label>
         <label htmlFor="app-name">
@@ -1005,8 +1031,10 @@ function Builder({
               value={gitScope}
               options={gitScopeOptions}
               onChange={setGitScope}
-              prefix={<Github size={16} />}
+              prefix={<FaGithub size={16} />}
               menuFooter={{ value: "add-github", label: "Add GitHub Scope" }}
+              optionIcon={() => <FaGithub size={16} />}
+              footerIcon={<Plus size={21} />}
             />
           </label>
           <span className={styles.slash} aria-hidden="true">
@@ -1043,9 +1071,9 @@ function Builder({
                 <span>
                   <i>
                     {form.privateRepository ? (
-                      <Lock size={12} />
+                      <FaLock size={11} />
                     ) : (
-                      <Unlock size={12} />
+                      <FaLockOpen size={12} />
                     )}
                   </i>
                 </span>
@@ -1106,7 +1134,8 @@ function Builder({
             value={model}
             options={modelOptions}
             onChange={setModel}
-            prefix={<Search size={16} />}
+            prefix={<Search size={15} />}
+            showSelectedCheck={false}
           />
         </fieldset>
         <fieldset className={styles.sectionField}>
@@ -1141,7 +1170,7 @@ function Builder({
           <legend>Connections</legend>
           <p>Give this app access to tools and data from other services.</p>
           <label className={styles.searchBox}>
-            <Search size={16} aria-hidden="true" />
+            <Search size={15} aria-hidden="true" />
             <span className={styles.srOnly}>Search connections</span>
             <input
               type="search"

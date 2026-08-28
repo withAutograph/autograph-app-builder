@@ -109,3 +109,29 @@ No actionable P0, P1, or P2 differences remain in the tested fine-detail states.
 - Browser console error log was empty in the verified states.
 
 Final result: passed.
+
+### Picker and control fidelity pass
+
+The Vercel Team, Git Scope, repository, model, and connection-search controls
+were rechecked against the supplied open, selected, focused, private, and public
+reference states at the rendered desktop size.
+
+- Team rows now use round team marks, gray Hobby and blue Pro pills, a trailing
+  selected check, aligned labels, and an undivided Create a Team footer with a
+  circled plus.
+- Git Scope uses the filled GitHub mark on the control and every option, a
+  trailing selected check, aligned labels, and an undivided Add GitHub Scope
+  footer with the larger source-sized plus.
+- The repository separator, privacy track, filled lock glyphs, and right inset
+  match the source geometry. The information badge is dark and legible on a
+  subtle round background.
+- Model options keep provider identifiers aligned without a selected-row check.
+  Model and connection search icons use the smaller source-sized mark, while the
+  connection search focus halo belongs to the complete compound control.
+- Show all connections now uses Vercel's subtle gray hover surface.
+
+The authenticated page was reloaded in the in-app browser and the open Team
+menu was captured at the actual viewport. Labels, icons, badges, checkmark,
+footer, slash, repository switch, information badge, and model row alignment
+were visually verified. Unit tests and type checking passed before the final
+production build.
