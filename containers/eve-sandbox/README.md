@@ -6,7 +6,7 @@ environment. It pins its Eve runtime base, Git, mise `2026.8.12`, and Bun
 It also builds the exact external dependency closure needed by Arrusted's
 read-only app planner, including `@vercel/microfrontends` `2.4.0`, from a clean
 checkout of Arrusted commit
-`2503b6ad5820f650b1469d72fc569260bee298a8`.
+`77dce48833e7d6e05e086f18ca11b77d9214da9e`.
 
 The final image contains no Arrusted source tree, credentials, or provider
 configuration. It contains a normalized, deterministically gzip-compressed
@@ -118,7 +118,7 @@ closed manifest shape, labels, and rootfs identity must match before the task
 emits the platform digest-only reference. The selected platform manifest
 digest, not the transient tag or top-level index, remains runtime authority.
 For this exact Dockerfile and Arrusted source, the transient tag is
-`dockerfile-<dockerfile-sha-prefix>-arrusted-2503b6ad-arm64-v2`; it is only a publication
+`dockerfile-<dockerfile-sha-prefix>-arrusted-77dce488-arm64-v2`; it is only a publication
 handle and never runtime authority.
 
 The build fails on target SHA/tree or contract/lock drift. It performs the

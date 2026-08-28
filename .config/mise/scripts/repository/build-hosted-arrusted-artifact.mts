@@ -22,16 +22,16 @@ import { create as createTar } from "tar";
 
 import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts";
 
-const TARGET_SHA = "2503b6ad5820f650b1469d72fc569260bee298a8";
-const TARGET_TREE = "226cf97f187d50ba0db5877b62f7c38db95061da";
-const OUTPUT_NAME = "arrusted-2503b6ad-preview.tar.gz";
+const TARGET_SHA = "77dce48833e7d6e05e086f18ca11b77d9214da9e";
+const TARGET_TREE = "2ed91119a0101ce053a4eb2122624efa1fff6ecd";
+const OUTPUT_NAME = "arrusted-77dce488-preview.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
 const SOURCE_FILE = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u;
 
 const targetDigests = {
   miseConfigSha256:
-    "563ef5a6a44ce320ce4833f61391ebd9f41b02ac542d4254f04087285ce449ae",
+    "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
   miseLockSha256:
     "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
   bunLockSha256:
@@ -317,9 +317,9 @@ try {
       sha: TARGET_SHA,
       tree: TARGET_TREE,
       eligibilityDigest:
-        "f22626d877869ba98ace18b29c60b54a8ef9f968c00a6d9de09d40f662b139f7",
+        "2b524f0975a1e0c55e0c7aeca25553afc394698e812f89f35df3881e24e38744",
       contractDigest:
-        "efbd1f6d233e2d8f5972e80920af76974f465820fad118bcb6b40448537ec73a",
+        "0295cecbbb6059544e80b90dc95a4722eb530642d4c0d63687b08009a26aa2c3",
       workspaceDigest: sha256(JSON.stringify(entries)),
     },
     source: {

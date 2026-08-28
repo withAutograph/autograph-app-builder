@@ -22,7 +22,7 @@ const manifest = {
     sha: ARRUSTED_TARGET_SHA,
     tree: ARRUSTED_TARGET_TREE,
     miseConfigSha256:
-      "563ef5a6a44ce320ce4833f61391ebd9f41b02ac542d4254f04087285ce449ae",
+      "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
     miseLockSha256:
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     bunLockSha256:
