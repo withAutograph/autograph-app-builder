@@ -16,13 +16,15 @@ export function SignInForm() {
     setPending(true);
     setError(undefined);
     const oauthQuery = currentOAuthQuery(window.location.search);
+    const callbackURL = new URLSearchParams(window.location.search).get(
+      "callbackURL",
+    );
     try {
       const signInRedirect = await postPreviewOAuthInteraction({
         endpoint: "/api/auth/sign-in/social",
-        body: {
-          provider: "github",
-          oauth_query: oauthQuery,
-        },
+        body: callbackURL
+          ? { provider: "github", callbackURL }
+          : { provider: "github", oauth_query: oauthQuery },
       });
       if (signInRedirect === undefined) {
         throw new Error("The authorization flow did not return a destination.");
