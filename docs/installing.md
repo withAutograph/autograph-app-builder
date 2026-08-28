@@ -38,15 +38,19 @@ published.
 
 ## Install from the shared marketplace after publication
 
-After an administrator publishes and configures the shared `autograph`
-marketplace, install through its Codex listing or run:
+After the immutable marketplace tag is published, register that exact Git ref
+and install its `autograph` listing:
 
 ```sh
+codex plugin marketplace add withAutograph/autograph-app-builder \
+  --ref codex-marketplace-v0.1.1
 codex plugin add autograph-app-builder@autograph
 ```
 
-Open a new Codex task after installation. Publishing a release does not create
-the shared listing; marketplace publication is a separate distribution action.
+Open a new Codex task after installation. The marketplace tag contains only the
+generated catalog and endpoint-bound plugin; it never installs the loopback
+development adapter from `main`. Publishing a release does not create the
+shared listing; marketplace publication is a separate distribution action.
 
 ## Other Agent Plugins clients
 
