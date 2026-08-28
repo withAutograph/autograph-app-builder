@@ -399,9 +399,9 @@ describe("trusted Node launcher", () => {
     const result = spawnSync(
       launcher,
       [
-      pinnedNode,
-      "-e",
-      "process.stdout.write(JSON.stringify({path:process.env.PATH,pwd:process.env.PWD,bash:process.env.BASH_ENV,node:process.env.NODE_PATH,npm:process.env.NPM_CONFIG_USERCONFIG,pnpm:process.env.PNPM_HOME,mise:process.env.MISE_CONFIG_FILE,loader:process.env.LD_LIBRARY_PATH,dyld:process.env.DYLD_INSERT_LIBRARIES,tsx:process.env.TSX_TSCONFIG_PATH,vitest:process.env.VITEST_POOL_ID,uv:process.env.UV_THREADPOOL_SIZE,openssl:process.env.OPENSSL_CONF}))",
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({path:process.env.PATH,pwd:process.env.PWD,bash:process.env.BASH_ENV,node:process.env.NODE_PATH,npm:process.env.NPM_CONFIG_USERCONFIG,pnpm:process.env.PNPM_HOME,mise:process.env.MISE_CONFIG_FILE,loader:process.env.LD_LIBRARY_PATH,dyld:process.env.DYLD_INSERT_LIBRARIES,tsx:process.env.TSX_TSCONFIG_PATH,vitest:process.env.VITEST_POOL_ID,uv:process.env.UV_THREADPOOL_SIZE,openssl:process.env.OPENSSL_CONF}))",
       ],
       { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
     );
