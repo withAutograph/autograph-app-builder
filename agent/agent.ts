@@ -248,8 +248,30 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ({ name }) => name === "accept_app_spec",
     );
     const latestAcceptance = acceptanceResults.at(-1);
+    const repairDiagnostic = (() => {
+      if (
+        latestAcceptance?.isError !== true ||
+        typeof latestAcceptance.output !== "string"
+      )
+        return undefined;
+      try {
+        return JSON.parse(
+          latestAcceptance.output.replace(/^Error:\s*/u, ""),
+        ) as {
+          code?: string;
+          issues?: { code?: string }[];
+        };
+      } catch {
+        return undefined;
+      }
+    })();
     if (
       latestAcceptance?.isError === true &&
+      repairDiagnostic?.code === "app_spec_invalid" &&
+      repairDiagnostic.issues?.some(
+        ({ code }) =>
+          code === "missing_heading" || code === "build_handoff_format",
+      ) === true &&
       appSpecArtifacts.length === 1 &&
       acceptanceResults.length === 1
     )
