@@ -29,8 +29,6 @@ export default defineEval({
     t.check(t.reply, includes('"phase":"publication_pending"'));
 
     await t.send("Record a replacement prototype artifact.");
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("durable state was not changed"));
     t.notCalledTool("bash");

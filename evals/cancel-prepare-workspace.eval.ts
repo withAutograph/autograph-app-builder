@@ -5,17 +5,16 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "Canceling preparation leaves the durable App Builder workspace phase empty.",
+    "Eligible source preparation completes automatically without a workspace-approval prompt.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.calledTool("inspect_source", { count: 1 });
-    t.requireInputRequest({ toolName: "prepare_workspace" });
-
-    await t.respondAll("cancel");
     t.succeeded();
+    t.notEvent("input.requested");
+    t.calledTool("prepare_workspace", { count: 1 });
     t.calledTool("workspace_status", { count: 1 });
-    t.check(t.reply, includes("workspace phase remains empty"));
+    t.check(t.reply, includes("confirms the prepared phase"));
   },
 });

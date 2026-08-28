@@ -4,27 +4,25 @@
 
 Classify every question before asking it:
 
-| Class                 | Meaning                                                                   | Behavior                                                                |
-| --------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| HTML blocker          | Missing JTBD or desired interfaces                                        | Ask one concise question and wait.                                      |
-| Prototype-shaping     | Answer materially changes the first visible workflow                      | Ask early; use a labeled assumption and continue if reasonably safe.    |
-| Discovery-value       | Helps refine realism but does not change the next prototype               | Record it and ask during feedback, no more than three at once.          |
-| Build blocker         | Production meaning, authority, or data contract cannot be inferred safely | Ask before the build-ready gate and wait.                               |
-| Implementation detail | Autograph can decide from target-repository contracts and evidence        | Do not burden the user; decide during planning and explain if material. |
+| Class                 | Meaning                                                                          | Behavior                                                                |
+| --------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| HTML blocker          | Missing JTBD, or material ambiguity would create meaningfully different products | Ask one concise question and wait.                                      |
+| Prototype-shaping     | Answer materially changes the first visible workflow into a different product    | Ask only when no safe revisable default exists.                         |
+| Discovery-value       | Helps refine realism but does not change the next prototype                      | Record it and ask during feedback, no more than three at once.          |
+| Build blocker         | Production meaning, authority, or data contract cannot be inferred safely        | Ask before the build-ready gate and wait.                               |
+| Implementation detail | Autograph can decide from target-repository contracts and evidence               | Do not burden the user; decide during planning and explain if material. |
 
 Prefer one question. Ask two or three together only when they concern the same
 visible decision. Explain the assumed default when the question is nonblocking.
 
 ## Minimum HTML gate
 
-Ask only when missing:
-
-- “What is the person trying to accomplish with this app?”
-- “Which interfaces would help them do that—a dashboard, table, form, detail
-  view, import flow, timeline, planning surface, or something else?”
-
-If “interface” is ambiguous, give examples rather than asking for technical UI
-architecture.
+Ask “What is the person trying to accomplish with this app?” only when the job
+to be done is missing. Infer the initial interface from the brief and explicit
+preferences. When no preference is stated, choose a reasonable revisable
+default and explain it briefly. Do not ask the user to choose among dashboard,
+table, form, queue, detail view, import flow, timeline, or planning surface when
+the workflow supports a good default.
 
 ## Prototype-shaping questions
 

@@ -17,14 +17,10 @@ export default defineEval({
     t.succeeded();
 
     await t.send("Record a replacement prototype artifact.");
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("durable state was not changed"));
 
     await t.send("Attempt AppSpec mutation after publication.");
-    t.requireInputRequest({ toolName: "accept_app_spec" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("denied by the terminal publication workflow"));
     t.notCalledTool("bash");

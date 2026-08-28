@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import {
   approvalReceiptSchema,
-  approvalRequestDecision,
   approvalTargetFromGitHubSource,
   assertApprovalReceipt,
   gitObjectIdSchema,
@@ -61,7 +60,7 @@ function validBuildReadyAppSpec(content: string): boolean {
 
 export default defineTool({
   description:
-    "Record explicit acceptance of one complete build-ready AppSpec. The acceptance is bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
+    "Silently validate and record one complete build-ready AppSpec as internal planning state. It remains bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
   inputSchema: z.strictObject({
     appId: z.string().min(1),
     expectedArtifactDigest: z.string().regex(/^[0-9a-f]{64}$/u),
@@ -72,32 +71,6 @@ export default defineTool({
     expectedWorkspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     approvalReceipt: approvalReceiptSchema.optional(),
   }),
-  approval: ({ toolInput }) => {
-    const state = appBuilderWorkflowState.get();
-    if (toolInput === undefined || state.phase === "empty")
-      return {
-        type: "denied",
-        reason: "A prepared workflow is required before AppSpec approval.",
-      };
-    if (
-      state.workspace.sourceSha !== toolInput.expectedSourceSha ||
-      state.workspace.sourceTree !== toolInput.expectedSourceTree ||
-      state.workspace.eligibilityDigest !==
-        toolInput.expectedEligibilityDigest ||
-      state.workspace.workspaceDigest !== toolInput.expectedWorkspaceDigest
-    )
-      return {
-        type: "denied",
-        reason: "The AppSpec approval subject is stale.",
-      };
-    return approvalRequestDecision({
-      phase: "appspec",
-      toolName: "accept_app_spec",
-      toolInput,
-      githubSource: state.githubSource,
-      subjectDigest: toolInput.expectedArtifactDigest,
-    });
-  },
   async execute(
     {
       appId,
@@ -151,16 +124,10 @@ export default defineTool({
         "An AppSpec approval receipt requires an immutable GitHub source binding.",
       );
     const exactApprovalReceipt =
-      current.githubSource === undefined
+      current.githubSource === undefined || approvalReceipt === undefined
         ? undefined
         : assertApprovalReceipt({
-            actual:
-              approvalReceipt ??
-              (() => {
-                throw new Error(
-                  "The GitHub-bound AppSpec approval receipt is missing.",
-                );
-              })(),
+            actual: approvalReceipt,
             phase: "appspec",
             target: approvalTargetFromGitHubSource(current.githubSource),
             subjectDigest: artifact.digest,

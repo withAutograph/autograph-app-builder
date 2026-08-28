@@ -17,12 +17,10 @@ that an HTML artifact was created or shown.
 
 ## Communication rule
 
-Explain every technical term the first time it appears with one short sentence
-that says what it means for the user or what happens next. In diagrams and
-status reports, never rely on labels such as AppSpec, routing, temporal,
-provenance, generated client, or build gate by themselves; pair each with plain
-language such as “the agreed blueprint for the real app” or “the point where the
-user confirms that development can begin.”
+Use product language in every public message. Never name internal
+specifications, acceptance mechanics, artifacts, receipts, digests, workspace
+or source machinery, validation gates, protocol operations, or opaque
+validator/blocker text. Translate only the visible product meaning or effect.
 
 ## Load references
 
@@ -34,11 +32,17 @@ user confirms that development can begin.”
 
 ## Artifacts
 
-Choose one lowercase kebab-case app id and maintain these together under
-`prototype/<app-id>/`. The prototype slug and future app id must be identical.
-Before creating the directory, use the builder-owned identity operation
-declared by the selected adapter. Never construct or guess a repository script
-path.
+Resolve one concise user-facing app name and one lowercase kebab-case app id,
+then maintain these together under `prototype/<app-id>/`. Preserve explicitly
+supplied valid values. When either is omitted, infer it from the product brief,
+briefly tell the user what was inferred, and continue without confirmation.
+Derive an inferred id deterministically from the chosen name by lowercasing it,
+replacing each run of non-alphanumeric characters with one hyphen, and trimming
+hyphens. The prototype slug and future app id must be identical. Inspect the
+prepared source for a real directory, package, route, or prototype collision;
+ask only for a collision, unsupported identifier, or material ambiguity. The
+selected adapter's builder-owned identity operation remains authoritative for
+later target planning. Never construct or guess a repository script path.
 
 - `index.html` plus additional self-contained HTML pages when interfaces require
   them;
@@ -47,23 +51,21 @@ path.
   confirmations, defaults, unresolved questions, and explicit deferrals.
 
 The HTML is not production code, schema authority, or persisted-data authority.
-The AppSpec is not build-ready until the user accepts it explicitly.
+The AppSpec becomes build-ready when stated product decisions and safe revisable
+defaults satisfy the complete contract; formal recording is internal and silent.
 
 ## Phase 0: Minimum HTML gate
 
-Require only:
-
-1. a job to be done; and
-2. one or more desired interfaces.
-
-Interfaces are user-facing surfaces such as a dashboard, table, form, record
-detail, timeline, kanban, import/reconciliation flow, planning canvas, or agent
-chat—not APIs or TypeScript interfaces.
-
-If either minimum input is absent, ask one concise blocking question. Do not
-start domain research or generate HTML until both exist. Do not block HTML on
-personas, integrations, data objects, fields, permissions, or delivery details;
-infer plausible provisional choices, label them, and make them easy to revise.
+Require only a clear job to be done. Infer the initial interface pattern from
+the product brief and explicit preferences. When no preference is stated,
+choose a reasonable, revisable pattern, explain the choice briefly in user
+language, and proceed quickly to HTML. Do not ask the user to choose among a
+queue, form, dashboard, table, or detail view when the brief supports a good
+default. Ask one concise blocking question only when the job itself is missing
+or materially different interface choices would produce meaningfully different
+products. Do not block HTML on personas, integrations, data objects, fields,
+permissions, or delivery details; infer plausible provisional choices, label
+them, and make them easy to revise.
 
 ## Phase 1: Focused exploration
 
@@ -77,8 +79,8 @@ Research enough to make the prototype credible:
 5. identify concrete proactive and on-demand agent value.
 
 Do not turn this into a mandatory pre-prototype interview. Ask only questions
-that would materially change the first HTML. For valuable but nonblocking
-questions, state the assumption and continue unless the user answers in time.
+that would materially change the first HTML into a different product. For
+valuable but nonblocking questions, state the assumption and continue.
 
 ## Phase 2: Target-repository grounding
 
@@ -116,6 +118,10 @@ Before presenting it, verify:
   appear; and
 - every provisional behavior is labeled in the decision ledger.
 
+Record the HTML, decision ledger, and exploring AppSpec through the discovered
+session-scoped artifact tool without requesting approval. This is non-published
+builder-owned state and must not write the source or target repository.
+
 ## Phase 4: Prototype-led interview loop
 
 Show the prototype early. Ask the user to react in product language: what feels
@@ -149,21 +155,23 @@ Infer and confirm the production meaning behind the approved experience:
 - first-use, empty, loading, and failure behavior; and
 - delivery expectation, non-goals, and acceptance walkthrough.
 
-Never infer build readiness from praise of the HTML. Present the AppSpec's
-confirmed decisions, accepted defaults, explicit deferrals, and remaining
-blockers separately.
+Never infer build readiness from praise of the HTML. Present confirmed
+decisions, accepted defaults, explicit deferrals, and material product questions
+separately, without naming internal planning structures.
 
-After explicit acceptance, add exactly one `## Build handoff` JSON block using
-the strict shape in `references/app-spec.md`. It contains only the
-non-derivable decisions needed by app preparation. Omit it while the AppSpec is
-still exploring.
+When product decisions and safe revisable defaults are complete, add exactly one
+`## Build handoff` JSON block using the strict shape in
+`references/app-spec.md`. It contains only the non-derivable decisions needed
+by app preparation. Omit it while a materially product-changing choice remains
+unresolved.
 
 ## Phase 6: Build-ready gate
 
-Stop and request explicit user acceptance before final application development.
-The gate passes only when:
+Validate the complete AppSpec silently before target mutation. The gate passes
+without a formal acceptance prompt when:
 
-- the user accepts the HTML experience and interface inventory;
+- the HTML experience and interface inventory follow stated preferences or
+  clearly labeled safe revisable defaults;
 - every visible value has a confirmed or explicitly provisional production
   source;
 - integrations and data objects are confirmed or deliberately deferred;
@@ -172,7 +180,7 @@ The gate passes only when:
   settled for the first version;
 - blocking `agent_inferred` and `unresolved` items are confirmed, replaced by an
   accepted default, deferred, or made a non-goal; and
-- the user accepts the AppSpec and acceptance walkthrough.
+- the acceptance walkthrough is complete enough to review the plan.
 
 Before passing the gate, confirm the accountable owner, whether the app owns a
 kernel schema, any exceptional public routes beyond the conventional app-id
@@ -180,13 +188,31 @@ routes, and provider-neutral integration or hosted-resource capabilities. Then
 set the strict Build handoff status to `build-ready`; do not add provider
 configuration or mechanical repository identities to it.
 
-If the gate fails, return the specific uncertainty to the prototype loop. Do not
-paper over it with implementation assumptions.
+If validation fails, parse the technical or schema errors, repair missing
+sections and completeness automatically, re-record the artifact, and retry. If
+the gate still fails, return one plain-language product question only when the
+answer materially changes the product; otherwise state one actionable product
+limitation. Never surface AppSpec, receipt, validator, or schema mechanics in
+normal conversation.
 
 ## Phase 7: Production handoff
 
-After acceptance, return control to `$create-app` with the app id so the same
-user task can bind the exact AppSpec bytes, produce the read-only proposal, and
-request separate source/topology approval. If invoked directly for an app the
+After internal validation, return control to `$create-app` with the app id so
+the same user task can bind the exact AppSpec bytes and automatically produce
+the read-only proposal before requesting separate source/topology mutation
+approval. If invoked directly for an app the
 user intends to build, continue into `$create-app` without asking the user to
 start another task. Do not create production source or topology in this skill.
+
+## Product-facing conversation
+
+Keep normal updates about the product: the inferred name and id, the chosen UX
+pattern, what is visible now, and the next meaningful decision. Suppress routine
+internal specification and acceptance terms, artifact recording, receipts,
+digests, workspace/source machinery, validation gates, protocol operations, and
+opaque validator or blocker copy. Reconcile them internally whenever safe.
+Translate an unavoidable constraint into the smallest product-domain question
+with a visible tradeoff and recommended default. If no product answer can
+resolve it, explain the unavailable outcome and offer a product-level
+alternative. Phrase every approval in plain language around the concrete
+external effect.

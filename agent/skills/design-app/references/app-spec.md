@@ -69,8 +69,10 @@ AppSpec, not a second product specification:
 
 Every object is closed. Arrays must be sorted and contain no duplicates.
 
-- `status` is exactly `build-ready`, and may be set only after explicit AppSpec
-  acceptance. Omit the entire block while the AppSpec is still exploring.
+- `status` is exactly `build-ready`, and may be set after the complete contract
+  is internally validated from stated decisions and safe revisable defaults.
+  Omit the entire block while a materially product-changing choice remains
+  unresolved.
 - `owner` is the non-empty accountable team or domain identity.
 - `schema.kind` is `none` when the app owns no kernel data, otherwise `kernel`.
 - `additionalPublicRoutes` contains only exceptional public routes. Do not list
@@ -95,7 +97,8 @@ prototype interface that demonstrates it or note that it is nonvisual.
 
 Mark build-ready only when:
 
-- HTML experience and interface inventory are explicitly accepted;
+- HTML experience and interface inventory follow stated preferences or clearly
+  labeled safe revisable defaults;
 - integrations and data objects are confirmed or deferred;
 - sources, identities, relationships, and temporal meaning are adequate for the
   first workflow;
@@ -103,10 +106,11 @@ Mark build-ready only when:
 - writes, review, provenance, access, and agent authority are settled;
 - blocking inference labels have become confirmed, defaulted, deferred, or
   non-goals; and
-- the user explicitly accepts the AppSpec version and walkthrough.
+- the walkthrough is complete enough for product review.
 
 After those conditions pass, add the strict Build handoff block with status
 `build-ready`. Any subsequent AppSpec byte change invalidates its prepared
 digest and requires a new review and preparation result.
 
-Positive prototype feedback is not acceptance of production meaning.
+Formal AppSpec recording is internal planning state, not authority to mutate the
+target. Target mutation still requires its own explicit approval.

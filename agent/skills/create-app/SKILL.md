@@ -19,47 +19,62 @@ missing operation with a raw shell command or generic file write.
    [$scaffold-app-workspace](../scaffold-app-workspace/SKILL.md) and stop this
    route-owned flow. Do not interpret a generic “create an app” request as bare
    scaffolding.
-2. Collect one lowercase kebab-case app id. Use the builder-owned identity
-   operation declared by the selected adapter; never construct or guess a
-   repository script path.
+2. Resolve one concise user-facing app name and one lowercase kebab-case app id.
+   Preserve each explicitly supplied valid value. When either is omitted, infer
+   it from the product brief, tell the user the inferred value in one short
+   sentence, and continue without confirmation. Derive an inferred id
+   deterministically from the chosen name by lowercasing it, replacing each run
+   of non-alphanumeric characters with one hyphen, and trimming hyphens. Ask
+   only when the result is unsupported, the prepared source proves a real
+   workspace/package/prototype collision, or the brief is materially ambiguous.
+   The selected adapter's builder-owned identity operation remains authoritative
+   for target planning; never construct or guess a repository script path.
 
-3. Inspect the isolated target workspace, existing workspace identities, current topology,
-   and `prototype/<app-id>/app-spec.md`. Preserve unrelated changes.
-4. If the conventional AppSpec is absent or lacks an explicitly accepted,
-   build-ready handoff, follow [$design-app](../design-app/SKILL.md) in this same
-   task. Resume only after the user explicitly accepts the AppSpec. AppSpec
-   acceptance does not authorize source or topology mutation.
-5. Follow [$plan-app-creation](../plan-app-creation/SKILL.md) to produce the
-   canonical proposal. Return blockers without workarounds.
-6. Present the complete proposal and request a distinct, explicit approval for
+3. After an eligible exact source receipt is resolved, automatically inspect
+   the source read-only and prepare its isolated builder-owned workspace. Inspect
+   existing workspace identities, current topology, and
+   `prototype/<app-id>/app-spec.md`. Do not request approval for supported-source
+   inspection, workspace preparation, or non-published prototype artifacts.
+   Preserve unrelated changes.
+4. If the conventional AppSpec is absent or incomplete, follow
+   [$design-app](../design-app/SKILL.md) in this same task. Synthesize its
+   build-ready handoff from stated decisions and safe revisable defaults, then
+   validate and record it silently. If validation reports technical or schema
+   errors, repair completeness and retry automatically. Ask only when an
+   unresolved choice materially changes the product; otherwise do not prompt
+   for artifact recording or formal AppSpec acceptance.
+5. Follow [$plan-app-creation](../plan-app-creation/SKILL.md) automatically to
+   produce the canonical validated proposal. Return only product blockers
+   without workarounds or internal validator mechanics.
+6. Present the usable prototype and complete proposal, then request the first
+   distinct, explicit approval for
    the builder-owned apply operation. Do not apply on AppSpec acceptance alone,
    and never invoke the target command through generic shell access.
 7. Use only the discovered `apply_app_creation` tool. It must rerun readiness,
    bind the exact proposal and earlier receipts, and write only its fresh
    builder-owned overlay. If it records partial failure, stop in
    recovery-required state without automatic retry.
-8. Return the structured apply receipt, then request a distinct approval for
-   `validate_app_creation`. The validation tool must persist its pending receipt
+8. After the approved app changes are prepared, explain the visible outcome and
+   request a distinct approval to run the fixed local checks. The validation
+   tool must persist its pending receipt
    before execution, run only the fixed check and test commands in independent
    copies of the exact applied tree, and stop on pending or failed state without
    automatic redispatch.
-9. Return the structured validation receipt. Use `change_set_status` to show
-   the complete ordered normalized changes, before/after digests, and approved
-   path set from the canonical applied overlay. Then request separate approval
+9. After checks pass, use `change_set_status` internally and show the complete
+   ordered product/code changes in plain language. Then request separate approval
    for `accept_change_set`, carrying that exact payload; it recomputes the
    proposal and records the durable reviewed receipt. Request a separate
    local-publication approval before applying the reviewed paths to a named
    existing checkout. This does not create a commit, branch, draft pull
    request, or other remote publication outcome.
-   State exactly that apply created and route-configured state only in its fresh
-   overlay and validation used separate copies; neither operation published,
-   provisioned providers, deployed the app, activated releases, or proved
-   Production readiness.
+   Keep internal execution mechanics and no-authority boilerplate out of the
+   public conversation.
 
 ## Boundaries
 
-- Never infer product decisions, silently repair the AppSpec, or mutate before
-  the separate source/topology approval.
+- Infer only safe, revisable prototype defaults. Never infer production
+  authority, silently repair the AppSpec, or mutate the target before its
+  separate source/topology approval.
 - Never use `$scaffold-app-workspace` as the apply step for a planned route-owned
   app; the complete command owns contract, workspace, and topology composition.
 - Never create schema contents merely because the proposal derives a kernel
@@ -67,5 +82,12 @@ missing operation with a raw shell command or generic file write.
 - Never publish without the separate publication approval. Never reconcile providers, mutate `amp.yaml`, create secrets or environment
   configuration, deploy, or claim admission or Production readiness.
 - If the complete command reports stale, conflicting, or ambiguous recovery
-  state, stop and report it precisely. Do not delete or overwrite user-modified
-  state.
+  state, reconcile it automatically when safe. Otherwise translate the visible
+  product effect into one recommended product choice or an unavailable outcome
+  with an alternative. Do not delete or overwrite user-modified state.
+- Keep every public update product-facing. Never name internal specifications
+  or acceptance, artifact recording, receipts, digests, workspace/source
+  machinery, validation gates, protocol operations, or opaque validator and
+  blocker copy. Translate unavoidable constraints into the smallest
+  product-domain question with a recommended default, or offer a product-level
+  alternative when no answer can make the requested outcome available.

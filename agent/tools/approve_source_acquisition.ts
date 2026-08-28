@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import {
@@ -10,11 +9,10 @@ import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
 export default defineTool({
   description:
-    "Approve use of an exact reviewed fresh-template local checkout as an acquisition source. This approval does not clone, copy, or materialize anything.",
+    "Automatically bind an exact eligible fresh-template local checkout as the internal acquisition source. This does not clone, copy, or materialize anything.",
   inputSchema: z.object({
     expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  approval: always(),
   async execute({ expectedSourceReceiptDigest }, ctx) {
     const current = sourceWorkflowState.get();
     if (current.phase === "empty") throw new Error("No source was reviewed.");

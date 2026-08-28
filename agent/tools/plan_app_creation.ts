@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
@@ -24,11 +23,10 @@ import {
 
 export default defineTool({
   description:
-    "Run the two fixed read-only target commands for app identity and canonical planning. Approval is bound to the accepted AppSpec; no apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
+    "Automatically run the two fixed read-only target commands for app identity and canonical planning after a complete AppSpec is recorded. No apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  approval: always(),
   async execute({ expectedAppSpecDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target identity and planning");

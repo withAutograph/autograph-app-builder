@@ -8,13 +8,11 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "AppSpec acceptance and fixed target identity/planning have distinct approvals and durable receipts.",
+    "Internal product-plan validation and fixed read-only planning are automatic while target mutation remains approval-bound.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
 
     await t.send(`Prepare supported repository at ${repository}`);
-    t.requireInputRequest({ toolName: "prepare_workspace" });
-    await t.respondAll("approve");
     t.succeeded();
 
     await t.send("Assess workspace readiness before planning.");
@@ -27,16 +25,10 @@ export default defineEval({
     await t.send(
       `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
     );
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
-    await t.respondAll("approve");
-    t.requireInputRequest({ toolName: "accept_app_spec" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("separate explicit request and approval"));
+    t.check(t.reply, includes("ready for automatic implementation planning"));
 
     await t.send("Prepare offline target dependencies.");
-    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("target-bound offline dependency closure"));
     t.check(t.reply, includes("builder-owned planning metadata"));
@@ -44,8 +36,6 @@ export default defineEval({
     t.notCalledTool("write_file");
 
     await t.send("Prepare offline target dependencies after a lost response.");
-    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(
       t.reply,
@@ -55,8 +45,6 @@ export default defineEval({
     await t.send(
       "Prepare offline target dependencies with a stale AppSpec digest.",
     );
-    t.requireInputRequest({ toolName: "prepare_target_dependencies" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(
       t.reply,
@@ -64,8 +52,6 @@ export default defineEval({
     );
 
     await t.send("Run target identity and planning.");
-    t.requireInputRequest({ toolName: "plan_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
     t.calledTool("accept_app_spec", { count: 1 });
     t.calledTool("plan_app_creation", { count: 2 });
@@ -75,8 +61,6 @@ export default defineEval({
     t.notCalledTool("write_file");
 
     await t.send("Retry target planning after a lost response.");
-    t.requireInputRequest({ toolName: "plan_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(
       t.reply,
@@ -86,8 +70,6 @@ export default defineEval({
     t.notCalledTool("write_file");
 
     await t.send("Retry target planning with a stale AppSpec digest.");
-    t.requireInputRequest({ toolName: "plan_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("stale target-planning retry was rejected"));
     t.notCalledTool("bash");
@@ -291,8 +273,6 @@ export default defineEval({
     t.notCalledTool("write_file");
 
     await t.send("Record a replacement prototype artifact.");
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("durable state was not changed"));
     t.notCalledTool("bash");
@@ -315,8 +295,6 @@ export default defineEval({
     const afterRevision = t.reply;
 
     await t.send("Retry recording the exact replacement prototype artifact.");
-    t.requireInputRequest({ toolName: "record_prototype_artifact" });
-    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("durable state was not changed"));
 
