@@ -16,6 +16,7 @@ import {
   Globe,
   HelpCircle,
   Home,
+  Info,
   Lock,
   LogOut,
   Monitor,
@@ -244,6 +245,21 @@ function AutographMark({ compact = false }: { compact?: boolean }) {
         alt=""
       />
       <span>Autograph</span>
+    </span>
+  );
+}
+
+function InfoTooltip({ children }: { children: string }) {
+  const tooltipId = useId();
+
+  return (
+    <span className={styles.infoTooltip}>
+      <button type="button" aria-label={children} aria-describedby={tooltipId}>
+        <Info size={12} aria-hidden="true" />
+      </button>
+      <span id={tooltipId} role="tooltip">
+        {children}
+      </span>
     </span>
   );
 }
@@ -1077,8 +1093,10 @@ function Builder({
         <fieldset className={styles.modelField}>
           <legend>Model</legend>
           <label className={styles.checkLine}>
-            <input type="checkbox" name="zdr" /> Zero Data Retention{" "}
-            <HelpCircle size={12} aria-hidden="true" />
+            <input type="checkbox" name="zdr" /> Zero Data Retention
+            <InfoTooltip>
+              Only use providers that support Zero Data Retention.
+            </InfoTooltip>
           </label>
           <SearchCombobox
             label={

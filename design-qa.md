@@ -19,6 +19,12 @@
 - Connection flow sources: the five `17.25`–`17.34` screenshots supplied on 2026-08-28.
 - Connection drawer implementation: `.artifacts/connection-flow/implementation-connect.png`
 - Connection success implementation: `.artifacts/connection-flow/implementation-success.png`
+- Repository control source: `/Volumes/Home/.TemporaryItems/folders.501/TemporaryItems/NSIRD_screencaptureui_8G06ad/Screenshot 2026-08-28 at 17.04.27.png`
+- Model and information-badge source: `/Volumes/Home/.TemporaryItems/folders.501/TemporaryItems/NSIRD_screencaptureui_ahXV27/Screenshot 2026-08-28 at 17.04.59.png`
+- Final polished repository state: `.artifacts/polish/local-after-lock.png`
+- Final polished information-tooltip state: `.artifacts/polish/local-after-tooltip.png`
+- Final polished resting state: `.artifacts/polish/local-final.png`
+- Final polished mobile state: `.artifacts/polish/local-after-mobile.png`
 
 The authenticated builder comparison used the source viewport of 1699 x 1600 at DPR 1, with both experiences in the authenticated light-theme state. The completion comparison used the same light theme and the completed handoff state.
 
@@ -68,6 +74,28 @@ The supplied connection drawer, authorization success, configuration, and connec
 - The prototype states plainly that the local flow does not persist credentials or claim real provider authorization.
 
 No actionable P0, P1, or P2 differences remain in the tested connection flow. The provider-specific configuration vocabulary is intentionally normalized for a frontend prototype; future live integrations can replace those fields with provider-owned schemas.
+
+### Fine-detail polish pass
+
+The focused source details were compared with the browser-rendered implementation in one combined inspection. The 336 x 90 repository source and 683 x 367 model source were checked against the 787 x 906 desktop implementation at CSS DPR 1, with focused crops used to judge the controls rather than browser framing. The responsive implementation was separately checked at 390 x 844 and DPR 1; document width remained exactly 390 CSS pixels with no horizontal overflow.
+
+Initial P2 findings:
+
+- The repository tooltip was clipped by the compound input's overflow boundary.
+- Focus treatment used a generic blue outline rather than Vercel's neutral inset border and soft outer halo.
+- The repository switch thumb measured 21 x 21 instead of the source-matched 22 x 22 inside the 40 x 24 track.
+- Zero Data Retention used an outlined help glyph instead of the compact information badge.
+- Menus, tooltips, and the connection backdrop lacked the source's short opacity/transform entrances.
+
+Fixes and post-fix evidence:
+
+- The lock tooltip now escapes the 38 px repository control and renders at 175 x 32 with the captured copy, black surface, six-pixel radius, and pointer.
+- Repository geometry is 38 px control height, 40 x 24 track, 22 x 22 thumb, and 30 x 40 hit area; private/public positions and amber public state were browser-verified.
+- Compound controls use the neutral Vercel focus border and three-pixel halo. The information trigger uses a 16 x 16 hit area with a 12 x 12 information badge and a keyboard-accessible tooltip.
+- Hover, active, menu, tooltip, backdrop, drawer, and chevron transitions now animate only opacity, transform, background, border, color, and shadow. Reduced-motion disables or effectively removes these transitions.
+- Post-fix captures show the source-matched lock tooltip without clipping, the polished information treatment, clean mobile stacking, and no browser console errors.
+
+No actionable P0, P1, or P2 differences remain in the tested fine-detail states. Font family/weights, spacing rhythm, neutral color tokens, icon source quality, element sizes, and copy were explicitly checked. Autograph branding and the approved App terminology remain intentional product substitutions.
 
 ## Interaction and state QA
 

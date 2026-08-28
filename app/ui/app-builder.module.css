@@ -8,6 +8,8 @@
   --faint: #8a8a8a;
   --border: #e5e5e5;
   --hover: #f2f2f2;
+  --focus-border: #666;
+  --focus-ring: rgb(0 0 0/0.16);
   --shadow: 0 2px 8px rgb(0 0 0/0.06);
   min-height: 100vh;
   background: var(--bg);
@@ -22,6 +24,8 @@
   --faint: #777;
   --border: #262626;
   --hover: #1a1a1a;
+  --focus-border: #888;
+  --focus-ring: rgb(255 255 255/0.24);
   --shadow: 0 2px 12px rgb(0 0 0/0.5);
 }
 @media (prefers-color-scheme: dark) {
@@ -34,6 +38,8 @@
     --faint: #777;
     --border: #262626;
     --hover: #1a1a1a;
+    --focus-border: #888;
+    --focus-ring: rgb(255 255 255/0.24);
     --shadow: 0 2px 12px rgb(0 0 0/0.5);
   }
 }
@@ -52,6 +58,16 @@
 .anonymousPage button {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+.appShell button:active:not(:disabled),
+.anonymousPage button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 .skipLink {
   position: fixed;
@@ -122,6 +138,8 @@
   padding: 8px 0;
   z-index: 20;
   overscroll-behavior: contain;
+  transform-origin: top right;
+  animation: popoverIn 120ms ease-out;
 }
 .accountMenu > a,
 .accountMenu > button,
@@ -349,6 +367,9 @@
   place-items: center;
   cursor: pointer;
 }
+.combobox > button svg {
+  transition: transform 150ms ease;
+}
 .combobox[data-open] > button svg {
   transform: rotate(180deg);
 }
@@ -387,6 +408,8 @@
   box-shadow: 0 8px 30px rgb(0 0 0/0.12);
   z-index: 30;
   overflow: hidden;
+  transform-origin: top center;
+  animation: popoverIn 120ms ease-out;
 }
 .comboMenu > div {
   max-height: 205px;
@@ -477,7 +500,17 @@
   height: 38px;
   display: flex;
   align-items: center;
-  overflow: hidden;
+  overflow: visible;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.lockedInput:hover {
+  border-color: color-mix(in srgb, var(--border), var(--text) 20%);
+}
+.lockedInput:focus-within {
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .lockedInput input {
   min-width: 0;
@@ -515,14 +548,16 @@
   border-radius: 14px;
   background: #f2f2f2;
   position: relative;
-  transition: background 150ms cubic-bezier(0, 0, 0.2, 1);
+  transition:
+    background-color 150ms cubic-bezier(0, 0, 0.2, 1),
+    box-shadow 150ms ease;
 }
 .privacyToggle > span > i {
   position: absolute;
-  left: 2px;
-  top: 1.5px;
-  width: 21px;
-  height: 21px;
+  left: 1px;
+  top: 1px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--surface);
   color: #000;
@@ -541,7 +576,7 @@
   background: #f5a800;
 }
 .privacyToggle > input:focus-visible + span {
-  box-shadow: 0 0 0 4px rgb(0 0 0/0.16);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .privacyToggle em {
   position: absolute;
@@ -556,7 +591,8 @@
   font-size: 12px;
   font-style: normal;
   opacity: 0;
-  transform: translateY(3px);
+  transform: translateY(3px) scale(0.98);
+  transform-origin: bottom right;
   pointer-events: none;
   transition:
     opacity 120ms ease,
@@ -566,7 +602,72 @@
 .privacyToggle:hover em,
 .privacyToggle:focus-within em {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
+}
+.privacyToggle em::after,
+.infoTooltip > span::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: 12px;
+  border: 4px solid transparent;
+  border-top-color: #171717;
+}
+.infoTooltip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  margin-left: 1px;
+}
+.infoTooltip > button {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--faint);
+  display: grid;
+  place-items: center;
+  cursor: help;
+}
+.infoTooltip > button svg {
+  border-radius: 999px;
+  background: var(--hover);
+}
+.appShell .infoTooltip > button:focus-visible {
+  box-shadow:
+    0 0 0 1px var(--surface),
+    0 0 0 2px var(--focus-border);
+}
+.infoTooltip > span {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 240px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #171717;
+  color: #fff;
+  font-size: 12px;
+  line-height: 16px;
+  opacity: 0;
+  transform: translate(-50%, 3px) scale(0.98);
+  transform-origin: bottom center;
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  z-index: 40;
+}
+.infoTooltip > span::after {
+  right: calc(50% - 4px);
+}
+.infoTooltip:hover > span,
+.infoTooltip:focus-within > span {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
 }
 .briefField {
   height: 188px;
@@ -574,6 +675,16 @@
   border-radius: 6px;
   position: relative;
   overflow: hidden;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.briefField:hover {
+  border-color: color-mix(in srgb, var(--border), var(--text) 20%);
+}
+.briefField:focus-within {
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .briefField textarea {
   width: 100%;
@@ -700,6 +811,16 @@
   align-items: center;
   gap: 8px;
   padding: 0 12px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.searchBox:hover {
+  border-color: color-mix(in srgb, var(--border), var(--text) 20%);
+}
+.searchBox:focus-within {
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .searchBox input {
   height: 100%;
@@ -836,6 +957,7 @@
   backdrop-filter: blur(1px);
   display: flex;
   justify-content: flex-end;
+  animation: backdropIn 180ms ease-out;
 }
 .connectionDrawer {
   width: min(660px, calc(100vw - 24px));
@@ -853,6 +975,17 @@
   from {
     transform: translateX(18px);
     opacity: 0;
+  }
+}
+@keyframes backdropIn {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.98);
   }
 }
 .connectionDrawer > header {
@@ -1472,8 +1605,10 @@
 .anonymousPage a:focus-visible,
 .anonymousPage button:focus-visible,
 .anonymousPage textarea:focus-visible {
-  outline: 2px solid #0070f3;
-  outline-offset: 2px;
+  outline: 0;
+  box-shadow:
+    0 0 0 1px var(--focus-border),
+    0 0 0 4px var(--focus-ring);
 }
 .appShell input::placeholder,
 .appShell textarea::placeholder,
@@ -1492,6 +1627,23 @@
   }
   .connectionDrawer {
     animation: none;
+  }
+  .accountMenu,
+  .comboMenu,
+  .drawerBackdrop {
+    animation: none;
+  }
+  .appShell button,
+  .anonymousPage button,
+  .combobox > button svg,
+  .lockedInput,
+  .privacyToggle > span,
+  .privacyToggle > span > i,
+  .privacyToggle em,
+  .infoTooltip > span,
+  .briefField,
+  .searchBox {
+    transition-duration: 0.01ms;
   }
 }
 @media (max-width: 700px) {

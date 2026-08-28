@@ -164,9 +164,20 @@ describe("Vercel-faithful App Builder flow", () => {
     )!;
     expect(privacy.checked).toBe(true);
     expect(view.textContent).toContain("Private Repository Name");
+    expect(view.querySelector('[role="tooltip"]')?.textContent?.trim()).toBe(
+      "This repository will be private.",
+    );
+    expect(
+      view.querySelector(
+        'button[aria-label="Only use providers that support Zero Data Retention."]',
+      ),
+    ).not.toBeNull();
     await click(privacy);
     expect(privacy.checked).toBe(false);
     expect(view.textContent).toContain("Public Repository Name");
+    expect(view.querySelector('[role="tooltip"]')?.textContent?.trim()).toBe(
+      "This repository will be public.",
+    );
 
     await click(
       [...view.querySelectorAll("button")].find(
