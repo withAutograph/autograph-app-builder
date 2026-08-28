@@ -16,14 +16,15 @@ its complete asset set, extract the endpoint-bound Codex marketplace, and
 install it. These commands fail closed until that release exists:
 
 ```sh
-release_version=0.2.0
-release_dir="$PWD/autograph-app-builder-release-$release_version"
-marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
-mkdir "$release_dir" "$marketplace_dir"
-gh release download "v$release_version" \
-  --repo withAutograph/autograph-app-builder \
-  --dir "$release_dir"
 (
+  set -eu
+  release_version=0.2.0
+  release_dir="$PWD/autograph-app-builder-release-$release_version"
+  marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
+  mkdir "$release_dir" "$marketplace_dir"
+  gh release download "v$release_version" \
+    --repo withAutograph/autograph-app-builder \
+    --dir "$release_dir"
   cd "$release_dir"
   shasum -a 256 -c SHA256SUMS
   gh release verify "v$release_version" \
@@ -34,9 +35,9 @@ gh release download "v$release_version" \
   tar -xzf \
     "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
     -C "$marketplace_dir"
+  codex plugin marketplace add "$marketplace_dir"
+  codex plugin add autograph-app-builder@autograph
 )
-codex plugin marketplace add "$marketplace_dir"
-codex plugin add autograph-app-builder@autograph
 ```
 
 Complete OAuth, open a new task, and mention `@Autograph App Builder`. A shared

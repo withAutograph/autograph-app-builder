@@ -6,8 +6,8 @@ Once the pre-release `v0.2.0` GitHub release is published, use its public
 [release assets](https://github.com/withAutograph/autograph-app-builder/releases)
 until the shared marketplace is available. The release contains:
 
-- `autograph-app-builder-VERSION.tar.gz`
-- `autograph-app-builder-codex-marketplace-VERSION.tar.gz`
+- `autograph-app-builder-0.2.0.tar.gz`
+- `autograph-app-builder-codex-marketplace-0.2.0.tar.gz`
 - `release-receipt.json`
 - `SHA256SUMS`
 
@@ -16,14 +16,15 @@ immutable release attestations, install, and open a new Codex task. These
 commands fail closed until `v0.2.0` exists:
 
 ```sh
-release_version=0.2.0
-release_dir="$PWD/autograph-app-builder-release-$release_version"
-marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
-mkdir "$release_dir" "$marketplace_dir"
-gh release download "v$release_version" \
-  --repo withAutograph/autograph-app-builder \
-  --dir "$release_dir"
 (
+  set -eu
+  release_version=0.2.0
+  release_dir="$PWD/autograph-app-builder-release-$release_version"
+  marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
+  mkdir "$release_dir" "$marketplace_dir"
+  gh release download "v$release_version" \
+    --repo withAutograph/autograph-app-builder \
+    --dir "$release_dir"
   cd "$release_dir"
   shasum -a 256 -c SHA256SUMS
   gh release verify "v$release_version" \
@@ -34,9 +35,9 @@ gh release download "v$release_version" \
   tar -xzf \
     "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
     -C "$marketplace_dir"
+  codex plugin marketplace add "$marketplace_dir"
+  codex plugin add autograph-app-builder@autograph
 )
-codex plugin marketplace add "$marketplace_dir"
-codex plugin add autograph-app-builder@autograph
 ```
 
 The release package defines the Model Context Protocol (MCP) origin and contains
@@ -58,9 +59,12 @@ After the immutable marketplace tag is published, register that exact Git ref
 and install its `autograph` listing:
 
 ```sh
-codex plugin marketplace add withAutograph/autograph-app-builder \
-  --ref codex-marketplace-v0.2.0
-codex plugin add autograph-app-builder@autograph
+(
+  set -eu
+  codex plugin marketplace add withAutograph/autograph-app-builder \
+    --ref codex-marketplace-v0.2.0
+  codex plugin add autograph-app-builder@autograph
+)
 ```
 
 Open a new Codex task after installation. The marketplace tag contains only the
@@ -91,8 +95,8 @@ doesn't offer a catalog listing.
 
 Every release contains:
 
-- `autograph-app-builder-VERSION.tar.gz`, the portable Agent Plugins package
-- `autograph-app-builder-codex-marketplace-VERSION.tar.gz`, a self-contained
+- `autograph-app-builder-0.2.0.tar.gz`, the portable Agent Plugins package
+- `autograph-app-builder-codex-marketplace-0.2.0.tar.gz`, a self-contained
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
@@ -104,13 +108,14 @@ Download the complete release, verify its checksums and immutable attestations,
 then extract the portable archive:
 
 ```sh
-release_version=0.2.0
-release_dir="$PWD/autograph-app-builder-release-$release_version"
-mkdir "$release_dir"
-gh release download "v$release_version" \
-  --repo withAutograph/autograph-app-builder \
-  --dir "$release_dir"
 (
+  set -eu
+  release_version=0.2.0
+  release_dir="$PWD/autograph-app-builder-release-$release_version"
+  mkdir "$release_dir"
+  gh release download "v$release_version" \
+    --repo withAutograph/autograph-app-builder \
+    --dir "$release_dir"
   cd "$release_dir"
   shasum -a 256 -c SHA256SUMS
   gh release verify "v$release_version" \
@@ -128,23 +133,10 @@ client’s local Agent Plugin installation procedure.
 ### Local Codex marketplace archive
 
 For an offline or manually managed Codex installation, use the complete
-download-and-verification flow above, then extract and install its marketplace
-archive:
-
-```sh
-release_version=0.2.0
-release_dir="$PWD/autograph-app-builder-release-$release_version"
-marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
-mkdir "$marketplace_dir"
-tar -xzf \
-  "$release_dir/autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
-  -C "$marketplace_dir"
-codex plugin marketplace add "$marketplace_dir"
-codex plugin add autograph-app-builder@autograph
-```
-
-This creates a local marketplace. It is the supported Codex installation path
-until a separately managed shared marketplace listing is published.
+download, verification, extraction, and installation command in
+**Install before shared marketplace publication** above. It creates a local
+marketplace and is the supported Codex installation path until a separately
+managed shared marketplace listing is published.
 
 ### Upgrade a local Codex marketplace installation
 
@@ -153,13 +145,16 @@ old marketplace registration before adding the newly extracted, versioned
 marketplace directory:
 
 ```sh
-codex plugin remove autograph-app-builder@autograph
-codex plugin marketplace remove autograph
-mkdir autograph-app-builder-marketplace-0.2.0
-tar -xzf autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
-  -C autograph-app-builder-marketplace-0.2.0
-codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.2.0"
-codex plugin add autograph-app-builder@autograph
+(
+  set -eu
+  codex plugin remove autograph-app-builder@autograph
+  codex plugin marketplace remove autograph
+  mkdir autograph-app-builder-marketplace-0.2.0
+  tar -xzf autograph-app-builder-codex-marketplace-0.2.0.tar.gz \
+    -C autograph-app-builder-marketplace-0.2.0
+  codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.2.0"
+  codex plugin add autograph-app-builder@autograph
+)
 ```
 
 Open a new Codex task after installation or upgrade so the client reloads the
