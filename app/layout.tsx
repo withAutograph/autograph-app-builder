@@ -4,7 +4,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Autograph App Builder",
-  description: "Design and plan supported applications through Eve.",
+  description:
+    "Design, plan, create, and validate supported apps with Autograph App Builder.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

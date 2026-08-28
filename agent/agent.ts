@@ -1283,7 +1283,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         : "Preparation was canceled, but the workspace phase could not be confirmed empty.";
     }
     return status?.phase === "prepared"
-      ? "The reviewed repository was prepared inside the Eve session workspace, and workspace status confirms the prepared phase."
+      ? "The reviewed repository was prepared inside the App Builder session workspace, and workspace status confirms the prepared phase."
       : "The repository preparation completed, but workspace status did not confirm the prepared phase.";
   }
   if (message.includes("capabilities")) {
@@ -1301,7 +1301,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       process.env.APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT !== undefined
         ? " With another approval, fresh local bootstrap is enabled for an exact absent or exact-empty destination under the configured owner-only root; it creates one release-disabled parentless commit and never configures a remote."
         : " Fresh local bootstrap publication is disabled on this host.";
-    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated Eve workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication}${branchPublication}${freshBootstrap} A typed least-privilege GitHub acquisition/private-repository/draft-PR contract is defined, but live GitHub calls remain disabled until an installation-bound adapter and durable receipt store are configured. Generic shell access is never a GitHub fallback.`;
+    return `I can inspect an explicitly allowlisted existing repository or fresh-template local checkout and, after the required approvals, prepare its exact reviewed tree read-only inside an isolated App Builder workspace. Fresh templates require a separate acquisition approval before independently approved materialization. Generated state remains release-disabled. I can record and exactly read session-bound prototype artifact receipts, accept a recorded AppSpec revision, verify offline dependencies, run fixed target identity and planning, separately apply the exact proposal only in a fresh builder-owned overlay, and after another approval run the fixed check and test commands in independent validation overlays, then show and separately accept an exact normalized reviewed change set.${localPublication}${branchPublication}${freshBootstrap} A typed least-privilege GitHub acquisition/private-repository/draft-PR contract is defined, but live GitHub calls remain disabled until an installation-bound adapter and durable receipt store are configured. Generic shell access is never a GitHub fallback.`;
   }
   return "I am the Autograph App Builder. Tell me whether you are starting from the supported template or iterating on an existing supported repository, and describe the app outcome you want.";
 });

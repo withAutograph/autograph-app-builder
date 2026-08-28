@@ -104,7 +104,10 @@ function runtime(
   };
 }
 
-function mcpRequest(headers: Record<string, string> = {}): Request {
+function mcpRequest(
+  headers: Record<string, string> = {},
+  method = "tools/list",
+): Request {
   return new Request(auth.resourceUrl, {
     method: "POST",
     headers: {
@@ -115,22 +118,28 @@ function mcpRequest(headers: Record<string, string> = {}): Request {
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
-      method: "tools/list",
+      method,
       params: {},
     }),
   });
 }
 
-async function toolNames(response: Response): Promise<string[]> {
+async function mcpResult<T>(response: Response): Promise<T> {
   const body = await response.text();
   const data = body
     .split("\n")
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
-  const payload = JSON.parse(data ?? body) as {
-    result?: { tools?: Array<{ name?: string }> };
-  };
-  return (payload.result?.tools ?? []).map((tool) => tool.name ?? "").sort();
+  const payload = JSON.parse(data ?? body) as { result?: T };
+  if (payload.result === undefined) throw new Error("MCP result was missing.");
+  return payload.result;
+}
+
+async function toolNames(response: Response): Promise<string[]> {
+  const result = await mcpResult<{
+    tools?: Array<{ name?: string }>;
+  }>(response);
+  return (result.tools ?? []).map((tool) => tool.name ?? "").sort();
 }
 
 describe("request-scoped MCP service selection", () => {
@@ -312,5 +321,46 @@ describe("request-scoped MCP service selection", () => {
     expect(unconfiguredResponse.status).toBe(200);
     expect(await toolNames(localResponse)).toEqual(exactTools);
     expect(await toolNames(unconfiguredResponse)).toEqual(exactTools);
+  });
+
+  it("brands public MCP discovery without renaming its protocol surface", async () => {
+    const handler = createMcpRequestHandler({ environment: {} });
+    const toolResponse = await handler(mcpRequest());
+    const resourceResponse = await handler(mcpRequest({}, "resources/list"));
+    expect(toolResponse.status).toBe(200);
+    expect(resourceResponse.status).toBe(200);
+
+    const toolResult = await mcpResult<{
+      tools: Array<{ name: string; title?: string; description?: string }>;
+    }>(toolResponse);
+    expect(toolResult.tools.map(({ name }) => name).sort()).toEqual(exactTools);
+    expect(
+      Object.fromEntries(
+        toolResult.tools.map(({ name, title }) => [name, title]),
+      ),
+    ).toEqual({
+      eve_start: "Start App Builder work",
+      eve_get: "Get App Builder session",
+      eve_send: "Send App Builder follow-up",
+      eve_respond: "Respond to App Builder request",
+      eve_cancel: "Cancel App Builder turn",
+    });
+    for (const tool of toolResult.tools) {
+      expect(tool.description).not.toMatch(/\bEve\b/u);
+    }
+    expect(
+      toolResult.tools.find(({ name }) => name === "eve_respond")?.description,
+    ).toContain("one complete outstanding App Builder input batch atomically");
+
+    const resourceResult = await mcpResult<{
+      resources: Array<{ name: string; title?: string; description?: string }>;
+    }>(resourceResponse);
+    expect(resourceResult.resources).toContainEqual(
+      expect.objectContaining({
+        name: "eve-session",
+        title: "Autograph App Builder session",
+        description: "A stable live view of Autograph App Builder work.",
+      }),
+    );
   });
 });

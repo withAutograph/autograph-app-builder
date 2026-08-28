@@ -28,9 +28,9 @@ no credential. Codex completes OAuth against that origin's protected-resource
 and authorization-server metadata.
 
 Confirm that a new task exposes exactly `eve_start`, `eve_get`, `eve_send`,
-`eve_respond`, and `eve_cancel`. The bundled Eve skill is fail-closed: if any Eve
-tool is unavailable, it stops without using another app builder or editing a
-target directly.
+`eve_respond`, and `eve_cancel`. The bundled App Builder skill is fail-closed:
+if any App Builder tool is unavailable, it stops without using another app
+builder or editing a target directly.
 
 The repository and release assets are public. The release archive is the
 supported external installation path until the shared marketplace is

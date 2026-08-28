@@ -1,9 +1,8 @@
 # Autograph App Builder
 
-Autograph App Builder is a durable [Eve](https://github.com/vercel/eve) agent
-and portable [Agent Plugin](https://agent-plugins.org/) for designing and
-creating apps in explicitly supported repositories. Codex is the first
-user-facing entrypoint.
+Autograph App Builder is a durable, portable
+[Agent Plugin](https://agent-plugins.org/) for designing and creating apps in
+explicitly supported repositories. Codex is the first user-facing entrypoint.
 
 The project is based on
 [`jasonmorganson/eve-agent-plugin`](https://github.com/jasonmorganson/eve-agent-plugin)
@@ -304,7 +303,7 @@ files and client adapters cannot accidentally enter the portable package.
 `mise run package:validate-release` additionally refuses the development MCP endpoint; it
 does not replace the hosted and cross-client proofs above.
 
-## Run the Eve agent locally
+## Run Autograph App Builder locally
 
 Use Node.js 24 and pnpm 11.7.0:
 
@@ -315,7 +314,7 @@ mise run test:agent
 mise run local:dev
 ```
 
-For a non-interactive smoke test through Eve itself:
+For a non-interactive smoke test through App Builder itself:
 
 ```bash
 mise run local:smoke

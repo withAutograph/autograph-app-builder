@@ -9,7 +9,7 @@ import {
   sessionUiHtml,
 } from "./session-ui";
 
-describe("Eve MCP App session UI", () => {
+describe("Autograph App Builder MCP App session UI", () => {
   it("uses the MCP Apps resource profile and protocol handshake", () => {
     expect(MCP_APP_RESOURCE_MIME_TYPE).toBe("text/html;profile=mcp-app");
     expect(sessionUiHtml).toContain('method:"ui/initialize"');
@@ -28,6 +28,20 @@ describe("Eve MCP App session UI", () => {
     expect(sessionUiHtml).toContain("height:312px");
     expect(sessionUiHtml).toContain("overflow:hidden");
     expect(sessionUiHtml).toContain("prefers-reduced-motion:reduce");
+  });
+
+  it("uses product language while retaining private handshake identifiers", () => {
+    expect(sessionUiHtml).toContain("<title>Autograph App Builder</title>");
+    expect(sessionUiHtml).toContain(
+      'aria-label="Autograph App Builder session"',
+    );
+    expect(sessionUiHtml).toContain("Connecting to App Builder");
+    expect(sessionUiHtml).toContain('label.textContent="App Builder"');
+    expect(sessionUiHtml).toContain("App Builder is waiting for your response");
+    expect(sessionUiHtml).toContain("Updates stream as App Builder works");
+    expect(sessionUiHtml).toContain('id:"eve-session-init"');
+    expect(sessionUiHtml).not.toContain("Eve session");
+    expect(sessionUiHtml).not.toContain("Connecting to Eve");
   });
 
   it("renders untrusted event content as text and removes the placeholder", () => {

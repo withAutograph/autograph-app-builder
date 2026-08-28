@@ -59,8 +59,8 @@ export function createEveMcpHandler(service: EveSessionService) {
       "eve-session",
       SESSION_RESOURCE_URI,
       {
-        title: "Eve session",
-        description: "A stable live view of an Eve session.",
+        title: "Autograph App Builder session",
+        description: "A stable live view of Autograph App Builder work.",
         mimeType: MCP_APP_RESOURCE_MIME_TYPE,
         _meta: { ui: { prefersBorder: false } },
       },
@@ -79,9 +79,9 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_start",
       {
-        title: "Start Eve work",
+        title: "Start App Builder work",
         description:
-          "Start a new durable Eve objective and return immediately.",
+          "Start a new durable App Builder objective and return immediately.",
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
       },
@@ -89,7 +89,7 @@ export function createEveMcpHandler(service: EveSessionService) {
         try {
           return toolResult(
             await service.start(input),
-            "Eve accepted the objective.",
+            "Autograph App Builder accepted the objective.",
           );
         } catch (error) {
           return safeToolError(error);
@@ -99,7 +99,7 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_get",
       {
-        title: "Get Eve session",
+        title: "Get App Builder session",
         description: "Read the next bounded page of public session events.",
         inputSchema: eveGetInputSchema,
         outputSchema: eveSessionResultSchema,
@@ -108,7 +108,7 @@ export function createEveMcpHandler(service: EveSessionService) {
         try {
           return toolResult(
             await service.get(input),
-            "Fetched the Eve session.",
+            "Fetched the App Builder session.",
           );
         } catch (error) {
           return safeToolError(error, input.sessionId);
@@ -118,7 +118,7 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_send",
       {
-        title: "Send Eve follow-up",
+        title: "Send App Builder follow-up",
         description: "Send a follow-up while an owned session is waiting.",
         inputSchema: eveSendInputSchema,
         outputSchema: eveSessionResultSchema,
@@ -134,9 +134,9 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_respond",
       {
-        title: "Respond to Eve request",
+        title: "Respond to App Builder request",
         description:
-          "Answer one complete outstanding Eve input batch atomically.",
+          "Answer one complete outstanding App Builder input batch atomically.",
         inputSchema: eveRespondInputSchema,
         outputSchema: eveSessionResultSchema,
       },
@@ -154,8 +154,9 @@ export function createEveMcpHandler(service: EveSessionService) {
     server.registerTool(
       "eve_cancel",
       {
-        title: "Cancel Eve turn",
-        description: "Request cooperative cancellation of the active Eve turn.",
+        title: "Cancel App Builder turn",
+        description:
+          "Request cooperative cancellation of the active App Builder turn.",
         inputSchema: eveCancelInputSchema,
         outputSchema: eveSessionResultSchema,
       },
