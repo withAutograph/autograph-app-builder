@@ -70,9 +70,9 @@ receipt:
 - the release receipt is closed and binds the GitHub source, current SHA/tree,
   safe archive basename, exact deterministic archive contents, loose core and
   auxiliary digests, and all three installed client adapters;
-- discovery returns exactly `eve_start`, `eve_get`, `eve_send`, `eve_respond`,
-  and `eve_cancel`;
-- the first successful `eve_start` result is deliberately discarded before an
+- discovery returns exactly `autograph_start`, `autograph_get`, `autograph_send`, `autograph_respond`,
+  and `autograph_cancel`;
+- the first successful `autograph_start` result is deliberately discarded before an
   exact retry recovers the durable session; the proof retains only a private
   canonical fingerprint of the discarded public result, requires both retries
   to match it exactly, and never includes that fingerprint in its public
@@ -81,7 +81,7 @@ receipt:
   and draft-PR approval receipts; each binds the stable repository ID and slug,
   base ref/SHA, and exact subject digest, with publication bound to the sealed
   proposal digest rather than only its change set;
-- the same session accepts an iteration through `eve_send`;
+- the same session accepts an iteration through `autograph_send`;
 - the iteration reaches `completed`, not merely `waiting`;
 - a public structural publication receipt proves a real draft GitHub URL plus
   exact repository, base/head refs and SHAs, change-set digest, and outcome;
@@ -89,7 +89,7 @@ receipt:
   subject/workspace identities are mutually isolated; and
 - cooperative cancellation reaches a public `cancelled` state;
 - each complete outstanding input batch is submitted through one ordered
-  `eve_respond` call, including sibling approvals emitted at the same boundary;
+  `autograph_respond` call, including sibling approvals emitted at the same boundary;
   and
 - every captured public MCP response is scanned for the exact proof tokens,
   private adapter-session identifiers, and workload-identity header material.

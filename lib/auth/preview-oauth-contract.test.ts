@@ -63,7 +63,7 @@ describe("Preview OAuth activation contract", () => {
       allowUnauthenticatedClientRegistration: false,
       clientRegistrationDefaultResources: [config.resource],
       clientRegistrationAllowedResources: [],
-      clientRegistrationDefaultScopes: ["eve:session", "offline_access"],
+      clientRegistrationDefaultScopes: ["autograph:session", "offline_access"],
     });
     expect(options.scopes).toEqual(previewOAuthScopes);
     expect(options.clientRegistrationAllowedScopes).toEqual(
@@ -128,21 +128,21 @@ describe("Preview OAuth activation contract", () => {
         headers: new Headers(),
         user,
         session: {} as never,
-        scopes: ["eve:session"],
+        scopes: ["autograph:session"],
       }),
     ).resolves.toBe(false);
     await expect(
       options.postLogin?.consentReferenceId({
         user,
         session: {} as never,
-        scopes: ["eve:session"],
+        scopes: ["autograph:session"],
       }),
     ).resolves.toBe("workspace_1");
     await expect(
       options.customAccessTokenClaims?.({
         user,
         referenceId: "workspace_1",
-        scopes: ["eve:session"],
+        scopes: ["autograph:session"],
         resources: [config.resource],
       }),
     ).resolves.toEqual({
@@ -168,21 +168,21 @@ describe("Preview OAuth activation contract", () => {
         headers: new Headers(),
         user,
         session: {} as never,
-        scopes: ["eve:session"],
+        scopes: ["autograph:session"],
       }),
     ).rejects.toThrow("exactly one active");
     await expect(
       inactive.postLogin?.consentReferenceId({
         user,
         session: {} as never,
-        scopes: ["eve:session"],
+        scopes: ["autograph:session"],
       }),
     ).rejects.toThrow("exactly one active");
     await expect(
       inactive.customAccessTokenClaims?.({
         user,
         referenceId: "workspace_1",
-        scopes: ["eve:session"],
+        scopes: ["autograph:session"],
         resources: [config.resource],
       }),
     ).rejects.toThrow("not active");
@@ -195,7 +195,7 @@ describe("Preview OAuth activation contract", () => {
       active.customAccessTokenClaims?.({
         user,
         referenceId: "workspace_1",
-        scopes: ["eve:session"],
+        scopes: ["autograph:session"],
         resources: ["https://other.example.test/mcp"],
       }),
     ).rejects.toThrow("not active");

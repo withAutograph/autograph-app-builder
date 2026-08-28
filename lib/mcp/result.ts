@@ -9,7 +9,7 @@ import {
 } from "../eve/hosted-service";
 import type { EveSessionResult } from "./contracts";
 
-export const SESSION_RESOURCE_URI = "ui://eve-agent/session.html";
+export const SESSION_RESOURCE_URI = "ui://autograph-app-builder/session.html";
 
 export function toolResult(result: EveSessionResult, text: string) {
   const needsInteractiveSessionUi =
@@ -60,7 +60,7 @@ export function safeToolError(error: unknown, sessionId = "") {
           : unknown
             ? "The submission outcome is unknown and was not replayed."
             : cancellationUnsettled
-              ? "Cancellation was accepted but has not settled. Continue with eve_get."
+              ? "Cancellation was accepted but has not settled. Continue with autograph_get."
               : rejected
                 ? "The operation was rejected before a durable result."
                 : "The operation failed safely.";

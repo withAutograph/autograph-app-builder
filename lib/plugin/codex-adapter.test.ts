@@ -35,14 +35,17 @@ describe("Codex adapter", () => {
   });
 
   it("fails closed instead of invoking another app builder", async () => {
-    const skill = await readFile(resolve("skills/eve-agent/SKILL.md"), "utf8");
+    const skill = await readFile(
+      resolve("skills/autograph-app-builder/SKILL.md"),
+      "utf8",
+    );
 
     for (const tool of [
-      "eve_start",
-      "eve_get",
-      "eve_send",
-      "eve_respond",
-      "eve_cancel",
+      "autograph_start",
+      "autograph_get",
+      "autograph_send",
+      "autograph_respond",
+      "autograph_cancel",
     ]) {
       expect(skill).toContain(`\`${tool}\``);
     }
@@ -50,7 +53,7 @@ describe("Codex adapter", () => {
     expect(skill).toContain("edit the target repository directly");
     expect(skill).toContain("# Autograph App Builder orchestration");
     expect(skill).toContain("Before starting an app build");
-    expect(skill).toContain("Start every new app build with `eve_start`");
+    expect(skill).toContain("Start every new app build with `autograph_start`");
     expect(skill).toContain("Never split one App Builder batch across calls");
     expect(skill).not.toContain("Before doing any app-building work");
     expect(skill).not.toContain("new app-building objective");

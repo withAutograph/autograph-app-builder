@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
-import { isIP } from "node:net";
 import { gzipSync } from "node:zlib";
 
+import { isReservedPublicReleaseHostname } from "../lib/plugin/public-release-endpoint.ts";
+
 export const TOOL_NAMES = [
-  "eve_start",
-  "eve_get",
-  "eve_send",
-  "eve_respond",
-  "eve_cancel",
+  "autograph_start",
+  "autograph_get",
+  "autograph_send",
+  "autograph_respond",
+  "autograph_cancel",
 ] as const;
 
 export const sha256 = (value: Uint8Array | string) =>
@@ -34,23 +35,6 @@ export function hasCanonicalFetchRemote(
   });
 }
 
-const reservedReleaseHost = (hostname: string) => {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "localhost") return true;
-  const family = isIP(host);
-  if (family === 4 && host.startsWith("127.")) return true;
-  if (family === 6 && host === "::1") return true;
-  if (
-    ["example.com", "example.net", "example.org"].some(
-      (name) => host === name || host.endsWith(`.${name}`),
-    )
-  )
-    return true;
-  return [".invalid", ".test", ".example", ".localhost", ".template"].some(
-    (suffix) => host.endsWith(suffix),
-  );
-};
-
 export function releaseEndpoint(value: string | undefined) {
   if (!value) throw new Error("Usage: --endpoint https://agent.example.com");
   const endpoint = new URL(value);
@@ -61,7 +45,9 @@ export function releaseEndpoint(value: string | undefined) {
     endpoint.pathname !== "/" ||
     endpoint.search ||
     endpoint.hash ||
-    reservedReleaseHost(endpoint.hostname)
+    endpoint.hostname.endsWith(".") ||
+    isReservedPublicReleaseHostname(endpoint.hostname) ||
+    value !== endpoint.origin
   )
     throw new Error(
       "Endpoint must be a credential-free, deployed, literal HTTPS origin.",
@@ -69,7 +55,7 @@ export function releaseEndpoint(value: string | undefined) {
   return endpoint.origin;
 }
 
-export function registeredEveToolNames(handlerSource: string) {
+export function registeredAutographToolNames(handlerSource: string) {
   const names = [
     ...handlerSource.matchAll(/server\.registerTool\(\s*"([^"]+)"/gu),
   ].map((match) => match[1]);

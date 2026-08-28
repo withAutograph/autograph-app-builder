@@ -175,12 +175,12 @@ export function verifyWorkspaceTokenPair(input: {
   const primary = tokenClaims(input.primary);
   const secondary = tokenClaims(input.secondary);
   const requiredScopes = [
-    "eve:session",
-    "eve:start",
-    "eve:get",
-    "eve:send",
-    "eve:respond",
-    "eve:cancel",
+    "autograph:session",
+    "autograph:start",
+    "autograph:get",
+    "autograph:send",
+    "autograph:respond",
+    "autograph:cancel",
   ];
   for (const claims of [primary, secondary]) {
     const scopes = new Set(claims.scope.split(" "));
@@ -221,12 +221,12 @@ const protectedResourceMetadataSchema = z
       .length(1),
     bearer_methods_supported: z.tuple([z.literal("header")]),
     scopes_supported: z.tuple([
-      z.literal("eve:session"),
-      z.literal("eve:start"),
-      z.literal("eve:get"),
-      z.literal("eve:send"),
-      z.literal("eve:respond"),
-      z.literal("eve:cancel"),
+      z.literal("autograph:session"),
+      z.literal("autograph:start"),
+      z.literal("autograph:get"),
+      z.literal("autograph:send"),
+      z.literal("autograph:respond"),
+      z.literal("autograph:cancel"),
     ]),
   })
   .strict();
@@ -591,8 +591,8 @@ async function pollUntilSettled(input: {
   const approvalPhases: string[] = [];
   for (let poll = 0; poll < input.scenario.maxPolls; poll += 1) {
     const page = toolSession(
-      "eve_get",
-      await input.client.callTool("eve_get", {
+      "autograph_get",
+      await input.client.callTool("autograph_get", {
         sessionId: input.sessionId,
         cursor,
         limit: 250,
@@ -613,8 +613,8 @@ async function pollUntilSettled(input: {
     });
     if (responses.length > 0) {
       toolSession(
-        "eve_respond",
-        await input.client.callTool("eve_respond", {
+        "autograph_respond",
+        await input.client.callTool("autograph_respond", {
           sessionId: input.sessionId,
           responses,
           clientRequestId: `${input.requestPrefix}-respond-batch-${responseBatchCount}`,
@@ -729,7 +729,7 @@ export async function runHostedProof(input: {
   const discoveredTools = await client.listTools();
   if (JSON.stringify(discoveredTools) !== JSON.stringify(TOOL_NAMES))
     throw new Error(
-      "Hosted endpoint did not expose exactly the five Eve tools.",
+      "Hosted endpoint did not expose exactly the five Autograph tools.",
     );
 
   const proofId = digest(
@@ -739,14 +739,14 @@ export async function runHostedProof(input: {
     prompt: input.scenario.createPrompt,
     clientRequestId: `hosted-create-${proofId}`,
   };
-  await client.callToolAndDiscardResult("eve_start", startArgs);
+  await client.callToolAndDiscardResult("autograph_start", startArgs);
   const first = toolSession(
-    "eve_start",
-    await client.callToolMatchingDiscardedResult("eve_start", startArgs),
+    "autograph_start",
+    await client.callToolMatchingDiscardedResult("autograph_start", startArgs),
   );
   toolSession(
-    "eve_start",
-    await client.callToolMatchingDiscardedResult("eve_start", startArgs),
+    "autograph_start",
+    await client.callToolMatchingDiscardedResult("autograph_start", startArgs),
   );
   const created = await pollUntilSettled({
     client,
@@ -757,15 +757,15 @@ export async function runHostedProof(input: {
     requestPrefix: `hosted-create-${proofId}`,
   });
   if (created.responseCount < 1)
-    throw new Error("Hosted proof did not exercise eve_respond.");
+    throw new Error("Hosted proof did not exercise autograph_respond.");
   if (created.page.status !== "waiting")
     throw new Error(
       "Create phase did not reach the waiting state for iteration.",
     );
 
   const sent = toolSession(
-    "eve_send",
-    await client.callTool("eve_send", {
+    "autograph_send",
+    await client.callTool("autograph_send", {
       sessionId: first.sessionId,
       message: input.scenario.iterateMessage,
       clientRequestId: `hosted-iterate-${proofId}`,
@@ -794,7 +794,7 @@ export async function runHostedProof(input: {
     );
   const draftPr = verifiedDraftPrEvidence(iterated.allText, input.scenario);
 
-  const stale = await client.callTool("eve_get", {
+  const stale = await client.callTool("autograph_get", {
     sessionId: `stale-${proofId}`,
     cursor: 0,
     limit: 1,
@@ -809,15 +809,15 @@ export async function runHostedProof(input: {
   );
   await crossTenant.initialize();
   const cancellationStart = toolSession(
-    "eve_start",
-    await crossTenant.callTool("eve_start", {
+    "autograph_start",
+    await crossTenant.callTool("autograph_start", {
       prompt: input.scenario.cancelPrompt,
       clientRequestId: `hosted-cancel-${proofId}`,
     }),
   );
   const denied = async (clientInput: HostedMcpProofClient, sessionId: string) =>
     (
-      await clientInput.callTool("eve_get", {
+      await clientInput.callTool("autograph_get", {
         sessionId,
         cursor: 0,
         limit: 1,
@@ -831,8 +831,8 @@ export async function runHostedProof(input: {
       "The two server-accepted workspace identities were not mutually isolated.",
     );
   toolSession(
-    "eve_cancel",
-    await crossTenant.callTool("eve_cancel", {
+    "autograph_cancel",
+    await crossTenant.callTool("autograph_cancel", {
       sessionId: cancellationStart.sessionId,
     }),
   );

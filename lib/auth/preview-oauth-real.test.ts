@@ -17,7 +17,7 @@ const issuer = `${origin}/api/auth`;
 const resource = `${origin}/mcp`;
 const clientId = "https://client.withautograph.com/portable.json";
 const redirectUri = "http://127.0.0.1:43123/auth/callback";
-const requestedScope = "eve:session eve:start offline_access";
+const requestedScope = "autograph:session autograph:start offline_access";
 
 const codexClientId =
   "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json";

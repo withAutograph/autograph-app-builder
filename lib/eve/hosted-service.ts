@@ -103,7 +103,7 @@ export class HostedSubmissionUnknownError extends Error {
 
 export class HostedCancellationUnsettledError extends Error {
   constructor() {
-    super("Cancellation was accepted but has not settled; use eve_get.");
+    super("Cancellation was accepted but has not settled; use autograph_get.");
     this.name = "HostedCancellationUnsettledError";
   }
 }

@@ -33,12 +33,12 @@ function principal(ownerUserId: string): HostedPrincipal {
     workspaceId: "workspace_one",
     ownerUserId,
     scopes: [
-      "eve:session",
-      "eve:start",
-      "eve:get",
-      "eve:send",
-      "eve:respond",
-      "eve:cancel",
+      "autograph:session",
+      "autograph:start",
+      "autograph:get",
+      "autograph:send",
+      "autograph:respond",
+      "autograph:cancel",
     ],
   };
 }

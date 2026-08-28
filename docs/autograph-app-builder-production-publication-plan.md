@@ -5,7 +5,7 @@
 Use a public Git-backed Autograph marketplace in the existing
 `withAutograph/autograph-app-builder` repository, but publish it as a
 marketplace-only orphan commit containing the generated archive files. Do not
-point the marketplace at the product checkout root on `main` or `v0.1.1`: its
+point the marketplace at the product checkout root on `main` or `v0.2.0`: its
 root `mcp.json` intentionally points at loopback and is not a production
 installation source. Do not make users download or unpack the release tarball;
 Codex can clone/track the immutable marketplace ref and install the generated
@@ -63,7 +63,7 @@ marketplace-only orphan tree/
         ├── LICENSE
         ├── mcp.json
         ├── plugin.json
-        └── skills/eve-agent/
+        └── skills/autograph-app-builder/
             ├── SKILL.md
             └── references/session-semantics.md
 ```
@@ -94,8 +94,8 @@ the marketplace name `autograph`:
 
 All eight files must come from the verified Codex marketplace release asset,
 not from the source checkout or a hand-assembled fixture. Pin the resulting
-tree immutably as `codex-marketplace-v0.1.1`. Recompute the orphan tree and
-receipt from the published `v0.1.1` asset and bind them to the exact release
+tree immutably as `codex-marketplace-v0.2.0`. Recompute the orphan tree and
+receipt from the published `v0.2.0` asset and bind them to the exact release
 commit before publishing the marketplace tag. Do not reuse a pre-release local
 fixture commit or receipt.
 
@@ -115,7 +115,7 @@ fixture commit or receipt.
    `codex-marketplace-vX.Y.Z` tag. Never point the marketplace at `main`.
 5. Run `codex plugin marketplace upgrade` and install in a clean test profile;
    verify the installed manifest, exact version, MCP URL, and the five expected
-   Eve tools. Treat this as install proof, separate from hosted Eve proof.
+   Autograph tools. Treat this as install proof, separate from hosted Eve proof.
 
 The release archive and checksum are useful for audit and fallback, but they
 are not part of the normal user installation UX.
@@ -125,7 +125,7 @@ are not part of the normal user installation UX.
 CLI:
 
 ```bash
-codex plugin marketplace add withAutograph/autograph-app-builder --ref codex-marketplace-v0.1.1
+codex plugin marketplace add withAutograph/autograph-app-builder --ref codex-marketplace-v0.2.0
 codex plugin list
 codex plugin add autograph-app-builder@autograph
 ```
@@ -185,7 +185,7 @@ version submission.
 ## Decision required before publication
 
 Approve (a) public visibility of the marketplace ref, (b) creation and
-publication of the immutable `codex-marketplace-v0.1.1` tag, and (c) whether to
+publication of the immutable `codex-marketplace-v0.2.0` tag, and (c) whether to
 submit separately to OpenAI's public directory. Until those approvals, do not
 change repository visibility, publish a release or marketplace tag, or submit
 the plugin to an external directory.

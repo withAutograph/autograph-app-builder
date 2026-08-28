@@ -11,14 +11,33 @@ without changing that source repository.
 
 ## Install
 
-Before the shared marketplace is published, download the verified Codex
-marketplace archive and `SHA256SUMS` from the public
-[GitHub releases](https://github.com/withAutograph/autograph-app-builder/releases).
-After extracting the archive, install it with:
+Once the pre-release `v0.2.0` GitHub release is published, download and verify
+its complete asset set, extract the endpoint-bound Codex marketplace, and
+install it. These commands fail closed until that release exists:
 
 ```sh
-codex plugin marketplace add "$PWD/autograph-app-builder-marketplace"
-codex plugin add autograph-app-builder@autograph
+(
+  set -eu
+  release_version=0.2.0
+  release_dir="$PWD/autograph-app-builder-release-$release_version"
+  marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
+  mkdir "$release_dir" "$marketplace_dir"
+  gh release download "v$release_version" \
+    --repo withAutograph/autograph-app-builder \
+    --dir "$release_dir"
+  cd "$release_dir"
+  shasum -a 256 -c SHA256SUMS
+  gh release verify "v$release_version" \
+    --repo withAutograph/autograph-app-builder
+  gh release verify-asset "v$release_version" \
+    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    --repo withAutograph/autograph-app-builder
+  tar -xzf \
+    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    -C "$marketplace_dir"
+  codex plugin marketplace add "$marketplace_dir"
+  codex plugin add autograph-app-builder@autograph
+)
 ```
 
 Complete OAuth, open a new task, and mention `@Autograph App Builder`. A shared
@@ -221,8 +240,10 @@ template manifest.
   recovery receipts.
 - A fixed, read-only sandbox toolchain inspection receipt; it cannot accept
   commands, install tools, or authorize target repository execution.
-- Five public MCP operations: `eve_start`, `eve_get`, `eve_send`,
-  `eve_respond`, and `eve_cancel`.
+- Five public MCP operations: `autograph_start`, `autograph_get`, `autograph_send`,
+  `autograph_respond`, and `autograph_cancel`, mapped to the unchanged internal
+  Eve session service as documented in
+  [`docs/public-mcp-contract.md`](docs/public-mcp-contract.md).
 - A loopback-only local MCP-to-Eve adapter.
 - A provider-neutral hosted Eve service core with strict request-scoped Bearer
   and remote-JWKS verification, protected-resource metadata, closed principal

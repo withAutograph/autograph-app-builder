@@ -24,7 +24,7 @@ const forwarded = {
   attributes: {
     "eve:forwarded-by": "owner:autographing:project:app-builder",
     "mcp:audience": authority.audience,
-    "mcp:scopes": ["eve:session", "eve:start"],
+    "mcp:scopes": ["autograph:session", "autograph:start"],
     "mcp:workspace-id": authority.workspaceId,
   },
   authenticator: "mcp-oauth-jwks",
@@ -155,7 +155,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
         ...forwarded,
         attributes: {
           ...forwarded.attributes,
-          "mcp:scopes": ["eve:session"],
+          "mcp:scopes": ["autograph:session"],
         },
       },
     };

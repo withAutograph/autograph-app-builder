@@ -72,7 +72,7 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
           audience: input.audience,
           workspaceId: input.workspaceId,
           ownerUserId: input.ownerUserId,
-          scopes: ["eve:session"],
+          scopes: ["autograph:session"],
         },
         workspaceId: input.workspaceId,
       });
