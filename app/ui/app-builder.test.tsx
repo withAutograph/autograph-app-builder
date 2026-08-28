@@ -193,20 +193,24 @@ describe("Vercel-faithful App Builder flow", () => {
       "This repository will be public.",
     );
 
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Show all connections",
-      )!,
-    );
-    expect(view.textContent).toContain("Zomato");
+    for (const connection of [
+      "QuickBooks",
+      "Ramp",
+      "NetSuite",
+      "Xero",
+      "Sage Intacct",
+    ]) {
+      expect(view.textContent).toContain(connection);
+    }
+    expect(view.textContent).not.toContain("Show all connections");
+    expect(view.querySelector('[aria-label="Add Vercel"]')).toBeNull();
 
     const connectionSearch = view.querySelector<HTMLInputElement>(
       'input[placeholder="Search connections…"]',
     )!;
-    await fill(connectionSearch, "ver");
-    expect(view.textContent).toContain("Vercel");
-    expect(view.textContent).toContain("Cloudinary");
-    expect(view.textContent).not.toContain("Linear");
+    await fill(connectionSearch, "xero");
+    expect(view.textContent).toContain("Xero");
+    expect(view.textContent).not.toContain("QuickBooks");
   });
 
   it("runs the connection authorization, configuration, and customization flow", async () => {
@@ -218,13 +222,15 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     await click(
-      view.querySelector<HTMLButtonElement>('[aria-label="Add Vercel"]')!,
+      view.querySelector<HTMLButtonElement>('[aria-label="Add QuickBooks"]')!,
     );
     expect(view.querySelector("#connection-drawer-title")).toBeNull();
     expect(
       view.querySelector('[aria-label="Added connections"]'),
     ).not.toBeNull();
-    expect(view.querySelector('[aria-label="Remove Vercel"]')).not.toBeNull();
+    expect(
+      view.querySelector('[aria-label="Remove QuickBooks"]'),
+    ).not.toBeNull();
     expect(
       [...view.querySelectorAll("button")].find(
         (button) => button.textContent === "Connect",
@@ -239,7 +245,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector("#connection-drawer-title")?.textContent).toBe(
       "Add Connection",
     );
-    expect(view.textContent).toContain("Connect Vercel");
+    expect(view.textContent).toContain("Connect QuickBooks");
 
     const drawerAccessibility = await axe.run(view, {
       rules: { "color-contrast": { enabled: false } },
@@ -248,7 +254,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await click(
       [...view.querySelectorAll("button")].find((button) =>
-        button.textContent?.includes("Connect Vercel"),
+        button.textContent?.includes("Connect QuickBooks"),
       )!,
     );
     expect(view.textContent).toContain("Connection successful");
@@ -273,13 +279,17 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(
       view.querySelector('[aria-label="Added connections"]'),
     ).not.toBeNull();
-    expect(view.querySelector('[aria-label="Remove Vercel"]')).not.toBeNull();
+    expect(
+      view.querySelector('[aria-label="Remove QuickBooks"]'),
+    ).not.toBeNull();
     expect(view.textContent).toContain("Customize");
 
     await click(
-      view.querySelector<HTMLButtonElement>('[aria-label="Remove Vercel"]')!,
+      view.querySelector<HTMLButtonElement>(
+        '[aria-label="Remove QuickBooks"]',
+      )!,
     );
-    expect(view.querySelector('[aria-label="Remove Vercel"]')).toBeNull();
-    expect(view.querySelector('[aria-label="Add Vercel"]')).not.toBeNull();
+    expect(view.querySelector('[aria-label="Remove QuickBooks"]')).toBeNull();
+    expect(view.querySelector('[aria-label="Add QuickBooks"]')).not.toBeNull();
   });
 });

@@ -41,44 +41,11 @@ import {
   type ReactNode,
 } from "react";
 import {
-  SiAirtable,
-  SiAsana,
-  SiBitly,
-  SiBox,
-  SiBrex,
-  SiClickhouse,
-  SiCloudflare,
-  SiCloudinary,
-  SiCoda,
-  SiEgnyte,
-  SiFathom,
-  SiHuggingface,
-  SiJira,
-  SiLinear,
-  SiMake,
-  SiMiro,
-  SiMixpanel,
-  SiNetlify,
-  SiNotion,
-  SiPagerduty,
-  SiPlanetscale,
-  SiPosthog,
-  SiPostman,
-  SiRazorpay,
-  SiResend,
-  SiSanity,
-  SiSentry,
-  SiSimilarweb,
+  SiOracle,
+  SiQuickbooks,
+  SiSage,
   SiSlack,
-  SiStripe,
-  SiSupabase,
-  SiTicktick,
-  SiTodoist,
-  SiVercel,
-  SiWebflow,
-  SiWix,
   SiXero,
-  SiZapier,
 } from "react-icons/si";
 
 import styles from "./app-builder.module.css";
@@ -100,83 +67,23 @@ type ConnectionStage = "connect" | "configure" | "customize";
 type ConnectionFlow = { name: string; stage: ConnectionStage };
 
 const featuredConnections = [
-  ["Linear", "linear"],
-  ["Notion", "notion"],
-  ["Vercel", "vercel"],
-  ["Resend", "resend"],
-  ["Stripe", "stripe"],
-  ["Sanity", "sanity"],
-  ["Kernel", "kernel"],
-  ["Custom MCP", "mcp"],
+  ["QuickBooks", "quickbooks"],
+  ["Ramp", "ramp"],
+  ["NetSuite", "netsuite"],
+  ["Xero", "xero"],
+  ["Sage Intacct", "sage-intacct"],
 ] as const;
 
-const allConnectionNames = [
-  "Linear",
-  "Notion",
-  "Vercel",
-  "Resend",
-  "Stripe",
-  "Sanity",
-  "Kernel",
-  "Custom MCP",
-  "Agentcard",
-  "AgentMail",
-  "Airtable",
-  "Asana",
-  "beehiiv",
-  "Bitly",
-  "Box",
-  "Brex",
-  "Candid",
-  "ClickHouse",
-  "Cloudflare",
-  "Cloudinary",
-  "Coda",
-  "Egnyte",
-  "Embat",
-  "Fathom",
-  "G2",
-  "Hugging Face",
-  "Jira",
-  "Local Falcon",
-  "Make",
-  "Manufact",
-  "Mem0",
-  "Miro",
-  "Mixpanel",
-  "Netlify",
-  "O’Reilly",
-  "PagerDuty",
-  "PlanetScale",
-  "PostHog",
-  "Postman",
-  "Razorpay",
-  "Sentry",
-  "Similarweb",
-  "Supabase",
-  "Ticket Tailor",
-  "TickTick",
-  "Todoist",
-  "Webflow",
-  "Wix",
-  "Xero",
-  "Zapier",
-  "Zernio",
-  "Zomato",
-] as const;
+const allConnectionNames = featuredConnections.map(([name]) => name);
 
 const connectionKind = new Map<string, string>(featuredConnections);
 
 const connectionDescriptions: Record<string, string> = {
-  Linear: "Create and manage issues from any conversation",
-  Notion: "Search and update your team knowledge",
-  Vercel: "Manage projects, deployments, and domains",
-  Resend: "Send transactional email from your app",
-  Stripe: "Access customers, payments, and subscriptions",
-  Sanity: "Read and manage structured content",
-  Kernel: "Run secure browser and compute sessions",
-  "Custom MCP": "Connect your own tools through MCP",
-  Xero: "Access your Xero financials from any conversation",
+  QuickBooks: "Import mapped vendors, bills, and vendor credits",
+  Ramp: "Import authorized transactions and vendor data",
+  NetSuite: "Import vendor data from a NetSuite account",
+  Xero: "Import suppliers, invoices, and credit data",
+  "Sage Intacct": "Import vendor data from a Sage Intacct company",
 };
 
 function connectionDescription(name: string) {
@@ -265,51 +172,13 @@ function InfoTooltip({ children }: { children: string }) {
 
 function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   const icons = {
-    linear: SiLinear,
-    notion: SiNotion,
-    vercel: SiVercel,
-    resend: SiResend,
-    stripe: SiStripe,
-    sanity: SiSanity,
-    kernel: Globe,
-    mcp: GitBranch,
+    quickbooks: SiQuickbooks,
+    ramp: DollarSign,
+    netsuite: SiOracle,
+    xero: SiXero,
+    "sage-intacct": SiSage,
   };
-  const brandIcons = {
-    Airtable: SiAirtable,
-    Asana: SiAsana,
-    Bitly: SiBitly,
-    Box: SiBox,
-    Brex: SiBrex,
-    ClickHouse: SiClickhouse,
-    Cloudflare: SiCloudflare,
-    Cloudinary: SiCloudinary,
-    Coda: SiCoda,
-    Egnyte: SiEgnyte,
-    Fathom: SiFathom,
-    "Hugging Face": SiHuggingface,
-    Jira: SiJira,
-    Make: SiMake,
-    Miro: SiMiro,
-    Mixpanel: SiMixpanel,
-    Netlify: SiNetlify,
-    PagerDuty: SiPagerduty,
-    PlanetScale: SiPlanetscale,
-    PostHog: SiPosthog,
-    Postman: SiPostman,
-    Razorpay: SiRazorpay,
-    Sentry: SiSentry,
-    Similarweb: SiSimilarweb,
-    Supabase: SiSupabase,
-    TickTick: SiTicktick,
-    Todoist: SiTodoist,
-    Webflow: SiWebflow,
-    Wix: SiWix,
-    Xero: SiXero,
-    Zapier: SiZapier,
-  };
-  const Icon = kind
-    ? icons[kind as keyof typeof icons]
-    : brandIcons[name as keyof typeof brandIcons];
+  const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
   return (
     <span
       className={styles.connectionIcon}
@@ -915,7 +784,6 @@ function Builder({
   const [team, setTeam] = useState("autograph");
   const [gitScope, setGitScope] = useState("jasonmorganson");
   const [model, setModel] = useState("openai/gpt-5.6-terra");
-  const [showAllConnections, setShowAllConnections] = useState(false);
   const [search, setSearch] = useState("");
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
     null,
@@ -923,26 +791,10 @@ function Builder({
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
     [],
   );
-  const baseConnections =
-    showAllConnections || search
-      ? allConnectionNames
-      : allConnectionNames.slice(0, 8);
   const normalizedSearch = search.trim().toLowerCase();
-  const filtered = baseConnections.filter((name) => {
+  const filtered = allConnectionNames.filter((name) => {
     if (!normalizedSearch) return true;
-    const lower = name.toLowerCase();
-    if (lower.includes(normalizedSearch)) return true;
-    if (normalizedSearch === "ver")
-      return [
-        "Cloudinary",
-        "Manufact",
-        "O’Reilly",
-        "Xero",
-        "Zapier",
-        "Zomato",
-        "Custom MCP",
-      ].includes(name);
-    return normalizedSearch.split("").every((letter) => lower.includes(letter));
+    return name.toLowerCase().includes(normalizedSearch);
   });
   const canSubmit = Boolean(form.brief.trim());
   const addConnection = (name: string) =>
@@ -1202,15 +1054,6 @@ function Builder({
                 </button>
               ))}
           </div>
-          {!showAllConnections && !search ? (
-            <button
-              className={styles.showAll}
-              type="button"
-              onClick={() => setShowAllConnections(true)}
-            >
-              Show all connections
-            </button>
-          ) : null}
           {form.connections.length ? (
             <div
               className={styles.connectedList}
