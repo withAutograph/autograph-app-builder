@@ -762,13 +762,11 @@
   border-radius: 4px;
   margin: 0;
 }
-.checkLine input:checked,
-.optionGrid input:checked {
+.checkLine input:checked {
   background: #171717;
   box-shadow: inset 0 0 0 1px #171717;
 }
-.checkLine input:checked::after,
-.optionGrid input:checked::after {
+.checkLine input:checked::after {
   content: "✓";
   display: block;
   color: #fff;
@@ -821,6 +819,35 @@
 }
 .optionGrid input {
   margin-left: auto;
+  border-radius: 50%;
+}
+.optionGrid input:checked {
+  border-color: #171717;
+  background: #171717;
+  box-shadow: inset 0 0 0 4px var(--surface);
+}
+.buildDestinationGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.buildDestinationGrid label {
+  min-width: 0;
+}
+.buildDestinationGrid label > span {
+  min-width: 0;
+}
+.buildDestinationGrid small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.buildDestinationGrid .unavailableOption {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: var(--soft);
+}
+.buildDestinationGrid input:disabled {
+  opacity: 0.55;
 }
 .searchBox {
   height: 38px;
