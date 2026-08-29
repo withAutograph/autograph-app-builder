@@ -85,9 +85,11 @@ const targetFiles = Object.fromEntries(
     ".config/mise/scripts/repository/app-identity.ts",
     ".config/mise/scripts/repository/app-contract.ts",
     ".config/mise/scripts/repository/app-validation.ts",
+    ".config/turbo/generators/create-app.ts",
+    ".config/turbo/generators/templates/app/package.json.hbs",
     ".config/mise/scripts/repository/repository-preflight.ts",
     ".config/mise/tasks/repository/exec",
-  ].map((path, index) => [path, "3456789ab"[index]!.repeat(64)]),
+  ].map((path, index) => [path, "3456789abcd"[index]!.repeat(64)]),
 );
 
 const provenance = () =>
