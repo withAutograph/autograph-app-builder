@@ -5,9 +5,92 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createPreviewOAuthRequestHandler,
   createPreviewOAuthWellKnownHandler,
+  ensurePreviewSessionOrganization,
 } from "./preview-oauth-deployment";
 
 describe("Preview OAuth deployment handlers", () => {
+  it("provisions and activates a workspace for an existing signed-in user", async () => {
+    const getSession = vi.fn(async () => ({
+      session: { activeOrganizationId: null },
+      user: {
+        id: "user_one",
+        name: "Person",
+        email: "person@example.com",
+      },
+    }));
+    const setActiveOrganization = vi.fn(async () => ({
+      id: "organization_one",
+    }));
+    const ensureOrganizationForVerifiedUser = vi.fn(async () => ({
+      organizationId: "organization_one",
+      workspaceId: "workspace_one",
+    }));
+
+    await expect(
+      ensurePreviewSessionOrganization({
+        auth: { api: { getSession, setActiveOrganization } },
+        authority: { ensureOrganizationForVerifiedUser },
+        headers: new Headers(),
+      }),
+    ).resolves.toMatchObject({ id: "user_one" });
+    expect(ensureOrganizationForVerifiedUser).toHaveBeenCalledWith({
+      userId: "user_one",
+    });
+    expect(setActiveOrganization).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      body: { organizationId: "organization_one" },
+    });
+  });
+
+  it("rechecks membership without rewriting an already active organization", async () => {
+    const setActiveOrganization = vi.fn();
+    const ensureOrganizationForVerifiedUser = vi.fn(async () => ({
+      organizationId: "organization_one",
+      workspaceId: "workspace_one",
+    }));
+
+    await ensurePreviewSessionOrganization({
+      auth: {
+        api: {
+          getSession: vi.fn(async () => ({
+            session: { activeOrganizationId: "organization_one" },
+            user: {
+              id: "user_one",
+              name: "Person",
+              email: "person@example.com",
+            },
+          })),
+          setActiveOrganization,
+        },
+      },
+      authority: { ensureOrganizationForVerifiedUser },
+      headers: new Headers(),
+    });
+
+    expect(ensureOrganizationForVerifiedUser).toHaveBeenCalledOnce();
+    expect(setActiveOrganization).not.toHaveBeenCalled();
+  });
+
+  it("does not provision without an authenticated session", async () => {
+    const ensureOrganizationForVerifiedUser = vi.fn();
+    const setActiveOrganization = vi.fn();
+
+    await expect(
+      ensurePreviewSessionOrganization({
+        auth: {
+          api: {
+            getSession: vi.fn(async () => null),
+            setActiveOrganization,
+          },
+        },
+        authority: { ensureOrganizationForVerifiedUser },
+        headers: new Headers(),
+      }),
+    ).resolves.toBeUndefined();
+    expect(ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
+    expect(setActiveOrganization).not.toHaveBeenCalled();
+  });
+
   it("mounts the Better Auth handler without eager runtime construction", async () => {
     const handler = vi.fn(async (request: Request) =>
       Response.json({ path: new URL(request.url).pathname }),

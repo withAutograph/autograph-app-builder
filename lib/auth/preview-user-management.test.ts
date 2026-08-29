@@ -1,8 +1,12 @@
+import { DatabaseSync } from "node:sqlite";
+
+import { betterAuth } from "better-auth";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   createPreviewUserManagementLifecycle,
   OrganizationProvisioningError,
+  previewUserManagementPlugins,
   type OrganizationProvisioningFailure,
   type PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
@@ -86,6 +90,32 @@ describe("Preview Better Auth user management", () => {
     expect(authority.ensureOrganizationForVerifiedUser).toHaveBeenCalledWith({
       userId: verifiedUser.id,
     });
+  });
+
+  it("registers workspace provisioning on Better Auth session creation", async () => {
+    const authority = createAuthority();
+    const database = new DatabaseSync(":memory:");
+    const auth = betterAuth({
+      baseURL: "http://localhost:3000",
+      secret: "better-auth-secret-that-is-long-enough-for-testing",
+      database,
+      emailAndPassword: { enabled: true },
+      plugins: [...previewUserManagementPlugins(authority)],
+    });
+    await (await auth.$context).runMigrations();
+
+    await auth.api.signUpEmail({
+      body: {
+        email: "person@example.com",
+        name: "Person",
+        password: "test-password-123",
+      },
+    });
+
+    expect(authority.ensureOrganizationForVerifiedUser).toHaveBeenCalledOnce();
+    expect(
+      database.prepare('select "activeOrganizationId" from "session"').get(),
+    ).toEqual({ activeOrganizationId: "organization_one" });
   });
 
   it.each([
