@@ -347,7 +347,7 @@ describe("installed Eve 0.43 projection", () => {
     expect(latestInstalledPrototype(malformedRequest)).toBeUndefined();
   });
 
-  it("projects a stable title and only a closed approval receipt", () => {
+  it("fails closed if internal specification recording requests approval", () => {
     const receipt = {
       format: "autograph-eve-approval-receipt-v2",
       phase: "appspec",
@@ -385,20 +385,16 @@ describe("installed Eve 0.43 projection", () => {
       ),
     ).toEqual([
       {
-        type: "input.requested",
+        type: "error.public",
         index: 3,
-        request: {
-          requestId: "req_appspec",
-          kind: "approval",
-          title: "Approve AppSpec",
-          description: JSON.stringify(receipt),
-          allowFreeform: false,
-        },
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
+      { type: "status", index: 3, status: "failed" },
     ]);
   });
 
-  it("keeps a normal local AppSpec approval actionable with a closed subject", () => {
+  it("does not expose an internal local specification approval", () => {
     const projected = projectInstalledEveEvent(
       installedEvent({
         type: "input.requested",
@@ -428,16 +424,15 @@ describe("installed Eve 0.43 projection", () => {
       }),
       3,
     );
-    expect(projected).toHaveLength(1);
-    expect(projected[0]?.request).toMatchObject({
-      requestId: "req_local_appspec",
-      kind: "approval",
-      title: "Approve AppSpec",
-      allowFreeform: false,
-    });
-    expect(projected[0]?.request?.description).toContain(
-      "autograph-local-approval-subject-v1",
-    );
+    expect(projected).toEqual([
+      {
+        type: "error.public",
+        index: 3,
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
+      },
+      { type: "status", index: 3, status: "failed" },
+    ]);
     expect(JSON.stringify(projected)).not.toContain("not projected");
     expect(
       deriveInstalledEveStatus([
@@ -467,7 +462,7 @@ describe("installed Eve 0.43 projection", () => {
           },
         }),
       ]),
-    ).toBe("input_required");
+    ).toBe("failed");
   });
 
   it("fails closed without exposing a malformed receipt or raw arguments", () => {
@@ -497,9 +492,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         type: "error.public",
         index: 4,
-        code: "approval_receipt_invalid",
-        message:
-          "A required approval receipt was missing or invalid; the request was not exposed.",
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
       { type: "status", index: 4, status: "failed" },
     ]);
@@ -507,9 +501,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         type: "error",
         index: 0,
-        code: "approval_receipt_invalid",
-        message:
-          "A required approval receipt was missing or invalid; the request was not exposed.",
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
       { type: "status", index: 1, status: "failed" },
     ]);
@@ -567,9 +560,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         type: "error.public",
         index: 4,
-        code: "approval_receipt_invalid",
-        message:
-          "A required approval receipt was missing or invalid; the request was not exposed.",
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
       { type: "status", index: 4, status: "failed" },
     ]);
@@ -606,7 +598,7 @@ describe("installed Eve 0.43 projection", () => {
       },
     });
     expect(projectInstalledEveEvent(event, 8)).toMatchObject([
-      { type: "error.public", code: "approval_receipt_invalid" },
+      { type: "error.public", code: "confirmation_unavailable" },
       { type: "status", status: "failed" },
     ]);
     expect(deriveInstalledEveStatus([event])).toBe("failed");

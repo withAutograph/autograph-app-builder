@@ -1,6 +1,6 @@
 # Implementation gates
 
-The loopback local adapter and approval-gated isolated workflow through target
+The loopback local adapter and isolated workflow through target
 validation are usable for local development and testing. Apply remains confined
 to a fresh builder-owned overlay; validation uses independent copies of that
 exact tree. Reviewed change-set generation and both approval-bound local
@@ -164,7 +164,7 @@ Before enabling GitHub or hosted repository publication:
 3. The implemented prototype-artifact tools allow only the three conventional
    files, bind AppSpec acceptance to an exact recorded revision, and invalidate
    downstream receipts when artifact bytes or paths change. The implemented
-   apply tool separately approves the exact proposal, reruns execution readiness,
+   apply tool automatically handles the exact proposal, reruns execution readiness,
    writes only a fresh builder-owned overlay, and stores pre/post tree,
    changed-content, strict command, and recovery-required partial-failure
    receipts. Its durable planning-tree binding is distinct from the
@@ -172,7 +172,7 @@ Before enabling GitHub or hosted repository publication:
    restored to the prepared-source baseline for the pre-snapshot, and then
    staged as an allowed canonical apply change. The exact AppSpec path and
    digest remain receipt-bound by the V2 apply, V3 validation, and V2 normalized
-   change-set receipt shapes; the aggregate workflow remains V12. Every reuse,
+   change-set receipt shapes; the aggregate workflow remains V15. Every reuse,
    validation, review, and local or branch publication boundary checks literal
    matching current versions before accepting reconstructed digests, so JSON omission of the AppSpec
    path cannot recreate current authority. Failures

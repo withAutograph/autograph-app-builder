@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
@@ -30,11 +29,10 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
-    "Run only the two fixed target validation commands against independent copies of the exact applied tree. This separately approved operation records a durable pass or recovery-required failure receipt; it does not review or publish, and it detects drift in protected source, cache, planning, and applied bindings.",
+    "Automatically run only the two fixed target validation commands against independent copies of the exact applied tree. This internal operation records a durable pass or recovery-required failure receipt; it does not review or publish, and it detects drift in protected source, cache, planning, and applied bindings.",
   inputSchema: z.object({
     expectedApplyDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  approval: always(),
   async execute({ expectedApplyDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target proposal validation");

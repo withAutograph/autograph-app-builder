@@ -29,8 +29,8 @@ export type InternalEveEvent = {
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
-const invalidApprovalReceiptMessage =
-  "A required approval receipt was missing or invalid; the request was not exposed.";
+const unavailableConfirmationMessage =
+  "I couldn't verify this action, so it was not run.";
 const maximumPrototypeBytes = 262_144;
 const prototypePathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
@@ -284,11 +284,14 @@ function inputRequest(request: {
   };
 }): PublicInputRequest | undefined {
   const approvalTitles = {
-    accept_app_spec: "Approve AppSpec",
-    accept_change_set: "Approve change set",
     publish_github_draft_pr: "Approve draft PR publication",
   } as const;
   const toolName = request.action?.toolName;
+  if (
+    request.kind === "tool-approval" &&
+    (toolName === "accept_app_spec" || toolName === "accept_change_set")
+  )
+    return undefined;
   const title =
     request.kind === "tool-approval" &&
     toolName !== undefined &&
@@ -361,8 +364,8 @@ export function projectInstalledEveEvent(
             {
               type: "error.public",
               index,
-              code: "approval_receipt_invalid",
-              message: invalidApprovalReceiptMessage,
+              code: "confirmation_unavailable",
+              message: unavailableConfirmationMessage,
             },
             { type: "status", index, status: "failed" },
           ]

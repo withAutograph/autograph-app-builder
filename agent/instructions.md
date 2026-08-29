@@ -77,26 +77,24 @@ isolated workspace.
    prose-match one.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
-   shell command or retry with altered inputs. The first routine approval is the
-   distinct target-mutation approval. Use only `apply_app_creation` to apply the
-   exact proposal in its fresh
-   builder-owned overlay. A partial failure is recovery-required and must not be
+   shell command or retry with altered inputs. Use only `apply_app_creation` to
+   apply the exact proposal in its fresh builder-owned overlay. This internal
+   preparation is automatic and silent because it cannot mutate the prepared
+   source or publish. A partial failure is recovery-required and must not be
    retried automatically. A pre-dispatch overlay preparation failure is cleaned
    up and remains retryable; a post-dispatch observation failure is recorded for
    recovery. Reuse must re-observe the exact planning, prepared, and applied
-   trees. This apply does not validate or mutate the prepared source.
-5. After a distinct validation approval, use only `validate_app_creation`. It
-   records pending state before execution and runs the fixed check and test
-   commands in independent builder-owned copies of the exact applied tree. A
-   pending or failed attempt is recovery-required and must not be redispatched
-   automatically. Treat any detected source, dependency-cache, planning, or
-   applied-tree drift as a recovery-required failure. Use `change_set_status`
-   to show the exact normalized ordered changes and approved paths from the
-   canonical applied overlay, then obtain separate approval through
-   `accept_change_set`. It recomputes the displayed digest and records a
-   reviewed receipt; it does not validate or publish. A GitHub-bound acceptance
-   must carry the same repository/ref/SHA identity and the exact normalized
-   change-set digest in an `autograph-eve-approval-receipt-v2` object.
+   trees.
+5. Automatically use only `validate_app_creation`. It records pending state
+   before execution and runs the fixed check and test commands in independent
+   builder-owned copies of the exact applied tree. A pending or failed attempt
+   is recovery-required and must not be redispatched automatically. Treat any
+   detected source, dependency-cache, planning, or applied-tree drift as a
+   recovery-required failure. Use `change_set_status` and
+   `accept_change_set` internally to recompute the exact normalized ordered
+   changes and record the reviewed receipt. These internal operations are
+   silent and require no user approval because they do not mutate the prepared
+   source or publish.
 6. Obtain a separate publication approval naming exactly one local outcome:
    apply to the exact original checkout, create the deterministic
    builder-owned branch/worktree, or atomically bootstrap a fresh-template tree

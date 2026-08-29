@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
@@ -24,11 +23,10 @@ import { assertReusableTargetApplyReceipt } from "@/lib/repository/target-valida
 
 export default defineTool({
   description:
-    "Apply the exact approved canonical proposal only inside a fresh builder-owned overlay. This separately approved operation reruns target execution readiness and records a durable apply or recovery-required receipt; it does not validate, review, publish, or mutate the prepared source.",
+    "Automatically apply the exact canonical proposal only inside a fresh builder-owned overlay. This internal operation reruns target execution readiness and records a durable apply or recovery-required receipt; it does not validate, review, publish, or mutate the prepared source.",
   inputSchema: z.object({
     expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  approval: always(),
   async execute({ expectedProposalDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target proposal apply");

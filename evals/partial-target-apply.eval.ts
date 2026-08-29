@@ -18,11 +18,10 @@ export default defineEval({
     t.succeeded();
 
     await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("recovery-required partial-failure receipt"));
-    t.check(t.reply, includes("will not retry automatically"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("couldn't finish preparing the app safely"));
+    t.check(t.reply, includes("Nothing was published"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -32,10 +31,9 @@ export default defineEval({
     t.check(t.reply, includes('"recoveryRequired":true'));
 
     await t.send("Retry target apply after a lost response.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("recovery-required partial-failure receipt"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("couldn't finish preparing the app safely"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

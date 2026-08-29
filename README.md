@@ -70,7 +70,7 @@ allowlisted fresh-template checkout:
 9. after another distinct approval, run only the fixed target identity and planning
    commands against a builder-owned input overlay and record their strictly
    parsed, digest-bound receipts; and
-10. after a separate apply approval and a fresh readiness check, invoke only the
+10. after a fresh readiness check, automatically invoke only the
     fixed target apply command in a fresh builder-owned overlay, recording exact
     planning-input, prepared-source pre-tree, post-tree, and normalized
     changed-content receipts. The exact accepted AppSpec is staged after the
@@ -78,19 +78,19 @@ allowlisted fresh-template checkout:
     an explicit reviewed and published path. Its exact repository path and
     digest remain bound through apply, validation, review, and publication. A
     V2 apply, validation, and normalized-change receipt boundary rejects the
-    earlier path-less receipt shape while the aggregate workflow remains V12.
+    earlier path-less receipt shape while the aggregate workflow remains V15.
     Literal V2 is checked again at apply reuse, validation, reviewed-change,
     local-publication, and branch-publication trust boundaries; recomputing a
     historical receipt digest cannot upgrade its authority. A
     pre-command inspection, baseline-restore, snapshot, or staging failure
     removes only that fresh overlay and remains safely retryable; once command
     dispatch occurs, any observation failure is durably recovery-required; and
-11. after a separate validation approval, persist a pending attempt before
+11. automatically persist a pending validation attempt before
     execution, then run only the fixed check and test commands in independent
     builder-owned copies of the exact applied tree and record a durable pass or
     recovery-required failure receipt without publication claims. A passed
-    validation can then produce a read-only normalized change-set proposal and,
-    after separate approval, a durable reviewed receipt; and
+    validation can then produce a read-only normalized change-set proposal and
+    durable reviewed receipt without another user interruption; and
 12. after choosing a publication outcome and granting another approval, either
     apply the reviewed set to the exact original checkout or create a
     deterministic builder-owned branch/worktree at the exact base and apply it
@@ -102,7 +102,7 @@ Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
 are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
-workspace. The durable workflow uses its V13 state key so older, synthetic, or
+workspace. The durable workflow uses its V15 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
 planning receipts. Every dependency, identity, proposal, apply, validation,
 review, and publication boundary carries the prepared source commit and tree;
@@ -113,11 +113,11 @@ The real target commands remain fail-closed until an immutable cache-bearing
 sandbox image is configured and its fixed manifest and archive bytes are
 verified inside the sandbox. No free-form cache digest is accepted. Tests use an
 injectable executor and never run Arrusted commands. Apply is proposal-bound,
-approval-gated, and limited to a fresh builder-owned overlay; a failed attempt
+automatic and limited to a fresh builder-owned overlay; a failed attempt
 after command dispatch persists recovery-required state and is never replayed
 automatically. Receipt reuse re-observes the planning, prepared, and applied
-trees rather than trusting an earlier success alone. Validation
-is separately approved, runs each fixed command against an independent copy,
+trees rather than trusting an earlier success alone. Validation runs
+automatically against independent copies with fixed commands,
 and persists pending state before execution so an interrupted attempt is never
 redispatched automatically. Local publication is separately approval-bound,
 disabled unless `APP_BUILDER_LOCAL_PUBLICATION=1`, and constrained by
@@ -223,13 +223,13 @@ template manifest.
   and fixed bounded target identity/planning commands. Strict receipts bind
   source commit and tree, workspace, toolchain, observed cache bytes, and artifact revision
   without writing the prepared target workspace.
-- Proposal-bound target apply in a fresh builder-owned overlay, with a separate
-  approval, a repeated readiness check, normalized pre/post tree evidence, and
+- Proposal-bound target apply in a fresh builder-owned overlay, with a repeated
+  readiness check, normalized pre/post tree evidence, and
   durable success or partial-failure receipts. Planning-input and
   prepared-source tree digests remain distinct, and the accepted AppSpec is
   verified and included in the canonical change set whenever it differs from
   the source.
-- Approval-bound fixed target validation in independent exact-tree overlays,
+- Automatic fixed target validation in independent exact-tree overlays,
   with an atomic durable claim, protected source/cache/planning/apply drift
   detection, passed or recovery-required failure receipts, and no
   validation-generated files admitted to reviewed change sets.

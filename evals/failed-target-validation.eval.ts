@@ -16,16 +16,14 @@ export default defineEval({
     await t.send("Prepare offline target dependencies.");
     await t.send("Run target identity and planning.");
     await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
+    t.notEvent("input.requested");
 
     await t.send("Validate the applied creation.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("recovery-required failure receipt"));
-    t.check(t.reply, includes("will not retry automatically"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("did not pass its quality checks"));
+    t.check(t.reply, includes("Nothing was published"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -35,10 +33,9 @@ export default defineEval({
     t.check(t.reply, includes('"recoveryRequired":true'));
 
     await t.send("Retry target validation after a lost response.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("recovery-required failure receipt"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("did not pass its quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

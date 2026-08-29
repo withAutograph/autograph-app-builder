@@ -1,7 +1,17 @@
 import { defineEval } from "eve/evals";
-import { includes } from "eve/evals/expect";
+import { includes, satisfies } from "eve/evals/expect";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
+import { isProductFacing } from "./support/public-conversation";
+
+const staysProductFacing = satisfies(
+  (reply) =>
+    isProductFacing(reply) &&
+    !/(?:builder-owned|overlay|fixed check|normalized change set|approval receipt|publication did not run)/iu.test(
+      String(reply),
+    ),
+  "assistant reply stays product-facing and omits internal review mechanics",
+);
 
 export default defineEval({
   description:
@@ -28,27 +38,27 @@ export default defineEval({
     t.succeeded();
 
     await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("fresh builder-owned overlay"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("private preview"));
+    t.check(t.reply, staysProductFacing);
 
     await t.send("Validate the applied creation.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("fixed check and test commands passed"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("quality checks"));
+    t.check(t.reply, staysProductFacing);
 
     await t.send("Inspect the validated change set.");
     t.succeeded();
     t.calledTool("change_set_status", { count: 1 });
 
     await t.send("Accept the displayed change set.");
-    t.requireInputRequest({ toolName: "accept_change_set" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("separately approved normalized change set"));
-    t.check(t.reply, includes("Publication did not run"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("ready for review"));
+    t.check(t.reply, includes("Nothing has been published"));
+    t.check(t.reply, staysProductFacing);
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
