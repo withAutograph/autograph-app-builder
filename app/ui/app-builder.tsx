@@ -40,46 +40,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import {
-  SiAirtable,
-  SiAsana,
-  SiBitly,
-  SiBox,
-  SiBrex,
-  SiClickhouse,
-  SiCloudflare,
-  SiCloudinary,
-  SiCoda,
-  SiEgnyte,
-  SiFathom,
-  SiHuggingface,
-  SiJira,
-  SiLinear,
-  SiMake,
-  SiMiro,
-  SiMixpanel,
-  SiNetlify,
-  SiNotion,
-  SiPagerduty,
-  SiPlanetscale,
-  SiPosthog,
-  SiPostman,
-  SiRazorpay,
-  SiResend,
-  SiSanity,
-  SiSentry,
-  SiSimilarweb,
-  SiSlack,
-  SiStripe,
-  SiSupabase,
-  SiTicktick,
-  SiTodoist,
-  SiVercel,
-  SiWebflow,
-  SiWix,
-  SiXero,
-  SiZapier,
-} from "react-icons/si";
+import { SiQuickbooks, SiSage, SiSlack, SiXero } from "react-icons/si";
 
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
@@ -100,83 +61,29 @@ type ConnectionStage = "connect" | "configure" | "customize";
 type ConnectionFlow = { name: string; stage: ConnectionStage };
 
 const featuredConnections = [
-  ["Linear", "linear"],
-  ["Notion", "notion"],
-  ["Vercel", "vercel"],
-  ["Resend", "resend"],
-  ["Stripe", "stripe"],
-  ["Sanity", "sanity"],
-  ["Kernel", "kernel"],
-  ["Custom MCP", "mcp"],
+  ["QuickBooks", "quickbooks"],
+  ["Ramp", "ramp"],
+  ["NetSuite", "netsuite"],
+  ["Xero", "xero"],
+  ["Sage Intacct", "sage-intacct"],
 ] as const;
 
-const allConnectionNames = [
-  "Linear",
-  "Notion",
-  "Vercel",
-  "Resend",
-  "Stripe",
-  "Sanity",
-  "Kernel",
-  "Custom MCP",
-  "Agentcard",
-  "AgentMail",
-  "Airtable",
-  "Asana",
-  "beehiiv",
-  "Bitly",
-  "Box",
-  "Brex",
-  "Candid",
-  "ClickHouse",
-  "Cloudflare",
-  "Cloudinary",
-  "Coda",
-  "Egnyte",
-  "Embat",
-  "Fathom",
-  "G2",
-  "Hugging Face",
-  "Jira",
-  "Local Falcon",
-  "Make",
-  "Manufact",
-  "Mem0",
-  "Miro",
-  "Mixpanel",
-  "Netlify",
-  "O’Reilly",
-  "PagerDuty",
-  "PlanetScale",
-  "PostHog",
-  "Postman",
-  "Razorpay",
-  "Sentry",
-  "Similarweb",
-  "Supabase",
-  "Ticket Tailor",
-  "TickTick",
-  "Todoist",
-  "Webflow",
-  "Wix",
+const allConnectionNames = featuredConnections.map(([name]) => name);
+const comingSoonConnections = new Set([
+  "Ramp",
+  "NetSuite",
   "Xero",
-  "Zapier",
-  "Zernio",
-  "Zomato",
-] as const;
+  "Sage Intacct",
+]);
 
 const connectionKind = new Map<string, string>(featuredConnections);
 
 const connectionDescriptions: Record<string, string> = {
-  Linear: "Create and manage issues from any conversation",
-  Notion: "Search and update your team knowledge",
-  Vercel: "Manage projects, deployments, and domains",
-  Resend: "Send transactional email from your app",
-  Stripe: "Access customers, payments, and subscriptions",
-  Sanity: "Read and manage structured content",
-  Kernel: "Run secure browser and compute sessions",
-  "Custom MCP": "Connect your own tools through MCP",
-  Xero: "Access your Xero financials from any conversation",
+  QuickBooks: "Import mapped vendors, bills, and vendor credits",
+  Ramp: "Import authorized transactions and vendor data",
+  NetSuite: "Import vendor data from a NetSuite account",
+  Xero: "Import suppliers, invoices, and credit data",
+  "Sage Intacct": "Import vendor data from a Sage Intacct company",
 };
 
 function connectionDescription(name: string) {
@@ -233,6 +140,13 @@ const suggestions = [
 const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
 
+const briefExamples = [
+  defaultBrief,
+  "# Customer feedback portal\n\nBuild a portal where customers can submit feedback, vote on ideas, and follow status updates. Give the product team a triage view with tags, ownership, and clear acceptance criteria.",
+  "# Operations dashboard\n\nBuild an internal dashboard for monitoring active work, blocked tasks, and service health. Prioritize fast scanning, clear ownership, and links to the source systems for follow-up.",
+  "# Vendor onboarding\n\nBuild a guided vendor onboarding app that collects company details, validates required documents, and shows approval progress. Include explicit review states, responsible owners, and audit-friendly history.",
+] as const;
+
 function AutographMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={styles.brand} data-compact={compact || undefined}>
@@ -265,51 +179,12 @@ function InfoTooltip({ children }: { children: string }) {
 
 function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   const icons = {
-    linear: SiLinear,
-    notion: SiNotion,
-    vercel: SiVercel,
-    resend: SiResend,
-    stripe: SiStripe,
-    sanity: SiSanity,
-    kernel: Globe,
-    mcp: GitBranch,
+    quickbooks: SiQuickbooks,
+    xero: SiXero,
+    "sage-intacct": SiSage,
   };
-  const brandIcons = {
-    Airtable: SiAirtable,
-    Asana: SiAsana,
-    Bitly: SiBitly,
-    Box: SiBox,
-    Brex: SiBrex,
-    ClickHouse: SiClickhouse,
-    Cloudflare: SiCloudflare,
-    Cloudinary: SiCloudinary,
-    Coda: SiCoda,
-    Egnyte: SiEgnyte,
-    Fathom: SiFathom,
-    "Hugging Face": SiHuggingface,
-    Jira: SiJira,
-    Make: SiMake,
-    Miro: SiMiro,
-    Mixpanel: SiMixpanel,
-    Netlify: SiNetlify,
-    PagerDuty: SiPagerduty,
-    PlanetScale: SiPlanetscale,
-    PostHog: SiPosthog,
-    Postman: SiPostman,
-    Razorpay: SiRazorpay,
-    Sentry: SiSentry,
-    Similarweb: SiSimilarweb,
-    Supabase: SiSupabase,
-    TickTick: SiTicktick,
-    Todoist: SiTodoist,
-    Webflow: SiWebflow,
-    Wix: SiWix,
-    Xero: SiXero,
-    Zapier: SiZapier,
-  };
-  const Icon = kind
-    ? icons[kind as keyof typeof icons]
-    : brandIcons[name as keyof typeof brandIcons];
+  const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
+  const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
     <span
       className={styles.connectionIcon}
@@ -317,7 +192,7 @@ function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
       data-name={name}
       aria-hidden="true"
     >
-      {Icon ? <Icon size={18} /> : <Globe size={18} />}
+      {Icon ? <Icon size={18} /> : hasBrandAsset ? null : <Globe size={18} />}
     </span>
   );
 }
@@ -328,6 +203,8 @@ type ComboOption = {
   detail?: string;
   icon?: string;
 };
+
+type ComboFooter = ComboOption & { disabled?: boolean };
 
 function SearchCombobox({
   label,
@@ -346,7 +223,7 @@ function SearchCombobox({
   options: ComboOption[];
   onChange: (value: string) => void;
   prefix: ReactNode;
-  menuFooter?: ComboOption;
+  menuFooter?: ComboFooter;
   optionIcon?: (option: ComboOption) => ReactNode;
   footerIcon?: ReactNode;
   detailPills?: boolean;
@@ -489,7 +366,11 @@ function SearchCombobox({
           ) : null}
         </div>
         {menuFooter ? (
-          <button className={styles.comboFooter} type="button">
+          <button
+            className={styles.comboFooter}
+            type="button"
+            disabled={menuFooter.disabled}
+          >
             <span className={styles.comboOptionIcon} aria-hidden="true">
               {footerIcon ?? <Plus size={20} />}
             </span>
@@ -915,7 +796,7 @@ function Builder({
   const [team, setTeam] = useState("autograph");
   const [gitScope, setGitScope] = useState("jasonmorganson");
   const [model, setModel] = useState("openai/gpt-5.6-terra");
-  const [showAllConnections, setShowAllConnections] = useState(false);
+  const [showMoreConnections, setShowMoreConnections] = useState(false);
   const [search, setSearch] = useState("");
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
     null,
@@ -923,35 +804,25 @@ function Builder({
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
     [],
   );
-  const baseConnections =
-    showAllConnections || search
-      ? allConnectionNames
-      : allConnectionNames.slice(0, 8);
   const normalizedSearch = search.trim().toLowerCase();
-  const filtered = baseConnections.filter((name) => {
+  const availableConnections =
+    showMoreConnections || normalizedSearch
+      ? allConnectionNames
+      : allConnectionNames.slice(0, 2);
+  const filtered = availableConnections.filter((name) => {
     if (!normalizedSearch) return true;
-    const lower = name.toLowerCase();
-    if (lower.includes(normalizedSearch)) return true;
-    if (normalizedSearch === "ver")
-      return [
-        "Cloudinary",
-        "Manufact",
-        "O’Reilly",
-        "Xero",
-        "Zapier",
-        "Zomato",
-        "Custom MCP",
-      ].includes(name);
-    return normalizedSearch.split("").every((letter) => lower.includes(letter));
+    return name.toLowerCase().includes(normalizedSearch);
   });
   const canSubmit = Boolean(form.brief.trim());
-  const addConnection = (name: string) =>
+  const addConnection = (name: string) => {
+    if (comingSoonConnections.has(name)) return;
     setForm((current) => ({
       ...current,
       connections: current.connections.includes(name)
         ? current.connections
         : [...current.connections, name],
     }));
+  };
   const removeConnection = (name: string) => {
     setForm((current) => ({
       ...current,
@@ -993,22 +864,6 @@ function Builder({
           <h1>Build an app</h1>
           <AutographMark compact />
         </div>
-        <label>
-          Vercel Team
-          <SearchCombobox
-            label="Select a Vercel Team"
-            value={team}
-            options={teamOptions}
-            onChange={setTeam}
-            prefix={<span className={styles.teamDot} data-team={team} />}
-            menuFooter={{ value: "create-team", label: "Create a Team" }}
-            optionIcon={(option) => (
-              <span className={styles.teamDot} data-team={option.value} />
-            )}
-            footerIcon={<PlusCircle size={18} />}
-            detailPills
-          />
-        </label>
         <label htmlFor="app-name">
           App Name
           <input
@@ -1023,6 +878,70 @@ function Builder({
             placeholder="support-app"
           />
         </label>
+        <label htmlFor="app-brief">
+          App Brief
+          <div className={styles.briefField}>
+            <textarea
+              id="app-brief"
+              name="app-brief"
+              autoComplete="off"
+              value={form.brief}
+              onChange={(event) =>
+                setForm({ ...form, brief: event.target.value })
+              }
+              placeholder="# Product\n\nDescribe the app you want to build…"
+            />
+            <button
+              type="button"
+              aria-label="Try another app brief example"
+              onClick={() =>
+                setForm((current) => {
+                  const currentIndex = briefExamples.indexOf(
+                    current.brief as (typeof briefExamples)[number],
+                  );
+                  const nextIndex =
+                    currentIndex < 0
+                      ? 0
+                      : (currentIndex + 1) % briefExamples.length;
+                  return { ...current, brief: briefExamples[nextIndex] };
+                })
+              }
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </label>
+        <p className={styles.helpText}>
+          Define this app’s users, workflow, constraints, and desired outcome.{" "}
+          <a
+            href="https://github.com/withAutograph/autograph-app-builder"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Read the App Builder docs ↗
+          </a>
+          .
+        </p>
+        <label>
+          Vercel Team
+          <SearchCombobox
+            label="Select a Vercel Team"
+            value={team}
+            options={teamOptions}
+            onChange={setTeam}
+            prefix={<span className={styles.teamDot} data-team={team} />}
+            menuFooter={{
+              value: "create-team",
+              label: "Create a Team",
+              disabled: true,
+            }}
+            optionIcon={(option) => (
+              <span className={styles.teamDot} data-team={option.value} />
+            )}
+            footerIcon={<PlusCircle size={18} />}
+            detailPills
+          />
+        </label>
         <div className={styles.repoRow}>
           <label>
             Git Scope
@@ -1032,7 +951,11 @@ function Builder({
               options={gitScopeOptions}
               onChange={setGitScope}
               prefix={<FaGithub size={16} />}
-              menuFooter={{ value: "add-github", label: "Add GitHub Scope" }}
+              menuFooter={{
+                value: "add-github",
+                label: "Add GitHub Scope",
+                disabled: true,
+              }}
               optionIcon={() => <FaGithub size={16} />}
               footerIcon={<Plus size={21} />}
             />
@@ -1085,39 +1008,6 @@ function Builder({
             </div>
           </div>
         </div>
-        <label htmlFor="app-brief">
-          App Brief
-          <div className={styles.briefField}>
-            <textarea
-              id="app-brief"
-              name="app-brief"
-              autoComplete="off"
-              value={form.brief}
-              onChange={(event) =>
-                setForm({ ...form, brief: event.target.value })
-              }
-              placeholder="# Product\n\nDescribe the app you want to build…"
-            />
-            <button
-              type="button"
-              aria-label="Try another app brief example"
-              onClick={() => setForm({ ...form, brief: defaultBrief })}
-            >
-              <RefreshCw size={16} aria-hidden="true" />
-            </button>
-          </div>
-        </label>
-        <p className={styles.helpText}>
-          Define this app’s users, workflow, constraints, and desired outcome.{" "}
-          <a
-            href="https://github.com/withAutograph/autograph-app-builder"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Read the App Builder docs ↗
-          </a>
-          .
-        </p>
         <fieldset className={styles.modelField}>
           <legend>Model</legend>
           <label className={styles.checkLine}>
@@ -1190,25 +1080,37 @@ function Builder({
           <div className={styles.connectionGrid}>
             {filtered
               .filter((name) => !form.connections.includes(name))
-              .map((name) => (
-                <button
-                  type="button"
-                  key={name}
-                  aria-label={`Add ${name}`}
-                  onClick={() => addConnection(name)}
-                >
-                  <ConnectionIcon kind={connectionKind.get(name)} name={name} />
-                  {name}
-                </button>
-              ))}
+              .map((name) => {
+                const comingSoon = comingSoonConnections.has(name);
+                return (
+                  <button
+                    type="button"
+                    key={name}
+                    aria-label={
+                      comingSoon ? `${name} coming soon` : `Add ${name}`
+                    }
+                    disabled={comingSoon}
+                    onClick={() => addConnection(name)}
+                  >
+                    <ConnectionIcon
+                      kind={connectionKind.get(name)}
+                      name={name}
+                    />
+                    {name}
+                    {comingSoon ? (
+                      <span className={styles.comingSoon}>Coming soon</span>
+                    ) : null}
+                  </button>
+                );
+              })}
           </div>
-          {!showAllConnections && !search ? (
+          {!showMoreConnections && !search ? (
             <button
               className={styles.showAll}
               type="button"
-              onClick={() => setShowAllConnections(true)}
+              onClick={() => setShowMoreConnections(true)}
             >
-              Show all connections
+              Show more connections
             </button>
           ) : null}
           {form.connections.length ? (
