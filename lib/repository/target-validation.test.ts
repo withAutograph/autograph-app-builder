@@ -138,6 +138,15 @@ function sandboxFixture() {
   };
 }
 
+async function withRealSandbox<T>(run: () => Promise<T>): Promise<T> {
+  vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "1");
+  try {
+    return await run();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
 describe("proposal-bound target validation", () => {
   it("binds planning and prepared-source trees independently", () => {
     expect(() =>
@@ -351,14 +360,16 @@ describe("proposal-bound target validation", () => {
         stderr: "",
       }),
     );
-    const result = await executeProposalBoundValidation({
-      sandbox,
-      executor,
-      snapshotter: async () => snapshots.shift()!,
-      apply,
-      attempt: createTargetValidationAttempt(apply, "validation-call"),
-      appId: "example",
-    });
+    const result = await withRealSandbox(() =>
+      executeProposalBoundValidation({
+        sandbox,
+        executor,
+        snapshotter: async () => snapshots.shift()!,
+        apply,
+        attempt: createTargetValidationAttempt(apply, "validation-call"),
+        appId: "example",
+      }),
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected passing validation");
     expect(result.receipt.commands.map(({ command }) => command)).toEqual([

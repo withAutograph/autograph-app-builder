@@ -200,6 +200,15 @@ function sandboxFixture() {
   };
 }
 
+async function withRealSandbox<T>(run: () => Promise<T>): Promise<T> {
+  vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "1");
+  try {
+    return await run();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
 describe("proposal-bound target apply", () => {
   it.each([
     ["path-less historical V1", { ...binding, version: 1 }],
@@ -382,19 +391,21 @@ describe("proposal-bound target apply", () => {
     const { run, sandbox, writeTextFile, writeBinaryFile, removePath } =
       sandboxFixture();
     const snapshots = [planning, before, before, after];
-    const result = await executeProposalBoundApply({
-      sandbox,
-      executor: async () => ({
-        exitCode: 0,
-        stdout: JSON.stringify(commandReceipt()),
-        stderr: "",
+    const result = await withRealSandbox(() =>
+      executeProposalBoundApply({
+        sandbox,
+        executor: async () => ({
+          exitCode: 0,
+          stdout: JSON.stringify(commandReceipt()),
+          stderr: "",
+        }),
+        snapshotter: async () => snapshots.shift()!,
+        binding,
+        artifactRevision: binding.artifactRevision,
+        proposal,
+        appliedByCallId: "apply-call",
       }),
-      snapshotter: async () => snapshots.shift()!,
-      binding,
-      artifactRevision: binding.artifactRevision,
-      proposal,
-      appliedByCallId: "apply-call",
-    });
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected successful apply");
     expect(result.receipt.preTreeDigest).toBe(before.treeDigest);
