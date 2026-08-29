@@ -7,6 +7,7 @@ export default defineEval({
   description:
     "The exact digest sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
   tags: ["sandbox-image-proof", "reviewed-change-set"],
+  timeoutMs: 360_000,
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
