@@ -13,6 +13,10 @@ import {
 } from "./preview-oauth-contract";
 import { fetchPreviewClientMetadataResource } from "./preview-cimd-transport";
 import {
+  previewUserManagementPlugins,
+  type PreviewOrganizationUserAuthority,
+} from "./preview-user-management";
+import {
   hostedDeploymentEnvironmentSchema,
   readHostedDeploymentEnvironment,
 } from "../hosted/deployment-environment";
@@ -125,6 +129,7 @@ export function createPreviewOAuthServer(input: {
   config: PreviewOAuthRuntimeConfig;
   database: NonNullable<BetterAuthOptions["database"]>;
   membership: PreviewOAuthMembershipAuthority;
+  userManagement?: PreviewOrganizationUserAuthority;
   fetchClientMetadata?: typeof fetchPreviewClientMetadataResource;
 }) {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
@@ -144,7 +149,7 @@ export function createPreviewOAuthServer(input: {
       github: {
         clientId: config.githubClientId,
         clientSecret: config.githubClientSecret,
-        disableSignUp: true,
+        disableSignUp: false,
       },
     },
     account: {
@@ -165,6 +170,19 @@ export function createPreviewOAuthServer(input: {
       useSecureCookies: true,
     },
     plugins: [
+      ...previewUserManagementPlugins(
+        input.userManagement ?? {
+          async pendingOrganizationForVerifiedEmail() {
+            return undefined;
+          },
+          async activatePendingInvitation() {
+            throw new Error("Preview invitation authority is unavailable.");
+          },
+          async activeOrganizationForUser() {
+            return undefined;
+          },
+        },
+      ),
       jwt({
         jwks: {
           keyPairConfig: { alg: "ES256" },
