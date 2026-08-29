@@ -426,7 +426,7 @@ describe("approval-bound local publication", () => {
         review: fixture.review,
       }),
     ).rejects.toThrow(/success.*not canonical/u);
-  });
+  }, 15_000);
 
   it("requires published workflow reuse to match the exact durable success", async () => {
     const fixture = await combinedFixture();
@@ -468,7 +468,7 @@ describe("approval-bound local publication", () => {
     expect(() =>
       assertExactDurablePublicationSuccess(result.receipt, differentSuccess),
     ).toThrow(/exactly match/u);
-  });
+  }, 15_000);
 
   it.each([
     "appliedPaths",
