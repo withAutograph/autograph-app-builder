@@ -315,9 +315,12 @@ export async function materializeOfflineDependencies(input: {
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
     const cachePaths = dependencyCachePaths(environment);
-    await ensureSandboxDirectories(input.sandbox, [root]);
+    const dependencyRoot = `.app-builder/dependencies/${observed.contentDigest}`;
+    const absoluteDependencyRoot = `/workspace/${dependencyRoot}`;
+    const absoluteNodeModules = `${absoluteDependencyRoot}/node_modules`;
+    await ensureSandboxDirectories(input.sandbox, [root, dependencyRoot]);
     const extraction = await input.sandbox.run({
-      command: `rm -rf /workspace/${root}/node_modules && cd /workspace/${root} && tar --list --gzip --file ${cachePaths.archive} | awk 'substr($0, length($0), 1) == "/"' | while IFS= read -r directory; do mkdir -p -- "$directory"; done && tar --extract --gzip --no-overwrite-dir --file ${cachePaths.archive} --no-same-owner --no-same-permissions`,
+      command: `rm -rf ${absoluteNodeModules} && cd ${absoluteDependencyRoot} && tar --list --gzip --file ${cachePaths.archive} | awk 'substr($0, length($0), 1) == "/"' | while IFS= read -r directory; do mkdir -p -- "$directory"; done && tar --extract --gzip --no-overwrite-dir --file ${cachePaths.archive} --no-same-owner --no-same-permissions && chmod -R a-w ${absoluteNodeModules} && if find ${absoluteNodeModules} -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });

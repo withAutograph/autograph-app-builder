@@ -364,14 +364,21 @@ describe("proposal-bound target validation", () => {
     expect(executor.mock.calls[0]?.[0].validationRoot).not.toBe(
       executor.mock.calls[1]?.[0].validationRoot,
     );
-    expect(
-      run.mock.calls
-        .map(([request]) => (request as { command: string }).command)
-        .filter((command) => command.startsWith("cp -R")),
-    ).toEqual([
-      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "check-build")}`,
-      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "test")}`,
-    ]);
+    const copyCommands = run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .filter((command) => command.includes("cp -R"));
+    expect(copyCommands).toHaveLength(2);
+    for (const [index, name] of ["check-build", "test"].entries()) {
+      const command = copyCommands[index]!;
+      const validationRoot = validationOverlayRoot(
+        apply.digest,
+        name as "check-build" | "test",
+      );
+      expect(command).toContain(`test -L ${apply.applyRoot}/node_modules`);
+      expect(command).toContain(`cp -R ${apply.applyRoot} ${validationRoot}`);
+      expect(command).toContain(`test -L ${validationRoot}/node_modules`);
+      expect(command).toContain("readlink --");
+    }
   });
 
   it("records a command failure and does not dispatch later validation", async () => {

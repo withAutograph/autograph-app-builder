@@ -362,7 +362,7 @@ describe("proposal-bound target apply", () => {
   });
 
   it("records normalized pre/post overlay changes and a strict target receipt", async () => {
-    const { sandbox, writeTextFile, writeBinaryFile, removePath } =
+    const { run, sandbox, writeTextFile, writeBinaryFile, removePath } =
       sandboxFixture();
     const snapshots = [planning, before, after];
     const result = await executeProposalBoundApply({
@@ -395,6 +395,13 @@ describe("proposal-bound target apply", () => {
       path: `.app-builder/apply/${binding.proposalDigest}/proposal.json`,
       content: `${JSON.stringify(proposal, null, 2)}\n`,
     });
+    const overlayCopy = run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .find((command) => command.includes("cp -R"))!;
+    expect(overlayCopy).toContain("test -L");
+    expect(overlayCopy).toContain("dependency_root=");
+    expect(overlayCopy).toContain("cp -R");
+    expect(overlayCopy).toContain("readlink --");
     expect(removePath).toHaveBeenCalledWith({
       path: `.app-builder/apply/${binding.proposalDigest}/repository/prototype/expense-review/app-spec.md`,
       force: true,

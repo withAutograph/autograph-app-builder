@@ -349,7 +349,7 @@ async function materializeValidationOverlay(input: {
   if (absent.exitCode !== 0) throw new Error("ValidationOverlayExists");
   await ensureSandboxDirectories(input.sandbox, [parent]);
   const copy = await input.sandbox.run({
-    command: `cp -R ${input.applyRoot} ${input.command.validationRoot}`,
+    command: `test -L ${input.applyRoot}/node_modules && dependency_root="$(readlink -- ${input.applyRoot}/node_modules)" && cp -R ${input.applyRoot} ${input.command.validationRoot} && test -L ${input.command.validationRoot}/node_modules && test "$(readlink -- ${input.command.validationRoot}/node_modules)" = "$dependency_root"`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
   });

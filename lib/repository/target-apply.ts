@@ -200,7 +200,7 @@ export async function materializeFreshApplyOverlay(input: {
   await ensureSandboxDirectories(input.sandbox, [parent]);
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
   const copy = await input.sandbox.run({
-    command: `cp -R ${planningRoot} ${absoluteRoot}`,
+    command: `test -L ${planningRoot}/node_modules && dependency_root="$(readlink -- ${planningRoot}/node_modules)" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "$dependency_root"`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });

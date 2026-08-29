@@ -178,6 +178,16 @@ describe("offline dependency cache", () => {
         command: expect.stringContaining("--no-overwrite-dir"),
       }),
     );
+    const extractionCommand = run.mock.calls[3]?.[0].command as string;
+    expect(extractionCommand).toContain(
+      `.app-builder/dependencies/${archiveDigest}/node_modules`,
+    );
+    expect(extractionCommand).toContain("chmod -R a-w");
+    expect(extractionCommand).toContain("-perm /222");
+    expect(extractionCommand).toContain("ln -s");
+    expect(extractionCommand).toContain(
+      `test -L /workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/node_modules`,
+    );
     expect(run).toHaveBeenNthCalledWith(5, {
       command: expect.stringContaining(
         'const {match}=require("path-to-regexp")',
