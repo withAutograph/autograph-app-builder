@@ -8,8 +8,8 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "d15606efe06d9150ecc7230e054d17c50b269d84";
-export const ARRUSTED_TARGET_TREE = "5616c24161fc051d65bbad0f169d284d53ecf5e7";
+export const ARRUSTED_TARGET_SHA = "c2d5c97f8996deb334b81fdbbc777f9472b9e25f";
+export const ARRUSTED_TARGET_TREE = "f4ce93e6ca2aeec7a25614e33d18fa89f22fc114";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_RUST_VERSION = "1.97.1";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
@@ -18,7 +18,7 @@ export const ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION = "6.3.0";
 export const ARRUSTED_APP_VALIDATION_SHA256 =
   "db6cac93c5a89ba26db8274312959114d674ec1901ee9fcd93ab9d6ef2c503a5";
 export const ARRUSTED_CREATE_APP_SHA256 =
-  "d86fa8f45df2ad3d88d7536ba3ee59bb5c7fb7fd3c0ff3bd169a709ee1f26696";
+  "357d18e3cb355736638ed087355739858da59cf7c43dc09755ac1c589a4397ff";
 export const ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256 =
   "c7cb64a189e464abd5f1825db52dcdac62c3898940826d9ae49553291d35d762";
 
