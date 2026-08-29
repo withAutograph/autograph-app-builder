@@ -243,7 +243,7 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("[net]\\noffline = true");
     expect(dockerfile).toContain("cargo-closure.tar.gz");
     expect(dockerfile).toContain(
-      "! grep -Eq '(^|/)(registry|git|cache|bin)/' /tmp/cargo-closure.list",
+      "! grep -Ev '^(config[.]toml|vendor(/.*)?)$' /tmp/cargo-closure.list",
     );
     expect(dockerfile).toContain("cd packages/platform-microfrontends;");
     expect(dockerfile).toContain(

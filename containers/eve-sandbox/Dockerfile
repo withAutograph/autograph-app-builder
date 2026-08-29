@@ -113,13 +113,13 @@ RUN set -eux; \
       | gzip --no-name --best > /opt/app-builder/dependency-cache/node-modules.tar.gz; \
     tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime --create \
-      --file - --directory /opt/app-builder cargo-closure \
+      --file - --directory /opt/app-builder/cargo-closure config.toml vendor \
       | gzip --no-name --best > /opt/app-builder/dependency-cache/cargo-closure.tar.gz; \
     tar --list --gzip --file /opt/app-builder/dependency-cache/cargo-closure.tar.gz \
       > /tmp/cargo-closure.list; \
-    grep -Eq '^cargo-closure/config[.]toml$' /tmp/cargo-closure.list; \
-    grep -Eq '^cargo-closure/vendor/' /tmp/cargo-closure.list; \
-    ! grep -Eq '(^|/)(registry|git|cache|bin)/' /tmp/cargo-closure.list; \
+    grep -Eq '^config[.]toml$' /tmp/cargo-closure.list; \
+    grep -Eq '^vendor/' /tmp/cargo-closure.list; \
+    ! grep -Ev '^(config[.]toml|vendor(/.*)?)$' /tmp/cargo-closure.list; \
     archive_sha="$(sha256sum /opt/app-builder/dependency-cache/node-modules.tar.gz | cut -d' ' -f1)"; \
     archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/node-modules.tar.gz)"; \
     cargo_archive_sha="$(sha256sum /opt/app-builder/dependency-cache/cargo-closure.tar.gz | cut -d' ' -f1)"; \
@@ -170,8 +170,9 @@ COPY --from=dependency-cache --chown=root:root /opt/app-builder/dependency-cache
   /opt/app-builder/dependency-cache
 
 RUN set -eux; \
+    install -d /opt/app-builder/cargo-closure; \
     tar --extract --gzip --file /opt/app-builder/dependency-cache/cargo-closure.tar.gz \
-      --directory /opt/app-builder --no-same-owner --no-same-permissions; \
+      --directory /opt/app-builder/cargo-closure --no-same-owner --no-same-permissions; \
     install --mode=0444 /opt/app-builder/cargo-closure/config.toml \
       /opt/app-builder/cargo/config.toml; \
     chmod -R a-w,a+rX /opt/app-builder/cargo-closure /opt/app-builder/cargo
