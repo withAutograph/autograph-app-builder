@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import {
+  ARRUSTED_APP_VALIDATION_SHA256,
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
@@ -16,23 +17,24 @@ import {
 const archiveDigest = "a".repeat(64);
 const manifest = {
   version: 1,
-  scope: "identity-planning",
+  scope: "builder-execution",
   platform: "linux/arm64",
   target: {
     sha: ARRUSTED_TARGET_SHA,
     tree: ARRUSTED_TARGET_TREE,
     miseConfigSha256:
-      "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
+      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
     miseLockSha256:
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     bunLockSha256:
-      "a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b",
+      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
     appIdentitySha256:
       "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
     appContractSha256:
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
     repositoryPreflightSha256:
-      "6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6",
+      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
     repositoryExecSha256:
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
   },

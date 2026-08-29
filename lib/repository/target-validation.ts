@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
-import { SUPPORTED_VALIDATION_COMMANDS } from "./supported-template";
+import {
+  supportedValidationCommands,
+  SUPPORTED_VALIDATION_TEST_SHARDS,
+} from "./supported-template";
+import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
 import {
   applyOverlayRoot,
   assertCurrentTargetApplyReceipt,
@@ -14,11 +18,10 @@ import {
 
 export const TARGET_VALIDATION_TIMEOUT_MS = 300_000;
 export const TARGET_VALIDATION_OUTPUT_BYTES = 1_048_576;
-export const TARGET_VALIDATION_COMMANDS = SUPPORTED_VALIDATION_COMMANDS;
-
 export type TargetValidationCommand =
-  (typeof TARGET_VALIDATION_COMMANDS)[number];
-export type TargetValidationCommandName = "check" | "test";
+  | `mise run app:check-build ${string}`
+  | `mise run app:test ${string} ${string}`;
+export type TargetValidationCommandName = "check-build" | "test";
 
 export type ValidationCommandExecutor = (input: {
   sandbox: SandboxSession;
@@ -28,6 +31,9 @@ export type ValidationCommandExecutor = (input: {
 }) => Promise<ApplyCommandResult>;
 
 type TargetValidationBinding = {
+  appId: string;
+  testShards: readonly string[];
+  appValidationSha256: string;
   sourceSha: string;
   sourceTree: string;
   eligibilityDigest: string;
@@ -52,7 +58,7 @@ export type PlannedValidationCommand = {
 };
 
 export type TargetValidationAttemptReceipt = TargetValidationBinding & {
-  version: 2;
+  version: 3;
   status: "pending";
   commands: readonly PlannedValidationCommand[];
   startedByCallId: string;
@@ -67,7 +73,7 @@ export type TargetValidationCommandReceipt = PlannedValidationCommand & {
 };
 
 type ValidationReceiptBase = TargetValidationBinding & {
-  version: 2;
+  version: 3;
   attemptDigest: string;
   commands: readonly TargetValidationCommandReceipt[];
   validatedByCallId: string;
@@ -156,7 +162,7 @@ export function assertReusableTargetValidationReceipt(input: {
     input.validation.validatedByCallId,
   );
   if (
-    input.validation.version !== 2 ||
+    input.validation.version !== 3 ||
     input.validation.status !== "passed" ||
     input.validation.attemptDigest !== expectedAttempt.digest ||
     input.validation.applyDigest !== input.apply.digest ||
@@ -181,13 +187,13 @@ export function assertReusableTargetValidationReceipt(input: {
     })
   )
     throw new Error(
-      "A canonical V2 target validation receipt for the exact apply is required.",
+      "A canonical V3 target validation receipt for the exact apply is required.",
     );
   const canonicalCommands = input.validation.commands.map((command, index) => {
     const expected = expectedAttempt.commands[index];
     if (expected === undefined)
       throw new Error(
-        "A canonical V2 target validation receipt for the exact apply is required.",
+        "A canonical V3 target validation receipt for the exact apply is required.",
       );
     return {
       name: expected.name,
@@ -200,7 +206,7 @@ export function assertReusableTargetValidationReceipt(input: {
     };
   });
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     ...expectedBinding,
     status: "passed" as const,
     attemptDigest: input.validation.attemptDigest,
@@ -217,14 +223,8 @@ export function assertReusableTargetValidationReceipt(input: {
       })
   )
     throw new Error(
-      "The canonical V2 target validation receipt digest is malformed.",
+      "The canonical V3 target validation receipt digest is malformed.",
     );
-}
-
-function commandName(
-  command: TargetValidationCommand,
-): TargetValidationCommandName {
-  return command === "mise run check" ? "check" : "test";
 }
 
 export function validationOverlayRoot(
@@ -240,6 +240,9 @@ export function validationBinding(
   apply: TargetApplyReceipt,
 ): TargetValidationBinding {
   return {
+    appId: apply.targetReceipt.appId,
+    testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
+    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
     sourceSha: apply.sourceSha,
     sourceTree: apply.sourceTree,
     eligibilityDigest: apply.eligibilityDigest,
@@ -268,17 +271,17 @@ export function createTargetValidationAttempt(
   )
     throw new Error("The target apply overlay root is not proposal-bound.");
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     status: "pending" as const,
     ...validationBinding(apply),
-    commands: TARGET_VALIDATION_COMMANDS.map((command) => {
-      const name = commandName(command);
-      return {
-        name,
-        command,
-        validationRoot: validationOverlayRoot(apply.digest, name),
-      };
-    }),
+    commands: supportedValidationCommands(
+      apply.targetReceipt.appId,
+      SUPPORTED_VALIDATION_TEST_SHARDS,
+    ).map(({ command, name }) => ({
+      name,
+      command,
+      validationRoot: validationOverlayRoot(apply.digest, name),
+    })),
     startedByCallId,
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
@@ -289,8 +292,8 @@ function assertAttemptMatchesApply(
   apply: TargetApplyReceipt,
 ): void {
   assertCurrentTargetApplyReceipt(apply);
-  if (attempt.version !== 2)
-    throw new Error("A canonical V2 target validation attempt is required.");
+  if (attempt.version !== 3)
+    throw new Error("A canonical V3 target validation attempt is required.");
   const expected = createTargetValidationAttempt(
     apply,
     attempt.startedByCallId,
@@ -305,6 +308,9 @@ function attemptBinding(
   attempt: TargetValidationAttemptReceipt,
 ): TargetValidationBinding {
   return {
+    appId: attempt.appId,
+    testShards: attempt.testShards,
+    appValidationSha256: attempt.appValidationSha256,
     sourceSha: attempt.sourceSha,
     sourceTree: attempt.sourceTree,
     eligibilityDigest: attempt.eligibilityDigest,
@@ -364,7 +370,8 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
 
 export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
   return async ({ appId, command }) =>
-    appId === "validation-failure" && command === "mise run check"
+    appId === "validation-failure" &&
+    command.startsWith("mise run app:check-build ")
       ? { exitCode: 1, stdout: "", stderr: "fixture validation failure" }
       : { exitCode: 0, stdout: `${command} passed`, stderr: "" };
 }
@@ -375,7 +382,7 @@ function failureReceipt(
   reason: TargetValidationFailureReason,
 ): TargetValidationFailureReceipt {
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     ...attemptBinding(attempt),
     status: "failed" as const,
     attemptDigest: attempt.digest,
@@ -408,6 +415,8 @@ export async function executeProposalBoundValidation(input: {
   appId: string;
 }): Promise<TargetValidationResult> {
   assertAttemptMatchesApply(input.attempt, input.apply);
+  if (input.appId !== input.attempt.appId)
+    throw new Error("The validation application id changed after approval.");
   const snapshotter = input.snapshotter ?? inspectApplyOverlay;
   const commands: TargetValidationCommandReceipt[] = [];
   for (const planned of input.attempt.commands) {
@@ -512,7 +521,7 @@ export async function executeProposalBoundValidation(input: {
       };
   }
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     ...attemptBinding(input.attempt),
     status: "passed" as const,
     attemptDigest: input.attempt.digest,

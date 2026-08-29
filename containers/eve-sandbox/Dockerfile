@@ -15,7 +15,7 @@ ENV MISE_DATA_DIR=/opt/app-builder/mise \
     PATH=/opt/app-builder/mise/installs/bun/1.3.14/bin:/usr/local/bin:/usr/bin:/bin
 
 LABEL org.opencontainers.image.source="https://github.com/withAutograph/autograph-app-builder" \
-      org.opencontainers.image.description="Autograph App Builder Eve sandbox with a target-bound offline planning cache"
+      org.opencontainers.image.description="Autograph App Builder Eve sandbox with a target-bound offline execution cache"
 
 RUN set -eux; \
     curl --fail --location --silent --show-error \
@@ -44,14 +44,15 @@ RUN set -eux; \
 
 FROM toolchain AS dependency-cache
 
-ARG TARGET_SHA=77dce48833e7d6e05e086f18ca11b77d9214da9e
-ARG TARGET_TREE=2ed91119a0101ce053a4eb2122624efa1fff6ecd
-ARG MISE_CONFIG_SHA256=d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3
+ARG TARGET_SHA=0c5d1bd4f875b415c7c5144a28c1464020a36405
+ARG TARGET_TREE=ea6b11c9c35c398a408d176ec303401f1bcacba0
+ARG MISE_CONFIG_SHA256=be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8
 ARG MISE_LOCK_SHA256=415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462
-ARG BUN_LOCK_SHA256=a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b
+ARG BUN_LOCK_SHA256=e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0
 ARG APP_IDENTITY_SHA256=10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c
 ARG APP_CONTRACT_SHA256=03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e
-ARG REPOSITORY_PREFLIGHT_SHA256=6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6
+ARG APP_VALIDATION_SHA256=11b090ccc6a41ff7e98eed17b58b8d493f594da60e4e30c1f1f3b5c854fc3a18
+ARG REPOSITORY_PREFLIGHT_SHA256=7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340
 ARG REPOSITORY_EXEC_SHA256=7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc
 
 COPY --from=arrusted-target / /tmp/arrusted-target
@@ -65,6 +66,7 @@ RUN set -eux; \
     echo "${BUN_LOCK_SHA256}  /tmp/arrusted-target/bun.lock" | sha256sum --check --strict; \
     echo "${APP_IDENTITY_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-identity.ts" | sha256sum --check --strict; \
     echo "${APP_CONTRACT_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-contract.ts" | sha256sum --check --strict; \
+    echo "${APP_VALIDATION_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-validation.ts" | sha256sum --check --strict; \
     echo "${REPOSITORY_PREFLIGHT_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/repository-preflight.ts" | sha256sum --check --strict; \
     echo "${REPOSITORY_EXEC_SHA256}  /tmp/arrusted-target/.config/mise/tasks/repository/exec" | sha256sum --check --strict
 
@@ -86,7 +88,7 @@ RUN set -eux; \
     printf '%s\n' \
       '{' \
       '  "version": 1,' \
-      '  "scope": "identity-planning",' \
+      '  "scope": "builder-execution",' \
       '  "platform": "linux/arm64",' \
       '  "target": {' \
       "    \"sha\": \"${TARGET_SHA}\"," \
@@ -96,6 +98,7 @@ RUN set -eux; \
       "    \"bunLockSha256\": \"${BUN_LOCK_SHA256}\"," \
       "    \"appIdentitySha256\": \"${APP_IDENTITY_SHA256}\"," \
       "    \"appContractSha256\": \"${APP_CONTRACT_SHA256}\"," \
+      "    \"appValidationSha256\": \"${APP_VALIDATION_SHA256}\"," \
       "    \"repositoryPreflightSha256\": \"${REPOSITORY_PREFLIGHT_SHA256}\"," \
       "    \"repositoryExecSha256\": \"${REPOSITORY_EXEC_SHA256}\"" \
       '  },' \

@@ -89,7 +89,10 @@ const canonicalDigest = (value: unknown) =>
 function reusableValidationReceipt(): TargetValidationReceipt {
   const attempt = createTargetValidationAttempt(apply, "validation-call");
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
+    appId: attempt.appId,
+    testShards: attempt.testShards,
+    appValidationSha256: attempt.appValidationSha256,
     sourceSha: attempt.sourceSha,
     sourceTree: attempt.sourceTree,
     eligibilityDigest: attempt.eligibilityDigest,
@@ -212,6 +215,12 @@ describe("proposal-bound target validation", () => {
       },
     ],
     [
+      "tampered app validation input",
+      (receipt: Record<string, unknown>) => {
+        receipt.testShards = ["1/2"];
+      },
+    ],
+    [
       "tampered attempt digest",
       (receipt: Record<string, unknown>) => {
         receipt.attemptDigest = digest("0");
@@ -249,13 +258,16 @@ describe("proposal-bound target validation", () => {
         planningTreeDigest: apply.planningTreeDigest,
         preparedTreeDigest: apply.preTreeDigest,
       }),
-    ).toThrow(/canonical V2 target validation receipt/u);
+    ).toThrow(/canonical V3 target validation receipt/u);
   });
 
   it("binds a pending attempt to the exact apply receipt and fixed commands", () => {
     const attempt = createTargetValidationAttempt(apply, "validation-call");
     expect(attempt).toMatchObject({
       status: "pending",
+      appId: "example",
+      testShards: ["1/1"],
+      appValidationSha256: expect.stringMatching(/^[0-9a-f]{64}$/u),
       applyDigest: apply.digest,
       appliedTreeDigest: apply.postTreeDigest,
       changedContentDigest: apply.changedContentDigest,
@@ -263,13 +275,13 @@ describe("proposal-bound target validation", () => {
     });
     expect(attempt.commands).toEqual([
       {
-        name: "check",
-        command: "mise run check",
-        validationRoot: validationOverlayRoot(apply.digest, "check"),
+        name: "check-build",
+        command: "mise run app:check-build example",
+        validationRoot: validationOverlayRoot(apply.digest, "check-build"),
       },
       {
         name: "test",
-        command: "mise run test",
+        command: "mise run app:test example 1/1",
         validationRoot: validationOverlayRoot(apply.digest, "test"),
       },
     ]);
@@ -290,7 +302,7 @@ describe("proposal-bound target validation", () => {
         attempt: { ...attempt, version: 1 } as never,
         appId: "example",
       }),
-    ).rejects.toThrow(/canonical V2 target validation attempt/u);
+    ).rejects.toThrow(/canonical V3 target validation attempt/u);
   });
 
   it("rejects an apply overlay root that is not bound to the proposal", () => {
@@ -326,8 +338,8 @@ describe("proposal-bound target validation", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected passing validation");
     expect(result.receipt.commands.map(({ command }) => command)).toEqual([
-      "mise run check",
-      "mise run test",
+      "mise run app:check-build example",
+      "mise run app:test example 1/1",
     ]);
     expect(
       result.receipt.commands.map(({ inputTreeDigest }) => inputTreeDigest),
@@ -341,7 +353,7 @@ describe("proposal-bound target validation", () => {
         .map(([request]) => (request as { command: string }).command)
         .filter((command) => command.startsWith("cp -R")),
     ).toEqual([
-      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "check")}`,
+      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "check-build")}`,
       `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "test")}`,
     ]);
   });
@@ -368,7 +380,9 @@ describe("proposal-bound target validation", () => {
         status: "failed",
         reason: "command-failed",
         recoveryRequired: true,
-        commands: [{ command: "mise run check", exitCode: 1 }],
+        commands: [
+          { command: "mise run app:check-build example", exitCode: 1 },
+        ],
       },
     });
     expect(executor).toHaveBeenCalledTimes(1);
@@ -494,17 +508,30 @@ describe("proposal-bound target validation", () => {
     ).rejects.toThrow("no longer matches the exact apply receipt");
   });
 
+  it("rejects a validation app id that differs from the approved apply", async () => {
+    const { sandbox } = sandboxFixture();
+    await expect(
+      executeProposalBoundValidation({
+        sandbox,
+        executor: vi.fn(),
+        apply,
+        attempt: createTargetValidationAttempt(apply, "validation-call"),
+        appId: "other-app",
+      }),
+    ).rejects.toThrow("validation application id changed after approval");
+  });
+
   it("uses only the fixed command, cwd, timeout, and no environment", async () => {
     const { run, sandbox } = sandboxFixture();
-    const root = validationOverlayRoot(apply.digest, "check");
+    const root = validationOverlayRoot(apply.digest, "check-build");
     await sandboxValidationCommandExecutor()({
       sandbox,
       appId: "example",
-      command: "mise run check",
+      command: "mise run app:check-build example",
       validationRoot: root,
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run check",
+      command: "mise run app:check-build example",
       workingDirectory: root,
       abortSignal: expect.any(AbortSignal),
     });

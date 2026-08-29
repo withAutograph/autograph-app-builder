@@ -171,10 +171,10 @@ Before enabling GitHub or hosted repository publication:
    prepared-source pre-tree: the accepted AppSpec is verified in planning,
    restored to the prepared-source baseline for the pre-snapshot, and then
    staged as an allowed canonical apply change. The exact AppSpec path and
-   digest remain receipt-bound by the V2 apply, validation, and normalized
+   digest remain receipt-bound by the V2 apply, V3 validation, and V2 normalized
    change-set receipt shapes; the aggregate workflow remains V12. Every reuse,
    validation, review, and local or branch publication boundary checks literal
-   V2 before accepting reconstructed digests, so JSON omission of the AppSpec
+   matching current versions before accepting reconstructed digests, so JSON omission of the AppSpec
    path cannot recreate current authority. Failures
    before command dispatch remove only the
    fresh apply overlay and permit a clean retry; a post-dispatch snapshot failure
@@ -183,8 +183,10 @@ Before enabling GitHub or hosted repository publication:
    implemented validation tool
    persists pending state before
    execution, rechecks readiness and the exact applied tree, and runs only the
-   adapter-owned `mise run check` and `mise run test` commands in independent
-   builder-owned copies. It records only bounded, digested output evidence and
+   adapter-owned `mise run app:check-build <app-id>` and
+   `mise run app:test <app-id> <shard>` commands in independent builder-owned
+   copies. The V3 receipt binds the exact app id, shard set, and target-owned
+   app-validation implementation digest. It records only bounded, digested output evidence and
    durable pass or recovery-required failure state. It rechecks protected
    source, cache, planning, and applied bindings after each command and records
    drift instead of claiming success; validation overlays never supply files to

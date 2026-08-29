@@ -8,10 +8,12 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "77dce48833e7d6e05e086f18ca11b77d9214da9e";
-export const ARRUSTED_TARGET_TREE = "2ed91119a0101ce053a4eb2122624efa1fff6ecd";
+export const ARRUSTED_TARGET_SHA = "0c5d1bd4f875b415c7c5144a28c1464020a36405";
+export const ARRUSTED_TARGET_TREE = "ea6b11c9c35c398a408d176ec303401f1bcacba0";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
+export const ARRUSTED_APP_VALIDATION_SHA256 =
+  "11b090ccc6a41ff7e98eed17b58b8d493f594da60e4e30c1f1f3b5c854fc3a18";
 
 export const DEPENDENCY_CACHE_MANIFEST_PATH =
   "/opt/app-builder/dependency-cache/manifest.json";
@@ -26,19 +28,19 @@ const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
 
 const dependencyCacheManifestShapeSchema = z.strictObject({
   version: z.literal(1),
-  scope: z.literal("identity-planning"),
+  scope: z.literal("builder-execution"),
   platform: z.union([z.literal("linux/arm64"), z.literal("linux/portable")]),
   target: z.strictObject({
     sha: gitObjectId,
     tree: gitObjectId,
     miseConfigSha256: z.literal(
-      "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
+      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
     ),
     miseLockSha256: z.literal(
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     ),
     bunLockSha256: z.literal(
-      "a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b",
+      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
     ),
     appIdentitySha256: z.literal(
       "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
@@ -46,8 +48,9 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     appContractSha256: z.literal(
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     ),
+    appValidationSha256: z.literal(ARRUSTED_APP_VALIDATION_SHA256),
     repositoryPreflightSha256: z.literal(
-      "6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6",
+      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
     ),
     repositoryExecSha256: z.literal(
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
@@ -157,23 +160,24 @@ function fixtureManifest(
 ): DependencyCacheManifest {
   return {
     version: 1,
-    scope: "identity-planning",
+    scope: "builder-execution",
     platform: "linux/arm64",
     target: {
       sha: target.sourceSha,
       tree: target.sourceTree,
       miseConfigSha256:
-        "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
+        "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
       miseLockSha256:
         "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
       bunLockSha256:
-        "a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b",
+        "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
       appIdentitySha256:
         "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
       appContractSha256:
         "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+      appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
       repositoryPreflightSha256:
-        "6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6",
+        "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
       repositoryExecSha256:
         "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
     },

@@ -77,14 +77,15 @@ async function createTestSource(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "app-builder-bootstrap-source-"));
   roots.push(root);
   const files: Record<string, string> = {
-    ".config/mise/config.toml": `[tasks."create:app"]\nrun = 'mise exec -- bun create --proposal "$usage_proposal"'\n[tasks."repository:preflight"]\nrun = "mise run repository:exec -- repository-preflight.ts"\n[tasks."generate:app"]\nrun = 'turbo gen --config .config/turbo/generators/config.ts app --args "$usage_app_id"'\n`,
+    ".config/mise/config.toml": `[tasks."create:app"]\nrun = 'mise exec -- bun create --proposal "$usage_proposal"'\n[tasks."repository:preflight"]\nrun = "mise run repository:exec -- repository-preflight.ts"\n[tasks."generate:app"]\nrun = 'turbo gen --config .config/turbo/generators/config.ts app --args "$usage_app_id"'\n[tasks."app:check-build"]\nrun = 'bun .config/mise/scripts/repository/app-validation.ts check-build "$usage_app"'\n[tasks."app:test"]\nrun = 'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"'\n`,
     ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":
       'const scope = "@autograph/${appId}";\n',
+    ".config/mise/scripts/repository/app-validation.ts": "export {};\n",
     ".config/mise/scripts/repository/repository-preflight.ts":
-      'const observed = { runtime: "nextjs" };\nconst a = "mise run repository:exec -- app-identity.ts --app <app-id>";\nconst b = "mise run repository:exec -- app-contract.ts --contract <contract-file>";\nconst c = "mise run create:app -- --proposal <proposal-file>";\nconst d = "mise run repository:preflight";\nconst e = ["mise run check", "mise run test"];\n',
+      'const observed = { runtime: "nextjs" };\nconst a = "mise run repository:exec -- app-identity.ts --app <app-id>";\nconst b = "mise run repository:exec -- app-contract.ts --contract <contract-file>";\nconst c = "mise run create:app -- --proposal <proposal-file>";\nconst d = "mise run repository:preflight";\nconst e = ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"];\n',
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":

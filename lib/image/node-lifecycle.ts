@@ -86,6 +86,7 @@ const targetArguments = {
   BUN_LOCK_SHA256: "bun.lock",
   APP_IDENTITY_SHA256: ".config/mise/scripts/repository/app-identity.ts",
   APP_CONTRACT_SHA256: ".config/mise/scripts/repository/app-contract.ts",
+  APP_VALIDATION_SHA256: ".config/mise/scripts/repository/app-validation.ts",
   REPOSITORY_PREFLIGHT_SHA256:
     ".config/mise/scripts/repository/repository-preflight.ts",
   REPOSITORY_EXEC_SHA256: ".config/mise/tasks/repository/exec",

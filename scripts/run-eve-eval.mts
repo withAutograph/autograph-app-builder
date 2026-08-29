@@ -97,6 +97,7 @@ if (
 const sandboxEvaluations = new Set([
   "sandbox-toolchain",
   "sandbox-identity-planning",
+  "sandbox-reviewed-change-set",
 ]);
 if (
   (gateAEvalProfile.profile === "sandbox" ||
@@ -111,6 +112,15 @@ if (
   (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
 )
   throw new Error("The sandbox identity/planning proof requires exact inputs.");
+if (
+  (gateAEvalProfile.profile === "sandbox" ||
+    gateAEvalProfile.profile === "hosted-artifact") &&
+  args[0] === "sandbox-reviewed-change-set" &&
+  (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
+)
+  throw new Error(
+    "The sandbox reviewed change-set proof requires exact inputs.",
+  );
 if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
 const realSandbox =

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TargetApplyReceipt } from "./target-apply";
 import type { TargetValidationReceipt } from "./target-validation";
+import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
 import {
   createReviewedChangeSetReceipt,
   deriveNormalizedChangeSet,
@@ -70,6 +71,7 @@ const apply = {
   changes: [...changes].reverse(),
   targetReceipt: {
     version: 1,
+    appId: "example",
     contractPath: "apps/example/app.contract.json",
     topology: {
       path: "microfrontends.json",
@@ -81,8 +83,11 @@ const apply = {
 } as unknown as TargetApplyReceipt;
 
 const validation = {
-  version: 2,
+  version: 3,
   status: "passed",
+  appId: apply.targetReceipt.appId,
+  testShards: ["1/1"],
+  appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
   sourceSha: apply.sourceSha,
   sourceTree: apply.sourceTree,
   eligibilityDigest: apply.eligibilityDigest,

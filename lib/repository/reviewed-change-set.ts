@@ -10,6 +10,8 @@ import {
 } from "./target-apply";
 import { safeSourcePath } from "./source-path";
 import type { TargetValidationReceipt } from "./target-validation";
+import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
+import { SUPPORTED_VALIDATION_TEST_SHARDS } from "./supported-template";
 
 export type NormalizedChangeSet = {
   version: 2;
@@ -119,7 +121,7 @@ export function deriveNormalizedChangeSet(
 ): NormalizedChangeSet {
   assertCurrentTargetApplyReceipt(apply);
   if (
-    validation.version !== 2 ||
+    validation.version !== 3 ||
     validation.status !== "passed" ||
     validation.applyDigest !== apply.digest ||
     validation.appliedTreeDigest !== apply.postTreeDigest ||
@@ -143,6 +145,10 @@ export function deriveNormalizedChangeSet(
     proposalDigest: apply.proposalDigest,
   };
   if (
+    validation.appId !== apply.targetReceipt.appId ||
+    JSON.stringify(validation.testShards) !==
+      JSON.stringify(SUPPORTED_VALIDATION_TEST_SHARDS) ||
+    validation.appValidationSha256 !== ARRUSTED_APP_VALIDATION_SHA256 ||
     Object.entries(exactValidationBinding).some(
       ([key, value]) =>
         validation[key as keyof typeof exactValidationBinding] !== value,
