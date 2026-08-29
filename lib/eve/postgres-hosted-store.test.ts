@@ -215,6 +215,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0008_sandbox_execution_lease",
           breakpoints: true,
         },
+        {
+          idx: 8,
+          version: "7",
+          when: 1_788_066_000_000,
+          tag: "0009_builder_provider_integrations",
+          breakpoints: true,
+        },
       ],
     });
   });

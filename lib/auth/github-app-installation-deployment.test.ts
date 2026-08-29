@@ -82,7 +82,7 @@ describe("GitHub App installation routes", () => {
     const response = await route.callback(new Request(callback));
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
-      "https://builder.example/github/installations?status=connected",
+      "https://builder.example/?github=connected",
     );
     expect(complete).toHaveBeenCalledWith(callback, authority);
   });

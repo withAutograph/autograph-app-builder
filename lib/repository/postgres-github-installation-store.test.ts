@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { hostedGitHubInstallationBindingSchema } from "./postgres-github-installation-store";
+import {
+  hostedGitHubInstallationBindingSchema,
+  mergeHostedGitHubInstallationBindings,
+} from "./postgres-github-installation-store";
 
 describe("tenant GitHub installation binding schema", () => {
   it("accepts one exact active installation identity", () => {
@@ -38,5 +41,33 @@ describe("tenant GitHub installation binding schema", () => {
         token: "forbidden",
       }),
     ).toThrow();
+  });
+
+  it("keeps a legacy scope visible beside new multi-installation bindings", () => {
+    const updatedAt = new Date("2026-08-28T00:00:00.000Z");
+    const legacy = hostedGitHubInstallationBindingSchema.parse({
+      installationId: "123",
+      accountId: "456",
+      accountLogin: "withAutograph",
+      accountType: "Organization",
+      active: true,
+      updatedAt,
+    });
+    const added = hostedGitHubInstallationBindingSchema.parse({
+      installationId: "789",
+      accountId: "987",
+      accountLogin: "autograph-labs",
+      accountType: "Organization",
+      active: true,
+      updatedAt,
+    });
+
+    expect(mergeHostedGitHubInstallationBindings([added], legacy)).toEqual([
+      added,
+      legacy,
+    ]);
+    expect(mergeHostedGitHubInstallationBindings([legacy], legacy)).toEqual([
+      legacy,
+    ]);
   });
 });

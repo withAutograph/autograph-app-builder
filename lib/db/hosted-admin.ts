@@ -108,6 +108,8 @@ const effectsSchema = z
     membershipRowsDeleted: z.number().int().min(0),
     operationRowsDeleted: z.number().int().min(0),
     sessionRowsDeleted: z.number().int().min(0),
+    integrationRowsDeleted: z.number().int().min(0),
+    authorizationStateRowsDeleted: z.number().int().min(0),
   })
   .strict();
 
@@ -152,6 +154,8 @@ export interface HostedAdminStore {
   }): Promise<{
     operationRowsDeleted: number;
     sessionRowsDeleted: number;
+    integrationRowsDeleted?: number;
+    authorizationStateRowsDeleted?: number;
   }>;
   deleteTenant(input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
@@ -160,6 +164,8 @@ export interface HostedAdminStore {
     membershipRowsDeleted: number;
     operationRowsDeleted: number;
     sessionRowsDeleted: number;
+    integrationRowsDeleted?: number;
+    authorizationStateRowsDeleted?: number;
   }>;
 }
 
@@ -214,6 +220,8 @@ const emptyEffects = {
   membershipRowsDeleted: 0,
   operationRowsDeleted: 0,
   sessionRowsDeleted: 0,
+  integrationRowsDeleted: 0,
+  authorizationStateRowsDeleted: 0,
 };
 
 export async function executeHostedAdminRequest(input: {
