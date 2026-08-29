@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 
-import { getPreviewOAuthDeploymentAuth } from "@/lib/auth/preview-oauth-deployment";
+import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
 import {
   parseProviderConnectionFailureReason,
@@ -24,13 +24,15 @@ type PageProps = {
 
 async function currentUser() {
   try {
-    const auth = getPreviewOAuthDeploymentAuth(process.env);
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) return undefined;
+    const user = await ensurePreviewOAuthDeploymentSessionOrganization({
+      environment: process.env,
+      headers: await headers(),
+    });
+    if (!user) return undefined;
     return {
-      id: session.user.id,
-      name: session.user.name || "Autograph user",
-      email: session.user.email,
+      id: user.id,
+      name: user.name || "Autograph user",
+      email: user.email,
     };
   } catch {
     return undefined;
