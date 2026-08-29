@@ -40,9 +40,10 @@ async function currentUser() {
       return undefined;
     }
     return {
-      id: user.id,
-      name: user.name || "Autograph user",
-      email: user.email,
+      id: user.user.id,
+      name: user.user.name || "Autograph user",
+      email: user.user.email,
+      workspaceId: user.organization.workspaceId,
     };
   } catch (error) {
     console.error(
@@ -85,6 +86,7 @@ export default async function Home({ searchParams }: PageProps) {
   const integrations = await loadBuilderIntegrationState({
     environment: process.env,
     userId: user?.id,
+    workspaceId: user?.workspaceId,
   });
 
   return (

@@ -32,7 +32,17 @@ describe("Preview OAuth deployment handlers", () => {
         authority: { ensureOrganizationForVerifiedUser },
         headers: new Headers(),
       }),
-    ).resolves.toMatchObject({ id: "user_one" });
+    ).resolves.toEqual({
+      user: {
+        id: "user_one",
+        name: "Person",
+        email: "person@example.com",
+      },
+      organization: {
+        organizationId: "organization_one",
+        workspaceId: "workspace_one",
+      },
+    });
     expect(ensureOrganizationForVerifiedUser).toHaveBeenCalledWith({
       userId: "user_one",
     });
