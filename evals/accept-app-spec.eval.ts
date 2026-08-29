@@ -105,42 +105,48 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Apply the current creation proposal.");
+    const apply = await t.send("Apply the current creation proposal.");
     t.succeeded();
-    t.notEvent("input.requested");
+    apply.notEvent("input.requested");
     t.check(t.reply, includes("private preview"));
     t.check(t.reply, includes("quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry target apply after a lost response.");
+    const retryApply = await t.send(
+      "Retry target apply after a lost response.",
+    );
     t.succeeded();
-    t.notEvent("input.requested");
+    retryApply.notEvent("input.requested");
     t.check(t.reply, includes("prepared app is unchanged"));
 
-    await t.send("Apply with a stale proposal digest.");
+    const staleApply = await t.send("Apply with a stale proposal digest.");
     t.succeeded();
-    t.notEvent("input.requested");
+    staleApply.notEvent("input.requested");
     t.check(t.reply, includes("product plan changed"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Validate the applied creation.");
+    const validation = await t.send("Validate the applied creation.");
     t.succeeded();
-    t.notEvent("input.requested");
+    validation.notEvent("input.requested");
     t.check(t.reply, includes("quality checks"));
     t.check(t.reply, includes("ready for review"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry target validation after a lost response.");
+    const retryValidation = await t.send(
+      "Retry target validation after a lost response.",
+    );
     t.succeeded();
-    t.notEvent("input.requested");
+    retryValidation.notEvent("input.requested");
     t.check(t.reply, includes("quality checks are still passing"));
 
-    await t.send("Validate with a stale apply digest.");
+    const staleValidation = await t.send(
+      "Validate with a stale apply digest.",
+    );
     t.succeeded();
-    t.notEvent("input.requested");
+    staleValidation.notEvent("input.requested");
     t.check(t.reply, includes("app changed before checks could start"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
@@ -152,24 +158,26 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Accept the displayed change set.");
+    const review = await t.send("Accept the displayed change set.");
     t.succeeded();
-    t.notEvent("input.requested");
+    review.notEvent("input.requested");
     t.check(t.reply, includes("completed app changes are ready for review"));
     t.check(t.reply, includes("draft pull request"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry change-set acceptance after a lost response.");
+    const retryReview = await t.send(
+      "Retry change-set acceptance after a lost response.",
+    );
     t.succeeded();
-    t.notEvent("input.requested");
+    retryReview.notEvent("input.requested");
     t.check(t.reply, includes("same completed app changes remain ready"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Accept a stale change set.");
+    const staleReview = await t.send("Accept a stale change set.");
     t.succeeded();
-    t.notEvent("input.requested");
+    staleReview.notEvent("input.requested");
     t.check(t.reply, includes("app changed before review could finish"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
