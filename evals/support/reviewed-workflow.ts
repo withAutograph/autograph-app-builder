@@ -21,16 +21,16 @@ export async function prepareReviewedWorkflow(
 
   await t.send("Run target identity and planning.");
 
-  await t.send("Apply the current creation proposal.");
-  t.notEvent("input.requested");
+  const apply = await t.send("Apply the current creation proposal.");
+  apply.notEvent("input.requested");
 
-  await t.send("Validate the applied creation.");
-  t.notEvent("input.requested");
+  const validation = await t.send("Validate the applied creation.");
+  validation.notEvent("input.requested");
 
   await t.send("Inspect the validated change set.");
   t.succeeded();
 
-  await t.send("Accept the displayed change set.");
-  t.notEvent("input.requested");
+  const review = await t.send("Accept the displayed change set.");
+  review.notEvent("input.requested");
   t.succeeded();
 }
