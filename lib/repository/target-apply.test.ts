@@ -70,6 +70,7 @@ const binding: TargetApplyBinding = {
   identityDigest: "6".repeat(64),
   imageDigest: `fixture@sha256:${"7".repeat(64)}`,
   dependencyCacheDigest: `sha256:${"8".repeat(64)}`,
+  dependencyCacheContentDigest: "d".repeat(64),
   proposalDigest: "9".repeat(64),
 };
 
@@ -399,7 +400,9 @@ describe("proposal-bound target apply", () => {
       .map(([request]) => (request as { command: string }).command)
       .find((command) => command.includes("cp -R"))!;
     expect(overlayCopy).toContain("test -L");
-    expect(overlayCopy).toContain("dependency_root=");
+    expect(overlayCopy).toContain(
+      `/opt/app-builder/dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+    );
     expect(overlayCopy).toContain("cp -R");
     expect(overlayCopy).toContain("readlink --");
     expect(removePath).toHaveBeenCalledWith({

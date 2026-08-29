@@ -7,7 +7,10 @@ import {
   supportedValidationCommands,
   SUPPORTED_VALIDATION_TEST_SHARDS,
 } from "./supported-template";
-import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
+import {
+  ARRUSTED_APP_VALIDATION_SHA256,
+  dependencyCacheNodeModulesRoot,
+} from "./dependency-cache";
 import {
   applyOverlayRoot,
   assertCurrentTargetApplyReceipt,
@@ -45,6 +48,7 @@ type TargetValidationBinding = {
   identityDigest: string;
   imageDigest: string;
   dependencyCacheDigest: string;
+  dependencyCacheContentDigest: string;
   proposalDigest: string;
   applyDigest: string;
   appliedTreeDigest: string;
@@ -256,6 +260,7 @@ export function validationBinding(
     identityDigest: apply.identityDigest,
     imageDigest: apply.imageDigest,
     dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
     proposalDigest: apply.proposalDigest,
     applyDigest: apply.digest,
     appliedTreeDigest: apply.postTreeDigest,
@@ -324,6 +329,7 @@ function attemptBinding(
     identityDigest: attempt.identityDigest,
     imageDigest: attempt.imageDigest,
     dependencyCacheDigest: attempt.dependencyCacheDigest,
+    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
     proposalDigest: attempt.proposalDigest,
     applyDigest: attempt.applyDigest,
     appliedTreeDigest: attempt.appliedTreeDigest,
@@ -334,6 +340,7 @@ function attemptBinding(
 async function materializeValidationOverlay(input: {
   sandbox: SandboxSession;
   applyRoot: string;
+  dependencyCacheContentDigest: string;
   command: PlannedValidationCommand;
 }): Promise<void> {
   const relativeRoot = input.command.validationRoot.replace(
@@ -348,8 +355,11 @@ async function materializeValidationOverlay(input: {
   });
   if (absent.exitCode !== 0) throw new Error("ValidationOverlayExists");
   await ensureSandboxDirectories(input.sandbox, [parent]);
+  const dependencyRoot = dependencyCacheNodeModulesRoot(
+    input.dependencyCacheContentDigest,
+  );
   const copy = await input.sandbox.run({
-    command: `test -L ${input.applyRoot}/node_modules && dependency_root="$(readlink -- ${input.applyRoot}/node_modules)" && cp -R ${input.applyRoot} ${input.command.validationRoot} && test -L ${input.command.validationRoot}/node_modules && test "$(readlink -- ${input.command.validationRoot}/node_modules)" = "$dependency_root"`,
+    command: `test -L ${input.applyRoot}/node_modules && test "$(readlink -- ${input.applyRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${input.applyRoot} ${input.command.validationRoot} && test -L ${input.command.validationRoot}/node_modules && test "$(readlink -- ${input.command.validationRoot}/node_modules)" = "${dependencyRoot}"`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
   });
@@ -448,6 +458,8 @@ export async function executeProposalBoundValidation(input: {
       await materializeValidationOverlay({
         sandbox: input.sandbox,
         applyRoot: input.apply.applyRoot,
+        dependencyCacheContentDigest:
+          input.apply.dependencyCacheContentDigest,
         command: planned,
       });
     } catch {

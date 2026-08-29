@@ -173,21 +173,18 @@ describe("offline dependency cache", () => {
       }),
     );
     expect(run.mock.calls[3]?.[0]).not.toHaveProperty("env");
-    expect(run.mock.calls[3]?.[0]).toEqual(
-      expect.objectContaining({
-        command: expect.stringContaining("--no-overwrite-dir"),
-      }),
+    const linkCommand = run.mock.calls[3]?.[0].command as string;
+    expect(linkCommand).toContain(
+      `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
     );
-    const extractionCommand = run.mock.calls[3]?.[0].command as string;
-    expect(extractionCommand).toContain(
-      `.app-builder/dependencies/${archiveDigest}/node_modules`,
-    );
-    expect(extractionCommand).toContain("chmod -R a-w");
-    expect(extractionCommand).toContain("-perm /222");
-    expect(extractionCommand).toContain("ln -s");
-    expect(extractionCommand).toContain(
+    expect(linkCommand).toContain("test -d");
+    expect(linkCommand).toContain("test ! -L");
+    expect(linkCommand).toContain("-perm /222");
+    expect(linkCommand).toContain("ln -s");
+    expect(linkCommand).toContain(
       `test -L /workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/node_modules`,
     );
+    expect(linkCommand).toContain("readlink --");
     expect(run).toHaveBeenNthCalledWith(5, {
       command: expect.stringContaining(
         'const {match}=require("path-to-regexp")',
@@ -217,13 +214,6 @@ describe("offline dependency cache", () => {
     expect(rustCommand).toContain("CARGO_NET_OFFLINE=true");
     expect(rustCommand).toContain(
       "cargo metadata --format-version 1 --locked --all-features",
-    );
-    expect(run.mock.calls[3]?.[0]).toEqual(
-      expect.objectContaining({
-        command: expect.stringContaining(
-          'while IFS= read -r directory; do mkdir -p -- "$directory"; done',
-        ),
-      }),
     );
   });
 
@@ -269,6 +259,18 @@ describe("offline dependency cache", () => {
     );
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
+    expect(dockerfile).toContain(
+      "/opt/app-builder/dependencies/${archive_sha}",
+    );
+    expect(dockerfile).toContain(
+      "tar --extract --gzip --file /opt/app-builder/dependency-cache/node-modules.tar.gz",
+    );
+    expect(dockerfile).toContain(
+      "chmod -R a-w,a+rX /opt/app-builder/dependencies",
+    );
+    expect(dockerfile).toContain(
+      "find /opt/app-builder/dependencies -perm /222 -print -quit",
+    );
     expect(dockerfile).toContain(`ARG RUST_VERSION=${ARRUSTED_RUST_VERSION}`);
     expect(dockerfile).toContain("CARGO_HOME=/opt/app-builder/cargo");
     expect(dockerfile).toContain("RUSTUP_HOME=/opt/app-builder/rustup");

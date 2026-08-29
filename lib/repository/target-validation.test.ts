@@ -33,6 +33,7 @@ const apply: TargetApplyReceipt = {
   identityDigest: digest("7"),
   imageDigest: `fixture@sha256:${digest("8")}`,
   dependencyCacheDigest: `sha256:${digest("9")}`,
+  dependencyCacheContentDigest: digest("3"),
   proposalDigest: digest("a"),
   applyRoot: `/workspace/.app-builder/apply/${digest("a")}/repository`,
   planningTreeDigest: digest("b"),
@@ -104,6 +105,7 @@ function reusableValidationReceipt(): TargetValidationReceipt {
     identityDigest: attempt.identityDigest,
     imageDigest: attempt.imageDigest,
     dependencyCacheDigest: attempt.dependencyCacheDigest,
+    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
     proposalDigest: attempt.proposalDigest,
     applyDigest: attempt.applyDigest,
     appliedTreeDigest: attempt.appliedTreeDigest,
@@ -377,6 +379,9 @@ describe("proposal-bound target validation", () => {
       expect(command).toContain(`test -L ${apply.applyRoot}/node_modules`);
       expect(command).toContain(`cp -R ${apply.applyRoot} ${validationRoot}`);
       expect(command).toContain(`test -L ${validationRoot}/node_modules`);
+      expect(command).toContain(
+        `/opt/app-builder/dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
+      );
       expect(command).toContain("readlink --");
     }
   });

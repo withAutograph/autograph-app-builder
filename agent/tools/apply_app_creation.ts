@@ -96,6 +96,8 @@ export default defineTool({
       identityDigest: current.identityReceipt.digest,
       imageDigest: current.dependencyReceipt.imageDigest,
       dependencyCacheDigest: current.dependencyReceipt.dependencyCacheDigest,
+      dependencyCacheContentDigest:
+        current.dependencyReceipt.cacheContentDigest,
       proposalDigest: current.proposal.digest,
     };
     const result = await executeProposalBoundApply({

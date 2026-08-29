@@ -170,6 +170,15 @@ COPY --from=dependency-cache --chown=root:root /opt/app-builder/dependency-cache
   /opt/app-builder/dependency-cache
 
 RUN set -eux; \
+    archive_sha="$(bun -e 'console.log(require("/opt/app-builder/dependency-cache/manifest.json").closure.archiveSha256)')"; \
+    dependency_root="/opt/app-builder/dependencies/${archive_sha}"; \
+    install -d "${dependency_root}"; \
+    tar --extract --gzip --file /opt/app-builder/dependency-cache/node-modules.tar.gz \
+      --directory "${dependency_root}" --no-same-owner --no-same-permissions; \
+    test -d "${dependency_root}/node_modules"; \
+    chmod -R a-w,a+rX /opt/app-builder/dependencies; \
+    if find /opt/app-builder/dependencies -perm /222 -print -quit | grep -q .; then exit 1; fi; \
+    test "$(bun -e 'console.log(require("'"${dependency_root}"'/node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"; \
     install -d /opt/app-builder/cargo-closure; \
     tar --extract --gzip --file /opt/app-builder/dependency-cache/cargo-closure.tar.gz \
       --directory /opt/app-builder/cargo-closure --no-same-owner --no-same-permissions; \
@@ -186,4 +195,4 @@ RUN --network=none set -eux; \
       mise exec rust@1.97.1 -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
     MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false \
       mise exec rust@1.97.1 -- cargo --version | grep -E '^cargo 1[.]97[.]1 '; \
-    bun -e 'const {execFileSync}=require("node:child_process"); const m=require("/opt/app-builder/dependency-cache/manifest.json"); const digest=(path)=>execFileSync("sha256sum",[path],{encoding:"utf8"}).split(/\s/u)[0]; if(digest(m.closure.archivePath)!==m.closure.archiveSha256 || digest(m.closure.cargoArchivePath)!==m.closure.cargoArchiveSha256) process.exit(1)'
+    bun -e 'const fs=require("node:fs"),{execFileSync}=require("node:child_process"); const m=require("/opt/app-builder/dependency-cache/manifest.json"); const digest=(path)=>execFileSync("sha256sum",[path],{encoding:"utf8"}).split(/\s/u)[0]; const root=`/opt/app-builder/dependencies/${m.closure.archiveSha256}/node_modules`; if(digest(m.closure.archivePath)!==m.closure.archiveSha256 || digest(m.closure.cargoArchivePath)!==m.closure.cargoArchiveSha256 || !fs.statSync(root).isDirectory()) process.exit(1)'

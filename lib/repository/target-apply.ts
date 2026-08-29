@@ -6,7 +6,10 @@ import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
-import { planningOverlayRoot } from "./dependency-cache";
+import {
+  dependencyCacheNodeModulesRoot,
+  planningOverlayRoot,
+} from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -84,6 +87,7 @@ export type TargetApplyBinding = {
   identityDigest: string;
   imageDigest: string;
   dependencyCacheDigest: string;
+  dependencyCacheContentDigest: string;
   proposalDigest: string;
 };
 
@@ -177,6 +181,7 @@ export function applyOverlayRoot(proposalDigest: string): string {
 export async function materializeFreshApplyOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
+  dependencyCacheContentDigest: string;
   proposalDigest: string;
   proposal: TargetProposal;
 }): Promise<{
@@ -199,8 +204,11 @@ export async function materializeFreshApplyOverlay(input: {
     );
   await ensureSandboxDirectories(input.sandbox, [parent]);
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
+  const dependencyRoot = dependencyCacheNodeModulesRoot(
+    input.dependencyCacheContentDigest,
+  );
   const copy = await input.sandbox.run({
-    command: `test -L ${planningRoot}/node_modules && dependency_root="$(readlink -- ${planningRoot}/node_modules)" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "$dependency_root"`,
+    command: `test -L ${planningRoot}/node_modules && test "$(readlink -- ${planningRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "${dependencyRoot}"`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
@@ -533,6 +541,7 @@ export async function executeProposalBoundApply(input: {
   const overlay = await materializeFreshApplyOverlay({
     sandbox: input.sandbox,
     artifactRevision: input.artifactRevision,
+    dependencyCacheContentDigest: input.binding.dependencyCacheContentDigest,
     proposalDigest: input.binding.proposalDigest,
     proposal: input.proposal,
   });

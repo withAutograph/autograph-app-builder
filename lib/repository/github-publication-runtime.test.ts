@@ -135,6 +135,7 @@ function review() {
     identityDigest: "e".repeat(64),
     imageDigest: `sha256:${"f".repeat(64)}`,
     dependencyCacheDigest: "0".repeat(64),
+    dependencyCacheContentDigest: "1".repeat(64),
     targetReceipt: {
       version: 1 as const,
       contractPath: ".config/repository-template.json",

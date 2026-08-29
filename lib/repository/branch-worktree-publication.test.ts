@@ -118,6 +118,7 @@ async function fixture() {
     identityDigest: "2".repeat(64),
     imageDigest: `fixture@sha256:${"3".repeat(64)}`,
     dependencyCacheDigest: `sha256:${"4".repeat(64)}`,
+    dependencyCacheContentDigest: "5".repeat(64),
     targetReceipt: {
       version: 1 as const,
       contractPath: "apps/example/app.contract.json",

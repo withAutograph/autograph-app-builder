@@ -24,6 +24,8 @@ export const DEPENDENCY_CACHE_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/node-modules.tar.gz";
 export const DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/cargo-closure.tar.gz";
+export const DEPENDENCY_CACHE_EXTRACTED_ROOT =
+  "/opt/app-builder/dependencies";
 export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
 export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
@@ -133,6 +135,12 @@ export function assertExactDependencyTargetBinding(input: {
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+export function dependencyCacheNodeModulesRoot(contentDigest: string): string {
+  if (!sha256Digest.safeParse(contentDigest).success)
+    throw new Error("The dependency cache content digest is invalid.");
+  return `${DEPENDENCY_CACHE_EXTRACTED_ROOT}/${contentDigest}/node_modules`;
+}
 
 const fixtureDependencyCacheEnabled = (
   environment: Readonly<Record<string, string | undefined>>,
@@ -314,13 +322,12 @@ export async function materializeOfflineDependencies(input: {
   });
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
-    const cachePaths = dependencyCachePaths(environment);
-    const dependencyRoot = `.app-builder/dependencies/${observed.contentDigest}`;
-    const absoluteDependencyRoot = `/workspace/${dependencyRoot}`;
-    const absoluteNodeModules = `${absoluteDependencyRoot}/node_modules`;
-    await ensureSandboxDirectories(input.sandbox, [root, dependencyRoot]);
+    const absoluteNodeModules = dependencyCacheNodeModulesRoot(
+      observed.contentDigest,
+    );
+    await ensureSandboxDirectories(input.sandbox, [root]);
     const extraction = await input.sandbox.run({
-      command: `rm -rf ${absoluteNodeModules} && cd ${absoluteDependencyRoot} && tar --list --gzip --file ${cachePaths.archive} | awk 'substr($0, length($0), 1) == "/"' | while IFS= read -r directory; do mkdir -p -- "$directory"; done && tar --extract --gzip --no-overwrite-dir --file ${cachePaths.archive} --no-same-owner --no-same-permissions && chmod -R a-w ${absoluteNodeModules} && if find ${absoluteNodeModules} -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
+      command: `test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && if find ${absoluteNodeModules} -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });

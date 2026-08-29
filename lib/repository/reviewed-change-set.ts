@@ -31,6 +31,7 @@ export type NormalizedChangeSet = {
   identityDigest: string;
   imageDigest: string;
   dependencyCacheDigest: string;
+  dependencyCacheContentDigest: string;
   targetReceipt: {
     version: 1;
     contractPath: string;
@@ -142,6 +143,7 @@ export function deriveNormalizedChangeSet(
     identityDigest: apply.identityDigest,
     imageDigest: apply.imageDigest,
     dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
     proposalDigest: apply.proposalDigest,
   };
   if (
@@ -197,6 +199,7 @@ export function deriveNormalizedChangeSet(
     identityDigest: apply.identityDigest,
     imageDigest: apply.imageDigest,
     dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
     targetReceipt: {
       version: apply.targetReceipt.version,
       contractPath: apply.targetReceipt.contractPath,

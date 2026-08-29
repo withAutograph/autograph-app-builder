@@ -39,7 +39,9 @@ export async function exactNormalizedChangeSet(input: {
     state.identityReceipt.digest !== state.applyReceipt.identityDigest ||
     state.dependencyReceipt.imageDigest !== state.applyReceipt.imageDigest ||
     state.dependencyReceipt.dependencyCacheDigest !==
-      state.applyReceipt.dependencyCacheDigest
+      state.applyReceipt.dependencyCacheDigest ||
+    state.dependencyReceipt.cacheContentDigest !==
+      state.applyReceipt.dependencyCacheContentDigest
   )
     throw new Error(
       "The validated workflow bindings no longer match the exact apply receipt.",
