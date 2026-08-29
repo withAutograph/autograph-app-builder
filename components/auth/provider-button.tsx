@@ -52,14 +52,6 @@ export function ProviderButton({
     socialSignInMode,
   } = useAuth();
 
-  const callback = resolveAuthCallbackURL(
-    "/",
-    window.location.search,
-    window.location.origin,
-  );
-  const callbackURL = new URL(`${baseURL}${redirectTo}`);
-  callbackURL.searchParams.set("callbackURL", callback);
-
   const { mutate: signInSocial, isPending: signInSocialPending } =
     useSignInSocial(authClient);
   const { mutate: signInPopup, isPending: signInPopupPending } =
@@ -77,6 +69,14 @@ export function ProviderButton({
   const isPending = signInMutating + signUpMutating > 0;
 
   const handleSignIn = () => {
+    const callback = resolveAuthCallbackURL(
+      "/",
+      window.location.search,
+      window.location.origin,
+    );
+    const callbackURL = new URL(`${baseURL}${redirectTo}`);
+    callbackURL.searchParams.set("callbackURL", callback);
+
     if (socialSignInMode === "popup") {
       signInPopup(
         {
