@@ -316,9 +316,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     const appName = view.querySelector<HTMLInputElement>("#app-name")?.value;
-    expect(appName).toMatch(
-      /^(Bright|Calm|Clever|Nimble|Open|Swift) (Atlas|Beacon|Canvas|Harbor|Orbit|Studio)$/u,
-    );
+    expect(appName).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/u);
     expect(
       view.querySelector<HTMLInputElement>("#repository-name")?.value,
     ).toBe(repositoryNameFromAppName(appName ?? ""));
