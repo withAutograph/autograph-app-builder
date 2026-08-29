@@ -171,7 +171,14 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).toContain("What should this app do?");
-    expect(view.querySelector('a[href^="/auth/sign-in"]')).not.toBeNull();
+    expect(
+      view.querySelector('a[href="/auth/sign-in?callbackURL=%2F"]')
+        ?.textContent,
+    ).toBe("Sign In");
+    expect(
+      view.querySelector('a[href="/auth/sign-up?callbackURL=%2F"]')
+        ?.textContent,
+    ).toBe("Sign Up");
     expect(view.querySelector("button")?.hasAttribute("disabled")).toBe(true);
   });
 

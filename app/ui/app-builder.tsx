@@ -744,7 +744,7 @@ function AnonymousBuilder({
         <span>New App</span>
         <div>
           <a href="/auth/sign-in?callbackURL=%2F">Sign In</a>
-          <a className={styles.darkButton} href="/auth/sign-in?callbackURL=%2F">
+          <a className={styles.darkButton} href="/auth/sign-up?callbackURL=%2F">
             Sign Up
           </a>
         </div>
