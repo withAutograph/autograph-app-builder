@@ -39,6 +39,8 @@ export function createPostgresVercelAuthorizationStateStore(
         stateDigest: input.stateDigest,
         ...input.authority,
         authorityDigest: input.authorityDigest,
+        returnTo: input.returnState.returnTo,
+        resumeKey: input.returnState.resumeKey ?? null,
         createdAt: input.createdAt,
         expiresAt: input.expiresAt,
       });
@@ -78,9 +80,14 @@ export function createPostgresVercelAuthorizationStateStore(
           ),
         )
         .returning({
-          stateDigest: vercelInstallationAuthorizationStates.stateDigest,
+          returnTo: vercelInstallationAuthorizationStates.returnTo,
+          resumeKey: vercelInstallationAuthorizationStates.resumeKey,
         });
-      return rows.length === 1;
+      if (rows.length !== 1) return undefined;
+      return {
+        returnTo: "/",
+        ...(rows[0]?.resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
+      };
     },
   };
 }

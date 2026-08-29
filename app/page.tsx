@@ -6,6 +6,7 @@ import {
   parseProviderConnectionFailureReason,
   type ProviderConnectionNotice,
 } from "@/lib/integrations/provider-connection-status";
+import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-return";
 
 import { AppBuilder } from "./ui/app-builder";
 
@@ -17,6 +18,7 @@ type PageProps = {
     reason?: string | string[];
     vercelReason?: string | string[];
     githubReason?: string | string[];
+    resume?: string | string[];
   }>;
 };
 
@@ -68,6 +70,7 @@ export default async function Home({ searchParams }: PageProps) {
       authenticated={authenticated && mode !== "anonymous"}
       integrations={integrations}
       providerNotices={notices}
+      providerResumeKey={parseProviderResumeKey(query.resume)}
     />
   );
 }

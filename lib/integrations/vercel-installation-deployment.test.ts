@@ -24,7 +24,7 @@ describe("Vercel installation deployment route", () => {
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
-      "https://builder.example/vercel/installations?status=failed&reason=configuration-unavailable",
+      "https://builder.example/?vercel=failed&vercelReason=configuration-unavailable",
     );
     expect(error).toHaveBeenCalledOnce();
     expect(error.mock.calls[0]?.[0]).toContain(
@@ -52,7 +52,7 @@ describe("Vercel installation deployment route", () => {
     );
 
     expect(response.headers.get("location")).toBe(
-      "https://builder.example/vercel/installations?status=failed&reason=request-invalid",
+      "https://builder.example/?vercel=failed&vercelReason=request-invalid",
     );
   });
 });

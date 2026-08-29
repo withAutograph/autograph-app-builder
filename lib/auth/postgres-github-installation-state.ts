@@ -20,6 +20,8 @@ export function createPostgresGitHubInstallationAuthorizationStateStore(
         authorityDigest: input.authorityDigest,
         createdAt: input.createdAt,
         expiresAt: input.expiresAt,
+        returnTo: input.returnState.returnTo,
+        resumeKey: input.returnState.resumeKey ?? null,
         consumedAt: null,
       });
     },

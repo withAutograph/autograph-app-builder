@@ -19,6 +19,7 @@ export const hostedStorageMigrationTags = [
   "0009_builder_provider_integrations",
   "0010_better_auth_organizations",
   "0011_self_service_onboarding",
+  "0012_provider_connection_return_state",
 ] as const;
 
 const contractSourcePaths = [
@@ -95,6 +96,8 @@ export const hostedStorageExpectedColumns = [
   ],
   ["github_installation_authorization_state", "issuer", "text", true],
   ["github_installation_authorization_state", "owner_user_id", "text", true],
+  ["github_installation_authorization_state", "resume_key", "text", false],
+  ["github_installation_authorization_state", "return_to", "text", true],
   ["github_installation_authorization_state", "state_digest", "text", true],
   ["github_installation_authorization_state", "workspace_id", "text", true],
   [
@@ -395,6 +398,8 @@ export const hostedStorageExpectedColumns = [
   ],
   ["vercel_installation_authorization_state", "issuer", "text", true],
   ["vercel_installation_authorization_state", "owner_user_id", "text", true],
+  ["vercel_installation_authorization_state", "resume_key", "text", false],
+  ["vercel_installation_authorization_state", "return_to", "text", true],
   ["vercel_installation_authorization_state", "state_digest", "text", true],
   ["vercel_installation_authorization_state", "workspace_id", "text", true],
   ["verification", "created_at", "timestamp with time zone", true],
@@ -774,6 +779,7 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
         "0009_builder_provider_integrations",
         "0010_better_auth_organizations",
         "0011_self_service_onboarding",
+        "0012_provider_connection_return_state",
       ].includes(migration.tag) &&
         /\b(?:UPDATE|INSERT\s+INTO)\b/iu.test(migration.content)) ||
       /\bALTER\b[\s\S]*\bDROP\b/iu.test(migration.content)

@@ -8,6 +8,7 @@ import {
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 
 const GITHUB_ORIGIN = "https://github.com";
@@ -111,6 +112,7 @@ export interface GitHubInstallationAuthorizationStateStore {
     authorityDigest: string;
     createdAt: Date;
     expiresAt: Date;
+    returnState: ProviderConnectionReturn;
   }): Promise<void>;
   consume(input: {
     stateDigest: string;
@@ -205,6 +207,7 @@ function signedState(input: {
   phase: "install" | "authorize";
   installationId?: string;
   setupAction?: "install" | "update";
+  returnState: ProviderConnectionReturn;
 }) {
   const binding = authorityDigest(input.authority);
   const payload = Buffer.from(
@@ -219,6 +222,10 @@ function signedState(input: {
       ...(input.setupAction === undefined
         ? {}
         : { setupAction: input.setupAction }),
+      returnTo: input.returnState.returnTo,
+      ...(input.returnState.resumeKey === undefined
+        ? {}
+        : { resumeKey: input.returnState.resumeKey }),
       issuedAt: Math.floor(input.now / 1_000),
       expiresAt: Math.floor((input.now + STATE_LIFETIME_MS) / 1_000),
     }),
@@ -243,6 +250,8 @@ const statePayloadSchema = z
     phase: z.enum(["install", "authorize"]),
     installationId: decimalSchema.optional(),
     setupAction: z.enum(["install", "update"]).optional(),
+    returnTo: z.literal("/"),
+    resumeKey: z.string().uuid().optional(),
     issuedAt: z.number().int().nonnegative(),
     expiresAt: z.number().int().positive(),
   })
@@ -297,6 +306,12 @@ function verifyState(input: {
     phase: parsed.phase,
     installationId: parsed.installationId,
     setupAction: parsed.setupAction,
+    returnState: {
+      returnTo: parsed.returnTo,
+      ...(parsed.resumeKey === undefined
+        ? {}
+        : { resumeKey: parsed.resumeKey }),
+    },
   };
 }
 
@@ -538,7 +553,10 @@ export function createGitHubAppInstallationAuthorization(input: {
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
 
   return {
-    async begin(authorityInput: HostedTenantAuthority) {
+    async begin(
+      authorityInput: HostedTenantAuthority,
+      returnState: ProviderConnectionReturn = { returnTo: "/" },
+    ) {
       try {
         const authority = hostedTenantAuthoritySchema.parse(authorityInput);
         if (!(await input.membership.isActiveMember(authority)))
@@ -550,6 +568,7 @@ export function createGitHubAppInstallationAuthorization(input: {
           now: issuedAt,
           nonce: nonce(),
           phase: "install",
+          returnState,
         });
         await input.stateStore.create({
           stateDigest: state.stateDigest,
@@ -557,6 +576,7 @@ export function createGitHubAppInstallationAuthorization(input: {
           authorityDigest: state.authorityDigest,
           createdAt: new Date(issuedAt),
           expiresAt: state.expiresAt,
+          returnState,
         });
         const redirect = new URL(
           "/apps/autograph-app-builder/installations/new",
@@ -618,6 +638,7 @@ export function createGitHubAppInstallationAuthorization(input: {
             phase: "authorize",
             installationId: callback.installationId,
             setupAction: callback.setupAction,
+            returnState: state.returnState,
           });
           await input.stateStore.create({
             stateDigest: authorizationState.stateDigest,
@@ -625,6 +646,7 @@ export function createGitHubAppInstallationAuthorization(input: {
             authorityDigest: authorizationState.authorityDigest,
             createdAt: new Date(issuedAt),
             expiresAt: authorizationState.expiresAt,
+            returnState: state.returnState,
           });
           const verifier = codeVerifier(
             config.stateSecret,
@@ -727,6 +749,7 @@ export function createGitHubAppInstallationAuthorization(input: {
           accountType: binding.accountType,
           repositorySelection: "selected" as const,
           setupAction: state.setupAction,
+          returnState: state.returnState,
           appliedAt: appliedAt.toISOString(),
         };
       } catch {

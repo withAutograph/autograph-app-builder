@@ -259,6 +259,95 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(accessibility.violations).toEqual([]);
   });
 
+  it("preserves a builder draft before a first-use provider connection", async () => {
+    const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(resumeKey);
+    const view = await render(
+      <AppBuilderComponent
+        authenticated
+        integrations={{
+          ...integrationState,
+          vercel: { status: "disconnected", scopes: [] },
+          github: { status: "disconnected", scopes: [] },
+        }}
+      />,
+    );
+    await fill(
+      view.querySelector<HTMLInputElement>("#app-name")!,
+      "Restored App",
+    );
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# Restored App\n\nKeep this brief through the provider flow.",
+    );
+    await click(
+      [...view.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Connect to Vercel",
+      )!,
+    );
+
+    expect(navigation.push).toHaveBeenCalledWith(
+      `/vercel/installations?returnTo=%2F&resume=${resumeKey}`,
+    );
+    expect(
+      sessionStorage.getItem(`autograph-builder-draft:${resumeKey}`),
+    ).toContain("Restored App");
+  });
+
+  it("restores the draft, field focus, and actionable failure after provider return", async () => {
+    const resumeKey = "33d5a3b0-64d5-4cf2-b0f7-015ea9ae0b8d";
+    sessionStorage.setItem(
+      `autograph-builder-draft:${resumeKey}`,
+      JSON.stringify({
+        version: 1,
+        form: {
+          appName: "Restored App",
+          repository: "restored-app",
+          brief: "# Restored App\n\nKeep every field.",
+          privateRepository: false,
+          channelWeb: true,
+          channelSlack: false,
+          connections: ["QuickBooks"],
+          modelId: "openai/gpt-5.6-sol",
+        },
+        team: "",
+        gitScope: "",
+        model: "openai/gpt-5.6-sol",
+        zdrOnly: false,
+        showMoreConnections: true,
+        search: "quick",
+        connectedConnections: ["QuickBooks"],
+        focusOrigin: "vercel",
+        appNameEditedByUser: true,
+        repositoryEditedByUser: true,
+      }),
+    );
+    const view = await render(
+      <AppBuilderComponent
+        authenticated
+        providerResumeKey={resumeKey}
+        providerNotices={[{ provider: "vercel", status: "failed" }]}
+        integrations={{
+          ...integrationState,
+          vercel: { status: "disconnected", scopes: [] },
+        }}
+      />,
+    );
+    await act(async () => new Promise(requestAnimationFrame));
+
+    expect(view.querySelector<HTMLInputElement>("#app-name")?.value).toBe(
+      "Restored App",
+    );
+    expect(
+      view.querySelector<HTMLInputElement>("#repository-name")?.value,
+    ).toBe("restored-app");
+    expect(view.querySelector<HTMLInputElement>("#vercel-team")).toBe(
+      document.activeElement,
+    );
+    expect(view.textContent).toContain("Vercel could not be connected");
+    expect(view.textContent).toContain("QuickBooks");
+  });
+
   it("cycles app brief examples without repeating the current example", async () => {
     const view = await render(
       <AppBuilder

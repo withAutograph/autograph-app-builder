@@ -62,9 +62,9 @@ describe("Vercel integration security", () => {
       states: {
         async create() {},
         async consume() {
-          if (consumed) return false;
+          if (consumed) return undefined;
           consumed = true;
-          return true;
+          return { returnTo: "/" };
         },
       },
       installations: {
@@ -106,11 +106,8 @@ describe("Vercel integration security", () => {
     callback.searchParams.set("state", state!);
     callback.searchParams.set("configurationId", "icfg_1");
     callback.searchParams.set("teamId", "team_1");
-    const binding = await authorization.complete(
-      callback.toString(),
-      authority,
-    );
-    expect(binding).toMatchObject({
+    const result = await authorization.complete(callback.toString(), authority);
+    expect(result.binding).toMatchObject({
       installationId: "icfg_1",
       slug: "autograph",
     });
