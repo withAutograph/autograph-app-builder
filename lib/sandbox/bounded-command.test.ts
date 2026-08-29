@@ -55,10 +55,12 @@ function startMonitor(
   workspaceRoot: string,
   maximumBytes: number,
   maximumFiles: number,
+  preload?: string,
 ) {
   const monitor = spawn(
     process.execPath,
     [
+      ...(preload === undefined ? [] : ["--require", preload]),
       "-e",
       WORKSPACE_QUOTA_MONITOR_SCRIPT,
       "--",
@@ -101,7 +103,7 @@ describe("bounded sandbox command", () => {
   it("terminates the child group and exits 125 when workspace limits are exceeded", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "quota-monitor-limit-"));
     await writeFile(join(workspaceRoot, "one-file"), "content");
-    const child = spawn("/bin/sh", ["-c", "sleep 30"], {
+    const child = spawn("/bin/sh", ["-c", "trap '' TERM; sleep 30"], {
       detached: true,
       stdio: "ignore",
     });
@@ -113,8 +115,89 @@ describe("bounded sandbox command", () => {
       0,
     );
     const monitorExit = await waitForExit(fixture.monitor);
-    await childExit;
+    const childResult = await childExit;
     expect(monitorExit).toEqual({ code: 125, signal: null });
+    expect(childResult).toEqual({ code: null, signal: "SIGKILL" });
+    expect(fixture.stderr()).toBe("sandbox_workspace_quota_exceeded\n");
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  it("terminates the child group when workspace traversal fails", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "quota-monitor-error-"));
+    const child = spawn("/bin/sh", ["-c", "trap '' TERM; sleep 30"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const childExit = waitForExit(child);
+    const fixture = startMonitor(
+      child,
+      join(workspaceRoot, "missing"),
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    );
+    const monitorExit = await waitForExit(fixture.monitor);
+    const childResult = await childExit;
+    expect(monitorExit).toEqual({ code: 2, signal: null });
+    expect(childResult).toEqual({ code: null, signal: "SIGKILL" });
+    expect(fixture.stderr()).toContain(
+      "sandbox_workspace_quota_monitor_failed:",
+    );
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  it("counts raw-byte file names without decoding them", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "quota-monitor-bytes-"));
+    const preload = join(workspaceRoot, "raw-byte-filesystem.cjs");
+    await writeFile(
+      preload,
+      String.raw`
+const filesystem = require("node:fs");
+const root = Buffer.from("/workspace");
+const rawFile = Buffer.concat([root, Buffer.from("/"), Buffer.from([0xff])]);
+filesystem.lstatSync = (path) => {
+  if (Buffer.isBuffer(path) && path.equals(root))
+    return {
+      dev: 1,
+      ino: 1,
+      blocks: 0,
+      isFile: () => false,
+      isDirectory: () => true,
+    };
+  if (Buffer.isBuffer(path) && path.equals(rawFile))
+    return {
+      dev: 1,
+      ino: 2,
+      blocks: 1,
+      isFile: () => true,
+      isDirectory: () => false,
+    };
+  throw new Error("monitor decoded or changed the raw-byte path");
+};
+filesystem.readdirSync = (path, options) => {
+  if (!Buffer.isBuffer(path) || !path.equals(root))
+    throw new Error("monitor changed the raw-byte directory path");
+  if (options?.encoding !== "buffer")
+    throw new Error("monitor did not request raw directory entries");
+  return [Buffer.from([0xff])];
+};
+`,
+    );
+    const child = spawn("/bin/sh", ["-c", "trap '' TERM; sleep 30"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const childExit = waitForExit(child);
+    const fixture = startMonitor(
+      child,
+      "/workspace",
+      Number.MAX_SAFE_INTEGER,
+      0,
+      preload,
+    );
+    const monitorExit = await waitForExit(fixture.monitor);
+    const childResult = await childExit;
+    expect(monitorExit).toEqual({ code: 125, signal: null });
+    expect(childResult).toEqual({ code: null, signal: "SIGKILL" });
     expect(fixture.stderr()).toBe("sandbox_workspace_quota_exceeded\n");
     await rm(workspaceRoot, { recursive: true, force: true });
   });

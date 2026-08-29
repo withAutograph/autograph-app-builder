@@ -66,9 +66,10 @@ const childIsAlive = () => {
 };
 
 const workspaceUsage = () => {
-  const root = lstatSync(workspaceRoot);
+  const workspaceRootBytes = Buffer.from(workspaceRoot);
+  const root = lstatSync(workspaceRootBytes);
   const device = root.dev;
-  const pending = [workspaceRoot];
+  const pending = [workspaceRootBytes];
   const allocatedInodes = new Set();
   let allocatedBytes = 0;
   let files = 0;
@@ -93,12 +94,13 @@ const workspaceUsage = () => {
 
     let entries;
     try {
-      entries = readdirSync(path, { encoding: "utf8" });
+      entries = readdirSync(path, { encoding: "buffer" });
     } catch (error) {
       if (error && error.code === "ENOENT") continue;
       throw error;
     }
-    for (const entry of entries) pending.push(path + "/" + entry);
+    for (const entry of entries)
+      pending.push(Buffer.concat([path, Buffer.from("/"), entry]));
   }
 
   return { allocatedBytes, files };
@@ -114,7 +116,6 @@ const terminateChild = async () => {
     if (!error || error.code !== "ESRCH") throw error;
   }
   await delay(1_000);
-  if (!childIsAlive()) return;
   try {
     process.kill(-child, "SIGKILL");
   } catch (error) {
@@ -138,7 +139,18 @@ const monitor = async () => {
   }
 };
 
-monitor().catch((error) => {
+monitor().catch(async (error) => {
+  try {
+    await terminateChild();
+  } catch (terminationError) {
+    process.stderr.write(
+      "sandbox_workspace_quota_termination_failed:" +
+        (terminationError instanceof Error
+          ? terminationError.message
+          : String(terminationError)) +
+        "\n",
+    );
+  }
   process.stderr.write(
     "sandbox_workspace_quota_monitor_failed:" +
       (error instanceof Error ? error.message : String(error)) +
