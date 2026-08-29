@@ -79,7 +79,7 @@ describe("MCP App UI presentation", () => {
     });
   });
 
-  it("offers the App Builder UI whenever a prototype is available", () => {
+  it("keeps prototype results out of the MCP App UI", () => {
     const result = toolResult(
       {
         sessionId: "session-one",
@@ -97,8 +97,6 @@ describe("MCP App UI presentation", () => {
       "Autograph App Builder returned the latest progress.",
     );
 
-    expect(result._meta).toEqual({
-      ui: { resourceUri: "ui://autograph-app-builder/session.html" },
-    });
+    expect(result._meta).toBeUndefined();
   });
 });
