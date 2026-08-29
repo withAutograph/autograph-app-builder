@@ -509,9 +509,7 @@ export function assertCanonicalLocalPublicationJournal(
   const canonicalPartition =
     new Set(accounted).size === accounted.length &&
     samePaths(
-      accounted
-        .filter((path) => applied.has(path))
-        .sort(compareOverlayPaths),
+      accounted.filter((path) => applied.has(path)).sort(compareOverlayPaths),
       [...journal.appliedPaths].sort(compareOverlayPaths),
     );
   if (journal.reason === "precondition-failed") {

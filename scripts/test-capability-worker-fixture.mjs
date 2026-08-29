@@ -50,8 +50,7 @@ parentPort?.postMessage({
   eveDev: process.env.EVE_DEV ?? null,
   workflowBaseUrl: process.env.WORKFLOW_LOCAL_BASE_URL ?? null,
   workflowBodyTimeout: process.env.WORKFLOW_LOCAL_BODY_TIMEOUT_MS ?? null,
-  workflowHeadersTimeout:
-    process.env.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS ?? null,
+  workflowHeadersTimeout: process.env.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS ?? null,
   port: process.env.PORT ?? null,
   hasTransportSecret:
     process.env.EVE_DEV_WORKFLOW_TRANSPORT_SECRET !== undefined,

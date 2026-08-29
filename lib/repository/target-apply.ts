@@ -439,8 +439,7 @@ export async function inspectFixtureApplyOverlay(
           : { path, mode, digest: sha256(content) };
       }),
     )
-  )
-    .filter((file): file is OverlayFile => file !== undefined);
+  ).filter((file): file is OverlayFile => file !== undefined);
   const normalized = canonicalOverlayFiles(files);
   return {
     files: normalized,

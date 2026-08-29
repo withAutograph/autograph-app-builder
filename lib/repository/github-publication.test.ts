@@ -435,9 +435,7 @@ describe("closed GitHub publication contract", () => {
       "apps/demo/\u{e000}.tsx",
       "apps/demo/\u{10000}.tsx",
     ]);
-    expect(() =>
-      assertExactDraftPullRequestProposal(proposal),
-    ).not.toThrow();
+    expect(() => assertExactDraftPullRequestProposal(proposal)).not.toThrow();
   });
 
   it("derives operation-specific least-privilege identities", () => {

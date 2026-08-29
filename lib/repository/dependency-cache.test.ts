@@ -260,22 +260,18 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(
       "domain-libs/vendor|domain-libs/vendor/*) dependency_owner=domain-libs/vendor",
     );
-    expect(dockerfile).toContain(
-      '"${node_root}"/*) continue',
-    );
+    expect(dockerfile).toContain('"${node_root}"/*) continue');
     expect(dockerfile).toContain(
       '"${source_root}"/*) dependency_relative="${dependency_target#"${source_root}"/}"',
     );
     expect(dockerfile).toContain("*) exit 1");
-    expect(dockerfile).toContain("test -e \"${dependency_target}\"");
+    expect(dockerfile).toContain('test -e "${dependency_target}"');
     expect(dockerfile).toContain("workspace-closure-fixtures");
     expect(dockerfile).toContain("@autograph/missing");
     expect(dockerfile).toContain("@autograph/outside");
     expect(dockerfile).toContain("@autograph/unallowlisted");
     expect(dockerfile).toContain("grep -Fx 'packages/vite-config'");
-    expect(dockerfile).toContain(
-      "--files-from /tmp/workspace-closure.list",
-    );
+    expect(dockerfile).toContain("--files-from /tmp/workspace-closure.list");
     expect(dockerfile).toContain("--exclude='packages/*/node_modules'");
     expect(dockerfile).toContain(
       'case "${workspace_target}" in "${dependency_root}"/*)',
@@ -320,12 +316,8 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("RUSTUP_HOME=/opt/app-builder/rustup");
     expect(dockerfile).toContain("RUSTUP_TOOLCHAIN=1.97.1");
     expect(dockerfile).toContain('mise install "rust@${RUST_VERSION}"');
-    expect(dockerfile).toContain(
-      "chmod -R a-w,a+rX /opt/app-builder/rustup",
-    );
-    expect(dockerfile).toContain(
-      "chmod -R a-w,a+rX /opt/app-builder/cargo",
-    );
+    expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/rustup");
+    expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/cargo");
     expect(dockerfile).toContain(
       `mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`,
     );

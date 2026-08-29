@@ -632,8 +632,7 @@ describe("proposal-bound target apply", () => {
   it("snapshots the overlay in one sandbox process without per-file commands", async () => {
     const firstDigest = createHash("sha256").update("first\n").digest("hex");
     const secondDigest = createHash("sha256").update("second\n").digest("hex");
-    const skillPath =
-      ".codex/skills/harness-engineering-rules/SKILL.md";
+    const skillPath = ".codex/skills/harness-engineering-rules/SKILL.md";
     const agentPath =
       ".codex/skills/harness-engineering-rules/agents/openai.yaml";
     const stdout =

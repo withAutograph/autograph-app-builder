@@ -2,10 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  canonicalOverlayFiles,
-  type TargetApplyReceipt,
-} from "./target-apply";
+import { canonicalOverlayFiles, type TargetApplyReceipt } from "./target-apply";
 import type { TargetValidationReceipt } from "./target-validation";
 import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
 import {
@@ -218,11 +215,7 @@ describe("reviewed change-set receipts", () => {
       ".codex/skills/harness-engineering-rules/agents/openai.yaml",
     ]);
     expect(() =>
-      deriveNormalizedChangeSet(
-        orderedApply,
-        orderedValidation,
-        digest("2"),
-      ),
+      deriveNormalizedChangeSet(orderedApply, orderedValidation, digest("2")),
     ).not.toThrow();
     expect(() =>
       deriveNormalizedChangeSet(

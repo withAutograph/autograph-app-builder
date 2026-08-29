@@ -284,7 +284,9 @@ describe("approval-bound local publication", () => {
         bytes: Buffer.from("astral\n"),
       },
     });
-    const review = JSON.parse(JSON.stringify(reviewed.review)) as typeof reviewed.review;
+    const review = JSON.parse(
+      JSON.stringify(reviewed.review),
+    ) as typeof reviewed.review;
     const proposal = await deriveLocalPublicationProposal({
       destinationPath: root,
       sourceReceipt: source,
