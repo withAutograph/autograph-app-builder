@@ -77,6 +77,10 @@ type BuilderDraft = {
   repositoryEditedByUser: boolean;
 };
 
+function connectionsAreEnabled() {
+  return process.env.NEXT_PUBLIC_FEATURE_CONNECTIONS === "true";
+}
+
 const builderDraftStorageKey = (resumeKey: string) =>
   `autograph-builder-draft:${resumeKey}`;
 const builderDraftCache = new Map<
@@ -880,6 +884,7 @@ function Builder({
   initialDraft?: BuilderDraft;
   resumeKey?: string;
 }) {
+  const connectionsEnabled = connectionsAreEnabled();
   const router = useRouter();
   const generatedNameSeed = useId();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
@@ -1417,107 +1422,109 @@ function Builder({
             </label>
           </div>
         </fieldset>
-        <fieldset className={styles.sectionField}>
-          <legend>Connections</legend>
-          <p>Give this app access to tools and data from other services.</p>
-          <label className={styles.searchBox}>
-            <Search size={15} aria-hidden="true" />
-            <span className={styles.srOnly}>Search connections</span>
-            <input
-              type="search"
-              name="connection-search"
-              autoComplete="off"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => event.key === "Escape" && setSearch("")}
-              placeholder="Search connections…"
-            />
-            {search ? (
-              <button type="button" onClick={() => setSearch("")}>
-                Esc
+        {connectionsEnabled ? (
+          <fieldset className={styles.sectionField}>
+            <legend>Connections</legend>
+            <p>Give this app access to tools and data from other services.</p>
+            <label className={styles.searchBox}>
+              <Search size={15} aria-hidden="true" />
+              <span className={styles.srOnly}>Search connections</span>
+              <input
+                type="search"
+                name="connection-search"
+                autoComplete="off"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => event.key === "Escape" && setSearch("")}
+                placeholder="Search connections…"
+              />
+              {search ? (
+                <button type="button" onClick={() => setSearch("")}>
+                  Esc
+                </button>
+              ) : null}
+            </label>
+            <div className={styles.connectionGrid}>
+              {filtered
+                .filter((name) => !form.connections.includes(name))
+                .map((name) => {
+                  const comingSoon = comingSoonConnections.has(name);
+                  return (
+                    <button
+                      type="button"
+                      key={name}
+                      aria-label={
+                        comingSoon ? `${name} coming soon` : `Add ${name}`
+                      }
+                      disabled={comingSoon}
+                      onClick={() => addConnection(name)}
+                    >
+                      <ConnectionIcon
+                        kind={connectionKind.get(name)}
+                        name={name}
+                      />
+                      {name}
+                      {comingSoon ? (
+                        <span className={styles.comingSoon}>Coming soon</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+            </div>
+            {!showMoreConnections && !search ? (
+              <button
+                className={styles.showAll}
+                type="button"
+                onClick={() => setShowMoreConnections(true)}
+              >
+                Show more connections
               </button>
             ) : null}
-          </label>
-          <div className={styles.connectionGrid}>
-            {filtered
-              .filter((name) => !form.connections.includes(name))
-              .map((name) => {
-                const comingSoon = comingSoonConnections.has(name);
-                return (
-                  <button
-                    type="button"
-                    key={name}
-                    aria-label={
-                      comingSoon ? `${name} coming soon` : `Add ${name}`
-                    }
-                    disabled={comingSoon}
-                    onClick={() => addConnection(name)}
-                  >
-                    <ConnectionIcon
-                      kind={connectionKind.get(name)}
-                      name={name}
-                    />
-                    {name}
-                    {comingSoon ? (
-                      <span className={styles.comingSoon}>Coming soon</span>
-                    ) : null}
-                  </button>
-                );
-              })}
-          </div>
-          {!showMoreConnections && !search ? (
-            <button
-              className={styles.showAll}
-              type="button"
-              onClick={() => setShowMoreConnections(true)}
-            >
-              Show more connections
-            </button>
-          ) : null}
-          {form.connections.length ? (
-            <div
-              className={styles.connectedList}
-              aria-label="Added connections"
-            >
-              {form.connections.map((name) => (
-                <article key={name}>
-                  <span>
-                    <ConnectionIcon
-                      kind={connectionKind.get(name)}
-                      name={name}
-                    />
-                  </span>
-                  <div>
-                    <strong>{name}</strong>
-                    <p>{connectionDescription(name)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setConnectionFlow({
-                        name,
-                        stage: connectedConnections.includes(name)
-                          ? "configure"
-                          : "connect",
-                      })
-                    }
-                  >
-                    {connectedConnections.includes(name)
-                      ? "Customize"
-                      : "Connect"}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${name}`}
-                    onClick={() => removeConnection(name)}
-                  >
-                    <X size={17} />
-                  </button>
-                </article>
-              ))}
-            </div>
-          ) : null}
-        </fieldset>
+            {form.connections.length ? (
+              <div
+                className={styles.connectedList}
+                aria-label="Added connections"
+              >
+                {form.connections.map((name) => (
+                  <article key={name}>
+                    <span>
+                      <ConnectionIcon
+                        kind={connectionKind.get(name)}
+                        name={name}
+                      />
+                    </span>
+                    <div>
+                      <strong>{name}</strong>
+                      <p>{connectionDescription(name)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setConnectionFlow({
+                          name,
+                          stage: connectedConnections.includes(name)
+                            ? "configure"
+                            : "connect",
+                        })
+                      }
+                    >
+                      {connectedConnections.includes(name)
+                        ? "Customize"
+                        : "Connect"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${name}`}
+                      onClick={() => removeConnection(name)}
+                    >
+                      <X size={17} />
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+          </fieldset>
+        ) : null}
         <button
           className={styles.createButton}
           type="submit"
