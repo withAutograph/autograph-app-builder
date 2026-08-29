@@ -6,12 +6,15 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Code,
   Copy,
   DollarSign,
   ExternalLink,
   GitBranch,
   Globe,
   Info,
+  MessageSquare,
+  Monitor,
   Plus,
   PlusCircle,
   RefreshCw,
@@ -32,7 +35,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { SiQuickbooks, SiSage, SiSlack, SiXero } from "react-icons/si";
+import { SiQuickbooks, SiSage, SiXero } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import { UserButton } from "../../components/auth/user/user-button";
@@ -44,13 +47,15 @@ import {
 } from "../../lib/integrations/provider-connection-status";
 
 type Screen = "builder" | "handoff" | "ready";
+type BuildDestination = "codex" | "cursor";
+type ClipboardState = "idle" | "copied" | "failed";
+type HandoffAttempt = "attempted" | "blocked" | "too-long";
 type BuilderForm = {
   appName: string;
   repository: string;
   brief: string;
   privateRepository: boolean;
-  channelWeb: boolean;
-  channelSlack: boolean;
+  buildDestination: BuildDestination;
   connections: string[];
   vercelInstallationId?: string;
   githubInstallationId?: string;
@@ -91,7 +96,14 @@ function parseBuilderDraft(value: string | null): BuilderDraft | undefined {
       !Array.isArray(parsed.connectedConnections)
     )
       return undefined;
-    return parsed as BuilderDraft;
+    return {
+      ...parsed,
+      form: {
+        ...parsed.form,
+        buildDestination:
+          parsed.form.buildDestination === "cursor" ? "cursor" : "codex",
+      },
+    } as BuilderDraft;
   } catch {
     return undefined;
   }
@@ -107,6 +119,67 @@ function readBuilderDraft(resumeKey: string) {
 }
 type ConnectionStage = "connect" | "configure" | "customize";
 type ConnectionFlow = { name: string; stage: ConnectionStage };
+
+const maximumHandoffUrlLength = 8_000;
+
+function buildDestinationLabel(destination: BuildDestination) {
+  return destination === "codex" ? "ChatGPT / Codex" : "Cursor";
+}
+
+function buildAppHandoffPrompt(form: BuilderForm) {
+  return `Use the Autograph App Builder plugin to create this app. If the plugin is unavailable, stop and explain how to install it. Do not use another app builder or edit the target repository directly.
+
+App Name:
+${form.appName}
+
+Repository:
+${form.repository}
+
+Model:
+${form.modelId}${
+    form.vercelInstallationId
+      ? `
+
+Vercel Installation:
+${form.vercelInstallationId}`
+      : ""
+  }${
+    form.githubInstallationId
+      ? `
+
+GitHub Installation:
+${form.githubInstallationId}`
+      : ""
+  }${
+    form.connections.length > 0
+      ? `
+
+Connections:
+${form.connections.join(", ")}`
+      : ""
+  }
+
+App Brief:
+${form.brief}`;
+}
+
+function buildAppHandoffUrl(form: BuilderForm) {
+  const prompt = encodeURIComponent(buildAppHandoffPrompt(form));
+  return form.buildDestination === "codex"
+    ? `codex://new?prompt=${prompt}`
+    : `cursor://anysphere.cursor-deeplink/prompt?text=${prompt}`;
+}
+
+function attemptAppHandoff(form: BuilderForm): HandoffAttempt {
+  const url = buildAppHandoffUrl(form);
+  if (url.length > maximumHandoffUrlLength) return "too-long";
+  try {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return "attempted";
+  } catch {
+    return "blocked";
+  }
+}
 
 const featuredConnections = [
   ["QuickBooks", "quickbooks"],
@@ -832,16 +905,20 @@ function Builder({
   const initialAppName =
     appNameFromBrief(initialBrief) || randomAppName(generatedNameSeed);
   const [form, setForm] = useState<BuilderForm>(
-    initialDraft?.form ?? {
-      appName: initialAppName,
-      repository: repositoryNameFromAppName(initialAppName),
-      brief: initialBrief,
-      privateRepository: true,
-      channelWeb: false,
-      channelSlack: false,
-      connections: [],
-      modelId: defaultModel,
-    },
+    initialDraft
+      ? {
+          ...initialDraft.form,
+          buildDestination: initialDraft.form.buildDestination ?? "codex",
+        }
+      : {
+          appName: initialAppName,
+          repository: repositoryNameFromAppName(initialAppName),
+          brief: initialBrief,
+          privateRepository: true,
+          buildDestination: "codex",
+          connections: [],
+          modelId: defaultModel,
+        },
   );
   const appNameEditedByUser = useRef(
     initialDraft?.appNameEditedByUser ?? false,
@@ -1290,29 +1367,52 @@ function Builder({
           ) : null}
         </fieldset>
         <fieldset className={styles.sectionField}>
-          <legend>Channels</legend>
-          <p>Choose where people can use this app.</p>
-          <div className={styles.optionGrid}>
+          <legend>Build with</legend>
+          <p id="build-destination-help">
+            Where do you want to build this app?
+          </p>
+          <div
+            className={`${styles.optionGrid} ${styles.buildDestinationGrid}`}
+            role="radiogroup"
+            aria-label="Build destination"
+            aria-describedby="build-destination-help"
+          >
             <label>
-              <Globe size={18} aria-hidden="true" />
-              Web Chat
+              <MessageSquare size={18} aria-hidden="true" />
+              ChatGPT / Codex
               <input
-                type="checkbox"
-                checked={form.channelWeb}
-                onChange={(event) =>
-                  setForm({ ...form, channelWeb: event.target.checked })
-                }
+                type="radio"
+                name="build-destination"
+                value="codex"
+                required
+                checked={form.buildDestination === "codex"}
+                onChange={() => setForm({ ...form, buildDestination: "codex" })}
               />
             </label>
             <label>
-              <SiSlack size={18} aria-hidden="true" />
-              Slack
+              <Code size={18} aria-hidden="true" />
+              Cursor
               <input
-                type="checkbox"
-                checked={form.channelSlack}
-                onChange={(event) =>
-                  setForm({ ...form, channelSlack: event.target.checked })
+                type="radio"
+                name="build-destination"
+                value="cursor"
+                required
+                checked={form.buildDestination === "cursor"}
+                onChange={() =>
+                  setForm({ ...form, buildDestination: "cursor" })
                 }
+              />
+            </label>
+            <label className={styles.unavailableOption}>
+              <Monitor size={18} aria-hidden="true" />
+              <span>
+                Web Chat <small>Coming soon</small>
+              </span>
+              <input
+                type="radio"
+                name="build-destination"
+                value="web"
+                disabled
               />
             </label>
           </div>
@@ -1448,7 +1548,7 @@ function Handoff({ onReady }: { onReady: () => void }) {
     "Preparing App Brief",
     "Validating Inputs",
     "Copying App Brief",
-    "Opening Connected Client",
+    "Opening Selected Client",
   ];
   useEffect(() => {
     if (step >= stages.length) {
@@ -1490,8 +1590,8 @@ function Handoff({ onReady }: { onReady: () => void }) {
           </div>
         </div>
         <footer>
-          <SiSlack size={18} aria-hidden="true" /> Tip: Continue the build in
-          your connected AI workspace.
+          <ExternalLink size={18} aria-hidden="true" /> Tip: Review and send the
+          brief in your selected client.
         </footer>
       </section>
       <p className={styles.liveStatus} role="status" aria-live="polite">
@@ -1501,25 +1601,41 @@ function Handoff({ onReady }: { onReady: () => void }) {
   );
 }
 
-function Ready({ form, onReset }: { form: BuilderForm; onReset: () => void }) {
+function Ready({
+  form,
+  initialAttempt,
+  initialClipboardState,
+  onReset,
+}: {
+  form: BuilderForm;
+  initialAttempt: HandoffAttempt;
+  initialClipboardState: ClipboardState;
+  onReset: () => void;
+}) {
   const command = "$ npx plugins add withAutograph/autograph-app-builder";
   const [showInstall, setShowInstall] = useState(true);
-  const [continueState, setContinueState] = useState<
-    "idle" | "copied" | "failed"
-  >("idle");
+  const [retryClipboardState, setRetryClipboardState] =
+    useState<ClipboardState>("idle");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
-  const [deepLinkStatus, setDeepLinkStatus] = useState<string>();
-  const tryCodexDeepLink = (path: string) => {
-    const samplePrompt = "Create a harmless test app named Deep Link Probe.";
-    const url = `codex://${path}?prompt=${encodeURIComponent(samplePrompt)}`;
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    setDeepLinkStatus(
-      opened
-        ? `Attempted ${url}. Check whether Codex opened a new task and prefilled the prompt.`
-        : "The browser blocked the launch. Allow pop-ups and try again.",
-    );
+  const [handoffAttempt, setHandoffAttempt] =
+    useState<HandoffAttempt>(initialAttempt);
+  const destination = buildDestinationLabel(form.buildDestination);
+  const continueState =
+    retryClipboardState === "idle"
+      ? initialClipboardState
+      : retryClipboardState;
+  const openSelectedClient = () => {
+    try {
+      void navigator.clipboard
+        .writeText(buildAppHandoffPrompt(form))
+        .then(() => setRetryClipboardState("copied"))
+        .catch(() => setRetryClipboardState("failed"));
+    } catch {
+      setRetryClipboardState("failed");
+    }
+    setHandoffAttempt(attemptAppHandoff(form));
   };
   return (
     <main className={styles.flowPage} id="main-content">
@@ -1535,54 +1651,27 @@ function Ready({ form, onReset }: { form: BuilderForm; onReset: () => void }) {
           <span>
             <i /> Ready
           </span>
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(form.brief);
-                setContinueState("copied");
-              } catch {
-                setContinueState("failed");
-              }
-            }}
-          >
-            Continue with Autograph
+          <button type="button" onClick={openSelectedClient}>
+            Open in {destination}
           </button>
         </div>
         <p className={styles.continueStatus} role="status" aria-live="polite">
+          {handoffAttempt === "attempted"
+            ? `Launch requested for ${destination}. If your browser suppressed the custom link, you can retry above.`
+            : null}
+          {handoffAttempt === "too-long"
+            ? `This brief is too long to open automatically in ${destination}.`
+            : null}
+          {handoffAttempt === "blocked"
+            ? `The browser blocked ${destination}. You can open the client manually and paste the brief.`
+            : null}
           {continueState === "copied"
-            ? "App brief copied. Continue in your connected client."
+            ? " Your brief was copied as a fallback."
             : null}
           {continueState === "failed"
-            ? "Copy failed. Return to the form and copy the brief manually."
+            ? " Clipboard access was blocked. Retry after allowing clipboard access."
             : null}
         </p>
-        <section className={styles.deepLinkCard}>
-          <h2>Experiment with Codex handoff</h2>
-          <p>
-            Try the unsupported Codex URL shapes with a harmless test prompt.
-            This does not submit a task or use your app brief.
-          </p>
-          <div className={styles.deepLinkActions}>
-            {[
-              ["codex://", ""],
-              ["codex://open", "open"],
-              ["codex://new", "new"],
-              ["codex://task", "task"],
-            ].map(([label, path]) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => tryCodexDeepLink(path)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <span className={styles.deepLinkStatus} role="status" aria-live="polite">
-            {deepLinkStatus}
-          </span>
-        </section>
         {showInstall ? (
           <section className={styles.installCard}>
             <div>
@@ -1688,6 +1777,10 @@ export function AppBuilder({
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("builder");
   const [submitted, setSubmitted] = useState<BuilderForm>();
+  const [handoffAttempt, setHandoffAttempt] =
+    useState<HandoffAttempt>("attempted");
+  const [handoffClipboardState, setHandoffClipboardState] =
+    useState<ClipboardState>("idle");
   const [savedBrief, setSavedBrief] = useState("");
   const resumedDraft = useSyncExternalStore(
     () => () => undefined,
@@ -1724,17 +1817,22 @@ export function AppBuilder({
           resumeKey={providerResumeKey}
           integrations={integrations}
           providerNotices={providerNotices}
-          onCreate={async (form) => {
+          onCreate={(form) => {
             if (providerResumeKey)
               sessionStorage.removeItem(
                 builderDraftStorageKey(providerResumeKey),
               );
             setSubmitted(form);
+            setHandoffClipboardState("idle");
             try {
-              await navigator.clipboard.writeText(
-                `Autograph App Builder brief\n\nApp Name:\n${form.appName}\n\nRepository:\n${form.repository}\n\nModel:\n${form.modelId}${form.vercelInstallationId ? `\n\nVercel Installation:\n${form.vercelInstallationId}` : ""}${form.githubInstallationId ? `\n\nGitHub Installation:\n${form.githubInstallationId}` : ""}\n\nApp Brief:\n${form.brief}`,
-              );
-            } catch {}
+              void navigator.clipboard
+                .writeText(buildAppHandoffPrompt(form))
+                .then(() => setHandoffClipboardState("copied"))
+                .catch(() => setHandoffClipboardState("failed"));
+            } catch {
+              setHandoffClipboardState("failed");
+            }
+            setHandoffAttempt(attemptAppHandoff(form));
             setScreen("handoff");
           }}
         />
@@ -1743,7 +1841,12 @@ export function AppBuilder({
         <Handoff onReady={() => setScreen("ready")} />
       ) : null}
       {screen === "ready" && submitted ? (
-        <Ready form={submitted} onReset={() => setScreen("builder")} />
+        <Ready
+          form={submitted}
+          initialAttempt={handoffAttempt}
+          initialClipboardState={handoffClipboardState}
+          onReset={() => setScreen("builder")}
+        />
       ) : null}
     </div>
   );

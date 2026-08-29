@@ -187,9 +187,31 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Git Scope (Optional)");
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");
-    expect(view.textContent).toContain("Channels");
+    expect(view.textContent).toContain("Build with");
+    expect(view.textContent).toContain("Where do you want to build this app?");
+    expect(view.textContent).toContain("ChatGPT / Codex");
+    expect(view.textContent).toContain("Cursor");
+    expect(view.textContent).toContain("Web Chat");
+    expect(view.textContent).toContain("Coming soon");
     expect(view.textContent).toContain("Connections");
+    expect(view.textContent).not.toContain("Channels");
     expect(view.textContent).not.toContain("Agent Name");
+
+    const destinations = [
+      ...view.querySelectorAll<HTMLInputElement>(
+        'input[name="build-destination"]',
+      ),
+    ];
+    expect(destinations.map((input) => input.value)).toEqual([
+      "codex",
+      "cursor",
+      "web",
+    ]);
+    expect(destinations[0]?.checked).toBe(true);
+    expect(destinations[0]?.required).toBe(true);
+    expect(destinations[1]?.checked).toBe(false);
+    expect(destinations[1]?.required).toBe(true);
+    expect(destinations[2]?.disabled).toBe(true);
 
     const orderedControls = [
       view.querySelector("#app-name"),
@@ -346,6 +368,11 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(view.textContent).toContain("Vercel could not be connected");
     expect(view.textContent).toContain("QuickBooks");
+    expect(
+      view.querySelector<HTMLInputElement>(
+        'input[name="build-destination"][value="codex"]',
+      )?.checked,
+    ).toBe(true);
   });
 
   it("cycles app brief examples without repeating the current example", async () => {
@@ -522,6 +549,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("copies the canonical brief and advances through truthful handoff states", async () => {
     vi.useFakeTimers();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -555,6 +583,17 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining("App Name:\nsupport-app"),
     );
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("Use the Autograph App Builder plugin"),
+    );
+    expect(open).toHaveBeenCalledWith(
+      expect.stringMatching(/^codex:\/\/new\?prompt=/u),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    const copiedPrompt = writeText.mock.calls[0]?.[0];
+    const initialUrl = open.mock.calls[0]?.[0] as string;
+    expect(new URL(initialUrl).searchParams.get("prompt")).toBe(copiedPrompt);
     expect(view.textContent).toContain("Handoff");
     expect(view.textContent).toContain("Preparing App Brief");
 
@@ -562,7 +601,138 @@ describe("Vercel-faithful App Builder flow", () => {
       await act(async () => vi.advanceTimersByTimeAsync(700));
     }
     expect(view.textContent).toContain("App Brief Ready!");
+    expect(view.textContent).toContain("Open in ChatGPT / Codex");
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Open in ChatGPT / Codex",
+      )!,
+    );
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open.mock.calls[1]?.[0]).toBe(initialUrl);
     expect(view.textContent).not.toContain("deployed");
+  });
+
+  it("opens Cursor when it is selected as the build destination", async () => {
+    vi.useFakeTimers();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "Build a harmless Cursor handoff test.",
+    );
+    await click(
+      view.querySelector<HTMLInputElement>(
+        'input[name="build-destination"][value="cursor"]',
+      )!,
+    );
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Create App",
+      )!,
+    );
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u,
+      ),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("Build a harmless Cursor handoff test."),
+    );
+    const copiedPrompt = writeText.mock.calls[0]?.[0];
+    const initialUrl = open.mock.calls[0]?.[0] as string;
+    expect(new URL(initialUrl).searchParams.get("text")).toBe(copiedPrompt);
+
+    for (let index = 0; index < 6; index += 1) {
+      await act(async () => vi.advanceTimersByTimeAsync(700));
+    }
+    expect(view.textContent).toContain("Open in Cursor");
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Open in Cursor",
+      )!,
+    );
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open.mock.calls[1]?.[0]).toBe(initialUrl);
+  });
+
+  it("keeps the Ready fallback actionable when launching and copying fail", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "open").mockImplementation(() => {
+      throw new Error("Custom protocol blocked");
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) },
+    });
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "Build a harmless fallback test.",
+    );
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Create App",
+      )!,
+    );
+    for (let index = 0; index < 6; index += 1) {
+      await act(async () => vi.advanceTimersByTimeAsync(700));
+    }
+
+    expect(view.textContent).toContain("The browser blocked ChatGPT / Codex.");
+    expect(view.textContent).toContain("Clipboard access was blocked.");
+    expect(view.textContent).toContain("Open in ChatGPT / Codex");
+  });
+
+  it("does not launch an encoded prompt that exceeds the URL safety limit", async () => {
+    vi.useFakeTimers();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "A".repeat(8_000),
+    );
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Create App",
+      )!,
+    );
+    for (let index = 0; index < 6; index += 1) {
+      await act(async () => vi.advanceTimersByTimeAsync(700));
+    }
+
+    expect(open).not.toHaveBeenCalled();
+    expect(view.textContent).toContain("This brief is too long to open");
+    expect(view.textContent).toContain("Open in ChatGPT / Codex");
   });
 
   it("renders the Better Auth account trigger without the legacy menu", async () => {
@@ -575,7 +745,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector('[aria-label="Account"]')).not.toBeNull();
     expect(view.textContent).not.toContain("Feedback");
     expect(view.textContent).not.toContain("Changelog");
-    expect(view.querySelector('[role="radiogroup"]')).toBeNull();
+    expect(view.querySelector('[role="radiogroup"]')).not.toBeNull();
   });
 
   it("matches the repository privacy and connection-browser interactions", async () => {
