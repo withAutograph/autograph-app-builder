@@ -8,6 +8,8 @@ import {
 import { getPreviewOAuthDeploymentAuth } from "./preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
+import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
+import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
 
 type Authority = {
   issuer: string;
@@ -31,7 +33,10 @@ export function createGitHubAppInstallationRouteHandlers(input: {
   authorization: InstallationAuthorization;
 }) {
   const origin = new URL(input.origin).origin;
-  const redirect = (status: "connected" | "failed") =>
+  const redirect = (
+    status: "connected" | "failed",
+    reason?: ProviderConnectionFailureReason,
+  ) =>
     new Response(null, {
       status: 303,
       headers: {
@@ -39,23 +44,41 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         Location:
           status === "connected"
             ? `${origin}/?github=connected`
-            : `${origin}/github/installations?status=failed`,
+            : `${origin}/github/installations?status=failed&reason=${reason ?? "authorization-failed"}`,
       },
     });
 
   return {
     async start(request: Request): Promise<Response> {
+      const startedAt = Date.now();
+      const fail = (reason: ProviderConnectionFailureReason) => {
+        logProviderConnectionFailure({
+          request,
+          provider: "github",
+          phase: "start",
+          reason,
+          startedAt,
+        });
+        return redirect("failed", reason);
+      };
+      if (
+        request.method !== "POST" ||
+        request.headers.get("origin") !== origin ||
+        request.headers.get("content-type")?.split(";", 1)[0] !==
+          "application/x-www-form-urlencoded"
+      ) {
+        return fail("request-invalid");
+      }
+
+      let authority: Authority | undefined;
       try {
-        if (
-          request.method !== "POST" ||
-          request.headers.get("origin") !== origin ||
-          request.headers.get("content-type")?.split(";", 1)[0] !==
-            "application/x-www-form-urlencoded"
-        ) {
-          return redirect("failed");
-        }
-        const authority = await input.authorityForRequest(request);
-        if (authority === undefined) return redirect("failed");
+        authority = await input.authorityForRequest(request);
+      } catch {
+        return fail("workspace-unavailable");
+      }
+      if (authority === undefined) return fail("workspace-unavailable");
+
+      try {
         const result = await input.authorization.begin(authority);
         return new Response(null, {
           status: 303,
@@ -65,15 +88,33 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           },
         });
       } catch {
-        return redirect("failed");
+        return fail("authorization-failed");
       }
     },
 
     async callback(request: Request): Promise<Response> {
+      const startedAt = Date.now();
+      const fail = (reason: ProviderConnectionFailureReason) => {
+        logProviderConnectionFailure({
+          request,
+          provider: "github",
+          phase: "callback",
+          reason,
+          startedAt,
+        });
+        return redirect("failed", reason);
+      };
+      if (request.method !== "GET") return fail("request-invalid");
+
+      let authority: Authority | undefined;
       try {
-        if (request.method !== "GET") return redirect("failed");
-        const authority = await input.authorityForRequest(request);
-        if (authority === undefined) return redirect("failed");
+        authority = await input.authorityForRequest(request);
+      } catch {
+        return fail("workspace-unavailable");
+      }
+      if (authority === undefined) return fail("workspace-unavailable");
+
+      try {
         const result = await input.authorization.complete(
           request.url,
           authority,
@@ -86,7 +127,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         }
         return redirect("connected");
       } catch {
-        return redirect("failed");
+        return fail("callback-invalid");
       }
     },
   };
@@ -141,16 +182,25 @@ export function createGitHubAppInstallationDeploymentHandler(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   return async (request: Request): Promise<Response> => {
+    const startedAt = Date.now();
     try {
       return await getGitHubAppInstallationDeploymentHandlers(environment)[
         kind
       ](request);
     } catch {
+      logProviderConnectionFailure({
+        request,
+        provider: "github",
+        phase: kind,
+        reason: "configuration-unavailable",
+        startedAt,
+      });
       return new Response(null, {
         status: 303,
         headers: {
           ...noStoreHeaders,
-          Location: "/github/installations?status=failed",
+          Location:
+            "/github/installations?status=failed&reason=configuration-unavailable",
         },
       });
     }

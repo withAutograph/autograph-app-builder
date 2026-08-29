@@ -35,9 +35,12 @@ import { SiQuickbooks, SiSage, SiSlack, SiXero } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import { UserButton } from "../../components/auth/user/user-button";
-
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
+import {
+  providerConnectionFailureMessage,
+  type ProviderConnectionNotice,
+} from "../../lib/integrations/provider-connection-status";
 
 type Screen = "builder" | "handoff" | "ready";
 type BuilderForm = {
@@ -740,10 +743,12 @@ function Builder({
   initialBrief,
   onCreate,
   integrations,
+  providerNotices,
 }: {
   initialBrief: string;
   onCreate: (form: BuilderForm) => void;
   integrations: BuilderIntegrationState;
+  providerNotices: ProviderConnectionNotice[];
 }) {
   const router = useRouter();
   const generatedNameSeed = useId();
@@ -886,6 +891,36 @@ function Builder({
           <h1>Build an app</h1>
           <AutographMark compact />
         </div>
+        {providerNotices.length ? (
+          <div className={styles.providerNotices} aria-live="polite">
+            {providerNotices.map((notice) => {
+              const provider =
+                notice.provider === "vercel" ? "Vercel" : "GitHub";
+              return (
+                <p
+                  key={`${notice.provider}-${notice.status}`}
+                  role={notice.status === "failed" ? "alert" : "status"}
+                  data-status={notice.status}
+                >
+                  {notice.status === "connected" ? (
+                    <>
+                      <Check size={15} aria-hidden="true" />
+                      {provider} connected successfully.
+                    </>
+                  ) : (
+                    <>
+                      <Info size={15} aria-hidden="true" />
+                      {providerConnectionFailureMessage(
+                        provider,
+                        notice.reason,
+                      )}
+                    </>
+                  )}
+                </p>
+              );
+            })}
+          </div>
+        ) : null}
         <label htmlFor="app-name">
           App Name
           <input
@@ -968,6 +1003,10 @@ function Builder({
               footerIcon={<PlusCircle size={18} />}
               detailPills
             />
+          ) : integrations.vercel.status === "unavailable" ? (
+            <button className={styles.connectProvider} type="button" disabled>
+              Connect to Vercel
+            </button>
           ) : (
             <Link
               className={styles.connectProvider}
@@ -980,6 +1019,14 @@ function Builder({
             Connect Vercel and Autograph can create and deploy the project for
             you. You can also skip this and deploy later.
           </small>
+          {integrations.vercel.status === "unavailable" ? (
+            <p className={styles.integrationUnavailable} role="alert">
+              {providerConnectionFailureMessage(
+                "Vercel",
+                integrations.vercel.unavailableReason,
+              )}
+            </p>
+          ) : null}
         </div>
         <div className={styles.repoRow}>
           <div className={styles.integrationField}>
@@ -996,6 +1043,10 @@ function Builder({
                 optionIcon={() => <FaGithub size={16} />}
                 footerIcon={<Plus size={21} />}
               />
+            ) : integrations.github.status === "unavailable" ? (
+              <button className={styles.connectProvider} type="button" disabled>
+                Connect to GitHub
+              </button>
             ) : (
               <Link
                 className={styles.connectProvider}
@@ -1009,6 +1060,14 @@ function Builder({
               repository for you. You can also skip this and connect a
               repository later.
             </small>
+            {integrations.github.status === "unavailable" ? (
+              <p className={styles.integrationUnavailable} role="alert">
+                {providerConnectionFailureMessage(
+                  "GitHub",
+                  integrations.github.unavailableReason,
+                )}
+              </p>
+            ) : null}
           </div>
           <span className={styles.slash} aria-hidden="true">
             /
@@ -1461,9 +1520,11 @@ function Ready({ form, onReset }: { form: BuilderForm; onReset: () => void }) {
 export function AppBuilder({
   authenticated,
   integrations,
+  providerNotices = [],
 }: {
   authenticated: boolean;
   integrations: BuilderIntegrationState;
+  providerNotices?: ProviderConnectionNotice[];
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("builder");
@@ -1493,6 +1554,7 @@ export function AppBuilder({
           key={savedBrief || "new"}
           initialBrief={savedBrief}
           integrations={integrations}
+          providerNotices={providerNotices}
           onCreate={async (form) => {
             setSubmitted(form);
             try {

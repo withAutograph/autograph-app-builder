@@ -1,5 +1,6 @@
 import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
+import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import {
   createPostgresHostedGitHubInstallationStore,
   mergeHostedGitHubInstallationBindings,
@@ -30,27 +31,59 @@ export async function loadBuilderIntegrationState(input: {
     });
   }
 
+  const unavailable = (
+    reason: "configuration-unavailable" | "workspace-unavailable",
+  ) => ({
+    status: "unavailable" as const,
+    scopes: [],
+    unavailableReason: reason,
+  });
+
+  let preview: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
+  let database: ReturnType<typeof openHostedPostgresDatabase>;
   try {
-    const preview = readPreviewOAuthRuntimeConfig(input.environment);
-    const database = openHostedPostgresDatabase(preview.databaseUrl);
+    preview = readPreviewOAuthRuntimeConfig(input.environment);
+    database = openHostedPostgresDatabase(preview.databaseUrl);
+  } catch {
+    return builderIntegrationStateSchema.parse({
+      vercel: unavailable("configuration-unavailable"),
+      github: unavailable("configuration-unavailable"),
+      models: await modelsPromise,
+    });
+  }
+
+  let workspaceId: string | undefined;
+  try {
     const membership = createPostgresOAuthMembershipAuthority(database);
-    const workspaceId = await membership.activeWorkspaceForUser({
+    workspaceId = await membership.activeWorkspaceForUser({
       issuer: preview.issuer,
       audience: preview.resource,
       ownerUserId: input.userId,
     });
-    if (!workspaceId) throw new Error("workspace-unavailable");
-    const authority = {
-      issuer: preview.issuer,
-      audience: preview.resource,
-      workspaceId,
-      ownerUserId: input.userId,
-    };
+  } catch {}
+  if (!workspaceId) {
+    return builderIntegrationStateSchema.parse({
+      vercel: unavailable("workspace-unavailable"),
+      github: unavailable("workspace-unavailable"),
+      models: await modelsPromise,
+    });
+  }
+  const authority = {
+    issuer: preview.issuer,
+    audience: preview.resource,
+    workspaceId,
+    ownerUserId: input.userId,
+  };
 
+  let github: BuilderIntegrationState["github"] = unavailable(
+    "configuration-unavailable",
+  );
+  try {
+    readGitHubAppInstallationEnvironment(input.environment);
     const githubStore = createPostgresHostedGitHubInstallationStore(database);
     const githubBindings = (await githubStore.list?.(authority)) ?? [];
     const legacy = await githubStore.read(authority);
-    const github = mergeHostedGitHubInstallationBindings(githubBindings, legacy)
+    const scopes = mergeHostedGitHubInstallationBindings(githubBindings, legacy)
       .filter((binding) => binding.active)
       .map((binding) => ({
         installationId: binding.installationId,
@@ -58,44 +91,33 @@ export async function loadBuilderIntegrationState(input: {
         accountLogin: binding.accountLogin,
         accountType: binding.accountType,
       }));
+    github = { status: scopes.length ? "connected" : "disconnected", scopes };
+  } catch {}
 
-    let vercel: BuilderIntegrationState["vercel"] = {
-      status: "unavailable",
-      scopes: [],
-    };
-    try {
-      const config = readVercelIntegrationEnvironment(input.environment);
-      const bindings = await createPostgresVercelInstallationStore({
-        database,
-        config,
-      }).list(authority);
-      const scopes = bindings
-        .filter((binding) => binding.active)
-        .map((binding) => ({
-          installationId: binding.installationId,
-          status: "connected" as const,
-          displayName: binding.displayName,
-          slug: binding.slug,
-          plan: binding.plan,
-        }));
-      vercel = { status: scopes.length ? "connected" : "disconnected", scopes };
-    } catch {
-      vercel = { status: "unavailable", scopes: [] };
-    }
+  let vercel: BuilderIntegrationState["vercel"] = unavailable(
+    "configuration-unavailable",
+  );
+  try {
+    const config = readVercelIntegrationEnvironment(input.environment);
+    const bindings = await createPostgresVercelInstallationStore({
+      database,
+      config,
+    }).list(authority);
+    const scopes = bindings
+      .filter((binding) => binding.active)
+      .map((binding) => ({
+        installationId: binding.installationId,
+        status: "connected" as const,
+        displayName: binding.displayName,
+        slug: binding.slug,
+        plan: binding.plan,
+      }));
+    vercel = { status: scopes.length ? "connected" : "disconnected", scopes };
+  } catch {}
 
-    return builderIntegrationStateSchema.parse({
-      vercel,
-      github: {
-        status: github.length ? "connected" : "disconnected",
-        scopes: github,
-      },
-      models: await modelsPromise,
-    });
-  } catch {
-    return builderIntegrationStateSchema.parse({
-      vercel: { status: "unavailable", scopes: [] },
-      github: { status: "unavailable", scopes: [] },
-      models: await modelsPromise,
-    });
-  }
+  return builderIntegrationStateSchema.parse({
+    vercel,
+    github,
+    models: await modelsPromise,
+  });
 }

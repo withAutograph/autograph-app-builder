@@ -1,9 +1,18 @@
+import {
+  parseProviderConnectionFailureReason,
+  providerConnectionFailureMessage,
+} from "@/lib/integrations/provider-connection-status";
+
 type Props = {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{
+    status?: string | string[];
+    reason?: string | string[];
+  }>;
 };
 
 export default async function GitHubInstallationsPage({ searchParams }: Props) {
-  const { status } = await searchParams;
+  const { status, reason } = await searchParams;
+  const failureReason = parseProviderConnectionFailureReason(reason);
   return (
     <main className="auth-shell">
       <section className="auth-card">
@@ -18,8 +27,7 @@ export default async function GitHubInstallationsPage({ searchParams }: Props) {
         ) : null}
         {status === "failed" ? (
           <p role="alert">
-            The GitHub App installation could not be connected. Start a new
-            authorization attempt.
+            {providerConnectionFailureMessage("GitHub", failureReason)}
           </p>
         ) : null}
         <form method="post" action="/github/installations/start">

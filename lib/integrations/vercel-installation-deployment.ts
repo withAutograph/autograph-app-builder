@@ -8,6 +8,8 @@ import {
   createPostgresVercelAuthorizationStateStore,
   createPostgresVercelInstallationStore,
 } from "./postgres-vercel-installation";
+import { logProviderConnectionFailure } from "./provider-connection-logging";
+import type { ProviderConnectionFailureReason } from "./provider-connection-status";
 import {
   createVercelInstallationAuthorization,
   readVercelIntegrationEnvironment,
@@ -68,24 +70,61 @@ export function createVercelInstallationDeploymentHandler(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   return async (request: Request) => {
+    const startedAt = Date.now();
     const origin = new URL(environment.APP_ORIGIN ?? request.url).origin;
-    const redirect = (status: "connected" | "failed") =>
+    const redirect = (
+      status: "connected" | "failed",
+      reason?: ProviderConnectionFailureReason,
+    ) =>
       new Response(null, {
         status: 303,
-        headers: { ...noStoreHeaders, Location: `${origin}/?vercel=${status}` },
+        headers: {
+          ...noStoreHeaders,
+          Location:
+            status === "connected"
+              ? `${origin}/?vercel=connected`
+              : `${origin}/vercel/installations?status=failed&reason=${reason ?? "authorization-failed"}`,
+        },
       });
-    try {
-      const runtime = deployment(environment);
-      const authority = await runtime.authorityForRequest(request);
-      if (!authority) return redirect("failed");
-      if (kind === "start") {
-        if (
-          request.method !== "POST" ||
+    const fail = (reason: ProviderConnectionFailureReason) => {
+      logProviderConnectionFailure({
+        request,
+        provider: "vercel",
+        phase: kind,
+        reason,
+        startedAt,
+      });
+      return redirect("failed", reason);
+    };
+
+    if (
+      (kind === "start" &&
+        (request.method !== "POST" ||
           request.headers.get("origin") !== origin ||
           request.headers.get("content-type")?.split(";", 1)[0] !==
-            "application/x-www-form-urlencoded"
-        )
-          return redirect("failed");
+            "application/x-www-form-urlencoded")) ||
+      (kind === "callback" && request.method !== "GET")
+    ) {
+      return fail("request-invalid");
+    }
+
+    let runtime: ReturnType<typeof deployment>;
+    try {
+      runtime = deployment(environment);
+    } catch {
+      return fail("configuration-unavailable");
+    }
+
+    let authority: Awaited<ReturnType<typeof runtime.authorityForRequest>>;
+    try {
+      authority = await runtime.authorityForRequest(request);
+    } catch {
+      return fail("workspace-unavailable");
+    }
+    if (!authority) return fail("workspace-unavailable");
+
+    try {
+      if (kind === "start") {
         return new Response(null, {
           status: 303,
           headers: {
@@ -94,11 +133,12 @@ export function createVercelInstallationDeploymentHandler(
           },
         });
       }
-      if (request.method !== "GET") return redirect("failed");
       await runtime.authorization.complete(request.url, authority);
       return redirect("connected");
     } catch {
-      return redirect("failed");
+      return fail(
+        kind === "callback" ? "callback-invalid" : "authorization-failed",
+      );
     }
   };
 }
