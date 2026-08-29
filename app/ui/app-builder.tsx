@@ -6,14 +6,12 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  Code,
   Copy,
   DollarSign,
   ExternalLink,
   GitBranch,
   Globe,
   Info,
-  MessageSquare,
   Monitor,
   Plus,
   PlusCircle,
@@ -35,7 +33,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { SiQuickbooks, SiSage, SiXero } from "react-icons/si";
+import { SiOpenai, SiQuickbooks, SiSage, SiXero } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import { UserButton } from "../../components/auth/user/user-button";
@@ -123,6 +121,25 @@ function readBuilderDraft(resumeKey: string) {
 }
 type ConnectionStage = "connect" | "configure" | "customize";
 type ConnectionFlow = { name: string; stage: ConnectionStage };
+
+function CursorMark() {
+  return (
+    <svg
+      width="16"
+      height="18"
+      viewBox="0 0 466.73 532.09"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fill="currentColor"
+        d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"
+      />
+    </svg>
+  );
+}
 
 const maximumHandoffUrlLength = 8_000;
 
@@ -1383,7 +1400,7 @@ function Builder({
             aria-describedby="build-destination-help"
           >
             <label>
-              <MessageSquare size={18} aria-hidden="true" />
+              <SiOpenai size={18} aria-hidden="true" />
               ChatGPT / Codex
               <input
                 type="radio"
@@ -1395,7 +1412,7 @@ function Builder({
               />
             </label>
             <label>
-              <Code size={18} aria-hidden="true" />
+              <CursorMark />
               Cursor
               <input
                 type="radio"
