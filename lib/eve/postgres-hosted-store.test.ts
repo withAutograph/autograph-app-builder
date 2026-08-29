@@ -236,6 +236,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0011_self_service_onboarding",
           breakpoints: true,
         },
+        {
+          idx: 11,
+          version: "7",
+          when: 1_788_084_000_000,
+          tag: "0012_provider_connection_return_state",
+          breakpoints: true,
+        },
       ],
     });
   });
