@@ -35,6 +35,7 @@ const maximumPrototypeBytes = 262_144;
 const prototypePathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const prefixedSha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const immutableExecutionArtifactSchema = z
   .string()
@@ -71,7 +72,7 @@ const planResultSchema = z
     eligibilityDigest: lowercaseSha256Schema,
     workspaceDigest: lowercaseSha256Schema,
     imageDigest: immutableExecutionArtifactSchema,
-    dependencyCacheDigest: lowercaseSha256Schema,
+    dependencyCacheDigest: prefixedSha256Schema,
     appSpecDigest: lowercaseSha256Schema,
     artifactRevision: lowercaseSha256Schema,
     identityDigest: lowercaseSha256Schema,
@@ -112,8 +113,7 @@ function verifiedImplementationPlan(
     plannedByCallId: result.plannedByCallId,
   };
   if (
-    result.reused ||
-    result.plannedByCallId !== callId ||
+    (!result.reused && result.plannedByCallId !== callId) ||
     result.appSpecDigest !== expectedAppSpecDigest ||
     target.contract.appSpec.sha256 !== expectedAppSpecDigest ||
     target.plan.product.appSpec.sha256 !== expectedAppSpecDigest ||

@@ -29,7 +29,8 @@ describe("hosted runtime asset bundle", () => {
       resolve("lib/sandbox/hosted-artifact.ts"),
     ).href;
     const tsxLoader = import.meta.resolve("tsx/esm");
-    const { NODE_OPTIONS: _nodeOptions, ...childEnvironment } = process.env;
+    const childEnvironment = { ...process.env };
+    delete childEnvironment.NODE_OPTIONS;
     const output = execFileSync(
       process.execPath,
       [

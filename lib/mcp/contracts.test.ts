@@ -81,6 +81,33 @@ describe("publicPrototypeSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts only exact hosted HTTPS or loopback preview URLs", () => {
+    const path = `/preview/session-one/${"a".repeat(64)}`;
+    expect(
+      publicPrototypeSchema.safeParse({
+        ...prototype,
+        previewUrl: `https://builder.example.test${path}`,
+      }).success,
+    ).toBe(true);
+    expect(
+      publicPrototypeSchema.safeParse({
+        ...prototype,
+        previewUrl: `http://127.0.0.1:3000${path}`,
+      }).success,
+    ).toBe(true);
+    for (const previewUrl of [
+      `http://builder.example.test${path}`,
+      `data:text/html,${encodeURIComponent(prototype.content)}`,
+      `https://user:secret@builder.example.test${path}`,
+      `https://builder.example.test${path}?token=secret`,
+      `https://builder.example.test/other/${"a".repeat(64)}`,
+    ]) {
+      expect(
+        publicPrototypeSchema.safeParse({ ...prototype, previewUrl }).success,
+      ).toBe(false);
+    }
+  });
 });
 
 describe("publicImplementationPlanSchema", () => {

@@ -104,7 +104,7 @@ function plannedEvents() {
     eligibilityDigest: "3".repeat(64),
     workspaceDigest: "4".repeat(64),
     imageDigest: `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
-    dependencyCacheDigest: "6".repeat(64),
+    dependencyCacheDigest: `sha256:${"6".repeat(64)}`,
     appSpecDigest,
     artifactRevision: "7".repeat(64),
     identityDigest: "8".repeat(64),

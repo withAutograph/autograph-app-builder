@@ -62,10 +62,12 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("binds every browser interaction surface to no-store anti-clickjacking headers", async () => {
-    const [config, runtime, signIn] = await Promise.all([
+    const [config, runtime, providers, authClient, signIn] = await Promise.all([
       readFile("next.config.ts", "utf8"),
       readFile("lib/auth/preview-oauth-runtime.ts", "utf8"),
-      readFile("app/auth/sign-in/sign-in-form.tsx", "utf8"),
+      readFile("components/providers.tsx", "utf8"),
+      readFile("lib/auth-client.ts", "utf8"),
+      readFile("components/auth/sign-in.tsx", "utf8"),
     ]);
     expect(config).toContain('source: "/auth/:path*"');
     expect(config).toContain('{ key: "Cache-Control", value: "no-store" }');
@@ -73,6 +75,12 @@ describe("Preview OAuth deployment handlers", () => {
     expect(config).toContain('{ key: "X-Frame-Options", value: "DENY" }');
     expect(runtime).toContain("baseURL: resourceOrigin");
     expect(runtime).not.toContain("baseURL: config.issuer");
+    expect(providers).toContain('socialProviders={["github"]}');
+    expect(providers).toContain("emailAndPassword={{ enabled: false }}");
+    expect(authClient).toContain("oauthProviderClient()");
+    expect(signIn).toContain("<ProviderButtons");
+    expect(signIn).not.toContain('type="email"');
+    expect(signIn).not.toContain("SignUp");
     expect(signIn).not.toContain("/oauth2/continue");
     await expect(
       readFile("app/auth/workspace/page.tsx", "utf8"),

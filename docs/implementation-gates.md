@@ -344,7 +344,18 @@ Before enabling real MCP mutations:
    origin's canonical Eve routes, including the exact trusted-forwarder subject,
    forwarded principal, and manual redirect denial.
 9. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
-10. Complete the MCP Apps host bridge. The iframe must invoke tools through the host, never call Eve or private endpoints directly.
+10. Keep the MCP Apps host bridge limited to progress and input controls. It
+    must never display or embed generated app previews. Open previews in the
+    integrated ChatGPT/Codex Browser using a hosted HTTPS URL or a loopback URL
+    for local proof; use an ordinary link when the integrated Browser is
+    unavailable. The public result adds an exact session-and-content-bound URL
+    only for those origins. Its route re-reads the caller-owned session and
+    exact recorded artifact, returns `404` for absent, stale, or unauthorized
+    content, disables storage, and applies a top-level CSP sandbox without
+    same-origin authority, networking, forms, framing, or external resources.
+    Raw prototype bytes remain workflow evidence and are never rendered by the
+    MCP App. The MCP iframe must invoke tools through the host and never call
+    Eve or private endpoints directly.
 11. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
 12. Enforce the fixed 30-minute idle and 24-hour maximum hosted session
     lifetimes before transport access, and omit expired rows from admission

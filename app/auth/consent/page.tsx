@@ -1,9 +1,9 @@
-import { ConsentForm } from "./consent-form";
+import { OAuthConsent } from "@/components/auth/oauth-provider/oauth-consent";
 
 export default function PreviewConsentPage() {
   return (
-    <main className="auth-shell">
-      <ConsentForm />
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <OAuthConsent />
     </main>
   );
 }

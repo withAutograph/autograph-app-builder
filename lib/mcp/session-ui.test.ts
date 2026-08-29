@@ -6,7 +6,6 @@ import portableManifest from "../../plugin.json";
 import {
   APP_VERSION,
   MCP_APP_RESOURCE_MIME_TYPE,
-  sandboxedPrototypeDocument,
   sessionUiHtml,
 } from "./session-ui";
 
@@ -61,35 +60,10 @@ describe("Autograph App Builder MCP App progress UI", () => {
     expect(sessionUiHtml).not.toContain("Complete the production bridge");
   });
 
-  it("renders verified prototypes in a network-denied opaque sandbox", () => {
-    expect(sessionUiHtml).toContain(
-      'frame.setAttribute("sandbox","allow-scripts")',
-    );
-    expect(sessionUiHtml).not.toContain("allow-same-origin");
-    expect(sessionUiHtml).toContain(
-      "frame.srcdoc=prototypeDocument(value.content)",
-    );
-    expect(sessionUiHtml).toContain("default-src 'none'");
-    expect(sessionUiHtml).toContain("connect-src 'none'");
-    expect(sessionUiHtml).toContain("form-action 'none'");
-    expect(sessionUiHtml).toContain(
-      'frame.setAttribute("referrerpolicy","no-referrer")',
-    );
-  });
-
-  it("places hostile prototype bytes only after the fixed CSP boundary", () => {
-    const hostile =
-      '<script>window.top.postMessage("hostile","*")</script><!-- <head> --><head><title>Prototype</title></head><body>Queue</body>';
-    const document = sandboxedPrototypeDocument(hostile);
-    const head = document.indexOf("<head>");
-    const csp = document.indexOf('http-equiv="Content-Security-Policy"');
-    const charset = document.indexOf('<meta charset="utf-8">');
-    const untrusted = document.indexOf(hostile);
-
-    expect(document.startsWith("<!doctype html><html><head>")).toBe(true);
-    expect(head).toBeLessThan(csp);
-    expect(csp).toBeLessThan(charset);
-    expect(charset).toBeLessThan(untrusted);
-    expect(sessionUiHtml).not.toContain("/<head");
+  it("never embeds generated app previews", () => {
+    expect(sessionUiHtml).not.toContain("<iframe");
+    expect(sessionUiHtml).not.toContain("srcdoc");
+    expect(sessionUiHtml).not.toContain("result.prototype");
+    expect(sessionUiHtml).not.toContain("Interactive app prototype");
   });
 });
