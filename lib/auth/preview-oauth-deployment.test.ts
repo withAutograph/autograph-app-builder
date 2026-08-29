@@ -70,16 +70,15 @@ describe("Preview OAuth deployment handlers", () => {
       signIn,
       providerButton,
       settingUp,
-    ] =
-      await Promise.all([
-        readFile("next.config.ts", "utf8"),
-        readFile("lib/auth/preview-oauth-runtime.ts", "utf8"),
-        readFile("components/providers.tsx", "utf8"),
-        readFile("lib/auth-client.ts", "utf8"),
-        readFile("components/auth/sign-in.tsx", "utf8"),
-        readFile("components/auth/provider-button.tsx", "utf8"),
-        readFile("app/auth/setting-up/page.tsx", "utf8"),
-      ]);
+    ] = await Promise.all([
+      readFile("next.config.ts", "utf8"),
+      readFile("lib/auth/preview-oauth-runtime.ts", "utf8"),
+      readFile("components/providers.tsx", "utf8"),
+      readFile("lib/auth-client.ts", "utf8"),
+      readFile("components/auth/sign-in.tsx", "utf8"),
+      readFile("components/auth/provider-button.tsx", "utf8"),
+      readFile("app/auth/setting-up/page.tsx", "utf8"),
+    ]);
     expect(config).toContain('source: "/auth/:path*"');
     expect(config).toContain('{ key: "Cache-Control", value: "no-store" }');
     expect(config).toContain("frame-ancestors 'none'");
