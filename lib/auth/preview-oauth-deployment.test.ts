@@ -195,7 +195,7 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("uses Better Auth organizations for every signed-in workspace boundary", async () => {
-    const sources = await Promise.all(
+    const [builder, ...authoritySources] = await Promise.all(
       [
         "lib/integrations/builder-integration-deployment.ts",
         "lib/integrations/vercel-installation-deployment.ts",
@@ -204,7 +204,11 @@ describe("Preview OAuth deployment handlers", () => {
       ].map((path) => readFile(path, "utf8")),
     );
 
-    for (const source of sources) {
+    expect(builder).toContain("authenticated: true");
+    expect(builder).toContain("organizationId: string");
+    expect(builder).toContain("workspaceId: string");
+    expect(builder).not.toContain("activeWorkspaceForUser");
+    for (const source of authoritySources) {
       expect(source).toContain("createPostgresPreviewOrganizationAuthority");
       expect(source).not.toContain("createPostgresOAuthMembershipAuthority");
     }

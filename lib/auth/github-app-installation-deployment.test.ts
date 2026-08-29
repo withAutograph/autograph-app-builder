@@ -83,10 +83,7 @@ describe("GitHub App installation routes", () => {
     expect(begin).toHaveBeenCalledOnce();
   });
 
-  it("returns an actionable workspace failure without exposing authority data", async () => {
-    const error = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+  it("returns unauthenticated users to sign-in instead of a provider workspace error", async () => {
     const { route } = handlers(async () => undefined);
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
@@ -100,13 +97,27 @@ describe("GitHub App installation routes", () => {
     );
 
     expect(response.headers.get("location")).toBe(
-      "https://builder.example/?github=failed&githubReason=workspace-unavailable",
+      "https://builder.example/auth/sign-in?callbackURL=%2F",
     );
-    expect(error).toHaveBeenCalledOnce();
-    const logged = error.mock.calls[0]?.[0];
-    expect(logged).toContain('"reason":"workspace-unavailable"');
-    expect(logged).not.toContain(authority.ownerUserId);
-    expect(logged).not.toContain(authority.workspaceId);
+  });
+
+  it("routes onboarding failures to the shared recovery surface", async () => {
+    const { route } = handlers(async () => {
+      throw new Error("database unavailable");
+    });
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        method: "POST",
+        headers: {
+          Origin: "https://builder.example",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "",
+      }),
+    );
+    expect(response.headers.get("location")).toBe(
+      "https://builder.example/?onboarding=workspace-setup-retry",
+    );
   });
 
   it("binds the callback only to the current authenticated authority", async () => {

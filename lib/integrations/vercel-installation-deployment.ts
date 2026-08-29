@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { getPreviewOAuthDeploymentAuth } from "../auth/preview-oauth-deployment";
+import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
@@ -20,6 +20,10 @@ import {
   readVercelIntegrationEnvironment,
   verifyVercelWebhook,
 } from "./vercel-installation";
+import {
+  signInForWorkspaceRedirect,
+  workspaceOnboardingRedirect,
+} from "../auth/workspace-onboarding";
 
 const noStoreHeaders = {
   "Cache-Control": "no-store",
@@ -40,20 +44,16 @@ function deployment(
     database,
     config,
   });
-  const auth = getPreviewOAuthDeploymentAuth(environment);
   const authorityForRequest = async (request: Request) => {
-    const session = await auth.api.getSession({ headers: request.headers });
-    if (!session?.user.id) return undefined;
-    const workspaceId = await membership.activeWorkspaceForUser({
-      issuer: preview.issuer,
-      audience: preview.resource,
-      ownerUserId: session.user.id,
+    const session = await ensurePreviewOAuthDeploymentSessionOrganization({
+      environment,
+      headers: request.headers,
     });
-    return workspaceId
+    return session
       ? {
           issuer: preview.issuer,
           audience: preview.resource,
-          workspaceId,
+          workspaceId: session.organization.workspaceId,
           ownerUserId: session.user.id,
         }
       : undefined;
@@ -134,9 +134,25 @@ export function createVercelInstallationDeploymentHandler(
     try {
       authority = await runtime.authorityForRequest(request);
     } catch {
-      return fail("workspace-unavailable");
+      return new Response(null, {
+        status: 303,
+        headers: {
+          ...noStoreHeaders,
+          Location: workspaceOnboardingRedirect(
+            origin,
+            "workspace-setup-retry",
+          ),
+        },
+      });
     }
-    if (!authority) return fail("workspace-unavailable");
+    if (!authority)
+      return new Response(null, {
+        status: 303,
+        headers: {
+          ...noStoreHeaders,
+          Location: signInForWorkspaceRedirect(origin),
+        },
+      });
 
     try {
       if (kind === "start") {

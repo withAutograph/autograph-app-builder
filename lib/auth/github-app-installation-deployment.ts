@@ -5,7 +5,7 @@ import {
   createGitHubAppInstallationAuthorization,
   readGitHubAppInstallationEnvironment,
 } from "./github-app-installation";
-import { getPreviewOAuthDeploymentAuth } from "./preview-oauth-deployment";
+import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
@@ -15,6 +15,10 @@ import {
   providerConnectionReturnFromFormData,
   type ProviderConnectionReturn,
 } from "../integrations/provider-connection-return";
+import {
+  signInForWorkspaceRedirect,
+  workspaceOnboardingRedirect,
+} from "./workspace-onboarding";
 
 type Authority = {
   issuer: string;
@@ -83,9 +87,25 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       try {
         authority = await input.authorityForRequest(request);
       } catch {
-        return fail("workspace-unavailable");
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...noStoreHeaders,
+            Location: workspaceOnboardingRedirect(
+              origin,
+              "workspace-setup-retry",
+            ),
+          },
+        });
       }
-      if (authority === undefined) return fail("workspace-unavailable");
+      if (authority === undefined)
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...noStoreHeaders,
+            Location: signInForWorkspaceRedirect(origin),
+          },
+        });
 
       try {
         const returnState = providerConnectionReturnFromFormData(
@@ -122,9 +142,25 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       try {
         authority = await input.authorityForRequest(request);
       } catch {
-        return fail("workspace-unavailable");
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...noStoreHeaders,
+            Location: workspaceOnboardingRedirect(
+              origin,
+              "workspace-setup-retry",
+            ),
+          },
+        });
       }
-      if (authority === undefined) return fail("workspace-unavailable");
+      if (authority === undefined)
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...noStoreHeaders,
+            Location: signInForWorkspaceRedirect(origin),
+          },
+        });
 
       try {
         const result = await input.authorization.complete(
@@ -159,7 +195,6 @@ export function getGitHubAppInstallationDeploymentHandlers(
     issuer: previewConfig.issuer,
     audience: previewConfig.resource,
   });
-  const auth = getPreviewOAuthDeploymentAuth(environment);
   const authorization = createGitHubAppInstallationAuthorization({
     config,
     stateStore:
@@ -173,18 +208,15 @@ export function getGitHubAppInstallationDeploymentHandlers(
     origin: new URL(config.issuer).origin,
     authorization,
     async authorityForRequest(request) {
-      const session = await auth.api.getSession({ headers: request.headers });
-      if (session?.user.id === undefined) return undefined;
-      const workspaceId = await membership.activeWorkspaceForUser({
-        issuer: config.issuer,
-        audience: config.resource,
-        ownerUserId: session.user.id,
+      const session = await ensurePreviewOAuthDeploymentSessionOrganization({
+        environment,
+        headers: request.headers,
       });
-      if (workspaceId === undefined) return undefined;
+      if (session === undefined) return undefined;
       return {
         issuer: config.issuer,
         audience: config.resource,
-        workspaceId,
+        workspaceId: session.organization.workspaceId,
         ownerUserId: session.user.id,
       };
     },

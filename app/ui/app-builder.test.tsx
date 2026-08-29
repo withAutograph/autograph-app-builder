@@ -249,7 +249,7 @@ describe("Vercel-faithful App Builder flow", () => {
           github: {
             status: "unavailable",
             scopes: [],
-            unavailableReason: "workspace-unavailable",
+            unavailableReason: "configuration-unavailable",
           },
         }}
         providerNotices={[
@@ -264,7 +264,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain(
       "administrator needs to finish provider setup",
     );
-    expect(view.textContent).toContain("active App Builder workspace");
+    expect(view.textContent).not.toContain("active App Builder workspace");
     const connectButtons = [...view.querySelectorAll("button")].filter(
       (button) => button.textContent?.startsWith("Connect to "),
     );
