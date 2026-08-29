@@ -10,13 +10,12 @@ const navigation = vi.hoisted(() => ({
   refresh: vi.fn(),
   replace: vi.fn(),
 }));
-const authClientMocks = vi.hoisted(() => ({ signOut: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
-vi.mock("../../lib/auth-client", () => ({
-  authClient: { signOut: authClientMocks.signOut },
+vi.mock("../../components/auth/user/user-button", () => ({
+  UserButton: () => <button aria-label="Account">Account</button>,
 }));
 
 import {
@@ -100,9 +99,15 @@ const integrationState = {
 };
 
 function AppBuilder(
-  props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations">,
+  props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
+    user?: { name: string; email: string };
+  },
 ) {
-  return <AppBuilderComponent {...props} integrations={integrationState} />;
+  const { user, ...componentProps } = props;
+  void user;
+  return (
+    <AppBuilderComponent {...componentProps} integrations={integrationState} />
+  );
 }
 
 (
@@ -423,52 +428,17 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).not.toContain("deployed");
   });
 
-  it("opens the account menu and changes the selected theme", async () => {
+  it("renders the Better Auth account trigger without the legacy menu", async () => {
     const view = await render(
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
       />,
     );
-    await click(
-      view.querySelector<HTMLButtonElement>(
-        '[aria-label="Open account menu"]',
-      )!,
-    );
-    expect(view.querySelector('[role="dialog"]')?.textContent).toContain(
-      "Taylor",
-    );
-    await click(
-      view.querySelector<HTMLButtonElement>(
-        '[role="radio"][aria-label="dark"]',
-      )!,
-    );
-    expect(document.documentElement.dataset.theme).toBe("dark");
-  });
-
-  it("signs out through the JSON auth client and returns to sign in", async () => {
-    authClientMocks.signOut.mockResolvedValue({ data: { success: true } });
-    const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
-    );
-    await click(
-      view.querySelector<HTMLButtonElement>(
-        '[aria-label="Open account menu"]',
-      )!,
-    );
-    const logOut = [...view.querySelectorAll("button")].find(
-      (button) => button.textContent === "Log Out",
-    )!;
-
-    expect(logOut.closest("form")).toBeNull();
-    await click(logOut);
-
-    expect(authClientMocks.signOut).toHaveBeenCalledOnce();
-    expect(navigation.replace).toHaveBeenCalledWith("/auth/sign-in");
-    expect(navigation.refresh).toHaveBeenCalledOnce();
+    expect(view.querySelector('[aria-label="Account"]')).not.toBeNull();
+    expect(view.textContent).not.toContain("Feedback");
+    expect(view.textContent).not.toContain("Changelog");
+    expect(view.querySelector('[role="radiogroup"]')).toBeNull();
   });
 
   it("matches the repository privacy and connection-browser interactions", async () => {

@@ -35,7 +35,6 @@ export default async function Home({ searchParams }: PageProps) {
   return (
     <AppBuilder
       authenticated={authenticated && mode !== "anonymous"}
-      user={user ?? { name: "Autograph User", email: "Signed in with GitHub" }}
       integrations={integrations}
     />
   );
