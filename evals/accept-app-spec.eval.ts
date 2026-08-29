@@ -142,9 +142,7 @@ export default defineEval({
     retryValidation.notEvent("input.requested");
     t.check(t.reply, includes("quality checks are still passing"));
 
-    const staleValidation = await t.send(
-      "Validate with a stale apply digest.",
-    );
+    const staleValidation = await t.send("Validate with a stale apply digest.");
     t.succeeded();
     staleValidation.notEvent("input.requested");
     t.check(t.reply, includes("app changed before checks could start"));
