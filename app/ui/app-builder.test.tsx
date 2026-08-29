@@ -5,8 +5,18 @@ import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
+  refresh: vi.fn(),
+  replace: vi.fn(),
+}));
+const authClientMocks = vi.hoisted(() => ({ signOut: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => navigation,
+}));
+vi.mock("../../lib/auth-client", () => ({
+  authClient: { signOut: authClientMocks.signOut },
 }));
 
 import { AppBuilder } from "./app-builder";
@@ -251,6 +261,31 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("signs out through the JSON auth client and returns to sign in", async () => {
+    authClientMocks.signOut.mockResolvedValue({ data: { success: true } });
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    await click(
+      view.querySelector<HTMLButtonElement>(
+        '[aria-label="Open account menu"]',
+      )!,
+    );
+    const logOut = [...view.querySelectorAll("button")].find(
+      (button) => button.textContent === "Log Out",
+    )!;
+
+    expect(logOut.closest("form")).toBeNull();
+    await click(logOut);
+
+    expect(authClientMocks.signOut).toHaveBeenCalledOnce();
+    expect(navigation.replace).toHaveBeenCalledWith("/auth/sign-in");
+    expect(navigation.refresh).toHaveBeenCalledOnce();
   });
 
   it("matches the repository privacy and connection-browser interactions", async () => {
