@@ -1546,6 +1546,48 @@
   font-size: 12px;
   text-align: center;
 }
+.deepLinkCard {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin-top: 24px;
+  padding: 16px;
+}
+.deepLinkCard h2 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+.deepLinkCard p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 8px 0 14px;
+}
+.deepLinkActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.deepLinkActions button {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+.deepLinkActions button:hover {
+  background: var(--hover);
+}
+.deepLinkStatus {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
 .installCard > div:first-child {
   display: flex;
   align-items: center;

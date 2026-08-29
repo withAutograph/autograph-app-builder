@@ -1510,6 +1510,17 @@ function Ready({ form, onReset }: { form: BuilderForm; onReset: () => void }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
+  const [deepLinkStatus, setDeepLinkStatus] = useState<string>();
+  const tryCodexDeepLink = (path: string) => {
+    const samplePrompt = "Create a harmless test app named Deep Link Probe.";
+    const url = `codex://${path}?prompt=${encodeURIComponent(samplePrompt)}`;
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    setDeepLinkStatus(
+      opened
+        ? `Attempted ${url}. Check whether Codex opened a new task and prefilled the prompt.`
+        : "The browser blocked the launch. Allow pop-ups and try again.",
+    );
+  };
   return (
     <main className={styles.flowPage} id="main-content">
       <section className={styles.readyCard}>
@@ -1546,6 +1557,32 @@ function Ready({ form, onReset }: { form: BuilderForm; onReset: () => void }) {
             ? "Copy failed. Return to the form and copy the brief manually."
             : null}
         </p>
+        <section className={styles.deepLinkCard}>
+          <h2>Experiment with Codex handoff</h2>
+          <p>
+            Try the unsupported Codex URL shapes with a harmless test prompt.
+            This does not submit a task or use your app brief.
+          </p>
+          <div className={styles.deepLinkActions}>
+            {[
+              ["codex://", ""],
+              ["codex://open", "open"],
+              ["codex://new", "new"],
+              ["codex://task", "task"],
+            ].map(([label, path]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => tryCodexDeepLink(path)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className={styles.deepLinkStatus} role="status" aria-live="polite">
+            {deepLinkStatus}
+          </span>
+        </section>
         {showInstall ? (
           <section className={styles.installCard}>
             <div>
