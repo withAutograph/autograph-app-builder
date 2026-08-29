@@ -64,24 +64,15 @@ const previewOAuthRuntimeConfigSchema = z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value))
-      .optional(),
+      .refine((value) => !/[\0\r\n]/u.test(value)),
     vercelClientSecret: z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value))
-      .optional(),
+      .refine((value) => !/[\0\r\n]/u.test(value)),
   })
   .strict()
   .superRefine((config, context) => {
-    if (Boolean(config.vercelClientId) !== Boolean(config.vercelClientSecret)) {
-      context.addIssue({
-        code: "custom",
-        path: ["vercelClientId"],
-        message: "Vercel authentication requires both client credentials.",
-      });
-    }
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
     if (
@@ -243,26 +234,21 @@ export function createPreviewOAuthServer(input: {
             input.fetchClientMetadata ?? fetchPreviewClientMetadataResource,
         }),
       ),
-      ...(config.vercelClientId && config.vercelClientSecret
-        ? [
-            genericOAuth({
-              config: [
-                {
-                  providerId: "vercel",
-                  name: "Vercel",
-                  discoveryUrl:
-                    "https://vercel.com/.well-known/openid-configuration",
-                  requireIdTokenVerification: true,
-                  clientId: config.vercelClientId,
-                  clientSecret: config.vercelClientSecret,
-                  tokenEndpointAuth: { method: "client_secret_post" },
-                  scopes: ["openid", "email", "profile"],
-                  disableSignUp: false,
-                },
-              ],
-            }),
-          ]
-        : []),
+      genericOAuth({
+        config: [
+          {
+            providerId: "vercel",
+            name: "Vercel",
+            discoveryUrl: "https://vercel.com/.well-known/openid-configuration",
+            requireIdTokenVerification: true,
+            clientId: config.vercelClientId,
+            clientSecret: config.vercelClientSecret,
+            tokenEndpointAuth: { method: "client_secret_post" },
+            scopes: ["openid", "email", "profile"],
+            disableSignUp: false,
+          },
+        ],
+      }),
       nextCookies(),
     ],
   });

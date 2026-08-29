@@ -13,13 +13,7 @@ import { authClient } from "@/lib/auth-client";
 import { oauthProviderPlugin } from "@/lib/auth/oauth-provider-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
-export function Providers({
-  children,
-  vercelAuthEnabled,
-}: {
-  children: ReactNode;
-  vercelAuthEnabled: boolean;
-}) {
+export function Providers({ children }: { children: ReactNode }) {
   const router = useRouter();
   const queryClient = getQueryClient();
 
@@ -34,9 +28,7 @@ export function Providers({
         plugins={[oauthProviderPlugin()]}
         redirectTo="/"
         socialProviders={[
-          ...(vercelAuthEnabled
-            ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }]
-            : []),
+          { id: "vercel", label: "Vercel", icon: <SiVercel /> },
           "github",
         ]}
       >

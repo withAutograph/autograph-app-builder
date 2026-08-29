@@ -13,14 +13,10 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  const vercelAuthEnabled = Boolean(
-    process.env.VERCEL_AUTH_CLIENT_ID && process.env.VERCEL_AUTH_CLIENT_SECRET,
-  );
-
   return (
     <html lang="en" className={`${GeistSans.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <Providers vercelAuthEnabled={vercelAuthEnabled}>{children}</Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

@@ -12,6 +12,8 @@ const environment = {
   DATABASE_URL: "postgresql://runtime:secret@database.example.test/app",
   GITHUB_CLIENT_ID: "github-client-id",
   GITHUB_CLIENT_SECRET: "github-client-secret",
+  VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
+  VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
@@ -28,24 +30,20 @@ describe("Preview OAuth runtime configuration", () => {
     }
   });
 
-  it("enables Vercel authentication only with a complete credential pair", () => {
-    expect(
-      readPreviewOAuthRuntimeConfig({
-        ...environment,
-        VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
-        VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
-      }),
-    ).toMatchObject({
+  it("requires Vercel authentication credentials", () => {
+    expect(readPreviewOAuthRuntimeConfig(environment)).toMatchObject({
       vercelClientId: "vercel-client-id",
       vercelClientSecret: "vercel-client-secret",
     });
 
-    expect(() =>
-      readPreviewOAuthRuntimeConfig({
-        ...environment,
-        VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
-      }),
-    ).toThrow("requires both client credentials");
+    for (const field of [
+      "VERCEL_AUTH_CLIENT_ID",
+      "VERCEL_AUTH_CLIENT_SECRET",
+    ] as const) {
+      expect(() =>
+        readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
+      ).toThrow();
+    }
   });
 
   it("accepts Production only when Vercel and the configured environment agree", () => {
