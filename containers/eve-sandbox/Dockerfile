@@ -8,6 +8,7 @@ ARG MISE_VERSION=2026.8.12
 ARG MISE_SHA256=071e2d16905360fa04762422a2a889692bb3a4d30f27650de50bc1ac0564840b
 ARG BUN_VERSION=1.3.14
 ARG BUN_SHA256=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
+ARG RUST_VERSION=1.97.1
 
 ENV MISE_DATA_DIR=/opt/app-builder/mise \
     MISE_CACHE_DIR=/opt/app-builder/mise-cache \
@@ -36,6 +37,11 @@ RUN set -eux; \
       /opt/app-builder/mise/installs/bun/${BUN_VERSION}/bin/bun; \
     ln -s /opt/app-builder/mise/installs/bun/${BUN_VERSION}/bin/bun /usr/local/bin/bun; \
     rm -rf /tmp/bun.zip /tmp/bun-linux-aarch64
+
+RUN set -eux; \
+    mise install "rust@${RUST_VERSION}"; \
+    mise exec "rust@${RUST_VERSION}" -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
+    mise exec "rust@${RUST_VERSION}" -- cargo --version | grep -E '^cargo 1[.]97[.]1 '
 
 RUN set -eux; \
     git --version; \
@@ -106,7 +112,7 @@ RUN set -eux; \
       "    \"repositoryPreflightSha256\": \"${REPOSITORY_PREFLIGHT_SHA256}\"," \
       "    \"repositoryExecSha256\": \"${REPOSITORY_EXEC_SHA256}\"" \
       '  },' \
-      '  "runtime": { "bun": "1.3.14" },' \
+      '  "runtime": { "bun": "1.3.14", "rust": "1.97.1" },' \
       '  "closure": {' \
       '    "package": "@vercel/microfrontends",' \
       '    "version": "2.4.0",' \
@@ -132,6 +138,8 @@ COPY --from=dependency-cache --chown=root:root /opt/app-builder/dependency-cache
 RUN --network=none set -eux; \
     echo "${APP_BUILDER_REVISION}" | grep -E '^[0-9a-f]{40}$'; \
     test "$(bun --version)" = "1.3.14"; \
+    mise exec rust@1.97.1 -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
+    mise exec rust@1.97.1 -- cargo --version | grep -E '^cargo 1[.]97[.]1 '; \
     bun -e 'const {execFileSync}=require("node:child_process"); const m=require("/opt/app-builder/dependency-cache/manifest.json"); const actual=execFileSync("sha256sum",[m.closure.archivePath],{encoding:"utf8"}).split(/\s/u)[0]; if(actual!==m.closure.archiveSha256) process.exit(1)'
 
 USER vercel-sandbox

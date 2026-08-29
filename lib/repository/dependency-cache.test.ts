@@ -9,6 +9,7 @@ import {
   ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
   ARRUSTED_MICROFRONTENDS_VERSION,
   ARRUSTED_PATH_TO_REGEXP_VERSION,
+  ARRUSTED_RUST_VERSION,
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
@@ -41,7 +42,7 @@ const manifest = {
     repositoryExecSha256:
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
   },
-  runtime: { bun: "1.3.14" },
+  runtime: { bun: "1.3.14", rust: ARRUSTED_RUST_VERSION },
   closure: {
     package: "@vercel/microfrontends",
     version: "2.4.0",
@@ -65,6 +66,7 @@ function sandboxFixture(inputManifest: unknown = manifest) {
       stderr: "",
     })
     .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   const sandbox = {
@@ -166,7 +168,9 @@ describe("offline dependency cache", () => {
       }),
     );
     expect(run).toHaveBeenNthCalledWith(5, {
-      command: expect.stringContaining('const {match}=require("path-to-regexp")'),
+      command: expect.stringContaining(
+        'const {match}=require("path-to-regexp")',
+      ),
       workingDirectory: `/workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/packages/platform-microfrontends`,
       abortSignal: expect.any(AbortSignal),
     });
@@ -177,6 +181,21 @@ describe("offline dependency cache", () => {
       ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
     );
     expect(resolutionCommand).toContain('result?.path!=="/vendor"');
+    expect(run).toHaveBeenNthCalledWith(6, {
+      command: expect.stringContaining(
+        `cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}"`,
+      ),
+      workingDirectory: `/workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository`,
+      abortSignal: expect.any(AbortSignal),
+    });
+    const rustCommand = run.mock.calls[5]?.[0].command as string;
+    expect(rustCommand).toContain("MISE_AUTO_INSTALL=false");
+    expect(rustCommand).toContain("MISE_EXEC_AUTO_INSTALL=false");
+    expect(rustCommand).toContain("MISE_TASK_RUN_AUTO_INSTALL=false");
+    expect(rustCommand).toContain("mise --env app-builder exec --no-deps");
+    expect(rustCommand).toContain(
+      "cargo metadata --no-deps --format-version 1",
+    );
     expect(run.mock.calls[3]?.[0]).toEqual(
       expect.objectContaining({
         command: expect.stringContaining(
@@ -217,6 +236,11 @@ describe("offline dependency cache", () => {
     );
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
+    expect(dockerfile).toContain(`ARG RUST_VERSION=${ARRUSTED_RUST_VERSION}`);
+    expect(dockerfile).toContain('mise install "rust@${RUST_VERSION}"');
+    expect(dockerfile).toContain(
+      `mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`,
+    );
     expect(dockerfile).toContain("RUN --network=none");
   });
 });

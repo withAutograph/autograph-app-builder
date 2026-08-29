@@ -11,6 +11,7 @@ import { hasTestCapability } from "../testing/test-capability";
 export const ARRUSTED_TARGET_SHA = "8bdeb7667a0f0cd2305fe60e6a0237620c20cf41";
 export const ARRUSTED_TARGET_TREE = "5df26996ea5259916af7a81bff09ca792874f095";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
+export const ARRUSTED_RUST_VERSION = "1.97.1";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
 export const ARRUSTED_PATH_TO_REGEXP_VERSION = "8.4.2";
 export const ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION = "6.3.0";
@@ -60,6 +61,7 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
   }),
   runtime: z.strictObject({
     bun: z.literal(ARRUSTED_BUN_VERSION),
+    rust: z.literal(ARRUSTED_RUST_VERSION),
   }),
   closure: z.strictObject({
     package: z.literal("@vercel/microfrontends"),
@@ -183,7 +185,10 @@ function fixtureManifest(
       repositoryExecSha256:
         "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
     },
-    runtime: { bun: ARRUSTED_BUN_VERSION },
+    runtime: {
+      bun: ARRUSTED_BUN_VERSION,
+      rust: ARRUSTED_RUST_VERSION,
+    },
     closure: {
       package: "@vercel/microfrontends",
       version: ARRUSTED_MICROFRONTENDS_VERSION,
@@ -334,6 +339,18 @@ export async function materializeOfflineDependencies(input: {
     );
     if (resolution.exitCode !== 0)
       throw new Error("The required offline dependency closure is incomplete.");
+    const rustToolchain = await input.sandbox.run({
+      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && cargo metadata --no-deps --format-version 1 >/dev/null'`,
+      workingDirectory: `/workspace/${root}`,
+      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+    });
+    boundedOutput(
+      rustToolchain.stdout,
+      rustToolchain.stderr,
+      "Offline Rust toolchain inspection",
+    );
+    if (rustToolchain.exitCode !== 0)
+      throw new Error("The required offline Rust toolchain is incomplete.");
   }
   return { ...observed, planningRoot: `/workspace/${root}` };
 }

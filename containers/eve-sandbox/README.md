@@ -2,9 +2,9 @@
 
 This image is Autograph App Builder's externally built, target-bound execution
 environment. It pins its Eve runtime base, Git, mise `2026.8.12`, and Bun
-`1.3.14`.
-It also builds the exact external dependency closure needed by Arrusted's
-app creation and app-specific validation commands, including
+`1.3.14`, plus Rust and Cargo `1.97.1`.
+It also builds the exact external dependency closure needed by Arrusted's app
+creation and app-specific validation commands, including
 `@vercel/microfrontends` `2.4.0`, from a clean
 checkout of Arrusted commit
 `8bdeb7667a0f0cd2305fe60e6a0237620c20cf41`.
