@@ -62,8 +62,6 @@ export const previewOAuthScopes = [
 
 const refreshTokenLifetimeSeconds = 60 * 60 * 8;
 
-export const previewEmailPasswordPolicy = { enabled: false } as const;
-
 export interface PreviewOAuthMembershipAuthority {
   activeWorkspaceForUser(input: {
     issuer: string;
