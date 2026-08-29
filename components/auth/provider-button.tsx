@@ -19,7 +19,6 @@ import type { ComponentProps } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { resolveAuthCallbackURL } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
 
@@ -52,6 +51,8 @@ export function ProviderButton({
     socialSignInMode,
   } = useAuth();
 
+  const callbackURL = `${baseURL}${redirectTo}`;
+
   const { mutate: signInSocial, isPending: signInSocialPending } =
     useSignInSocial(authClient);
   const { mutate: signInPopup, isPending: signInPopupPending } =
@@ -67,13 +68,8 @@ export function ProviderButton({
     mutationKey: authMutationKeys.signUp.all,
   });
   const isPending = signInMutating + signUpMutating > 0;
-  const isProviderPending = signInSocialPending || signInPopupPending;
 
   const handleSignIn = () => {
-    const callbackURL = resolveAuthCallbackURL(
-      `${baseURL}${redirectTo}`,
-      window.location.search,
-    );
     if (socialSignInMode === "popup") {
       signInPopup(
         {
@@ -98,18 +94,16 @@ export function ProviderButton({
       className={cn("relative overflow-visible", className)}
       {...props}
     >
-      {isProviderPending ? <Spinner /> : providerIcon}
+      {signInSocialPending || signInPopupPending ? <Spinner /> : providerIcon}
 
-      {isProviderPending
-        ? "Setting up your workspace…"
-        : display === "full"
-          ? localization.auth.continueWith.replace(
-              "{{provider}}",
-              getProviderName(provider),
-            )
-          : display === "name"
-            ? getProviderName(provider)
-            : null}
+      {display === "full"
+        ? localization.auth.continueWith.replace(
+            "{{provider}}",
+            getProviderName(provider),
+          )
+        : display === "name"
+          ? getProviderName(provider)
+          : null}
 
       {display === "icon" && (
         <span className="sr-only">{getProviderName(provider)}</span>
