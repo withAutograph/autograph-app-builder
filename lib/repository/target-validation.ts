@@ -167,10 +167,12 @@ export function assertReusableTargetValidationReceipt(input: {
     input.validation.attemptDigest !== expectedAttempt.digest ||
     input.validation.applyDigest !== input.apply.digest ||
     input.validation.appSpecPath !== input.apply.appSpecPath ||
-    Object.entries(expectedBinding).some(
-      ([key, value]) =>
-        input.validation[key as keyof typeof expectedBinding] !== value,
-    ) ||
+    Object.entries(expectedBinding).some(([key, value]) => {
+      const observed = input.validation[key as keyof typeof expectedBinding];
+      return Array.isArray(value)
+        ? JSON.stringify(observed) !== JSON.stringify(value)
+        : observed !== value;
+    }) ||
     input.validation.commands.length !== expectedAttempt.commands.length ||
     input.validation.commands.some((command, index) => {
       const expected = expectedAttempt.commands[index];
@@ -360,12 +362,19 @@ async function materializeValidationOverlay(input: {
 }
 
 export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
-  return async ({ sandbox, command, validationRoot }) =>
-    await sandbox.run({
-      command,
+  return async ({ sandbox, appId, command, validationRoot }) => {
+    const expected = supportedValidationCommands(
+      appId,
+      SUPPORTED_VALIDATION_TEST_SHARDS,
+    ).find((candidate) => candidate.command === command);
+    if (expected === undefined)
+      throw new Error("The target validation command was not canonical.");
+    return await sandbox.run({
+      command: command.replace(/^mise run /u, "mise run --no-deps "),
       workingDirectory: validationRoot,
       abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
     });
+  };
 }
 
 export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {

@@ -82,7 +82,10 @@ describe("closed Gate A eval profile", () => {
     );
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
-    expect(environment).toEqual({ APP_BUILDER_REAL_SANDBOX: "1" });
+    expect(environment).toEqual({
+      APP_BUILDER_REAL_SANDBOX: "1",
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+    });
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
   });
 
@@ -130,6 +133,7 @@ describe("closed Gate A eval profile", () => {
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
       APP_BUILDER_SANDBOX_IMAGE: image,
       REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
     });
     expect(validateGateAEvalProfile(profile, repositoryRoot)).toEqual(profile);
 
@@ -160,6 +164,7 @@ describe("closed Gate A eval profile", () => {
       APP_BUILDER_REAL_SANDBOX: "1",
       APP_BUILDER_SANDBOX_IMAGE: image,
       REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
     });
     if (profile?.profile !== "sandbox")
       throw new Error("Expected sandbox profile.");

@@ -453,7 +453,7 @@ function parseTargetReceipt(
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, applyRoot, proposalPath }) =>
     await sandbox.run({
-      command: `mise run create:app -- --proposal ${proposalPath}`,
+      command: `mise run --no-deps create:app -- --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });

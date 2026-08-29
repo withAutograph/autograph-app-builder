@@ -537,7 +537,7 @@ describe("proposal-bound target apply", () => {
       proposal,
     });
     expect(run).toHaveBeenCalledWith({
-      command: `mise run create:app -- --proposal /workspace/.app-builder/apply/${binding.proposalDigest}/proposal.json`,
+      command: `mise run --no-deps create:app -- --proposal /workspace/.app-builder/apply/${binding.proposalDigest}/proposal.json`,
       workingDirectory: `/workspace/.app-builder/apply/${binding.proposalDigest}/repository`,
       abortSignal: expect.any(AbortSignal),
     });

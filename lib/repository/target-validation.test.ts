@@ -194,6 +194,22 @@ describe("proposal-bound target validation", () => {
     },
   );
 
+  it("reuses a canonical validation receipt after a JSON round trip", () => {
+    const validation = JSON.parse(
+      JSON.stringify(reusableValidationReceipt()),
+    ) as TargetValidationReceipt;
+    expect(() =>
+      assertReusableTargetValidationReceipt({
+        apply,
+        validation,
+        expectedAppSpecPath: apply.appSpecPath,
+        appliedTreeDigest: apply.postTreeDigest,
+        planningTreeDigest: apply.planningTreeDigest,
+        preparedTreeDigest: apply.preTreeDigest,
+      }),
+    ).not.toThrow();
+  });
+
   it.each([
     [
       "path-less historical V1",
@@ -531,10 +547,23 @@ describe("proposal-bound target validation", () => {
       validationRoot: root,
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run app:check-build example",
+      command: "mise run --no-deps app:check-build example",
       workingDirectory: root,
       abortSignal: expect.any(AbortSignal),
     });
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+  });
+
+  it("rejects non-canonical validation commands before sandbox execution", async () => {
+    const { run, sandbox } = sandboxFixture();
+    await expect(
+      sandboxValidationCommandExecutor()({
+        sandbox,
+        appId: "example",
+        command: "mise run app:test example 2/2",
+        validationRoot: validationOverlayRoot(apply.digest, "test"),
+      }),
+    ).rejects.toThrow("target validation command was not canonical");
+    expect(run).not.toHaveBeenCalled();
   });
 });
