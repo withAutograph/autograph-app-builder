@@ -8,9 +8,9 @@ export const IMAGE_REPOSITORY =
   "ghcr.io/withautograph/autograph-app-builder-sandbox";
 export const IMAGE_VERSION = "sandbox-v2";
 export const ARRUSTED_IMAGE_TARGET_SHA =
-  "86c1abcc0a29eba070856fde669feba07b7cde47";
+  "de37c1c37a9af222865760b9fa68e72323b327e8";
 export const ARRUSTED_IMAGE_TARGET_TREE =
-  "b47d3c503f7b8e4345731b1d278ff9d83fa2b917";
+  "ba987ace442394ee3959ea2294ca099d0db4cd26";
 
 const sha40 = /^[0-9a-f]{40}$/u;
 const sha256 = /^[0-9a-f]{64}$/u;
