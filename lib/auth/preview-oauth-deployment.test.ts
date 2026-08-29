@@ -93,12 +93,14 @@ describe("Preview OAuth deployment handlers", () => {
     expect(runtime).not.toContain("trustedProviders");
     expect(providers).toContain('id: "vercel"');
     expect(providers).toContain('"github",');
-    expect(providers).not.toContain("emailAndPassword");
+    expect(providers).toContain("emailAndPassword={{ enabled: false }}");
     expect(authClient).toContain("oauthProviderClient()");
     expect(signIn).toContain("<ProviderButtons");
     expect(signIn).not.toContain("SignUp");
     expect(signIn).not.toContain("/oauth2/continue");
-    expect(signIn).toContain("Continue with GitHub or Vercel");
+    expect(signIn).toContain(
+      '<ProviderButtons socialLayout={socialLayout} view="signIn" />',
+    );
     expect(providerButton).not.toContain("Setting up your workspace…");
     expect(settingUp).toContain("Setting up your workspace…");
     await expect(
