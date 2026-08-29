@@ -60,13 +60,23 @@ provider drift, membership change, suspended installation, or all-repository
 selection fails closed without a binding.
 
 This route adds the exact hosted environment fields
-`GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
+`GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
 `GITHUB_APP_INSTALL_STATE_SECRET`. The existing `GITHUB_CLIENT_ID` and
 `GITHUB_CLIENT_SECRET` remain the separate invited-user sign-in provider.
 `GITHUB_TOKEN` and `GITHUB_API_URL` are forbidden ambient overrides. Migration
 `0007_github_installation_authorization` owns the digest-only, one-time state
 table. The owner-only mise binding remains an operator recovery path; it is not
 the public installation flow.
+
+Register the GitHub App under the Autograph organization with the exact slug
+`autograph-app-builder`. Use `https://www.autograph.so/` as its public homepage
+and configure both its callback URL and setup URL as
+`<APP_ORIGIN>/github/installations/callback`. Request selected-repository
+installation and only the maximum repository permissions exercised by the
+operation-scoped installation tokens: metadata read, contents read/write,
+workflows read/write, pull requests read/write, administration read/write, and
+variables read. The App Builder narrows these permissions again for each
+operation and performs no repository mutation during the connection flow.
 
 `composeGitHubPublicationRuntime` enables the typed tools only when an adapter,
 proposal store, and receipt store are all injected with `enabled: true`. The
