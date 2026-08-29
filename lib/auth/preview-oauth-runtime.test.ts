@@ -28,6 +28,26 @@ describe("Preview OAuth runtime configuration", () => {
     }
   });
 
+  it("enables Vercel authentication only with a complete credential pair", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
+        VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
+      }),
+    ).toMatchObject({
+      vercelClientId: "vercel-client-id",
+      vercelClientSecret: "vercel-client-secret",
+    });
+
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
+      }),
+    ).toThrow("requires both client credentials");
+  });
+
   it("accepts Production only when Vercel and the configured environment agree", () => {
     expect(
       readPreviewOAuthRuntimeConfig({
