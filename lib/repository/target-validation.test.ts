@@ -547,7 +547,8 @@ describe("proposal-bound target validation", () => {
       validationRoot: root,
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run --no-deps app:check-build example",
+      command:
+        "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools app:check-build example",
       workingDirectory: root,
       abortSignal: expect.any(AbortSignal),
     });

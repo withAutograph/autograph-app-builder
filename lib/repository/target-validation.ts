@@ -370,7 +370,10 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
     if (expected === undefined)
       throw new Error("The target validation command was not canonical.");
     return await sandbox.run({
-      command: command.replace(/^mise run /u, "mise run --no-deps "),
+      command: command.replace(
+        /^mise run /u,
+        "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools ",
+      ),
       workingDirectory: validationRoot,
       abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
     });

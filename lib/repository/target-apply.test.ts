@@ -537,7 +537,7 @@ describe("proposal-bound target apply", () => {
       proposal,
     });
     expect(run).toHaveBeenCalledWith({
-      command: `mise run --no-deps create:app -- --proposal /workspace/.app-builder/apply/${binding.proposalDigest}/proposal.json`,
+      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools create:app -- --proposal /workspace/.app-builder/apply/${binding.proposalDigest}/proposal.json`,
       workingDirectory: `/workspace/.app-builder/apply/${binding.proposalDigest}/repository`,
       abortSignal: expect.any(AbortSignal),
     });
