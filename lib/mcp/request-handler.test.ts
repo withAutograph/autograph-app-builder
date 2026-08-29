@@ -269,6 +269,52 @@ describe("branded public tool mapping", () => {
       { operation: "cancel", input: invocations[4][1] },
     ]);
   });
+
+  it("returns a Browser-openable URL without attaching prototype UI", async () => {
+    const content = "<!doctype html><html><body>Vendor queue</body></html>";
+    const result = {
+      sessionId: "session-one",
+      status: "completed" as const,
+      cursor: 1,
+      events: [],
+      prototype: {
+        path: "prototype/vendor-onboarding/index.html",
+        mediaType: "text/html" as const,
+        content,
+        digest:
+          "e8385bab4b1d1c12641b37bdeec4e359c40a6f30016f724ec61b5b8b20ca8c0f",
+        revision: "b".repeat(64),
+      },
+    };
+    const service = {
+      start: vi.fn(async () => result),
+      get: vi.fn(async () => result),
+      send: vi.fn(async () => result),
+      respond: vi.fn(async () => result),
+      cancel: vi.fn(async () => result),
+    } satisfies EveSessionService;
+    const handler = createAutographMcpHandler(service, {
+      requestUrl: auth.resourceUrl,
+    });
+    const response = await handler(
+      mcpToolRequest("autograph_get", {
+        sessionId: "session-one",
+        cursor: 0,
+        limit: 100,
+      }),
+    );
+    const callResult = await mcpResult<{
+      structuredContent: Omit<typeof result, "prototype"> & {
+        prototype: typeof result.prototype & { previewUrl: string };
+      };
+      _meta?: unknown;
+    }>(response);
+
+    expect(callResult.structuredContent.prototype.previewUrl).toBe(
+      `https://builder.example.test/preview/session-one/${result.prototype.digest}`,
+    );
+    expect(callResult._meta).toBeUndefined();
+  });
 });
 
 describe("request-scoped MCP service selection", () => {

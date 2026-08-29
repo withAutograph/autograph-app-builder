@@ -348,8 +348,14 @@ Before enabling real MCP mutations:
     must never display or embed generated app previews. Open previews in the
     integrated ChatGPT/Codex Browser using a hosted HTTPS URL or a loopback URL
     for local proof; use an ordinary link when the integrated Browser is
-    unavailable. The MCP iframe must invoke tools through the host and never
-    call Eve or private endpoints directly.
+    unavailable. The public result adds an exact session-and-content-bound URL
+    only for those origins. Its route re-reads the caller-owned session and
+    exact recorded artifact, returns `404` for absent, stale, or unauthorized
+    content, disables storage, and applies a top-level CSP sandbox without
+    same-origin authority, networking, forms, framing, or external resources.
+    Raw prototype bytes remain workflow evidence and are never rendered by the
+    MCP App. The MCP iframe must invoke tools through the host and never call
+    Eve or private endpoints directly.
 11. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
 12. Enforce the fixed 30-minute idle and 24-hour maximum hosted session
     lifetimes before transport access, and omit expired rows from admission
