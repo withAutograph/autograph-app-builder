@@ -82,3 +82,53 @@ The prototype includes an experiment panel that tests candidate URL forms with
 a harmless prompt. The confirmed production candidate is
 `codex://new?prompt=...`; the clipboard fallback should remain available, and
 the UI should make clear that the user must send the task manually.
+
+## Cursor handoff
+
+Cursor has documented deep-link support for pre-filled prompts.
+
+The prompt format is:
+
+```text
+cursor://anysphere.cursor-deeplink/prompt?text=<URL-encoded-prompt>
+```
+
+Example:
+
+```text
+cursor://anysphere.cursor-deeplink/prompt?text=Create%20a%20harmless%20test%20app%20named%20Deep%20Link%20Probe.
+```
+
+The link opens the prompt in Cursor chat. The user must still review and submit
+it; Cursor deeplinks do not automatically execute prompts.
+
+### Cursor MCP installation
+
+Cursor also supports MCP installation deeplinks:
+
+```text
+cursor://anysphere.cursor-deeplink/mcp/install?name=<NAME>&config=<BASE64-ENCODED-CONFIG>
+```
+
+The `config` value is the base64-encoded JSON server configuration. Cursor
+prompts the user to install the server and may require authentication or a
+project-versus-user scope choice.
+
+### Recommended Cursor flow
+
+1. Offer an **Add Autograph to Cursor** link using the MCP installation format.
+2. The user approves installation, authentication, and scope if requested.
+3. Offer the prompt deeplink using
+   `cursor://anysphere.cursor-deeplink/prompt?text=...`.
+4. Cursor opens a chat with the Autograph request pre-filled.
+5. The user reviews and submits the request.
+
+Cursor also supports installing Agent Plugins and Cursor Plugins through its
+Customize and marketplace surfaces. Installation and any required app
+authorization remain user- or workspace-controlled.
+
+### Cursor references
+
+- [Cursor deeplinks](https://cursor.com/docs/reference/deeplinks)
+- [Cursor MCP install links](https://cursor.com/docs/mcp/install-links)
+- [Cursor plugins](https://cursor.com/docs/plugins)
