@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
+import { OrganizationProvisioningError } from "@/lib/auth/preview-user-management";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
 import {
   parseProviderConnectionFailureReason,
@@ -28,13 +29,32 @@ async function currentUser() {
       environment: process.env,
       headers: await headers(),
     });
-    if (!user) return undefined;
+    if (!user) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "preview_workspace_reconciliation_skipped",
+          reason: "session_unavailable",
+        }),
+      );
+      return undefined;
+    }
     return {
       id: user.id,
       name: user.name || "Autograph user",
       email: user.email,
     };
-  } catch {
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        message: "preview_workspace_reconciliation_failed",
+        reason:
+          error instanceof OrganizationProvisioningError
+            ? error.reason
+            : "unexpected",
+      }),
+    );
     return undefined;
   }
 }
