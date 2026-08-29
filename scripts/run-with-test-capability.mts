@@ -55,6 +55,24 @@ function childEnvironment(): NodeJS.ProcessEnv {
   return environment as NodeJS.ProcessEnv;
 }
 
+export function gateAEvalWorkflowBodyTimeout(
+  profile: unknown,
+): string | undefined {
+  if (
+    typeof profile !== "object" ||
+    profile === null ||
+    !Object.isFrozen(profile) ||
+    Object.keys(profile).sort().join(",") !==
+      "image,profile,sourceRoot,version" ||
+    (profile as { version?: unknown }).version !== 1
+  )
+    return undefined;
+  const name = (profile as { profile?: unknown }).profile;
+  return name === "sandbox" || name === "hosted-artifact"
+    ? "360000"
+    : undefined;
+}
+
 function canonical(proof: Record<string, unknown>) {
   return JSON.stringify({
     version: proof.version,
@@ -200,6 +218,9 @@ export async function runWithTestCapability(options: {
       ...childEnvironment(),
       EVE_DEV_WORKER_APP_ROOT:
         options.profile === "eve" ? repositoryRoot : undefined,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
+        options.gateAEvalProfile,
+      ),
       NODE_OPTIONS: `--import=${preload}`,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,

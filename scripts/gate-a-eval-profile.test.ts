@@ -10,6 +10,7 @@ import {
   installGateAEvalProfile,
   validateGateAEvalProfile,
 } from "./gate-a-eval-profile.mjs";
+import { gateAEvalWorkflowBodyTimeout } from "./run-with-test-capability.mts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -87,6 +88,28 @@ describe("closed Gate A eval profile", () => {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
     });
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
+    expect(gateAEvalWorkflowBodyTimeout(profile)).toBe("360000");
+  });
+
+  it("projects the body timeout only from a closed sandbox launch profile", () => {
+    const sandbox = createGateAEvalProfile(
+      { profile: "sandbox", image: null, sourceRoot: null },
+      repositoryRoot,
+    );
+    const general = createGateAEvalProfile(
+      { profile: "general", localPublication: "0" },
+      repositoryRoot,
+    );
+    expect(gateAEvalWorkflowBodyTimeout(sandbox)).toBe("360000");
+    expect(gateAEvalWorkflowBodyTimeout(general)).toBeUndefined();
+    expect(
+      gateAEvalWorkflowBodyTimeout({
+        version: 1,
+        profile: "sandbox",
+        image: null,
+        sourceRoot: null,
+      }),
+    ).toBeUndefined();
   });
 
   it("accepts only an explicit immutable sandbox image", () => {
