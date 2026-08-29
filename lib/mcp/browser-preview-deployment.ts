@@ -1,4 +1,5 @@
 import { getPreviewOAuthDeploymentAuth } from "../auth/preview-oauth-deployment";
+import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import {
   createHostedEveSessionService,
@@ -6,7 +7,6 @@ import {
 } from "../eve/hosted-service";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
-import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
 import {
   createSameOriginEveTransport,
   type HostedWorkloadIdentity,
@@ -51,7 +51,9 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
         issuer: string;
         audience: string;
         auth: ReturnType<typeof getPreviewOAuthDeploymentAuth>;
-        membership: ReturnType<typeof createPostgresOAuthMembershipAuthority>;
+        membership: ReturnType<
+          typeof createPostgresPreviewOrganizationAuthority
+        >;
         store: ReturnType<typeof createPostgresHostedEveStore>;
         transport: HostedEveTransport;
       }
@@ -75,7 +77,10 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
         issuer: config.issuer,
         audience: config.resource,
         auth: getPreviewOAuthDeploymentAuth(input.environment),
-        membership: createPostgresOAuthMembershipAuthority(database),
+        membership: createPostgresPreviewOrganizationAuthority(database, {
+          issuer: config.issuer,
+          audience: config.resource,
+        }),
         store: createPostgresHostedEveStore(database),
         transport: createSameOriginEveTransport({
           config: { baseUrl: new URL(config.resource).origin },
