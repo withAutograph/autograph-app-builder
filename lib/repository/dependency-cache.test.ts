@@ -239,6 +239,26 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
+    expect(dockerfile).toContain("find node_modules -type l -print0");
+    expect(dockerfile).toContain(
+      "/tmp/arrusted-target/node_modules/*) continue",
+    );
+    expect(dockerfile).toContain(
+      '/tmp/arrusted-target/*) dependency_relative="${dependency_target#/tmp/arrusted-target/}"',
+    );
+    expect(dockerfile).toContain("*) exit 1");
+    expect(dockerfile).toContain("test -e \"${dependency_target}\"");
+    expect(dockerfile).toContain("grep -Fx 'packages/vite-config'");
+    expect(dockerfile).toContain(
+      "--files-from /tmp/workspace-closure.list",
+    );
+    expect(dockerfile).toContain("--exclude='packages/*/node_modules'");
+    expect(dockerfile).toContain(
+      'case "${workspace_target}" in "${dependency_root}"/*)',
+    );
+    expect(dockerfile).toContain(
+      'require("\'"${dependency_root}"\'/node_modules/@autograph/vite-config/package.json").name',
+    );
     expect(dockerfile).toContain(
       `ARG CARGO_LOCK_SHA256=${manifest.target.cargoLockSha256}`,
     );

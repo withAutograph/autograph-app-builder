@@ -92,7 +92,23 @@ RUN set -eux; \
     cd packages/platform-microfrontends; \
     test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "8.4.2"; \
     test "$(bun -e 'console.log(require("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json").version)')" = "6.3.0"; \
-    bun -e 'const { match } = require("path-to-regexp"); if (match("/vendor")("/vendor")?.path !== "/vendor") process.exit(1)'
+    bun -e 'const { match } = require("path-to-regexp"); if (match("/vendor")("/vendor")?.path !== "/vendor") process.exit(1)'; \
+    cd /tmp/arrusted-target; \
+    find node_modules -type l -print0 \
+      | while IFS= read -r -d '' dependency_link; do \
+          dependency_target="$(readlink -f -- "${dependency_link}")"; \
+          test -e "${dependency_target}"; \
+          case "${dependency_target}" in \
+            /tmp/arrusted-target/node_modules/*) continue ;; \
+            /tmp/arrusted-target/*) dependency_relative="${dependency_target#/tmp/arrusted-target/}" ;; \
+            *) exit 1 ;; \
+          esac; \
+          printf '%s\n' "${dependency_relative}" \
+            | grep -Ex '(\.config/turbo/generators|apps/(hc|vendor)|packages/(agents/(csv|reference-resolution)|app-runtime|auth|dashboard-agent-evals|integrations|microfrontends|microfrontends-shell|platform-microfrontends|typescript-config|vite-config))'; \
+        done \
+      | LC_ALL=C sort -u > /tmp/workspace-closure.list; \
+    test -s /tmp/workspace-closure.list; \
+    grep -Fx 'packages/vite-config' /tmp/workspace-closure.list
 
 RUN set -eux; \
     cd /tmp/arrusted-target; \
@@ -109,7 +125,13 @@ RUN set -eux; \
     install -d /opt/app-builder/dependency-cache; \
     tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime --create \
-      --file - --directory /tmp/arrusted-target node_modules \
+      --exclude='packages/*/node_modules' \
+      --exclude='packages/agents/*/node_modules' \
+      --exclude='apps/*/node_modules' \
+      --exclude='.config/turbo/generators/node_modules' \
+      --file - --directory /tmp/arrusted-target \
+      node_modules \
+      --files-from /tmp/workspace-closure.list \
       | gzip --no-name --best > /opt/app-builder/dependency-cache/node-modules.tar.gz; \
     tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime --create \
@@ -178,7 +200,14 @@ RUN set -eux; \
     test -d "${dependency_root}/node_modules"; \
     chmod -R a-w,a+rX /opt/app-builder/dependencies; \
     if find /opt/app-builder/dependencies \( -type f -o -type d \) -perm /222 -print -quit | grep -q .; then exit 1; fi; \
+    find "${dependency_root}/node_modules/@autograph" -mindepth 1 -maxdepth 1 -type l -print0 \
+      | while IFS= read -r -d '' workspace_link; do \
+          workspace_target="$(readlink -f -- "${workspace_link}")"; \
+          test -e "${workspace_target}"; \
+          case "${workspace_target}" in "${dependency_root}"/*) ;; *) exit 1 ;; esac; \
+        done; \
     test "$(bun -e 'console.log(require("'"${dependency_root}"'/node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"; \
+    test "$(bun -e 'console.log(require("'"${dependency_root}"'/node_modules/@autograph/vite-config/package.json").name)')" = "@autograph/vite-config"; \
     install -d /opt/app-builder/cargo-closure; \
     tar --extract --gzip --file /opt/app-builder/dependency-cache/cargo-closure.tar.gz \
       --directory /opt/app-builder/cargo-closure --no-same-owner --no-same-permissions; \
