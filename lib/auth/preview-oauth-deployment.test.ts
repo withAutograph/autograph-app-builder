@@ -183,4 +183,20 @@ describe("Preview OAuth deployment handlers", () => {
       readFile("app/auth/workspace/workspace-form.tsx", "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it("uses Better Auth organizations for every signed-in workspace boundary", async () => {
+    const sources = await Promise.all(
+      [
+        "lib/integrations/builder-integration-deployment.ts",
+        "lib/integrations/vercel-installation-deployment.ts",
+        "lib/auth/github-app-installation-deployment.ts",
+        "lib/mcp/browser-preview-deployment.ts",
+      ].map((path) => readFile(path, "utf8")),
+    );
+
+    for (const source of sources) {
+      expect(source).toContain("createPostgresPreviewOrganizationAuthority");
+      expect(source).not.toContain("createPostgresOAuthMembershipAuthority");
+    }
+  });
 });

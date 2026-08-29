@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import { getPreviewOAuthDeploymentAuth } from "../auth/preview-oauth-deployment";
+import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
-import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
   createPostgresVercelAuthorizationStateStore,
@@ -32,7 +32,10 @@ function deployment(
   const preview = readPreviewOAuthRuntimeConfig(environment);
   const config = readVercelIntegrationEnvironment(environment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
-  const membership = createPostgresOAuthMembershipAuthority(database);
+  const membership = createPostgresPreviewOrganizationAuthority(database, {
+    issuer: preview.issuer,
+    audience: preview.resource,
+  });
   const installations = createPostgresVercelInstallationStore({
     database,
     config,

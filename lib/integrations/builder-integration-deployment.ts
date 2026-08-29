@@ -1,4 +1,4 @@
-import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
+import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import {
@@ -54,7 +54,10 @@ export async function loadBuilderIntegrationState(input: {
 
   let workspaceId: string | undefined;
   try {
-    const membership = createPostgresOAuthMembershipAuthority(database);
+    const membership = createPostgresPreviewOrganizationAuthority(database, {
+      issuer: preview.issuer,
+      audience: preview.resource,
+    });
     workspaceId = await membership.activeWorkspaceForUser({
       issuer: preview.issuer,
       audience: preview.resource,

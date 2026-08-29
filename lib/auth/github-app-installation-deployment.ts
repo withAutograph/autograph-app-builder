@@ -1,4 +1,4 @@
-import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
+import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
@@ -155,7 +155,10 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const config = readGitHubAppInstallationEnvironment(environment);
   const previewConfig = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(previewConfig.databaseUrl);
-  const membership = createPostgresOAuthMembershipAuthority(database);
+  const membership = createPostgresPreviewOrganizationAuthority(database, {
+    issuer: previewConfig.issuer,
+    audience: previewConfig.resource,
+  });
   const auth = getPreviewOAuthDeploymentAuth(environment);
   const authorization = createGitHubAppInstallationAuthorization({
     config,
