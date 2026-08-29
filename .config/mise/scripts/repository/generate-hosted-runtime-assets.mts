@@ -12,7 +12,7 @@ const skillOutputPath = join(
 );
 const artifactSourcePath = join(
   repositoryRoot,
-  "artifacts/hosted/arrusted-77dce488-preview.tar.gz",
+  "artifacts/hosted/arrusted-ffa0c34a-preview.tar.gz",
 );
 const artifactOutputPath = join(
   repositoryRoot,

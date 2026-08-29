@@ -19,11 +19,11 @@ import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "./dependency-cache";
 import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
 export const HOSTED_ELIGIBILITY_DIGEST =
-  "2b524f0975a1e0c55e0c7aeca25553afc394698e812f89f35df3881e24e38744";
+  "c47f3c720cce4b4bcf64e430d248284570776f48a886c20fc18d255815985c6e";
 export const HOSTED_CONTRACT_DIGEST =
-  "0295cecbbb6059544e80b90dc95a4722eb530642d4c0d63687b08009a26aa2c3";
+  "f3c8499305c983b3d82f3b78687f4106a149decd7faa486d3d106bdaf83e928f";
 export const HOSTED_SOURCE_RECEIPT_DIGEST =
-  "7acb8c5ba44424f1f4924f3304e7a3360b0f0acef391132e338c7a5072487dd5";
+  "d7d0f34a4f3fbe5f3fc7a342e17a4ee68485dd5039156cf630648e10f16459e9";
 
 function exactHostedReceipt(): SourceReceipt {
   return parseSourceReceipt({

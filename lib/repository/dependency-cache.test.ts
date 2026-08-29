@@ -22,6 +22,39 @@ import {
 } from "./dependency-cache";
 
 const archiveDigest = "a".repeat(64);
+const hostedArchiveDigest =
+  "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
+const hostedPlanningManifest = {
+  version: 1,
+  scope: "identity-planning",
+  platform: "linux/portable",
+  target: {
+    sha: ARRUSTED_TARGET_SHA,
+    tree: ARRUSTED_TARGET_TREE,
+    miseConfigSha256:
+      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+    miseLockSha256:
+      "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+    bunLockSha256:
+      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    appIdentitySha256:
+      "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+    appContractSha256:
+      "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    repositoryPreflightSha256:
+      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+    repositoryExecSha256:
+      "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+  },
+  runtime: { bun: "1.3.14" },
+  closure: {
+    package: "@vercel/microfrontends",
+    version: "2.4.0",
+    archivePath: DEPENDENCY_CACHE_ARCHIVE_PATH,
+    archiveSha256: hostedArchiveDigest,
+    archiveBytes: 1_356_765,
+  },
+} as const;
 const manifest = {
   version: 1,
   scope: "builder-execution",
@@ -86,7 +119,50 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   return { run, sandbox };
 }
 
+function hostedPlanningSandbox(
+  inputManifest: unknown = hostedPlanningManifest,
+) {
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: `${JSON.stringify(inputManifest)}\n`,
+      stderr: "",
+    })
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: `${hostedArchiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n1356765\n`,
+      stderr: "",
+    });
+  return { run, sandbox: { run } as unknown as SandboxSession };
+}
+
 describe("offline dependency cache", () => {
+  it("accepts only the exact narrow hosted planning closure", async () => {
+    const { run, sandbox } = hostedPlanningSandbox();
+    const observed = await inspectDependencyCache(sandbox, { VERCEL: "1" });
+
+    expect(observed.manifest.scope).toBe("identity-planning");
+    expect(observed.contentDigest).toBe(hostedArchiveDigest);
+    expect(run).toHaveBeenNthCalledWith(2, {
+      command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH}`,
+      workingDirectory: "/workspace",
+      abortSignal: expect.any(AbortSignal),
+    });
+  });
+
+  it("rejects hosted planning receipt drift before reading archives", async () => {
+    const { run, sandbox } = hostedPlanningSandbox({
+      ...hostedPlanningManifest,
+      target: { ...hostedPlanningManifest.target, sha: "0".repeat(40) },
+    });
+
+    await expect(
+      inspectDependencyCache(sandbox, { VERCEL: "1" }),
+    ).rejects.toThrow("manifest drifted");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("binds fixture cache observations to the exact prepared source", async () => {
     const target = {
       sourceSha: "3".repeat(40),

@@ -3,6 +3,6 @@
 set -eu
 
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
-  "$(mise which node)" \
+  "$(mise which node)" --import tsx \
   .config/mise/scripts/repository/prove-hosted-arrusted-artifact.mts \
   --mise-bin "$(command -v mise)"

@@ -87,6 +87,45 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
   }),
 });
 
+export const hostedPlanningDependencyCacheManifestSchema = z.strictObject({
+  version: z.literal(1),
+  scope: z.literal("identity-planning"),
+  platform: z.literal("linux/portable"),
+  target: z.strictObject({
+    sha: z.literal(ARRUSTED_TARGET_SHA),
+    tree: z.literal(ARRUSTED_TARGET_TREE),
+    miseConfigSha256: z.literal(
+      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+    ),
+    miseLockSha256: z.literal(
+      "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+    ),
+    bunLockSha256: z.literal(
+      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    ),
+    appIdentitySha256: z.literal(
+      "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+    ),
+    appContractSha256: z.literal(
+      "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    ),
+    repositoryPreflightSha256: z.literal(
+      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+    ),
+    repositoryExecSha256: z.literal(
+      "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+    ),
+  }),
+  runtime: z.strictObject({ bun: z.literal(ARRUSTED_BUN_VERSION) }),
+  closure: z.strictObject({
+    package: z.literal("@vercel/microfrontends"),
+    version: z.literal(ARRUSTED_MICROFRONTENDS_VERSION),
+    archivePath: z.literal(DEPENDENCY_CACHE_ARCHIVE_PATH),
+    archiveSha256: sha256Digest,
+    archiveBytes: z.number().int().positive(),
+  }),
+});
+
 export const dependencyCacheManifestSchema =
   dependencyCacheManifestShapeSchema.refine(
     ({ target }) =>
@@ -95,9 +134,9 @@ export const dependencyCacheManifestSchema =
     "dependency target does not match the committed source binding",
   );
 
-export type DependencyCacheManifest = z.infer<
-  typeof dependencyCacheManifestShapeSchema
->;
+export type DependencyCacheManifest =
+  | z.infer<typeof dependencyCacheManifestShapeSchema>
+  | z.infer<typeof hostedPlanningDependencyCacheManifestSchema>;
 
 export type ObservedDependencyCache = {
   manifest: DependencyCacheManifest;
@@ -156,6 +195,12 @@ const hostedArtifactDependencyCacheEnabled = (
 ) =>
   environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF === "1" &&
   hasTestCapability("mock-model", environment);
+
+const hostedPlanningDependencyCacheEnabled = (
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
+  environment.VERCEL === "1" ||
+  hostedArtifactDependencyCacheEnabled(environment);
 
 function dependencyCachePaths(
   environment: Readonly<Record<string, string | undefined>>,
@@ -263,12 +308,19 @@ export async function inspectDependencyCache(
   } catch {
     throw new Error("The fixed offline dependency cache manifest is invalid.");
   }
-  const validated = dependencyCacheManifestSchema.safeParse(parsed);
+  const hostedPlanning = hostedPlanningDependencyCacheEnabled(environment);
+  const validated = (
+    hostedPlanning
+      ? hostedPlanningDependencyCacheManifestSchema
+      : dependencyCacheManifestSchema
+  ).safeParse(parsed);
   if (!validated.success)
     throw new Error("The fixed offline dependency cache manifest drifted.");
 
   const archiveResult = await sandbox.run({
-    command: `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive} && sha256sum -- ${cachePaths.cargoArchive} && stat --format='%s' -- ${cachePaths.cargoArchive}`,
+    command: hostedPlanning
+      ? `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive}`
+      : `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive} && sha256sum -- ${cachePaths.cargoArchive} && stat --format='%s' -- ${cachePaths.cargoArchive}`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
@@ -285,15 +337,19 @@ export async function inspectDependencyCache(
   const observedBytes = Number(sizeLine);
   const observedCargoDigest = cargoChecksumLine?.trim().split(/\s+/u)[0];
   const observedCargoBytes = Number(cargoSizeLine);
+  const fullClosure = hostedPlanning
+    ? undefined
+    : dependencyCacheManifestSchema.parse(validated.data).closure;
   if (
     observedDigest === undefined ||
     !sha256Digest.safeParse(observedDigest).success ||
     observedDigest !== validated.data.closure.archiveSha256 ||
     observedBytes !== validated.data.closure.archiveBytes ||
-    observedCargoDigest === undefined ||
-    !sha256Digest.safeParse(observedCargoDigest).success ||
-    observedCargoDigest !== validated.data.closure.cargoArchiveSha256 ||
-    observedCargoBytes !== validated.data.closure.cargoArchiveBytes
+    (fullClosure !== undefined &&
+      (observedCargoDigest === undefined ||
+        !sha256Digest.safeParse(observedCargoDigest).success ||
+        observedCargoDigest !== fullClosure.cargoArchiveSha256 ||
+        observedCargoBytes !== fullClosure.cargoArchiveBytes))
   )
     throw new Error("The fixed offline dependency cache archive drifted.");
 
@@ -329,12 +385,17 @@ export async function materializeOfflineDependencies(input: {
   });
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
-    const absoluteNodeModules = dependencyCacheNodeModulesRoot(
-      observed.contentDigest,
-    );
+    const hostedPlanning = hostedPlanningDependencyCacheEnabled(environment);
+    const hostedDependencyRoot = `/workspace/.app-builder/hosted-dependencies/${observed.contentDigest}`;
+    const absoluteNodeModules = hostedPlanning
+      ? `${hostedDependencyRoot}/node_modules`
+      : dependencyCacheNodeModulesRoot(observed.contentDigest);
+    const installHostedClosure = hostedPlanning
+      ? `if [ ! -d ${absoluteNodeModules} ]; then rm -rf ${hostedDependencyRoot} && install -d -m 0755 ${hostedDependencyRoot} && tar --extract --gzip --file ${dependencyCachePaths(environment).archive} --directory ${hostedDependencyRoot} --no-same-owner --no-same-permissions && chmod -R a-w,a+rX ${hostedDependencyRoot}; fi && `
+      : "";
     await ensureSandboxDirectories(input.sandbox, [root]);
     const extraction = await input.sandbox.run({
-      command: `test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
@@ -364,7 +425,10 @@ export async function materializeOfflineDependencies(input: {
   }
   if (packageVersion !== ARRUSTED_MICROFRONTENDS_VERSION)
     throw new Error("The required offline dependency closure drifted.");
-  if (!fixtureDependencyCacheEnabled(environment)) {
+  if (
+    !fixtureDependencyCacheEnabled(environment) &&
+    !hostedPlanningDependencyCacheEnabled(environment)
+  ) {
     const resolution = await input.sandbox.run({
       command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
       workingDirectory: `/workspace/${root}/packages/platform-microfrontends`,
