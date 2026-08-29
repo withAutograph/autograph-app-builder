@@ -187,7 +187,7 @@ cleanup() {
   if [ -n "$monitor" ]; then kill -TERM "$monitor" 2>/dev/null || true; fi
 }
 trap cleanup EXIT INT TERM
-bun -e ${shellQuote(WORKSPACE_QUOTA_MONITOR_SCRIPT)} -- "$child" ${quota.maximumWorkspaceBytes} ${quota.maximumWorkspaceFiles} 1000 /workspace &
+node -e ${shellQuote(WORKSPACE_QUOTA_MONITOR_SCRIPT)} -- "$child" ${quota.maximumWorkspaceBytes} ${quota.maximumWorkspaceFiles} 1000 /workspace &
 monitor=$!
 set +e
 wait "$child"
