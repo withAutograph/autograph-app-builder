@@ -1,15 +1,98 @@
 /** @vitest-environment jsdom */
 
-import { act, type ReactNode } from "react";
+import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
+  refresh: vi.fn(),
+  replace: vi.fn(),
+}));
+const authClientMocks = vi.hoisted(() => ({ signOut: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => navigation,
+}));
+vi.mock("../../lib/auth-client", () => ({
+  authClient: { signOut: authClientMocks.signOut },
 }));
 
-import { AppBuilder } from "./app-builder";
+import { AppBuilder as AppBuilderComponent } from "./app-builder";
+
+const integrationState = {
+  vercel: {
+    status: "connected" as const,
+    scopes: [
+      {
+        installationId: "vercel-pylee",
+        status: "connected" as const,
+        displayName: "pylee",
+        slug: "pylee",
+        plan: "Hobby",
+      },
+      {
+        installationId: "vercel-autograph",
+        status: "connected" as const,
+        displayName: "autograph",
+        slug: "autograph",
+        plan: "Pro",
+      },
+    ],
+  },
+  github: {
+    status: "connected" as const,
+    scopes: [
+      {
+        installationId: "101",
+        status: "connected" as const,
+        accountLogin: "jasonmorganson",
+        accountType: "User" as const,
+      },
+      {
+        installationId: "102",
+        status: "connected" as const,
+        accountLogin: "withAutograph",
+        accountType: "Organization" as const,
+      },
+    ],
+  },
+  models: {
+    status: "ready" as const,
+    entries: [
+      {
+        id: "openai/gpt-5.6-terra",
+        name: "GPT 5.6 Terra",
+        provider: "openai",
+        capabilities: ["tool-use"],
+        zdr: "all" as const,
+      },
+      {
+        id: "openai/gpt-5.4-mini",
+        name: "GPT 5.4 Mini",
+        provider: "openai",
+        capabilities: [],
+        zdr: "some" as const,
+      },
+      {
+        id: "anthropic/claude-opus-4.6",
+        name: "Claude Opus 4.6",
+        provider: "anthropic",
+        capabilities: [],
+        zdr: "none" as const,
+      },
+    ],
+    defaultModelId: "openai/gpt-5.6-terra",
+    cached: false,
+  },
+};
+
+function AppBuilder(
+  props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations">,
+) {
+  return <AppBuilderComponent {...props} integrations={integrationState} />;
+}
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
@@ -146,16 +229,18 @@ describe("Vercel-faithful App Builder flow", () => {
       '[aria-label="Select a Vercel Team"]',
     )!;
     await focus(team);
-    expect(view.querySelector('[data-option-value="pylee"]')).not.toBeNull();
     expect(
-      view.querySelector('[data-option-value="autograph"]'),
+      view.querySelector('[data-option-value="vercel-pylee"]'),
+    ).not.toBeNull();
+    expect(
+      view.querySelector('[data-option-value="vercel-autograph"]'),
     ).not.toBeNull();
     const createTeam = [
       ...view.querySelectorAll<HTMLButtonElement>("button"),
-    ].find((button) => button.textContent === "Create a Team")!;
-    expect(createTeam.disabled).toBe(true);
+    ].find((button) => button.textContent === "Connect another Vercel team")!;
+    expect(createTeam.disabled).toBe(false);
     await click(
-      view.querySelector<HTMLElement>('[data-option-value="pylee"]')!,
+      view.querySelector<HTMLElement>('[data-option-value="vercel-pylee"]')!,
     );
     expect(team.value).toBe("pylee");
     await fill(team, "missing");
@@ -168,13 +253,11 @@ describe("Vercel-faithful App Builder flow", () => {
     )!;
     await focus(gitScope);
     await fill(gitScope, "withAuto");
-    expect(
-      view.querySelector('[data-option-value="withAutograph"]'),
-    ).not.toBeNull();
+    expect(view.querySelector('[data-option-value="102"]')).not.toBeNull();
     const addScope = [
       ...view.querySelectorAll<HTMLButtonElement>("button"),
     ].find((button) => button.textContent === "Add GitHub Scope")!;
-    expect(addScope.disabled).toBe(true);
+    expect(addScope.disabled).toBe(false);
     await press(gitScope, "Enter");
     expect(gitScope.value).toBe("withAutograph");
 
@@ -251,6 +334,31 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("signs out through the JSON auth client and returns to sign in", async () => {
+    authClientMocks.signOut.mockResolvedValue({ data: { success: true } });
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    await click(
+      view.querySelector<HTMLButtonElement>(
+        '[aria-label="Open account menu"]',
+      )!,
+    );
+    const logOut = [...view.querySelectorAll("button")].find(
+      (button) => button.textContent === "Log Out",
+    )!;
+
+    expect(logOut.closest("form")).toBeNull();
+    await click(logOut);
+
+    expect(authClientMocks.signOut).toHaveBeenCalledOnce();
+    expect(navigation.replace).toHaveBeenCalledWith("/auth/sign-in");
+    expect(navigation.refresh).toHaveBeenCalledOnce();
   });
 
   it("matches the repository privacy and connection-browser interactions", async () => {

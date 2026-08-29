@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
 import { getPreviewOAuthDeploymentAuth } from "@/lib/auth/preview-oauth-deployment";
+import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
 
 import { AppBuilder } from "./ui/app-builder";
 
@@ -12,6 +13,7 @@ async function currentUser() {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) return undefined;
     return {
+      id: session.user.id,
       name: session.user.name || "Autograph user",
       email: session.user.email,
     };
@@ -25,11 +27,16 @@ export default async function Home({ searchParams }: PageProps) {
   const authenticated =
     user !== undefined ||
     (process.env.NODE_ENV !== "production" && mode === "authenticated");
+  const integrations = await loadBuilderIntegrationState({
+    environment: process.env,
+    userId: user?.id,
+  });
 
   return (
     <AppBuilder
       authenticated={authenticated && mode !== "anonymous"}
       user={user ?? { name: "Autograph User", email: "Signed in with GitHub" }}
+      integrations={integrations}
     />
   );
 }

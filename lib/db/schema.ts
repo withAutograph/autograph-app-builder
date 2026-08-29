@@ -617,6 +617,118 @@ export const hostedGitHubInstallations = pgTable(
   ],
 );
 
+/** Multi-installation GitHub bindings used by App Builder selection. The
+ * original single binding remains the publication-runtime compatibility row;
+ * connecting another scope never broadens publication authority implicitly. */
+export const hostedGitHubInstallationBindings = pgTable(
+  "hosted_github_installation_binding",
+  {
+    ...hostedGitHubTenantColumns,
+    installationId: text("installation_id").notNull(),
+    accountId: text("account_id").notNull(),
+    accountLogin: text("account_login").notNull(),
+    accountType: text("account_type").notNull(),
+    active: boolean("active").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_github_installation_binding_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.installationId,
+      ],
+    }),
+    uniqueIndex("hosted_github_installation_binding_id_uidx").on(
+      table.installationId,
+    ),
+    check(
+      "hosted_github_installation_binding_id_check",
+      sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_installation_binding_account_id_check",
+      sql`${table.accountId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_installation_binding_account_type_check",
+      sql`${table.accountType} IN ('Organization', 'User')`,
+    ),
+  ],
+);
+
+export const hostedVercelInstallations = pgTable(
+  "hosted_vercel_installation",
+  {
+    ...hostedGitHubTenantColumns,
+    installationId: text("installation_id").notNull(),
+    scopeId: text("scope_id").notNull(),
+    scopeType: text("scope_type").notNull(),
+    displayName: text("display_name").notNull(),
+    slug: text("slug").notNull(),
+    plan: text("plan").notNull(),
+    encryptedToken: text("encrypted_token").notNull(),
+    tokenIv: text("token_iv").notNull(),
+    tokenTag: text("token_tag").notNull(),
+    tokenKeyVersion: text("token_key_version").notNull(),
+    active: boolean("active").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_vercel_installation_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.installationId,
+      ],
+    }),
+    uniqueIndex("hosted_vercel_installation_id_uidx").on(table.installationId),
+    check(
+      "hosted_vercel_installation_scope_type_check",
+      sql`${table.scopeType} IN ('team', 'user')`,
+    ),
+  ],
+);
+
+export const vercelInstallationAuthorizationStates = pgTable(
+  "vercel_installation_authorization_state",
+  {
+    stateDigest: text("state_digest").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    authorityDigest: text("authority_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("vercel_installation_authorization_state_expiry_idx").on(
+      table.expiresAt,
+    ),
+    check(
+      "vercel_installation_authorization_state_digest_check",
+      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "vercel_installation_authorization_authority_digest_check",
+      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "vercel_installation_authorization_state_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "vercel_installation_authorization_state_consumed_check",
+      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
+    ),
+  ],
+);
+
 export const githubInstallationAuthorizationStates = pgTable(
   "github_installation_authorization_state",
   {
