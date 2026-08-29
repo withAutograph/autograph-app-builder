@@ -743,7 +743,7 @@ function AnonymousBuilder({
         <AutographMark />
         <span>New App</span>
         <div>
-          <a href="/auth/sign-in?callbackURL=%2F">Login</a>
+          <a href="/auth/sign-in?callbackURL=%2F">Sign In</a>
           <a className={styles.darkButton} href="/auth/sign-in?callbackURL=%2F">
             Sign Up
           </a>
@@ -785,7 +785,7 @@ function AnonymousBuilder({
           ))}
         </div>
         <p>
-          You’ll create or log in to your Autograph account before building.
+          You’ll create or sign in to your Autograph account before building.
         </p>
       </section>
     </main>
