@@ -140,6 +140,13 @@ const suggestions = [
 const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
 
+const briefExamples = [
+  defaultBrief,
+  "# Customer feedback portal\n\nBuild a portal where customers can submit feedback, vote on ideas, and follow status updates. Give the product team a triage view with tags, ownership, and clear acceptance criteria.",
+  "# Operations dashboard\n\nBuild an internal dashboard for monitoring active work, blocked tasks, and service health. Prioritize fast scanning, clear ownership, and links to the source systems for follow-up.",
+  "# Vendor onboarding\n\nBuild a guided vendor onboarding app that collects company details, validates required documents, and shows approval progress. Include explicit review states, responsible owners, and audit-friendly history.",
+] as const;
+
 function AutographMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={styles.brand} data-compact={compact || undefined}>
@@ -197,6 +204,8 @@ type ComboOption = {
   icon?: string;
 };
 
+type ComboFooter = ComboOption & { disabled?: boolean };
+
 function SearchCombobox({
   label,
   value,
@@ -214,7 +223,7 @@ function SearchCombobox({
   options: ComboOption[];
   onChange: (value: string) => void;
   prefix: ReactNode;
-  menuFooter?: ComboOption;
+  menuFooter?: ComboFooter;
   optionIcon?: (option: ComboOption) => ReactNode;
   footerIcon?: ReactNode;
   detailPills?: boolean;
@@ -357,7 +366,11 @@ function SearchCombobox({
           ) : null}
         </div>
         {menuFooter ? (
-          <button className={styles.comboFooter} type="button">
+          <button
+            className={styles.comboFooter}
+            type="button"
+            disabled={menuFooter.disabled}
+          >
             <span className={styles.comboOptionIcon} aria-hidden="true">
               {footerIcon ?? <Plus size={20} />}
             </span>
@@ -801,13 +814,15 @@ function Builder({
     return name.toLowerCase().includes(normalizedSearch);
   });
   const canSubmit = Boolean(form.brief.trim());
-  const addConnection = (name: string) =>
+  const addConnection = (name: string) => {
+    if (comingSoonConnections.has(name)) return;
     setForm((current) => ({
       ...current,
       connections: current.connections.includes(name)
         ? current.connections
         : [...current.connections, name],
     }));
+  };
   const removeConnection = (name: string) => {
     setForm((current) => ({
       ...current,
@@ -879,7 +894,18 @@ function Builder({
             <button
               type="button"
               aria-label="Try another app brief example"
-              onClick={() => setForm({ ...form, brief: defaultBrief })}
+              onClick={() =>
+                setForm((current) => {
+                  const currentIndex = briefExamples.indexOf(
+                    current.brief as (typeof briefExamples)[number],
+                  );
+                  const nextIndex =
+                    currentIndex < 0
+                      ? 0
+                      : (currentIndex + 1) % briefExamples.length;
+                  return { ...current, brief: briefExamples[nextIndex] };
+                })
+              }
             >
               <RefreshCw size={16} aria-hidden="true" />
             </button>
@@ -904,7 +930,11 @@ function Builder({
             options={teamOptions}
             onChange={setTeam}
             prefix={<span className={styles.teamDot} data-team={team} />}
-            menuFooter={{ value: "create-team", label: "Create a Team" }}
+            menuFooter={{
+              value: "create-team",
+              label: "Create a Team",
+              disabled: true,
+            }}
             optionIcon={(option) => (
               <span className={styles.teamDot} data-team={option.value} />
             )}
@@ -921,7 +951,11 @@ function Builder({
               options={gitScopeOptions}
               onChange={setGitScope}
               prefix={<FaGithub size={16} />}
-              menuFooter={{ value: "add-github", label: "Add GitHub Scope" }}
+              menuFooter={{
+                value: "add-github",
+                label: "Add GitHub Scope",
+                disabled: true,
+              }}
               optionIcon={() => <FaGithub size={16} />}
               footerIcon={<Plus size={21} />}
             />

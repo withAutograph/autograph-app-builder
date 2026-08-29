@@ -435,8 +435,13 @@
   grid-template-columns: 18px minmax(0, 1fr) auto auto;
 }
 .comboMenu button[data-active],
-.comboMenu button:hover {
+.comboMenu button:not(:disabled):hover {
   background: var(--hover);
+}
+.comboMenu button:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  opacity: 0.6;
 }
 .comboOptionLabel {
   overflow: hidden;

@@ -45,6 +45,16 @@ async function click(element: HTMLElement) {
   await act(async () => element.click());
 }
 
+async function focus(element: HTMLElement) {
+  await act(async () => element.focus());
+}
+
+async function press(element: HTMLElement, key: string) {
+  await act(async () =>
+    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })),
+  );
+}
+
 afterEach(async () => {
   vi.useRealTimers();
   if (root) await act(async () => root?.unmount());
@@ -99,6 +109,84 @@ describe("Vercel-faithful App Builder flow", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(accessibility.violations).toEqual([]);
+  });
+
+  it("cycles app brief examples without repeating the current example", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    const anotherExample = view.querySelector<HTMLButtonElement>(
+      '[aria-label="Try another app brief example"]',
+    )!;
+    const examples = [brief.value];
+
+    for (let index = 0; index < 3; index += 1) {
+      await click(anotherExample);
+      examples.push(brief.value);
+    }
+
+    expect(new Set(examples).size).toBe(4);
+    await click(anotherExample);
+    expect(brief.value).toBe(examples[0]);
+  });
+
+  it("selects and searches seeded teams, GitHub scopes, and models", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    const team = view.querySelector<HTMLInputElement>(
+      '[aria-label="Select a Vercel Team"]',
+    )!;
+    await focus(team);
+    expect(view.querySelector('[data-option-value="pylee"]')).not.toBeNull();
+    expect(
+      view.querySelector('[data-option-value="autograph"]'),
+    ).not.toBeNull();
+    const createTeam = [
+      ...view.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Create a Team")!;
+    expect(createTeam.disabled).toBe(true);
+    await click(
+      view.querySelector<HTMLElement>('[data-option-value="pylee"]')!,
+    );
+    expect(team.value).toBe("pylee");
+    await fill(team, "missing");
+    expect(view.textContent).toContain("No results found.");
+    await press(team, "Escape");
+    expect(team.value).toBe("pylee");
+
+    const gitScope = view.querySelector<HTMLInputElement>(
+      '[aria-label="Git Scope"]',
+    )!;
+    await focus(gitScope);
+    await fill(gitScope, "withAuto");
+    expect(
+      view.querySelector('[data-option-value="withAutograph"]'),
+    ).not.toBeNull();
+    const addScope = [
+      ...view.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Add GitHub Scope")!;
+    expect(addScope.disabled).toBe(true);
+    await press(gitScope, "Enter");
+    expect(gitScope.value).toBe("withAutograph");
+
+    const model = view.querySelector<HTMLInputElement>(
+      '[aria-label="GPT 5.6 Terra"]',
+    )!;
+    await focus(model);
+    await fill(model, "openai/gpt-5.4-mini");
+    expect(view.textContent).toContain("GPT 5.4 Mini");
+    expect(view.textContent).not.toContain("Claude Opus 4.6");
+    await press(model, "Enter");
+    expect(model.value).toBe("GPT 5.4 Mini");
   });
 
   it("copies the canonical brief and advances through truthful handoff states", async () => {
@@ -208,6 +296,8 @@ describe("Vercel-faithful App Builder flow", () => {
     )!;
     expect(ramp.disabled).toBe(true);
     expect(ramp.textContent).toContain("Coming soon");
+    await click(ramp);
+    expect(view.querySelector('[aria-label="Added connections"]')).toBeNull();
     await click(
       [...view.querySelectorAll("button")].find(
         (button) => button.textContent === "Show more connections",
