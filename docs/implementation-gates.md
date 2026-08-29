@@ -322,7 +322,7 @@ Before enabling real MCP mutations:
    and must exactly equal `VERCEL_ENV`. Missing, Development, wildcard, and
    mismatched values fail closed. This source support is not Production
    activation evidence.
-4. Establish an approved Preview database restore point, then apply the five
+4. Establish an approved Preview database restore point, then apply all
    checked-in additive Drizzle-derived migrations with
    `mise run database:migrate`. Run `mise run hosted:storage-verify` afterward;
    it uses a read-only transaction to require the exact migration order,
