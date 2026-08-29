@@ -46,15 +46,27 @@ const previewOAuthRuntimeConfigSchema = z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value)),
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .optional(),
     githubClientSecret: z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value)),
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .optional(),
   })
   .strict()
   .superRefine((config, context) => {
+    if (
+      (config.githubClientId === undefined) !==
+      (config.githubClientSecret === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["githubClientSecret"],
+        message: "GitHub OAuth credentials must be configured together.",
+      });
+    }
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
     if (
@@ -140,13 +152,16 @@ export function createPreviewOAuthServer(input: {
     database: input.database,
     trustedOrigins: [resourceOrigin],
     emailAndPassword: previewEmailPasswordPolicy,
-    socialProviders: {
-      github: {
-        clientId: config.githubClientId,
-        clientSecret: config.githubClientSecret,
-        disableSignUp: true,
-      },
-    },
+    socialProviders:
+      config.githubClientId && config.githubClientSecret
+        ? {
+            github: {
+              clientId: config.githubClientId,
+              clientSecret: config.githubClientSecret,
+              disableSignUp: true,
+            },
+          }
+        : undefined,
     account: {
       accountLinking: {
         enabled: false,

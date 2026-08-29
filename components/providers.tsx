@@ -20,14 +20,14 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider
         authClient={authClient}
-        emailAndPassword={{ enabled: false }}
+        emailAndPassword={{ enabled: true }}
         Link={Link}
         navigate={({ to, replace }) =>
           replace ? router.replace(to) : router.push(to)
         }
         plugins={[oauthProviderPlugin()]}
         redirectTo="/"
-        socialProviders={["github"]}
+        socialProviders={[]}
       >
         <TooltipProvider>{children}</TooltipProvider>
         <Toaster />

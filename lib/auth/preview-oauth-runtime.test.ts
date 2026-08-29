@@ -15,17 +15,25 @@ const environment = {
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
-  it("requires the GitHub identity provider alongside the Preview bindings", () => {
+  it("accepts the optional GitHub provider alongside invited-user login", () => {
     expect(readPreviewOAuthRuntimeConfig(environment)).toMatchObject({
       environment: "preview",
       githubClientId: "github-client-id",
       githubClientSecret: "github-client-secret",
     });
-    for (const field of ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const) {
-      expect(() =>
-        readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
-      ).toThrow();
-    }
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        GITHUB_CLIENT_ID: undefined,
+        GITHUB_CLIENT_SECRET: undefined,
+      }),
+    ).toMatchObject({ environment: "preview" });
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        GITHUB_CLIENT_SECRET: undefined,
+      }),
+    ).toThrow("configured together");
   });
 
   it("accepts Production only when Vercel and the configured environment agree", () => {
