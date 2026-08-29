@@ -179,7 +179,7 @@ describe("offline dependency cache", () => {
     );
     expect(linkCommand).toContain("test -d");
     expect(linkCommand).toContain("test ! -L");
-    expect(linkCommand).toContain("-perm /222");
+    expect(linkCommand).toContain("\\( -type f -o -type d \\) -perm /222");
     expect(linkCommand).toContain("ln -s");
     expect(linkCommand).toContain(
       `test -L /workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/node_modules`,
@@ -269,7 +269,7 @@ describe("offline dependency cache", () => {
       "chmod -R a-w,a+rX /opt/app-builder/dependencies",
     );
     expect(dockerfile).toContain(
-      "find /opt/app-builder/dependencies -perm /222 -print -quit",
+      "find /opt/app-builder/dependencies \\( -type f -o -type d \\) -perm /222 -print -quit",
     );
     expect(dockerfile).toContain(`ARG RUST_VERSION=${ARRUSTED_RUST_VERSION}`);
     expect(dockerfile).toContain("CARGO_HOME=/opt/app-builder/cargo");

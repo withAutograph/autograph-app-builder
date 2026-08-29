@@ -327,7 +327,7 @@ export async function materializeOfflineDependencies(input: {
     );
     await ensureSandboxDirectories(input.sandbox, [root]);
     const extraction = await input.sandbox.run({
-      command: `test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && if find ${absoluteNodeModules} -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
+      command: `test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });

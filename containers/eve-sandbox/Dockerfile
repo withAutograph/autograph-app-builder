@@ -177,7 +177,7 @@ RUN set -eux; \
       --directory "${dependency_root}" --no-same-owner --no-same-permissions; \
     test -d "${dependency_root}/node_modules"; \
     chmod -R a-w,a+rX /opt/app-builder/dependencies; \
-    if find /opt/app-builder/dependencies -perm /222 -print -quit | grep -q .; then exit 1; fi; \
+    if find /opt/app-builder/dependencies \( -type f -o -type d \) -perm /222 -print -quit | grep -q .; then exit 1; fi; \
     test "$(bun -e 'console.log(require("'"${dependency_root}"'/node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"; \
     install -d /opt/app-builder/cargo-closure; \
     tar --extract --gzip --file /opt/app-builder/dependency-cache/cargo-closure.tar.gz \
