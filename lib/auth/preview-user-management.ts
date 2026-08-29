@@ -3,7 +3,10 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { admin } from "better-auth/plugins/admin";
 import { organization } from "better-auth/plugins/organization";
 
-const githubCallbackPath = "/callback/github";
+const invitationCallbackPaths = new Set([
+  "/callback/github",
+  "/callback/vercel",
+]);
 
 const organizationAccess = createAccessControl({
   organization: ["update", "delete"],
@@ -79,7 +82,7 @@ export function createPreviewUserManagementLifecycle(
       user: PreviewInvitedUser & Record<string, unknown>,
       context: { path?: string } | null,
     ) {
-      if (context?.path !== githubCallbackPath) return;
+      if (!invitationCallbackPaths.has(context?.path ?? "")) return;
       if (!user.emailVerified) {
         throw accessDenied(
           "GitHub must provide a verified email address before you can join Autograph.",
@@ -100,7 +103,7 @@ export function createPreviewUserManagementLifecycle(
       user: PreviewInvitedUser & Record<string, unknown>,
       context: { path?: string } | null,
     ) {
-      if (context?.path !== githubCallbackPath) return;
+      if (!invitationCallbackPaths.has(context?.path ?? "")) return;
       await authority.activatePendingInvitation({
         email: user.email.toLowerCase(),
         userId: user.id,
