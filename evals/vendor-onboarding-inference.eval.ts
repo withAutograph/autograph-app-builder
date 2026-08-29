@@ -6,7 +6,7 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "A sparse vendor-onboarding brief infers identity and UX, automatically prepares eligible context, repairs its internal spec, and reaches a validated plan without conversation-friction input.",
+    "A sparse vendor-onboarding brief infers identity and UX, automatically prepares eligible context, repairs its internal spec, and reaches review-ready app changes without conversation-friction input.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Supported repository at ${repository}
@@ -23,6 +23,10 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       "accept_app_spec",
       "prepare_target_dependencies",
       "plan_app_creation",
+      "apply_app_creation",
+      "validate_app_creation",
+      "change_set_status",
+      "accept_change_set",
     ]);
     t.calledTool("inspect_source", { count: 1 });
     t.calledTool("prepare_workspace", { count: 1 });
@@ -64,7 +68,13 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.calledTool("accept_app_spec", { count: 1 });
     t.calledTool("prepare_target_dependencies", { count: 1 });
     t.calledTool("plan_app_creation", { count: 1 });
-    t.notCalledTool("apply_app_creation");
+    t.calledTool("apply_app_creation", { count: 1 });
+    t.calledTool("validate_app_creation", { count: 1 });
+    t.calledTool("change_set_status", { count: 1 });
+    t.calledTool("accept_change_set", { count: 1 });
+    t.notCalledTool("publish_reviewed_change_set");
+    t.notCalledTool("publish_reviewed_change_set_to_branch_worktree");
+    t.notCalledTool("publish_github_draft_pr");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
     t.check(t.reply, includes("Vendor Onboarding"));
@@ -72,10 +82,9 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.check(t.reply, includes("operations review queue"));
     t.check(t.reply, includes("vendor detail panel"));
     t.check(t.reply, includes("conditional Finance verification step"));
-    t.check(
-      t.reply,
-      includes("usable visual prototype and validated implementation plan"),
-    );
+    t.check(t.reply, includes("implementation plan and complete app changes"));
+    t.check(t.reply, includes("ready to review"));
+    t.check(t.reply, includes("draft pull request"));
     t.check(
       t.reply,
       satisfies(

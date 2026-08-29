@@ -12,6 +12,7 @@ import {
   type DraftPullRequestProposal,
 } from "./github-publication";
 import { safeSourcePath } from "./source-path";
+import { compareOverlayPaths } from "./target-apply";
 
 const API_ORIGIN = "https://api.github.com";
 const API_VERSION = "2026-03-10";
@@ -164,7 +165,7 @@ function canonicalFiles(
   if (totalBytes > MAX_TOTAL_MATERIAL_BYTES)
     throw new Error("invalid-material");
   return [...input].toSorted((left, right) =>
-    left.path.localeCompare(right.path),
+    compareOverlayPaths(left.path, right.path),
   );
 }
 
@@ -901,7 +902,9 @@ export function createGitHubAppHttpProvider(input: {
           changes.some((change) => !safeSourcePath(change.path))
         )
           throw new Error("invalid-material");
-        const paths = changes.map(({ path }) => path).toSorted();
+        const paths = changes
+          .map(({ path }) => path)
+          .toSorted(compareOverlayPaths);
         if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths))
           throw new Error("invalid-material");
         let totalBytes = 0;
@@ -934,7 +937,9 @@ export function createGitHubAppHttpProvider(input: {
               ...(after === undefined ? {} : { after }),
             };
           })
-          .toSorted((left, right) => left.path.localeCompare(right.path));
+          .toSorted((left, right) =>
+            compareOverlayPaths(left.path, right.path),
+          );
         if (totalBytes > MAX_TOTAL_MATERIAL_BYTES)
           throw new Error("invalid-material");
         if (

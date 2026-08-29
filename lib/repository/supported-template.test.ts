@@ -69,6 +69,12 @@ function fixture(): string {
       "",
       '[tasks."repository:exec"]',
       'run = "bun .config/mise/scripts/repository/$usage_script"',
+      "",
+      '[tasks."app:check-build"]',
+      "run = 'bun .config/mise/scripts/repository/app-validation.ts check-build \"$usage_app\"'",
+      "",
+      '[tasks."app:test"]',
+      'run = \'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"\'',
     ].join("\n"),
     ".github/workflows/cd.yml": [
       "jobs:",
@@ -99,13 +105,14 @@ function fixture(): string {
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":
       'const scope = "@autograph/${appId}";\n',
+    ".config/mise/scripts/repository/app-validation.ts": "export {};\n",
     ".config/mise/scripts/repository/repository-preflight.ts": [
       'const observed = { runtime: "nextjs" };',
       'const appIdentity = "mise run repository:exec -- app-identity.ts --app <app-id>";',
       'const appPlan = "mise run repository:exec -- app-contract.ts --contract <contract-file>";',
       'const appApply = "mise run create:app -- --proposal <proposal-file>";',
       'const preflight = "mise run repository:preflight";',
-      'const validation = ["mise run check", "mise run test"];',
+      'const validation = ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"];',
     ].join("\n"),
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",

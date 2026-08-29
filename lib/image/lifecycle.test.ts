@@ -81,11 +81,15 @@ const targetFiles = Object.fromEntries(
     ".config/mise/config.toml",
     ".config/mise/mise.lock",
     "bun.lock",
+    "Cargo.lock",
     ".config/mise/scripts/repository/app-identity.ts",
     ".config/mise/scripts/repository/app-contract.ts",
+    ".config/mise/scripts/repository/app-validation.ts",
+    ".config/turbo/generators/create-app.ts",
+    ".config/turbo/generators/templates/app/package.json.hbs",
     ".config/mise/scripts/repository/repository-preflight.ts",
     ".config/mise/tasks/repository/exec",
-  ].map((path, index) => [path, "456789a"[index]!.repeat(64)]),
+  ].map((path, index) => [path, "3456789abcd"[index]!.repeat(64)]),
 );
 
 const provenance = () =>
@@ -1279,7 +1283,7 @@ wait
       readFileSync("containers/eve-sandbox/Dockerfile"),
     );
     expect(dockerfileDigest).toBe(
-      "71cfb9d0d5bb5780e5496d3b62ce66f47f34f73d95d336e9c6ad10128b521813",
+      "4c65f1e04a673a3bf8cd2426985decb714a93b959089b165ac14fccf53c0cdde",
     );
     expect(
       readFileSync("containers/eve-sandbox/README.md", "utf8"),

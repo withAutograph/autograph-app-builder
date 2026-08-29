@@ -150,9 +150,6 @@ function statusReceipt(
           review: {
             digest: state.reviewReceipt.digest,
             changeSetDigest: state.reviewReceipt.changeSetDigest,
-            ...(state.changeSetApprovalReceipt === undefined
-              ? {}
-              : { approvalReceipt: state.changeSetApprovalReceipt }),
           },
         }
       : {}),

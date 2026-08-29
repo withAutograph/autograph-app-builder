@@ -13,9 +13,11 @@ import {
   createTargetValidationAttempt,
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
+  TARGET_VALIDATION_RELAY_CALL_BUDGET,
   type TargetValidationReceipt,
   type ValidationCommandExecutor,
   validationOverlayRoot,
+  verifyTargetValidationProtectedTrees,
 } from "./target-validation";
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
@@ -33,9 +35,11 @@ const apply: TargetApplyReceipt = {
   identityDigest: digest("7"),
   imageDigest: `fixture@sha256:${digest("8")}`,
   dependencyCacheDigest: `sha256:${digest("9")}`,
+  dependencyCacheContentDigest: digest("3"),
   proposalDigest: digest("a"),
   applyRoot: `/workspace/.app-builder/apply/${digest("a")}/repository`,
   planningTreeDigest: digest("b"),
+  preparedTreeDigest: digest("3"),
   preTree: [],
   postTree: [
     { path: "apps/example/package.json", mode: "644", digest: digest("b") },
@@ -89,7 +93,10 @@ const canonicalDigest = (value: unknown) =>
 function reusableValidationReceipt(): TargetValidationReceipt {
   const attempt = createTargetValidationAttempt(apply, "validation-call");
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
+    appId: attempt.appId,
+    testShards: attempt.testShards,
+    appValidationSha256: attempt.appValidationSha256,
     sourceSha: attempt.sourceSha,
     sourceTree: attempt.sourceTree,
     eligibilityDigest: attempt.eligibilityDigest,
@@ -101,6 +108,7 @@ function reusableValidationReceipt(): TargetValidationReceipt {
     identityDigest: attempt.identityDigest,
     imageDigest: attempt.imageDigest,
     dependencyCacheDigest: attempt.dependencyCacheDigest,
+    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
     proposalDigest: attempt.proposalDigest,
     applyDigest: attempt.applyDigest,
     appliedTreeDigest: attempt.appliedTreeDigest,
@@ -130,20 +138,29 @@ function sandboxFixture() {
   };
 }
 
+async function withRealSandbox<T>(run: () => Promise<T>): Promise<T> {
+  vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "1");
+  try {
+    return await run();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
 describe("proposal-bound target validation", () => {
   it("binds planning and prepared-source trees independently", () => {
     expect(() =>
       assertTargetValidationSourceBindings({
         apply,
         planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       }),
     ).not.toThrow();
     expect(() =>
       assertTargetValidationSourceBindings({
         apply,
         planningTreeDigest: digest("0"),
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       }),
     ).toThrow(/planning overlay changed/u);
     expect(() =>
@@ -167,7 +184,7 @@ describe("proposal-bound target validation", () => {
         expectedAppSpecPath: apply.appSpecPath,
         appliedTreeDigest: apply.postTreeDigest,
         planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       };
       expect(() => assertReusable(exact)).not.toThrow();
       expect(() =>
@@ -191,6 +208,25 @@ describe("proposal-bound target validation", () => {
     },
   );
 
+  it("reuses a canonical validation receipt after a JSON round trip", () => {
+    const roundTrippedApply = JSON.parse(
+      JSON.stringify(apply),
+    ) as TargetApplyReceipt;
+    const validation = JSON.parse(
+      JSON.stringify(reusableValidationReceipt()),
+    ) as TargetValidationReceipt;
+    expect(() =>
+      assertReusableTargetValidationReceipt({
+        apply: roundTrippedApply,
+        validation,
+        expectedAppSpecPath: roundTrippedApply.appSpecPath,
+        appliedTreeDigest: roundTrippedApply.postTreeDigest,
+        planningTreeDigest: roundTrippedApply.planningTreeDigest,
+        preparedTreeDigest: roundTrippedApply.preparedTreeDigest,
+      }),
+    ).not.toThrow();
+  });
+
   it.each([
     [
       "path-less historical V1",
@@ -209,6 +245,12 @@ describe("proposal-bound target validation", () => {
       "tampered binding",
       (receipt: Record<string, unknown>) => {
         receipt.workspaceDigest = digest("0");
+      },
+    ],
+    [
+      "tampered app validation input",
+      (receipt: Record<string, unknown>) => {
+        receipt.testShards = ["1/2"];
       },
     ],
     [
@@ -247,15 +289,18 @@ describe("proposal-bound target validation", () => {
         expectedAppSpecPath: apply.appSpecPath,
         appliedTreeDigest: apply.postTreeDigest,
         planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       }),
-    ).toThrow(/canonical V2 target validation receipt/u);
+    ).toThrow(/canonical V3 target validation receipt/u);
   });
 
   it("binds a pending attempt to the exact apply receipt and fixed commands", () => {
     const attempt = createTargetValidationAttempt(apply, "validation-call");
     expect(attempt).toMatchObject({
       status: "pending",
+      appId: "example",
+      testShards: ["1/1"],
+      appValidationSha256: expect.stringMatching(/^[0-9a-f]{64}$/u),
       applyDigest: apply.digest,
       appliedTreeDigest: apply.postTreeDigest,
       changedContentDigest: apply.changedContentDigest,
@@ -263,13 +308,13 @@ describe("proposal-bound target validation", () => {
     });
     expect(attempt.commands).toEqual([
       {
-        name: "check",
-        command: "mise run check",
-        validationRoot: validationOverlayRoot(apply.digest, "check"),
+        name: "check-build",
+        command: "mise run app:check-build example",
+        validationRoot: validationOverlayRoot(apply.digest, "check-build"),
       },
       {
         name: "test",
-        command: "mise run test",
+        command: "mise run app:test example 1/1",
         validationRoot: validationOverlayRoot(apply.digest, "test"),
       },
     ]);
@@ -290,7 +335,7 @@ describe("proposal-bound target validation", () => {
         attempt: { ...attempt, version: 1 } as never,
         appId: "example",
       }),
-    ).rejects.toThrow(/canonical V2 target validation attempt/u);
+    ).rejects.toThrow(/canonical V3 target validation attempt/u);
   });
 
   it("rejects an apply overlay root that is not bound to the proposal", () => {
@@ -315,19 +360,21 @@ describe("proposal-bound target validation", () => {
         stderr: "",
       }),
     );
-    const result = await executeProposalBoundValidation({
-      sandbox,
-      executor,
-      snapshotter: async () => snapshots.shift()!,
-      apply,
-      attempt: createTargetValidationAttempt(apply, "validation-call"),
-      appId: "example",
-    });
+    const result = await withRealSandbox(() =>
+      executeProposalBoundValidation({
+        sandbox,
+        executor,
+        snapshotter: async () => snapshots.shift()!,
+        apply,
+        attempt: createTargetValidationAttempt(apply, "validation-call"),
+        appId: "example",
+      }),
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected passing validation");
     expect(result.receipt.commands.map(({ command }) => command)).toEqual([
-      "mise run check",
-      "mise run test",
+      "mise run app:check-build example",
+      "mise run app:test example 1/1",
     ]);
     expect(
       result.receipt.commands.map(({ inputTreeDigest }) => inputTreeDigest),
@@ -336,15 +383,127 @@ describe("proposal-bound target validation", () => {
     expect(executor.mock.calls[0]?.[0].validationRoot).not.toBe(
       executor.mock.calls[1]?.[0].validationRoot,
     );
-    expect(
-      run.mock.calls
-        .map(([request]) => (request as { command: string }).command)
-        .filter((command) => command.startsWith("cp -R")),
-    ).toEqual([
-      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "check")}`,
-      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "test")}`,
-    ]);
+    const copyCommands = run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .filter((command) => command.includes("cp -R"));
+    expect(copyCommands).toHaveLength(2);
+    for (const [index, name] of ["check-build", "test"].entries()) {
+      const command = copyCommands[index]!;
+      const validationRoot = validationOverlayRoot(
+        apply.digest,
+        name as "check-build" | "test",
+      );
+      expect(command).toContain(`test -L ${apply.applyRoot}/node_modules`);
+      expect(command).toContain(`cp -R ${apply.applyRoot} ${validationRoot}`);
+      expect(command).toContain(`test -L ${validationRoot}/node_modules`);
+      expect(command).toContain(
+        `/opt/app-builder/dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
+      );
+      expect(command).toContain("readlink --");
+    }
   });
+
+  it("keeps the two-command protected validation below the relay ceiling", async () => {
+    const { run, sandbox } = sandboxFixture();
+    const relayCall = vi.fn();
+    const snapshotter = vi.fn(async (_sandbox: SandboxSession, root = "") => {
+      relayCall();
+      return snapshot(
+        root === "/workspace/repository"
+          ? apply.preparedTreeDigest
+          : root === "/workspace/planning"
+            ? apply.planningTreeDigest
+            : apply.postTreeDigest,
+      );
+    });
+    const executor = vi.fn(async () => {
+      relayCall();
+      return { exitCode: 0, stdout: "passed", stderr: "" };
+    });
+    const verifyProtectedState = () =>
+      verifyTargetValidationProtectedTrees({
+        sandbox,
+        apply,
+        planningRoot: "/workspace/planning",
+        preparedRoot: "/workspace/repository",
+        assertWorkflowState: () => undefined,
+        snapshotter,
+      });
+    const result = await executeProposalBoundValidation({
+      sandbox,
+      executor,
+      snapshotter,
+      verifyProtectedState,
+      apply,
+      attempt: createTargetValidationAttempt(apply, "validation-call"),
+      appId: "example",
+    });
+    expect(result.ok).toBe(true);
+    const relayCalls = run.mock.calls.length + relayCall.mock.calls.length;
+    expect(relayCalls).toBe(TARGET_VALIDATION_RELAY_CALL_BUDGET);
+    expect(relayCalls).toBeLessThan(128);
+  });
+
+  it("rejects stale workflow state before protected-tree inspection", async () => {
+    const { sandbox } = sandboxFixture();
+    const snapshotter = vi.fn(async () => snapshot(apply.postTreeDigest));
+    await expect(
+      verifyTargetValidationProtectedTrees({
+        sandbox,
+        apply,
+        planningRoot: "/workspace/planning",
+        preparedRoot: "/workspace/repository",
+        assertWorkflowState: () => {
+          throw new Error("stale workflow state");
+        },
+        snapshotter,
+      }),
+    ).rejects.toThrow("stale workflow state");
+    expect(snapshotter).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "prepared",
+      [
+        snapshot(digest("0")),
+        snapshot(apply.planningTreeDigest),
+        snapshot(apply.postTreeDigest),
+      ],
+    ],
+    [
+      "planning",
+      [
+        snapshot(apply.preparedTreeDigest),
+        snapshot(digest("0")),
+        snapshot(apply.postTreeDigest),
+      ],
+    ],
+    [
+      "applied",
+      [
+        snapshot(apply.preparedTreeDigest),
+        snapshot(apply.planningTreeDigest),
+        snapshot(digest("0")),
+      ],
+    ],
+  ] as const)(
+    "rejects %s tree drift during protected validation",
+    async (_name, snapshots) => {
+      const { sandbox } = sandboxFixture();
+      const remaining = [...snapshots];
+      await expect(
+        verifyTargetValidationProtectedTrees({
+          sandbox,
+          apply,
+          planningRoot: "/workspace/planning",
+          preparedRoot: "/workspace/repository",
+          assertWorkflowState: () => undefined,
+          snapshotter: async () => remaining.shift()!,
+        }),
+      ).rejects.toThrow(/changed/u);
+    },
+  );
 
   it("records a command failure and does not dispatch later validation", async () => {
     const { sandbox } = sandboxFixture();
@@ -368,7 +527,9 @@ describe("proposal-bound target validation", () => {
         status: "failed",
         reason: "command-failed",
         recoveryRequired: true,
-        commands: [{ command: "mise run check", exitCode: 1 }],
+        commands: [
+          { command: "mise run app:check-build example", exitCode: 1 },
+        ],
       },
     });
     expect(executor).toHaveBeenCalledTimes(1);
@@ -494,20 +655,47 @@ describe("proposal-bound target validation", () => {
     ).rejects.toThrow("no longer matches the exact apply receipt");
   });
 
+  it("rejects a validation app id that differs from the approved apply", async () => {
+    const { sandbox } = sandboxFixture();
+    await expect(
+      executeProposalBoundValidation({
+        sandbox,
+        executor: vi.fn(),
+        apply,
+        attempt: createTargetValidationAttempt(apply, "validation-call"),
+        appId: "other-app",
+      }),
+    ).rejects.toThrow("validation application id changed after approval");
+  });
+
   it("uses only the fixed command, cwd, timeout, and no environment", async () => {
     const { run, sandbox } = sandboxFixture();
-    const root = validationOverlayRoot(apply.digest, "check");
+    const root = validationOverlayRoot(apply.digest, "check-build");
     await sandboxValidationCommandExecutor()({
       sandbox,
       appId: "example",
-      command: "mise run check",
+      command: "mise run app:check-build example",
       validationRoot: root,
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run check",
+      command:
+        "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools app:check-build example",
       workingDirectory: root,
       abortSignal: expect.any(AbortSignal),
     });
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+  });
+
+  it("rejects non-canonical validation commands before sandbox execution", async () => {
+    const { run, sandbox } = sandboxFixture();
+    await expect(
+      sandboxValidationCommandExecutor()({
+        sandbox,
+        appId: "example",
+        command: "mise run app:test example 2/2",
+        validationRoot: validationOverlayRoot(apply.digest, "test"),
+      }),
+    ).rejects.toThrow("target validation command was not canonical");
+    expect(run).not.toHaveBeenCalled();
   });
 });

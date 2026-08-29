@@ -22,26 +22,26 @@ import { create as createTar } from "tar";
 
 import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts";
 
-const TARGET_SHA = "77dce48833e7d6e05e086f18ca11b77d9214da9e";
-const TARGET_TREE = "2ed91119a0101ce053a4eb2122624efa1fff6ecd";
-const OUTPUT_NAME = "arrusted-77dce488-preview.tar.gz";
+const TARGET_SHA = "ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49";
+const TARGET_TREE = "88ead91d7b11aae11c526f1c2ee40f5b6db70642";
+const OUTPUT_NAME = "arrusted-ffa0c34a-preview.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
 const SOURCE_FILE = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u;
 
 const targetDigests = {
   miseConfigSha256:
-    "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
+    "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
   miseLockSha256:
     "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
   bunLockSha256:
-    "a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b",
+    "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
   appIdentitySha256:
     "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
   appContractSha256:
     "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
   repositoryPreflightSha256:
-    "6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6",
+    "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
   repositoryExecSha256:
     "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
 } as const;
@@ -317,9 +317,9 @@ try {
       sha: TARGET_SHA,
       tree: TARGET_TREE,
       eligibilityDigest:
-        "2b524f0975a1e0c55e0c7aeca25553afc394698e812f89f35df3881e24e38744",
+        "c47f3c720cce4b4bcf64e430d248284570776f48a886c20fc18d255815985c6e",
       contractDigest:
-        "0295cecbbb6059544e80b90dc95a4722eb530642d4c0d63687b08009a26aa2c3",
+        "f3c8499305c983b3d82f3b78687f4106a149decd7faa486d3d106bdaf83e928f",
       workspaceDigest: sha256(JSON.stringify(entries)),
     },
     source: {

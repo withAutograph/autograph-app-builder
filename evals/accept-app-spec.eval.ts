@@ -105,134 +105,78 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
+    const apply = await t.send("Apply the current creation proposal.");
     t.succeeded();
-    t.check(t.reply, includes("fresh builder-owned overlay"));
-    t.check(t.reply, includes("exact pre/post tree"));
-    t.check(t.reply, includes("Validation"));
+    apply.notEvent("input.requested");
+    t.check(t.reply, includes("private preview"));
+    t.check(t.reply, includes("quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry target apply after a lost response.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
-    t.succeeded();
-    t.check(t.reply, includes("reused the exact durable target-apply receipt"));
-    t.check(t.reply, includes("command was not rerun"));
-
-    await t.send("Apply with a stale proposal digest.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
-    t.succeeded();
-    t.check(t.reply, includes("Stale target apply was rejected"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
-    await t.send("Validate the applied creation.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
-    t.succeeded();
-    t.check(t.reply, includes("fixed check and test commands passed"));
-    t.check(t.reply, includes("independent builder-owned copies"));
-    t.check(t.reply, includes("change review and publication did not run"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
-    await t.send("Retry target validation after a lost response.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
-    t.succeeded();
-    t.check(
-      t.reply,
-      includes("reused the exact durable target-validation receipt"),
+    const retryApply = await t.send(
+      "Retry target apply after a lost response.",
     );
-    t.check(t.reply, includes("neither fixed command was rerun"));
-
-    await t.send("Validate with a stale apply digest.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("Stale target validation was rejected"));
+    retryApply.notEvent("input.requested");
+    t.check(t.reply, includes("prepared app is unchanged"));
+
+    const staleApply = await t.send("Apply with a stale proposal digest.");
+    t.succeeded();
+    staleApply.notEvent("input.requested");
+    t.check(t.reply, includes("product plan changed"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    const validation = await t.send("Validate the applied creation.");
+    t.succeeded();
+    validation.notEvent("input.requested");
+    t.check(t.reply, includes("quality checks"));
+    t.check(t.reply, includes("ready for review"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    const retryValidation = await t.send(
+      "Retry target validation after a lost response.",
+    );
+    t.succeeded();
+    retryValidation.notEvent("input.requested");
+    t.check(t.reply, includes("quality checks are still passing"));
+
+    const staleValidation = await t.send("Validate with a stale apply digest.");
+    t.succeeded();
+    staleValidation.notEvent("input.requested");
+    t.check(t.reply, includes("app changed before checks could start"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
     await t.send("Inspect the validated change set.");
     t.succeeded();
     t.calledTool("change_set_status", { count: 1 });
-    t.check(t.reply, includes("Validated change-set proposal"));
-    t.check(t.reply, includes("approvedPaths"));
-    t.check(t.reply, includes('"changes"'));
-    t.check(t.reply, includes('"kind"'));
-    t.check(t.reply, includes('"before"'));
-    t.check(t.reply, includes('"after"'));
+    t.check(t.reply, includes("completed app changes are ready for review"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Accept the displayed change set.");
-    t.requireInputRequest({
-      toolName: "accept_change_set",
-      input: (input) => {
-        const changeSet = (input as { changeSet?: unknown }).changeSet;
-        if (typeof changeSet !== "object" || changeSet === null) return false;
-        const value = changeSet as {
-          digest?: unknown;
-          approvedPaths?: unknown;
-          changes?: unknown;
-        };
-        if (
-          typeof value.digest !== "string" ||
-          !Array.isArray(value.approvedPaths) ||
-          !Array.isArray(value.changes)
-        )
-          return false;
-        const approvedPaths: unknown[] = value.approvedPaths;
-        const changes: unknown[] = value.changes;
-        return (
-          changes.length === approvedPaths.length &&
-          changes.every(
-            (change, index) =>
-              typeof change === "object" &&
-              change !== null &&
-              "path" in change &&
-              "kind" in change &&
-              approvedPaths[index] === change.path &&
-              (change.kind === "added" ||
-                change.kind === "modified" ||
-                change.kind === "deleted") &&
-              ((change.kind === "added" && "after" in change) ||
-                (change.kind === "deleted" && "before" in change) ||
-                (change.kind === "modified" &&
-                  "before" in change &&
-                  "after" in change)),
-          )
-        );
-      },
-    });
-    await t.respondAll("approve");
+    const review = await t.send("Accept the displayed change set.");
     t.succeeded();
-    t.check(t.reply, includes("separately approved normalized change set"));
-    t.check(t.reply, includes("Publication did not run"));
+    review.notEvent("input.requested");
+    t.check(t.reply, includes("completed app changes are ready for review"));
+    t.check(t.reply, includes("draft pull request"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry change-set acceptance after a lost response.");
-    t.requireInputRequest({ toolName: "accept_change_set" });
-    await t.respondAll("approve");
-    t.succeeded();
-    t.check(
-      t.reply,
-      includes("reused the exact durable reviewed change-set receipt"),
+    const retryReview = await t.send(
+      "Retry change-set acceptance after a lost response.",
     );
+    t.succeeded();
+    retryReview.notEvent("input.requested");
+    t.check(t.reply, includes("same completed app changes remain ready"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Accept a stale change set.");
-    t.requireInputRequest({ toolName: "accept_change_set" });
-    await t.respondAll("approve");
+    const staleReview = await t.send("Accept a stale change set.");
     t.succeeded();
-    t.check(t.reply, includes("stale change-set proposal was rejected"));
+    staleReview.notEvent("input.requested");
+    t.check(t.reply, includes("app changed before review could finish"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

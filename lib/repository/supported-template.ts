@@ -20,6 +20,7 @@ export const SUPPORTED_TEMPLATE_INPUT_PATHS = [
   "microfrontends.json",
   ".config/mise/scripts/repository/app-contract.ts",
   ".config/mise/scripts/repository/app-identity.ts",
+  ".config/mise/scripts/repository/app-validation.ts",
   ".config/mise/scripts/repository/repository-preflight.ts",
   ".config/turbo/generators/config.ts",
   ".config/turbo/generators/create-app.ts",
@@ -55,10 +56,38 @@ const expectedCommands = {
   scaffold: "mise run generate:app <app-id>",
   apply: "mise run create:app -- --proposal <proposal-file>",
   preflight: "mise run repository:preflight",
-  validation: ["mise run check", "mise run test"],
+  validation: [
+    "mise run app:check-build <app-id>",
+    "mise run app:test <app-id> <shard>",
+  ],
 } as const;
 
-export const SUPPORTED_VALIDATION_COMMANDS = expectedCommands.validation;
+export const SUPPORTED_VALIDATION_COMMAND_TEMPLATES =
+  expectedCommands.validation;
+export const SUPPORTED_VALIDATION_TEST_SHARDS = ["1/1"] as const;
+
+export function supportedValidationCommands(
+  appId: string,
+  testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
+) {
+  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId))
+    throw new Error("The validation application id is invalid.");
+  if (
+    testShards.length === 0 ||
+    testShards.some((shard) => !/^[1-9][0-9]*\/[1-9][0-9]*$/u.test(shard))
+  )
+    throw new Error("The validation test shard set is invalid.");
+  return [
+    {
+      name: "check-build" as const,
+      command: `mise run app:check-build ${appId}` as const,
+    },
+    ...testShards.map((shard) => ({
+      name: "test" as const,
+      command: `mise run app:test ${appId} ${shard}` as const,
+    })),
+  ];
+}
 
 export type EligibilityResult = {
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
@@ -346,6 +375,16 @@ export async function inspectSupportedRepository(
   if (!mise.includes('[tasks."repository:preflight"]'))
     failures.push("repository:preflight command is missing");
   if (
+    !mise.includes('[tasks."app:check-build"]') ||
+    !mise.includes('app-validation.ts check-build "$usage_app"')
+  )
+    failures.push("app:check-build validation command drifted");
+  if (
+    !mise.includes('[tasks."app:test"]') ||
+    !mise.includes('app-validation.ts test "$usage_app" "$usage_shard"')
+  )
+    failures.push("app:test validation command drifted");
+  if (
     !mise.includes('[tasks."generate:app"]') ||
     !mise.includes(
       "turbo gen --config .config/turbo/generators/config.ts app --args",
@@ -422,7 +461,7 @@ export type PreparedSandboxWorkspace = {
 const sandboxRecordPath = ".app-builder/prepared-workspace.json";
 const sandboxSourceFilesPath = ".app-builder/source-files.json";
 const sandboxSourceChecksumsPath = ".app-builder/source-checksums.sha256";
-const sandboxSourceArchivePath = ".app-builder/source-tree.tar";
+const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
 const sandboxOperationTimeoutMs = 120_000;
 const sandboxOperationOutputBytes = 262_144;
 
@@ -717,9 +756,11 @@ export async function prepareSupportedSandboxWorkspace(
       });
     }
   } else {
+    // Microsandbox transfers the archive through a bounded file-write API. A
+    // compressed archive keeps real template repositories within that bound.
     const sourceArchive = execFileSync(
       "git",
-      ["-C", eligibility.sourcePath, "archive", "--format=tar", expectedSha],
+      ["-C", eligibility.sourcePath, "archive", "--format=tar.gz", expectedSha],
       { maxBuffer: 256 * 1024 * 1024 },
     );
     await sandbox.writeBinaryFile({
@@ -728,7 +769,7 @@ export async function prepareSupportedSandboxWorkspace(
     });
     try {
       const extraction = await sandbox.run({
-        command: `mkdir -p repository && tar --extract --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
+        command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
         workingDirectory: "/workspace",
         abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
       });

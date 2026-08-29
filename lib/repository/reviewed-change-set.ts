@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import {
   assertCurrentTargetApplyReceipt,
+  canonicalOverlayFiles,
+  compareOverlayPaths,
   overlayChanges,
   type OverlayChange,
   type OverlayFile,
@@ -10,6 +12,8 @@ import {
 } from "./target-apply";
 import { safeSourcePath } from "./source-path";
 import type { TargetValidationReceipt } from "./target-validation";
+import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
+import { SUPPORTED_VALIDATION_TEST_SHARDS } from "./supported-template";
 
 export type NormalizedChangeSet = {
   version: 2;
@@ -29,6 +33,7 @@ export type NormalizedChangeSet = {
   identityDigest: string;
   imageDigest: string;
   dependencyCacheDigest: string;
+  dependencyCacheContentDigest: string;
   targetReceipt: {
     version: 1;
     contractPath: string;
@@ -88,7 +93,7 @@ function normalizedChanges(
       );
   }
   return [...changes].sort((left, right) =>
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+    compareOverlayPaths(left.path, right.path),
   );
 }
 
@@ -105,10 +110,8 @@ function normalizedSnapshot(files: readonly OverlayFile[]): OverlaySnapshot {
     paths.add(file.path);
     return { path: file.path, mode: file.mode, digest: file.digest };
   });
-  normalized.sort((left, right) =>
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
-  );
-  return { files: normalized, treeDigest: digest(normalized) };
+  const canonical = canonicalOverlayFiles(normalized);
+  return { files: canonical, treeDigest: digest(canonical) };
 }
 
 export function deriveNormalizedChangeSet(
@@ -119,7 +122,7 @@ export function deriveNormalizedChangeSet(
 ): NormalizedChangeSet {
   assertCurrentTargetApplyReceipt(apply);
   if (
-    validation.version !== 2 ||
+    validation.version !== 3 ||
     validation.status !== "passed" ||
     validation.applyDigest !== apply.digest ||
     validation.appliedTreeDigest !== apply.postTreeDigest ||
@@ -140,9 +143,14 @@ export function deriveNormalizedChangeSet(
     identityDigest: apply.identityDigest,
     imageDigest: apply.imageDigest,
     dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
     proposalDigest: apply.proposalDigest,
   };
   if (
+    validation.appId !== apply.targetReceipt.appId ||
+    JSON.stringify(validation.testShards) !==
+      JSON.stringify(SUPPORTED_VALIDATION_TEST_SHARDS) ||
+    validation.appValidationSha256 !== ARRUSTED_APP_VALIDATION_SHA256 ||
     Object.entries(exactValidationBinding).some(
       ([key, value]) =>
         validation[key as keyof typeof exactValidationBinding] !== value,
@@ -191,6 +199,7 @@ export function deriveNormalizedChangeSet(
     identityDigest: apply.identityDigest,
     imageDigest: apply.imageDigest,
     dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
     targetReceipt: {
       version: apply.targetReceipt.version,
       contractPath: apply.targetReceipt.contractPath,

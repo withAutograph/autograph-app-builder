@@ -29,6 +29,7 @@ export default defineEval({
         t.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       t.requireInputRequest({ toolName: "publish_fresh_repository" });
+      t.event("input.requested", { count: 1 });
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.respondAll("approve"),
       );

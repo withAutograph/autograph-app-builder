@@ -107,7 +107,7 @@ install -m 0644 "$artifact/source-checksums.sha256" /workspace/.app-builder/sour
 git --version
 mise --version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
-bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/portable"||cache.target.sha!=="77dce48833e7d6e05e086f18ca11b77d9214da9e"||cache.target.tree!=="2ed91119a0101ce053a4eb2122624efa1fff6ecd") process.exit(1)' \
+bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/portable"||cache.target.sha!=="ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49"||cache.target.tree!=="88ead91d7b11aae11c526f1c2ee40f5b6db70642") process.exit(1)' \
   && (cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)`;
 }
 

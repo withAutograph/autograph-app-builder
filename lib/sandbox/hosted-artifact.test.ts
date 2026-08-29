@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { extract } from "tar";
 
 import {
   HOSTED_ARTIFACT_BYTES,
@@ -12,9 +15,16 @@ import {
   readHostedArtifactBytes,
 } from "./hosted-artifact";
 import {
+  HOSTED_CONTRACT_DIGEST,
+  HOSTED_ELIGIBILITY_DIGEST,
   HOSTED_SOURCE_RECEIPT_DIGEST,
   hostedSourceReceipt,
 } from "../repository/hosted-source";
+import {
+  ARRUSTED_TARGET_SHA,
+  ARRUSTED_TARGET_TREE,
+  hostedPlanningDependencyCacheManifestSchema,
+} from "../repository/dependency-cache";
 
 const sha256 = (value: Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
@@ -66,6 +76,34 @@ describe("hosted Arrusted artifact", () => {
       ).toBeUndefined();
     },
   );
+
+  it("binds the authored artifact to the exact hosted planning receipt", () => {
+    const root = mkdtempSync(join(tmpdir(), "hosted-artifact-binding-"));
+    try {
+      extract({ cwd: root, file: HOSTED_ARTIFACT_PATH, sync: true });
+      const seed = join(root, ".app-builder-hosted-seed");
+      const artifactManifest = JSON.parse(
+        readFileSync(join(seed, "artifact-manifest.json"), "utf8"),
+      ) as { target: Record<string, unknown> };
+      const dependencyManifest = JSON.parse(
+        readFileSync(join(seed, "dependency-cache", "manifest.json"), "utf8"),
+      ) as unknown;
+
+      expect(artifactManifest.target).toEqual(
+        expect.objectContaining({
+          sha: ARRUSTED_TARGET_SHA,
+          tree: ARRUSTED_TARGET_TREE,
+          eligibilityDigest: HOSTED_ELIGIBILITY_DIGEST,
+          contractDigest: HOSTED_CONTRACT_DIGEST,
+        }),
+      );
+      expect(
+        hostedPlanningDependencyCacheManifestSchema.parse(dependencyManifest),
+      ).toEqual(dependencyManifest);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
 
   it("rejects a hosted source before inspection when environments differ", () => {
     expect(() =>

@@ -3,10 +3,14 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
+import { hasTestCapability } from "../testing/test-capability";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
-import { planningOverlayRoot } from "./dependency-cache";
+import {
+  dependencyCacheNodeModulesRoot,
+  planningOverlayRoot,
+} from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -51,6 +55,18 @@ export type OverlaySnapshot = {
   files: readonly OverlayFile[];
 };
 
+export function compareOverlayPaths(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
+export function canonicalOverlayFiles(
+  files: readonly OverlayFile[],
+): OverlayFile[] {
+  return files
+    .map(({ path, mode, digest }) => ({ path, mode, digest }))
+    .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
+}
+
 export type OverlayChange = {
   path: string;
   kind: "added" | "modified" | "deleted";
@@ -84,6 +100,7 @@ export type TargetApplyBinding = {
   identityDigest: string;
   imageDigest: string;
   dependencyCacheDigest: string;
+  dependencyCacheContentDigest: string;
   proposalDigest: string;
 };
 
@@ -91,6 +108,7 @@ type ApplyResultBase = TargetApplyBinding & {
   version: 2;
   applyRoot: string;
   planningTreeDigest: string;
+  preparedTreeDigest: string;
   preTree: readonly OverlayFile[];
   preTreeDigest: string;
   command: {
@@ -147,12 +165,18 @@ export function assertCurrentTargetApplyReceipt(input: {
   version: number;
   appSpecPath?: string;
   appSpecDigest: string;
-}): asserts input is typeof input & { version: 2; appSpecPath: string } {
+  preparedTreeDigest?: string;
+}): asserts input is typeof input & {
+  version: 2;
+  appSpecPath: string;
+  preparedTreeDigest: string;
+} {
   if (
     input.version !== 2 ||
     input.appSpecPath === undefined ||
     !safeSourcePath(input.appSpecPath) ||
-    !digest.safeParse(input.appSpecDigest).success
+    !digest.safeParse(input.appSpecDigest).success ||
+    !digest.safeParse(input.preparedTreeDigest).success
   )
     throw new Error("A canonical V2 target apply receipt is required.");
 }
@@ -177,6 +201,7 @@ export function applyOverlayRoot(proposalDigest: string): string {
 export async function materializeFreshApplyOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
+  dependencyCacheContentDigest: string;
   proposalDigest: string;
   proposal: TargetProposal;
 }): Promise<{
@@ -199,8 +224,14 @@ export async function materializeFreshApplyOverlay(input: {
     );
   await ensureSandboxDirectories(input.sandbox, [parent]);
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
+  const dependencyRoot = dependencyCacheNodeModulesRoot(
+    input.dependencyCacheContentDigest,
+  );
+  const copyCommand = hasTestCapability("simulated-target")
+    ? `cp -R ${planningRoot} ${absoluteRoot}`
+    : `test -L ${planningRoot}/node_modules && test "$(readlink -- ${planningRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "${dependencyRoot}"`;
   const copy = await input.sandbox.run({
-    command: `cp -R ${planningRoot} ${absoluteRoot}`,
+    command: copyCommand,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
@@ -208,7 +239,11 @@ export async function materializeFreshApplyOverlay(input: {
     boundedOutput(copy);
     if (copy.exitCode !== 0) throw new Error("ApplyOverlayCopyFailed");
   } catch {
-    await input.sandbox.removePath({ path: relativeRoot, force: true });
+    await input.sandbox.removePath({
+      path: relativeRoot,
+      recursive: true,
+      force: true,
+    });
     throw new Error(
       "The fresh proposal apply overlay could not be materialized.",
     );
@@ -237,7 +272,11 @@ export async function materializeFreshApplyOverlay(input: {
       acceptedAppSpec,
     };
   } catch (error) {
-    await input.sandbox.removePath({ path: relativeRoot, force: true });
+    await input.sandbox.removePath({
+      path: relativeRoot,
+      recursive: true,
+      force: true,
+    });
     throw error;
   }
 }
@@ -272,13 +311,57 @@ async function stageAcceptedAppSpec(input: {
 
 const snapshotLine = /^([0-7]{3,4})\t([0-9a-f]{64})\t(.+)$/u;
 
+export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
+const { createHash } = require("node:crypto");
+const { lstatSync, readFileSync, readdirSync } = require("node:fs");
+const { join } = require("node:path");
+
+const files = [];
+const visit = (directory, relativeDirectory) => {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const relativePath = relativeDirectory
+      ? relativeDirectory + "/" + entry.name
+      : entry.name;
+    if (
+      relativeDirectory === "" &&
+      (relativePath === "node_modules" || relativePath === ".scratch")
+    )
+      continue;
+    const absolutePath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      visit(absolutePath, relativePath);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const stat = lstatSync(absolutePath);
+    const mode = (stat.mode & 0o7777).toString(8);
+    const digest = createHash("sha256")
+      .update(readFileSync(absolutePath))
+      .digest("hex");
+    files.push({ path: relativePath, mode, digest });
+  }
+};
+
+visit(".", "");
+files.sort((left, right) =>
+  Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)),
+);
+for (const file of files)
+  process.stdout.write(file.mode + "\t" + file.digest + "\t" + file.path + "\n");
+`;
+
+export function overlaySnapshotCommand(): string {
+  if (OVERLAY_SNAPSHOT_SCRIPT.includes("'"))
+    throw new Error("The overlay snapshot script is not shell-safe.");
+  return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
+}
+
 export async function inspectApplyOverlay(
   sandbox: SandboxSession,
   applyRoot: string,
 ): Promise<OverlaySnapshot> {
   const result = await sandbox.run({
-    command:
-      "find . \\( -path './node_modules' -o -path './.scratch' \\) -prune -o -type f -print0 | sort -z | while IFS= read -r -d '' path; do mode=$(stat --format='%a' -- \"$path\") || exit 1; sum=$(sha256sum -- \"$path\") || exit 1; printf '%s\\t%s\\t%s\\n' \"$mode\" \"${sum%% *}\" \"${path#./}\"; done",
+    command: overlaySnapshotCommand(),
     workingDirectory: applyRoot,
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
@@ -305,9 +388,7 @@ export async function inspectApplyOverlay(
         digest: match[2],
       };
     });
-  const normalized = files.toSorted((left, right) =>
-    left.path.localeCompare(right.path),
-  );
+  const normalized = canonicalOverlayFiles(files);
   if (new Set(normalized.map(({ path }) => path)).size !== normalized.length)
     throw new Error("The proposal apply overlay returned duplicate paths.");
   return { files: normalized, treeDigest: sha256(JSON.stringify(normalized)) };
@@ -358,10 +439,12 @@ export async function inspectFixtureApplyOverlay(
           : { path, mode, digest: sha256(content) };
       }),
     )
-  )
-    .filter((file): file is OverlayFile => file !== undefined)
-    .toSorted((left, right) => left.path.localeCompare(right.path));
-  return { files, treeDigest: sha256(JSON.stringify(files)) };
+  ).filter((file): file is OverlayFile => file !== undefined);
+  const normalized = canonicalOverlayFiles(files);
+  return {
+    files: normalized,
+    treeDigest: sha256(JSON.stringify(normalized)),
+  };
 }
 
 export function overlayChanges(
@@ -371,7 +454,7 @@ export function overlayChanges(
   const beforeFiles = new Map(before.files.map((file) => [file.path, file]));
   const afterFiles = new Map(after.files.map((file) => [file.path, file]));
   return [...new Set([...beforeFiles.keys(), ...afterFiles.keys()])]
-    .toSorted()
+    .toSorted(compareOverlayPaths)
     .flatMap((path): OverlayChange[] => {
       const previous = beforeFiles.get(path);
       const current = afterFiles.get(path);
@@ -453,7 +536,7 @@ function parseTargetReceipt(
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, applyRoot, proposalPath }) =>
     await sandbox.run({
-      command: `mise run create:app -- --proposal ${proposalPath}`,
+      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools create:app -- --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
@@ -525,13 +608,16 @@ export async function executeProposalBoundApply(input: {
   const overlay = await materializeFreshApplyOverlay({
     sandbox: input.sandbox,
     artifactRevision: input.artifactRevision,
+    dependencyCacheContentDigest: input.binding.dependencyCacheContentDigest,
     proposalDigest: input.binding.proposalDigest,
     proposal: input.proposal,
   });
   let planning: OverlaySnapshot;
+  let prepared: OverlaySnapshot;
   let before: OverlaySnapshot;
   try {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
+    prepared = await snapshotter(input.sandbox, "/workspace/repository");
     await restorePreparedAppSpecBaseline({
       sandbox: input.sandbox,
       applyRoot: overlay.applyRoot,
@@ -547,6 +633,7 @@ export async function executeProposalBoundApply(input: {
   } catch (error) {
     await input.sandbox.removePath({
       path: applyOverlayRoot(input.binding.proposalDigest),
+      recursive: true,
       force: true,
     });
     throw error;
@@ -578,6 +665,7 @@ export async function executeProposalBoundApply(input: {
     ...input.binding,
     applyRoot: overlay.applyRoot,
     planningTreeDigest: planning.treeDigest,
+    preparedTreeDigest: prepared.treeDigest,
     preTree: before.files,
     preTreeDigest: before.treeDigest,
     command: {

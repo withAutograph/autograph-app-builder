@@ -19,6 +19,151 @@ export class SandboxCommandLimitError extends Error {
 // Bash defines the `ulimit -f` block size as 1024 bytes.
 const BASH_ULIMIT_FILE_BLOCK_BYTES = 1_024;
 
+export const WORKSPACE_QUOTA_MONITOR_SCRIPT = String.raw`
+const {
+  lstatSync,
+  readdirSync,
+} = require("node:fs");
+
+const [childValue, bytesValue, filesValue, intervalValue, workspaceRoot] =
+  process.argv.slice(-5);
+const child = Number(childValue);
+const maximumBytes = Number(bytesValue);
+const maximumFiles = Number(filesValue);
+const intervalMs = Number(intervalValue);
+
+if (
+  !Number.isSafeInteger(child) ||
+  child <= 0 ||
+  !Number.isSafeInteger(maximumBytes) ||
+  maximumBytes < 0 ||
+  !Number.isSafeInteger(maximumFiles) ||
+  maximumFiles < 0 ||
+  !Number.isSafeInteger(intervalMs) ||
+  intervalMs <= 0 ||
+  typeof workspaceRoot !== "string" ||
+  workspaceRoot.length === 0
+) {
+  process.exit(2);
+}
+
+let cancelled = false;
+let cancellation;
+
+const childIsAlive = () => {
+  try {
+    process.kill(child, 0);
+    return true;
+  } catch (error) {
+    if (error && error.code === "ESRCH") return false;
+    throw error;
+  }
+};
+
+const workspaceUsage = () => {
+  const workspaceRootBytes = Buffer.from(workspaceRoot);
+  const root = lstatSync(workspaceRootBytes);
+  const device = root.dev;
+  const pending = [workspaceRootBytes];
+  const allocatedInodes = new Set();
+  let allocatedBytes = 0;
+  let files = 0;
+
+  while (pending.length > 0) {
+    const path = pending.pop();
+    let stat;
+    try {
+      stat = lstatSync(path);
+    } catch (error) {
+      if (error && error.code === "ENOENT") continue;
+      throw error;
+    }
+    if (stat.dev !== device) continue;
+    const inode = stat.dev + ":" + stat.ino;
+    if (!allocatedInodes.has(inode)) {
+      allocatedInodes.add(inode);
+      allocatedBytes += stat.blocks * 512;
+    }
+    if (stat.isFile()) files += 1;
+    if (!stat.isDirectory()) continue;
+
+    let entries;
+    try {
+      entries = readdirSync(path, { encoding: "buffer" });
+    } catch (error) {
+      if (error && error.code === "ENOENT") continue;
+      throw error;
+    }
+    for (const entry of entries)
+      pending.push(Buffer.concat([path, Buffer.from("/"), entry]));
+  }
+
+  return { allocatedBytes, files };
+};
+
+const delay = (durationMs) =>
+  new Promise((resolve) => setTimeout(resolve, durationMs));
+
+const terminateChild = async () => {
+  try {
+    process.kill(-child, "SIGTERM");
+  } catch (error) {
+    if (!error || error.code !== "ESRCH") throw error;
+  }
+  await delay(1_000);
+  try {
+    process.kill(-child, "SIGKILL");
+  } catch (error) {
+    if (!error || error.code !== "ESRCH") throw error;
+  }
+};
+
+const cancel = () => {
+  cancelled = true;
+  cancellation ??= terminateChild();
+  cancellation.catch(() => undefined);
+};
+process.once("SIGINT", cancel);
+process.once("SIGTERM", cancel);
+
+const monitor = async () => {
+  while (!cancelled && childIsAlive()) {
+    const usage = workspaceUsage();
+    if (
+      usage.allocatedBytes > maximumBytes ||
+      usage.files > maximumFiles
+    ) {
+      await terminateChild();
+      process.stderr.write("sandbox_workspace_quota_exceeded\n");
+      process.exitCode = 125;
+      return;
+    }
+    await delay(intervalMs);
+  }
+  if (cancellation) await cancellation;
+};
+
+monitor().catch(async (error) => {
+  try {
+    await terminateChild();
+  } catch (terminationError) {
+    process.stderr.write(
+      "sandbox_workspace_quota_termination_failed:" +
+        (terminationError instanceof Error
+          ? terminationError.message
+          : String(terminationError)) +
+        "\n",
+    );
+  }
+  process.stderr.write(
+    "sandbox_workspace_quota_monitor_failed:" +
+      (error instanceof Error ? error.message : String(error)) +
+      "\n",
+  );
+  process.exitCode = 2;
+});
+`;
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`;
 }
@@ -36,23 +181,23 @@ ulimit -n ${quota.maximumOpenFiles}
 ulimit -u ${quota.maximumProcesses}
 setsid bash -lc ${shellQuote(command)} &
 child=$!
-cleanup() { kill -TERM -- -"$child" 2>/dev/null || true; }
+monitor=
+cleanup() {
+  kill -TERM -- -"$child" 2>/dev/null || true
+  if [ -n "$monitor" ]; then kill -TERM "$monitor" 2>/dev/null || true; fi
+}
 trap cleanup EXIT INT TERM
-while kill -0 "$child" 2>/dev/null; do
-  workspace_bytes=$(du -sx --block-size=1 /workspace 2>/dev/null | awk '{print $1}')
-  workspace_files=$(find /workspace -xdev -type f -printf '.' 2>/dev/null | wc -c)
-  if [ "\${workspace_bytes:-0}" -gt ${quota.maximumWorkspaceBytes} ] || [ "\${workspace_files:-0}" -gt ${quota.maximumWorkspaceFiles} ]; then
-    kill -TERM -- -"$child" 2>/dev/null || true
-    sleep 1
-    kill -KILL -- -"$child" 2>/dev/null || true
-    wait "$child" 2>/dev/null || true
-    printf '%s\\n' sandbox_workspace_quota_exceeded >&2
-    exit 125
-  fi
-  sleep 1
-done
-trap - EXIT INT TERM
+bun -e ${shellQuote(WORKSPACE_QUOTA_MONITOR_SCRIPT)} -- "$child" ${quota.maximumWorkspaceBytes} ${quota.maximumWorkspaceFiles} 1000 /workspace &
+monitor=$!
+set +e
 wait "$child"
+child_status=$?
+wait "$monitor"
+monitor_status=$?
+set -e
+trap - EXIT INT TERM
+if [ "$monitor_status" -ne 0 ]; then exit "$monitor_status"; fi
+exit "$child_status"
 `;
   return `bash -lc ${shellQuote(script)}`;
 }

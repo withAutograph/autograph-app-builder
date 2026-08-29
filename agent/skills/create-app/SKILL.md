@@ -1,6 +1,6 @@
 ---
 name: create-app
-description: Guide complete creation of a route-owned Next.js app in a supported Autograph repository, from product design through an approved AppSpec, canonical proposal, reviewed change set, and separately approved publication. Use as the primary entry point when a user asks to create, build, or start a new app. Route explicitly bare/local-only Next.js workspace requests to $scaffold-app-workspace.
+description: Guide complete creation of a route-owned Next.js app in a supported Autograph repository, from product design through a usable prototype, implementation plan, reviewed changes, and separately approved publication. Use as the primary entry point when a user asks to create, build, or start a new app. Route explicitly bare/local-only Next.js workspace requests to $scaffold-app-workspace.
 ---
 
 # Create App
@@ -52,35 +52,33 @@ missing operation with a raw shell command or generic file write.
    `plan_app_creation` succeeds for the current artifact bytes. If the visual
    prototype is ready first, continue the silent workflow. Return only product
    blockers without workarounds or internal validator mechanics.
-6. Present the usable prototype and complete proposal, then request the first
-   distinct, explicit approval for
-   the builder-owned apply operation. Do not apply on AppSpec acceptance alone,
-   and never invoke the target command through generic shell access.
+6. Present the usable prototype and complete proposal, then continue through
+   builder-owned preparation, checks, and review automatically and silently.
+   Never invoke the target command through generic shell access.
 7. Use only the discovered `apply_app_creation` tool. It must rerun readiness,
    bind the exact proposal and earlier receipts, and write only its fresh
    builder-owned overlay. If it records partial failure, stop in
    recovery-required state without automatic retry.
-8. After the approved app changes are prepared, explain the visible outcome and
-   request a distinct approval to run the fixed local checks. The validation
-   tool must persist its pending receipt
+8. After the app changes are prepared, run the fixed local checks automatically.
+   The validation tool must persist its pending receipt
    before execution, run only the fixed check and test commands in independent
    copies of the exact applied tree, and stop on pending or failed state without
    automatic redispatch.
-9. After checks pass, use `change_set_status` internally and show the complete
-   ordered product/code changes in plain language. Then request separate approval
-   for `accept_change_set`, carrying that exact payload; it recomputes the
-   proposal and records the durable reviewed receipt. Request a separate
-   local-publication approval before applying the reviewed paths to a named
-   existing checkout. This does not create a commit, branch, draft pull
-   request, or other remote publication outcome.
+9. After checks pass, use `change_set_status` and `accept_change_set` internally
+   to recompute the exact proposal and record the durable reviewed receipt.
+   Show the complete ordered product/code changes in plain language and offer
+   one concrete repository or draft-pull-request next step. Stop unless the
+   user chooses to continue. Only then request a separate effect-based approval
+   before applying the reviewed paths to a named existing checkout or
+   publishing them. One approval never authorizes another outcome.
    Keep internal execution mechanics and no-authority boilerplate out of the
    public conversation.
 
 ## Boundaries
 
-- Infer only safe, revisable prototype defaults. Never infer production
-  authority, silently repair the AppSpec, or mutate the target before its
-  separate source/topology approval.
+- Infer only safe, revisable prototype defaults. Never infer Production
+  authority. Never mutate the prepared source or target checkout, or publish
+  reviewed changes, without effect-based approval for that exact outcome.
 - Never use `$scaffold-app-workspace` as the apply step for a planned route-owned
   app; the complete command owns contract, workspace, and topology composition.
 - Never create schema contents merely because the proposal derives a kernel

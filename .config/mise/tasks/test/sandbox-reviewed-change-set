@@ -1,0 +1,16 @@
+#!/bin/sh
+#MISE description="Prove apply, validation, and review in the pinned sandbox without publication"
+set -eu
+
+if [ "$#" -ne 2 ]; then
+  echo "usage: mise run test:sandbox-reviewed-change-set -- <image-digest-reference> <source-root>" >&2
+  exit 2
+fi
+
+node_bin="$(mise which node)"
+launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
+exec "$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts \
+  --gate-a-profile sandbox \
+  --gate-a-image "$1" \
+  --gate-a-source-root "$2" \
+  sandbox-reviewed-change-set --strict --skip-report

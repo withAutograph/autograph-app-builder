@@ -11,8 +11,17 @@ import {
 } from "./github-app-http-provider";
 import {
   GITHUB_PUBLICATION_VERSION,
+  createDraftPullRequestProposal,
+  createGitHubInstallationIdentity,
+  createRepositoryObservation,
+  type GitHubDraftPullRequestContent,
   type FreshRepositoryProposal,
 } from "./github-publication";
+import {
+  createReviewedChangeSetReceipt,
+  type NormalizedChangeSet,
+} from "./reviewed-change-set";
+import { compareOverlayPaths } from "./target-apply";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey
@@ -20,6 +29,108 @@ const privateKeyPem = privateKey
   .toString();
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+const sourceSha = "1".repeat(40);
+const sourceTree = "2".repeat(40);
+
+function unicodeDraftMaterial() {
+  const bytes = new TextEncoder().encode("export default null;\n");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  const changes = [
+    ".codex/skills/example/agents/openai.yaml",
+    ".codex/skills/example/SKILL.md",
+    "apps/demo/\u{e000}.tsx",
+    "apps/demo/\u{10000}.tsx",
+  ]
+    .map((path) => ({
+      path,
+      kind: "added" as const,
+      after: { mode: "644", digest },
+    }))
+    .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
+  const unsigned = {
+    version: 2 as const,
+    validationDigest: "3".repeat(64),
+    applyDigest: "4".repeat(64),
+    proposalDigest: "5".repeat(64),
+    contractDigest: "6".repeat(64),
+    repositoryContractDigest: "7".repeat(64),
+    sourceSha,
+    sourceTree,
+    eligibilityDigest: "8".repeat(64),
+    workspaceDigest: "9".repeat(64),
+    appSpecDigest: "a".repeat(64),
+    appSpecPath: "prototype/demo/app-spec.md",
+    artifactRevision: "b".repeat(64),
+    dependencyReceiptDigest: "c".repeat(64),
+    identityDigest: "d".repeat(64),
+    imageDigest: `sha256:${"e".repeat(64)}`,
+    dependencyCacheDigest: "f".repeat(64),
+    dependencyCacheContentDigest: "0".repeat(64),
+    targetReceipt: {
+      version: 1 as const,
+      contractPath: ".config/repository-template.json",
+      topology: {
+        path: "apps.json",
+        oldDigest: "1".repeat(64),
+        newDigest: "2".repeat(64),
+      },
+    },
+    preTreeDigest: "3".repeat(64),
+    postTreeDigest: "4".repeat(64),
+    changedContentDigest: hash(changes),
+    changes,
+    approvedPaths: changes.map(({ path }) => path),
+  };
+  const changeSet: NormalizedChangeSet = {
+    ...unsigned,
+    digest: hash(unsigned),
+  };
+  const review = createReviewedChangeSetReceipt(changeSet, "review-call");
+  const installation = createGitHubInstallationIdentity({
+    operation: "publish-draft-pull-request",
+    installationId: "456",
+    accountId: "789",
+    accountLogin: "withAutograph",
+    accountType: "Organization",
+    repositorySelection: "selected",
+    selectedRepositoryIds: ["100"],
+  });
+  const repository = createRepositoryObservation({
+    repositoryId: "100",
+    owner: "withAutograph",
+    name: "example-app",
+    visibility: "private",
+    defaultBranch: "main",
+    headSha: sourceSha,
+    headTree: sourceTree,
+    installationIdentityDigest: installation.digest,
+    releaseGate: {
+      name: "REPOSITORY_RELEASE_ENABLED",
+      configured: false,
+    },
+  });
+  const proposal = createDraftPullRequestProposal({
+    installation,
+    repository,
+    review,
+    changedPathsSinceBase: [],
+    title: "Add demo",
+  });
+  const content: GitHubDraftPullRequestContent = {
+    version: 1,
+    kind: "draft-reviewed-change-set",
+    reviewDigest: review.digest,
+    changeSetDigest: review.changeSetDigest,
+    changedContentDigest: review.changedContentDigest,
+    approvedPaths: review.approvedPaths,
+    changes: changes.map((change) => ({
+      ...change,
+      after: { ...change.after, bytes },
+    })),
+  };
+  return { proposal, content };
+}
 
 function freshProposal(): FreshRepositoryProposal {
   const installationIdentityDigest = "1".repeat(64);
@@ -270,5 +381,55 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     });
     expect(mock.calls).toHaveLength(1);
     expect(mock.calls[0]?.init.method ?? "GET").toBe("GET");
+  });
+
+  it("round-trips UTF-8 ordered draft material through the HTTP provider", async () => {
+    const calls: string[] = [];
+    const implementation: typeof fetch = async (request, init = {}) => {
+      const url = String(request);
+      calls.push(url);
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        const body = JSON.parse(String(init.body)) as {
+          permissions: Record<string, string>;
+        };
+        return json(
+          {
+            token: "ghs_operation_scoped_installation_token",
+            permissions: body.permissions,
+          },
+          201,
+        );
+      }
+      if (url.endsWith("/repositories/100")) {
+        return json({
+          id: 100,
+          owner: { login: "withAutograph" },
+          name: "example-app",
+          private: true,
+          default_branch: "main",
+        });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/commits/main")) {
+        return json({
+          sha: "a".repeat(40),
+          commit: { tree: { sha: "b".repeat(40) } },
+        });
+      }
+      if (
+        url.endsWith(
+          "/repos/withAutograph/example-app/actions/variables?per_page=100&page=1",
+        )
+      ) {
+        return json({ variables: [] });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+    const provider = createProvider(implementation);
+    const { proposal, content } = unicodeDraftMaterial();
+
+    await expect(
+      provider.publishDraftPullRequest(proposal, content),
+    ).resolves.toEqual({ status: "rejected", code: "stale-base" });
+    expect(calls).toHaveLength(4);
   });
 });

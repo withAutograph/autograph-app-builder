@@ -1,4 +1,16 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,7 +19,10 @@ import type { SandboxSession } from "eve/sandbox";
 import {
   assertCurrentTargetApplyReceipt,
   executeProposalBoundApply,
+  inspectApplyOverlay,
+  OVERLAY_SNAPSHOT_SCRIPT,
   overlayChanges,
+  overlaySnapshotCommand,
   sandboxApplyCommandExecutor,
   type OverlaySnapshot,
   type TargetApplyBinding,
@@ -19,6 +34,7 @@ const acceptedAppSpec = Buffer.from("# Accepted AppSpec\n");
 const acceptedAppSpecDigest = createHash("sha256")
   .update(acceptedAppSpec)
   .digest("hex");
+const executeFile = promisify(execFile);
 
 const proposal: TargetProposal = {
   contract: {
@@ -70,6 +86,7 @@ const binding: TargetApplyBinding = {
   identityDigest: "6".repeat(64),
   imageDigest: `fixture@sha256:${"7".repeat(64)}`,
   dependencyCacheDigest: `sha256:${"8".repeat(64)}`,
+  dependencyCacheContentDigest: "d".repeat(64),
   proposalDigest: "9".repeat(64),
 };
 
@@ -183,6 +200,15 @@ function sandboxFixture() {
   };
 }
 
+async function withRealSandbox<T>(run: () => Promise<T>): Promise<T> {
+  vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "1");
+  try {
+    return await run();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
 describe("proposal-bound target apply", () => {
   it.each([
     ["path-less historical V1", { ...binding, version: 1 }],
@@ -214,6 +240,7 @@ describe("proposal-bound target apply", () => {
       ).rejects.toThrow(/exact accepted AppSpec/u);
       expect(removePath).toHaveBeenCalledWith({
         path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+        recursive: true,
         force: true,
       });
     },
@@ -285,10 +312,10 @@ describe("proposal-bound target apply", () => {
         if (
           injectFailure &&
           ((failureStage === "planning-snapshot" && call === 0) ||
-            (failureStage === "pre-command-snapshot" && call === 1))
+            (failureStage === "pre-command-snapshot" && call === 2))
         )
           throw new Error(`injected ${failureStage} failure`);
-        return call === 0 ? planning : call === 1 ? before : after;
+        return call === 0 ? planning : call < 3 ? before : after;
       });
       const execute = () =>
         executeProposalBoundApply({
@@ -305,6 +332,7 @@ describe("proposal-bound target apply", () => {
       expect(executor).not.toHaveBeenCalled();
       expect(fixture.removePath).toHaveBeenCalledWith({
         path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+        recursive: true,
         force: true,
       });
 
@@ -318,7 +346,7 @@ describe("proposal-bound target apply", () => {
 
   it("persists a recovery-required attempt when the post-command snapshot fails", async () => {
     const fixture = sandboxFixture();
-    const snapshots = [planning, before];
+    const snapshots = [planning, before, before];
     const executor = vi.fn(async () => ({
       exitCode: 0,
       stdout: JSON.stringify(commandReceipt()),
@@ -354,31 +382,35 @@ describe("proposal-bound target apply", () => {
     });
     expect(fixture.removePath).not.toHaveBeenCalledWith({
       path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+      recursive: true,
       force: true,
     });
   });
 
   it("records normalized pre/post overlay changes and a strict target receipt", async () => {
-    const { sandbox, writeTextFile, writeBinaryFile, removePath } =
+    const { run, sandbox, writeTextFile, writeBinaryFile, removePath } =
       sandboxFixture();
-    const snapshots = [planning, before, after];
-    const result = await executeProposalBoundApply({
-      sandbox,
-      executor: async () => ({
-        exitCode: 0,
-        stdout: JSON.stringify(commandReceipt()),
-        stderr: "",
+    const snapshots = [planning, before, before, after];
+    const result = await withRealSandbox(() =>
+      executeProposalBoundApply({
+        sandbox,
+        executor: async () => ({
+          exitCode: 0,
+          stdout: JSON.stringify(commandReceipt()),
+          stderr: "",
+        }),
+        snapshotter: async () => snapshots.shift()!,
+        binding,
+        artifactRevision: binding.artifactRevision,
+        proposal,
+        appliedByCallId: "apply-call",
       }),
-      snapshotter: async () => snapshots.shift()!,
-      binding,
-      artifactRevision: binding.artifactRevision,
-      proposal,
-      appliedByCallId: "apply-call",
-    });
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected successful apply");
     expect(result.receipt.preTreeDigest).toBe(before.treeDigest);
     expect(result.receipt.planningTreeDigest).toBe(planning.treeDigest);
+    expect(result.receipt.preparedTreeDigest).toBe(before.treeDigest);
     expect(result.receipt.postTreeDigest).toBe(after.treeDigest);
     expect(result.receipt.preTree).toEqual(before.files);
     expect(result.receipt.postTree).toEqual(after.files);
@@ -392,6 +424,15 @@ describe("proposal-bound target apply", () => {
       path: `.app-builder/apply/${binding.proposalDigest}/proposal.json`,
       content: `${JSON.stringify(proposal, null, 2)}\n`,
     });
+    const overlayCopy = run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .find((command) => command.includes("cp -R"))!;
+    expect(overlayCopy).toContain("test -L");
+    expect(overlayCopy).toContain(
+      `/opt/app-builder/dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+    );
+    expect(overlayCopy).toContain("cp -R");
+    expect(overlayCopy).toContain("readlink --");
     expect(removePath).toHaveBeenCalledWith({
       path: `.app-builder/apply/${binding.proposalDigest}/repository/prototype/expense-review/app-spec.md`,
       force: true,
@@ -400,6 +441,60 @@ describe("proposal-bound target apply", () => {
       path: `.app-builder/apply/${binding.proposalDigest}/repository/prototype/expense-review/app-spec.md`,
       content: acceptedAppSpec,
     });
+  });
+
+  it("binds the pristine prepared tree separately from injected planning config", async () => {
+    const injectedConfig = {
+      path: ".config/mise/config.app-builder.toml",
+      mode: "644",
+      digest: "f".repeat(64),
+    };
+    const prepared = before;
+    const injectedBefore = {
+      treeDigest: "1".repeat(64),
+      files: [...before.files, injectedConfig],
+    };
+    const injectedPlanning = {
+      treeDigest: "2".repeat(64),
+      files: [
+        ...injectedBefore.files,
+        {
+          path: proposal.contract.appSpec.path,
+          mode: "644",
+          digest: acceptedAppSpecDigest,
+        },
+      ],
+    };
+    const injectedAfter = {
+      ...after,
+      files: [...after.files, injectedConfig],
+    };
+    const snapshots = [
+      injectedPlanning,
+      prepared,
+      injectedBefore,
+      injectedAfter,
+    ];
+    const result = await executeProposalBoundApply({
+      sandbox: sandboxFixture().sandbox,
+      executor: async () => ({
+        exitCode: 0,
+        stdout: JSON.stringify(commandReceipt()),
+        stderr: "",
+      }),
+      snapshotter: async () => snapshots.shift()!,
+      binding,
+      artifactRevision: binding.artifactRevision,
+      proposal,
+      appliedByCallId: "apply-call",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected successful apply");
+    expect(result.receipt.preparedTreeDigest).toBe(prepared.treeDigest);
+    expect(result.receipt.preTreeDigest).toBe(injectedBefore.treeDigest);
+    expect(result.receipt.preparedTreeDigest).not.toBe(
+      result.receipt.preTreeDigest,
+    );
   });
 
   it.each([
@@ -412,7 +507,7 @@ describe("proposal-bound target apply", () => {
       readBinaryFile
         .mockResolvedValueOnce(acceptedAppSpec)
         .mockResolvedValueOnce(preparedAppSpec);
-      const snapshots = [planning, preparedSnapshot, after];
+      const snapshots = [planning, preparedSnapshot, preparedSnapshot, after];
       const result = await executeProposalBoundApply({
         sandbox,
         executor: async () => ({
@@ -446,7 +541,7 @@ describe("proposal-bound target apply", () => {
 
   it("records command failure as recovery-required without claiming apply", async () => {
     const { sandbox } = sandboxFixture();
-    const snapshots = [planning, before, after];
+    const snapshots = [planning, before, before, after];
     const result = await executeProposalBoundApply({
       sandbox,
       executor: async () => ({
@@ -475,6 +570,7 @@ describe("proposal-bound target apply", () => {
     const { sandbox } = sandboxFixture();
     const snapshots = [
       planning,
+      before,
       before,
       {
         treeDigest: "f".repeat(64),
@@ -505,7 +601,7 @@ describe("proposal-bound target apply", () => {
 
   it("fails closed when the target receipt is not bound to proposal topology", async () => {
     const { sandbox } = sandboxFixture();
-    const snapshots = [planning, before, after];
+    const snapshots = [planning, before, before, after];
     const receipt = commandReceipt();
     receipt.topology.newDigest = "f".repeat(64);
     const result = await executeProposalBoundApply({
@@ -537,11 +633,81 @@ describe("proposal-bound target apply", () => {
       proposal,
     });
     expect(run).toHaveBeenCalledWith({
-      command: `mise run create:app -- --proposal /workspace/.app-builder/apply/${binding.proposalDigest}/proposal.json`,
+      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools create:app -- --proposal /workspace/.app-builder/apply/${binding.proposalDigest}/proposal.json`,
       workingDirectory: `/workspace/.app-builder/apply/${binding.proposalDigest}/repository`,
       abortSignal: expect.any(AbortSignal),
     });
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+  });
+
+  it("snapshots the overlay in one sandbox process without per-file commands", async () => {
+    const firstDigest = createHash("sha256").update("first\n").digest("hex");
+    const secondDigest = createHash("sha256").update("second\n").digest("hex");
+    const skillPath = ".codex/skills/harness-engineering-rules/SKILL.md";
+    const agentPath =
+      ".codex/skills/harness-engineering-rules/agents/openai.yaml";
+    const stdout =
+      `644\t${firstDigest}\t${agentPath}\n` +
+      `644\t${secondDigest}\t${skillPath}\n` +
+      `644\t${firstDigest}\ta.txt\n` +
+      `755\t${secondDigest}\tnested/z.sh\n`;
+    const run = vi.fn(async (request: unknown) => {
+      void request;
+      return { exitCode: 0, stdout, stderr: "" };
+    });
+    const snapshot = await inspectApplyOverlay(
+      { id: "sandbox", run } as unknown as SandboxSession,
+      "/workspace/overlay",
+    );
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith({
+      command: overlaySnapshotCommand(),
+      workingDirectory: "/workspace/overlay",
+      abortSignal: expect.any(AbortSignal),
+    });
+    const command = (run.mock.calls[0]?.[0] as { command?: string } | undefined)
+      ?.command;
+    expect(command).toBeDefined();
+    expect(command).toMatch(/^bun -e '/u);
+    expect(command).not.toContain("find .");
+    expect(command).not.toContain("sha256sum --");
+    expect(command).not.toContain("stat --format");
+    expect(snapshot.files).toEqual([
+      { path: skillPath, mode: "644", digest: secondDigest },
+      { path: agentPath, mode: "644", digest: firstDigest },
+      { path: "a.txt", mode: "644", digest: firstDigest },
+      { path: "nested/z.sh", mode: "755", digest: secondDigest },
+    ]);
+  });
+
+  it("preserves regular-file snapshot semantics and prunes only root caches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "target-apply-snapshot-"));
+    try {
+      await mkdir(join(root, "nested"));
+      await mkdir(join(root, "node_modules"));
+      await mkdir(join(root, ".scratch"));
+      await writeFile(join(root, "a.txt"), "first\n");
+      await writeFile(join(root, "nested", "z.sh"), "second\n");
+      await chmod(join(root, "nested", "z.sh"), 0o755);
+      await writeFile(join(root, "node_modules", "excluded"), "cache\n");
+      await writeFile(join(root, ".scratch", "excluded"), "scratch\n");
+      await symlink("a.txt", join(root, "ignored-link"));
+
+      const result = await executeFile(
+        process.execPath,
+        ["-e", OVERLAY_SNAPSHOT_SCRIPT],
+        { cwd: root },
+      );
+
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toBe(
+        `644\t${createHash("sha256").update("first\n").digest("hex")}\ta.txt\n` +
+          `755\t${createHash("sha256").update("second\n").digest("hex")}\tnested/z.sh\n`,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("normalizes added, modified, and deleted content", () => {

@@ -2,8 +2,17 @@ import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
 
+import { hasTestCapability } from "../testing/test-capability";
+
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
-import { SUPPORTED_VALIDATION_COMMANDS } from "./supported-template";
+import {
+  supportedValidationCommands,
+  SUPPORTED_VALIDATION_TEST_SHARDS,
+} from "./supported-template";
+import {
+  ARRUSTED_APP_VALIDATION_SHA256,
+  dependencyCacheNodeModulesRoot,
+} from "./dependency-cache";
 import {
   applyOverlayRoot,
   assertCurrentTargetApplyReceipt,
@@ -14,11 +23,10 @@ import {
 
 export const TARGET_VALIDATION_TIMEOUT_MS = 300_000;
 export const TARGET_VALIDATION_OUTPUT_BYTES = 1_048_576;
-export const TARGET_VALIDATION_COMMANDS = SUPPORTED_VALIDATION_COMMANDS;
-
 export type TargetValidationCommand =
-  (typeof TARGET_VALIDATION_COMMANDS)[number];
-export type TargetValidationCommandName = "check" | "test";
+  | `mise run app:check-build ${string}`
+  | `mise run app:test ${string} ${string}`;
+export type TargetValidationCommandName = "check-build" | "test";
 
 export type ValidationCommandExecutor = (input: {
   sandbox: SandboxSession;
@@ -28,6 +36,9 @@ export type ValidationCommandExecutor = (input: {
 }) => Promise<ApplyCommandResult>;
 
 type TargetValidationBinding = {
+  appId: string;
+  testShards: readonly string[];
+  appValidationSha256: string;
   sourceSha: string;
   sourceTree: string;
   eligibilityDigest: string;
@@ -39,6 +50,7 @@ type TargetValidationBinding = {
   identityDigest: string;
   imageDigest: string;
   dependencyCacheDigest: string;
+  dependencyCacheContentDigest: string;
   proposalDigest: string;
   applyDigest: string;
   appliedTreeDigest: string;
@@ -52,7 +64,7 @@ export type PlannedValidationCommand = {
 };
 
 export type TargetValidationAttemptReceipt = TargetValidationBinding & {
-  version: 2;
+  version: 3;
   status: "pending";
   commands: readonly PlannedValidationCommand[];
   startedByCallId: string;
@@ -67,7 +79,7 @@ export type TargetValidationCommandReceipt = PlannedValidationCommand & {
 };
 
 type ValidationReceiptBase = TargetValidationBinding & {
-  version: 2;
+  version: 3;
   attemptDigest: string;
   commands: readonly TargetValidationCommandReceipt[];
   validatedByCallId: string;
@@ -99,6 +111,10 @@ export type TargetValidationResult =
   | { ok: true; receipt: TargetValidationReceipt }
   | { ok: false; receipt: TargetValidationFailureReceipt };
 
+// Two fixed commands, each with three materialization calls, one input
+// snapshot, one command, and three three-tree protected-state snapshots.
+export const TARGET_VALIDATION_RELAY_CALL_BUDGET = 28;
+
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
@@ -113,7 +129,7 @@ export function assertTargetValidationSourceBindings(input: {
 }): void {
   if (input.planningTreeDigest !== input.apply.planningTreeDigest)
     throw new Error("The planning overlay changed before target validation.");
-  if (input.preparedTreeDigest !== input.apply.preTreeDigest)
+  if (input.preparedTreeDigest !== input.apply.preparedTreeDigest)
     throw new Error("The prepared source changed before target validation.");
 }
 
@@ -156,15 +172,17 @@ export function assertReusableTargetValidationReceipt(input: {
     input.validation.validatedByCallId,
   );
   if (
-    input.validation.version !== 2 ||
+    input.validation.version !== 3 ||
     input.validation.status !== "passed" ||
     input.validation.attemptDigest !== expectedAttempt.digest ||
     input.validation.applyDigest !== input.apply.digest ||
     input.validation.appSpecPath !== input.apply.appSpecPath ||
-    Object.entries(expectedBinding).some(
-      ([key, value]) =>
-        input.validation[key as keyof typeof expectedBinding] !== value,
-    ) ||
+    Object.entries(expectedBinding).some(([key, value]) => {
+      const observed = input.validation[key as keyof typeof expectedBinding];
+      return Array.isArray(value)
+        ? JSON.stringify(observed) !== JSON.stringify(value)
+        : observed !== value;
+    }) ||
     input.validation.commands.length !== expectedAttempt.commands.length ||
     input.validation.commands.some((command, index) => {
       const expected = expectedAttempt.commands[index];
@@ -181,13 +199,13 @@ export function assertReusableTargetValidationReceipt(input: {
     })
   )
     throw new Error(
-      "A canonical V2 target validation receipt for the exact apply is required.",
+      "A canonical V3 target validation receipt for the exact apply is required.",
     );
   const canonicalCommands = input.validation.commands.map((command, index) => {
     const expected = expectedAttempt.commands[index];
     if (expected === undefined)
       throw new Error(
-        "A canonical V2 target validation receipt for the exact apply is required.",
+        "A canonical V3 target validation receipt for the exact apply is required.",
       );
     return {
       name: expected.name,
@@ -200,7 +218,7 @@ export function assertReusableTargetValidationReceipt(input: {
     };
   });
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     ...expectedBinding,
     status: "passed" as const,
     attemptDigest: input.validation.attemptDigest,
@@ -217,14 +235,8 @@ export function assertReusableTargetValidationReceipt(input: {
       })
   )
     throw new Error(
-      "The canonical V2 target validation receipt digest is malformed.",
+      "The canonical V3 target validation receipt digest is malformed.",
     );
-}
-
-function commandName(
-  command: TargetValidationCommand,
-): TargetValidationCommandName {
-  return command === "mise run check" ? "check" : "test";
 }
 
 export function validationOverlayRoot(
@@ -240,6 +252,9 @@ export function validationBinding(
   apply: TargetApplyReceipt,
 ): TargetValidationBinding {
   return {
+    appId: apply.targetReceipt.appId,
+    testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
+    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
     sourceSha: apply.sourceSha,
     sourceTree: apply.sourceTree,
     eligibilityDigest: apply.eligibilityDigest,
@@ -251,6 +266,7 @@ export function validationBinding(
     identityDigest: apply.identityDigest,
     imageDigest: apply.imageDigest,
     dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
     proposalDigest: apply.proposalDigest,
     applyDigest: apply.digest,
     appliedTreeDigest: apply.postTreeDigest,
@@ -268,17 +284,17 @@ export function createTargetValidationAttempt(
   )
     throw new Error("The target apply overlay root is not proposal-bound.");
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     status: "pending" as const,
     ...validationBinding(apply),
-    commands: TARGET_VALIDATION_COMMANDS.map((command) => {
-      const name = commandName(command);
-      return {
-        name,
-        command,
-        validationRoot: validationOverlayRoot(apply.digest, name),
-      };
-    }),
+    commands: supportedValidationCommands(
+      apply.targetReceipt.appId,
+      SUPPORTED_VALIDATION_TEST_SHARDS,
+    ).map(({ command, name }) => ({
+      name,
+      command,
+      validationRoot: validationOverlayRoot(apply.digest, name),
+    })),
     startedByCallId,
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
@@ -289,8 +305,8 @@ function assertAttemptMatchesApply(
   apply: TargetApplyReceipt,
 ): void {
   assertCurrentTargetApplyReceipt(apply);
-  if (attempt.version !== 2)
-    throw new Error("A canonical V2 target validation attempt is required.");
+  if (attempt.version !== 3)
+    throw new Error("A canonical V3 target validation attempt is required.");
   const expected = createTargetValidationAttempt(
     apply,
     attempt.startedByCallId,
@@ -305,6 +321,9 @@ function attemptBinding(
   attempt: TargetValidationAttemptReceipt,
 ): TargetValidationBinding {
   return {
+    appId: attempt.appId,
+    testShards: attempt.testShards,
+    appValidationSha256: attempt.appValidationSha256,
     sourceSha: attempt.sourceSha,
     sourceTree: attempt.sourceTree,
     eligibilityDigest: attempt.eligibilityDigest,
@@ -316,6 +335,7 @@ function attemptBinding(
     identityDigest: attempt.identityDigest,
     imageDigest: attempt.imageDigest,
     dependencyCacheDigest: attempt.dependencyCacheDigest,
+    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
     proposalDigest: attempt.proposalDigest,
     applyDigest: attempt.applyDigest,
     appliedTreeDigest: attempt.appliedTreeDigest,
@@ -326,6 +346,7 @@ function attemptBinding(
 async function materializeValidationOverlay(input: {
   sandbox: SandboxSession;
   applyRoot: string;
+  dependencyCacheContentDigest: string;
   command: PlannedValidationCommand;
 }): Promise<void> {
   const relativeRoot = input.command.validationRoot.replace(
@@ -340,8 +361,14 @@ async function materializeValidationOverlay(input: {
   });
   if (absent.exitCode !== 0) throw new Error("ValidationOverlayExists");
   await ensureSandboxDirectories(input.sandbox, [parent]);
+  const dependencyRoot = dependencyCacheNodeModulesRoot(
+    input.dependencyCacheContentDigest,
+  );
+  const copyCommand = hasTestCapability("simulated-target")
+    ? `cp -R ${input.applyRoot} ${input.command.validationRoot}`
+    : `test -L ${input.applyRoot}/node_modules && test "$(readlink -- ${input.applyRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${input.applyRoot} ${input.command.validationRoot} && test -L ${input.command.validationRoot}/node_modules && test "$(readlink -- ${input.command.validationRoot}/node_modules)" = "${dependencyRoot}"`;
   const copy = await input.sandbox.run({
-    command: `cp -R ${input.applyRoot} ${input.command.validationRoot}`,
+    command: copyCommand,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
   });
@@ -354,17 +381,28 @@ async function materializeValidationOverlay(input: {
 }
 
 export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
-  return async ({ sandbox, command, validationRoot }) =>
-    await sandbox.run({
-      command,
+  return async ({ sandbox, appId, command, validationRoot }) => {
+    const expected = supportedValidationCommands(
+      appId,
+      SUPPORTED_VALIDATION_TEST_SHARDS,
+    ).find((candidate) => candidate.command === command);
+    if (expected === undefined)
+      throw new Error("The target validation command was not canonical.");
+    return await sandbox.run({
+      command: command.replace(
+        /^mise run /u,
+        "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools ",
+      ),
       workingDirectory: validationRoot,
       abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
     });
+  };
 }
 
 export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
   return async ({ appId, command }) =>
-    appId === "validation-failure" && command === "mise run check"
+    appId === "validation-failure" &&
+    command.startsWith("mise run app:check-build ")
       ? { exitCode: 1, stdout: "", stderr: "fixture validation failure" }
       : { exitCode: 0, stdout: `${command} passed`, stderr: "" };
 }
@@ -375,7 +413,7 @@ function failureReceipt(
   reason: TargetValidationFailureReason,
 ): TargetValidationFailureReceipt {
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     ...attemptBinding(attempt),
     status: "failed" as const,
     attemptDigest: attempt.digest,
@@ -398,6 +436,30 @@ export function appliedOverlayDriftFailure(input: {
   );
 }
 
+export async function verifyTargetValidationProtectedTrees(input: {
+  sandbox: SandboxSession;
+  apply: TargetApplyReceipt;
+  planningRoot: string;
+  preparedRoot: string;
+  assertWorkflowState: () => void;
+  snapshotter?: typeof inspectApplyOverlay;
+}): Promise<void> {
+  input.assertWorkflowState();
+  const snapshotter = input.snapshotter ?? inspectApplyOverlay;
+  const [prepared, planning, applied] = await Promise.all([
+    snapshotter(input.sandbox, input.preparedRoot),
+    snapshotter(input.sandbox, input.planningRoot),
+    snapshotter(input.sandbox, input.apply.applyRoot),
+  ]);
+  assertTargetValidationSourceBindings({
+    apply: input.apply,
+    planningTreeDigest: planning.treeDigest,
+    preparedTreeDigest: prepared.treeDigest,
+  });
+  if (applied.treeDigest !== input.apply.postTreeDigest)
+    throw new Error("The applied overlay changed during validation.");
+}
+
 export async function executeProposalBoundValidation(input: {
   sandbox: SandboxSession;
   executor: ValidationCommandExecutor;
@@ -408,6 +470,8 @@ export async function executeProposalBoundValidation(input: {
   appId: string;
 }): Promise<TargetValidationResult> {
   assertAttemptMatchesApply(input.attempt, input.apply);
+  if (input.appId !== input.attempt.appId)
+    throw new Error("The validation application id changed after approval.");
   const snapshotter = input.snapshotter ?? inspectApplyOverlay;
   const commands: TargetValidationCommandReceipt[] = [];
   for (const planned of input.attempt.commands) {
@@ -427,6 +491,7 @@ export async function executeProposalBoundValidation(input: {
       await materializeValidationOverlay({
         sandbox: input.sandbox,
         applyRoot: input.apply.applyRoot,
+        dependencyCacheContentDigest: input.apply.dependencyCacheContentDigest,
         command: planned,
       });
     } catch {
@@ -512,7 +577,7 @@ export async function executeProposalBoundValidation(input: {
       };
   }
   const unsigned = {
-    version: 2 as const,
+    version: 3 as const,
     ...attemptBinding(input.attempt),
     status: "passed" as const,
     attemptDigest: input.attempt.digest,

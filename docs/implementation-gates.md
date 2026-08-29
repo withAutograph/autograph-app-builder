@@ -1,6 +1,6 @@
 # Implementation gates
 
-The loopback local adapter and approval-gated isolated workflow through target
+The loopback local adapter and isolated workflow through target
 validation are usable for local development and testing. Apply remains confined
 to a fresh builder-owned overlay; validation uses independent copies of that
 exact tree. Reviewed change-set generation and both approval-bound local
@@ -109,9 +109,9 @@ Before enabling GitHub or hosted repository publication:
    recovery batch. This source proof does not activate the gate or prove
    provider-side orphan lookup and stop.
    The combined `hosted:artifact-prove-typed` gate first proves those exact
-   artifact commands offline, then exercises the approval-bound Eve tool flow
+   artifact commands offline, then exercises the silent Eve tool flow
    to terminal `planned` and emits its asserted called/forbidden tool trace.
-2. The implemented approval-gated dependency preparation verifies the fixed
+2. The implemented automatic dependency preparation verifies the fixed
    image-internal manifest and archive bytes, binds Arrusted commit/tree and
    contract/lock hashes, and extracts `node_modules` only into builder-owned
    planning metadata under deny-all runtime networking. It precreates the
@@ -164,17 +164,17 @@ Before enabling GitHub or hosted repository publication:
 3. The implemented prototype-artifact tools allow only the three conventional
    files, bind AppSpec acceptance to an exact recorded revision, and invalidate
    downstream receipts when artifact bytes or paths change. The implemented
-   apply tool separately approves the exact proposal, reruns execution readiness,
+   apply tool automatically handles the exact proposal, reruns execution readiness,
    writes only a fresh builder-owned overlay, and stores pre/post tree,
    changed-content, strict command, and recovery-required partial-failure
    receipts. Its durable planning-tree binding is distinct from the
    prepared-source pre-tree: the accepted AppSpec is verified in planning,
    restored to the prepared-source baseline for the pre-snapshot, and then
    staged as an allowed canonical apply change. The exact AppSpec path and
-   digest remain receipt-bound by the V2 apply, validation, and normalized
-   change-set receipt shapes; the aggregate workflow remains V12. Every reuse,
+   digest remain receipt-bound by the V2 apply, V3 validation, and V2 normalized
+   change-set receipt shapes; the aggregate workflow remains V15. Every reuse,
    validation, review, and local or branch publication boundary checks literal
-   V2 before accepting reconstructed digests, so JSON omission of the AppSpec
+   matching current versions before accepting reconstructed digests, so JSON omission of the AppSpec
    path cannot recreate current authority. Failures
    before command dispatch remove only the
    fresh apply overlay and permit a clean retry; a post-dispatch snapshot failure
@@ -183,39 +183,41 @@ Before enabling GitHub or hosted repository publication:
    implemented validation tool
    persists pending state before
    execution, rechecks readiness and the exact applied tree, and runs only the
-   adapter-owned `mise run check` and `mise run test` commands in independent
-   builder-owned copies. It records only bounded, digested output evidence and
+   adapter-owned `mise run app:check-build <app-id>` and
+   `mise run app:test <app-id> <shard>` commands in independent builder-owned
+   copies. The V3 receipt binds the exact app id, shard set, and target-owned
+   app-validation implementation digest. It records only bounded, digested output evidence and
    durable pass or recovery-required failure state. It rechecks protected
    source, cache, planning, and applied bindings after each command and records
    drift instead of claiming success; validation overlays never supply files to
    the future reviewed change set. The implemented typed change-review tools
    derive an ordered, path-safe normalized proposal only from the exact canonical
    applied overlay and passed validation receipt. `change_set_status` is
-   read-only; `accept_change_set` separately approves its digest and rechecks
+   read-only; `accept_change_set` automatically rechecks its digest and
    the same overlay before recording the durable reviewed receipt. Neither
-   validates, executes a target command, or publishes. GitHub-bound AppSpec,
-   change-set, and publication approvals expose only a canonical closed V2
-   receipt. The first two bind the persisted immutable source identity to their
-   artifact/change-set digest; publication binds the refreshed, durably sealed
+   validates, executes a target command, or publishes. Internal specification
+   recording and change review never create a public approval request.
+   GitHub publication approval exposes only a canonical closed V2 receipt and
+   binds the refreshed, durably sealed
    draft-PR proposal digest. The sealed proposal is stored in the current
    workflow aggregate with its source and review bindings, so an older proposal
    or another session's source cannot be adopted for publication. Missing or
-   malformed GitHub receipt-bound approval batches fail publicly without
-   exposing an actionable request. Local AppSpec and change-set approvals expose
-   a distinct closed digest-only local subject instead of raw tool input. Their
-   input-dependent Eve approval policies read the workflow target before
-   requesting approval, denying missing, stale, or wrong-phase GitHub receipts
-   before a request exists. The implemented
+   malformed GitHub publication approval fails publicly without exposing raw
+   internal tool input. The implemented
    `target_execution_status` rechecks the exact planned proposal, prepared
    workspace, and immutable toolchain receipt before any future target command;
-   gate every mutating operation in code.
+   gate every mutating operation in code. The sparse-brief conversation must
+   continue through this apply, validation, and review chain without an internal
+   approval event, then show the reviewable product result and offer a concrete
+   outward-effect choice.
 4. The exact-checkout, branch/worktree, and fresh-repository local publishers are separately
    approval-gated and verify the destination/source SHA, index, remotes, full
    status, dirty-path overlap, approved paths, modes, and change-set digests.
-5. Eve evals prove approval, cancellation, stale input, dirty overlap,
-   partial-failure, lost-response, no automatic redispatch, and separately
-   approved recovery behavior without generic shell or writer use.
-6. The fresh local-template receipt and acquisition approval remain separate
+5. Eve evals prove silent internal completion, outward-effect approval,
+   cancellation, stale input, dirty overlap, partial-failure, lost-response, no
+   automatic redispatch, and separately approved recovery behavior without
+   generic shell or writer use.
+6. The fresh local-template receipt and automatic acquisition remain separate
    from publication. Fresh local publication accepts only the exact reviewed
    fresh-template tree, an absent or inode-bound exact-empty destination under
    a configured owner-only root, and a separately approved deterministic Git

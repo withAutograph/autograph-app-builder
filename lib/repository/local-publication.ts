@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { OverlayChange } from "./target-apply";
+import { compareOverlayPaths, type OverlayChange } from "./target-apply";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
@@ -188,7 +188,7 @@ function canonicalChanges(
   if (review.changes.length === 0)
     throw new Error("The reviewed change set is empty.");
   const sorted = [...review.changes].toSorted((left, right) =>
-    left.path.localeCompare(right.path),
+    compareOverlayPaths(left.path, right.path),
   );
   if (
     JSON.stringify(sorted.map(({ path }) => path)) !==
@@ -227,6 +227,7 @@ export function assertExactReviewedChangeSet(
     identityDigest: review.identityDigest,
     imageDigest: review.imageDigest,
     dependencyCacheDigest: review.dependencyCacheDigest,
+    dependencyCacheContentDigest: review.dependencyCacheContentDigest,
     targetReceipt: review.targetReceipt,
     preTreeDigest: review.preTreeDigest,
     postTreeDigest: review.postTreeDigest,
@@ -508,8 +509,8 @@ export function assertCanonicalLocalPublicationJournal(
   const canonicalPartition =
     new Set(accounted).size === accounted.length &&
     samePaths(
-      accounted.filter((path) => applied.has(path)).sort(),
-      [...journal.appliedPaths].sort(),
+      accounted.filter((path) => applied.has(path)).sort(compareOverlayPaths),
+      [...journal.appliedPaths].sort(compareOverlayPaths),
     );
   if (journal.reason === "precondition-failed") {
     if (

@@ -84,8 +84,13 @@ const targetArguments = {
   MISE_CONFIG_SHA256: ".config/mise/config.toml",
   MISE_LOCK_SHA256: ".config/mise/mise.lock",
   BUN_LOCK_SHA256: "bun.lock",
+  CARGO_LOCK_SHA256: "Cargo.lock",
   APP_IDENTITY_SHA256: ".config/mise/scripts/repository/app-identity.ts",
   APP_CONTRACT_SHA256: ".config/mise/scripts/repository/app-contract.ts",
+  APP_VALIDATION_SHA256: ".config/mise/scripts/repository/app-validation.ts",
+  CREATE_APP_SHA256: ".config/turbo/generators/create-app.ts",
+  APP_TEMPLATE_PACKAGE_SHA256:
+    ".config/turbo/generators/templates/app/package.json.hbs",
   REPOSITORY_PREFLIGHT_SHA256:
     ".config/mise/scripts/repository/repository-preflight.ts",
   REPOSITORY_EXEC_SHA256: ".config/mise/tasks/repository/exec",

@@ -39,9 +39,9 @@ import type {
 } from "@/lib/repository/github-publication";
 import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 14 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 15 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v14" as const;
+  "autograph-app-builder.workflow.v15" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -123,7 +123,6 @@ type ReviewedPhase = WorkspacePhase & {
   applyReceipt: TargetApplyReceipt;
   validationReceipt: TargetValidationReceipt;
   reviewReceipt: ReviewedChangeSetReceipt;
-  changeSetApprovalReceipt?: ApprovalReceipt;
   githubDraftProposal?: GitHubDraftProposalBinding;
 };
 

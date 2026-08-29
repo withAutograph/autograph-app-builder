@@ -5,34 +5,44 @@ import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import {
+  ARRUSTED_APP_VALIDATION_SHA256,
+  ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
+  ARRUSTED_CREATE_APP_SHA256,
+  ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
+  ARRUSTED_MICROFRONTENDS_VERSION,
+  ARRUSTED_PATH_TO_REGEXP_VERSION,
+  ARRUSTED_RUST_VERSION,
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
+  DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
   assertExactDependencyTargetBinding,
   inspectDependencyCache,
   materializeOfflineDependencies,
 } from "./dependency-cache";
 
 const archiveDigest = "a".repeat(64);
-const manifest = {
+const hostedArchiveDigest =
+  "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
+const hostedPlanningManifest = {
   version: 1,
   scope: "identity-planning",
-  platform: "linux/arm64",
+  platform: "linux/portable",
   target: {
     sha: ARRUSTED_TARGET_SHA,
     tree: ARRUSTED_TARGET_TREE,
     miseConfigSha256:
-      "d6f6fdd17092e57e51346d891737df6e8a70c7e656669d4c0a0cda3116a706a3",
+      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
     miseLockSha256:
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     bunLockSha256:
-      "a3c9712b469ef5bf8d22ae588b42c5834fff53adb2cf6c0ed84ebac9f3e0999b",
+      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
     appIdentitySha256:
       "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
     appContractSha256:
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     repositoryPreflightSha256:
-      "6e3d96c9373d046f24d654bada360d08bbbbc155bc3b382fc9fc1a0009e7a6e6",
+      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
     repositoryExecSha256:
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
   },
@@ -41,8 +51,47 @@ const manifest = {
     package: "@vercel/microfrontends",
     version: "2.4.0",
     archivePath: DEPENDENCY_CACHE_ARCHIVE_PATH,
+    archiveSha256: hostedArchiveDigest,
+    archiveBytes: 1_356_765,
+  },
+} as const;
+const manifest = {
+  version: 1,
+  scope: "builder-execution",
+  platform: "linux/arm64",
+  target: {
+    sha: ARRUSTED_TARGET_SHA,
+    tree: ARRUSTED_TARGET_TREE,
+    miseConfigSha256:
+      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+    miseLockSha256:
+      "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+    bunLockSha256:
+      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    cargoLockSha256:
+      "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
+    appIdentitySha256:
+      "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+    appContractSha256:
+      "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
+    createAppSha256: ARRUSTED_CREATE_APP_SHA256,
+    appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
+    repositoryPreflightSha256:
+      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+    repositoryExecSha256:
+      "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+  },
+  runtime: { bun: "1.3.14", rust: ARRUSTED_RUST_VERSION },
+  closure: {
+    package: "@vercel/microfrontends",
+    version: "2.4.0",
+    archivePath: DEPENDENCY_CACHE_ARCHIVE_PATH,
     archiveSha256: archiveDigest,
     archiveBytes: 123,
+    cargoArchivePath: DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
+    cargoArchiveSha256: "c".repeat(64),
+    cargoArchiveBytes: 456,
   },
 } as const;
 
@@ -56,10 +105,12 @@ function sandboxFixture(inputManifest: unknown = manifest) {
     })
     .mockResolvedValueOnce({
       exitCode: 0,
-      stdout: `${archiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n123\n`,
+      stdout: `${archiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n123\n${"c".repeat(64)}  ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}\n456\n`,
       stderr: "",
     })
     .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   const sandbox = {
     run,
@@ -68,7 +119,50 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   return { run, sandbox };
 }
 
+function hostedPlanningSandbox(
+  inputManifest: unknown = hostedPlanningManifest,
+) {
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: `${JSON.stringify(inputManifest)}\n`,
+      stderr: "",
+    })
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: `${hostedArchiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n1356765\n`,
+      stderr: "",
+    });
+  return { run, sandbox: { run } as unknown as SandboxSession };
+}
+
 describe("offline dependency cache", () => {
+  it("accepts only the exact narrow hosted planning closure", async () => {
+    const { run, sandbox } = hostedPlanningSandbox();
+    const observed = await inspectDependencyCache(sandbox, { VERCEL: "1" });
+
+    expect(observed.manifest.scope).toBe("identity-planning");
+    expect(observed.contentDigest).toBe(hostedArchiveDigest);
+    expect(run).toHaveBeenNthCalledWith(2, {
+      command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH}`,
+      workingDirectory: "/workspace",
+      abortSignal: expect.any(AbortSignal),
+    });
+  });
+
+  it("rejects hosted planning receipt drift before reading archives", async () => {
+    const { run, sandbox } = hostedPlanningSandbox({
+      ...hostedPlanningManifest,
+      target: { ...hostedPlanningManifest.target, sha: "0".repeat(40) },
+    });
+
+    await expect(
+      inspectDependencyCache(sandbox, { VERCEL: "1" }),
+    ).rejects.toThrow("manifest drifted");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("binds fixture cache observations to the exact prepared source", async () => {
     const target = {
       sourceSha: "3".repeat(40),
@@ -144,6 +238,11 @@ describe("offline dependency cache", () => {
       workingDirectory: "/workspace",
       abortSignal: expect.any(AbortSignal),
     });
+    expect(run).toHaveBeenNthCalledWith(2, {
+      command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && sha256sum -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}`,
+      workingDirectory: "/workspace",
+      abortSignal: expect.any(AbortSignal),
+    });
     expect(run).toHaveBeenNthCalledWith(
       4,
       expect.objectContaining({
@@ -154,17 +253,47 @@ describe("offline dependency cache", () => {
       }),
     );
     expect(run.mock.calls[3]?.[0]).not.toHaveProperty("env");
-    expect(run.mock.calls[3]?.[0]).toEqual(
-      expect.objectContaining({
-        command: expect.stringContaining("--no-overwrite-dir"),
-      }),
+    const linkCommand = run.mock.calls[3]?.[0].command as string;
+    expect(linkCommand).toContain(
+      `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
     );
-    expect(run.mock.calls[3]?.[0]).toEqual(
-      expect.objectContaining({
-        command: expect.stringContaining(
-          'while IFS= read -r directory; do mkdir -p -- "$directory"; done',
-        ),
-      }),
+    expect(linkCommand).toContain("test -d");
+    expect(linkCommand).toContain("test ! -L");
+    expect(linkCommand).toContain("\\( -type f -o -type d \\) -perm /222");
+    expect(linkCommand).toContain("ln -s");
+    expect(linkCommand).toContain(
+      `test -L /workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/node_modules`,
+    );
+    expect(linkCommand).toContain("readlink --");
+    expect(run).toHaveBeenNthCalledWith(5, {
+      command: expect.stringContaining(
+        'const {match}=require("path-to-regexp")',
+      ),
+      workingDirectory: `/workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/packages/platform-microfrontends`,
+      abortSignal: expect.any(AbortSignal),
+    });
+    const resolutionCommand = run.mock.calls[4]?.[0].command as string;
+    expect(resolutionCommand).toContain(ARRUSTED_PATH_TO_REGEXP_VERSION);
+    expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
+    expect(resolutionCommand).toContain(
+      ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
+    );
+    expect(resolutionCommand).toContain('result?.path!=="/vendor"');
+    expect(run).toHaveBeenNthCalledWith(6, {
+      command: expect.stringContaining(
+        `cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}"`,
+      ),
+      workingDirectory: `/workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository`,
+      abortSignal: expect.any(AbortSignal),
+    });
+    const rustCommand = run.mock.calls[5]?.[0].command as string;
+    expect(rustCommand).toContain("MISE_AUTO_INSTALL=false");
+    expect(rustCommand).toContain("MISE_EXEC_AUTO_INSTALL=false");
+    expect(rustCommand).toContain("MISE_TASK_RUN_AUTO_INSTALL=false");
+    expect(rustCommand).toContain("mise --env app-builder exec --no-deps");
+    expect(rustCommand).toContain("CARGO_NET_OFFLINE=true");
+    expect(rustCommand).toContain(
+      "cargo metadata --format-version 1 --locked --all-features",
     );
   });
 
@@ -188,10 +317,92 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(`ARG TARGET_TREE=${ARRUSTED_TARGET_TREE}`);
     expect(dockerfile).toContain("COPY --from=arrusted-target");
     expect(dockerfile).toContain(
-      "bun install --frozen-lockfile --ignore-scripts",
+      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
+    );
+    expect(dockerfile).toContain("record_workspace_targets() {");
+    expect(dockerfile).toContain(
+      'find "${node_root}" -type l -print0 > "${link_list}" || return 1',
+    );
+    expect(dockerfile).toContain('done < "${link_list}"');
+    expect(dockerfile).toContain(
+      "LC_ALL=C sort -u /tmp/workspace-closure.unsorted",
+    );
+    expect(dockerfile).toContain(
+      "cmp -s /tmp/workspace-closure.expected /tmp/workspace-closure.list",
+    );
+    expect(dockerfile).toContain(
+      "packages/microfrontends-shell|packages/microfrontends-shell/*) dependency_owner=packages/microfrontends-shell",
+    );
+    expect(dockerfile).toContain(
+      "domain-libs/vendor|domain-libs/vendor/*) dependency_owner=domain-libs/vendor",
+    );
+    expect(dockerfile).toContain('"${node_root}"/*) continue');
+    expect(dockerfile).toContain(
+      '"${source_root}"/*) dependency_relative="${dependency_target#"${source_root}"/}"',
+    );
+    expect(dockerfile).toContain("*) exit 1");
+    expect(dockerfile).toContain('test -e "${dependency_target}"');
+    expect(dockerfile).toContain("workspace-closure-fixtures");
+    expect(dockerfile).toContain("@autograph/missing");
+    expect(dockerfile).toContain("@autograph/outside");
+    expect(dockerfile).toContain("@autograph/unallowlisted");
+    expect(dockerfile).toContain("grep -Fx 'packages/vite-config'");
+    expect(dockerfile).toContain("--files-from /tmp/workspace-closure.list");
+    expect(dockerfile).toContain("--exclude='packages/*/node_modules'");
+    expect(dockerfile).toContain(
+      'case "${workspace_target}" in "${dependency_root}"/*)',
+    );
+    expect(dockerfile).toContain(
+      'require("\'"${dependency_root}"\'/node_modules/@autograph/vite-config/package.json").name',
+    );
+    expect(dockerfile).toContain(
+      `ARG CARGO_LOCK_SHA256=${manifest.target.cargoLockSha256}`,
+    );
+    expect(dockerfile).toContain(
+      "cargo vendor --locked --versioned-dirs /opt/app-builder/cargo-closure/vendor",
+    );
+    expect(dockerfile).toContain("[net]\\noffline = true");
+    expect(dockerfile).toContain("cargo-closure.tar.gz");
+    expect(dockerfile).toContain(
+      "! grep -Ev '^(config[.]toml|vendor(/.*)?)$' /tmp/cargo-closure.list",
+    );
+    expect(dockerfile).toContain("cd packages/platform-microfrontends;");
+    expect(dockerfile).toContain(
+      `test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "${ARRUSTED_PATH_TO_REGEXP_VERSION}"`,
+    );
+    expect(dockerfile).toContain(
+      `test "$(bun -e 'console.log(require("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json").version)')" = "${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}"`,
     );
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
+    expect(dockerfile).toContain(
+      "/opt/app-builder/dependencies/${archive_sha}",
+    );
+    expect(dockerfile).toContain(
+      "tar --extract --gzip --file /opt/app-builder/dependency-cache/node-modules.tar.gz",
+    );
+    expect(dockerfile).toContain(
+      "chmod -R a-w,a+rX /opt/app-builder/dependencies",
+    );
+    expect(dockerfile).toContain(
+      "find /opt/app-builder/dependencies \\( -type f -o -type d \\) -perm /222 -print -quit",
+    );
+    expect(dockerfile).toContain(`ARG RUST_VERSION=${ARRUSTED_RUST_VERSION}`);
+    expect(dockerfile).toContain("CARGO_HOME=/opt/app-builder/cargo");
+    expect(dockerfile).toContain("RUSTUP_HOME=/opt/app-builder/rustup");
+    expect(dockerfile).toContain("RUSTUP_TOOLCHAIN=1.97.1");
+    expect(dockerfile).toContain('mise install "rust@${RUST_VERSION}"');
+    expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/rustup");
+    expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/cargo");
+    expect(dockerfile).toContain(
+      `mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`,
+    );
+    expect(dockerfile.indexOf("USER vercel-sandbox")).toBeLessThan(
+      dockerfile.lastIndexOf("RUN --network=none"),
+    );
+    expect(dockerfile).toContain(
+      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false",
+    );
     expect(dockerfile).toContain("RUN --network=none");
   });
 });

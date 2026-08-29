@@ -1,5 +1,4 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
@@ -24,16 +23,16 @@ import {
   executeProposalBoundValidation,
   fixtureValidationCommandExecutor,
   sandboxValidationCommandExecutor,
+  verifyTargetValidationProtectedTrees,
 } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
-    "Run only the two fixed target validation commands against independent copies of the exact applied tree. This separately approved operation records a durable pass or recovery-required failure receipt; it does not review or publish, and it detects drift in protected source, cache, planning, and applied bindings.",
+    "Automatically run only the two fixed target validation commands against independent copies of the exact applied tree. This internal operation records a durable pass or recovery-required failure receipt; it does not review or publish, and it detects drift in protected source, cache, planning, and applied bindings.",
   inputSchema: z.object({
     expectedApplyDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
-  approval: always(),
   async execute({ expectedApplyDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target proposal validation");
@@ -208,48 +207,33 @@ export default defineTool({
       appId: current.appSpec.appId,
       verifyProtectedState: async () => {
         const latest = appBuilderWorkflowState.get();
-        if (
-          latest.phase !== "validation_pending" ||
-          latest.validationAttempt.digest !== attempt.digest
-        )
-          throw new Error("The workflow changed during target validation.");
-        const readinessAfter = await inspectTargetExecutionReadiness({
-          state: latest,
+        const expectedPending = {
+          ...base,
+          phase: "validation_pending" as const,
+          validationAttempt: attempt,
+        };
+        await verifyTargetValidationProtectedTrees({
           sandbox,
-          expectedProposalDigest: latest.proposal.digest,
-        });
-        if (!readinessAfter.targetCommandReady)
-          throw new Error(
-            "Target execution readiness drifted during validation.",
-          );
-        const preparedAfter = fixture
-          ? await inspectFixtureApplyOverlay(
-              sandbox,
-              current.workspace.workspacePath,
-              current.appSpec.appId,
-            )
-          : await inspectApplyOverlay(sandbox, current.workspace.workspacePath);
-        const planningAfter = fixture
-          ? await inspectFixtureApplyOverlay(
-              sandbox,
-              planningRoot,
-              current.appSpec.appId,
-            )
-          : await inspectApplyOverlay(sandbox, planningRoot);
-        assertTargetValidationSourceBindings({
           apply: current.applyReceipt,
-          planningTreeDigest: planningAfter.treeDigest,
-          preparedTreeDigest: preparedAfter.treeDigest,
+          planningRoot,
+          preparedRoot: current.workspace.workspacePath,
+          assertWorkflowState: () =>
+            assertExactWorkflowState(
+              latest,
+              expectedPending,
+              "target validation protected-state check",
+            ),
+          ...(fixture
+            ? {
+                snapshotter: (fixtureSandbox, root) =>
+                  inspectFixtureApplyOverlay(
+                    fixtureSandbox,
+                    root,
+                    current.appSpec.appId,
+                  ),
+              }
+            : {}),
         });
-        const appliedDuring = fixture
-          ? await inspectFixtureApplyOverlay(
-              sandbox,
-              current.applyReceipt.applyRoot,
-              current.appSpec.appId,
-            )
-          : await inspectApplyOverlay(sandbox, current.applyReceipt.applyRoot);
-        if (appliedDuring.treeDigest !== current.applyReceipt.postTreeDigest)
-          throw new Error("The applied overlay changed during validation.");
       },
     });
     const appliedAfter = fixture

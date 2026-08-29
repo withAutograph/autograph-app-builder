@@ -39,6 +39,7 @@ import {
 } from "./reviewed-change-set";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
+import { compareOverlayPaths } from "./target-apply";
 
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -113,14 +114,18 @@ function source(
   return { ...unsigned, digest: hash(unsigned) };
 }
 
-function review() {
-  const changes = [
+function review(
+  inputChanges: NormalizedChangeSet["changes"] = [
     {
       path: "apps/demo/page.tsx",
       kind: "added" as const,
       after: { mode: "644", digest: reviewedBytesDigest },
     },
-  ];
+  ],
+) {
+  const changes = [...inputChanges].toSorted((left, right) =>
+    compareOverlayPaths(left.path, right.path),
+  );
   const unsigned = {
     version: 2 as const,
     validationDigest: "6".repeat(64),
@@ -139,6 +144,7 @@ function review() {
     identityDigest: "e".repeat(64),
     imageDigest: `sha256:${"f".repeat(64)}`,
     dependencyCacheDigest: "0".repeat(64),
+    dependencyCacheContentDigest: "1".repeat(64),
     targetReceipt: {
       version: 1 as const,
       contractPath: ".config/repository-template.json",
@@ -152,7 +158,7 @@ function review() {
     postTreeDigest: "4".repeat(64),
     changedContentDigest: hash(changes),
     changes,
-    approvedPaths: ["apps/demo/page.tsx"],
+    approvedPaths: changes.map(({ path }) => path),
   };
   const changeSet: NormalizedChangeSet = {
     ...unsigned,
@@ -388,6 +394,50 @@ function draftProposal(adapter: Adapter) {
 }
 
 describe("closed GitHub publication contract", () => {
+  it("round-trips UTF-8 ordered review paths into GitHub publication", () => {
+    const adapter = new Adapter();
+    const canonicalReview = review([
+      {
+        path: "apps/demo/\u{10000}.tsx",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+      {
+        path: ".codex/skills/example/agents/openai.yaml",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+      {
+        path: "apps/demo/\u{e000}.tsx",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+      {
+        path: ".codex/skills/example/SKILL.md",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+    ]);
+    const roundTripped = JSON.parse(
+      JSON.stringify(canonicalReview),
+    ) as typeof canonicalReview;
+    const proposal = createDraftPullRequestProposal({
+      installation: adapter.identities.publish,
+      repository: adapter.publishRepo,
+      review: roundTripped,
+      changedPathsSinceBase: [],
+      title: "Add demo",
+    });
+
+    expect(proposal.approvedPaths).toEqual([
+      ".codex/skills/example/SKILL.md",
+      ".codex/skills/example/agents/openai.yaml",
+      "apps/demo/\u{e000}.tsx",
+      "apps/demo/\u{10000}.tsx",
+    ]);
+    expect(() => assertExactDraftPullRequestProposal(proposal)).not.toThrow();
+  });
+
   it("derives operation-specific least-privilege identities", () => {
     const resolve = installation("resolve-existing-source");
     const create = installation("create-fresh-repository");
