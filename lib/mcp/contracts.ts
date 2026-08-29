@@ -64,6 +64,35 @@ const repositoryPathSchema = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
 
+function isLoopbackHostname(hostname: string): boolean {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(hostname.toLowerCase());
+}
+
+export const publicPrototypePreviewUrlSchema = z
+  .string()
+  .url()
+  .max(1_024)
+  .superRefine((value, context) => {
+    const url = new URL(value);
+    if (
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      (url.protocol !== "https:" &&
+        !(url.protocol === "http:" && isLoopbackHostname(url.hostname))) ||
+      !/^\/preview\/[A-Za-z0-9][A-Za-z0-9._:@-]{0,199}\/[a-f0-9]{64}$/u.test(
+        url.pathname,
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Prototype previews require an exact hosted HTTPS or loopback URL.",
+      });
+    }
+  });
+
 export const publicPrototypeSchema = z
   .object({
     path: z
@@ -80,6 +109,7 @@ export const publicPrototypeSchema = z
       ),
     digest: sha256DigestSchema,
     revision: sha256DigestSchema,
+    previewUrl: publicPrototypePreviewUrlSchema.optional(),
   })
   .strict();
 

@@ -15,6 +15,7 @@ import {
 } from "../eve/service";
 import type { HostedEveStore } from "../eve/hosted-store";
 import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
+import { attachPrototypePreviewUrl } from "./browser-preview";
 import {
   eveCancelInputSchema,
   eveGetInputSchema,
@@ -65,7 +66,14 @@ export interface HostedMcpRuntime {
   now?: () => number;
 }
 
-export function createAutographMcpHandler(service: EveSessionService) {
+export function createAutographMcpHandler(
+  service: EveSessionService,
+  options: { requestUrl?: string } = {},
+) {
+  const present = (result: Awaited<ReturnType<EveSessionService["get"]>>) =>
+    options.requestUrl === undefined
+      ? result
+      : attachPrototypePreviewUrl(result, options.requestUrl);
   return createMcpHandler((server) => {
     server.registerResource(
       "autograph-session",
@@ -101,7 +109,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
       async (input) => {
         try {
           return toolResult(
-            await service.start(input),
+            present(await service.start(input)),
             "Autograph App Builder started the app build.",
           );
         } catch (error) {
@@ -122,7 +130,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
       async (input) => {
         try {
           return toolResult(
-            await service.get(input),
+            present(await service.get(input)),
             "Autograph App Builder returned the latest progress.",
           );
         } catch (error) {
@@ -143,7 +151,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
       async (input) => {
         try {
           return toolResult(
-            await service.send(input),
+            present(await service.send(input)),
             "Autograph App Builder received the feedback.",
           );
         } catch (error) {
@@ -164,7 +172,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
       async (input) => {
         try {
           return toolResult(
-            await service.respond(input),
+            present(await service.respond(input)),
             "Autograph App Builder recorded the answers.",
           );
         } catch (error) {
@@ -184,7 +192,7 @@ export function createAutographMcpHandler(service: EveSessionService) {
       async (input) => {
         try {
           return toolResult(
-            await service.cancel(input),
+            present(await service.cancel(input)),
             "Autograph App Builder received the stop request.",
           );
         } catch (error) {
@@ -294,19 +302,21 @@ export function createMcpRequestHandler(
         input.hostedRuntime,
       );
       if (selected instanceof Response) return selected;
-      return createAutographMcpHandler(selected)(request);
+      return createAutographMcpHandler(selected, { requestUrl: request.url })(
+        request,
+      );
     }
     if (mode === "local") {
       try {
-        return createAutographMcpHandler(createEveSessionService(environment))(
-          request,
-        );
+        return createAutographMcpHandler(createEveSessionService(environment), {
+          requestUrl: request.url,
+        })(request);
       } catch {
         return unavailableResponse();
       }
     }
-    return createAutographMcpHandler(createEveSessionService(environment))(
-      request,
-    );
+    return createAutographMcpHandler(createEveSessionService(environment), {
+      requestUrl: request.url,
+    })(request);
   };
 }
