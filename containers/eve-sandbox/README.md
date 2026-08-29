@@ -7,7 +7,7 @@ It also builds the exact external dependency closure needed by Arrusted's app
 creation and app-specific validation commands, including
 `@vercel/microfrontends` `2.4.0`, from a clean
 checkout of Arrusted commit
-`f91b16acd53e67af9cb0cb179952ec5034ab396f`.
+`ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49`.
 
 The final image contains no Arrusted source tree, credentials, or provider
 configuration. It contains a normalized, deterministically gzip-compressed

@@ -8,7 +8,7 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "f91b16acd53e67af9cb0cb179952ec5034ab396f";
+export const ARRUSTED_TARGET_SHA = "ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49";
 export const ARRUSTED_TARGET_TREE = "88ead91d7b11aae11c526f1c2ee40f5b6db70642";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_RUST_VERSION = "1.97.1";
