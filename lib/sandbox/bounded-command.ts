@@ -48,12 +48,7 @@ if (
 }
 
 let cancelled = false;
-process.once("SIGINT", () => {
-  cancelled = true;
-});
-process.once("SIGTERM", () => {
-  cancelled = true;
-});
+let cancellation;
 
 const childIsAlive = () => {
   try {
@@ -123,6 +118,14 @@ const terminateChild = async () => {
   }
 };
 
+const cancel = () => {
+  cancelled = true;
+  cancellation ??= terminateChild();
+  cancellation.catch(() => undefined);
+};
+process.once("SIGINT", cancel);
+process.once("SIGTERM", cancel);
+
 const monitor = async () => {
   while (!cancelled && childIsAlive()) {
     const usage = workspaceUsage();
@@ -137,6 +140,7 @@ const monitor = async () => {
     }
     await delay(intervalMs);
   }
+  if (cancellation) await cancellation;
 };
 
 monitor().catch(async (error) => {

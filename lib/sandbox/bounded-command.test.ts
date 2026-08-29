@@ -228,7 +228,7 @@ filesystem.readdirSync = (path, options) => {
     const workspaceRoot = await mkdtemp(
       join(tmpdir(), "quota-monitor-cancel-"),
     );
-    const child = spawn("/bin/sh", ["-c", "sleep 30"], {
+    const child = spawn("/bin/sh", ["-c", "trap '' TERM; sleep 30"], {
       detached: true,
       stdio: "ignore",
     });
@@ -241,13 +241,13 @@ filesystem.readdirSync = (path, options) => {
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
     fixture.monitor.kill("SIGTERM");
+    const childResult = await childExit;
     await expect(waitForExit(fixture.monitor)).resolves.toEqual({
       code: 0,
       signal: null,
     });
+    expect(childResult).toEqual({ code: null, signal: "SIGKILL" });
     expect(fixture.stderr()).toBe("");
-    process.kill(-child.pid!, "SIGTERM");
-    await childExit;
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
