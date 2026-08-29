@@ -2,30 +2,21 @@
 
 import {
   ArrowLeft,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
   Clock,
   Copy,
   DollarSign,
-  Edit,
   ExternalLink,
   GitBranch,
   Globe,
-  HelpCircle,
-  Home,
   Info,
-  LogOut,
-  Monitor,
-  Moon,
   Plus,
   PlusCircle,
   RefreshCw,
   Search,
   Settings,
-  Smile,
-  Sun,
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
@@ -43,14 +34,12 @@ import {
 import { SiQuickbooks, SiSage, SiSlack, SiXero } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import { UserButton } from "../../components/auth/user/user-button";
 
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
-import { authClient } from "../../lib/auth-client";
 
-type Theme = "system" | "light" | "dark";
 type Screen = "builder" | "handoff" | "ready";
-type UserSummary = { name: string; email: string };
 type BuilderForm = {
   appName: string;
   repository: string;
@@ -468,113 +457,7 @@ function SearchCombobox({
   );
 }
 
-function AccountMenu({
-  theme,
-  setTheme,
-  close,
-  user,
-}: {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-  close: () => void;
-  user: UserSummary;
-}) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  useEffect(() => {
-    menuRef.current?.focus();
-  }, []);
-  async function signOut() {
-    setIsSigningOut(true);
-    const result = await authClient.signOut();
-    if (result.error) {
-      setIsSigningOut(false);
-      return;
-    }
-    close();
-    router.replace("/auth/sign-in");
-    router.refresh();
-  }
-  return (
-    <div
-      className={styles.accountMenu}
-      role="dialog"
-      aria-label="Account menu"
-      tabIndex={-1}
-      ref={menuRef}
-      onKeyDown={(event) => event.key === "Escape" && close()}
-    >
-      <a className={styles.accountIdentity} href="/github/installations">
-        <strong>{user.name}</strong>
-        <span>{user.email}</span>
-        <Settings size={16} aria-hidden="true" />
-      </a>
-      <div className={styles.menuDivider} />
-      <button type="button">
-        <span>Feedback</span>
-        <Smile size={17} aria-hidden="true" />
-      </button>
-      <div className={styles.themeRow}>
-        <span>Theme</span>
-        <div role="radiogroup" aria-label="Select a display theme">
-          {(["system", "light", "dark"] as const).map((choice) => {
-            const Icon =
-              choice === "system" ? Monitor : choice === "light" ? Sun : Moon;
-            return (
-              <button
-                key={choice}
-                type="button"
-                role="radio"
-                aria-checked={theme === choice}
-                aria-label={choice}
-                onClick={() => setTheme(choice)}
-              >
-                <Icon size={15} aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <Link href="/">
-        <span>Home Page</span>
-        <Home size={17} aria-hidden="true" />
-      </Link>
-      <span className={styles.disabledMenuItem} aria-disabled="true">
-        <span>Changelog</span>
-        <Edit size={17} aria-hidden="true" />
-      </span>
-      <span className={styles.disabledMenuItem} aria-disabled="true">
-        <span>Help</span>
-        <HelpCircle size={17} aria-hidden="true" />
-      </span>
-      <span className={styles.disabledMenuItem} aria-disabled="true">
-        <span>Docs</span>
-        <BookOpen size={17} aria-hidden="true" />
-      </span>
-      <button type="button" disabled={isSigningOut} onClick={signOut}>
-        <span>{isSigningOut ? "Logging Out…" : "Log Out"}</span>
-        <LogOut size={17} aria-hidden="true" />
-      </button>
-      <div className={styles.menuDivider} />
-      <a className={styles.statusLink} href="/healthz">
-        <span>All systems normal.</span>
-        <i />
-      </a>
-    </div>
-  );
-}
-
-function Header({
-  theme,
-  setTheme,
-  user,
-}: {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-  user: UserSummary;
-}) {
-  const [open, setOpen] = useState(false);
+function Header() {
   return (
     <header className={styles.header}>
       <a className={styles.skipLink} href="#main-content">
@@ -588,28 +471,7 @@ function Header({
         <a href="/github/installations" aria-label="Settings">
           <Settings size={17} aria-hidden="true" />
         </a>
-        <button
-          className={styles.avatar}
-          type="button"
-          aria-label="Open account menu"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          {user.name
-            .split(/\s+/u)
-            .map((part) => part[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase() || "AU"}
-        </button>
-        {open ? (
-          <AccountMenu
-            theme={theme}
-            setTheme={setTheme}
-            close={() => setOpen(false)}
-            user={user}
-          />
-        ) : null}
+        <UserButton align="end" sideOffset={8} size="icon" />
       </div>
     </header>
   );
@@ -1598,38 +1460,21 @@ function Ready({ form, onReset }: { form: BuilderForm; onReset: () => void }) {
 
 export function AppBuilder({
   authenticated,
-  user,
   integrations,
 }: {
   authenticated: boolean;
-  user: UserSummary;
   integrations: BuilderIntegrationState;
 }) {
   const router = useRouter();
-  const [theme, setTheme] = useState<Theme>("system");
   const [screen, setScreen] = useState<Screen>("builder");
   const [submitted, setSubmitted] = useState<BuilderForm>();
   const [savedBrief, setSavedBrief] = useState("");
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
-      const storedTheme = window.localStorage?.getItem("autograph-theme");
-      if (
-        storedTheme === "system" ||
-        storedTheme === "light" ||
-        storedTheme === "dark"
-      ) {
-        setTheme(storedTheme);
-      }
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme =
-      theme === "system" ? "light dark" : theme;
-    window.localStorage?.setItem("autograph-theme", theme);
-  }, [theme]);
 
   if (!authenticated)
     return (
@@ -1642,7 +1487,7 @@ export function AppBuilder({
     );
   return (
     <div className={styles.appShell}>
-      <Header theme={theme} setTheme={setTheme} user={user} />
+      <Header />
       {screen === "builder" ? (
         <Builder
           key={savedBrief || "new"}

@@ -115,110 +115,6 @@
   place-items: center;
   color: var(--muted);
 }
-.avatar {
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 50%;
-  background: #ad7b69;
-  color: #fff;
-  font-size: 9px;
-  cursor: pointer;
-  padding: 0;
-}
-.accountMenu {
-  position: absolute;
-  right: 0;
-  top: 34px;
-  width: 288px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: 0 8px 30px rgb(0 0 0/0.15);
-  padding: 8px 0;
-  z-index: 20;
-  overscroll-behavior: contain;
-  transform-origin: top right;
-  animation: popoverIn 120ms ease-out;
-}
-.accountMenu > a,
-.accountMenu > button,
-.accountMenu form button,
-.disabledMenuItem,
-.themeRow {
-  height: 36px;
-  padding: 0 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  text-decoration: none;
-  font-size: 14px;
-}
-.accountMenu > a:hover,
-.accountMenu > button:hover,
-.accountMenu form button:hover {
-  background: var(--hover);
-}
-.accountIdentity {
-  height: 57px !important;
-  display: grid !important;
-  grid-template-columns: 1fr auto !important;
-  grid-template-rows: auto auto !important;
-}
-.accountIdentity strong {
-  font-weight: 500;
-}
-.accountIdentity span {
-  font-size: 13px;
-  color: var(--muted);
-}
-.accountIdentity svg {
-  grid-column: 2;
-  grid-row: 1/3;
-  align-self: center;
-}
-.menuDivider {
-  height: 1px;
-  background: var(--border);
-  margin: 7px 0;
-}
-.themeRow > div {
-  display: flex;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px;
-}
-.themeRow button {
-  width: 26px;
-  height: 24px;
-  border: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: var(--muted);
-}
-.themeRow button[aria-checked="true"] {
-  background: var(--hover);
-  color: var(--text);
-  box-shadow: 0 0 0 1px var(--border);
-}
-.disabledMenuItem {
-  color: var(--muted);
-}
-.statusLink {
-  color: #06f !important;
-}
-.statusLink i {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #06f;
-}
 .brand {
   display: inline-flex;
   align-items: center;
@@ -1730,7 +1626,6 @@
   .connectionDrawer {
     animation: none;
   }
-  .accountMenu,
   .comboMenu,
   .drawerBackdrop {
     animation: none;
@@ -1772,11 +1667,6 @@
   }
   .modelId {
     display: none;
-  }
-  .accountMenu {
-    position: fixed;
-    right: 10px;
-    top: 50px;
   }
   .publicHeader .brand > span:last-child {
     display: none;
