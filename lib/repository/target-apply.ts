@@ -95,6 +95,7 @@ type ApplyResultBase = TargetApplyBinding & {
   version: 2;
   applyRoot: string;
   planningTreeDigest: string;
+  preparedTreeDigest: string;
   preTree: readonly OverlayFile[];
   preTreeDigest: string;
   command: {
@@ -151,12 +152,18 @@ export function assertCurrentTargetApplyReceipt(input: {
   version: number;
   appSpecPath?: string;
   appSpecDigest: string;
-}): asserts input is typeof input & { version: 2; appSpecPath: string } {
+  preparedTreeDigest?: string;
+}): asserts input is typeof input & {
+  version: 2;
+  appSpecPath: string;
+  preparedTreeDigest: string;
+} {
   if (
     input.version !== 2 ||
     input.appSpecPath === undefined ||
     !safeSourcePath(input.appSpecPath) ||
-    !digest.safeParse(input.appSpecDigest).success
+    !digest.safeParse(input.appSpecDigest).success ||
+    !digest.safeParse(input.preparedTreeDigest).success
   )
     throw new Error("A canonical V2 target apply receipt is required.");
 }
@@ -546,9 +553,11 @@ export async function executeProposalBoundApply(input: {
     proposal: input.proposal,
   });
   let planning: OverlaySnapshot;
+  let prepared: OverlaySnapshot;
   let before: OverlaySnapshot;
   try {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
+    prepared = await snapshotter(input.sandbox, "/workspace/repository");
     await restorePreparedAppSpecBaseline({
       sandbox: input.sandbox,
       applyRoot: overlay.applyRoot,
@@ -596,6 +605,7 @@ export async function executeProposalBoundApply(input: {
     ...input.binding,
     applyRoot: overlay.applyRoot,
     planningTreeDigest: planning.treeDigest,
+    preparedTreeDigest: prepared.treeDigest,
     preTree: before.files,
     preTreeDigest: before.treeDigest,
     command: {

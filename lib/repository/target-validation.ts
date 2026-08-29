@@ -123,7 +123,7 @@ export function assertTargetValidationSourceBindings(input: {
 }): void {
   if (input.planningTreeDigest !== input.apply.planningTreeDigest)
     throw new Error("The planning overlay changed before target validation.");
-  if (input.preparedTreeDigest !== input.apply.preTreeDigest)
+  if (input.preparedTreeDigest !== input.apply.preparedTreeDigest)
     throw new Error("The prepared source changed before target validation.");
 }
 
@@ -458,8 +458,7 @@ export async function executeProposalBoundValidation(input: {
       await materializeValidationOverlay({
         sandbox: input.sandbox,
         applyRoot: input.apply.applyRoot,
-        dependencyCacheContentDigest:
-          input.apply.dependencyCacheContentDigest,
+        dependencyCacheContentDigest: input.apply.dependencyCacheContentDigest,
         command: planned,
       });
     } catch {

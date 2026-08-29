@@ -287,10 +287,10 @@ describe("proposal-bound target apply", () => {
         if (
           injectFailure &&
           ((failureStage === "planning-snapshot" && call === 0) ||
-            (failureStage === "pre-command-snapshot" && call === 1))
+            (failureStage === "pre-command-snapshot" && call === 2))
         )
           throw new Error(`injected ${failureStage} failure`);
-        return call === 0 ? planning : call === 1 ? before : after;
+        return call === 0 ? planning : call < 3 ? before : after;
       });
       const execute = () =>
         executeProposalBoundApply({
@@ -321,7 +321,7 @@ describe("proposal-bound target apply", () => {
 
   it("persists a recovery-required attempt when the post-command snapshot fails", async () => {
     const fixture = sandboxFixture();
-    const snapshots = [planning, before];
+    const snapshots = [planning, before, before];
     const executor = vi.fn(async () => ({
       exitCode: 0,
       stdout: JSON.stringify(commandReceipt()),
@@ -365,7 +365,7 @@ describe("proposal-bound target apply", () => {
   it("records normalized pre/post overlay changes and a strict target receipt", async () => {
     const { run, sandbox, writeTextFile, writeBinaryFile, removePath } =
       sandboxFixture();
-    const snapshots = [planning, before, after];
+    const snapshots = [planning, before, before, after];
     const result = await executeProposalBoundApply({
       sandbox,
       executor: async () => ({
@@ -383,6 +383,7 @@ describe("proposal-bound target apply", () => {
     if (!result.ok) throw new Error("expected successful apply");
     expect(result.receipt.preTreeDigest).toBe(before.treeDigest);
     expect(result.receipt.planningTreeDigest).toBe(planning.treeDigest);
+    expect(result.receipt.preparedTreeDigest).toBe(before.treeDigest);
     expect(result.receipt.postTreeDigest).toBe(after.treeDigest);
     expect(result.receipt.preTree).toEqual(before.files);
     expect(result.receipt.postTree).toEqual(after.files);
@@ -415,6 +416,60 @@ describe("proposal-bound target apply", () => {
     });
   });
 
+  it("binds the pristine prepared tree separately from injected planning config", async () => {
+    const injectedConfig = {
+      path: ".config/mise/config.app-builder.toml",
+      mode: "644",
+      digest: "f".repeat(64),
+    };
+    const prepared = before;
+    const injectedBefore = {
+      treeDigest: "1".repeat(64),
+      files: [...before.files, injectedConfig],
+    };
+    const injectedPlanning = {
+      treeDigest: "2".repeat(64),
+      files: [
+        ...injectedBefore.files,
+        {
+          path: proposal.contract.appSpec.path,
+          mode: "644",
+          digest: acceptedAppSpecDigest,
+        },
+      ],
+    };
+    const injectedAfter = {
+      ...after,
+      files: [...after.files, injectedConfig],
+    };
+    const snapshots = [
+      injectedPlanning,
+      prepared,
+      injectedBefore,
+      injectedAfter,
+    ];
+    const result = await executeProposalBoundApply({
+      sandbox: sandboxFixture().sandbox,
+      executor: async () => ({
+        exitCode: 0,
+        stdout: JSON.stringify(commandReceipt()),
+        stderr: "",
+      }),
+      snapshotter: async () => snapshots.shift()!,
+      binding,
+      artifactRevision: binding.artifactRevision,
+      proposal,
+      appliedByCallId: "apply-call",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected successful apply");
+    expect(result.receipt.preparedTreeDigest).toBe(prepared.treeDigest);
+    expect(result.receipt.preTreeDigest).toBe(injectedBefore.treeDigest);
+    expect(result.receipt.preparedTreeDigest).not.toBe(
+      result.receipt.preTreeDigest,
+    );
+  });
+
   it.each([
     ["different", priorAppSpec, preparedWithPriorAppSpec, true],
     ["identical", acceptedAppSpec, planning, false],
@@ -425,7 +480,7 @@ describe("proposal-bound target apply", () => {
       readBinaryFile
         .mockResolvedValueOnce(acceptedAppSpec)
         .mockResolvedValueOnce(preparedAppSpec);
-      const snapshots = [planning, preparedSnapshot, after];
+      const snapshots = [planning, preparedSnapshot, preparedSnapshot, after];
       const result = await executeProposalBoundApply({
         sandbox,
         executor: async () => ({
@@ -459,7 +514,7 @@ describe("proposal-bound target apply", () => {
 
   it("records command failure as recovery-required without claiming apply", async () => {
     const { sandbox } = sandboxFixture();
-    const snapshots = [planning, before, after];
+    const snapshots = [planning, before, before, after];
     const result = await executeProposalBoundApply({
       sandbox,
       executor: async () => ({
@@ -488,6 +543,7 @@ describe("proposal-bound target apply", () => {
     const { sandbox } = sandboxFixture();
     const snapshots = [
       planning,
+      before,
       before,
       {
         treeDigest: "f".repeat(64),
@@ -518,7 +574,7 @@ describe("proposal-bound target apply", () => {
 
   it("fails closed when the target receipt is not bound to proposal topology", async () => {
     const { sandbox } = sandboxFixture();
-    const snapshots = [planning, before, after];
+    const snapshots = [planning, before, before, after];
     const receipt = commandReceipt();
     receipt.topology.newDigest = "f".repeat(64);
     const result = await executeProposalBoundApply({

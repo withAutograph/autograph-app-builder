@@ -66,6 +66,7 @@ const apply = {
   proposalDigest: digest("a"),
   preTree,
   postTree,
+  preparedTreeDigest: sha256(preTree),
   preTreeDigest: sha256(preTree),
   postTreeDigest: sha256(postTree),
   changedContentDigest: sha256(changes),

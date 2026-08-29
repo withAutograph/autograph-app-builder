@@ -37,6 +37,7 @@ const apply: TargetApplyReceipt = {
   proposalDigest: digest("a"),
   applyRoot: `/workspace/.app-builder/apply/${digest("a")}/repository`,
   planningTreeDigest: digest("b"),
+  preparedTreeDigest: digest("3"),
   preTree: [],
   postTree: [
     { path: "apps/example/package.json", mode: "644", digest: digest("b") },
@@ -141,14 +142,14 @@ describe("proposal-bound target validation", () => {
       assertTargetValidationSourceBindings({
         apply,
         planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       }),
     ).not.toThrow();
     expect(() =>
       assertTargetValidationSourceBindings({
         apply,
         planningTreeDigest: digest("0"),
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       }),
     ).toThrow(/planning overlay changed/u);
     expect(() =>
@@ -172,7 +173,7 @@ describe("proposal-bound target validation", () => {
         expectedAppSpecPath: apply.appSpecPath,
         appliedTreeDigest: apply.postTreeDigest,
         planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       };
       expect(() => assertReusable(exact)).not.toThrow();
       expect(() =>
@@ -197,17 +198,20 @@ describe("proposal-bound target validation", () => {
   );
 
   it("reuses a canonical validation receipt after a JSON round trip", () => {
+    const roundTrippedApply = JSON.parse(
+      JSON.stringify(apply),
+    ) as TargetApplyReceipt;
     const validation = JSON.parse(
       JSON.stringify(reusableValidationReceipt()),
     ) as TargetValidationReceipt;
     expect(() =>
       assertReusableTargetValidationReceipt({
-        apply,
+        apply: roundTrippedApply,
         validation,
-        expectedAppSpecPath: apply.appSpecPath,
-        appliedTreeDigest: apply.postTreeDigest,
-        planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
+        expectedAppSpecPath: roundTrippedApply.appSpecPath,
+        appliedTreeDigest: roundTrippedApply.postTreeDigest,
+        planningTreeDigest: roundTrippedApply.planningTreeDigest,
+        preparedTreeDigest: roundTrippedApply.preparedTreeDigest,
       }),
     ).not.toThrow();
   });
@@ -274,7 +278,7 @@ describe("proposal-bound target validation", () => {
         expectedAppSpecPath: apply.appSpecPath,
         appliedTreeDigest: apply.postTreeDigest,
         planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
+        preparedTreeDigest: apply.preparedTreeDigest,
       }),
     ).toThrow(/canonical V3 target validation receipt/u);
   });
