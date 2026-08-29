@@ -7,7 +7,7 @@ It also builds the exact external dependency closure needed by Arrusted's
 app creation and app-specific validation commands, including
 `@vercel/microfrontends` `2.4.0`, from a clean
 checkout of Arrusted commit
-`0c5d1bd4f875b415c7c5144a28c1464020a36405`.
+`8bdeb7667a0f0cd2305fe60e6a0237620c20cf41`.
 
 The final image contains no Arrusted source tree, credentials, or provider
 configuration. It contains a normalized, deterministically gzip-compressed
@@ -119,7 +119,7 @@ closed manifest shape, labels, and rootfs identity must match before the task
 emits the platform digest-only reference. The selected platform manifest
 digest, not the transient tag or top-level index, remains runtime authority.
 For this exact Dockerfile and Arrusted source, the transient tag is
-`dockerfile-<dockerfile-sha-prefix>-arrusted-0c5d1bd4-arm64-v2`; it is only a publication
+`dockerfile-<dockerfile-sha-prefix>-arrusted-8bdeb766-arm64-v2`; it is only a publication
 handle and never runtime authority.
 
 The build fails on target SHA/tree or contract/lock drift. It performs the

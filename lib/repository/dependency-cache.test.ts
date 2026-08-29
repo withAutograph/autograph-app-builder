@@ -190,7 +190,11 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(`ARG TARGET_TREE=${ARRUSTED_TARGET_TREE}`);
     expect(dockerfile).toContain("COPY --from=arrusted-target");
     expect(dockerfile).toContain(
-      "bun install --frozen-lockfile --ignore-scripts",
+      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
+    );
+    expect(dockerfile).toContain("cd packages/platform-microfrontends;");
+    expect(dockerfile).toContain(
+      'bun -e \'const { match } = require("path-to-regexp"); if (typeof match !== "function") process.exit(1)\'',
     );
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");

@@ -44,8 +44,8 @@ RUN set -eux; \
 
 FROM toolchain AS dependency-cache
 
-ARG TARGET_SHA=0c5d1bd4f875b415c7c5144a28c1464020a36405
-ARG TARGET_TREE=ea6b11c9c35c398a408d176ec303401f1bcacba0
+ARG TARGET_SHA=8bdeb7667a0f0cd2305fe60e6a0237620c20cf41
+ARG TARGET_TREE=5df26996ea5259916af7a81bff09ca792874f095
 ARG MISE_CONFIG_SHA256=be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8
 ARG MISE_LOCK_SHA256=415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462
 ARG BUN_LOCK_SHA256=e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0
@@ -73,9 +73,11 @@ RUN set -eux; \
 RUN set -eux; \
     cd /tmp/arrusted-target; \
     rm -rf node_modules; \
-    bun install --frozen-lockfile --ignore-scripts; \
+    bun install --frozen-lockfile --ignore-scripts --linker=hoisted; \
     test "$(bun --version)" = "1.3.14"; \
-    test "$(bun -e 'console.log(require("./node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"
+    test "$(bun -e 'console.log(require("./node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"; \
+    cd packages/platform-microfrontends; \
+    bun -e 'const { match } = require("path-to-regexp"); if (typeof match !== "function") process.exit(1)'
 
 RUN set -eux; \
     install -d /opt/app-builder/dependency-cache; \
