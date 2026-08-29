@@ -295,13 +295,57 @@ async function stageAcceptedAppSpec(input: {
 
 const snapshotLine = /^([0-7]{3,4})\t([0-9a-f]{64})\t(.+)$/u;
 
+export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
+const { createHash } = require("node:crypto");
+const { lstatSync, readFileSync, readdirSync } = require("node:fs");
+const { join } = require("node:path");
+
+const files = [];
+const visit = (directory, relativeDirectory) => {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const relativePath = relativeDirectory
+      ? relativeDirectory + "/" + entry.name
+      : entry.name;
+    if (
+      relativeDirectory === "" &&
+      (relativePath === "node_modules" || relativePath === ".scratch")
+    )
+      continue;
+    const absolutePath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      visit(absolutePath, relativePath);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const stat = lstatSync(absolutePath);
+    const mode = (stat.mode & 0o7777).toString(8);
+    const digest = createHash("sha256")
+      .update(readFileSync(absolutePath))
+      .digest("hex");
+    files.push({ path: relativePath, mode, digest });
+  }
+};
+
+visit(".", "");
+files.sort((left, right) =>
+  Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)),
+);
+for (const file of files)
+  process.stdout.write(file.mode + "\t" + file.digest + "\t" + file.path + "\n");
+`;
+
+export function overlaySnapshotCommand(): string {
+  if (OVERLAY_SNAPSHOT_SCRIPT.includes("'"))
+    throw new Error("The overlay snapshot script is not shell-safe.");
+  return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
+}
+
 export async function inspectApplyOverlay(
   sandbox: SandboxSession,
   applyRoot: string,
 ): Promise<OverlaySnapshot> {
   const result = await sandbox.run({
-    command:
-      "find . \\( -path './node_modules' -o -path './.scratch' \\) -prune -o -type f -print0 | sort -z | while IFS= read -r -d '' path; do mode=$(stat --format='%a' -- \"$path\") || exit 1; sum=$(sha256sum -- \"$path\") || exit 1; printf '%s\\t%s\\t%s\\n' \"$mode\" \"${sum%% *}\" \"${path#./}\"; done",
+    command: overlaySnapshotCommand(),
     workingDirectory: applyRoot,
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });

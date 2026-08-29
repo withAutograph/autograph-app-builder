@@ -1,4 +1,16 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,7 +19,10 @@ import type { SandboxSession } from "eve/sandbox";
 import {
   assertCurrentTargetApplyReceipt,
   executeProposalBoundApply,
+  inspectApplyOverlay,
+  OVERLAY_SNAPSHOT_SCRIPT,
   overlayChanges,
+  overlaySnapshotCommand,
   sandboxApplyCommandExecutor,
   type OverlaySnapshot,
   type TargetApplyBinding,
@@ -19,6 +34,7 @@ const acceptedAppSpec = Buffer.from("# Accepted AppSpec\n");
 const acceptedAppSpecDigest = createHash("sha256")
   .update(acceptedAppSpec)
   .digest("hex");
+const executeFile = promisify(execFile);
 
 const proposal: TargetProposal = {
   contract: {
@@ -611,6 +627,67 @@ describe("proposal-bound target apply", () => {
       abortSignal: expect.any(AbortSignal),
     });
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+  });
+
+  it("snapshots the overlay in one sandbox process without per-file commands", async () => {
+    const firstDigest = createHash("sha256").update("first\n").digest("hex");
+    const secondDigest = createHash("sha256").update("second\n").digest("hex");
+    const stdout = `644\t${firstDigest}\ta.txt\n755\t${secondDigest}\tnested/z.sh\n`;
+    const run = vi.fn(async (request: unknown) => {
+      void request;
+      return { exitCode: 0, stdout, stderr: "" };
+    });
+    const snapshot = await inspectApplyOverlay(
+      { id: "sandbox", run } as unknown as SandboxSession,
+      "/workspace/overlay",
+    );
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith({
+      command: overlaySnapshotCommand(),
+      workingDirectory: "/workspace/overlay",
+      abortSignal: expect.any(AbortSignal),
+    });
+    const command = (run.mock.calls[0]?.[0] as { command?: string } | undefined)
+      ?.command;
+    expect(command).toBeDefined();
+    expect(command).toMatch(/^bun -e '/u);
+    expect(command).not.toContain("find .");
+    expect(command).not.toContain("sha256sum --");
+    expect(command).not.toContain("stat --format");
+    expect(snapshot.files).toEqual([
+      { path: "a.txt", mode: "644", digest: firstDigest },
+      { path: "nested/z.sh", mode: "755", digest: secondDigest },
+    ]);
+  });
+
+  it("preserves regular-file snapshot semantics and prunes only root caches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "target-apply-snapshot-"));
+    try {
+      await mkdir(join(root, "nested"));
+      await mkdir(join(root, "node_modules"));
+      await mkdir(join(root, ".scratch"));
+      await writeFile(join(root, "a.txt"), "first\n");
+      await writeFile(join(root, "nested", "z.sh"), "second\n");
+      await chmod(join(root, "nested", "z.sh"), 0o755);
+      await writeFile(join(root, "node_modules", "excluded"), "cache\n");
+      await writeFile(join(root, ".scratch", "excluded"), "scratch\n");
+      await symlink("a.txt", join(root, "ignored-link"));
+
+      const result = await executeFile(
+        process.execPath,
+        ["-e", OVERLAY_SNAPSHOT_SCRIPT],
+        { cwd: root },
+      );
+
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toBe(
+        `644\t${createHash("sha256").update("first\n").digest("hex")}\ta.txt\n` +
+          `755\t${createHash("sha256").update("second\n").digest("hex")}\tnested/z.sh\n`,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("normalizes added, modified, and deleted content", () => {
