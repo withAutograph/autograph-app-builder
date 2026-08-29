@@ -237,9 +237,21 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
     expect(dockerfile).toContain(`ARG RUST_VERSION=${ARRUSTED_RUST_VERSION}`);
+    expect(dockerfile).toContain("CARGO_HOME=/opt/app-builder/cargo");
+    expect(dockerfile).toContain("RUSTUP_HOME=/opt/app-builder/rustup");
+    expect(dockerfile).toContain("RUSTUP_TOOLCHAIN=1.97.1");
     expect(dockerfile).toContain('mise install "rust@${RUST_VERSION}"');
     expect(dockerfile).toContain(
+      "chmod -R a-w,a+rX /opt/app-builder/cargo /opt/app-builder/rustup",
+    );
+    expect(dockerfile).toContain(
       `mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`,
+    );
+    expect(dockerfile.indexOf("USER vercel-sandbox")).toBeLessThan(
+      dockerfile.lastIndexOf("RUN --network=none"),
+    );
+    expect(dockerfile).toContain(
+      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false",
     );
     expect(dockerfile).toContain("RUN --network=none");
   });

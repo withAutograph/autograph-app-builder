@@ -13,6 +13,9 @@ ARG RUST_VERSION=1.97.1
 ENV MISE_DATA_DIR=/opt/app-builder/mise \
     MISE_CACHE_DIR=/opt/app-builder/mise-cache \
     MISE_TRUSTED_CONFIG_PATHS=/workspace \
+    CARGO_HOME=/opt/app-builder/cargo \
+    RUSTUP_HOME=/opt/app-builder/rustup \
+    RUSTUP_TOOLCHAIN=1.97.1 \
     PATH=/opt/app-builder/mise/installs/bun/1.3.14/bin:/usr/local/bin:/usr/bin:/bin
 
 LABEL org.opencontainers.image.source="https://github.com/withAutograph/autograph-app-builder" \
@@ -41,7 +44,9 @@ RUN set -eux; \
 RUN set -eux; \
     mise install "rust@${RUST_VERSION}"; \
     mise exec "rust@${RUST_VERSION}" -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
-    mise exec "rust@${RUST_VERSION}" -- cargo --version | grep -E '^cargo 1[.]97[.]1 '
+    mise exec "rust@${RUST_VERSION}" -- cargo --version | grep -E '^cargo 1[.]97[.]1 '; \
+    chmod -R a-w,a+rX /opt/app-builder/cargo /opt/app-builder/rustup \
+      /opt/app-builder/mise/installs/rust/${RUST_VERSION}
 
 RUN set -eux; \
     git --version; \
@@ -135,11 +140,13 @@ LABEL org.opencontainers.image.revision="${APP_BUILDER_REVISION}" \
 COPY --from=dependency-cache --chown=root:root /opt/app-builder/dependency-cache \
   /opt/app-builder/dependency-cache
 
+USER vercel-sandbox
+
 RUN --network=none set -eux; \
     echo "${APP_BUILDER_REVISION}" | grep -E '^[0-9a-f]{40}$'; \
     test "$(bun --version)" = "1.3.14"; \
-    mise exec rust@1.97.1 -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
-    mise exec rust@1.97.1 -- cargo --version | grep -E '^cargo 1[.]97[.]1 '; \
+    MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false \
+      mise exec rust@1.97.1 -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
+    MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false \
+      mise exec rust@1.97.1 -- cargo --version | grep -E '^cargo 1[.]97[.]1 '; \
     bun -e 'const {execFileSync}=require("node:child_process"); const m=require("/opt/app-builder/dependency-cache/manifest.json"); const actual=execFileSync("sha256sum",[m.closure.archivePath],{encoding:"utf8"}).split(/\s/u)[0]; if(actual!==m.closure.archiveSha256) process.exit(1)'
-
-USER vercel-sandbox
