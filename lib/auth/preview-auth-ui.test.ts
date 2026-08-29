@@ -25,6 +25,38 @@ describe("Preview Better Auth UI", () => {
     ).toBe("/workspace");
   });
 
+  it.each([
+    "https://external.example/steal",
+    "//external.example/steal",
+    "not a valid callback",
+  ])("rejects unsafe callback %s", (callbackURL) => {
+    expect(
+      resolveAuthCallbackURL(
+        "/",
+        `?callbackURL=${encodeURIComponent(callbackURL)}`,
+      ),
+    ).toBe("/");
+  });
+
+  it("preserves callback query strings and fragments", () => {
+    expect(
+      resolveAuthCallbackURL(
+        "/",
+        "?callbackURL=%2Fworkspace%3Fsource%3Doauth%23complete",
+      ),
+    ).toBe("/workspace?source=oauth#complete");
+  });
+
+  it("preserves absolute callbacks for the current origin", () => {
+    expect(
+      resolveAuthCallbackURL(
+        "/",
+        `?callbackURL=${encodeURIComponent("https://builder.example.test/workspace?source=oauth")}`,
+        "https://builder.example.test",
+      ),
+    ).toBe("/workspace?source=oauth");
+  });
+
   it("forwards the complete signed OAuth query through social sign-in", async () => {
     const search =
       "?client_id=one&scope=autograph%3Aget&state=opaque&sig=signed" +

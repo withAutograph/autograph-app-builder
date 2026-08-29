@@ -17,7 +17,6 @@ import {
   PlusCircle,
   RefreshCw,
   Search,
-  Settings,
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
@@ -618,9 +617,6 @@ function Header() {
       </Link>
       <span>New App</span>
       <div className={styles.headerActions}>
-        <a href="/github/installations" aria-label="Settings">
-          <Settings size={17} aria-hidden="true" />
-        </a>
         <UserButton align="end" sideOffset={8} size="icon" />
       </div>
     </header>
@@ -837,8 +833,8 @@ function AnonymousBuilder({
         <AutographMark />
         <span>New App</span>
         <div>
-          <a href="/auth/sign-in?callbackURL=%2F">Login</a>
-          <a className={styles.darkButton} href="/auth/sign-in?callbackURL=%2F">
+          <a href="/auth/sign-in?callbackURL=%2F">Sign In</a>
+          <a className={styles.darkButton} href="/auth/sign-up?callbackURL=%2F">
             Sign Up
           </a>
         </div>
@@ -879,7 +875,7 @@ function AnonymousBuilder({
           ))}
         </div>
         <p>
-          You’ll create or log in to your Autograph account before building.
+          You’ll create or sign in to your Autograph account before building.
         </p>
       </section>
     </main>

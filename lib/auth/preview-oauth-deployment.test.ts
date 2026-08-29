@@ -155,15 +155,23 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("binds every browser interaction surface to no-store anti-clickjacking headers", async () => {
-    const [config, runtime, providers, authClient, signIn, providerButton] =
-      await Promise.all([
-        readFile("next.config.ts", "utf8"),
-        readFile("lib/auth/preview-oauth-runtime.ts", "utf8"),
-        readFile("components/providers.tsx", "utf8"),
-        readFile("lib/auth-client.ts", "utf8"),
-        readFile("components/auth/sign-in.tsx", "utf8"),
-        readFile("components/auth/provider-button.tsx", "utf8"),
-      ]);
+    const [
+      config,
+      runtime,
+      providers,
+      authClient,
+      signIn,
+      providerButton,
+      settingUp,
+    ] = await Promise.all([
+      readFile("next.config.ts", "utf8"),
+      readFile("lib/auth/preview-oauth-runtime.ts", "utf8"),
+      readFile("components/providers.tsx", "utf8"),
+      readFile("lib/auth-client.ts", "utf8"),
+      readFile("components/auth/sign-in.tsx", "utf8"),
+      readFile("components/auth/provider-button.tsx", "utf8"),
+      readFile("app/auth/setting-up/page.tsx", "utf8"),
+    ]);
     expect(config).toContain('source: "/auth/:path*"');
     expect(config).toContain('{ key: "Cache-Control", value: "no-store" }');
     expect(config).toContain("frame-ancestors 'none'");
@@ -178,14 +186,16 @@ describe("Preview OAuth deployment handlers", () => {
     expect(runtime).not.toContain("trustedProviders");
     expect(providers).toContain('id: "vercel"');
     expect(providers).toContain('"github",');
-    expect(providers).not.toContain("emailAndPassword");
+    expect(providers).toContain("emailAndPassword={{ enabled: false }}");
     expect(authClient).toContain("oauthProviderClient()");
     expect(signIn).toContain("<ProviderButtons");
-    expect(signIn).not.toContain('type="email"');
     expect(signIn).not.toContain("SignUp");
     expect(signIn).not.toContain("/oauth2/continue");
-    expect(signIn).toContain("Continue with GitHub or Vercel");
-    expect(providerButton).toContain("Setting up your workspace…");
+    expect(signIn).toContain(
+      '<ProviderButtons socialLayout={socialLayout} view="signIn" />',
+    );
+    expect(providerButton).not.toContain("Setting up your workspace…");
+    expect(settingUp).toContain("Setting up your workspace…");
     await expect(
       readFile("app/auth/workspace/page.tsx", "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });

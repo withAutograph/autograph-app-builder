@@ -9,7 +9,6 @@ import { z } from "zod";
 import {
   buildPreviewCimdOptions,
   buildPreviewMcpOAuthOptions,
-  previewEmailPasswordPolicy,
   type PreviewOAuthMembershipAuthority,
 } from "./preview-oauth-contract";
 import { fetchPreviewClientMetadataResource } from "./preview-cimd-transport";
@@ -270,7 +269,6 @@ export function createPreviewOAuthServer(input: {
     secret: config.secret,
     database: input.database,
     trustedOrigins: [resourceOrigin],
-    emailAndPassword: previewEmailPasswordPolicy,
     socialProviders: {
       github: {
         clientId: config.githubClientId,

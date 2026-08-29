@@ -67,26 +67,32 @@ export function ProviderButton({
     mutationKey: authMutationKeys.signUp.all,
   });
   const isPending = signInMutating + signUpMutating > 0;
-  const isProviderPending = signInSocialPending || signInPopupPending;
 
   const handleSignIn = () => {
-    const callbackURL = resolveAuthCallbackURL(
-      `${baseURL}${redirectTo}`,
+    const callback = resolveAuthCallbackURL(
+      "/",
       window.location.search,
+      window.location.origin,
     );
+    const callbackURL = new URL(`${baseURL}${redirectTo}`);
+    callbackURL.searchParams.set("callbackURL", callback);
+
     if (socialSignInMode === "popup") {
       signInPopup(
         {
           provider: providerId,
-          callbackURL,
+          callbackURL: callbackURL.toString(),
           requestSignUp: view === "signUp",
         },
-        { onSuccess: () => navigate({ to: redirectTo }) },
+        {
+          onSuccess: () =>
+            navigate({ to: callbackURL.pathname + callbackURL.search }),
+        },
       );
       return;
     }
 
-    signInSocial({ provider: providerId, callbackURL });
+    signInSocial({ provider: providerId, callbackURL: callbackURL.toString() });
   };
 
   return (
@@ -98,18 +104,16 @@ export function ProviderButton({
       className={cn("relative overflow-visible", className)}
       {...props}
     >
-      {isProviderPending ? <Spinner /> : providerIcon}
+      {signInSocialPending || signInPopupPending ? <Spinner /> : providerIcon}
 
-      {isProviderPending
-        ? "Setting up your workspace…"
-        : display === "full"
-          ? localization.auth.continueWith.replace(
-              "{{provider}}",
-              getProviderName(provider),
-            )
-          : display === "name"
-            ? getProviderName(provider)
-            : null}
+      {display === "full"
+        ? localization.auth.continueWith.replace(
+            "{{provider}}",
+            getProviderName(provider),
+          )
+        : display === "name"
+          ? getProviderName(provider)
+          : null}
 
       {display === "icon" && (
         <span className="sr-only">{getProviderName(provider)}</span>

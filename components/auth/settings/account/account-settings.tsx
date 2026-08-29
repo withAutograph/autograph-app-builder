@@ -14,24 +14,26 @@ export type AccountSettingsProps = {
 /**
  * Renders the account settings layout.
  *
- * Uses `emailAndPassword` from `useAuth()` to conditionally
+ * Uses `emailAndPassword` and `plugins` from `useAuth()` to conditionally
  * show sections:
  * - `UserProfile` always renders.
- * - The change-email card renders when `emailAndPassword?.enabled` is truthy.
+ * - The change-email card renders when `emailAndPassword?.enabled` is truthy
+ *   or the `magicLink` plugin is registered, and a plugin may replace it via
+ *   `cardOverrides.account.changeEmail` (the email-OTP plugin swaps in its
+ *   code-based flow).
+ * - Plugin-contributed account cards are rendered via the plugins array
+ *   (e.g. `Appearance` from the theme plugin, multi-session accounts).
  */
 export function AccountSettings({
   className,
   ...props
 }: AccountSettingsProps & ComponentProps<"div">) {
-  const { emailAndPassword } = useAuth();
-
   return (
     <div
       className={cn("flex w-full flex-col gap-4 md:gap-6", className)}
       {...props}
     >
       <UserProfile />
-      {emailAndPassword?.enabled && <ChangeEmail />}
     </div>
   );
 }
