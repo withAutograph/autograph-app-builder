@@ -2,7 +2,7 @@ import { cimd } from "@better-auth/cimd";
 import { mcp } from "@better-auth/mcp";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import { jwt } from "better-auth/plugins";
+import { genericOAuth, jwt } from "better-auth/plugins";
 import { z } from "zod";
 
 import {
@@ -56,6 +56,16 @@ const previewOAuthRuntimeConfigSchema = z
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
     githubClientSecret: z
+      .string()
+      .min(1)
+      .max(512)
+      .refine((value) => !/[\0\r\n]/u.test(value)),
+    vercelClientId: z
+      .string()
+      .min(1)
+      .max(512)
+      .refine((value) => !/[\0\r\n]/u.test(value)),
+    vercelClientSecret: z
       .string()
       .min(1)
       .max(512)
@@ -126,6 +136,8 @@ export function readPreviewOAuthRuntimeConfig(
     databaseUrl: environment.DATABASE_URL,
     githubClientId: environment.GITHUB_CLIENT_ID,
     githubClientSecret: environment.GITHUB_CLIENT_SECRET,
+    vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
+    vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
   });
 }
 
@@ -222,6 +234,21 @@ export function createPreviewOAuthServer(input: {
             input.fetchClientMetadata ?? fetchPreviewClientMetadataResource,
         }),
       ),
+      genericOAuth({
+        config: [
+          {
+            providerId: "vercel",
+            name: "Vercel",
+            discoveryUrl: "https://vercel.com/.well-known/openid-configuration",
+            requireIdTokenVerification: true,
+            clientId: config.vercelClientId,
+            clientSecret: config.vercelClientSecret,
+            tokenEndpointAuth: { method: "client_secret_post" },
+            scopes: ["openid", "email", "profile"],
+            disableSignUp: false,
+          },
+        ],
+      }),
       nextCookies(),
     ],
   });

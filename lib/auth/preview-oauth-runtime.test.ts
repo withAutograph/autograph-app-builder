@@ -12,6 +12,8 @@ const environment = {
   DATABASE_URL: "postgresql://runtime:secret@database.example.test/app",
   GITHUB_CLIENT_ID: "github-client-id",
   GITHUB_CLIENT_SECRET: "github-client-secret",
+  VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
+  VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
@@ -22,6 +24,22 @@ describe("Preview OAuth runtime configuration", () => {
       githubClientSecret: "github-client-secret",
     });
     for (const field of ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const) {
+      expect(() =>
+        readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
+      ).toThrow();
+    }
+  });
+
+  it("requires Vercel authentication credentials", () => {
+    expect(readPreviewOAuthRuntimeConfig(environment)).toMatchObject({
+      vercelClientId: "vercel-client-id",
+      vercelClientSecret: "vercel-client-secret",
+    });
+
+    for (const field of [
+      "VERCEL_AUTH_CLIENT_ID",
+      "VERCEL_AUTH_CLIENT_SECRET",
+    ] as const) {
       expect(() =>
         readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
       ).toThrow();
