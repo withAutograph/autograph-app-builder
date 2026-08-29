@@ -113,6 +113,115 @@ const briefExamples = [
   "# Vendor onboarding\n\nBuild a guided vendor onboarding app that collects company details, validates required documents, and shows approval progress. Include explicit review states, responsible owners, and audit-friendly history.",
 ] as const;
 
+const randomNameAdjectives = [
+  "Adaptive",
+  "Agile",
+  "Bright",
+  "Calm",
+  "Clever",
+  "Clear",
+  "Curious",
+  "Focused",
+  "Grounded",
+  "Guided",
+  "Helpful",
+  "Human",
+  "Intentional",
+  "Keen",
+  "Lucid",
+  "Modern",
+  "Nimble",
+  "Open",
+  "Ready",
+  "Reliable",
+  "Simple",
+  "Steady",
+  "Swift",
+  "Thoughtful",
+  "Trusted",
+  "Useful",
+  "Warm",
+] as const;
+const randomNameNouns = [
+  "App",
+  "Atlas",
+  "Beacon",
+  "Blueprint",
+  "Bridge",
+  "Builder",
+  "Canvas",
+  "Compass",
+  "Forge",
+  "Foundry",
+  "Flow",
+  "Grove",
+  "Harbor",
+  "Launch",
+  "Loom",
+  "Orbit",
+  "Path",
+  "Pilot",
+  "Portal",
+  "Prism",
+  "Relay",
+  "Signal",
+  "Spark",
+  "Stack",
+  "Studio",
+  "Thread",
+  "Waypoint",
+  "Workshop",
+] as const;
+const preferredModelId = "openai/gpt-5.6-sol";
+
+export function repositoryNameFromAppName(appName: string) {
+  return appName
+    .normalize("NFKD")
+    .replaceAll(/[\u0300-\u036f]/gu, "")
+    .toLowerCase()
+    .replaceAll("&", " and ")
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "")
+    .slice(0, 100)
+    .replaceAll(/-+$/gu, "");
+}
+
+export function appNameFromBrief(brief: string) {
+  const firstContentLine = brief
+    .split("\n")
+    .map((line) => line.replace(/^\s*#+\s*/u, "").trim())
+    .find(Boolean);
+  if (!firstContentLine) return "";
+
+  const words = firstContentLine
+    .replaceAll(/[*_`[\](){}]/gu, " ")
+    .replace(/^(?:build|create|design|launch|make)\s+(?:an?\s+|the\s+)?/iu, "")
+    .replaceAll(/[^\p{L}\p{N}'& -]+/gu, " ")
+    .trim()
+    .split(/\s+/u)
+    .slice(0, 5);
+  return words
+    .map((word) =>
+      word.length > 1
+        ? `${word[0]?.toUpperCase()}${word.slice(1).toLowerCase()}`
+        : word.toUpperCase(),
+    )
+    .join(" ");
+}
+
+function randomAppName(seed: string) {
+  const hash = [...seed].reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    0,
+  );
+  const adjective = randomNameAdjectives[hash % randomNameAdjectives.length];
+  const noun =
+    randomNameNouns[
+      Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length
+    ];
+  return `${adjective} ${noun}`;
+}
+
 function AutographMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={styles.brand} data-compact={compact || undefined}>
@@ -775,6 +884,7 @@ function Builder({
   integrations: BuilderIntegrationState;
 }) {
   const router = useRouter();
+  const generatedNameSeed = useId();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
     value: scope.installationId,
     label: scope.displayName,
@@ -790,19 +900,28 @@ function Builder({
     label: model.name,
     detail: model.id,
   }));
+  const defaultModel = integrations.models.entries.some(
+    (entry) => entry.id === preferredModelId,
+  )
+    ? preferredModelId
+    : (integrations.models.defaultModelId ?? allModelOptions[0]?.value ?? "");
+  const initialAppName =
+    appNameFromBrief(initialBrief) || randomAppName(generatedNameSeed);
   const [form, setForm] = useState<BuilderForm>({
-    appName: "",
-    repository: "",
-    brief: initialBrief || defaultBrief,
+    appName: initialAppName,
+    repository: repositoryNameFromAppName(initialAppName),
+    brief: initialBrief,
     privateRepository: true,
     channelWeb: false,
     channelSlack: false,
     connections: [],
-    modelId: integrations.models.defaultModelId ?? "",
+    modelId: defaultModel,
   });
+  const appNameEditedByUser = useRef(false);
+  const repositoryEditedByUser = useRef(false);
   const [team, setTeam] = useState(teamOptions[0]?.value ?? "");
   const [gitScope, setGitScope] = useState(gitScopeOptions[0]?.value ?? "");
-  const [model, setModel] = useState(integrations.models.defaultModelId ?? "");
+  const [model, setModel] = useState(defaultModel);
   const [zdrOnly, setZdrOnly] = useState(false);
   const [showMoreConnections, setShowMoreConnections] = useState(false);
   const [search, setSearch] = useState("");
@@ -830,8 +949,26 @@ function Builder({
       )
     : allModelOptions;
   const canSubmit = Boolean(
-    form.brief.trim() && integrations.models.status === "ready" && model,
+    form.appName.trim() &&
+    form.brief.trim() &&
+    integrations.models.status === "ready" &&
+    model,
   );
+  const updateBrief = (brief: string) => {
+    setForm((current) => {
+      if (appNameEditedByUser.current) return { ...current, brief };
+      const appName =
+        appNameFromBrief(brief) || randomAppName(generatedNameSeed);
+      return {
+        ...current,
+        brief,
+        appName,
+        repository: repositoryEditedByUser.current
+          ? current.repository
+          : repositoryNameFromAppName(appName),
+      };
+    });
+  };
   const addConnection = (name: string) => {
     if (comingSoonConnections.has(name)) return;
     setForm((current) => ({
@@ -867,15 +1004,17 @@ function Builder({
   }, [form.appName, form.repository]);
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (canSubmit)
+    if (canSubmit) {
+      const appName = form.appName.trim();
       onCreate({
         ...form,
-        appName: form.appName.trim() || "support-app",
-        repository: form.repository.trim() || "my-app",
+        appName,
+        repository: form.repository.trim(),
         ...(team ? { vercelInstallationId: team } : {}),
         ...(gitScope ? { githubInstallationId: gitScope } : {}),
         modelId: model,
       });
+    }
   }
 
   return (
@@ -893,9 +1032,17 @@ function Builder({
             autoComplete="off"
             spellCheck={false}
             value={form.appName}
-            onChange={(event) =>
-              setForm({ ...form, appName: event.target.value })
-            }
+            onChange={(event) => {
+              appNameEditedByUser.current = true;
+              const appName = event.target.value;
+              setForm((current) => ({
+                ...current,
+                appName,
+                repository: repositoryEditedByUser.current
+                  ? current.repository
+                  : repositoryNameFromAppName(appName),
+              }));
+            }}
             placeholder="support-app"
           />
         </label>
@@ -907,26 +1054,22 @@ function Builder({
               name="app-brief"
               autoComplete="off"
               value={form.brief}
-              onChange={(event) =>
-                setForm({ ...form, brief: event.target.value })
-              }
+              onChange={(event) => updateBrief(event.target.value)}
               placeholder="# Product\n\nDescribe the app you want to build…"
             />
             <button
               type="button"
               aria-label="Try another app brief example"
-              onClick={() =>
-                setForm((current) => {
-                  const currentIndex = briefExamples.indexOf(
-                    current.brief as (typeof briefExamples)[number],
-                  );
-                  const nextIndex =
-                    currentIndex < 0
-                      ? 0
-                      : (currentIndex + 1) % briefExamples.length;
-                  return { ...current, brief: briefExamples[nextIndex] };
-                })
-              }
+              onClick={() => {
+                const currentIndex = briefExamples.indexOf(
+                  form.brief as (typeof briefExamples)[number],
+                );
+                const nextIndex =
+                  currentIndex < 0
+                    ? 0
+                    : (currentIndex + 1) % briefExamples.length;
+                updateBrief(briefExamples[nextIndex]);
+              }}
             >
               <RefreshCw size={16} aria-hidden="true" />
             </button>
@@ -944,7 +1087,7 @@ function Builder({
           .
         </p>
         <div className={styles.integrationField}>
-          <span>Vercel Team</span>
+          <span>Vercel Team (Optional)</span>
           {integrations.vercel.status === "connected" ? (
             <SearchCombobox
               label="Select a Vercel Team"
@@ -978,7 +1121,7 @@ function Builder({
         </div>
         <div className={styles.repoRow}>
           <div className={styles.integrationField}>
-            <span>Git Scope</span>
+            <span>Git Scope (Optional)</span>
             {integrations.github.status === "connected" ? (
               <SearchCombobox
                 label="Git Scope"
@@ -1017,9 +1160,10 @@ function Builder({
                 autoComplete="off"
                 spellCheck={false}
                 value={form.repository}
-                onChange={(event) =>
-                  setForm({ ...form, repository: event.target.value })
-                }
+                onChange={(event) => {
+                  repositoryEditedByUser.current = true;
+                  setForm({ ...form, repository: event.target.value });
+                }}
                 placeholder="my-app"
               />
               <label

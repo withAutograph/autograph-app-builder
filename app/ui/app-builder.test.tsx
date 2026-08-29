@@ -19,7 +19,11 @@ vi.mock("../../lib/auth-client", () => ({
   authClient: { signOut: authClientMocks.signOut },
 }));
 
-import { AppBuilder as AppBuilderComponent } from "./app-builder";
+import {
+  appNameFromBrief,
+  AppBuilder as AppBuilderComponent,
+  repositoryNameFromAppName,
+} from "./app-builder";
 
 const integrationState = {
   vercel: {
@@ -61,6 +65,13 @@ const integrationState = {
   models: {
     status: "ready" as const,
     entries: [
+      {
+        id: "openai/gpt-5.6-sol",
+        name: "GPT 5.6 Sol",
+        provider: "openai",
+        capabilities: ["tool-use"],
+        zdr: "all" as const,
+      },
       {
         id: "openai/gpt-5.6-terra",
         name: "GPT 5.6 Terra",
@@ -167,7 +178,8 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
-    expect(view.textContent).toContain("Vercel Team");
+    expect(view.textContent).toContain("Vercel Team (Optional)");
+    expect(view.textContent).toContain("Git Scope (Optional)");
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");
     expect(view.textContent).toContain("Channels");
@@ -205,9 +217,9 @@ describe("Vercel-faithful App Builder flow", () => {
     const anotherExample = view.querySelector<HTMLButtonElement>(
       '[aria-label="Try another app brief example"]',
     )!;
-    const examples = [brief.value];
+    const examples: string[] = [];
 
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < 4; index += 1) {
       await click(anotherExample);
       examples.push(brief.value);
     }
@@ -215,6 +227,99 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(new Set(examples).size).toBe(4);
     await click(anotherExample);
     expect(brief.value).toBe(examples[0]);
+  });
+
+  it("keeps generated names in sync until the user edits each field", async () => {
+    expect(
+      appNameFromBrief(
+        "# Customer Feedback Portal\n\nLet customers vote on ideas.",
+      ),
+    ).toBe("Customer Feedback Portal");
+    expect(repositoryNameFromAppName("Café & Orders")).toBe("cafe-and-orders");
+
+    sessionStorage.setItem(
+      "autograph-app-brief",
+      "# Vendor Onboarding\n\nCollect and review vendor details.",
+    );
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    await act(async () => new Promise(requestAnimationFrame));
+
+    const appName = view.querySelector<HTMLInputElement>("#app-name")!;
+    const repository =
+      view.querySelector<HTMLInputElement>("#repository-name")!;
+    expect(appName.value).toBe("Vendor Onboarding");
+    expect(repository.value).toBe("vendor-onboarding");
+
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# Customer Success Hub\n\nHelp customers reach their goals.",
+    );
+    expect(appName.value).toBe("Customer Success Hub");
+    expect(repository.value).toBe("customer-success-hub");
+
+    await fill(appName, "Existing Name");
+    expect(repository.value).toBe("existing-name");
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# A Different Product\n\nDo something else.",
+    );
+    expect(appName.value).toBe("Existing Name");
+    expect(repository.value).toBe("existing-name");
+
+    await fill(appName, "Existing Name");
+    await fill(repository, "existing-repository");
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# One More Product\n\nDo one more thing.",
+    );
+    expect(appName.value).toBe("Existing Name");
+    expect(repository.value).toBe("existing-repository");
+  });
+
+  it("updates a generated app name while preserving a user-entered repository", async () => {
+    sessionStorage.setItem(
+      "autograph-app-brief",
+      "# Vendor Onboarding\n\nCollect and review vendor details.",
+    );
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    await act(async () => new Promise(requestAnimationFrame));
+
+    const appName = view.querySelector<HTMLInputElement>("#app-name")!;
+    const repository =
+      view.querySelector<HTMLInputElement>("#repository-name")!;
+    await fill(repository, "my-existing-repository");
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# Customer Success Hub\n\nHelp customers reach their goals.",
+    );
+
+    expect(appName.value).toBe("Customer Success Hub");
+    expect(repository.value).toBe("my-existing-repository");
+  });
+
+  it("generates a random app name and matching repository when no brief exists", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    const appName = view.querySelector<HTMLInputElement>("#app-name")?.value;
+    expect(appName).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/u);
+    expect(
+      view.querySelector<HTMLInputElement>("#repository-name")?.value,
+    ).toBe(repositoryNameFromAppName(appName ?? ""));
   });
 
   it("selects and searches seeded teams, GitHub scopes, and models", async () => {
@@ -262,8 +367,9 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(gitScope.value).toBe("withAutograph");
 
     const model = view.querySelector<HTMLInputElement>(
-      '[aria-label="GPT 5.6 Terra"]',
+      '[aria-label="GPT 5.6 Sol"]',
     )!;
+    expect(model.value).toBe("GPT 5.6 Sol");
     await focus(model);
     await fill(model, "openai/gpt-5.4-mini");
     expect(view.textContent).toContain("GPT 5.4 Mini");
@@ -293,6 +399,10 @@ describe("Vercel-faithful App Builder flow", () => {
     await fill(
       view.querySelector<HTMLInputElement>("#repository-name")!,
       "support-app",
+    );
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# Support App\n\nHelp customers resolve support requests.",
     );
     await click(
       [...view.querySelectorAll("button")].find(
