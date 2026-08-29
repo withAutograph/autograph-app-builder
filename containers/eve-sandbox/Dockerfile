@@ -94,19 +94,49 @@ RUN set -eux; \
     test "$(bun -e 'console.log(require("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json").version)')" = "6.3.0"; \
     bun -e 'const { match } = require("path-to-regexp"); if (match("/vendor")("/vendor")?.path !== "/vendor") process.exit(1)'; \
     cd /tmp/arrusted-target; \
-    find node_modules -type l -print0 \
-      | while IFS= read -r -d '' dependency_link; do \
-          dependency_target="$(readlink -f -- "${dependency_link}")"; \
-          test -e "${dependency_target}"; \
+    record_workspace_targets() { \
+      source_root="$1"; \
+      node_root="$2"; \
+      link_list="$3"; \
+      output="$4"; \
+      find "${node_root}" -type l -print0 > "${link_list}" || return 1; \
+      : > "${output}" || return 1; \
+      while IFS= read -r -d '' dependency_link; do \
+          dependency_target="$(readlink -f -- "${dependency_link}")" || return 1; \
+          test -e "${dependency_target}" || return 1; \
           case "${dependency_target}" in \
-            /tmp/arrusted-target/node_modules/*) continue ;; \
-            /tmp/arrusted-target/*) dependency_relative="${dependency_target#/tmp/arrusted-target/}" ;; \
-            *) exit 1 ;; \
+            "${node_root}"/*) continue ;; \
+            "${source_root}"/*) dependency_relative="${dependency_target#"${source_root}"/}" ;; \
+            *) return 1 ;; \
           esac; \
           printf '%s\n' "${dependency_relative}" \
-            | grep -Ex '(\.config/turbo/generators|apps/(hc|vendor)|packages/(agents/(csv|reference-resolution)|app-runtime|auth|dashboard-agent-evals|integrations|microfrontends|microfrontends-shell|platform-microfrontends|typescript-config|vite-config))'; \
-        done \
-      | LC_ALL=C sort -u > /tmp/workspace-closure.list; \
+            | grep -Ex '(\.config/turbo/generators|apps/(hc|vendor)|packages/(agents/(csv|reference-resolution)|app-runtime|auth|dashboard-agent-evals|integrations|microfrontends|microfrontends-shell|platform-microfrontends|typescript-config|vite-config))' \
+            >> "${output}" || return 1; \
+        done < "${link_list}"; \
+    }; \
+    fixture_root=/tmp/workspace-closure-fixtures; \
+    install -d "${fixture_root}/source/packages/vite-config" \
+      "${fixture_root}/source/other" "${fixture_root}/node_modules/@autograph" \
+      /tmp/workspace-closure-outside; \
+    ln -s ../../source/packages/vite-config "${fixture_root}/node_modules/@autograph/vite-config"; \
+    record_workspace_targets "${fixture_root}/source" "${fixture_root}/node_modules" \
+      "${fixture_root}/positive.links" "${fixture_root}/positive.targets"; \
+    grep -Fx 'packages/vite-config' "${fixture_root}/positive.targets"; \
+    ln -s ../../source/missing "${fixture_root}/node_modules/@autograph/missing"; \
+    if record_workspace_targets "${fixture_root}/source" "${fixture_root}/node_modules" \
+      "${fixture_root}/missing.links" "${fixture_root}/missing.targets"; then exit 1; fi; \
+    rm "${fixture_root}/node_modules/@autograph/missing"; \
+    ln -s /tmp/workspace-closure-outside "${fixture_root}/node_modules/@autograph/outside"; \
+    if record_workspace_targets "${fixture_root}/source" "${fixture_root}/node_modules" \
+      "${fixture_root}/outside.links" "${fixture_root}/outside.targets"; then exit 1; fi; \
+    rm "${fixture_root}/node_modules/@autograph/outside"; \
+    ln -s ../../source/other "${fixture_root}/node_modules/@autograph/unallowlisted"; \
+    if record_workspace_targets "${fixture_root}/source" "${fixture_root}/node_modules" \
+      "${fixture_root}/unallowlisted.links" "${fixture_root}/unallowlisted.targets"; then exit 1; fi; \
+    rm -rf "${fixture_root}" /tmp/workspace-closure-outside; \
+    record_workspace_targets /tmp/arrusted-target /tmp/arrusted-target/node_modules \
+      /tmp/workspace-closure.links /tmp/workspace-closure.unsorted; \
+    LC_ALL=C sort -u /tmp/workspace-closure.unsorted > /tmp/workspace-closure.list; \
     test -s /tmp/workspace-closure.list; \
     grep -Fx 'packages/vite-config' /tmp/workspace-closure.list
 

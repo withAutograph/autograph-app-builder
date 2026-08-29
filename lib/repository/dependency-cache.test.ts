@@ -239,15 +239,26 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
-    expect(dockerfile).toContain("find node_modules -type l -print0");
+    expect(dockerfile).toContain("record_workspace_targets() {");
     expect(dockerfile).toContain(
-      "/tmp/arrusted-target/node_modules/*) continue",
+      'find "${node_root}" -type l -print0 > "${link_list}" || return 1',
+    );
+    expect(dockerfile).toContain('done < "${link_list}"');
+    expect(dockerfile).toContain(
+      "LC_ALL=C sort -u /tmp/workspace-closure.unsorted",
     );
     expect(dockerfile).toContain(
-      '/tmp/arrusted-target/*) dependency_relative="${dependency_target#/tmp/arrusted-target/}"',
+      '"${node_root}"/*) continue',
+    );
+    expect(dockerfile).toContain(
+      '"${source_root}"/*) dependency_relative="${dependency_target#"${source_root}"/}"',
     );
     expect(dockerfile).toContain("*) exit 1");
     expect(dockerfile).toContain("test -e \"${dependency_target}\"");
+    expect(dockerfile).toContain("workspace-closure-fixtures");
+    expect(dockerfile).toContain("@autograph/missing");
+    expect(dockerfile).toContain("@autograph/outside");
+    expect(dockerfile).toContain("@autograph/unallowlisted");
     expect(dockerfile).toContain("grep -Fx 'packages/vite-config'");
     expect(dockerfile).toContain(
       "--files-from /tmp/workspace-closure.list",
