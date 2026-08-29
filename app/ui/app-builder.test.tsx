@@ -211,6 +211,54 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(accessibility.violations).toEqual([]);
   });
 
+  it("explains unavailable providers and preserves callback outcomes", async () => {
+    const view = await render(
+      <AppBuilderComponent
+        authenticated
+        integrations={{
+          ...integrationState,
+          vercel: {
+            status: "unavailable",
+            scopes: [],
+            unavailableReason: "configuration-unavailable",
+          },
+          github: {
+            status: "unavailable",
+            scopes: [],
+            unavailableReason: "workspace-unavailable",
+          },
+        }}
+        providerNotices={[
+          { provider: "vercel", status: "failed" },
+          { provider: "github", status: "connected" },
+        ]}
+      />,
+    );
+
+    expect(view.textContent).toContain("Vercel could not be connected");
+    expect(view.textContent).toContain("GitHub connected successfully");
+    expect(view.textContent).toContain(
+      "administrator needs to finish provider setup",
+    );
+    expect(view.textContent).toContain("active App Builder workspace");
+    const connectButtons = [...view.querySelectorAll("button")].filter(
+      (button) => button.textContent?.startsWith("Connect to "),
+    );
+    expect(connectButtons).toHaveLength(2);
+    expect(connectButtons.every((button) => button.disabled)).toBe(true);
+    expect(view.querySelector('a[href="/vercel/installations"]')).toBeNull();
+    expect(
+      [...view.querySelectorAll('a[href="/github/installations"]')].some(
+        (link) => link.textContent === "Connect to GitHub",
+      ),
+    ).toBe(false);
+
+    const accessibility = await axe.run(view, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(accessibility.violations).toEqual([]);
+  });
+
   it("cycles app brief examples without repeating the current example", async () => {
     const view = await render(
       <AppBuilder

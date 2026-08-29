@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createGitHubAppInstallationRouteHandlers } from "./github-app-installation-deployment";
 
@@ -9,7 +9,12 @@ const authority = {
   ownerUserId: "user_one",
 };
 
-function handlers() {
+afterEach(() => vi.restoreAllMocks());
+
+function handlers(
+  authorityForRequest: () => Promise<typeof authority | undefined> = async () =>
+    authority,
+) {
   const begin = vi.fn(async () => ({
     version: 1 as const,
     action: "github-app.installation.begin" as const,
@@ -35,7 +40,7 @@ function handlers() {
   }));
   const route = createGitHubAppInstallationRouteHandlers({
     origin: "https://builder.example",
-    authorityForRequest: async () => authority,
+    authorityForRequest,
     authorization: { begin, complete },
   });
   return { route, begin, complete };
@@ -43,6 +48,7 @@ function handlers() {
 
 describe("GitHub App installation routes", () => {
   it("accepts only a same-origin form POST before leaving Preview", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { route, begin } = handlers();
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
@@ -70,9 +76,35 @@ describe("GitHub App installation routes", () => {
       }),
     );
     expect(denied.headers.get("location")).toBe(
-      "https://builder.example/github/installations?status=failed",
+      "https://builder.example/github/installations?status=failed&reason=request-invalid",
     );
     expect(begin).toHaveBeenCalledOnce();
+  });
+
+  it("returns an actionable workspace failure without exposing authority data", async () => {
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { route } = handlers(async () => undefined);
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        method: "POST",
+        headers: {
+          Origin: "https://builder.example",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "",
+      }),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "https://builder.example/github/installations?status=failed&reason=workspace-unavailable",
+    );
+    expect(error).toHaveBeenCalledOnce();
+    const logged = error.mock.calls[0]?.[0];
+    expect(logged).toContain('"reason":"workspace-unavailable"');
+    expect(logged).not.toContain(authority.ownerUserId);
+    expect(logged).not.toContain(authority.workspaceId);
   });
 
   it("binds the callback only to the current authenticated authority", async () => {

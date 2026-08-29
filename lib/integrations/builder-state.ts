@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { providerConnectionFailureReasonSchema } from "./provider-connection-status";
+
 export const builderVercelScopeSchema = z
   .object({
     installationId: z.string().min(1),
@@ -35,14 +37,42 @@ export const builderIntegrationStateSchema = z
       .object({
         status: z.enum(["connected", "disconnected", "unavailable"]),
         scopes: z.array(builderVercelScopeSchema).max(100),
+        unavailableReason: providerConnectionFailureReasonSchema.optional(),
       })
-      .strict(),
+      .strict()
+      .superRefine((value, context) => {
+        if (
+          (value.status === "unavailable") !==
+          (value.unavailableReason !== undefined)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["unavailableReason"],
+            message:
+              "Unavailable Vercel state requires exactly one failure reason.",
+          });
+        }
+      }),
     github: z
       .object({
         status: z.enum(["connected", "disconnected", "unavailable"]),
         scopes: z.array(builderGitHubScopeSchema).max(100),
+        unavailableReason: providerConnectionFailureReasonSchema.optional(),
       })
-      .strict(),
+      .strict()
+      .superRefine((value, context) => {
+        if (
+          (value.status === "unavailable") !==
+          (value.unavailableReason !== undefined)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["unavailableReason"],
+            message:
+              "Unavailable GitHub state requires exactly one failure reason.",
+          });
+        }
+      }),
     models: z
       .object({
         status: z.enum(["ready", "unavailable"]),
