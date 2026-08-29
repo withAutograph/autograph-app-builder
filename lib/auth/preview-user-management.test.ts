@@ -65,6 +65,25 @@ describe("Preview Better Auth user management", () => {
     });
   });
 
+  it("admits an invited verified Vercel user and activates the invitation", async () => {
+    const authority = createAuthority({
+      pendingOrganizationId: "workspace_one",
+      activeOrganizationId: "workspace_one",
+    });
+    const lifecycle = createPreviewUserManagementLifecycle(authority);
+
+    await expect(
+      lifecycle.beforeUserCreate(invitedUser, { path: "/callback/vercel" }),
+    ).resolves.toBeUndefined();
+    await expect(
+      lifecycle.afterUserCreate(invitedUser, { path: "/callback/vercel" }),
+    ).resolves.toBeUndefined();
+    expect(authority.activatePendingInvitation).toHaveBeenCalledWith({
+      email: "invited@example.com",
+      userId: invitedUser.id,
+    });
+  });
+
   it("rejects an uninvited GitHub user before activation", async () => {
     const authority = createAuthority();
     const lifecycle = createPreviewUserManagementLifecycle(authority);
