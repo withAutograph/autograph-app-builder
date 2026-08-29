@@ -208,7 +208,11 @@ export async function materializeFreshApplyOverlay(input: {
     boundedOutput(copy);
     if (copy.exitCode !== 0) throw new Error("ApplyOverlayCopyFailed");
   } catch {
-    await input.sandbox.removePath({ path: relativeRoot, force: true });
+    await input.sandbox.removePath({
+      path: relativeRoot,
+      recursive: true,
+      force: true,
+    });
     throw new Error(
       "The fresh proposal apply overlay could not be materialized.",
     );
@@ -237,7 +241,11 @@ export async function materializeFreshApplyOverlay(input: {
       acceptedAppSpec,
     };
   } catch (error) {
-    await input.sandbox.removePath({ path: relativeRoot, force: true });
+    await input.sandbox.removePath({
+      path: relativeRoot,
+      recursive: true,
+      force: true,
+    });
     throw error;
   }
 }
@@ -547,6 +555,7 @@ export async function executeProposalBoundApply(input: {
   } catch (error) {
     await input.sandbox.removePath({
       path: applyOverlayRoot(input.binding.proposalDigest),
+      recursive: true,
       force: true,
     });
     throw error;

@@ -214,6 +214,7 @@ describe("proposal-bound target apply", () => {
       ).rejects.toThrow(/exact accepted AppSpec/u);
       expect(removePath).toHaveBeenCalledWith({
         path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+        recursive: true,
         force: true,
       });
     },
@@ -305,6 +306,7 @@ describe("proposal-bound target apply", () => {
       expect(executor).not.toHaveBeenCalled();
       expect(fixture.removePath).toHaveBeenCalledWith({
         path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+        recursive: true,
         force: true,
       });
 
@@ -354,6 +356,7 @@ describe("proposal-bound target apply", () => {
     });
     expect(fixture.removePath).not.toHaveBeenCalledWith({
       path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+      recursive: true,
       force: true,
     });
   });
