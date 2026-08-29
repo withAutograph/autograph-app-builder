@@ -96,11 +96,13 @@ RUN set -eux; \
 
 RUN set -eux; \
     cd /tmp/arrusted-target; \
+    install -d /opt/app-builder/cargo-closure; \
     mise exec "rust@${RUST_VERSION}" -- \
-      cargo vendor --locked --versioned-dirs /opt/app-builder/cargo/vendor \
-      > /opt/app-builder/cargo/config.toml; \
-    printf '\n[net]\noffline = true\n' >> /opt/app-builder/cargo/config.toml; \
-    CARGO_NET_OFFLINE=true mise exec "rust@${RUST_VERSION}" -- \
+      cargo vendor --locked --versioned-dirs /opt/app-builder/cargo-closure/vendor \
+      > /opt/app-builder/cargo-closure/config.toml; \
+    printf '\n[net]\noffline = true\n' >> /opt/app-builder/cargo-closure/config.toml; \
+    CARGO_HOME=/opt/app-builder/cargo-closure CARGO_NET_OFFLINE=true \
+      mise exec "rust@${RUST_VERSION}" -- \
       cargo metadata --format-version 1 --locked --all-features > /tmp/cargo-metadata.json
 
 RUN set -eux; \
@@ -111,12 +113,17 @@ RUN set -eux; \
       | gzip --no-name --best > /opt/app-builder/dependency-cache/node-modules.tar.gz; \
     tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime --create \
-      --file - --directory /opt/app-builder cargo \
-      | gzip --no-name --best > /opt/app-builder/dependency-cache/cargo-home.tar.gz; \
+      --file - --directory /opt/app-builder cargo-closure \
+      | gzip --no-name --best > /opt/app-builder/dependency-cache/cargo-closure.tar.gz; \
+    tar --list --gzip --file /opt/app-builder/dependency-cache/cargo-closure.tar.gz \
+      > /tmp/cargo-closure.list; \
+    grep -Eq '^cargo-closure/config[.]toml$' /tmp/cargo-closure.list; \
+    grep -Eq '^cargo-closure/vendor/' /tmp/cargo-closure.list; \
+    ! grep -Eq '(^|/)(registry|git|cache|bin)/' /tmp/cargo-closure.list; \
     archive_sha="$(sha256sum /opt/app-builder/dependency-cache/node-modules.tar.gz | cut -d' ' -f1)"; \
     archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/node-modules.tar.gz)"; \
-    cargo_archive_sha="$(sha256sum /opt/app-builder/dependency-cache/cargo-home.tar.gz | cut -d' ' -f1)"; \
-    cargo_archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/cargo-home.tar.gz)"; \
+    cargo_archive_sha="$(sha256sum /opt/app-builder/dependency-cache/cargo-closure.tar.gz | cut -d' ' -f1)"; \
+    cargo_archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/cargo-closure.tar.gz)"; \
     printf '%s\n' \
       '{' \
       '  "version": 1,' \
@@ -142,14 +149,14 @@ RUN set -eux; \
       '    "archivePath": "/opt/app-builder/dependency-cache/node-modules.tar.gz",' \
       "    \"archiveSha256\": \"${archive_sha}\"," \
       "    \"archiveBytes\": ${archive_bytes}," \
-      '    "cargoArchivePath": "/opt/app-builder/dependency-cache/cargo-home.tar.gz",' \
+      '    "cargoArchivePath": "/opt/app-builder/dependency-cache/cargo-closure.tar.gz",' \
       "    \"cargoArchiveSha256\": \"${cargo_archive_sha}\"," \
       "    \"cargoArchiveBytes\": ${cargo_archive_bytes}" \
       '  }' \
       '}' > /opt/app-builder/dependency-cache/manifest.json; \
     chmod 0444 /opt/app-builder/dependency-cache/manifest.json \
       /opt/app-builder/dependency-cache/node-modules.tar.gz \
-      /opt/app-builder/dependency-cache/cargo-home.tar.gz; \
+      /opt/app-builder/dependency-cache/cargo-closure.tar.gz; \
     chmod 0555 /opt/app-builder/dependency-cache
 
 FROM toolchain
@@ -163,10 +170,11 @@ COPY --from=dependency-cache --chown=root:root /opt/app-builder/dependency-cache
   /opt/app-builder/dependency-cache
 
 RUN set -eux; \
-    rm -rf /opt/app-builder/cargo; \
-    tar --extract --gzip --file /opt/app-builder/dependency-cache/cargo-home.tar.gz \
+    tar --extract --gzip --file /opt/app-builder/dependency-cache/cargo-closure.tar.gz \
       --directory /opt/app-builder --no-same-owner --no-same-permissions; \
-    chmod -R a-w,a+rX /opt/app-builder/cargo
+    install --mode=0444 /opt/app-builder/cargo-closure/config.toml \
+      /opt/app-builder/cargo/config.toml; \
+    chmod -R a-w,a+rX /opt/app-builder/cargo-closure /opt/app-builder/cargo
 
 USER vercel-sandbox
 
@@ -177,4 +185,4 @@ RUN --network=none set -eux; \
       mise exec rust@1.97.1 -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
     MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false \
       mise exec rust@1.97.1 -- cargo --version | grep -E '^cargo 1[.]97[.]1 '; \
-    bun -e 'const {execFileSync}=require("node:child_process"); const m=require("/opt/app-builder/dependency-cache/manifest.json"); const actual=execFileSync("sha256sum",[m.closure.archivePath],{encoding:"utf8"}).split(/\s/u)[0]; if(actual!==m.closure.archiveSha256) process.exit(1)'
+    bun -e 'const {execFileSync}=require("node:child_process"); const m=require("/opt/app-builder/dependency-cache/manifest.json"); const digest=(path)=>execFileSync("sha256sum",[path],{encoding:"utf8"}).split(/\s/u)[0]; if(digest(m.closure.archivePath)!==m.closure.archiveSha256 || digest(m.closure.cargoArchivePath)!==m.closure.cargoArchiveSha256) process.exit(1)'

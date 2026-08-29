@@ -23,7 +23,7 @@ export const DEPENDENCY_CACHE_MANIFEST_PATH =
 export const DEPENDENCY_CACHE_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/node-modules.tar.gz";
 export const DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH =
-  "/opt/app-builder/dependency-cache/cargo-home.tar.gz";
+  "/opt/app-builder/dependency-cache/cargo-closure.tar.gz";
 export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
 export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;

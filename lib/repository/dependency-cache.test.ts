@@ -238,10 +238,13 @@ describe("offline dependency cache", () => {
       `ARG CARGO_LOCK_SHA256=${manifest.target.cargoLockSha256}`,
     );
     expect(dockerfile).toContain(
-      "cargo vendor --locked --versioned-dirs /opt/app-builder/cargo/vendor",
+      "cargo vendor --locked --versioned-dirs /opt/app-builder/cargo-closure/vendor",
     );
     expect(dockerfile).toContain("[net]\\noffline = true");
-    expect(dockerfile).toContain("cargo-home.tar.gz");
+    expect(dockerfile).toContain("cargo-closure.tar.gz");
+    expect(dockerfile).toContain(
+      "! grep -Eq '(^|/)(registry|git|cache|bin)/' /tmp/cargo-closure.list",
+    );
     expect(dockerfile).toContain("cd packages/platform-microfrontends;");
     expect(dockerfile).toContain(
       `test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "${ARRUSTED_PATH_TO_REGEXP_VERSION}"`,
