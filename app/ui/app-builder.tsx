@@ -28,6 +28,7 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -55,6 +56,55 @@ type BuilderForm = {
   githubInstallationId?: string;
   modelId: string;
 };
+type ProviderField = "vercel" | "github";
+type BuilderDraft = {
+  version: 1;
+  form: BuilderForm;
+  team: string;
+  gitScope: string;
+  model: string;
+  zdrOnly: boolean;
+  showMoreConnections: boolean;
+  search: string;
+  connectedConnections: string[];
+  focusOrigin: ProviderField;
+  appNameEditedByUser: boolean;
+  repositoryEditedByUser: boolean;
+};
+
+const builderDraftStorageKey = (resumeKey: string) =>
+  `autograph-builder-draft:${resumeKey}`;
+const builderDraftCache = new Map<
+  string,
+  { raw: string | null; draft: BuilderDraft | undefined }
+>();
+
+function parseBuilderDraft(value: string | null): BuilderDraft | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as Partial<BuilderDraft>;
+    if (
+      parsed.version !== 1 ||
+      !parsed.form ||
+      (parsed.focusOrigin !== "vercel" && parsed.focusOrigin !== "github") ||
+      !Array.isArray(parsed.form.connections) ||
+      !Array.isArray(parsed.connectedConnections)
+    )
+      return undefined;
+    return parsed as BuilderDraft;
+  } catch {
+    return undefined;
+  }
+}
+
+function readBuilderDraft(resumeKey: string) {
+  const raw = sessionStorage.getItem(builderDraftStorageKey(resumeKey));
+  const cached = builderDraftCache.get(resumeKey);
+  if (cached?.raw === raw) return cached.draft;
+  const draft = parseBuilderDraft(raw);
+  builderDraftCache.set(resumeKey, { raw, draft });
+  return draft;
+}
 type ConnectionStage = "connect" | "configure" | "customize";
 type ConnectionFlow = { name: string; stage: ConnectionStage };
 
@@ -287,6 +337,7 @@ function SearchCombobox({
   placeholder = "Select…",
   disabled = false,
   onFooterSelect,
+  inputId,
 }: {
   label: string;
   value: string;
@@ -301,6 +352,7 @@ function SearchCombobox({
   placeholder?: string;
   disabled?: boolean;
   onFooterSelect?: () => void;
+  inputId?: string;
 }) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -356,6 +408,7 @@ function SearchCombobox({
         {prefix}
       </div>
       <input
+        id={inputId}
         role="searchbox"
         aria-label={label}
         aria-autocomplete="list"
@@ -744,11 +797,15 @@ function Builder({
   onCreate,
   integrations,
   providerNotices,
+  initialDraft,
+  resumeKey,
 }: {
   initialBrief: string;
-  onCreate: (form: BuilderForm) => void;
+  onCreate: (form: BuilderForm, resumeKey?: string) => void;
   integrations: BuilderIntegrationState;
   providerNotices: ProviderConnectionNotice[];
+  initialDraft?: BuilderDraft;
+  resumeKey?: string;
 }) {
   const router = useRouter();
   const generatedNameSeed = useId();
@@ -774,29 +831,52 @@ function Builder({
     : (integrations.models.defaultModelId ?? allModelOptions[0]?.value ?? "");
   const initialAppName =
     appNameFromBrief(initialBrief) || randomAppName(generatedNameSeed);
-  const [form, setForm] = useState<BuilderForm>({
-    appName: initialAppName,
-    repository: repositoryNameFromAppName(initialAppName),
-    brief: initialBrief,
-    privateRepository: true,
-    channelWeb: false,
-    channelSlack: false,
-    connections: [],
-    modelId: defaultModel,
-  });
-  const appNameEditedByUser = useRef(false);
-  const repositoryEditedByUser = useRef(false);
-  const [team, setTeam] = useState(teamOptions[0]?.value ?? "");
-  const [gitScope, setGitScope] = useState(gitScopeOptions[0]?.value ?? "");
-  const [model, setModel] = useState(defaultModel);
-  const [zdrOnly, setZdrOnly] = useState(false);
-  const [showMoreConnections, setShowMoreConnections] = useState(false);
-  const [search, setSearch] = useState("");
+  const [form, setForm] = useState<BuilderForm>(
+    initialDraft?.form ?? {
+      appName: initialAppName,
+      repository: repositoryNameFromAppName(initialAppName),
+      brief: initialBrief,
+      privateRepository: true,
+      channelWeb: false,
+      channelSlack: false,
+      connections: [],
+      modelId: defaultModel,
+    },
+  );
+  const appNameEditedByUser = useRef(
+    initialDraft?.appNameEditedByUser ?? false,
+  );
+  const repositoryEditedByUser = useRef(
+    initialDraft?.repositoryEditedByUser ?? false,
+  );
+  const suppressUnsavedWarning = useRef(false);
+  const resumedVercelConnection = providerNotices.some(
+    (notice) => notice.provider === "vercel" && notice.status === "connected",
+  );
+  const resumedGitHubConnection = providerNotices.some(
+    (notice) => notice.provider === "github" && notice.status === "connected",
+  );
+  const [team, setTeam] = useState(
+    resumedVercelConnection
+      ? (teamOptions[0]?.value ?? "")
+      : (initialDraft?.team ?? teamOptions[0]?.value ?? ""),
+  );
+  const [gitScope, setGitScope] = useState(
+    resumedGitHubConnection
+      ? (gitScopeOptions[0]?.value ?? "")
+      : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
+  );
+  const [model, setModel] = useState(initialDraft?.model ?? defaultModel);
+  const [zdrOnly, setZdrOnly] = useState(initialDraft?.zdrOnly ?? false);
+  const [showMoreConnections, setShowMoreConnections] = useState(
+    initialDraft?.showMoreConnections ?? false,
+  );
+  const [search, setSearch] = useState(initialDraft?.search ?? "");
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
     null,
   );
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
-    [],
+    initialDraft?.connectedConnections ?? [],
   );
   const normalizedSearch = search.trim().toLowerCase();
   const availableConnections =
@@ -865,22 +945,56 @@ function Builder({
   };
   useEffect(() => {
     if (!form.appName && !form.repository) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!suppressUnsavedWarning.current) event.preventDefault();
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [form.appName, form.repository]);
+  useEffect(() => {
+    if (!initialDraft) return;
+    const id =
+      initialDraft.focusOrigin === "vercel" ? "vercel-team" : "git-scope";
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(id)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialDraft]);
+  const beginProviderConnection = (provider: ProviderField) => {
+    const key = crypto.randomUUID();
+    const draft: BuilderDraft = {
+      version: 1,
+      form,
+      team,
+      gitScope,
+      model,
+      zdrOnly,
+      showMoreConnections,
+      search,
+      connectedConnections,
+      focusOrigin: provider,
+      appNameEditedByUser: appNameEditedByUser.current,
+      repositoryEditedByUser: repositoryEditedByUser.current,
+    };
+    sessionStorage.setItem(builderDraftStorageKey(key), JSON.stringify(draft));
+    suppressUnsavedWarning.current = true;
+    router.push(`/${provider}/installations?returnTo=%2F&resume=${key}`);
+  };
   function submit(event: FormEvent) {
     event.preventDefault();
     if (canSubmit) {
       const appName = form.appName.trim();
-      onCreate({
-        ...form,
-        appName,
-        repository: form.repository.trim(),
-        ...(team ? { vercelInstallationId: team } : {}),
-        ...(gitScope ? { githubInstallationId: gitScope } : {}),
-        modelId: model,
-      });
+      onCreate(
+        {
+          ...form,
+          appName,
+          repository: form.repository.trim(),
+          ...(team ? { vercelInstallationId: team } : {}),
+          ...(gitScope ? { githubInstallationId: gitScope } : {}),
+          modelId: model,
+        },
+        resumeKey,
+      );
     }
   }
 
@@ -988,6 +1102,7 @@ function Builder({
           {integrations.vercel.status === "connected" ? (
             <SearchCombobox
               label="Select a Vercel Team"
+              inputId="vercel-team"
               value={team}
               options={teamOptions}
               onChange={setTeam}
@@ -996,7 +1111,7 @@ function Builder({
                 value: "create-team",
                 label: "Connect another Vercel team",
               }}
-              onFooterSelect={() => router.push("/vercel/installations")}
+              onFooterSelect={() => beginProviderConnection("vercel")}
               optionIcon={(option) => (
                 <span className={styles.teamDot} data-team={option.value} />
               )}
@@ -1008,12 +1123,14 @@ function Builder({
               Connect to Vercel
             </button>
           ) : (
-            <Link
+            <button
               className={styles.connectProvider}
-              href="/vercel/installations"
+              type="button"
+              id="vercel-team"
+              onClick={() => beginProviderConnection("vercel")}
             >
               Connect to Vercel
-            </Link>
+            </button>
           )}
           <small className={styles.integrationHelp}>
             Connect Vercel and Autograph can create and deploy the project for
@@ -1034,12 +1151,13 @@ function Builder({
             {integrations.github.status === "connected" ? (
               <SearchCombobox
                 label="Git Scope"
+                inputId="git-scope"
                 value={gitScope}
                 options={gitScopeOptions}
                 onChange={setGitScope}
                 prefix={<FaGithub size={16} />}
                 menuFooter={{ value: "add-github", label: "Add GitHub Scope" }}
-                onFooterSelect={() => router.push("/github/installations")}
+                onFooterSelect={() => beginProviderConnection("github")}
                 optionIcon={() => <FaGithub size={16} />}
                 footerIcon={<Plus size={21} />}
               />
@@ -1048,12 +1166,14 @@ function Builder({
                 Connect to GitHub
               </button>
             ) : (
-              <Link
+              <button
                 className={styles.connectProvider}
-                href="/github/installations"
+                type="button"
+                id="git-scope"
+                onClick={() => beginProviderConnection("github")}
               >
                 Connect to GitHub
-              </Link>
+              </button>
             )}
             <small className={styles.integrationHelp}>
               Connect GitHub and Autograph can create and configure the
@@ -1521,21 +1641,31 @@ export function AppBuilder({
   authenticated,
   integrations,
   providerNotices = [],
+  providerResumeKey,
 }: {
   authenticated: boolean;
   integrations: BuilderIntegrationState;
   providerNotices?: ProviderConnectionNotice[];
+  providerResumeKey?: string;
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("builder");
   const [submitted, setSubmitted] = useState<BuilderForm>();
   const [savedBrief, setSavedBrief] = useState("");
+  const resumedDraft = useSyncExternalStore(
+    () => () => undefined,
+    () => (providerResumeKey ? readBuilderDraft(providerResumeKey) : undefined),
+    () => undefined,
+  );
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
+  const builderKey = providerResumeKey
+    ? `${providerResumeKey}:${resumedDraft ? "restored" : "pending"}`
+    : savedBrief || "new";
 
   if (!authenticated)
     return (
@@ -1551,11 +1681,17 @@ export function AppBuilder({
       <Header />
       {screen === "builder" ? (
         <Builder
-          key={savedBrief || "new"}
+          key={builderKey}
           initialBrief={savedBrief}
+          initialDraft={resumedDraft}
+          resumeKey={providerResumeKey}
           integrations={integrations}
           providerNotices={providerNotices}
           onCreate={async (form) => {
+            if (providerResumeKey)
+              sessionStorage.removeItem(
+                builderDraftStorageKey(providerResumeKey),
+              );
             setSubmitted(form);
             try {
               await navigator.clipboard.writeText(

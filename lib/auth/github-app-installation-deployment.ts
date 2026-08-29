@@ -10,6 +10,11 @@ import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
 import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
+import {
+  providerConnectionRedirect,
+  providerConnectionReturnFromFormData,
+  type ProviderConnectionReturn,
+} from "../integrations/provider-connection-return";
 
 type Authority = {
   issuer: string;
@@ -36,15 +41,19 @@ export function createGitHubAppInstallationRouteHandlers(input: {
   const redirect = (
     status: "connected" | "failed",
     reason?: ProviderConnectionFailureReason,
+    returnState?: ProviderConnectionReturn,
   ) =>
     new Response(null, {
       status: 303,
       headers: {
         ...noStoreHeaders,
-        Location:
-          status === "connected"
-            ? `${origin}/?github=connected`
-            : `${origin}/github/installations?status=failed&reason=${reason ?? "authorization-failed"}`,
+        Location: providerConnectionRedirect({
+          origin,
+          provider: "github",
+          status,
+          reason,
+          returnState,
+        }),
       },
     });
 
@@ -79,7 +88,10 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       if (authority === undefined) return fail("workspace-unavailable");
 
       try {
-        const result = await input.authorization.begin(authority);
+        const returnState = providerConnectionReturnFromFormData(
+          await request.formData(),
+        );
+        const result = await input.authorization.begin(authority, returnState);
         return new Response(null, {
           status: 303,
           headers: {
@@ -125,7 +137,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
             headers: { ...noStoreHeaders, Location: result.redirectUrl },
           });
         }
-        return redirect("connected");
+        return redirect("connected", undefined, result.returnState);
       } catch {
         return fail("callback-invalid");
       }

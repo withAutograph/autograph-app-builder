@@ -11,6 +11,11 @@ import {
 import { logProviderConnectionFailure } from "./provider-connection-logging";
 import type { ProviderConnectionFailureReason } from "./provider-connection-status";
 import {
+  providerConnectionRedirect,
+  providerConnectionReturnFromFormData,
+  type ProviderConnectionReturn,
+} from "./provider-connection-return";
+import {
   createVercelInstallationAuthorization,
   readVercelIntegrationEnvironment,
   verifyVercelWebhook,
@@ -75,18 +80,25 @@ export function createVercelInstallationDeploymentHandler(
     const redirect = (
       status: "connected" | "failed",
       reason?: ProviderConnectionFailureReason,
+      returnState?: ProviderConnectionReturn,
     ) =>
       new Response(null, {
         status: 303,
         headers: {
           ...noStoreHeaders,
-          Location:
-            status === "connected"
-              ? `${origin}/?vercel=connected`
-              : `${origin}/vercel/installations?status=failed&reason=${reason ?? "authorization-failed"}`,
+          Location: providerConnectionRedirect({
+            origin,
+            provider: "vercel",
+            status,
+            reason,
+            returnState,
+          }),
         },
       });
-    const fail = (reason: ProviderConnectionFailureReason) => {
+    const fail = (
+      reason: ProviderConnectionFailureReason,
+      returnState?: ProviderConnectionReturn,
+    ) => {
       logProviderConnectionFailure({
         request,
         provider: "vercel",
@@ -94,7 +106,7 @@ export function createVercelInstallationDeploymentHandler(
         reason,
         startedAt,
       });
-      return redirect("failed", reason);
+      return redirect("failed", reason, returnState);
     };
 
     if (
@@ -125,16 +137,22 @@ export function createVercelInstallationDeploymentHandler(
 
     try {
       if (kind === "start") {
+        const returnState = providerConnectionReturnFromFormData(
+          await request.formData(),
+        );
         return new Response(null, {
           status: 303,
           headers: {
             ...noStoreHeaders,
-            Location: await runtime.authorization.begin(authority),
+            Location: await runtime.authorization.begin(authority, returnState),
           },
         });
       }
-      await runtime.authorization.complete(request.url, authority);
-      return redirect("connected");
+      const result = await runtime.authorization.complete(
+        request.url,
+        authority,
+      );
+      return redirect("connected", undefined, result.returnState);
     } catch {
       return fail(
         kind === "callback" ? "callback-invalid" : "authorization-failed",

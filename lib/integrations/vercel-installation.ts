@@ -13,6 +13,7 @@ import {
   hostedTenantAuthoritySchema,
   type HostedAdminPlanRequest,
 } from "../db/hosted-admin";
+import type { ProviderConnectionReturn } from "./provider-connection-return";
 
 type Authority = HostedAdminPlanRequest["authority"];
 
@@ -55,13 +56,14 @@ export type VercelAuthorizationStateStore = {
     authorityDigest: string;
     createdAt: Date;
     expiresAt: Date;
+    returnState: ProviderConnectionReturn;
   }): Promise<void>;
   consume(input: {
     stateDigest: string;
     authority: Authority;
     authorityDigest: string;
     now: Date;
-  }): Promise<boolean>;
+  }): Promise<ProviderConnectionReturn | undefined>;
 };
 
 export type VercelInstallationBinding = {
@@ -174,7 +176,10 @@ export function createVercelInstallationAuthorization(input: {
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
 
   return {
-    async begin(authorityInput: Authority) {
+    async begin(
+      authorityInput: Authority,
+      returnState: ProviderConnectionReturn = { returnTo: "/" },
+    ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority)))
         throw new Error("membership-inactive");
@@ -186,6 +191,7 @@ export function createVercelInstallationAuthorization(input: {
         authorityDigest: authorityDigest(authority),
         createdAt: new Date(issuedAt),
         expiresAt: new Date(issuedAt + 10 * 60_000),
+        returnState,
       });
       const url = new URL(
         `/integrations/${config.slug}/new`,
@@ -216,15 +222,13 @@ export function createVercelInstallationAuthorization(input: {
       const teamId = url.searchParams.get("teamId") || undefined;
       if (!(await input.membership.isActiveMember(authority)))
         throw new Error("membership-inactive");
-      if (
-        !(await input.states.consume({
-          stateDigest: digest(state),
-          authority,
-          authorityDigest: authorityDigest(authority),
-          now: new Date(now()),
-        }))
-      )
-        throw new Error("state-invalid");
+      const returnState = await input.states.consume({
+        stateDigest: digest(state),
+        authority,
+        authorityDigest: authorityDigest(authority),
+        now: new Date(now()),
+      });
+      if (!returnState) throw new Error("state-invalid");
 
       const tokenResponse = await request(
         "https://api.vercel.com/v2/oauth/access_token",
@@ -291,12 +295,13 @@ export function createVercelInstallationAuthorization(input: {
       }
       if (!(await input.membership.isActiveMember(authority)))
         throw new Error("membership-inactive");
-      return input.installations.bind({
+      const persistedBinding = await input.installations.bind({
         authority,
         binding,
         token,
         now: new Date(now()),
       });
+      return { binding: persistedBinding, returnState };
     },
   };
 }

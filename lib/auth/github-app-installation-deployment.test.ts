@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createGitHubAppInstallationRouteHandlers } from "./github-app-installation-deployment";
+import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
 
 const authority = {
   issuer: "https://builder.example/api/auth",
@@ -36,6 +37,7 @@ function handlers(
     accountType: "Organization" as const,
     repositorySelection: "selected" as const,
     setupAction: "install" as const,
+    returnState: { returnTo: "/" as const } as ProviderConnectionReturn,
     appliedAt: "2026-08-28T12:00:00.000Z",
   }));
   const route = createGitHubAppInstallationRouteHandlers({
@@ -63,7 +65,7 @@ describe("GitHub App installation routes", () => {
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toContain("github.com/apps/");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(begin).toHaveBeenCalledWith(authority);
+    expect(begin).toHaveBeenCalledWith(authority, { returnTo: "/" });
 
     const denied = await route.start(
       new Request("https://builder.example/github/installations/start", {
@@ -76,7 +78,7 @@ describe("GitHub App installation routes", () => {
       }),
     );
     expect(denied.headers.get("location")).toBe(
-      "https://builder.example/github/installations?status=failed&reason=request-invalid",
+      "https://builder.example/?github=failed&githubReason=request-invalid",
     );
     expect(begin).toHaveBeenCalledOnce();
   });
@@ -98,7 +100,7 @@ describe("GitHub App installation routes", () => {
     );
 
     expect(response.headers.get("location")).toBe(
-      "https://builder.example/github/installations?status=failed&reason=workspace-unavailable",
+      "https://builder.example/?github=failed&githubReason=workspace-unavailable",
     );
     expect(error).toHaveBeenCalledOnce();
     const logged = error.mock.calls[0]?.[0];
@@ -117,5 +119,44 @@ describe("GitHub App installation routes", () => {
       "https://builder.example/?github=connected",
     );
     expect(complete).toHaveBeenCalledWith(callback, authority);
+  });
+
+  it("passes an opaque draft-resume key through a successful callback", async () => {
+    const { route, begin, complete } = handlers();
+    const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        method: "POST",
+        headers: {
+          Origin: "https://builder.example",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ returnTo: "/", resumeKey }),
+      }),
+    );
+    expect(response.status).toBe(303);
+    expect(begin).toHaveBeenCalledWith(authority, { returnTo: "/", resumeKey });
+    complete.mockResolvedValueOnce({
+      version: 1 as const,
+      action: "github-app.installation.complete" as const,
+      status: "bound" as const,
+      authorityDigest: "a".repeat(64),
+      stateDigest: "b".repeat(64),
+      installationDigest: "c".repeat(64),
+      providerUserDigest: "d".repeat(64),
+      accountType: "Organization" as const,
+      repositorySelection: "selected" as const,
+      setupAction: "install" as const,
+      appliedAt: "2026-08-28T12:00:00.000Z",
+      returnState: { returnTo: "/", resumeKey },
+    });
+    const callback = await route.callback(
+      new Request(
+        "https://builder.example/github/installations/callback?state=opaque",
+      ),
+    );
+    expect(callback.headers.get("location")).toBe(
+      `https://builder.example/?github=connected&resume=${resumeKey}`,
+    );
   });
 });
