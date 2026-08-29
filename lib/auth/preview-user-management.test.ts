@@ -2,168 +2,139 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createPreviewUserManagementLifecycle,
+  OrganizationProvisioningError,
+  type OrganizationProvisioningFailure,
   type PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
 function createAuthority(input?: {
-  pendingOrganizationId?: string;
-  activeOrganizationId?: string;
+  failure?: OrganizationProvisioningFailure;
 }) {
   const authority: PreviewOrganizationUserAuthority = {
-    pendingOrganizationForVerifiedEmail: vi.fn(async () =>
-      Promise.resolve(input?.pendingOrganizationId),
-    ),
-    activatePendingInvitation: vi.fn(async () =>
-      Promise.resolve(input?.pendingOrganizationId ?? "workspace_one"),
-    ),
-    activeOrganizationForUser: vi.fn(async () =>
-      Promise.resolve(input?.activeOrganizationId),
-    ),
+    ensureOrganizationForVerifiedUser: vi.fn(async () => {
+      if (input?.failure) {
+        throw new OrganizationProvisioningError(input.failure);
+      }
+      return {
+        organizationId: "organization_one",
+        workspaceId: "workspace_one",
+      };
+    }),
   };
   return authority;
 }
 
-const invitedUser = {
+const verifiedUser = {
   id: "user_one",
-  email: "Invited@Example.com",
+  email: "Person@Example.com",
   emailVerified: true,
 };
 
 describe("Preview Better Auth user management", () => {
-  it("admits an invited verified GitHub user and activates the invitation", async () => {
-    const authority = createAuthority({
-      pendingOrganizationId: "workspace_one",
-      activeOrganizationId: "workspace_one",
-    });
-    const lifecycle = createPreviewUserManagementLifecycle(authority);
-
-    await expect(
-      lifecycle.beforeUserCreate(invitedUser, { path: "/callback/github" }),
-    ).resolves.toBeUndefined();
-    await expect(
-      lifecycle.afterUserCreate(invitedUser, { path: "/callback/github" }),
-    ).resolves.toBeUndefined();
-    await expect(
-      lifecycle.beforeSessionCreate({
-        userId: invitedUser.id,
-        token: "session-token",
-      }),
-    ).resolves.toEqual({
-      data: {
-        activeOrganizationId: "workspace_one",
-        token: "session-token",
-        userId: invitedUser.id,
-      },
-    });
-
-    expect(authority.pendingOrganizationForVerifiedEmail).toHaveBeenCalledWith({
-      email: "invited@example.com",
-    });
-    expect(authority.activatePendingInvitation).toHaveBeenCalledWith({
-      email: "invited@example.com",
-      userId: invitedUser.id,
-    });
-  });
-
-  it("admits an invited verified Vercel user and activates the invitation", async () => {
-    const authority = createAuthority({
-      pendingOrganizationId: "workspace_one",
-      activeOrganizationId: "workspace_one",
-    });
-    const lifecycle = createPreviewUserManagementLifecycle(authority);
-
-    await expect(
-      lifecycle.beforeUserCreate(invitedUser, { path: "/callback/vercel" }),
-    ).resolves.toBeUndefined();
-    await expect(
-      lifecycle.afterUserCreate(invitedUser, { path: "/callback/vercel" }),
-    ).resolves.toBeUndefined();
-    expect(authority.activatePendingInvitation).toHaveBeenCalledWith({
-      email: "invited@example.com",
-      userId: invitedUser.id,
-    });
-  });
-
-  it("rejects an uninvited GitHub user before activation", async () => {
-    const authority = createAuthority();
-    const lifecycle = createPreviewUserManagementLifecycle(authority);
-
-    await expect(
-      lifecycle.beforeUserCreate(invitedUser, { path: "/callback/github" }),
-    ).rejects.toMatchObject({
-      status: "FORBIDDEN",
-      body: { code: "AUTOGRAPH_INVITATION_REQUIRED" },
-    });
-    expect(authority.activatePendingInvitation).not.toHaveBeenCalled();
-  });
-
-  it("rejects an unverified GitHub email without querying invitations", async () => {
-    const authority = createAuthority({
-      pendingOrganizationId: "workspace_one",
-    });
-    const lifecycle = createPreviewUserManagementLifecycle(authority);
-
-    await expect(
-      lifecycle.beforeUserCreate(
-        { ...invitedUser, emailVerified: false },
-        { path: "/callback/github" },
-      ),
-    ).rejects.toMatchObject({
-      status: "FORBIDDEN",
-      body: { code: "AUTOGRAPH_INVITATION_REQUIRED" },
-    });
-    expect(
-      authority.pendingOrganizationForVerifiedEmail,
-    ).not.toHaveBeenCalled();
-  });
-
-  it("leaves non-GitHub administrative user creation to the admin plugin", async () => {
-    const authority = createAuthority();
-    const lifecycle = createPreviewUserManagementLifecycle(authority);
-
-    await expect(
-      lifecycle.beforeUserCreate(invitedUser, { path: "/admin/create-user" }),
-    ).resolves.toBeUndefined();
-    await expect(
-      lifecycle.afterUserCreate(invitedUser, { path: "/admin/create-user" }),
-    ).resolves.toBeUndefined();
-    expect(
-      authority.pendingOrganizationForVerifiedEmail,
-    ).not.toHaveBeenCalled();
-    expect(authority.activatePendingInvitation).not.toHaveBeenCalled();
-  });
-
-  it.each(["zero", "multiple"])(
-    "fails a %s-active-organization session with a product-facing access error",
-    async () => {
-      const authority = createAuthority();
-      const lifecycle = createPreviewUserManagementLifecycle(authority);
+  it.each(["/callback/github", "/callback/vercel"])(
+    "admits a verified provider callback at %s and normalizes its email",
+    async (path) => {
+      const lifecycle = createPreviewUserManagementLifecycle(createAuthority());
 
       await expect(
-        lifecycle.beforeSessionCreate({ userId: invitedUser.id }),
-      ).rejects.toMatchObject({
-        status: "FORBIDDEN",
-        body: { code: "AUTOGRAPH_WORKSPACE_UNAVAILABLE" },
+        lifecycle.beforeUserCreate(verifiedUser, { path }),
+      ).resolves.toMatchObject({
+        data: { email: "person@example.com", emailVerified: true },
       });
     },
   );
 
-  it("supports an idempotent callback retry through the authority boundary", async () => {
-    const authority = createAuthority({
-      pendingOrganizationId: "workspace_one",
-      activeOrganizationId: "workspace_one",
-    });
+  it("rejects an unverified provider identity before user creation", async () => {
+    const authority = createAuthority();
     const lifecycle = createPreviewUserManagementLifecycle(authority);
 
-    await lifecycle.beforeUserCreate(invitedUser, { path: "/callback/github" });
-    await lifecycle.afterUserCreate(invitedUser, { path: "/callback/github" });
-    await lifecycle.afterUserCreate(invitedUser, { path: "/callback/github" });
-
-    expect(authority.activatePendingInvitation).toHaveBeenCalledTimes(2);
     await expect(
-      lifecycle.beforeSessionCreate({ userId: invitedUser.id }),
+      lifecycle.beforeUserCreate(
+        { ...verifiedUser, emailVerified: false },
+        { path: "/callback/github" },
+      ),
+    ).rejects.toMatchObject({
+      status: "FORBIDDEN",
+      body: { code: "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED" },
+    });
+    expect(authority.ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
+  });
+
+  it("leaves administrative user creation to the admin plugin", async () => {
+    const lifecycle = createPreviewUserManagementLifecycle(createAuthority());
+    await expect(
+      lifecycle.beforeUserCreate(verifiedUser, { path: "/admin/create-user" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("ensures one workspace before persisting every session", async () => {
+    const authority = createAuthority();
+    const lifecycle = createPreviewUserManagementLifecycle(authority);
+
+    await expect(
+      lifecycle.beforeSessionCreate({
+        userId: verifiedUser.id,
+        token: "session-token",
+      }),
+    ).resolves.toEqual({
+      data: {
+        activeOrganizationId: "organization_one",
+        token: "session-token",
+        userId: verifiedUser.id,
+      },
+    });
+    expect(authority.ensureOrganizationForVerifiedUser).toHaveBeenCalledWith({
+      userId: verifiedUser.id,
+    });
+  });
+
+  it.each([
+    ["access-revoked", "AUTOGRAPH_WORKSPACE_ACCESS_REVOKED", "FORBIDDEN"],
+    ["signup-disabled", "AUTOGRAPH_SIGNUP_UNAVAILABLE", "FORBIDDEN"],
+    [
+      "verified-identity-required",
+      "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED",
+      "FORBIDDEN",
+    ],
+    ["workspace-ambiguous", "AUTOGRAPH_WORKSPACE_AMBIGUOUS", "CONFLICT"],
+    [
+      "workspace-setup-failed",
+      "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
+      "SERVICE_UNAVAILABLE",
+    ],
+  ] as const)(
+    "maps %s to the product-facing %s error",
+    async (failure, code, status) => {
+      const lifecycle = createPreviewUserManagementLifecycle(
+        createAuthority({ failure }),
+      );
+      await expect(
+        lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
+      ).rejects.toMatchObject({ status, body: { code } });
+    },
+  );
+
+  it("masks unexpected persistence failures and remains retry-safe", async () => {
+    const authority: PreviewOrganizationUserAuthority = {
+      ensureOrganizationForVerifiedUser: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("database detail"))
+        .mockResolvedValueOnce({
+          organizationId: "organization_one",
+          workspaceId: "workspace_one",
+        }),
+    };
+    const lifecycle = createPreviewUserManagementLifecycle(authority);
+
+    await expect(
+      lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
+    ).rejects.toMatchObject({
+      body: { code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED" },
+    });
+    await expect(
+      lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
     ).resolves.toMatchObject({
-      data: { activeOrganizationId: "workspace_one" },
+      data: { activeOrganizationId: "organization_one" },
     });
   });
 });

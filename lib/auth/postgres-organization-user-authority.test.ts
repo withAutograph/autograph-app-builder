@@ -3,8 +3,22 @@ import { describe, expect, it, vi } from "vitest";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 
 const binding = {
-  issuer: "https://preview.example.test/api/auth",
-  audience: "https://preview.example.test/mcp",
+  issuer: "https://new.autograph.so/api/auth",
+  audience: "https://new.autograph.so/mcp",
+  selfServiceSignupEnabled: true,
+};
+
+const user = {
+  name: "Jason Morgan",
+  email: "jason@example.com",
+  email_verified: true,
+  banned: false,
+};
+
+const organization = {
+  organization_id: "organization_one",
+  workspace_id: "workspace_one",
+  role: "owner",
 };
 
 function createDatabase(results: unknown[]) {
@@ -24,37 +38,197 @@ function createDatabase(results: unknown[]) {
 }
 
 describe("PostgreSQL Better Auth organization authority", () => {
-  it("returns one exact pending invitation and rejects ambiguous invitations", async () => {
-    const one = createDatabase([[{ organization_id: "org_one" }]]);
-    const oneAuthority = createPostgresPreviewOrganizationAuthority(
-      one.database,
-      binding,
-    );
-    await expect(
-      oneAuthority.pendingOrganizationForVerifiedEmail({
-        email: "invited@example.com",
-      }),
-    ).resolves.toBe("org_one");
-
-    const ambiguous = createDatabase([
-      [{ organization_id: "org_one" }, { organization_id: "org_two" }],
+  it("reuses one exact active organization", async () => {
+    const state = createDatabase([
+      [user],
+      [{ provider_id: "github" }],
+      [organization],
     ]);
-    const ambiguousAuthority = createPostgresPreviewOrganizationAuthority(
-      ambiguous.database,
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      { ...binding, selfServiceSignupEnabled: false },
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).resolves.toEqual({
+      organizationId: "organization_one",
+      workspaceId: "workspace_one",
+    });
+    expect(state.transaction).toHaveBeenCalledTimes(1);
+    expect(state.execute).toHaveBeenCalledTimes(3);
+  });
+
+  it("accepts one pending invitation before personal provisioning", async () => {
+    const state = createDatabase([
+      [user],
+      [{ provider_id: "vercel" }],
+      [],
+      [
+        {
+          id: "invitation_one",
+          organization_id: "organization_invited",
+          role: "member",
+          workspace_id: "workspace_invited",
+        },
+      ],
+      [{ organization_id: "organization_invited" }],
+      [],
+      [
+        {
+          organization_id: "organization_invited",
+          workspace_id: "workspace_invited",
+          role: "member",
+        },
+      ],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      { ...binding, selfServiceSignupEnabled: false },
+      {
+        generateId: vi
+          .fn()
+          .mockReturnValueOnce("organization_one")
+          .mockReturnValueOnce("workspace_one")
+          .mockReturnValueOnce("member_one"),
+      },
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).resolves.toEqual({
+      organizationId: "organization_invited",
+      workspaceId: "workspace_invited",
+    });
+    expect(state.execute).toHaveBeenCalledTimes(7);
+  });
+
+  it("creates one personal owner organization and mapping", async () => {
+    const state = createDatabase([
+      [user],
+      [{ provider_id: "github" }],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [organization],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      binding,
+      {
+        generateId: vi
+          .fn()
+          .mockReturnValueOnce("organization_one")
+          .mockReturnValueOnce("workspace_one")
+          .mockReturnValueOnce("member_one"),
+      },
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).resolves.toEqual({
+      organizationId: "organization_one",
+      workspaceId: "workspace_one",
+    });
+    expect(state.execute).toHaveBeenCalledTimes(9);
+  });
+
+  it("keeps personal creation disabled while preserving existing and invited access", async () => {
+    const state = createDatabase([
+      [user],
+      [{ provider_id: "github" }],
+      [],
+      [],
+      [],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      { ...binding, selfServiceSignupEnabled: false },
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).rejects.toMatchObject({ reason: "signup-disabled" });
+  });
+
+  it.each([
+    {
+      name: "an unverified user",
+      results: [[{ ...user, email_verified: false }]],
+      reason: "verified-identity-required",
+    },
+    {
+      name: "a suspended user",
+      results: [[{ ...user, banned: true }]],
+      reason: "access-revoked",
+    },
+    {
+      name: "a user without a GitHub or Vercel account",
+      results: [[user], []],
+      reason: "verified-identity-required",
+    },
+    {
+      name: "multiple exact memberships",
+      results: [
+        [user],
+        [{ provider_id: "github" }],
+        [
+          organization,
+          { ...organization, organization_id: "organization_two" },
+        ],
+      ],
+      reason: "workspace-ambiguous",
+    },
+    {
+      name: "multiple exact invitations",
+      results: [
+        [user],
+        [{ provider_id: "github" }],
+        [],
+        [
+          {
+            id: "invitation_one",
+            organization_id: "organization_one",
+            workspace_id: "workspace_one",
+            role: "member",
+          },
+          {
+            id: "invitation_two",
+            organization_id: "organization_two",
+            workspace_id: "workspace_two",
+            role: "member",
+          },
+        ],
+      ],
+      reason: "workspace-ambiguous",
+    },
+    {
+      name: "a revoked personal workspace membership",
+      results: [
+        [user],
+        [{ provider_id: "github" }],
+        [],
+        [],
+        [{ organization_id: "organization_one" }],
+      ],
+      reason: "access-revoked",
+    },
+  ] as const)("fails closed for $name", async ({ results, reason }) => {
+    const state = createDatabase([...results]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
       binding,
     );
     await expect(
-      ambiguousAuthority.pendingOrganizationForVerifiedEmail({
-        email: "invited@example.com",
-      }),
-    ).resolves.toBeUndefined();
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).rejects.toMatchObject({ reason });
   });
 
   it("binds OAuth membership to the configured issuer and audience", async () => {
-    const state = createDatabase([
-      [{ organization_id: "org_one", workspace_id: "workspace_one" }],
-      [{ organization_id: "org_one", workspace_id: "workspace_one" }],
-    ]);
+    const state = createDatabase([[organization], [organization]]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
       binding,
@@ -62,13 +236,15 @@ describe("PostgreSQL Better Auth organization authority", () => {
 
     await expect(
       authority.activeWorkspaceForUser({
-        ...binding,
+        issuer: binding.issuer,
+        audience: binding.audience,
         ownerUserId: "user_one",
       }),
     ).resolves.toBe("workspace_one");
     await expect(
       authority.isActiveMember({
-        ...binding,
+        issuer: binding.issuer,
+        audience: binding.audience,
         workspaceId: "workspace_one",
         ownerUserId: "user_one",
       }),
@@ -81,67 +257,6 @@ describe("PostgreSQL Better Auth organization authority", () => {
         ownerUserId: "user_one",
       }),
     ).resolves.toBe(false);
-    expect(state.execute).toHaveBeenCalledTimes(2);
-  });
-
-  it("atomically accepts one verified invitation and creates one membership", async () => {
-    const state = createDatabase([
-      [],
-      [{ email: "invited@example.com", email_verified: true }],
-      [{ id: "invite_one", organization_id: "org_one", role: "member" }],
-      [{ organization_id: "org_one" }],
-      [],
-      [{ organization_id: "org_one", workspace_id: "workspace_one" }],
-    ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
-
-    await expect(
-      authority.activatePendingInvitation({
-        email: "invited@example.com",
-        userId: "user_one",
-      }),
-    ).resolves.toBe("org_one");
-    expect(state.transaction).toHaveBeenCalledTimes(1);
-    expect(state.execute).toHaveBeenCalledTimes(6);
-  });
-
-  it("returns the existing organization on an idempotent activation retry", async () => {
-    const state = createDatabase([
-      [{ organization_id: "org_one", workspace_id: "workspace_one" }],
-    ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
-
-    await expect(
-      authority.activatePendingInvitation({
-        email: "invited@example.com",
-        userId: "user_one",
-      }),
-    ).resolves.toBe("org_one");
-    expect(state.execute).toHaveBeenCalledTimes(1);
-  });
-
-  it("fails closed when the persisted user email is not verified", async () => {
-    const state = createDatabase([
-      [],
-      [{ email: "invited@example.com", email_verified: false }],
-    ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
-
-    await expect(
-      authority.activatePendingInvitation({
-        email: "invited@example.com",
-        userId: "user_one",
-      }),
-    ).rejects.toThrow("Verified invited user identity changed.");
     expect(state.execute).toHaveBeenCalledTimes(2);
   });
 });

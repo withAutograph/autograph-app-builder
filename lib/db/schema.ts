@@ -30,7 +30,10 @@ export const user = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
-  (table) => [uniqueIndex("user_email_uidx").on(table.email)],
+  (table) => [
+    uniqueIndex("user_email_uidx").on(table.email),
+    uniqueIndex("user_email_lower_uidx").on(sql`lower(${table.email})`),
+  ],
 );
 
 export const session = pgTable(
@@ -98,6 +101,24 @@ export const member = pgTable(
     ),
     index("member_organization_id_idx").on(table.organizationId),
     index("member_user_id_idx").on(table.userId),
+  ],
+);
+
+export const personalWorkspace = pgTable(
+  "personal_workspace",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("personal_workspace_organization_id_uidx").on(
+      table.organizationId,
+    ),
   ],
 );
 

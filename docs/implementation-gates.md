@@ -12,6 +12,9 @@ fail-closed until the production identity and session gates below are complete.
 Better Auth Infrastructure is a post-migration operator surface, not workspace
 authority. Its fail-closed Starter dashboard configuration and activation order
 are defined in [Better Auth Infrastructure](better-auth-infrastructure.md).
+Verified GitHub and Vercel first-login provisioning, invitation precedence,
+account linking, and rollback are defined in
+[Self-serve onboarding](self-serve-onboarding.md).
 
 Local publication requires `APP_BUILDER_LOCAL_PUBLICATION=1` and an exact
 canonical checkout under `REPOSITORY_LOCAL_ROOTS`. Workflow V10 atomically owns

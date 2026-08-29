@@ -315,6 +315,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           githubClientSecret: "task-scoped-oauth-initialization",
           vercelClientId: "task-scoped-oauth-initialization",
           vercelClientSecret: "task-scoped-oauth-initialization",
+          selfServiceSignupEnabled: false,
         },
         database: drizzleAdapter(database, {
           provider: "pg",

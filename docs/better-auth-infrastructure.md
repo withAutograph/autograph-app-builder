@@ -49,7 +49,8 @@ retention MUST be re-read from the provider before external activation.
   revocation, invitation changes, and membership changes MUST be independently
   authorized and verified against the application database.
 - The dashboard is an operator surface, not an authentication fallback. GitHub
-  remains the only public sign-in provider.
+  and Vercel remain the only public sign-in providers. Personal workspace
+  provisioning follows the [self-serve onboarding contract](self-serve-onboarding.md).
 - If Infrastructure is unavailable, authentication and organization authority
   remain in the application database; operators lose the managed dashboard but
   the application MUST NOT silently weaken access checks.
