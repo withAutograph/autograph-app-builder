@@ -71,6 +71,13 @@
       "when": 1788069600000,
       "tag": "0010_better_auth_organizations",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788080400000,
+      "tag": "0011_self_service_onboarding",
+      "breakpoints": true
     }
   ]
 }

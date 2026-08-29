@@ -18,6 +18,7 @@ export const hostedStorageMigrationTags = [
   "0008_sandbox_execution_lease",
   "0009_builder_provider_integrations",
   "0010_better_auth_organizations",
+  "0011_self_service_onboarding",
 ] as const;
 
 const contractSourcePaths = [
@@ -32,6 +33,7 @@ const contractSourcePaths = [
   "lib/repository/postgres-github-installation-store.ts",
   "lib/integrations/postgres-vercel-installation.ts",
   "lib/integrations/vercel-installation.ts",
+  "lib/auth/postgres-organization-user-authority.ts",
 ] as const;
 
 export const hostedStorageExpectedColumns = [
@@ -333,6 +335,9 @@ export const hostedStorageExpectedColumns = [
   ["oauth_resource", "signing_algorithm", "text", false],
   ["oauth_resource", "signing_key_id", "text", false],
   ["oauth_resource", "updated_at", "timestamp with time zone", false],
+  ["personal_workspace", "created_at", "timestamp with time zone", true],
+  ["personal_workspace", "organization_id", "text", true],
+  ["personal_workspace", "user_id", "text", true],
   ["sandbox_execution_lease", "acquired_at", "timestamp with time zone", true],
   ["sandbox_execution_lease", "adapter_session_id", "text", true],
   ["sandbox_execution_lease", "audience", "text", true],
@@ -485,6 +490,8 @@ export const hostedStorageExpectedIndexes = [
   ["oauth_refresh_token", "oauth_refresh_token_user_id_idx"],
   ["oauth_resource", "oauth_resource_identifier_uidx"],
   ["oauth_resource", "oauth_resource_pkey"],
+  ["personal_workspace", "personal_workspace_organization_id_uidx"],
+  ["personal_workspace", "personal_workspace_pkey"],
   ["sandbox_execution_lease", "sandbox_execution_lease_orphan_idx"],
   ["sandbox_execution_lease", "sandbox_execution_lease_subject_active_idx"],
   ["sandbox_execution_lease", "sandbox_execution_lease_tenant_pk"],
@@ -493,6 +500,7 @@ export const hostedStorageExpectedIndexes = [
   ["session", "session_token_uidx"],
   ["session", "session_user_id_idx"],
   ["user", "user_email_uidx"],
+  ["user", "user_email_lower_uidx"],
   ["user", "user_pkey"],
   [
     "vercel_installation_authorization_state",
@@ -651,6 +659,9 @@ export const hostedStorageExpectedConstraints = [
   ["oauth_refresh_token", "oauth_refresh_token_session_id_fkey"],
   ["oauth_refresh_token", "oauth_refresh_token_user_id_fkey"],
   ["oauth_resource", "oauth_resource_pkey"],
+  ["personal_workspace", "personal_workspace_organization_id_fkey"],
+  ["personal_workspace", "personal_workspace_pkey"],
+  ["personal_workspace", "personal_workspace_user_id_fkey"],
   ["sandbox_execution_lease", "sandbox_execution_lease_epoch_check"],
   ["sandbox_execution_lease", "sandbox_execution_lease_policy_digest_check"],
   ["sandbox_execution_lease", "sandbox_execution_lease_release_check"],
@@ -762,6 +773,7 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
       (![
         "0009_builder_provider_integrations",
         "0010_better_auth_organizations",
+        "0011_self_service_onboarding",
       ].includes(migration.tag) &&
         /\b(?:UPDATE|INSERT\s+INTO)\b/iu.test(migration.content)) ||
       /\bALTER\b[\s\S]*\bDROP\b/iu.test(migration.content)

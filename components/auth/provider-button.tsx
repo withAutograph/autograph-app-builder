@@ -67,6 +67,7 @@ export function ProviderButton({
     mutationKey: authMutationKeys.signUp.all,
   });
   const isPending = signInMutating + signUpMutating > 0;
+  const isProviderPending = signInSocialPending || signInPopupPending;
 
   const handleSignIn = () => {
     const callbackURL = resolveAuthCallbackURL(
@@ -97,16 +98,18 @@ export function ProviderButton({
       className={cn("relative overflow-visible", className)}
       {...props}
     >
-      {signInSocialPending || signInPopupPending ? <Spinner /> : providerIcon}
+      {isProviderPending ? <Spinner /> : providerIcon}
 
-      {display === "full"
-        ? localization.auth.continueWith.replace(
-            "{{provider}}",
-            getProviderName(provider),
-          )
-        : display === "name"
-          ? getProviderName(provider)
-          : null}
+      {isProviderPending
+        ? "Setting up your workspace…"
+        : display === "full"
+          ? localization.auth.continueWith.replace(
+              "{{provider}}",
+              getProviderName(provider),
+            )
+          : display === "name"
+            ? getProviderName(provider)
+            : null}
 
       {display === "icon" && (
         <span className="sr-only">{getProviderName(provider)}</span>

@@ -54,7 +54,7 @@ describe("hosted storage read-only readiness", () => {
         maxConnections: 1,
       },
       migrations: {
-        count: 10,
+        count: 11,
         exactOrder: true,
         noPendingMigration: true,
         additiveOnly: true,
@@ -163,5 +163,23 @@ describe("hosted storage read-only readiness", () => {
       'providerRestorePointStatus: "not-proven" as const',
     );
     expect(contract).toContain("githubJournalExcludedFromTenantRetention");
+  });
+
+  it("fails closed on normalized-email collisions before adding personal workspaces", async () => {
+    const migration = await readFile(
+      "drizzle/0011_self_service_onboarding.sql",
+      "utf8",
+    );
+    expect(migration).toContain('GROUP BY lower("email")');
+    expect(migration).toContain(
+      "case-insensitive Better Auth user email collision",
+    );
+    expect(migration).toContain('SET "email" = lower("email")');
+    expect(migration).toContain('CREATE UNIQUE INDEX "user_email_lower_uidx"');
+    expect(migration).toContain('CREATE TABLE "personal_workspace"');
+    expect(migration).toContain('REFERENCES "user"("id") ON DELETE CASCADE');
+    expect(migration).toContain(
+      'REFERENCES "organization"("id") ON DELETE CASCADE',
+    );
   });
 });

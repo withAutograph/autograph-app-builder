@@ -27,6 +27,7 @@ export function getPreviewOAuthDeploymentAuth(
     {
       issuer: config.issuer,
       audience: config.resource,
+      selfServiceSignupEnabled: config.selfServiceSignupEnabled,
     },
   );
   deploymentAuth = createPreviewOAuthServer({

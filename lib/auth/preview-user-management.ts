@@ -3,10 +3,7 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { admin } from "better-auth/plugins/admin";
 import { organization } from "better-auth/plugins/organization";
 
-const invitationCallbackPaths = new Set([
-  "/callback/github",
-  "/callback/vercel",
-]);
+const identityCallbackPaths = new Set(["/callback/github", "/callback/vercel"]);
 
 const organizationAccess = createAccessControl({
   organization: ["update", "delete"],
@@ -32,46 +29,89 @@ const organizationRoles = {
   }),
 };
 
-export interface PreviewInvitedUser {
+export interface PreviewVerifiedUser {
   id: string;
   email: string;
   emailVerified: boolean;
 }
 
+export type OrganizationProvisioningFailure =
+  | "access-revoked"
+  | "signup-disabled"
+  | "verified-identity-required"
+  | "workspace-ambiguous"
+  | "workspace-setup-failed";
+
+export class OrganizationProvisioningError extends Error {
+  readonly reason: OrganizationProvisioningFailure;
+
+  constructor(reason: OrganizationProvisioningFailure, options?: ErrorOptions) {
+    super(reason, options);
+    this.name = "OrganizationProvisioningError";
+    this.reason = reason;
+  }
+}
+
+export interface EnsuredOrganization {
+  organizationId: string;
+  workspaceId: string;
+}
+
 /**
- * Atomic persistence boundary for the Better Auth organization tables.
- *
- * Implementations must treat zero or multiple pending invitations and zero or
- * multiple active memberships as `undefined`. Activating an invitation must
- * compare-and-set one pending invitation, create at most one member row, and
- * return the same organization for an idempotent retry.
+ * Transactional persistence boundary for server-owned Better Auth workspace
+ * provisioning. Implementations must lock the persisted user, validate one
+ * verified GitHub or Vercel account, prefer one exact invitation, and return
+ * one exact issuer/resource-bound membership.
  */
 export interface PreviewOrganizationUserAuthority {
-  pendingOrganizationForVerifiedEmail(input: {
-    email: string;
-  }): Promise<string | undefined>;
-  activatePendingInvitation(input: {
-    email: string;
+  ensureOrganizationForVerifiedUser(input: {
     userId: string;
-  }): Promise<string>;
-  activeOrganizationForUser(input: {
-    userId: string;
-  }): Promise<string | undefined>;
+  }): Promise<EnsuredOrganization>;
 }
 
-function accessDenied(message: string) {
+function identityUnavailable() {
   return APIError.from("FORBIDDEN", {
-    code: "AUTOGRAPH_INVITATION_REQUIRED",
-    message,
-  });
-}
-
-function organizationUnavailable() {
-  return APIError.from("FORBIDDEN", {
-    code: "AUTOGRAPH_WORKSPACE_UNAVAILABLE",
+    code: "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED",
     message:
-      "Your Autograph workspace is not available. Ask a workspace owner to review your access.",
+      "Your sign-in provider must share a verified email address before Autograph can set up your workspace.",
   });
+}
+
+function organizationError(cause: unknown) {
+  if (!(cause instanceof OrganizationProvisioningError)) {
+    return APIError.from("SERVICE_UNAVAILABLE", {
+      code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
+      message:
+        "We couldn’t finish setting up your workspace. Try signing in again.",
+    });
+  }
+  switch (cause.reason) {
+    case "access-revoked":
+      return APIError.from("FORBIDDEN", {
+        code: "AUTOGRAPH_WORKSPACE_ACCESS_REVOKED",
+        message:
+          "Your access to this Autograph workspace has been suspended or revoked.",
+      });
+    case "signup-disabled":
+      return APIError.from("FORBIDDEN", {
+        code: "AUTOGRAPH_SIGNUP_UNAVAILABLE",
+        message: "New Autograph workspaces are not available yet.",
+      });
+    case "verified-identity-required":
+      return identityUnavailable();
+    case "workspace-ambiguous":
+      return APIError.from("CONFLICT", {
+        code: "AUTOGRAPH_WORKSPACE_AMBIGUOUS",
+        message:
+          "We found more than one workspace for this account. Choose an existing workspace or contact support.",
+      });
+    case "workspace-setup-failed":
+      return APIError.from("SERVICE_UNAVAILABLE", {
+        code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
+        message:
+          "We couldn’t finish setting up your workspace. Try signing in again.",
+      });
+  }
 }
 
 export function createPreviewUserManagementLifecycle(
@@ -79,50 +119,33 @@ export function createPreviewUserManagementLifecycle(
 ) {
   return {
     async beforeUserCreate(
-      user: PreviewInvitedUser & Record<string, unknown>,
+      user: PreviewVerifiedUser & Record<string, unknown>,
       context: { path?: string } | null,
     ) {
-      if (!invitationCallbackPaths.has(context?.path ?? "")) return;
-      if (!user.emailVerified) {
-        throw accessDenied(
-          "GitHub must provide a verified email address before you can join Autograph.",
-        );
-      }
-      const organizationId =
-        await authority.pendingOrganizationForVerifiedEmail({
-          email: user.email.toLowerCase(),
-        });
-      if (organizationId === undefined) {
-        throw accessDenied(
-          "This GitHub account does not have an active Autograph invitation.",
-        );
-      }
-    },
-
-    async afterUserCreate(
-      user: PreviewInvitedUser & Record<string, unknown>,
-      context: { path?: string } | null,
-    ) {
-      if (!invitationCallbackPaths.has(context?.path ?? "")) return;
-      await authority.activatePendingInvitation({
-        email: user.email.toLowerCase(),
-        userId: user.id,
-      });
+      if (!identityCallbackPaths.has(context?.path ?? "")) return;
+      if (!user.emailVerified) throw identityUnavailable();
+      return {
+        data: {
+          ...user,
+          email: user.email.trim().toLowerCase(),
+        },
+      };
     },
 
     async beforeSessionCreate<T extends { userId: string }>(session: T) {
-      const activeOrganizationId = await authority.activeOrganizationForUser({
-        userId: session.userId,
-      });
-      if (activeOrganizationId === undefined) {
-        throw organizationUnavailable();
+      try {
+        const ensured = await authority.ensureOrganizationForVerifiedUser({
+          userId: session.userId,
+        });
+        return {
+          data: {
+            ...session,
+            activeOrganizationId: ensured.organizationId,
+          },
+        };
+      } catch (cause) {
+        throw organizationError(cause);
       }
-      return {
-        data: {
-          ...session,
-          activeOrganizationId,
-        },
-      };
     },
   };
 }
@@ -171,7 +194,7 @@ export function previewUserManagementPlugins(
       adminRoles: ["admin"],
     }),
     {
-      id: "autograph-preview-invited-user",
+      id: "autograph-self-serve-workspace",
       init() {
         return {
           options: {
@@ -179,7 +202,6 @@ export function previewUserManagementPlugins(
               user: {
                 create: {
                   before: lifecycle.beforeUserCreate,
-                  after: lifecycle.afterUserCreate,
                 },
               },
               session: {

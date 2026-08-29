@@ -2,7 +2,13 @@
 
 import { AuthPrompts, useAuth } from "@better-auth-ui/react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { ProviderButtons, type SocialLayout } from "./provider-buttons";
 
@@ -23,6 +29,10 @@ export function SignIn({ className, socialLayout }: SignInProps) {
         <CardTitle className="text-xl font-semibold">
           {localization.auth.signIn}
         </CardTitle>
+        <CardDescription>
+          Continue with GitHub or Vercel. We’ll set up your workspace
+          automatically.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {socialProviders && socialProviders.length > 0 ? (

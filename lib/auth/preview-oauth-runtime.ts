@@ -38,6 +38,11 @@ const databaseUrlSchema = z
     }
   }, "Preview OAuth requires PostgreSQL.");
 
+const selfServiceSignupEnvironmentSchema = z
+  .enum(["0", "1"])
+  .default("0")
+  .transform((value) => value === "1");
+
 const previewOAuthRuntimeConfigSchema = z
   .object({
     hostedAdapter: z.literal("1"),
@@ -70,6 +75,7 @@ const previewOAuthRuntimeConfigSchema = z
       .min(1)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
+    selfServiceSignupEnabled: z.boolean(),
   })
   .strict()
   .superRefine((config, context) => {
@@ -138,6 +144,9 @@ export function readPreviewOAuthRuntimeConfig(
     githubClientSecret: environment.GITHUB_CLIENT_SECRET,
     vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
     vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
+    selfServiceSignupEnabled: selfServiceSignupEnvironmentSchema.parse(
+      environment.SELF_SERVICE_SIGNUP_ENABLED,
+    ),
   });
 }
 
@@ -176,11 +185,33 @@ export function createPreviewOAuthServer(input: {
         clientId: config.githubClientId,
         clientSecret: config.githubClientSecret,
         disableSignUp: false,
+        overrideUserInfoOnSignIn: false,
+      },
+    },
+    user: {
+      validateUserInfo({ user, source }) {
+        const providerId = source.oauth?.providerId;
+        if (providerId === undefined) return;
+        if (
+          !new Set(["github", "vercel"]).has(providerId) ||
+          user.emailVerified !== true ||
+          typeof user.email !== "string" ||
+          user.email.trim().length === 0
+        ) {
+          return {
+            error: "verified_provider_identity_required",
+            errorDescription:
+              "Use GitHub or Vercel with a verified email address.",
+          };
+        }
       },
     },
     account: {
       accountLinking: {
-        enabled: false,
+        enabled: true,
+        disableImplicitLinking: false,
+        allowDifferentEmails: true,
+        updateUserInfoOnLink: false,
       },
     },
     session: {
@@ -198,14 +229,8 @@ export function createPreviewOAuthServer(input: {
     plugins: [
       ...previewUserManagementPlugins(
         input.userManagement ?? {
-          async pendingOrganizationForVerifiedEmail() {
-            return undefined;
-          },
-          async activatePendingInvitation() {
-            throw new Error("Preview invitation authority is unavailable.");
-          },
-          async activeOrganizationForUser() {
-            return undefined;
+          async ensureOrganizationForVerifiedUser() {
+            throw new Error("Preview organization authority is unavailable.");
           },
         },
       ),
@@ -246,6 +271,7 @@ export function createPreviewOAuthServer(input: {
             tokenEndpointAuth: { method: "client_secret_post" },
             scopes: ["openid", "email", "profile"],
             disableSignUp: false,
+            overrideUserInfo: false,
           },
         ],
       }),
