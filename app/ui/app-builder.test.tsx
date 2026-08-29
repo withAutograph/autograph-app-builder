@@ -215,7 +215,6 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilderComponent
         authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
         integrations={{
           ...integrationState,
           vercel: {
