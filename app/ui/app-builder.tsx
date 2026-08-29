@@ -44,6 +44,7 @@ import { SiQuickbooks, SiSage, SiSlack, SiXero } from "react-icons/si";
 
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
+import { authClient } from "../../lib/auth-client";
 
 type Theme = "system" | "light" | "dark";
 type Screen = "builder" | "handoff" | "ready";
@@ -394,9 +395,22 @@ function AccountMenu({
   user: UserSummary;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [isSigningOut, setIsSigningOut] = useState(false);
   useEffect(() => {
     menuRef.current?.focus();
   }, []);
+  async function signOut() {
+    setIsSigningOut(true);
+    const result = await authClient.signOut();
+    if (result.error) {
+      setIsSigningOut(false);
+      return;
+    }
+    close();
+    router.replace("/auth/sign-in");
+    router.refresh();
+  }
   return (
     <div
       className={styles.accountMenu}
@@ -453,12 +467,10 @@ function AccountMenu({
         <span>Docs</span>
         <BookOpen size={17} aria-hidden="true" />
       </span>
-      <form action="/api/auth/sign-out" method="post">
-        <button type="submit">
-          <span>Log Out</span>
-          <LogOut size={17} aria-hidden="true" />
-        </button>
-      </form>
+      <button type="button" disabled={isSigningOut} onClick={signOut}>
+        <span>{isSigningOut ? "Logging Out…" : "Log Out"}</span>
+        <LogOut size={17} aria-hidden="true" />
+      </button>
       <div className={styles.menuDivider} />
       <a className={styles.statusLink} href="/healthz">
         <span>All systems normal.</span>
