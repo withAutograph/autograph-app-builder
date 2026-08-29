@@ -93,4 +93,16 @@ describe("closed Eve worker environment", () => {
     installEveWorkerEnvelope(environment, envelope, appRoot);
     expect(environment.EVE_DEVELOPMENT_SANDBOX_RUN_ID).toBeUndefined();
   });
+
+  it("deletes an ambient body timeout when the envelope omits it", () => {
+    const envelope = captureEveWorkerEnvelope(
+      trustedSource({ WORKFLOW_LOCAL_BODY_TIMEOUT_MS: undefined }),
+      appRoot,
+    );
+    const environment: Record<string, string | undefined> = {
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile",
+    };
+    installEveWorkerEnvelope(environment, envelope, appRoot);
+    expect(environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS).toBeUndefined();
+  });
 });

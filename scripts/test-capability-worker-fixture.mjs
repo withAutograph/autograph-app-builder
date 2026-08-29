@@ -27,6 +27,7 @@ const gateAFields = [
 let nestedCapability = null;
 let nestedAppRoot = null;
 let nestedEveDev = null;
+let nestedWorkflowBodyTimeout = null;
 if (workerData?.spawnNested === true) {
   const { Worker } = await import("node:worker_threads");
   const nested = new Worker(new URL(import.meta.url));
@@ -37,6 +38,7 @@ if (workerData?.spawnNested === true) {
   nestedCapability = nestedResult.capability;
   nestedAppRoot = nestedResult.appRoot;
   nestedEveDev = nestedResult.eveDev;
+  nestedWorkflowBodyTimeout = nestedResult.workflowBodyTimeout;
   await nested.terminate();
 }
 
@@ -45,6 +47,7 @@ parentPort?.postMessage({
   appRoot: process.env.EVE_DEV_WORKER_APP_ROOT ?? null,
   eveDev: process.env.EVE_DEV ?? null,
   workflowBaseUrl: process.env.WORKFLOW_LOCAL_BASE_URL ?? null,
+  workflowBodyTimeout: process.env.WORKFLOW_LOCAL_BODY_TIMEOUT_MS ?? null,
   port: process.env.PORT ?? null,
   hasTransportSecret:
     process.env.EVE_DEV_WORKFLOW_TRANSPORT_SECRET !== undefined,
@@ -57,4 +60,5 @@ parentPort?.postMessage({
   nestedCapability,
   nestedAppRoot,
   nestedEveDev,
+  nestedWorkflowBodyTimeout,
 });
