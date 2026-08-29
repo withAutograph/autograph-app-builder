@@ -156,7 +156,7 @@ export default defineEval({
     t.succeeded();
     t.notEvent("input.requested");
     t.check(t.reply, includes("completed app changes are ready for review"));
-    t.check(t.reply, includes("Nothing has been published"));
+    t.check(t.reply, includes("draft pull request"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

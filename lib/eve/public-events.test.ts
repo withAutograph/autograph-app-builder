@@ -465,6 +465,43 @@ describe("installed Eve 0.43 projection", () => {
     ).toBe("failed");
   });
 
+  it.each(["apply_app_creation", "validate_app_creation", "accept_change_set"])(
+    "does not expose an unexpected internal %s approval",
+    (toolName) => {
+      const projected = projectInstalledEveEvent(
+        installedEvent({
+          type: "input.requested",
+          data: {
+            requests: [
+              {
+                requestId: `req_${toolName}`,
+                kind: "tool-approval",
+                prompt: "Raw internal prompt with private mechanics",
+                action: {
+                  kind: "tool-call",
+                  toolName,
+                  input: { privateValue: "not projected" },
+                },
+              },
+            ],
+          },
+        }),
+        4,
+      );
+      expect(projected).toEqual([
+        {
+          type: "error.public",
+          index: 4,
+          code: "confirmation_unavailable",
+          message: "I couldn't verify this action, so it was not run.",
+        },
+        { type: "status", index: 4, status: "failed" },
+      ]);
+      expect(JSON.stringify(projected)).not.toContain("private mechanics");
+      expect(JSON.stringify(projected)).not.toContain("not projected");
+    },
+  );
+
   it("fails closed without exposing a malformed receipt or raw arguments", () => {
     const requested = installedEvent({
       type: "input.requested",

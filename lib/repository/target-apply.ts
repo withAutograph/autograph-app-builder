@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
+import { hasTestCapability } from "../testing/test-capability";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
@@ -214,8 +215,11 @@ export async function materializeFreshApplyOverlay(input: {
   const dependencyRoot = dependencyCacheNodeModulesRoot(
     input.dependencyCacheContentDigest,
   );
+  const copyCommand = hasTestCapability("simulated-target")
+    ? `cp -R ${planningRoot} ${absoluteRoot}`
+    : `test -L ${planningRoot}/node_modules && test "$(readlink -- ${planningRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "${dependencyRoot}"`;
   const copy = await input.sandbox.run({
-    command: `test -L ${planningRoot}/node_modules && test "$(readlink -- ${planningRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "${dependencyRoot}"`,
+    command: copyCommand,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });

@@ -354,7 +354,93 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     if (plan.isError)
       return "A real project conflict prevents this product direction from becoming a reliable plan.";
-    return "I inferred **Vendor Onboarding** with app ID `vendor-onboarding`. I started with an operations review queue and an in-context vendor detail panel so reviewers can work exceptions quickly; tax-reportable vendors get a conditional Finance verification step. A usable visual prototype and validated implementation plan are ready for review.";
+    const planned = plan.output as { digest?: string } | undefined;
+    const application = toolResults.find(
+      ({ name }) => name === "apply_app_creation",
+    );
+    if (application === undefined) {
+      if (planned?.digest === undefined)
+        return "I couldn't safely prepare this product direction for review.";
+      return {
+        toolCalls: [
+          {
+            name: "apply_app_creation",
+            input: { expectedProposalDigest: planned.digest },
+          },
+        ],
+      };
+    }
+    if (application.isError)
+      return "I couldn't finish assembling this product direction for review.";
+    const applied = application.output as { digest?: string } | undefined;
+    const validation = toolResults.find(
+      ({ name }) => name === "validate_app_creation",
+    );
+    if (validation === undefined) {
+      if (applied?.digest === undefined)
+        return "I couldn't safely check the assembled app.";
+      return {
+        toolCalls: [
+          {
+            name: "validate_app_creation",
+            input: { expectedApplyDigest: applied.digest },
+          },
+        ],
+      };
+    }
+    if (validation.isError)
+      return "The assembled app needs another revision before it is ready to review.";
+    const validated = validation.output as { digest?: string } | undefined;
+    const changeSet = toolResults.find(
+      ({ name }) => name === "change_set_status",
+    );
+    if (changeSet === undefined) {
+      if (validated?.digest === undefined)
+        return "I couldn't safely prepare the completed app for review.";
+      return {
+        toolCalls: [
+          {
+            name: "change_set_status",
+            input: { expectedValidationDigest: validated.digest },
+          },
+        ],
+      };
+    }
+    if (changeSet.isError)
+      return "I couldn't prepare the completed app changes for review.";
+    const review = toolResults.find(({ name }) => name === "accept_change_set");
+    if (review === undefined) {
+      const changes = changeSet.output as
+        | {
+            digest?: string;
+            approvedPaths?: readonly string[];
+            changes?: readonly unknown[];
+          }
+        | undefined;
+      if (
+        changes?.digest === undefined ||
+        changes.approvedPaths === undefined ||
+        changes.changes === undefined
+      )
+        return "I couldn't safely prepare the completed app for review.";
+      return {
+        toolCalls: [
+          {
+            name: "accept_change_set",
+            input: {
+              changeSet: {
+                digest: changes.digest,
+                approvedPaths: changes.approvedPaths,
+                changes: changes.changes,
+              },
+            },
+          },
+        ],
+      };
+    }
+    if (review.isError)
+      return "I couldn't finish preparing the completed app for review.";
+    return "I inferred **Vendor Onboarding** with app ID `vendor-onboarding`. The interactive prototype now covers an operations review queue, an in-context vendor detail panel, and a conditional Finance verification step for tax-reportable vendors. The implementation plan and complete app changes passed their checks and are ready to review. If you want to continue, I can prepare a draft pull request for the repository.";
   }
   if (message.includes("record three prototype artifacts in parallel")) {
     const recorded = toolResults.filter(
@@ -617,13 +703,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       if (stale)
         return "The product plan changed, so I stopped before preparing the app.";
       if (status.phase === "apply_failed")
-        return "I couldn't finish preparing the app safely. Nothing was published.";
-      return "I couldn't safely prepare the app. Nothing was published.";
+        return "I couldn't finish preparing the app safely. The current plan remains available to review.";
+      return "I couldn't safely prepare the app. The current plan remains available to review.";
     }
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The prepared app is unchanged and ready for quality checks."
-      : "The app is assembled in a private preview and ready for quality checks. Nothing has been published.";
+      : "The app is assembled in a private preview and ready for quality checks.";
   }
   if (
     message.includes("record a replacement prototype artifact") ||
@@ -729,15 +815,15 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       if (stale)
         return "The app changed before checks could start, so I stopped safely.";
       if (status.phase === "validation_pending")
-        return "The app checks did not finish, so I stopped without publishing anything.";
+        return "The app checks did not finish, so the current preview still needs review.";
       if (status.phase === "validation_failed")
-        return "The app did not pass its quality checks. Nothing was published.";
-      return "I couldn't safely finish the app checks. Nothing was published.";
+        return "The app did not pass its quality checks and needs another revision.";
+      return "I couldn't safely finish the app checks. The current preview still needs review.";
     }
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The app remains unchanged and its quality checks are still passing."
-      : "The app passed its local quality checks and is ready for review. Nothing has been published.";
+      : "The app passed its local quality checks and is ready for review.";
   }
   if (
     message.includes("inspect the validated change set") ||
@@ -818,8 +904,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         : "I couldn't safely prepare the completed app changes for review.";
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
-      ? "The same completed app changes remain ready for review. Nothing has been published."
-      : "The completed app changes are ready for review. Nothing has been published.";
+      ? "The same completed app changes remain ready for review. If you want to continue, I can prepare a draft pull request for the repository."
+      : "The completed app changes are ready for review. If you want to continue, I can prepare a draft pull request for the repository.";
   }
   if (
     message.includes("inspect fresh repository bootstrap at ") ||

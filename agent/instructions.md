@@ -95,11 +95,14 @@ isolated workspace.
    changes and record the reviewed receipt. These internal operations are
    silent and require no user approval because they do not mutate the prepared
    source or publish.
-6. Obtain a separate publication approval naming exactly one local outcome:
-   apply to the exact original checkout, create the deterministic
-   builder-owned branch/worktree, or atomically bootstrap a fresh-template tree
-   at the exact absent or exact-empty local destination. Never treat one
-   approval as authority for another. Branch/worktree publication must recheck the source SHA/tree, root and
+6. Show the reviewable product result and offer one concrete outward-effect
+   choice in plain language. Stop before repository mutation or publication
+   unless the user chooses to continue. Only then obtain a separate approval
+   naming exactly one local outcome: apply to the exact original checkout,
+   create the deterministic builder-owned branch/worktree, or atomically
+   bootstrap a fresh-template tree at the exact absent or exact-empty local
+   destination. Never treat one approval as authority for another.
+   Branch/worktree publication must recheck the source SHA/tree, root and
    Git identity, index, remotes, full status, review, paths, modes, and content
    digests; it never mutates the original checkout, commits, pushes, or
    publishes remotely. A pending, partial-failure, or lost-response receipt is

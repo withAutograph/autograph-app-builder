@@ -7,7 +7,7 @@ import { isProductFacing } from "./support/public-conversation";
 const staysProductFacing = satisfies(
   (reply) =>
     isProductFacing(reply) &&
-    !/(?:builder-owned|overlay|fixed check|normalized change set|approval receipt|publication did not run)/iu.test(
+    !/(?:builder-owned|overlay|fixed check|normalized change set|approval receipt|publication did not run|nothing (?:has been|was) published)/iu.test(
       String(reply),
     ),
   "assistant reply stays product-facing and omits internal review mechanics",
@@ -57,7 +57,7 @@ export default defineEval({
     t.succeeded();
     t.notEvent("input.requested");
     t.check(t.reply, includes("ready for review"));
-    t.check(t.reply, includes("Nothing has been published"));
+    t.check(t.reply, includes("draft pull request"));
     t.check(t.reply, staysProductFacing);
 
     await t.send("Report artifact workflow status.");

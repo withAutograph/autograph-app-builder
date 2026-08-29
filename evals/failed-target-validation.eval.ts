@@ -23,7 +23,7 @@ export default defineEval({
     t.succeeded();
     t.notEvent("input.requested");
     t.check(t.reply, includes("did not pass its quality checks"));
-    t.check(t.reply, includes("Nothing was published"));
+    t.check(t.reply, includes("needs another revision"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

@@ -29,6 +29,12 @@ export type InternalEveEvent = {
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
+const silentInternalApprovalTools = new Set([
+  "accept_app_spec",
+  "apply_app_creation",
+  "validate_app_creation",
+  "accept_change_set",
+]);
 const unavailableConfirmationMessage =
   "I couldn't verify this action, so it was not run.";
 const maximumPrototypeBytes = 262_144;
@@ -289,7 +295,8 @@ function inputRequest(request: {
   const toolName = request.action?.toolName;
   if (
     request.kind === "tool-approval" &&
-    (toolName === "accept_app_spec" || toolName === "accept_change_set")
+    toolName !== undefined &&
+    silentInternalApprovalTools.has(toolName)
   )
     return undefined;
   const title =

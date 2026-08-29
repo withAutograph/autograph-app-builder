@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
 
+import { hasTestCapability } from "../testing/test-capability";
+
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import {
   supportedValidationCommands,
@@ -362,8 +364,11 @@ async function materializeValidationOverlay(input: {
   const dependencyRoot = dependencyCacheNodeModulesRoot(
     input.dependencyCacheContentDigest,
   );
+  const copyCommand = hasTestCapability("simulated-target")
+    ? `cp -R ${input.applyRoot} ${input.command.validationRoot}`
+    : `test -L ${input.applyRoot}/node_modules && test "$(readlink -- ${input.applyRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${input.applyRoot} ${input.command.validationRoot} && test -L ${input.command.validationRoot}/node_modules && test "$(readlink -- ${input.command.validationRoot}/node_modules)" = "${dependencyRoot}"`;
   const copy = await input.sandbox.run({
-    command: `test -L ${input.applyRoot}/node_modules && test "$(readlink -- ${input.applyRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${input.applyRoot} ${input.command.validationRoot} && test -L ${input.command.validationRoot}/node_modules && test "$(readlink -- ${input.command.validationRoot}/node_modules)" = "${dependencyRoot}"`,
+    command: copyCommand,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
   });

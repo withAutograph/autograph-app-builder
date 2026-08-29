@@ -21,7 +21,7 @@ export default defineEval({
     t.succeeded();
     t.notEvent("input.requested");
     t.check(t.reply, includes("couldn't finish preparing the app safely"));
-    t.check(t.reply, includes("Nothing was published"));
+    t.check(t.reply, includes("current plan remains available"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

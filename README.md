@@ -54,20 +54,20 @@ allowlisted fresh-template checkout:
 1. inspect the source with the versioned, non-executing V0 adapter;
 2. emit a canonical receipt binding source kind, exact SHA, eligibility,
    supported-template contract, and release-disabled state;
-3. for a fresh-template source, require a separate acquisition approval that
-   does not clone, copy, or create a destination repository;
-4. materialize that exact approved receipt at `/workspace/repository` inside the
+3. for a fresh-template source, automatically verify one exact acquisition
+   receipt without cloning, copying, or creating a destination repository;
+4. materialize that exact receipt at `/workspace/repository` inside the
    App Builder's isolated workspace; and
 5. persist the prepared phase in durable Eve state and expose a verified,
    read-only workspace-status receipt while unrestricted shell and file writes
    remain disabled;
-6. record and exactly read approval-bound prototype artifact receipts without
+6. automatically record and exactly read prototype artifact receipts without
    writing the target workspace; and
-7. accept a recorded AppSpec revision against that receipt; and
-8. after a distinct approval, verify and materialize the image-internal,
+7. silently record a complete AppSpec revision against that receipt; and
+8. automatically verify and materialize the image-internal,
    target-bound offline dependency closure only in the builder-owned planning
    overlay; and
-9. after another distinct approval, run only the fixed target identity and planning
+9. automatically run only the fixed target identity and planning
    commands against a builder-owned input overlay and record their strictly
    parsed, digest-bound receipts; and
 10. after a fresh readiness check, automatically invoke only the
@@ -179,18 +179,16 @@ bounded helpers have returned. Exact-empty publication retains the swapped-out
 empty inode as a receipt-bound tombstone rather than deleting it by path.
 
 GitHub source resolution, draft-PR proposal sealing, and publication use typed,
-installation-bound operations and closed V2 approval receipts. They remain
+installation-bound operations; outward publication uses a closed V2 approval
+receipt. They remain
 fail-closed unless the deployment composes the least-privilege adapter and
 durable proposal/receipt stores. A sealed proposal is also bound into the
 current workflow aggregate; publication rejects an older review, another
 session's source, or any changed proposal before provider mutation. A malformed
-receipt-bound approval batch becomes a public adapter failure rather than an
-actionable approval. Local AppSpec and change-set approvals instead expose a
-closed digest-only local subject derived from their exact tool input; they never
-project raw artifact content or changed-file payloads. An input-dependent Eve
-approval policy reads the current workflow first, so a missing or wrong-phase
-GitHub receipt is denied before Eve creates an approval request and cannot be
-reinterpreted as local. The shipped default runtime is still disabled until
+publication approval becomes a public adapter failure rather than an actionable
+request. Internal specification recording and change review never create public
+approval requests or project raw artifact content and changed-file payloads.
+The shipped default runtime is still disabled until
 that live deployment composition is installed.
 The skills do not authorize raw target commands, tokens, or shell fallbacks.
 
@@ -201,7 +199,7 @@ template manifest.
 
 ## Included surfaces
 
-- Eve `0.43.0` with durable sessions and human-in-the-loop approvals.
+- Eve `0.43.0` with durable sessions and human approval for outward effects.
 - The four app-creation skills: `create-app`, `design-app`,
   `plan-app-creation`, and `scaffold-app-workspace`.
 - A purpose-built supported-template eligibility adapter and canonical V3
@@ -215,11 +213,11 @@ template manifest.
   mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
   ```
 
-- An approval-gated, digest-bound isolated App Builder workspace tool.
+- An automatic, digest-bound isolated App Builder workspace tool.
 - Durable prepared-phase state plus a read-only workspace integrity tool.
-- Approval-bound, session-scoped prototype artifact receipts with exact-digest
+- Automatically recorded, session-scoped prototype artifact receipts with exact-digest
   readback and a content-free workflow-status receipt.
-- Approval-bound AppSpec acceptance, separate offline dependency preparation,
+- Silent internal AppSpec recording, offline dependency preparation,
   and fixed bounded target identity/planning commands. Strict receipts bind
   source commit and tree, workspace, toolchain, observed cache bytes, and artifact revision
   without writing the prepared target workspace.
@@ -405,13 +403,13 @@ Validate its server-only placement, exact bytes, and real offline target
 commands with `mise run test:hosted-sandbox`.
 Run `mise run hosted:artifact-prove-typed -- --image <exact-local-digest-ref>
 --source-root <exact-clean-checkout>` to combine that artifact proof with the
-approval-bound Eve workflow proof. It must terminate at `planned` and emits the
+silent Eve workflow proof. It must terminate at `planned` and emits the
 asserted called-tool and forbidden-tool trace.
 
 For local source access, set `REPOSITORY_LOCAL_ROOTS` to a platform-delimited
-allowlist of absolute roots. Fresh-template acquisition means approving one
-exact local checkout receipt; it never means cloning or creating a destination
-repository. A separately approved preparation copies the reviewed tree into the
+allowlist of absolute roots. Fresh-template acquisition resolves one exact local
+checkout receipt; it never means cloning or creating a destination repository.
+Automatic preparation copies the reviewed tree into the
 durable App Builder workspace; the source checkout is not mutated.
 
 To enable the branch/worktree publication outcome, pre-create a canonical

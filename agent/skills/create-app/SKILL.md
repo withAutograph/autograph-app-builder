@@ -66,11 +66,11 @@ missing operation with a raw shell command or generic file write.
    automatic redispatch.
 9. After checks pass, use `change_set_status` and `accept_change_set` internally
    to recompute the exact proposal and record the durable reviewed receipt.
-   Show the complete ordered product/code changes in plain language, then
-   request a separate
-   local-publication approval before applying the reviewed paths to a named
-   existing checkout. This does not create a commit, branch, draft pull
-   request, or other remote publication outcome.
+   Show the complete ordered product/code changes in plain language and offer
+   one concrete repository or draft-pull-request next step. Stop unless the
+   user chooses to continue. Only then request a separate effect-based approval
+   before applying the reviewed paths to a named existing checkout or
+   publishing them. One approval never authorizes another outcome.
    Keep internal execution mechanics and no-authority boilerplate out of the
    public conversation.
 
