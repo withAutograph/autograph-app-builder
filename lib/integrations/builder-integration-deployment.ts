@@ -1,4 +1,5 @@
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
+import type { PreviewOAuthMembershipAuthority } from "../auth/preview-oauth-contract";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import {
@@ -14,9 +15,25 @@ import {
 import { createPostgresVercelInstallationStore } from "./postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "./vercel-installation";
 
+export async function resolveBuilderWorkspaceId(input: {
+  workspaceId?: string;
+  membership: PreviewOAuthMembershipAuthority;
+  issuer: string;
+  audience: string;
+  ownerUserId: string;
+}) {
+  if (input.workspaceId) return input.workspaceId;
+  return input.membership.activeWorkspaceForUser({
+    issuer: input.issuer,
+    audience: input.audience,
+    ownerUserId: input.ownerUserId,
+  });
+}
+
 export async function loadBuilderIntegrationState(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   userId?: string;
+  workspaceId?: string;
   forceModels?: boolean;
 }): Promise<BuilderIntegrationState> {
   const modelsPromise = loadGatewayModels({
@@ -58,7 +75,9 @@ export async function loadBuilderIntegrationState(input: {
       issuer: preview.issuer,
       audience: preview.resource,
     });
-    workspaceId = await membership.activeWorkspaceForUser({
+    workspaceId = await resolveBuilderWorkspaceId({
+      workspaceId: input.workspaceId,
+      membership,
       issuer: preview.issuer,
       audience: preview.resource,
       ownerUserId: input.userId,

@@ -111,7 +111,10 @@ export async function ensurePreviewSessionOrganization(input: {
     }
   }
 
-  return current.user;
+  return {
+    user: current.user,
+    organization: ensured,
+  };
 }
 
 export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
