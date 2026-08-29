@@ -158,6 +158,11 @@ describe("offline dependency cache", () => {
       workingDirectory: "/workspace",
       abortSignal: expect.any(AbortSignal),
     });
+    expect(run).toHaveBeenNthCalledWith(2, {
+      command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && sha256sum -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}`,
+      workingDirectory: "/workspace",
+      abortSignal: expect.any(AbortSignal),
+    });
     expect(run).toHaveBeenNthCalledWith(
       4,
       expect.objectContaining({

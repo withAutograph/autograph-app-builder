@@ -153,7 +153,7 @@ function dependencyCachePaths(
   return {
     manifest: `${root}/manifest.json`,
     archive: `${root}/node-modules.tar.gz`,
-    cargoArchive: `${root}/cargo-home.tar.gz`,
+    cargoArchive: `${root}/cargo-closure.tar.gz`,
   };
 }
 
