@@ -499,8 +499,8 @@ export const hostedStorageExpectedIndexes = [
   ["session", "session_pkey"],
   ["session", "session_token_uidx"],
   ["session", "session_user_id_idx"],
-  ["user", "user_email_uidx"],
   ["user", "user_email_lower_uidx"],
+  ["user", "user_email_uidx"],
   ["user", "user_pkey"],
   [
     "vercel_installation_authorization_state",

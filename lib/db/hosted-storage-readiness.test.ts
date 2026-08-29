@@ -38,6 +38,23 @@ async function exactReadBack() {
 }
 
 describe("hosted storage read-only readiness", () => {
+  it("keeps managed schema expectations in database read-back order", () => {
+    for (const rows of [
+      hostedStorageExpectedColumns,
+      hostedStorageExpectedIndexes,
+      hostedStorageExpectedConstraints,
+    ]) {
+      expect(rows).toEqual(
+        [...rows].sort(([leftTable, leftName], [rightTable, rightName]) => {
+          if (leftTable !== rightTable) {
+            return leftTable < rightTable ? -1 : 1;
+          }
+          return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
+        }),
+      );
+    }
+  });
+
   it("emits one sanitized receipt for the exact applied schema", async () => {
     const receipt = await verifyHostedStorageReadBack({
       repositoryRoot: process.cwd(),
