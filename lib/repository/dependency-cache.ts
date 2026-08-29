@@ -12,6 +12,8 @@ export const ARRUSTED_TARGET_SHA = "8bdeb7667a0f0cd2305fe60e6a0237620c20cf41";
 export const ARRUSTED_TARGET_TREE = "5df26996ea5259916af7a81bff09ca792874f095";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
+export const ARRUSTED_PATH_TO_REGEXP_VERSION = "8.4.2";
+export const ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION = "6.3.0";
 export const ARRUSTED_APP_VALIDATION_SHA256 =
   "11b090ccc6a41ff7e98eed17b58b8d493f594da60e4e30c1f1f3b5c854fc3a18";
 
@@ -319,6 +321,20 @@ export async function materializeOfflineDependencies(input: {
   }
   if (packageVersion !== ARRUSTED_MICROFRONTENDS_VERSION)
     throw new Error("The required offline dependency closure drifted.");
+  if (!fixtureDependencyCacheEnabled(environment)) {
+    const resolution = await input.sandbox.run({
+      command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
+      workingDirectory: `/workspace/${root}/packages/platform-microfrontends`,
+      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+    });
+    boundedOutput(
+      resolution.stdout,
+      resolution.stderr,
+      "Offline dependency resolution",
+    );
+    if (resolution.exitCode !== 0)
+      throw new Error("The required offline dependency closure is incomplete.");
+  }
   return { ...observed, planningRoot: `/workspace/${root}` };
 }
 

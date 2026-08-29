@@ -77,7 +77,9 @@ RUN set -eux; \
     test "$(bun --version)" = "1.3.14"; \
     test "$(bun -e 'console.log(require("./node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"; \
     cd packages/platform-microfrontends; \
-    bun -e 'const { match } = require("path-to-regexp"); if (typeof match !== "function") process.exit(1)'
+    test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "8.4.2"; \
+    test "$(bun -e 'console.log(require("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json").version)')" = "6.3.0"; \
+    bun -e 'const { match } = require("path-to-regexp"); if (match("/vendor")("/vendor")?.path !== "/vendor") process.exit(1)'
 
 RUN set -eux; \
     install -d /opt/app-builder/dependency-cache; \

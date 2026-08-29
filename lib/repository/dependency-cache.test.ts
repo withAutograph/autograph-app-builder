@@ -6,6 +6,9 @@ import type { SandboxSession } from "eve/sandbox";
 
 import {
   ARRUSTED_APP_VALIDATION_SHA256,
+  ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
+  ARRUSTED_MICROFRONTENDS_VERSION,
+  ARRUSTED_PATH_TO_REGEXP_VERSION,
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
@@ -62,6 +65,7 @@ function sandboxFixture(inputManifest: unknown = manifest) {
       stderr: "",
     })
     .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   const sandbox = {
     run,
@@ -161,6 +165,18 @@ describe("offline dependency cache", () => {
         command: expect.stringContaining("--no-overwrite-dir"),
       }),
     );
+    expect(run).toHaveBeenNthCalledWith(5, {
+      command: expect.stringContaining('const {match}=require("path-to-regexp")'),
+      workingDirectory: `/workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/packages/platform-microfrontends`,
+      abortSignal: expect.any(AbortSignal),
+    });
+    const resolutionCommand = run.mock.calls[4]?.[0].command as string;
+    expect(resolutionCommand).toContain(ARRUSTED_PATH_TO_REGEXP_VERSION);
+    expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
+    expect(resolutionCommand).toContain(
+      ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
+    );
+    expect(resolutionCommand).toContain('result?.path!=="/vendor"');
     expect(run.mock.calls[3]?.[0]).toEqual(
       expect.objectContaining({
         command: expect.stringContaining(
@@ -194,7 +210,10 @@ describe("offline dependency cache", () => {
     );
     expect(dockerfile).toContain("cd packages/platform-microfrontends;");
     expect(dockerfile).toContain(
-      'bun -e \'const { match } = require("path-to-regexp"); if (typeof match !== "function") process.exit(1)\'',
+      `test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "${ARRUSTED_PATH_TO_REGEXP_VERSION}"`,
+    );
+    expect(dockerfile).toContain(
+      `test "$(bun -e 'console.log(require("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json").version)')" = "${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}"`,
     );
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
