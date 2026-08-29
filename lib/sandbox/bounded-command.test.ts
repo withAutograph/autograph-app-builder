@@ -84,13 +84,14 @@ describe("bounded sandbox command", () => {
       "ulimit -n",
       "ulimit -u",
       "setsid bash",
-      "bun -e",
+      "node -e",
       "sandbox_workspace_quota_exceeded",
       'wait "$monitor"',
     ])
       expect(command).toContain(required);
     expect(command).toContain("ulimit -f 131072");
-    expect(command.match(/bun -e/g)).toHaveLength(1);
+    expect(command.match(/node -e/g)).toHaveLength(1);
+    expect(command).not.toContain("bun -e");
     for (const repeatedProcess of [
       "du -sx",
       "find /workspace",
