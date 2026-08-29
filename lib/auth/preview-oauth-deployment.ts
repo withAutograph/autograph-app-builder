@@ -1,12 +1,12 @@
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import * as databaseSchema from "../db/schema";
-import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
   createPreviewOAuthServer,
   readPreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
+import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 
 let deploymentAuth: ReturnType<typeof createPreviewOAuthServer> | undefined;
 
@@ -22,6 +22,13 @@ export function getPreviewOAuthDeploymentAuth(
   if (deploymentAuth !== undefined) return deploymentAuth;
   const config = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(config.databaseUrl);
+  const organizationAuthority = createPostgresPreviewOrganizationAuthority(
+    database,
+    {
+      issuer: config.issuer,
+      audience: config.resource,
+    },
+  );
   deploymentAuth = createPreviewOAuthServer({
     config,
     database: drizzleAdapter(database, {
@@ -29,7 +36,16 @@ export function getPreviewOAuthDeploymentAuth(
       schema: databaseSchema,
       transaction: true,
     }),
-    membership: createPostgresOAuthMembershipAuthority(database),
+    membership: organizationAuthority,
+    userManagement: organizationAuthority,
+    infrastructure: {
+      environment: {
+        BETTER_AUTH_INFRASTRUCTURE: environment.BETTER_AUTH_INFRASTRUCTURE,
+        BETTER_AUTH_API_KEY: environment.BETTER_AUTH_API_KEY,
+      },
+      organizationAuthorityReady:
+        environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY === "verified-v1",
+    },
   });
   return deploymentAuth;
 }

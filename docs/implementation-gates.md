@@ -9,6 +9,10 @@ operations remain fail-closed until their typed tools and receipts land; the
 generic shell and writer remain disabled. Hosted use also remains
 fail-closed until the production identity and session gates below are complete.
 
+Better Auth Infrastructure is a post-migration operator surface, not workspace
+authority. Its fail-closed Starter dashboard configuration and activation order
+are defined in [Better Auth Infrastructure](better-auth-infrastructure.md).
+
 Local publication requires `APP_BUILDER_LOCAL_PUBLICATION=1` and an exact
 canonical checkout under `REPOSITORY_LOCAL_ROOTS`. Workflow V10 atomically owns
 the exact pending and terminal publication attempt. The builder applies one
@@ -318,7 +322,7 @@ Before enabling real MCP mutations:
    and must exactly equal `VERCEL_ENV`. Missing, Development, wildcard, and
    mismatched values fail closed. This source support is not Production
    activation evidence.
-4. Establish an approved Preview database restore point, then apply the five
+4. Establish an approved Preview database restore point, then apply all
    checked-in additive Drizzle-derived migrations with
    `mise run database:migrate`. Run `mise run hosted:storage-verify` afterward;
    it uses a read-only transaction to require the exact migration order,

@@ -13,6 +13,14 @@ import {
 } from "./preview-oauth-contract";
 import { fetchPreviewClientMetadataResource } from "./preview-cimd-transport";
 import {
+  previewUserManagementPlugins,
+  type PreviewOrganizationUserAuthority,
+} from "./preview-user-management";
+import {
+  resolveBetterAuthInfrastructure,
+  type BetterAuthInfrastructureEnvironment,
+} from "./better-auth-infrastructure";
+import {
   hostedDeploymentEnvironmentSchema,
   readHostedDeploymentEnvironment,
 } from "../hosted/deployment-environment";
@@ -125,10 +133,21 @@ export function createPreviewOAuthServer(input: {
   config: PreviewOAuthRuntimeConfig;
   database: NonNullable<BetterAuthOptions["database"]>;
   membership: PreviewOAuthMembershipAuthority;
+  userManagement?: PreviewOrganizationUserAuthority;
+  infrastructure?: {
+    environment: BetterAuthInfrastructureEnvironment;
+    organizationAuthorityReady: boolean;
+  };
   fetchClientMetadata?: typeof fetchPreviewClientMetadataResource;
 }) {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
   const resourceOrigin = new URL(config.resource).origin;
+  const infrastructure = resolveBetterAuthInfrastructure(
+    input.infrastructure ?? {
+      environment: {},
+      organizationAuthorityReady: false,
+    },
+  );
   return betterAuth({
     appName:
       config.environment === "preview"
@@ -144,7 +163,7 @@ export function createPreviewOAuthServer(input: {
       github: {
         clientId: config.githubClientId,
         clientSecret: config.githubClientSecret,
-        disableSignUp: true,
+        disableSignUp: false,
       },
     },
     account: {
@@ -165,6 +184,20 @@ export function createPreviewOAuthServer(input: {
       useSecureCookies: true,
     },
     plugins: [
+      ...previewUserManagementPlugins(
+        input.userManagement ?? {
+          async pendingOrganizationForVerifiedEmail() {
+            return undefined;
+          },
+          async activatePendingInvitation() {
+            throw new Error("Preview invitation authority is unavailable.");
+          },
+          async activeOrganizationForUser() {
+            return undefined;
+          },
+        },
+      ),
+      ...infrastructure.plugins,
       jwt({
         jwks: {
           keyPairConfig: { alg: "ES256" },

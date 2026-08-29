@@ -222,6 +222,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0009_builder_provider_integrations",
           breakpoints: true,
         },
+        {
+          idx: 9,
+          version: "7",
+          when: 1_788_069_600_000,
+          tag: "0010_better_auth_organizations",
+          breakpoints: true,
+        },
       ],
     });
   });

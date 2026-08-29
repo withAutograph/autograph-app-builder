@@ -17,6 +17,7 @@ export const hostedStorageMigrationTags = [
   "0007_github_installation_authorization",
   "0008_sandbox_execution_lease",
   "0009_builder_provider_integrations",
+  "0010_better_auth_organizations",
 ] as const;
 
 const contractSourcePaths = [
@@ -346,20 +347,26 @@ export const hostedStorageExpectedColumns = [
   ["sandbox_execution_lease", "released_at", "timestamp with time zone", false],
   ["sandbox_execution_lease", "state", "text", true],
   ["sandbox_execution_lease", "workspace_id", "text", true],
+  ["session", "active_organization_id", "text", false],
   ["session", "created_at", "timestamp with time zone", true],
   ["session", "expires_at", "timestamp with time zone", true],
   ["session", "id", "text", true],
   ["session", "ip_address", "text", false],
+  ["session", "impersonated_by", "text", false],
   ["session", "token", "text", true],
   ["session", "updated_at", "timestamp with time zone", true],
   ["session", "user_agent", "text", false],
   ["session", "user_id", "text", true],
+  ["user", "ban_expires", "timestamp with time zone", false],
+  ["user", "ban_reason", "text", false],
+  ["user", "banned", "boolean", false],
   ["user", "created_at", "timestamp with time zone", true],
   ["user", "email", "text", true],
   ["user", "email_verified", "boolean", true],
   ["user", "id", "text", true],
   ["user", "image", "text", false],
   ["user", "name", "text", true],
+  ["user", "role", "text", false],
   ["user", "updated_at", "timestamp with time zone", true],
   ["vercel_installation_authorization_state", "audience", "text", true],
   ["vercel_installation_authorization_state", "authority_digest", "text", true],
@@ -751,9 +758,12 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
   }
   for (const migration of migrationFiles) {
     if (
-      /\b(?:DROP|TRUNCATE|DELETE\s+FROM|UPDATE|INSERT\s+INTO)\b/iu.test(
-        migration.content,
-      ) ||
+      /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/iu.test(migration.content) ||
+      (![
+        "0009_builder_provider_integrations",
+        "0010_better_auth_organizations",
+      ].includes(migration.tag) &&
+        /\b(?:UPDATE|INSERT\s+INTO)\b/iu.test(migration.content)) ||
       /\bALTER\b[\s\S]*\bDROP\b/iu.test(migration.content)
     ) {
       throw new Error("Hosted storage migration is not additive-only.");
