@@ -13,6 +13,7 @@ import {
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
+  DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
   assertExactDependencyTargetBinding,
   inspectDependencyCache,
   materializeOfflineDependencies,
@@ -32,6 +33,8 @@ const manifest = {
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     bunLockSha256:
       "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    cargoLockSha256:
+      "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
     appIdentitySha256:
       "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
     appContractSha256:
@@ -49,6 +52,9 @@ const manifest = {
     archivePath: DEPENDENCY_CACHE_ARCHIVE_PATH,
     archiveSha256: archiveDigest,
     archiveBytes: 123,
+    cargoArchivePath: DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
+    cargoArchiveSha256: "c".repeat(64),
+    cargoArchiveBytes: 456,
   },
 } as const;
 
@@ -62,7 +68,7 @@ function sandboxFixture(inputManifest: unknown = manifest) {
     })
     .mockResolvedValueOnce({
       exitCode: 0,
-      stdout: `${archiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n123\n`,
+      stdout: `${archiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n123\n${"c".repeat(64)}  ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}\n456\n`,
       stderr: "",
     })
     .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
@@ -193,8 +199,9 @@ describe("offline dependency cache", () => {
     expect(rustCommand).toContain("MISE_EXEC_AUTO_INSTALL=false");
     expect(rustCommand).toContain("MISE_TASK_RUN_AUTO_INSTALL=false");
     expect(rustCommand).toContain("mise --env app-builder exec --no-deps");
+    expect(rustCommand).toContain("CARGO_NET_OFFLINE=true");
     expect(rustCommand).toContain(
-      "cargo metadata --no-deps --format-version 1",
+      "cargo metadata --format-version 1 --locked --all-features",
     );
     expect(run.mock.calls[3]?.[0]).toEqual(
       expect.objectContaining({
@@ -227,6 +234,14 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
+    expect(dockerfile).toContain(
+      `ARG CARGO_LOCK_SHA256=${manifest.target.cargoLockSha256}`,
+    );
+    expect(dockerfile).toContain(
+      "cargo vendor --locked --versioned-dirs /opt/app-builder/cargo/vendor",
+    );
+    expect(dockerfile).toContain("[net]\\noffline = true");
+    expect(dockerfile).toContain("cargo-home.tar.gz");
     expect(dockerfile).toContain("cd packages/platform-microfrontends;");
     expect(dockerfile).toContain(
       `test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "${ARRUSTED_PATH_TO_REGEXP_VERSION}"`,
@@ -242,7 +257,10 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("RUSTUP_TOOLCHAIN=1.97.1");
     expect(dockerfile).toContain('mise install "rust@${RUST_VERSION}"');
     expect(dockerfile).toContain(
-      "chmod -R a-w,a+rX /opt/app-builder/cargo /opt/app-builder/rustup",
+      "chmod -R a-w,a+rX /opt/app-builder/rustup",
+    );
+    expect(dockerfile).toContain(
+      "chmod -R a-w,a+rX /opt/app-builder/cargo",
     );
     expect(dockerfile).toContain(
       `mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`,

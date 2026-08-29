@@ -45,7 +45,7 @@ RUN set -eux; \
     mise install "rust@${RUST_VERSION}"; \
     mise exec "rust@${RUST_VERSION}" -- rustc --version | grep -E '^rustc 1[.]97[.]1 '; \
     mise exec "rust@${RUST_VERSION}" -- cargo --version | grep -E '^cargo 1[.]97[.]1 '; \
-    chmod -R a-w,a+rX /opt/app-builder/cargo /opt/app-builder/rustup \
+    chmod -R a-w,a+rX /opt/app-builder/rustup \
       /opt/app-builder/mise/installs/rust/${RUST_VERSION}
 
 RUN set -eux; \
@@ -60,6 +60,7 @@ ARG TARGET_TREE=5df26996ea5259916af7a81bff09ca792874f095
 ARG MISE_CONFIG_SHA256=be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8
 ARG MISE_LOCK_SHA256=415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462
 ARG BUN_LOCK_SHA256=e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0
+ARG CARGO_LOCK_SHA256=8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb
 ARG APP_IDENTITY_SHA256=10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c
 ARG APP_CONTRACT_SHA256=03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e
 ARG APP_VALIDATION_SHA256=11b090ccc6a41ff7e98eed17b58b8d493f594da60e4e30c1f1f3b5c854fc3a18
@@ -75,6 +76,7 @@ RUN set -eux; \
     echo "${MISE_CONFIG_SHA256}  /tmp/arrusted-target/.config/mise/config.toml" | sha256sum --check --strict; \
     echo "${MISE_LOCK_SHA256}  /tmp/arrusted-target/.config/mise/mise.lock" | sha256sum --check --strict; \
     echo "${BUN_LOCK_SHA256}  /tmp/arrusted-target/bun.lock" | sha256sum --check --strict; \
+    echo "${CARGO_LOCK_SHA256}  /tmp/arrusted-target/Cargo.lock" | sha256sum --check --strict; \
     echo "${APP_IDENTITY_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-identity.ts" | sha256sum --check --strict; \
     echo "${APP_CONTRACT_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-contract.ts" | sha256sum --check --strict; \
     echo "${APP_VALIDATION_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-validation.ts" | sha256sum --check --strict; \
@@ -93,13 +95,28 @@ RUN set -eux; \
     bun -e 'const { match } = require("path-to-regexp"); if (match("/vendor")("/vendor")?.path !== "/vendor") process.exit(1)'
 
 RUN set -eux; \
+    cd /tmp/arrusted-target; \
+    mise exec "rust@${RUST_VERSION}" -- \
+      cargo vendor --locked --versioned-dirs /opt/app-builder/cargo/vendor \
+      > /opt/app-builder/cargo/config.toml; \
+    printf '\n[net]\noffline = true\n' >> /opt/app-builder/cargo/config.toml; \
+    CARGO_NET_OFFLINE=true mise exec "rust@${RUST_VERSION}" -- \
+      cargo metadata --format-version 1 --locked --all-features > /tmp/cargo-metadata.json
+
+RUN set -eux; \
     install -d /opt/app-builder/dependency-cache; \
     tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
       --format=posix --pax-option=delete=atime,delete=ctime --create \
       --file - --directory /tmp/arrusted-target node_modules \
       | gzip --no-name --best > /opt/app-builder/dependency-cache/node-modules.tar.gz; \
+    tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+      --format=posix --pax-option=delete=atime,delete=ctime --create \
+      --file - --directory /opt/app-builder cargo \
+      | gzip --no-name --best > /opt/app-builder/dependency-cache/cargo-home.tar.gz; \
     archive_sha="$(sha256sum /opt/app-builder/dependency-cache/node-modules.tar.gz | cut -d' ' -f1)"; \
     archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/node-modules.tar.gz)"; \
+    cargo_archive_sha="$(sha256sum /opt/app-builder/dependency-cache/cargo-home.tar.gz | cut -d' ' -f1)"; \
+    cargo_archive_bytes="$(stat --format='%s' /opt/app-builder/dependency-cache/cargo-home.tar.gz)"; \
     printf '%s\n' \
       '{' \
       '  "version": 1,' \
@@ -111,6 +128,7 @@ RUN set -eux; \
       "    \"miseConfigSha256\": \"${MISE_CONFIG_SHA256}\"," \
       "    \"miseLockSha256\": \"${MISE_LOCK_SHA256}\"," \
       "    \"bunLockSha256\": \"${BUN_LOCK_SHA256}\"," \
+      "    \"cargoLockSha256\": \"${CARGO_LOCK_SHA256}\"," \
       "    \"appIdentitySha256\": \"${APP_IDENTITY_SHA256}\"," \
       "    \"appContractSha256\": \"${APP_CONTRACT_SHA256}\"," \
       "    \"appValidationSha256\": \"${APP_VALIDATION_SHA256}\"," \
@@ -123,11 +141,15 @@ RUN set -eux; \
       '    "version": "2.4.0",' \
       '    "archivePath": "/opt/app-builder/dependency-cache/node-modules.tar.gz",' \
       "    \"archiveSha256\": \"${archive_sha}\"," \
-      "    \"archiveBytes\": ${archive_bytes}" \
+      "    \"archiveBytes\": ${archive_bytes}," \
+      '    "cargoArchivePath": "/opt/app-builder/dependency-cache/cargo-home.tar.gz",' \
+      "    \"cargoArchiveSha256\": \"${cargo_archive_sha}\"," \
+      "    \"cargoArchiveBytes\": ${cargo_archive_bytes}" \
       '  }' \
       '}' > /opt/app-builder/dependency-cache/manifest.json; \
     chmod 0444 /opt/app-builder/dependency-cache/manifest.json \
-      /opt/app-builder/dependency-cache/node-modules.tar.gz; \
+      /opt/app-builder/dependency-cache/node-modules.tar.gz \
+      /opt/app-builder/dependency-cache/cargo-home.tar.gz; \
     chmod 0555 /opt/app-builder/dependency-cache
 
 FROM toolchain
@@ -139,6 +161,12 @@ LABEL org.opencontainers.image.revision="${APP_BUILDER_REVISION}" \
 
 COPY --from=dependency-cache --chown=root:root /opt/app-builder/dependency-cache \
   /opt/app-builder/dependency-cache
+
+RUN set -eux; \
+    rm -rf /opt/app-builder/cargo; \
+    tar --extract --gzip --file /opt/app-builder/dependency-cache/cargo-home.tar.gz \
+      --directory /opt/app-builder --no-same-owner --no-same-permissions; \
+    chmod -R a-w,a+rX /opt/app-builder/cargo
 
 USER vercel-sandbox
 

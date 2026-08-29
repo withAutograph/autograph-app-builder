@@ -183,7 +183,7 @@ export function createExactImageProvenance(
     a.localeCompare(b),
   );
   if (
-    targetFileEntries.length !== 8 ||
+    targetFileEntries.length !== 9 ||
     targetFileEntries.some(([, digest]) => !sha256.test(digest))
   )
     throw new Error("The exact target-file digest set is incomplete.");

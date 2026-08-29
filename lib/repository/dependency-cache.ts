@@ -22,6 +22,8 @@ export const DEPENDENCY_CACHE_MANIFEST_PATH =
   "/opt/app-builder/dependency-cache/manifest.json";
 export const DEPENDENCY_CACHE_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/node-modules.tar.gz";
+export const DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH =
+  "/opt/app-builder/dependency-cache/cargo-home.tar.gz";
 export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
 export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
@@ -44,6 +46,9 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     ),
     bunLockSha256: z.literal(
       "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    ),
+    cargoLockSha256: z.literal(
+      "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
     ),
     appIdentitySha256: z.literal(
       "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
@@ -69,6 +74,9 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     archivePath: z.literal(DEPENDENCY_CACHE_ARCHIVE_PATH),
     archiveSha256: sha256Digest,
     archiveBytes: z.number().int().positive(),
+    cargoArchivePath: z.literal(DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH),
+    cargoArchiveSha256: sha256Digest,
+    cargoArchiveBytes: z.number().int().positive(),
   }),
 });
 
@@ -145,6 +153,7 @@ function dependencyCachePaths(
   return {
     manifest: `${root}/manifest.json`,
     archive: `${root}/node-modules.tar.gz`,
+    cargoArchive: `${root}/cargo-home.tar.gz`,
   };
 }
 
@@ -175,6 +184,8 @@ function fixtureManifest(
         "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
       bunLockSha256:
         "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+      cargoLockSha256:
+        "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
       appIdentitySha256:
         "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
       appContractSha256:
@@ -195,6 +206,9 @@ function fixtureManifest(
       archivePath: DEPENDENCY_CACHE_ARCHIVE_PATH,
       archiveSha256: "2".repeat(64),
       archiveBytes: 1,
+      cargoArchivePath: DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
+      cargoArchiveSha256: "3".repeat(64),
+      cargoArchiveBytes: 1,
     },
   };
 }
@@ -239,7 +253,7 @@ export async function inspectDependencyCache(
     throw new Error("The fixed offline dependency cache manifest drifted.");
 
   const archiveResult = await sandbox.run({
-    command: `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive}`,
+    command: `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive} && sha256sum -- ${cachePaths.cargoArchive} && stat --format='%s' -- ${cachePaths.cargoArchive}`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
@@ -250,14 +264,21 @@ export async function inspectDependencyCache(
   );
   if (archiveResult.exitCode !== 0)
     throw new Error("The fixed offline dependency cache archive is missing.");
-  const [checksumLine, sizeLine] = archiveResult.stdout.trim().split("\n");
+  const [checksumLine, sizeLine, cargoChecksumLine, cargoSizeLine] =
+    archiveResult.stdout.trim().split("\n");
   const observedDigest = checksumLine?.trim().split(/\s+/u)[0];
   const observedBytes = Number(sizeLine);
+  const observedCargoDigest = cargoChecksumLine?.trim().split(/\s+/u)[0];
+  const observedCargoBytes = Number(cargoSizeLine);
   if (
     observedDigest === undefined ||
     !sha256Digest.safeParse(observedDigest).success ||
     observedDigest !== validated.data.closure.archiveSha256 ||
-    observedBytes !== validated.data.closure.archiveBytes
+    observedBytes !== validated.data.closure.archiveBytes ||
+    observedCargoDigest === undefined ||
+    !sha256Digest.safeParse(observedCargoDigest).success ||
+    observedCargoDigest !== validated.data.closure.cargoArchiveSha256 ||
+    observedCargoBytes !== validated.data.closure.cargoArchiveBytes
   )
     throw new Error("The fixed offline dependency cache archive drifted.");
 
@@ -340,7 +361,7 @@ export async function materializeOfflineDependencies(input: {
     if (resolution.exitCode !== 0)
       throw new Error("The required offline dependency closure is incomplete.");
     const rustToolchain = await input.sandbox.run({
-      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && cargo metadata --no-deps --format-version 1 >/dev/null'`,
+      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
       workingDirectory: `/workspace/${root}`,
       abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
     });
