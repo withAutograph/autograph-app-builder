@@ -75,7 +75,8 @@ describe("Preview OAuth deployment handlers", () => {
     expect(config).toContain('{ key: "X-Frame-Options", value: "DENY" }');
     expect(runtime).toContain("baseURL: resourceOrigin");
     expect(runtime).not.toContain("baseURL: config.issuer");
-    expect(providers).toContain('socialProviders={["github"]}');
+    expect(providers).toContain('id: "vercel"');
+    expect(providers).toContain('"github",');
     expect(providers).not.toContain("emailAndPassword");
     expect(authClient).toContain("oauthProviderClient()");
     expect(signIn).toContain("<ProviderButtons");
