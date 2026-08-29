@@ -2,14 +2,6 @@ import packageManifest from "../../package.json";
 
 export const MCP_APP_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 export const APP_VERSION = packageManifest.version;
-const prototypeDocumentCsp =
-  "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; base-uri 'none'; connect-src 'none'; form-action 'none'; frame-src 'none'; img-src data:; media-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">";
-const prototypeDocumentPrefix = `<!doctype html><html><head>${prototypeDocumentCsp}<meta charset="utf-8"></head><body>`;
-const prototypeDocumentSuffix = "</body></html>";
-
-export function sandboxedPrototypeDocument(html: string): string {
-  return `${prototypeDocumentPrefix}${html}${prototypeDocumentSuffix}`;
-}
 
 export const sessionUiHtml = `<!doctype html>
 <html lang="en">
@@ -30,8 +22,6 @@ export const sessionUiHtml = `<!doctype html>
     .dot{width:7px;height:7px;border-radius:999px;background:#8b8b88}.working .dot,.waiting .dot{background:var(--accent)}.completed .dot{background:#28885c}.failed .dot{background:var(--danger)}.cancelled .dot{background:#8b8b88}
     .working .dot{animation:pulse 1.8s ease-in-out infinite}
     main{min-height:0;overflow:auto;padding:8px 14px 12px;scrollbar-width:thin;overscroll-behavior:contain}
-    main.prototype-ready{overflow:hidden;padding:0}
-    .prototype{width:100%;height:100%;background:#fff}.prototype iframe{display:block;width:100%;height:100%;border:0;background:#fff}
     .progress{height:100%}
     .empty{height:100%;display:grid;place-content:center;text-align:center;color:var(--muted);gap:7px}.empty strong{color:var(--text);font-weight:600}
     .events{display:grid;gap:2px}.event{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent)}.event:last-child{border-bottom:0}
@@ -46,7 +36,7 @@ export const sessionUiHtml = `<!doctype html>
 <body>
   <section class="shell" aria-label="Autograph App Builder progress">
     <header><div class="mark" aria-hidden="true">A</div><div class="title"><strong>Autograph App Builder</strong><span id="subtitle">App build</span></div><div class="state working" id="state"><span class="dot"></span><span id="state-label">Connecting</span></div></header>
-    <main id="content"><div class="prototype" id="prototype" hidden></div><div class="progress" id="progress"><div class="empty" id="empty"><strong>Connecting to Autograph App Builder</strong><span>Build updates will appear here.</span></div><div class="events" id="events" hidden></div></div></main>
+    <main id="content"><div class="progress" id="progress"><div class="empty" id="empty"><strong>Connecting to Autograph App Builder</strong><span>Build updates will appear here.</span></div><div class="events" id="events" hidden></div></div></main>
     <footer><span id="summary">Waiting for the first update</span><span class="count" id="count">0 events</span></footer>
   </section>
   <script>
@@ -54,7 +44,6 @@ export const sessionUiHtml = `<!doctype html>
       const protocolVersion="2026-01-26";
       const events=new Map();
       const content=document.getElementById("content");
-      const prototype=document.getElementById("prototype");
       const progress=document.getElementById("progress");
       const eventList=document.getElementById("events");
       const empty=document.getElementById("empty");
@@ -64,26 +53,7 @@ export const sessionUiHtml = `<!doctype html>
       const count=document.getElementById("count");
       const labels={working:"Working",input_required:"Needs input",waiting:"Waiting",completed:"Complete",failed:"Failed",cancelled:"Cancelled"};
       const icons={assistant_message:"E",progress:"·",input_required:"?",status:"·",error:"!"};
-      const prototypeDocumentPrefix=${JSON.stringify(prototypeDocumentPrefix)};
-      const prototypeDocumentSuffix=${JSON.stringify(prototypeDocumentSuffix)};
       function text(value){return typeof value==="string"?value:""}
-      function prototypeDocument(html){
-        return prototypeDocumentPrefix+html+prototypeDocumentSuffix;
-      }
-      function renderPrototype(value){
-        if(!value||value.mediaType!=="text/html"||typeof value.content!=="string"||typeof value.digest!=="string"){
-          prototype.hidden=true;progress.hidden=false;content.classList.remove("prototype-ready");return;
-        }
-        if(prototype.dataset.digest!==value.digest){
-          const frame=document.createElement("iframe");
-          frame.title="Interactive app prototype";
-          frame.setAttribute("sandbox","allow-scripts");
-          frame.setAttribute("referrerpolicy","no-referrer");
-          frame.srcdoc=prototypeDocument(value.content);
-          prototype.replaceChildren(frame);prototype.dataset.digest=value.digest;
-        }
-        prototype.hidden=false;progress.hidden=true;content.classList.add("prototype-ready");
-      }
       function renderEvent(event){
         const row=document.createElement("div");row.className="event "+(event.type==="error"?"error":"");row.dataset.index=String(event.index);
         const icon=document.createElement("span");icon.className="event-icon";icon.textContent=icons[event.type]||"·";
@@ -99,7 +69,6 @@ export const sessionUiHtml = `<!doctype html>
       }
       function update(result){
         if(!result||typeof result!=="object")return;
-        renderPrototype(result.prototype);
         for(const event of Array.isArray(result.events)?result.events:[]){if(Number.isInteger(event.index))events.set(event.index,event)}
         const ordered=[...events.values()].sort((a,b)=>a.index-b.index);
         eventList.replaceChildren(...ordered.map(renderEvent));eventList.hidden=ordered.length===0;empty.hidden=ordered.length!==0;

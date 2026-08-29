@@ -23,9 +23,13 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
    preserving every unique `requestId`. Never split one App Builder batch across calls.
 5. Send unrelated follow-ups with `autograph_send` only while the app build is `waiting` and no input is unresolved.
 6. Treat cancellation as cooperative. Poll until events prove the resulting state.
-7. Open Autograph App Builder progress when visual progress or input controls help.
-8. After a successful App Builder call, fall back to its text or `structuredContent`
-   response only for rendering when MCP Apps UI is unavailable.
-9. Never state that a side effect succeeded until a public event proves it.
+7. Treat the MCP App as an optional progress and input-control surface only. Never
+   use it to display or embed the generated app preview.
+8. When Autograph provides a preview URL, open it in the integrated ChatGPT or
+   Codex Browser. Prefer the hosted HTTPS URL; use a loopback URL for local proof.
+   If the integrated Browser is unavailable, provide the ordinary preview link.
+9. After a successful App Builder call, use its text and `structuredContent` for
+   status, evidence, and input handling—not for rendering prototype HTML.
+10. Never state that a side effect succeeded until a public event proves it.
 
 Read [session semantics](references/session-semantics.md) for cursor and status rules.

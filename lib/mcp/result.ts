@@ -13,9 +13,8 @@ export const SESSION_RESOURCE_URI = "ui://autograph-app-builder/session.html";
 
 export function toolResult(result: EveSessionResult, text: string) {
   const needsInteractiveSessionUi =
-    result.prototype !== undefined ||
-    (result.status === "input_required" &&
-      (result.inputRequests?.length ?? 0) > 0);
+    result.status === "input_required" &&
+    (result.inputRequests?.length ?? 0) > 0;
 
   return {
     content: [{ type: "text" as const, text }],
