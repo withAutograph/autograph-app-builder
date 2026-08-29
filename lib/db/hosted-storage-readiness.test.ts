@@ -153,11 +153,11 @@ describe("hosted storage read-only readiness", () => {
     expect(task).toContain("--database-url-fd 0");
     expect(cli).toContain("SET TRANSACTION READ ONLY");
     expect(cli).toContain("constraint_record.contype <> 'n'");
-    expect(cli).toContain("'github_publication_proposal'");
-    expect(cli).toContain("'github_installation_authorization_state'");
-    expect(cli).toContain("'hosted_github_installation'");
-    expect(cli).toContain("'hosted_github_publication_journal'");
-    expect(cli).toContain("'hosted_github_publication_proposal'");
+    expect(cli).toContain("hostedStorageExpectedColumns");
+    expect(cli).toContain(
+      "new Set(hostedStorageExpectedColumns.map(([table]) => table))",
+    );
+    expect(cli.match(/= ANY\(\$\{managedTables\}\)/gu)).toHaveLength(3);
     expect(cli).not.toContain("process.env.DATABASE_URL");
     expect(contract).toContain(
       'providerRestorePointStatus: "not-proven" as const',
