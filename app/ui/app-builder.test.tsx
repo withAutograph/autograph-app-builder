@@ -5,6 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.stubEnv("NEXT_PUBLIC_FEATURE_CONNECTIONS", "true");
+
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
   refresh: vi.fn(),
