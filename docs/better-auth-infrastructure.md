@@ -14,9 +14,12 @@ has been verified. Activation then follows this order:
 1. Verify organizations and members are the sole runtime workspace authority.
 2. Create one Better Auth Infrastructure project on the **Starter ($0)** plan.
 3. Store its API key as the server-only `BETTER_AUTH_API_KEY` secret.
-4. Set `BETTER_AUTH_INFRASTRUCTURE=starter-dashboard-v1` in the same runtime.
-5. Add the plugins returned by `resolveBetterAuthInfrastructure` to the Better
-   Auth server plugin list with `organizationAuthorityReady: true`.
+4. Set `BETTER_AUTH_ORGANIZATION_AUTHORITY_READY=verified-v1` only after the
+   parity receipt passes, then set
+   `BETTER_AUTH_INFRASTRUCTURE=starter-dashboard-v1` in the same runtime.
+5. The auth runtime adds the plugins returned by
+   `resolveBetterAuthInfrastructure`; it refuses activation unless the exact
+   organization-authority readiness value is present.
 6. Deploy, verify dashboard read-back for users, sessions, organizations,
    members, invitations, and audit events, then exercise session revocation and
    membership removal against the application.

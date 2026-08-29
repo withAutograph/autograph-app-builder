@@ -17,6 +17,10 @@ import {
   type PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 import {
+  resolveBetterAuthInfrastructure,
+  type BetterAuthInfrastructureEnvironment,
+} from "./better-auth-infrastructure";
+import {
   hostedDeploymentEnvironmentSchema,
   readHostedDeploymentEnvironment,
 } from "../hosted/deployment-environment";
@@ -130,10 +134,20 @@ export function createPreviewOAuthServer(input: {
   database: NonNullable<BetterAuthOptions["database"]>;
   membership: PreviewOAuthMembershipAuthority;
   userManagement?: PreviewOrganizationUserAuthority;
+  infrastructure?: {
+    environment: BetterAuthInfrastructureEnvironment;
+    organizationAuthorityReady: boolean;
+  };
   fetchClientMetadata?: typeof fetchPreviewClientMetadataResource;
 }) {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
   const resourceOrigin = new URL(config.resource).origin;
+  const infrastructure = resolveBetterAuthInfrastructure(
+    input.infrastructure ?? {
+      environment: {},
+      organizationAuthorityReady: false,
+    },
+  );
   return betterAuth({
     appName:
       config.environment === "preview"
@@ -183,6 +197,7 @@ export function createPreviewOAuthServer(input: {
           },
         },
       ),
+      ...infrastructure.plugins,
       jwt({
         jwks: {
           keyPairConfig: { alg: "ES256" },

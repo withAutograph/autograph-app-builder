@@ -38,6 +38,14 @@ export function getPreviewOAuthDeploymentAuth(
     }),
     membership: organizationAuthority,
     userManagement: organizationAuthority,
+    infrastructure: {
+      environment: {
+        BETTER_AUTH_INFRASTRUCTURE: environment.BETTER_AUTH_INFRASTRUCTURE,
+        BETTER_AUTH_API_KEY: environment.BETTER_AUTH_API_KEY,
+      },
+      organizationAuthorityReady:
+        environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY === "verified-v1",
+    },
   });
   return deploymentAuth;
 }
