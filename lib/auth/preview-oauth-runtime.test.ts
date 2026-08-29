@@ -53,7 +53,7 @@ describe("Preview OAuth runtime configuration", () => {
     expect(fetchImplementation).toHaveBeenCalledWith(
       "https://api.vercel.com/login/oauth/userinfo",
       expect.objectContaining({
-        method: "GET",
+        method: "POST",
         redirect: "error",
         headers: { Authorization: "Bearer sensitive-access-token" },
       }),

@@ -90,7 +90,7 @@ export async function fetchVerifiedVercelUserInfo(
   let response: Response;
   try {
     response = await fetchImplementation(vercelUserInfoEndpoint, {
-      method: "GET",
+      method: "POST",
       headers: { Authorization: `Bearer ${tokens.accessToken}` },
       cache: "no-store",
       redirect: "error",
