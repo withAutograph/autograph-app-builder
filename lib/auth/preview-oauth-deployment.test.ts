@@ -75,11 +75,11 @@ describe("Preview OAuth deployment handlers", () => {
     expect(config).toContain('{ key: "X-Frame-Options", value: "DENY" }');
     expect(runtime).toContain("baseURL: resourceOrigin");
     expect(runtime).not.toContain("baseURL: config.issuer");
-    expect(providers).toContain("socialProviders={[]}");
-    expect(providers).toContain("emailAndPassword={{ enabled: true }}");
+    expect(providers).toContain('socialProviders={["github"]}');
+    expect(providers).not.toContain("emailAndPassword");
     expect(authClient).toContain("oauthProviderClient()");
     expect(signIn).toContain("<ProviderButtons");
-    expect(signIn).toContain('<AuthPrompts view="signIn" />');
+    expect(signIn).not.toContain('type="email"');
     expect(signIn).not.toContain("SignUp");
     expect(signIn).not.toContain("/oauth2/continue");
     await expect(

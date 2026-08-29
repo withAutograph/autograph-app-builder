@@ -79,8 +79,7 @@ describe("Preview OAuth activation contract", () => {
       },
     ]);
     expect(previewEmailPasswordPolicy).toEqual({
-      enabled: true,
-      disableSignUp: true,
+      enabled: false,
     });
     for (const action of [
       "create",
