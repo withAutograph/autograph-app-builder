@@ -1,6 +1,6 @@
 ---
 name: create-app
-description: Guide complete creation of a route-owned Next.js app in a supported Autograph repository, from product design through an approved AppSpec, canonical proposal, reviewed change set, and separately approved publication. Use as the primary entry point when a user asks to create, build, or start a new app. Route explicitly bare/local-only Next.js workspace requests to $scaffold-app-workspace.
+description: Guide complete creation of a route-owned Next.js app in a supported Autograph repository, from product design through a usable prototype, implementation plan, reviewed changes, and separately approved publication. Use as the primary entry point when a user asks to create, build, or start a new app. Route explicitly bare/local-only Next.js workspace requests to $scaffold-app-workspace.
 ---
 
 # Create App
@@ -76,9 +76,9 @@ missing operation with a raw shell command or generic file write.
 
 ## Boundaries
 
-- Infer only safe, revisable prototype defaults. Never infer production
-  authority, silently repair the AppSpec, or mutate the target before its
-  separate source/topology approval.
+- Infer only safe, revisable prototype defaults. Never infer Production
+  authority. Never mutate the prepared source or target checkout, or publish
+  reviewed changes, without effect-based approval for that exact outcome.
 - Never use `$scaffold-app-workspace` as the apply step for a planned route-owned
   app; the complete command owns contract, workspace, and topology composition.
 - Never create schema contents merely because the proposal derives a kernel
