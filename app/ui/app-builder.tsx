@@ -16,7 +16,6 @@ import {
   PlusCircle,
   RefreshCw,
   Search,
-  Settings,
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
@@ -524,9 +523,6 @@ function Header() {
       </Link>
       <span>New App</span>
       <div className={styles.headerActions}>
-        <a href="/github/installations" aria-label="Settings">
-          <Settings size={17} aria-hidden="true" />
-        </a>
         <UserButton align="end" sideOffset={8} size="icon" />
       </div>
     </header>
