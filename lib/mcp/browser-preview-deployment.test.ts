@@ -69,5 +69,9 @@ describe("deployment Browser preview route", () => {
 
     expect(response.status).toBe(404);
     await expect(response.text()).resolves.toBe("");
+    expect(response.headers.get("cache-control")).toBe(
+      "private, no-store, max-age=0",
+    );
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });

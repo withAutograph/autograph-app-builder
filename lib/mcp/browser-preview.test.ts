@@ -100,10 +100,18 @@ describe("Browser prototype preview", () => {
         route: { sessionId: "session-one", digest },
         prototype: undefined,
       },
+      {
+        route: { sessionId: "session-one", digest },
+        prototype: new Error("private resolver failure"),
+      },
     ];
+    const projections: Array<Record<string, string | number | null>> = [];
     for (const candidate of cases) {
       const handler = createPrototypePreviewRequestHandler({
-        resolvePrototype: async () => candidate.prototype,
+        resolvePrototype: async () => {
+          if (candidate.prototype instanceof Error) throw candidate.prototype;
+          return candidate.prototype;
+        },
       });
       const response = await handler(
         new Request(
@@ -111,11 +119,35 @@ describe("Browser prototype preview", () => {
         ),
         candidate.route,
       );
-      expect({
+      projections.push({
         status: response.status,
         body: await response.text(),
-      }).toEqual({ status: 404, body: "" });
+        cache: response.headers.get("cache-control"),
+        contentSecurityPolicy: response.headers.get("content-security-policy"),
+        contentType: response.headers.get("content-type"),
+        crossOriginResourcePolicy: response.headers.get(
+          "cross-origin-resource-policy",
+        ),
+        permissionsPolicy: response.headers.get("permissions-policy"),
+        referrerPolicy: response.headers.get("referrer-policy"),
+        contentTypeOptions: response.headers.get("x-content-type-options"),
+      });
     }
+    expect(
+      new Set(projections.map((projection) => JSON.stringify(projection))).size,
+    ).toBe(1);
+    expect(projections[0]).toEqual({
+      status: 404,
+      body: "",
+      cache: "private, no-store, max-age=0",
+      contentSecurityPolicy: prototypePreviewContentSecurityPolicy,
+      contentType: "text/html; charset=utf-8",
+      crossOriginResourcePolicy: "same-origin",
+      permissionsPolicy:
+        "camera=(), display-capture=(), geolocation=(), microphone=(), payment=(), usb=()",
+      referrerPolicy: "no-referrer",
+      contentTypeOptions: "nosniff",
+    });
   });
 
   it("reads the requested owned session through the selected service", async () => {

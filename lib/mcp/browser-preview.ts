@@ -50,6 +50,13 @@ const previewResponseHeaders = {
   "X-Content-Type-Options": "nosniff",
 } as const;
 
+function emptyPreviewNotFoundResponse(): Response {
+  return new Response(null, {
+    status: 404,
+    headers: previewResponseHeaders,
+  });
+}
+
 function equalDigest(left: string, right: string): boolean {
   const leftBytes = Buffer.from(left, "hex");
   const rightBytes = Buffer.from(right, "hex");
@@ -115,7 +122,7 @@ export function createPrototypePreviewRequestHandler(input: {
     routeInput: { sessionId: string; digest: string },
   ): Promise<Response> => {
     const route = previewRouteInputSchema.safeParse(routeInput);
-    if (!route.success) return new Response(null, { status: 404 });
+    if (!route.success) return emptyPreviewNotFoundResponse();
     try {
       const prototype = publicPrototypeSchema.safeParse(
         await input.resolvePrototype({
@@ -131,14 +138,14 @@ export function createPrototypePreviewRequestHandler(input: {
           route.data.digest,
         )
       ) {
-        return new Response(null, { status: 404 });
+        return emptyPreviewNotFoundResponse();
       }
       return new Response(prototype.data.content, {
         status: 200,
         headers: previewResponseHeaders,
       });
     } catch {
-      return new Response(null, { status: 404 });
+      return emptyPreviewNotFoundResponse();
     }
   };
 }
