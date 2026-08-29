@@ -109,9 +109,35 @@ RUN set -eux; \
             "${source_root}"/*) dependency_relative="${dependency_target#"${source_root}"/}" ;; \
             *) return 1 ;; \
           esac; \
-          printf '%s\n' "${dependency_relative}" \
-            | grep -Ex '(\.config/turbo/generators|apps/(hc|vendor)|packages/(agents/(csv|reference-resolution)|app-runtime|auth|dashboard-agent-evals|integrations|microfrontends|microfrontends-shell|platform-microfrontends|typescript-config|vite-config))' \
-            >> "${output}" || return 1; \
+          case "${dependency_relative}" in \
+            .config/turbo/generators|.config/turbo/generators/*) dependency_owner=.config/turbo/generators ;; \
+            apps/hc|apps/hc/*) dependency_owner=apps/hc ;; \
+            apps/vendor|apps/vendor/*) dependency_owner=apps/vendor ;; \
+            domain-libs/_shared|domain-libs/_shared/*) dependency_owner=domain-libs/_shared ;; \
+            domain-libs/accounting|domain-libs/accounting/*) dependency_owner=domain-libs/accounting ;; \
+            domain-libs/compensation|domain-libs/compensation/*) dependency_owner=domain-libs/compensation ;; \
+            domain-libs/contractor|domain-libs/contractor/*) dependency_owner=domain-libs/contractor ;; \
+            domain-libs/employee|domain-libs/employee/*) dependency_owner=domain-libs/employee ;; \
+            domain-libs/org-assignment|domain-libs/org-assignment/*) dependency_owner=domain-libs/org-assignment ;; \
+            domain-libs/position|domain-libs/position/*) dependency_owner=domain-libs/position ;; \
+            domain-libs/recruiting|domain-libs/recruiting/*) dependency_owner=domain-libs/recruiting ;; \
+            domain-libs/requisition|domain-libs/requisition/*) dependency_owner=domain-libs/requisition ;; \
+            domain-libs/revenue|domain-libs/revenue/*) dependency_owner=domain-libs/revenue ;; \
+            domain-libs/vendor|domain-libs/vendor/*) dependency_owner=domain-libs/vendor ;; \
+            packages/agents/csv|packages/agents/csv/*) dependency_owner=packages/agents/csv ;; \
+            packages/agents/reference-resolution|packages/agents/reference-resolution/*) dependency_owner=packages/agents/reference-resolution ;; \
+            packages/app-runtime|packages/app-runtime/*) dependency_owner=packages/app-runtime ;; \
+            packages/auth|packages/auth/*) dependency_owner=packages/auth ;; \
+            packages/dashboard-agent-evals|packages/dashboard-agent-evals/*) dependency_owner=packages/dashboard-agent-evals ;; \
+            packages/integrations|packages/integrations/*) dependency_owner=packages/integrations ;; \
+            packages/microfrontends|packages/microfrontends/*) dependency_owner=packages/microfrontends ;; \
+            packages/microfrontends-shell|packages/microfrontends-shell/*) dependency_owner=packages/microfrontends-shell ;; \
+            packages/platform-microfrontends|packages/platform-microfrontends/*) dependency_owner=packages/platform-microfrontends ;; \
+            packages/typescript-config|packages/typescript-config/*) dependency_owner=packages/typescript-config ;; \
+            packages/vite-config|packages/vite-config/*) dependency_owner=packages/vite-config ;; \
+            *) return 1 ;; \
+          esac; \
+          printf '%s\n' "${dependency_owner}" >> "${output}" || return 1; \
         done < "${link_list}"; \
     }; \
     fixture_root=/tmp/workspace-closure-fixtures; \
@@ -137,8 +163,33 @@ RUN set -eux; \
     record_workspace_targets /tmp/arrusted-target /tmp/arrusted-target/node_modules \
       /tmp/workspace-closure.links /tmp/workspace-closure.unsorted; \
     LC_ALL=C sort -u /tmp/workspace-closure.unsorted > /tmp/workspace-closure.list; \
-    test -s /tmp/workspace-closure.list; \
-    grep -Fx 'packages/vite-config' /tmp/workspace-closure.list
+    printf '%s\n' \
+      '.config/turbo/generators' \
+      'apps/hc' \
+      'apps/vendor' \
+      'domain-libs/_shared' \
+      'domain-libs/accounting' \
+      'domain-libs/compensation' \
+      'domain-libs/contractor' \
+      'domain-libs/employee' \
+      'domain-libs/org-assignment' \
+      'domain-libs/position' \
+      'domain-libs/recruiting' \
+      'domain-libs/requisition' \
+      'domain-libs/revenue' \
+      'domain-libs/vendor' \
+      'packages/agents/csv' \
+      'packages/agents/reference-resolution' \
+      'packages/app-runtime' \
+      'packages/auth' \
+      'packages/dashboard-agent-evals' \
+      'packages/integrations' \
+      'packages/microfrontends' \
+      'packages/microfrontends-shell' \
+      'packages/platform-microfrontends' \
+      'packages/typescript-config' \
+      'packages/vite-config' > /tmp/workspace-closure.expected; \
+    cmp -s /tmp/workspace-closure.expected /tmp/workspace-closure.list
 
 RUN set -eux; \
     cd /tmp/arrusted-target; \

@@ -248,6 +248,15 @@ describe("offline dependency cache", () => {
       "LC_ALL=C sort -u /tmp/workspace-closure.unsorted",
     );
     expect(dockerfile).toContain(
+      "cmp -s /tmp/workspace-closure.expected /tmp/workspace-closure.list",
+    );
+    expect(dockerfile).toContain(
+      "packages/microfrontends-shell|packages/microfrontends-shell/*) dependency_owner=packages/microfrontends-shell",
+    );
+    expect(dockerfile).toContain(
+      "domain-libs/vendor|domain-libs/vendor/*) dependency_owner=domain-libs/vendor",
+    );
+    expect(dockerfile).toContain(
       '"${node_root}"/*) continue',
     );
     expect(dockerfile).toContain(
