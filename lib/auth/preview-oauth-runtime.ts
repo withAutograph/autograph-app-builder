@@ -3,6 +3,7 @@ import { mcp } from "@better-auth/mcp";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { genericOAuth, jwt } from "better-auth/plugins";
+import { decodeJwt } from "jose";
 import { z } from "zod";
 
 import {
@@ -42,6 +43,96 @@ const selfServiceSignupEnvironmentSchema = z
   .enum(["0", "1"])
   .default("0")
   .transform((value) => value === "1");
+
+const vercelUserInfoSchema = z
+  .object({
+    sub: z.string().min(1).max(512),
+    email: z.string().email().max(320),
+    email_verified: z.literal(true),
+    name: z.string().min(1).max(512).optional(),
+    preferred_username: z.string().min(1).max(512).optional(),
+    picture: z.string().url().max(2_048).optional(),
+  })
+  .passthrough();
+
+const vercelUserInfoEndpoint = "https://api.vercel.com/login/oauth/userinfo";
+
+type VercelOAuthTokens = {
+  accessToken?: string;
+  idToken?: string;
+};
+
+/**
+ * Vercel's signed ID token carries the email claim but not `email_verified`.
+ * Read that assertion from Vercel's fixed UserInfo endpoint, then bind it back
+ * to the already verified ID-token subject and email before Better Auth may
+ * treat the provider identity as verified.
+ */
+export async function fetchVerifiedVercelUserInfo(
+  tokens: VercelOAuthTokens,
+  fetchImplementation: typeof fetch = fetch,
+) {
+  if (!tokens.accessToken || !tokens.idToken) return null;
+
+  let tokenClaims: ReturnType<typeof decodeJwt>;
+  try {
+    tokenClaims = decodeJwt(tokens.idToken);
+  } catch {
+    return null;
+  }
+  if (
+    typeof tokenClaims.sub !== "string" ||
+    typeof tokenClaims.email !== "string"
+  ) {
+    return null;
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImplementation(vercelUserInfoEndpoint, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > 16_384) return null;
+  const body = await response.text();
+  if (body.length > 16_384) return null;
+
+  let profile: z.infer<typeof vercelUserInfoSchema>;
+  try {
+    profile = vercelUserInfoSchema.parse(JSON.parse(body));
+  } catch {
+    return null;
+  }
+
+  const email = profile.email.trim().toLowerCase();
+  if (
+    profile.sub !== tokenClaims.sub ||
+    email !== tokenClaims.email.trim().toLowerCase()
+  ) {
+    return null;
+  }
+
+  return {
+    ...profile,
+    id: profile.sub,
+    email,
+    emailVerified: true,
+    image: profile.picture,
+    name:
+      profile.name ??
+      profile.preferred_username ??
+      email.slice(0, email.indexOf("@")),
+  };
+}
 
 const previewOAuthRuntimeConfigSchema = z
   .object({
@@ -270,6 +361,7 @@ export function createPreviewOAuthServer(input: {
             clientSecret: config.vercelClientSecret,
             tokenEndpointAuth: { method: "client_secret_post" },
             scopes: ["openid", "email", "profile"],
+            getUserInfo: fetchVerifiedVercelUserInfo,
             disableSignUp: false,
             overrideUserInfo: false,
           },

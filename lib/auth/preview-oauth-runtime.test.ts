@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
+import {
+  fetchVerifiedVercelUserInfo,
+  readPreviewOAuthRuntimeConfig,
+} from "./preview-oauth-runtime";
 
 const environment = {
   EVE_HOSTED_ADAPTER: "1",
@@ -17,6 +20,115 @@ const environment = {
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
+  const idToken = (claims: Record<string, unknown>) =>
+    `${Buffer.from(JSON.stringify({ alg: "ES256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
+
+  it("binds Vercel's verified UserInfo email to the verified ID-token identity", async () => {
+    const fetchImplementation = vi.fn(async () =>
+      Response.json({
+        sub: "vercel-user-1",
+        email: "USER@EXAMPLE.COM",
+        email_verified: true,
+        name: "Example User",
+      }),
+    );
+
+    await expect(
+      fetchVerifiedVercelUserInfo(
+        {
+          accessToken: "sensitive-access-token",
+          idToken: idToken({
+            sub: "vercel-user-1",
+            email: "user@example.com",
+          }),
+        },
+        fetchImplementation,
+      ),
+    ).resolves.toMatchObject({
+      sub: "vercel-user-1",
+      email: "user@example.com",
+      emailVerified: true,
+      name: "Example User",
+    });
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      "https://api.vercel.com/login/oauth/userinfo",
+      expect.objectContaining({
+        method: "GET",
+        redirect: "error",
+        headers: { Authorization: "Bearer sensitive-access-token" },
+      }),
+    );
+  });
+
+  it.each([
+    {
+      name: "unverified email",
+      profile: {
+        sub: "vercel-user-1",
+        email: "user@example.com",
+        email_verified: false,
+      },
+    },
+    {
+      name: "different subject",
+      profile: {
+        sub: "vercel-user-2",
+        email: "user@example.com",
+        email_verified: true,
+      },
+    },
+    {
+      name: "different email",
+      profile: {
+        sub: "vercel-user-1",
+        email: "other@example.com",
+        email_verified: true,
+      },
+    },
+  ])("rejects Vercel UserInfo with $name", async ({ profile }) => {
+    await expect(
+      fetchVerifiedVercelUserInfo(
+        {
+          accessToken: "sensitive-access-token",
+          idToken: idToken({
+            sub: "vercel-user-1",
+            email: "user@example.com",
+          }),
+        },
+        async () => Response.json(profile),
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("rejects missing tokens, failed responses, and oversized profiles", async () => {
+    await expect(fetchVerifiedVercelUserInfo({})).resolves.toBeNull();
+    await expect(
+      fetchVerifiedVercelUserInfo(
+        {
+          accessToken: "sensitive-access-token",
+          idToken: idToken({
+            sub: "vercel-user-1",
+            email: "user@example.com",
+          }),
+        },
+        async () => new Response(null, { status: 503 }),
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      fetchVerifiedVercelUserInfo(
+        {
+          accessToken: "sensitive-access-token",
+          idToken: idToken({
+            sub: "vercel-user-1",
+            email: "user@example.com",
+          }),
+        },
+        async () =>
+          new Response("{}", { headers: { "content-length": "16385" } }),
+      ),
+    ).resolves.toBeNull();
+  });
+
   it("requires the GitHub identity provider alongside the Preview bindings", () => {
     expect(readPreviewOAuthRuntimeConfig(environment)).toMatchObject({
       environment: "preview",
