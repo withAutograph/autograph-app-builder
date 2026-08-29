@@ -1,7 +1,13 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxProcess } from "eve/sandbox";
 import {
+  WORKSPACE_QUOTA_MONITOR_SCRIPT,
   quotaWrappedSandboxCommand,
   runBoundedSandboxCommand,
 } from "./bounded-command";
@@ -26,6 +32,47 @@ function processFixture(stdout: string[], stderr: string[] = []) {
   return { process, kill };
 }
 
+function waitForExit(process: ReturnType<typeof spawn>) {
+  return new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      process.once("error", reject);
+      process.once("exit", (code, signal) => resolve({ code, signal }));
+    },
+  );
+}
+
+function readStream(stream: NodeJS.ReadableStream) {
+  let output = "";
+  stream.setEncoding("utf8");
+  stream.on("data", (chunk: string) => {
+    output += chunk;
+  });
+  return () => output;
+}
+
+function startMonitor(
+  child: ReturnType<typeof spawn>,
+  workspaceRoot: string,
+  maximumBytes: number,
+  maximumFiles: number,
+) {
+  const monitor = spawn(
+    process.execPath,
+    [
+      "-e",
+      WORKSPACE_QUOTA_MONITOR_SCRIPT,
+      "--",
+      String(child.pid),
+      String(maximumBytes),
+      String(maximumFiles),
+      "10",
+      workspaceRoot,
+    ],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+  return { monitor, stderr: readStream(monitor.stderr) };
+}
+
 describe("bounded sandbox command", () => {
   it("wraps every command with process, file, and workspace quotas", () => {
     const command = quotaWrappedSandboxCommand("mise run check");
@@ -35,12 +82,90 @@ describe("bounded sandbox command", () => {
       "ulimit -n",
       "ulimit -u",
       "setsid bash",
-      "du -sx --block-size=1 /workspace",
-      "find /workspace -xdev -type f",
-      "kill -KILL -- -",
+      "bun -e",
+      "sandbox_workspace_quota_exceeded",
+      'wait "$monitor"',
     ])
       expect(command).toContain(required);
     expect(command).toContain("ulimit -f 131072");
+    expect(command.match(/bun -e/g)).toHaveLength(1);
+    for (const repeatedProcess of [
+      "du -sx",
+      "find /workspace",
+      "awk ",
+      "wc -c",
+    ])
+      expect(command).not.toContain(repeatedProcess);
+  });
+
+  it("terminates the child group and exits 125 when workspace limits are exceeded", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "quota-monitor-limit-"));
+    await writeFile(join(workspaceRoot, "one-file"), "content");
+    const child = spawn("/bin/sh", ["-c", "sleep 30"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const childExit = waitForExit(child);
+    const fixture = startMonitor(
+      child,
+      workspaceRoot,
+      Number.MAX_SAFE_INTEGER,
+      0,
+    );
+    const monitorExit = await waitForExit(fixture.monitor);
+    await childExit;
+    expect(monitorExit).toEqual({ code: 125, signal: null });
+    expect(fixture.stderr()).toBe("sandbox_workspace_quota_exceeded\n");
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  it("exits cleanly after the child exits", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "quota-monitor-exit-"));
+    const child = spawn("/bin/sh", ["-c", "sleep 0.05"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const childExit = waitForExit(child);
+    const fixture = startMonitor(
+      child,
+      workspaceRoot,
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    );
+    await childExit;
+    await expect(waitForExit(fixture.monitor)).resolves.toEqual({
+      code: 0,
+      signal: null,
+    });
+    expect(fixture.stderr()).toBe("");
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  it("settles cleanly when the monitor is cancelled", async () => {
+    const workspaceRoot = await mkdtemp(
+      join(tmpdir(), "quota-monitor-cancel-"),
+    );
+    const child = spawn("/bin/sh", ["-c", "sleep 30"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const childExit = waitForExit(child);
+    const fixture = startMonitor(
+      child,
+      workspaceRoot,
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    fixture.monitor.kill("SIGTERM");
+    await expect(waitForExit(fixture.monitor)).resolves.toEqual({
+      code: 0,
+      signal: null,
+    });
+    expect(fixture.stderr()).toBe("");
+    process.kill(-child.pid!, "SIGTERM");
+    await childExit;
+    await rm(workspaceRoot, { recursive: true, force: true });
   });
 
   it("collects bounded output through spawn rather than buffered run", async () => {
