@@ -20,32 +20,18 @@ The Ready screen retains the copied brief, installation guidance, and a
 destination-specific retry button. Deep links only prefill a composer; they do
 not submit or execute the task.
 
-## Deep linking
+## ChatGPT / Codex deep link
 
 Codex supports the `codex://` URL scheme on macOS.
 
-The confirmed working format is:
+The production format is:
 
 ```text
 codex://new?prompt=<URL-encoded-prompt>
 ```
 
-Example:
-
-```text
-codex://new?prompt=Create%20a%20harmless%20test%20app%20named%20Deep%20Link%20Probe.
-```
-
 This opens Codex, selects the current project/worktree, and pre-fills the
 composer. The user must still review the task and click Send.
-
-## Tested URL variants
-
-- `codex://` launches or focuses Codex.
-- `codex://open?...` was not confirmed for creating a task.
-- `codex://new?...` opens a new task with the prompt pre-filled.
-- `codex://task?...` opens the URL in Codex's browser pane instead of creating
-  the desired task.
 
 ## Starting the chat automatically
 
@@ -62,10 +48,10 @@ requested action before execution.
 Codex can be instructed to install a plugin, but installation cannot reliably
 happen invisibly through the deep link.
 
-A pre-filled task could say:
+A pre-filled task instructs the client:
 
 ```text
-If the Autograph App Builder plugin is not installed, install it first, then use it for this request.
+If the Autograph App Builder plugin is unavailable, stop and explain how to install it. Do not use another app builder or edit the target repository directly.
 ```
 
 Installation may still require:
@@ -79,7 +65,7 @@ There is no confirmed deep link that silently installs a plugin.
 For Autograph, the fallback installation command is:
 
 ```bash
-codex plugin add autograph-app-builder@autograph
+npx plugins add withAutograph/autograph-app-builder
 ```
 
 OpenAI's plugin guidance also states that installation and any required
@@ -106,26 +92,8 @@ The prompt format is:
 cursor://anysphere.cursor-deeplink/prompt?text=<URL-encoded-prompt>
 ```
 
-Example:
-
-```text
-cursor://anysphere.cursor-deeplink/prompt?text=Create%20a%20harmless%20test%20app%20named%20Deep%20Link%20Probe.
-```
-
 The link opens the prompt in Cursor chat. The user must still review and submit
 it; Cursor deeplinks do not automatically execute prompts.
-
-### Cursor MCP installation
-
-Cursor also supports MCP installation deeplinks:
-
-```text
-cursor://anysphere.cursor-deeplink/mcp/install?name=<NAME>&config=<BASE64-ENCODED-CONFIG>
-```
-
-The `config` value is the base64-encoded JSON server configuration. Cursor
-prompts the user to install the server and may require authentication or a
-project-versus-user scope choice.
 
 ### Cursor flow
 
@@ -138,9 +106,8 @@ project-versus-user scope choice.
 5. If Autograph is unavailable, the user can separately approve MCP or plugin
    installation, authentication, and scope.
 
-Cursor also supports installing Agent Plugins and Cursor Plugins through its
-Customize and marketplace surfaces. Installation and any required app
-authorization remain user- or workspace-controlled.
+Installation and any required app authorization remain user- or
+workspace-controlled.
 
 ## Failure handling
 
@@ -155,5 +122,3 @@ prompt manually.
 ### Cursor references
 
 - [Cursor deeplinks](https://cursor.com/docs/reference/deeplinks)
-- [Cursor MCP install links](https://cursor.com/docs/mcp/install-links)
-- [Cursor plugins](https://cursor.com/docs/plugins)

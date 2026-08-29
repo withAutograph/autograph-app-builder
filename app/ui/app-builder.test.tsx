@@ -629,7 +629,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a harmless Cursor handoff test.",
+      "Build a billing dashboard in Cursor.",
     );
     await click(
       view.querySelector<HTMLInputElement>(
@@ -650,7 +650,7 @@ describe("Vercel-faithful App Builder flow", () => {
       "noopener,noreferrer",
     );
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Build a harmless Cursor handoff test."),
+      expect.stringContaining("Build a billing dashboard in Cursor."),
     );
     const copiedPrompt = writeText.mock.calls[0]?.[0];
     const initialUrl = open.mock.calls[0]?.[0] as string;
@@ -687,7 +687,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a harmless fallback test.",
+      "Build a fallback status test.",
     );
     await click(
       [...view.querySelectorAll("button")].find(
