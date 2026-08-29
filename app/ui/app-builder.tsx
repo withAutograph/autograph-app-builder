@@ -874,6 +874,8 @@ function Builder({
     connections: [],
     modelId: defaultModel,
   });
+  const appNameEditedByUser = useRef(false);
+  const repositoryEditedByUser = useRef(false);
   const [team, setTeam] = useState(teamOptions[0]?.value ?? "");
   const [gitScope, setGitScope] = useState(gitScopeOptions[0]?.value ?? "");
   const [model, setModel] = useState(defaultModel);
@@ -909,6 +911,21 @@ function Builder({
     integrations.models.status === "ready" &&
     model,
   );
+  const updateBrief = (brief: string) => {
+    setForm((current) => {
+      if (appNameEditedByUser.current) return { ...current, brief };
+      const appName =
+        appNameFromBrief(brief) || randomAppName(generatedNameSeed);
+      return {
+        ...current,
+        brief,
+        appName,
+        repository: repositoryEditedByUser.current
+          ? current.repository
+          : repositoryNameFromAppName(appName),
+      };
+    });
+  };
   const addConnection = (name: string) => {
     if (comingSoonConnections.has(name)) return;
     setForm((current) => ({
@@ -949,8 +966,7 @@ function Builder({
       onCreate({
         ...form,
         appName,
-        repository:
-          form.repository.trim() || repositoryNameFromAppName(appName),
+        repository: form.repository.trim(),
         ...(team ? { vercelInstallationId: team } : {}),
         ...(gitScope ? { githubInstallationId: gitScope } : {}),
         modelId: model,
@@ -973,17 +989,17 @@ function Builder({
             autoComplete="off"
             spellCheck={false}
             value={form.appName}
-            onChange={(event) =>
-              setForm({ ...form, appName: event.target.value })
-            }
-            onBlur={() =>
+            onChange={(event) => {
+              appNameEditedByUser.current = true;
+              const appName = event.target.value;
               setForm((current) => ({
                 ...current,
-                repository:
-                  current.repository ||
-                  repositoryNameFromAppName(current.appName),
-              }))
-            }
+                appName,
+                repository: repositoryEditedByUser.current
+                  ? current.repository
+                  : repositoryNameFromAppName(appName),
+              }));
+            }}
             placeholder="support-app"
           />
         </label>
@@ -995,40 +1011,22 @@ function Builder({
               name="app-brief"
               autoComplete="off"
               value={form.brief}
-              onChange={(event) =>
-                setForm({ ...form, brief: event.target.value })
-              }
-              onBlur={() =>
-                setForm((current) => {
-                  if (current.appName) return current;
-                  const appName =
-                    appNameFromBrief(current.brief) ||
-                    randomAppName(generatedNameSeed);
-                  return {
-                    ...current,
-                    appName,
-                    repository:
-                      current.repository || repositoryNameFromAppName(appName),
-                  };
-                })
-              }
+              onChange={(event) => updateBrief(event.target.value)}
               placeholder="# Product\n\nDescribe the app you want to build…"
             />
             <button
               type="button"
               aria-label="Try another app brief example"
-              onClick={() =>
-                setForm((current) => {
-                  const currentIndex = briefExamples.indexOf(
-                    current.brief as (typeof briefExamples)[number],
-                  );
-                  const nextIndex =
-                    currentIndex < 0
-                      ? 0
-                      : (currentIndex + 1) % briefExamples.length;
-                  return { ...current, brief: briefExamples[nextIndex] };
-                })
-              }
+              onClick={() => {
+                const currentIndex = briefExamples.indexOf(
+                  form.brief as (typeof briefExamples)[number],
+                );
+                const nextIndex =
+                  currentIndex < 0
+                    ? 0
+                    : (currentIndex + 1) % briefExamples.length;
+                updateBrief(briefExamples[nextIndex]);
+              }}
             >
               <RefreshCw size={16} aria-hidden="true" />
             </button>
@@ -1119,9 +1117,10 @@ function Builder({
                 autoComplete="off"
                 spellCheck={false}
                 value={form.repository}
-                onChange={(event) =>
-                  setForm({ ...form, repository: event.target.value })
-                }
+                onChange={(event) => {
+                  repositoryEditedByUser.current = true;
+                  setForm({ ...form, repository: event.target.value });
+                }}
                 placeholder="my-app"
               />
               <label

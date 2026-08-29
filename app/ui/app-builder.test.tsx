@@ -229,7 +229,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(brief.value).toBe(examples[0]);
   });
 
-  it("derives an app name and repository slug without replacing existing names", async () => {
+  it("keeps generated names in sync until the user edits each field", async () => {
     expect(
       appNameFromBrief(
         "# Customer Feedback Portal\n\nLet customers vote on ideas.",
@@ -255,14 +255,56 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(appName.value).toBe("Vendor Onboarding");
     expect(repository.value).toBe("vendor-onboarding");
 
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# Customer Success Hub\n\nHelp customers reach their goals.",
+    );
+    expect(appName.value).toBe("Customer Success Hub");
+    expect(repository.value).toBe("customer-success-hub");
+
     await fill(appName, "Existing Name");
-    await fill(repository, "existing-repository");
+    expect(repository.value).toBe("existing-name");
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
       "# A Different Product\n\nDo something else.",
     );
     expect(appName.value).toBe("Existing Name");
+    expect(repository.value).toBe("existing-name");
+
+    await fill(appName, "Existing Name");
+    await fill(repository, "existing-repository");
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# One More Product\n\nDo one more thing.",
+    );
+    expect(appName.value).toBe("Existing Name");
     expect(repository.value).toBe("existing-repository");
+  });
+
+  it("updates a generated app name while preserving a user-entered repository", async () => {
+    sessionStorage.setItem(
+      "autograph-app-brief",
+      "# Vendor Onboarding\n\nCollect and review vendor details.",
+    );
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    await act(async () => new Promise(requestAnimationFrame));
+
+    const appName = view.querySelector<HTMLInputElement>("#app-name")!;
+    const repository =
+      view.querySelector<HTMLInputElement>("#repository-name")!;
+    await fill(repository, "my-existing-repository");
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "# Customer Success Hub\n\nHelp customers reach their goals.",
+    );
+
+    expect(appName.value).toBe("Customer Success Hub");
+    expect(repository.value).toBe("my-existing-repository");
   });
 
   it("generates a random app name and matching repository when no brief exists", async () => {
