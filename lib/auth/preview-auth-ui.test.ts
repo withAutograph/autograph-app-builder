@@ -47,6 +47,16 @@ describe("Preview Better Auth UI", () => {
     ).toBe("/workspace?source=oauth#complete");
   });
 
+  it("preserves absolute callbacks for the current origin", () => {
+    expect(
+      resolveAuthCallbackURL(
+        "/",
+        `?callbackURL=${encodeURIComponent("https://builder.example.test/workspace?source=oauth")}`,
+        "https://builder.example.test",
+      ),
+    ).toBe("/workspace?source=oauth");
+  });
+
   it("forwards the complete signed OAuth query through social sign-in", async () => {
     const search =
       "?client_id=one&scope=autograph%3Aget&state=opaque&sig=signed" +

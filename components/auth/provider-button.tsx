@@ -52,7 +52,11 @@ export function ProviderButton({
     socialSignInMode,
   } = useAuth();
 
-  const callback = resolveAuthCallbackURL("/", window.location.search);
+  const callback = resolveAuthCallbackURL(
+    "/",
+    window.location.search,
+    window.location.origin,
+  );
   const callbackURL = new URL(`${baseURL}${redirectTo}`);
   callbackURL.searchParams.set("callbackURL", callback);
 
