@@ -8,8 +8,8 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "8bdeb7667a0f0cd2305fe60e6a0237620c20cf41";
-export const ARRUSTED_TARGET_TREE = "5df26996ea5259916af7a81bff09ca792874f095";
+export const ARRUSTED_TARGET_SHA = "86c1abcc0a29eba070856fde669feba07b7cde47";
+export const ARRUSTED_TARGET_TREE = "b47d3c503f7b8e4345731b1d278ff9d83fa2b917";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_RUST_VERSION = "1.97.1";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
@@ -17,6 +17,10 @@ export const ARRUSTED_PATH_TO_REGEXP_VERSION = "8.4.2";
 export const ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION = "6.3.0";
 export const ARRUSTED_APP_VALIDATION_SHA256 =
   "11b090ccc6a41ff7e98eed17b58b8d493f594da60e4e30c1f1f3b5c854fc3a18";
+export const ARRUSTED_CREATE_APP_SHA256 =
+  "16eac31c8281d70b525450b6dfdb5ffbd3dbda31424da6fcba04de283ced5c6c";
+export const ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256 =
+  "7674a4db3f07daa15566331b369b536e031699af000e6701962d267dd5f680b5";
 
 export const DEPENDENCY_CACHE_MANIFEST_PATH =
   "/opt/app-builder/dependency-cache/manifest.json";
@@ -59,6 +63,10 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     ),
     appValidationSha256: z.literal(ARRUSTED_APP_VALIDATION_SHA256),
+    createAppSha256: z.literal(ARRUSTED_CREATE_APP_SHA256),
+    appTemplatePackageSha256: z.literal(
+      ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
+    ),
     repositoryPreflightSha256: z.literal(
       "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
     ),
@@ -199,6 +207,8 @@ function fixtureManifest(
       appContractSha256:
         "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
       appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
+      createAppSha256: ARRUSTED_CREATE_APP_SHA256,
+      appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
       repositoryPreflightSha256:
         "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
       repositoryExecSha256:

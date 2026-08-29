@@ -55,8 +55,8 @@ RUN set -eux; \
 
 FROM toolchain AS dependency-cache
 
-ARG TARGET_SHA=8bdeb7667a0f0cd2305fe60e6a0237620c20cf41
-ARG TARGET_TREE=5df26996ea5259916af7a81bff09ca792874f095
+ARG TARGET_SHA=86c1abcc0a29eba070856fde669feba07b7cde47
+ARG TARGET_TREE=b47d3c503f7b8e4345731b1d278ff9d83fa2b917
 ARG MISE_CONFIG_SHA256=be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8
 ARG MISE_LOCK_SHA256=415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462
 ARG BUN_LOCK_SHA256=e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0
@@ -64,6 +64,8 @@ ARG CARGO_LOCK_SHA256=8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31
 ARG APP_IDENTITY_SHA256=10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c
 ARG APP_CONTRACT_SHA256=03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e
 ARG APP_VALIDATION_SHA256=11b090ccc6a41ff7e98eed17b58b8d493f594da60e4e30c1f1f3b5c854fc3a18
+ARG CREATE_APP_SHA256=16eac31c8281d70b525450b6dfdb5ffbd3dbda31424da6fcba04de283ced5c6c
+ARG APP_TEMPLATE_PACKAGE_SHA256=7674a4db3f07daa15566331b369b536e031699af000e6701962d267dd5f680b5
 ARG REPOSITORY_PREFLIGHT_SHA256=7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340
 ARG REPOSITORY_EXEC_SHA256=7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc
 
@@ -80,6 +82,8 @@ RUN set -eux; \
     echo "${APP_IDENTITY_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-identity.ts" | sha256sum --check --strict; \
     echo "${APP_CONTRACT_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-contract.ts" | sha256sum --check --strict; \
     echo "${APP_VALIDATION_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-validation.ts" | sha256sum --check --strict; \
+    echo "${CREATE_APP_SHA256}  /tmp/arrusted-target/.config/turbo/generators/create-app.ts" | sha256sum --check --strict; \
+    echo "${APP_TEMPLATE_PACKAGE_SHA256}  /tmp/arrusted-target/.config/turbo/generators/templates/app/package.json.hbs" | sha256sum --check --strict; \
     echo "${REPOSITORY_PREFLIGHT_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/repository-preflight.ts" | sha256sum --check --strict; \
     echo "${REPOSITORY_EXEC_SHA256}  /tmp/arrusted-target/.config/mise/tasks/repository/exec" | sha256sum --check --strict
 
@@ -242,6 +246,8 @@ RUN set -eux; \
       "    \"appIdentitySha256\": \"${APP_IDENTITY_SHA256}\"," \
       "    \"appContractSha256\": \"${APP_CONTRACT_SHA256}\"," \
       "    \"appValidationSha256\": \"${APP_VALIDATION_SHA256}\"," \
+      "    \"createAppSha256\": \"${CREATE_APP_SHA256}\"," \
+      "    \"appTemplatePackageSha256\": \"${APP_TEMPLATE_PACKAGE_SHA256}\"," \
       "    \"repositoryPreflightSha256\": \"${REPOSITORY_PREFLIGHT_SHA256}\"," \
       "    \"repositoryExecSha256\": \"${REPOSITORY_EXEC_SHA256}\"" \
       '  },' \
