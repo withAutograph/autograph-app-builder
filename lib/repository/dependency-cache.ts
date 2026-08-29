@@ -8,7 +8,7 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "c2d5c97f8996deb334b81fdbbc777f9472b9e25f";
+export const ARRUSTED_TARGET_SHA = "0f6afb50b9fd55f1f2065846ee8519c3f2a86bfd";
 export const ARRUSTED_TARGET_TREE = "f4ce93e6ca2aeec7a25614e33d18fa89f22fc114";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_RUST_VERSION = "1.97.1";
@@ -28,8 +28,7 @@ export const DEPENDENCY_CACHE_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/node-modules.tar.gz";
 export const DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/cargo-closure.tar.gz";
-export const DEPENDENCY_CACHE_EXTRACTED_ROOT =
-  "/opt/app-builder/dependencies";
+export const DEPENDENCY_CACHE_EXTRACTED_ROOT = "/opt/app-builder/dependencies";
 export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
 export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
@@ -64,9 +63,7 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     ),
     appValidationSha256: z.literal(ARRUSTED_APP_VALIDATION_SHA256),
     createAppSha256: z.literal(ARRUSTED_CREATE_APP_SHA256),
-    appTemplatePackageSha256: z.literal(
-      ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
-    ),
+    appTemplatePackageSha256: z.literal(ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256),
     repositoryPreflightSha256: z.literal(
       "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
     ),
