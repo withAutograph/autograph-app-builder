@@ -1,5 +1,6 @@
 .appShell,
-.anonymousPage {
+.anonymousPage,
+.onboardingPage {
   --bg: #fff;
   --surface: #fff;
   --soft: #fafafa;
@@ -15,7 +16,8 @@
   background: var(--bg);
   color: var(--text);
 }
-:global(html[data-theme="dark"]) .appShell {
+:global(html[data-theme="dark"]) .appShell,
+:global(html[data-theme="dark"]) .onboardingPage {
   --bg: #000;
   --surface: #0a0a0a;
   --soft: #111;
@@ -29,7 +31,8 @@
   --shadow: 0 2px 12px rgb(0 0 0/0.5);
 }
 @media (prefers-color-scheme: dark) {
-  :global(html[data-theme="system"]) .appShell {
+  :global(html[data-theme="system"]) .appShell,
+  :global(html[data-theme="system"]) .onboardingPage {
     --bg: #000;
     --surface: #0a0a0a;
     --soft: #111;
@@ -44,8 +47,64 @@
   }
 }
 .appShell *,
-.anonymousPage * {
+.anonymousPage *,
+.onboardingPage * {
   box-sizing: border-box;
+}
+.onboardingPage {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.onboardingCard {
+  width: min(460px, 100%);
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.onboardingBrand {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+.onboardingCard h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+.onboardingCard > p:not(.onboardingBrand) {
+  margin: 14px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.onboardingActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+}
+.onboardingActions a {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.onboardingActions a:first-child {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
 }
 .appShell button,
 .appShell input,

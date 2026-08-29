@@ -16,7 +16,7 @@ describe("builder integration state", () => {
         github: {
           status: "unavailable",
           scopes: [],
-          unavailableReason: "workspace-unavailable",
+          unavailableReason: "configuration-unavailable",
         },
         models,
       }).success,

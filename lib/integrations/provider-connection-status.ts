@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const providerConnectionFailureReasonSchema = z.enum([
   "configuration-unavailable",
-  "workspace-unavailable",
   "request-invalid",
   "authorization-failed",
   "callback-invalid",
@@ -29,9 +28,6 @@ export function providerConnectionFailureMessage(
 ) {
   if (reason === "configuration-unavailable") {
     return `${provider} connections have not been configured for this deployment yet. An administrator needs to finish provider setup before you can connect.`;
-  }
-  if (reason === "workspace-unavailable") {
-    return `Your signed-in account does not have an active App Builder workspace. Ask an administrator to activate it, then try connecting ${provider} again.`;
   }
   if (reason === "request-invalid") {
     return `The ${provider} connection request could not be verified. Return to the builder and start a new connection attempt.`;

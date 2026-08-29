@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
-import { OrganizationProvisioningError } from "@/lib/auth/preview-user-management";
+import { resolveWorkspaceOnboardingState } from "@/lib/auth/workspace-onboarding";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
 import {
   parseProviderConnectionFailureReason,
@@ -10,6 +10,7 @@ import {
 import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-return";
 
 import { AppBuilder } from "./ui/app-builder";
+import { WorkspaceOnboarding } from "./ui/workspace-onboarding";
 
 type PageProps = {
   searchParams: Promise<{
@@ -24,40 +25,42 @@ type PageProps = {
 };
 
 async function currentUser() {
-  try {
-    const user = await ensurePreviewOAuthDeploymentSessionOrganization({
+  const state = await resolveWorkspaceOnboardingState(async () =>
+    ensurePreviewOAuthDeploymentSessionOrganization({
       environment: process.env,
       headers: await headers(),
-    });
-    if (!user) {
-      console.error(
-        JSON.stringify({
-          level: "error",
-          message: "preview_workspace_reconciliation_skipped",
-          reason: "session_unavailable",
-        }),
-      );
-      return undefined;
-    }
-    return {
-      id: user.user.id,
-      name: user.user.name || "Autograph user",
-      email: user.user.email,
-      workspaceId: user.organization.workspaceId,
-    };
-  } catch (error) {
+    }),
+  );
+  if (state.status === "anonymous") {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        message: "preview_workspace_reconciliation_skipped",
+        reason: "session_unavailable",
+      }),
+    );
+    return state;
+  }
+  if (state.status !== "ready") {
     console.error(
       JSON.stringify({
         level: "error",
         message: "preview_workspace_reconciliation_failed",
-        reason:
-          error instanceof OrganizationProvisioningError
-            ? error.reason
-            : "unexpected",
+        reason: state.status,
       }),
     );
-    return undefined;
+    return state;
   }
+  return {
+    status: "ready" as const,
+    user: {
+      id: state.value.user.id,
+      name: state.value.user.name || "Autograph user",
+      email: state.value.user.email,
+      organizationId: state.value.organization.organizationId,
+      workspaceId: state.value.organization.workspaceId,
+    },
+  };
 }
 
 export default async function Home({ searchParams }: PageProps) {
@@ -80,13 +83,26 @@ export default async function Home({ searchParams }: PageProps) {
         : {}),
     });
   }
+  if (
+    user.status === "workspace-setup-retry" ||
+    user.status === "workspace-ambiguous" ||
+    user.status === "access-denied"
+  )
+    return <WorkspaceOnboarding status={user.status} />;
+
   const authenticated =
-    user !== undefined ||
+    user.status === "ready" ||
     (process.env.NODE_ENV !== "production" && mode === "authenticated");
   const integrations = await loadBuilderIntegrationState({
     environment: process.env,
-    userId: user?.id,
-    workspaceId: user?.workspaceId,
+    ...(user.status === "ready"
+      ? {
+          authenticated: true as const,
+          userId: user.user.id,
+          organizationId: user.user.organizationId,
+          workspaceId: user.user.workspaceId,
+        }
+      : { authenticated: false as const }),
   });
 
   return (

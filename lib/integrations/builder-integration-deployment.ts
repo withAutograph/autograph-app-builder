@@ -1,5 +1,3 @@
-import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
-import type { PreviewOAuthMembershipAuthority } from "../auth/preview-oauth-contract";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import {
@@ -15,32 +13,27 @@ import {
 import { createPostgresVercelInstallationStore } from "./postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "./vercel-installation";
 
-export async function resolveBuilderWorkspaceId(input: {
-  workspaceId?: string;
-  membership: PreviewOAuthMembershipAuthority;
-  issuer: string;
-  audience: string;
-  ownerUserId: string;
-}) {
-  if (input.workspaceId) return input.workspaceId;
-  return input.membership.activeWorkspaceForUser({
-    issuer: input.issuer,
-    audience: input.audience,
-    ownerUserId: input.ownerUserId,
-  });
-}
-
-export async function loadBuilderIntegrationState(input: {
+type BuilderIntegrationRequest = {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
-  userId?: string;
-  workspaceId?: string;
   forceModels?: boolean;
-}): Promise<BuilderIntegrationState> {
+} & (
+  | { authenticated: false }
+  | {
+      authenticated: true;
+      userId: string;
+      organizationId: string;
+      workspaceId: string;
+    }
+);
+
+export async function loadBuilderIntegrationState(
+  input: BuilderIntegrationRequest,
+): Promise<BuilderIntegrationState> {
   const modelsPromise = loadGatewayModels({
     defaultModelId: input.environment.EVE_MODEL,
     force: input.forceModels,
   });
-  if (!input.userId) {
+  if (!input.authenticated) {
     return builderIntegrationStateSchema.parse({
       vercel: { status: "disconnected", scopes: [] },
       github: { status: "disconnected", scopes: [] },
@@ -48,9 +41,7 @@ export async function loadBuilderIntegrationState(input: {
     });
   }
 
-  const unavailable = (
-    reason: "configuration-unavailable" | "workspace-unavailable",
-  ) => ({
+  const unavailable = (reason: "configuration-unavailable") => ({
     status: "unavailable" as const,
     scopes: [],
     unavailableReason: reason,
@@ -69,31 +60,10 @@ export async function loadBuilderIntegrationState(input: {
     });
   }
 
-  let workspaceId: string | undefined;
-  try {
-    const membership = createPostgresPreviewOrganizationAuthority(database, {
-      issuer: preview.issuer,
-      audience: preview.resource,
-    });
-    workspaceId = await resolveBuilderWorkspaceId({
-      workspaceId: input.workspaceId,
-      membership,
-      issuer: preview.issuer,
-      audience: preview.resource,
-      ownerUserId: input.userId,
-    });
-  } catch {}
-  if (!workspaceId) {
-    return builderIntegrationStateSchema.parse({
-      vercel: unavailable("workspace-unavailable"),
-      github: unavailable("workspace-unavailable"),
-      models: await modelsPromise,
-    });
-  }
   const authority = {
     issuer: preview.issuer,
     audience: preview.resource,
-    workspaceId,
+    workspaceId: input.workspaceId,
     ownerUserId: input.userId,
   };
 
