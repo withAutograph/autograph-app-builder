@@ -49,6 +49,7 @@ import {
   type SourceReceipt,
 } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
+import { compareOverlayPaths } from "./target-apply";
 
 type FileState = {
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
@@ -309,7 +310,9 @@ export function parseGitStatusV2(output: string): readonly ParsedGitStatus[] {
     }
     throw new Error("Git returned an unsupported porcelain-v2 status record.");
   }
-  return result.toSorted((left, right) => left.path.localeCompare(right.path));
+  return result.toSorted((left, right) =>
+    compareOverlayPaths(left.path, right.path),
+  );
 }
 
 async function fileState(
@@ -413,7 +416,7 @@ export async function inspectLocalPublicationDestination(input: {
         .flatMap((entry) => [entry.path, entry.originalPath])
         .filter((path): path is string => path !== undefined),
     ),
-  ].toSorted();
+  ].toSorted(compareOverlayPaths);
   const index = indexPaths.map((path) => {
     const entries = execFileSync(
       "git",

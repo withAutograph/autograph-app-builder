@@ -34,7 +34,7 @@ import {
 } from "./node-local-publication";
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import { inspectSourceReceipt, type SourceReceipt } from "./source-receipt";
-import type { OverlayChange } from "./target-apply";
+import { compareOverlayPaths, type OverlayChange } from "./target-apply";
 
 const hash = (value: Uint8Array | string | unknown) =>
   createHash("sha256")
@@ -98,7 +98,7 @@ async function reviewFor(
   const changes: OverlayChange[] = [];
   const overlay = new Map<string, Uint8Array>();
   for (const [path, value] of Object.entries(desired).toSorted(
-    ([left], [right]) => left.localeCompare(right),
+    ([left], [right]) => compareOverlayPaths(left, right),
   )) {
     if (value.kind === "added") {
       changes.push({
@@ -263,6 +263,42 @@ describe("approval-bound local publication", () => {
     vi.stubEnv("APP_BUILDER_LOCAL_PUBLICATION", "1");
   });
   afterEach(() => vi.unstubAllEnvs());
+
+  it("round-trips UTF-8 ordered review paths into local publication", async () => {
+    const { root, source } = await fixtureRoot();
+    const reviewed = await reviewFor(root, source, {
+      ".codex/skills/example/agents/openai.yaml": {
+        kind: "added",
+        bytes: Buffer.from("agent\n"),
+      },
+      ".codex/skills/example/SKILL.md": {
+        kind: "added",
+        bytes: Buffer.from("skill\n"),
+      },
+      "apps/example/\u{e000}.ts": {
+        kind: "added",
+        bytes: Buffer.from("bmp\n"),
+      },
+      "apps/example/\u{10000}.ts": {
+        kind: "added",
+        bytes: Buffer.from("astral\n"),
+      },
+    });
+    const review = JSON.parse(JSON.stringify(reviewed.review)) as typeof reviewed.review;
+    const proposal = await deriveLocalPublicationProposal({
+      destinationPath: root,
+      sourceReceipt: source,
+      review,
+    });
+
+    expect(proposal.approvedPaths).toEqual([
+      ".codex/skills/example/SKILL.md",
+      ".codex/skills/example/agents/openai.yaml",
+      "apps/example/\u{e000}.ts",
+      "apps/example/\u{10000}.ts",
+    ]);
+    expect(() => assertExactProposal(proposal)).not.toThrow();
+  });
 
   it.each(["path-less-v1", "wrong-version"] as const)(
     "rejects a rehashed %s review before local publication",

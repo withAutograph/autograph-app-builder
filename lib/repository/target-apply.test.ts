@@ -632,7 +632,15 @@ describe("proposal-bound target apply", () => {
   it("snapshots the overlay in one sandbox process without per-file commands", async () => {
     const firstDigest = createHash("sha256").update("first\n").digest("hex");
     const secondDigest = createHash("sha256").update("second\n").digest("hex");
-    const stdout = `644\t${firstDigest}\ta.txt\n755\t${secondDigest}\tnested/z.sh\n`;
+    const skillPath =
+      ".codex/skills/harness-engineering-rules/SKILL.md";
+    const agentPath =
+      ".codex/skills/harness-engineering-rules/agents/openai.yaml";
+    const stdout =
+      `644\t${firstDigest}\t${agentPath}\n` +
+      `644\t${secondDigest}\t${skillPath}\n` +
+      `644\t${firstDigest}\ta.txt\n` +
+      `755\t${secondDigest}\tnested/z.sh\n`;
     const run = vi.fn(async (request: unknown) => {
       void request;
       return { exitCode: 0, stdout, stderr: "" };
@@ -656,6 +664,8 @@ describe("proposal-bound target apply", () => {
     expect(command).not.toContain("sha256sum --");
     expect(command).not.toContain("stat --format");
     expect(snapshot.files).toEqual([
+      { path: skillPath, mode: "644", digest: secondDigest },
+      { path: agentPath, mode: "644", digest: firstDigest },
       { path: "a.txt", mode: "644", digest: firstDigest },
       { path: "nested/z.sh", mode: "755", digest: secondDigest },
     ]);

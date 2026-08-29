@@ -6,6 +6,7 @@ import {
   type SourceReceiptEvidence,
 } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
+import { compareOverlayPaths } from "./target-apply";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
@@ -489,7 +490,7 @@ function canonicalPaths(paths: readonly string[]): readonly string[] {
     paths.some((path) => !safeSourcePath(path))
   )
     throw new Error("GitHub publication paths are unsafe or duplicated.");
-  return [...paths].toSorted();
+  return [...paths].toSorted(compareOverlayPaths);
 }
 
 function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
@@ -510,7 +511,7 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
   delete changeSet.reviewedByCallId;
   changeSet.digest = review.changeSetDigest;
   const sortedChanges = [...review.changes].toSorted((left, right) =>
-    left.path.localeCompare(right.path),
+    compareOverlayPaths(left.path, right.path),
   );
   if (
     !isDigest(review.changeSetDigest) ||

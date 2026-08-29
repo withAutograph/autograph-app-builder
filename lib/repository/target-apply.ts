@@ -55,6 +55,18 @@ export type OverlaySnapshot = {
   files: readonly OverlayFile[];
 };
 
+export function compareOverlayPaths(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
+export function canonicalOverlayFiles(
+  files: readonly OverlayFile[],
+): OverlayFile[] {
+  return files
+    .map(({ path, mode, digest }) => ({ path, mode, digest }))
+    .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
+}
+
 export type OverlayChange = {
   path: string;
   kind: "added" | "modified" | "deleted";
@@ -376,9 +388,7 @@ export async function inspectApplyOverlay(
         digest: match[2],
       };
     });
-  const normalized = files.toSorted((left, right) =>
-    left.path.localeCompare(right.path),
-  );
+  const normalized = canonicalOverlayFiles(files);
   if (new Set(normalized.map(({ path }) => path)).size !== normalized.length)
     throw new Error("The proposal apply overlay returned duplicate paths.");
   return { files: normalized, treeDigest: sha256(JSON.stringify(normalized)) };
@@ -430,9 +440,12 @@ export async function inspectFixtureApplyOverlay(
       }),
     )
   )
-    .filter((file): file is OverlayFile => file !== undefined)
-    .toSorted((left, right) => left.path.localeCompare(right.path));
-  return { files, treeDigest: sha256(JSON.stringify(files)) };
+    .filter((file): file is OverlayFile => file !== undefined);
+  const normalized = canonicalOverlayFiles(files);
+  return {
+    files: normalized,
+    treeDigest: sha256(JSON.stringify(normalized)),
+  };
 }
 
 export function overlayChanges(
@@ -442,7 +455,7 @@ export function overlayChanges(
   const beforeFiles = new Map(before.files.map((file) => [file.path, file]));
   const afterFiles = new Map(after.files.map((file) => [file.path, file]));
   return [...new Set([...beforeFiles.keys(), ...afterFiles.keys()])]
-    .toSorted()
+    .toSorted(compareOverlayPaths)
     .flatMap((path): OverlayChange[] => {
       const previous = beforeFiles.get(path);
       const current = afterFiles.get(path);

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import {
   assertCurrentTargetApplyReceipt,
+  canonicalOverlayFiles,
+  compareOverlayPaths,
   overlayChanges,
   type OverlayChange,
   type OverlayFile,
@@ -91,7 +93,7 @@ function normalizedChanges(
       );
   }
   return [...changes].sort((left, right) =>
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+    compareOverlayPaths(left.path, right.path),
   );
 }
 
@@ -108,10 +110,8 @@ function normalizedSnapshot(files: readonly OverlayFile[]): OverlaySnapshot {
     paths.add(file.path);
     return { path: file.path, mode: file.mode, digest: file.digest };
   });
-  normalized.sort((left, right) =>
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
-  );
-  return { files: normalized, treeDigest: digest(normalized) };
+  const canonical = canonicalOverlayFiles(normalized);
+  return { files: canonical, treeDigest: digest(canonical) };
 }
 
 export function deriveNormalizedChangeSet(

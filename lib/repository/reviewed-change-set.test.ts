@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import type { TargetApplyReceipt } from "./target-apply";
+import {
+  canonicalOverlayFiles,
+  type TargetApplyReceipt,
+} from "./target-apply";
 import type { TargetValidationReceipt } from "./target-validation";
 import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
 import {
@@ -181,6 +184,67 @@ describe("reviewed change-set receipts", () => {
     expect(createReviewedChangeSetReceipt(proposal, "review-call")).toEqual(
       receipt,
     );
+  });
+
+  it("uses the snapshot byte order for nested mixed-case paths", () => {
+    const unchanged = [
+      {
+        path: ".codex/skills/harness-engineering-rules/agents/openai.yaml",
+        mode: "644",
+        digest: digest("a"),
+      },
+      {
+        path: ".codex/skills/harness-engineering-rules/SKILL.md",
+        mode: "644",
+        digest: digest("b"),
+      },
+    ];
+    const orderedPreTree = canonicalOverlayFiles([...preTree, ...unchanged]);
+    const orderedPostTree = canonicalOverlayFiles([...postTree, ...unchanged]);
+    const orderedApply = {
+      ...apply,
+      preTree: orderedPreTree,
+      preTreeDigest: sha256(orderedPreTree),
+      postTree: orderedPostTree,
+      postTreeDigest: sha256(orderedPostTree),
+    };
+    const orderedValidation = {
+      ...validation,
+      appliedTreeDigest: orderedApply.postTreeDigest,
+    };
+
+    expect(orderedPostTree.slice(0, 2).map(({ path }) => path)).toEqual([
+      ".codex/skills/harness-engineering-rules/SKILL.md",
+      ".codex/skills/harness-engineering-rules/agents/openai.yaml",
+    ]);
+    expect(() =>
+      deriveNormalizedChangeSet(
+        orderedApply,
+        orderedValidation,
+        digest("2"),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      deriveNormalizedChangeSet(
+        {
+          ...orderedApply,
+          postTreeDigest: sha256(
+            [...orderedPostTree].sort((left, right) =>
+              left.path.localeCompare(right.path),
+            ),
+          ),
+        },
+        {
+          ...orderedValidation,
+          appliedTreeDigest: sha256(
+            [...orderedPostTree].sort((left, right) =>
+              left.path.localeCompare(right.path),
+            ),
+          ),
+        },
+        digest("2"),
+      ),
+    ).toThrow("canonical snapshot");
   });
 
   it("fails closed for duplicate, unsafe, or non-exact validated changes", () => {

@@ -52,6 +52,7 @@ import {
   type SourceReceipt,
 } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
+import { compareOverlayPaths } from "./target-apply";
 import { resolveAllowedRepository } from "./supported-template";
 
 export type BranchWorktreePublicationFaultHooks = {
@@ -221,7 +222,7 @@ function parseCanonicalPathList(output: Buffer, message: string): string[] {
     paths.some((path) => !safeSourcePath(path))
   )
     throw new Error(message);
-  return paths.toSorted();
+  return paths.toSorted(compareOverlayPaths);
 }
 
 function publicationRoot(): string {
@@ -1352,7 +1353,9 @@ async function worktreeFileStates(
     }
   };
   await visit(proposal.worktreePath, "");
-  const paths = [...new Set([...cached, ...present])].toSorted();
+  const paths = [...new Set([...cached, ...present])].toSorted(
+    compareOverlayPaths,
+  );
   return Promise.all(
     paths.map(async (path) => ({
       path,
@@ -1488,7 +1491,7 @@ async function assertPostimages(
   const observed = await worktreeFileStates(proposal);
   if (
     JSON.stringify(observed.map(({ path }) => path)) !==
-    JSON.stringify([...expectedPaths].toSorted())
+    JSON.stringify([...expectedPaths].toSorted(compareOverlayPaths))
   )
     throw new Error("The publication worktree contains an unapproved path.");
   for (const { path, state } of observed) {
