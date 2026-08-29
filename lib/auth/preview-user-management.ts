@@ -144,6 +144,16 @@ export function createPreviewUserManagementLifecycle(
           },
         };
       } catch (cause) {
+        console.error(
+          JSON.stringify({
+            level: "error",
+            message: "preview_workspace_session_provisioning_failed",
+            reason:
+              cause instanceof OrganizationProvisioningError
+                ? cause.reason
+                : "unexpected",
+          }),
+        );
         throw organizationError(cause);
       }
     },
