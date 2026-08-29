@@ -16,6 +16,7 @@ export const hostedStorageMigrationTags = [
   "0006_tenant_github_publication",
   "0007_github_installation_authorization",
   "0008_sandbox_execution_lease",
+  "0009_builder_provider_integrations",
 ] as const;
 
 const contractSourcePaths = [
@@ -28,6 +29,8 @@ const contractSourcePaths = [
   "lib/repository/postgres-github-publication-receipt-store.ts",
   "lib/repository/postgres-github-publication-store.ts",
   "lib/repository/postgres-github-installation-store.ts",
+  "lib/integrations/postgres-vercel-installation.ts",
+  "lib/integrations/vercel-installation.ts",
 ] as const;
 
 export const hostedStorageExpectedColumns = [
@@ -134,6 +137,21 @@ export const hostedStorageExpectedColumns = [
     true,
   ],
   ["hosted_github_installation", "workspace_id", "text", true],
+  ["hosted_github_installation_binding", "account_id", "text", true],
+  ["hosted_github_installation_binding", "account_login", "text", true],
+  ["hosted_github_installation_binding", "account_type", "text", true],
+  ["hosted_github_installation_binding", "active", "boolean", true],
+  ["hosted_github_installation_binding", "audience", "text", true],
+  ["hosted_github_installation_binding", "installation_id", "text", true],
+  ["hosted_github_installation_binding", "issuer", "text", true],
+  ["hosted_github_installation_binding", "owner_user_id", "text", true],
+  [
+    "hosted_github_installation_binding",
+    "updated_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["hosted_github_installation_binding", "workspace_id", "text", true],
   ["hosted_github_publication_journal", "audience", "text", true],
   [
     "hosted_github_publication_journal",
@@ -170,6 +188,27 @@ export const hostedStorageExpectedColumns = [
   ["hosted_github_publication_proposal", "proposal", "jsonb", true],
   ["hosted_github_publication_proposal", "proposal_digest", "text", true],
   ["hosted_github_publication_proposal", "workspace_id", "text", true],
+  ["hosted_vercel_installation", "active", "boolean", true],
+  ["hosted_vercel_installation", "audience", "text", true],
+  ["hosted_vercel_installation", "display_name", "text", true],
+  ["hosted_vercel_installation", "encrypted_token", "text", true],
+  ["hosted_vercel_installation", "installation_id", "text", true],
+  ["hosted_vercel_installation", "issuer", "text", true],
+  ["hosted_vercel_installation", "owner_user_id", "text", true],
+  ["hosted_vercel_installation", "plan", "text", true],
+  ["hosted_vercel_installation", "scope_id", "text", true],
+  ["hosted_vercel_installation", "scope_type", "text", true],
+  ["hosted_vercel_installation", "slug", "text", true],
+  ["hosted_vercel_installation", "token_iv", "text", true],
+  ["hosted_vercel_installation", "token_key_version", "text", true],
+  ["hosted_vercel_installation", "token_tag", "text", true],
+  [
+    "hosted_vercel_installation",
+    "updated_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["hosted_vercel_installation", "workspace_id", "text", true],
   ["hosted_workspace_membership", "active", "boolean", true],
   ["hosted_workspace_membership", "audience", "text", true],
   ["hosted_workspace_membership", "issuer", "text", true],
@@ -322,6 +361,30 @@ export const hostedStorageExpectedColumns = [
   ["user", "image", "text", false],
   ["user", "name", "text", true],
   ["user", "updated_at", "timestamp with time zone", true],
+  ["vercel_installation_authorization_state", "audience", "text", true],
+  ["vercel_installation_authorization_state", "authority_digest", "text", true],
+  [
+    "vercel_installation_authorization_state",
+    "consumed_at",
+    "timestamp with time zone",
+    false,
+  ],
+  [
+    "vercel_installation_authorization_state",
+    "created_at",
+    "timestamp with time zone",
+    true,
+  ],
+  [
+    "vercel_installation_authorization_state",
+    "expires_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["vercel_installation_authorization_state", "issuer", "text", true],
+  ["vercel_installation_authorization_state", "owner_user_id", "text", true],
+  ["vercel_installation_authorization_state", "state_digest", "text", true],
+  ["vercel_installation_authorization_state", "workspace_id", "text", true],
   ["verification", "created_at", "timestamp with time zone", true],
   ["verification", "expires_at", "timestamp with time zone", true],
   ["verification", "id", "text", true],
@@ -361,6 +424,14 @@ export const hostedStorageExpectedIndexes = [
   ["hosted_github_installation", "hosted_github_installation_id_uidx"],
   ["hosted_github_installation", "hosted_github_installation_pk"],
   [
+    "hosted_github_installation_binding",
+    "hosted_github_installation_binding_id_uidx",
+  ],
+  [
+    "hosted_github_installation_binding",
+    "hosted_github_installation_binding_pk",
+  ],
+  [
     "hosted_github_publication_journal",
     "hosted_github_publication_journal_idempotency_uidx",
   ],
@@ -377,6 +448,8 @@ export const hostedStorageExpectedIndexes = [
     "hosted_github_publication_proposal",
     "hosted_github_publication_proposal_pk",
   ],
+  ["hosted_vercel_installation", "hosted_vercel_installation_id_uidx"],
+  ["hosted_vercel_installation", "hosted_vercel_installation_pk"],
   ["hosted_workspace_membership", "hosted_workspace_membership_pk"],
   ["jwks", "jwks_pkey"],
   ["oauth_access_token", "oauth_access_token_authorization_code_id_idx"],
@@ -414,6 +487,14 @@ export const hostedStorageExpectedIndexes = [
   ["session", "session_user_id_idx"],
   ["user", "user_email_uidx"],
   ["user", "user_pkey"],
+  [
+    "vercel_installation_authorization_state",
+    "vercel_installation_authorization_state_expiry_idx",
+  ],
+  [
+    "vercel_installation_authorization_state",
+    "vercel_installation_authorization_state_pkey",
+  ],
   ["verification", "verification_identifier_idx"],
   ["verification", "verification_pkey"],
 ] as const;
@@ -476,6 +557,22 @@ export const hostedStorageExpectedConstraints = [
   ["hosted_github_installation", "hosted_github_installation_id_check"],
   ["hosted_github_installation", "hosted_github_installation_pk"],
   [
+    "hosted_github_installation_binding",
+    "hosted_github_installation_binding_account_id_check",
+  ],
+  [
+    "hosted_github_installation_binding",
+    "hosted_github_installation_binding_account_type_check",
+  ],
+  [
+    "hosted_github_installation_binding",
+    "hosted_github_installation_binding_id_check",
+  ],
+  [
+    "hosted_github_installation_binding",
+    "hosted_github_installation_binding_pk",
+  ],
+  [
     "hosted_github_publication_journal",
     "hosted_github_publication_journal_idempotency_check",
   ],
@@ -524,6 +621,8 @@ export const hostedStorageExpectedConstraints = [
     "hosted_github_publication_proposal",
     "hosted_github_publication_proposal_record_check",
   ],
+  ["hosted_vercel_installation", "hosted_vercel_installation_pk"],
+  ["hosted_vercel_installation", "hosted_vercel_installation_scope_type_check"],
   ["hosted_workspace_membership", "hosted_workspace_membership_pk"],
   ["jwks", "jwks_pkey"],
   ["oauth_access_token", "oauth_access_token_client_id_fkey"],
@@ -554,6 +653,26 @@ export const hostedStorageExpectedConstraints = [
   ["session", "session_pkey"],
   ["session", "session_user_id_fkey"],
   ["user", "user_pkey"],
+  [
+    "vercel_installation_authorization_state",
+    "vercel_installation_authorization_authority_digest_check",
+  ],
+  [
+    "vercel_installation_authorization_state",
+    "vercel_installation_authorization_state_consumed_check",
+  ],
+  [
+    "vercel_installation_authorization_state",
+    "vercel_installation_authorization_state_digest_check",
+  ],
+  [
+    "vercel_installation_authorization_state",
+    "vercel_installation_authorization_state_pkey",
+  ],
+  [
+    "vercel_installation_authorization_state",
+    "vercel_installation_authorization_state_time_check",
+  ],
   ["verification", "verification_pkey"],
 ] as const;
 

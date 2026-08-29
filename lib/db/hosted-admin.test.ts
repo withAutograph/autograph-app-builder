@@ -38,6 +38,8 @@ function store(): HostedAdminStore {
     applyRetention: vi.fn(async () => ({
       operationRowsDeleted: 4,
       sessionRowsDeleted: 2,
+      integrationRowsDeleted: 0,
+      authorizationStateRowsDeleted: 0,
     })),
     deleteTenant: vi.fn(async () => ({
       membershipRowsDeleted: 1,
@@ -145,6 +147,8 @@ describe("hosted database administration contract", () => {
       membershipRowsDeleted: 0,
       operationRowsDeleted: 4,
       sessionRowsDeleted: 2,
+      integrationRowsDeleted: 0,
+      authorizationStateRowsDeleted: 0,
     });
 
     const future = request({

@@ -42,6 +42,8 @@ import {
 } from "react";
 import { SiQuickbooks, SiSage, SiSlack, SiXero } from "react-icons/si";
 
+import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
 import { authClient } from "../../lib/auth-client";
@@ -57,6 +59,9 @@ type BuilderForm = {
   channelWeb: boolean;
   channelSlack: boolean;
   connections: string[];
+  vercelInstallationId?: string;
+  githubInstallationId?: string;
+  modelId: string;
 };
 type ConnectionStage = "connect" | "configure" | "customize";
 type ConnectionFlow = { name: string; stage: ConnectionStage };
@@ -92,46 +97,6 @@ function connectionDescription(name: string) {
     connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`
   );
 }
-
-const teamOptions = [
-  { value: "pylee", label: "pylee", detail: "Hobby" },
-  { value: "autograph", label: "autograph", detail: "Pro" },
-];
-
-const gitScopeOptions = [
-  "jasonmorganson",
-  "abstractops",
-  "BucephalusTech",
-  "clientless-org",
-  "fatehai",
-  "mcpapp",
-  "precasting",
-  "pyleeai",
-  "withAutograph",
-].map((value) => ({ value, label: value }));
-
-const modelOptions = [
-  ["bytedance/seed-1.8", "Bytedance Seed 1.8"],
-  ["anthropic/claude-3-haiku", "Claude 3 Haiku"],
-  ["anthropic/claude-fable-5", "Claude Fable 5"],
-  ["anthropic/claude-haiku-4.5", "Claude Haiku 4.5"],
-  ["anthropic/claude-opus-4", "Claude Opus 4"],
-  ["anthropic/claude-opus-4.5", "Claude Opus 4.5"],
-  ["anthropic/claude-opus-4.6", "Claude Opus 4.6"],
-  ["anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5"],
-  ["deepseek/deepseek-v3.2", "DeepSeek V3.2"],
-  ["google/gemini-2.5-flash", "Gemini 2.5 Flash"],
-  ["google/gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
-  ["openai/gpt-5.4", "GPT 5.4"],
-  ["openai/gpt-5.4-mini", "GPT 5.4 Mini"],
-  ["openai/gpt-5.5", "GPT 5.5"],
-  ["openai/gpt-5.6-luna", "GPT 5.6 Luna"],
-  ["openai/gpt-5.6-sol", "GPT 5.6 Sol"],
-  ["openai/gpt-5.6-terra", "GPT 5.6 Terra"],
-  ["meta/llama-4-maverick", "Llama 4 Maverick"],
-  ["mistral/mistral-large-3", "Mistral Large 3"],
-  ["alibaba/qwen3-coder", "Qwen3 Coder"],
-].map(([value, label]) => ({ value, label, detail: value }));
 
 const suggestions = [
   "Build a customer feedback portal",
@@ -218,6 +183,9 @@ function SearchCombobox({
   footerIcon,
   detailPills = false,
   showSelectedCheck = true,
+  placeholder = "Select…",
+  disabled = false,
+  onFooterSelect,
 }: {
   label: string;
   value: string;
@@ -229,13 +197,15 @@ function SearchCombobox({
   footerIcon?: ReactNode;
   detailPills?: boolean;
   showSelectedCheck?: boolean;
+  placeholder?: string;
+  disabled?: boolean;
+  onFooterSelect?: () => void;
 }) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const selected =
-    options.find((option) => option.value === value) ?? options[0];
-  const [query, setQuery] = useState(selected.label);
+  const selected = options.find((option) => option.value === value);
+  const [query, setQuery] = useState(selected?.label ?? "");
   const [filtering, setFiltering] = useState(false);
   const [active, setActive] = useState(0);
   const shown = filtering
@@ -256,7 +226,7 @@ function SearchCombobox({
 
   function closeAndRestore() {
     setOpen(false);
-    setQuery(selected.label);
+    setQuery(selected?.label ?? "");
     setFiltering(false);
     setActive(0);
   }
@@ -290,6 +260,8 @@ function SearchCombobox({
         aria-autocomplete="list"
         aria-controls={`${id}-listbox`}
         value={query}
+        placeholder={placeholder}
+        disabled={disabled}
         autoComplete="off"
         spellCheck={false}
         onFocus={(event) => {
@@ -322,7 +294,7 @@ function SearchCombobox({
           }
         }}
       />
-      {selected.detail ? (
+      {selected?.detail ? (
         <span className={styles.comboDetail}>{selected.detail}</span>
       ) : null}
       <button
@@ -371,6 +343,10 @@ function SearchCombobox({
             className={styles.comboFooter}
             type="button"
             disabled={menuFooter.disabled}
+            onClick={() => {
+              setOpen(false);
+              onFooterSelect?.();
+            }}
           >
             <span className={styles.comboOptionIcon} aria-hidden="true">
               {footerIcon ?? <Plus size={20} />}
@@ -792,10 +768,28 @@ function AnonymousBuilder({
 function Builder({
   initialBrief,
   onCreate,
+  integrations,
 }: {
   initialBrief: string;
   onCreate: (form: BuilderForm) => void;
+  integrations: BuilderIntegrationState;
 }) {
+  const router = useRouter();
+  const teamOptions = integrations.vercel.scopes.map((scope) => ({
+    value: scope.installationId,
+    label: scope.displayName,
+    detail: scope.plan === "unknown" ? "Connected" : scope.plan,
+  }));
+  const gitScopeOptions = integrations.github.scopes.map((scope) => ({
+    value: scope.installationId,
+    label: scope.accountLogin,
+    detail: scope.accountType,
+  }));
+  const allModelOptions = integrations.models.entries.map((model) => ({
+    value: model.id,
+    label: model.name,
+    detail: model.id,
+  }));
   const [form, setForm] = useState<BuilderForm>({
     appName: "",
     repository: "",
@@ -804,10 +798,12 @@ function Builder({
     channelWeb: false,
     channelSlack: false,
     connections: [],
+    modelId: integrations.models.defaultModelId ?? "",
   });
-  const [team, setTeam] = useState("autograph");
-  const [gitScope, setGitScope] = useState("jasonmorganson");
-  const [model, setModel] = useState("openai/gpt-5.6-terra");
+  const [team, setTeam] = useState(teamOptions[0]?.value ?? "");
+  const [gitScope, setGitScope] = useState(gitScopeOptions[0]?.value ?? "");
+  const [model, setModel] = useState(integrations.models.defaultModelId ?? "");
+  const [zdrOnly, setZdrOnly] = useState(false);
   const [showMoreConnections, setShowMoreConnections] = useState(false);
   const [search, setSearch] = useState("");
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
@@ -825,7 +821,17 @@ function Builder({
     if (!normalizedSearch) return true;
     return name.toLowerCase().includes(normalizedSearch);
   });
-  const canSubmit = Boolean(form.brief.trim());
+  const modelOptions = zdrOnly
+    ? allModelOptions.filter((option) =>
+        integrations.models.entries.some(
+          (modelEntry) =>
+            modelEntry.id === option.value && modelEntry.zdr === "all",
+        ),
+      )
+    : allModelOptions;
+  const canSubmit = Boolean(
+    form.brief.trim() && integrations.models.status === "ready" && model,
+  );
   const addConnection = (name: string) => {
     if (comingSoonConnections.has(name)) return;
     setForm((current) => ({
@@ -866,6 +872,9 @@ function Builder({
         ...form,
         appName: form.appName.trim() || "support-app",
         repository: form.repository.trim() || "my-app",
+        ...(team ? { vercelInstallationId: team } : {}),
+        ...(gitScope ? { githubInstallationId: gitScope } : {}),
+        modelId: model,
       });
   }
 
@@ -934,44 +943,68 @@ function Builder({
           </a>
           .
         </p>
-        <label>
-          Vercel Team
-          <SearchCombobox
-            label="Select a Vercel Team"
-            value={team}
-            options={teamOptions}
-            onChange={setTeam}
-            prefix={<span className={styles.teamDot} data-team={team} />}
-            menuFooter={{
-              value: "create-team",
-              label: "Create a Team",
-              disabled: true,
-            }}
-            optionIcon={(option) => (
-              <span className={styles.teamDot} data-team={option.value} />
-            )}
-            footerIcon={<PlusCircle size={18} />}
-            detailPills
-          />
-        </label>
-        <div className={styles.repoRow}>
-          <label>
-            Git Scope
+        <div className={styles.integrationField}>
+          <span>Vercel Team</span>
+          {integrations.vercel.status === "connected" ? (
             <SearchCombobox
-              label="Git Scope"
-              value={gitScope}
-              options={gitScopeOptions}
-              onChange={setGitScope}
-              prefix={<FaGithub size={16} />}
+              label="Select a Vercel Team"
+              value={team}
+              options={teamOptions}
+              onChange={setTeam}
+              prefix={<span className={styles.teamDot} data-team={team} />}
               menuFooter={{
-                value: "add-github",
-                label: "Add GitHub Scope",
-                disabled: true,
+                value: "create-team",
+                label: "Connect another Vercel team",
               }}
-              optionIcon={() => <FaGithub size={16} />}
-              footerIcon={<Plus size={21} />}
+              onFooterSelect={() => router.push("/vercel/installations")}
+              optionIcon={(option) => (
+                <span className={styles.teamDot} data-team={option.value} />
+              )}
+              footerIcon={<PlusCircle size={18} />}
+              detailPills
             />
-          </label>
+          ) : (
+            <Link
+              className={styles.connectProvider}
+              href="/vercel/installations"
+            >
+              Connect to Vercel
+            </Link>
+          )}
+          <small className={styles.integrationHelp}>
+            Connect Vercel and Autograph can create and deploy the project for
+            you. You can also skip this and deploy later.
+          </small>
+        </div>
+        <div className={styles.repoRow}>
+          <div className={styles.integrationField}>
+            <span>Git Scope</span>
+            {integrations.github.status === "connected" ? (
+              <SearchCombobox
+                label="Git Scope"
+                value={gitScope}
+                options={gitScopeOptions}
+                onChange={setGitScope}
+                prefix={<FaGithub size={16} />}
+                menuFooter={{ value: "add-github", label: "Add GitHub Scope" }}
+                onFooterSelect={() => router.push("/github/installations")}
+                optionIcon={() => <FaGithub size={16} />}
+                footerIcon={<Plus size={21} />}
+              />
+            ) : (
+              <Link
+                className={styles.connectProvider}
+                href="/github/installations"
+              >
+                Connect to GitHub
+              </Link>
+            )}
+            <small className={styles.integrationHelp}>
+              Connect GitHub and Autograph can create and configure the
+              repository for you. You can also skip this and connect a
+              repository later.
+            </small>
+          </div>
           <span className={styles.slash} aria-hidden="true">
             /
           </span>
@@ -1023,7 +1056,23 @@ function Builder({
         <fieldset className={styles.modelField}>
           <legend>Model</legend>
           <label className={styles.checkLine}>
-            <input type="checkbox" name="zdr" /> Zero Data Retention
+            <input
+              type="checkbox"
+              name="zdr"
+              checked={zdrOnly}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setZdrOnly(checked);
+                if (
+                  checked &&
+                  !integrations.models.entries.some(
+                    (entry) => entry.id === model && entry.zdr === "all",
+                  )
+                )
+                  setModel("");
+              }}
+            />{" "}
+            Zero Data Retention
             <InfoTooltip>
               Only use providers that support Zero Data Retention.
             </InfoTooltip>
@@ -1038,7 +1087,22 @@ function Builder({
             onChange={setModel}
             prefix={<Search size={15} />}
             showSelectedCheck={false}
+            placeholder={
+              integrations.models.status === "ready"
+                ? "Select model"
+                : "Models unavailable"
+            }
+            disabled={integrations.models.status !== "ready"}
           />
+          {integrations.models.status === "unavailable" ? (
+            <button
+              className={styles.retryModels}
+              type="button"
+              onClick={() => router.refresh()}
+            >
+              Retry models
+            </button>
+          ) : null}
         </fieldset>
         <fieldset className={styles.sectionField}>
           <legend>Channels</legend>
@@ -1391,9 +1455,11 @@ function Ready({ form, onReset }: { form: BuilderForm; onReset: () => void }) {
 export function AppBuilder({
   authenticated,
   user,
+  integrations,
 }: {
   authenticated: boolean;
   user: UserSummary;
+  integrations: BuilderIntegrationState;
 }) {
   const router = useRouter();
   const [theme, setTheme] = useState<Theme>("system");
@@ -1437,11 +1503,12 @@ export function AppBuilder({
         <Builder
           key={savedBrief || "new"}
           initialBrief={savedBrief}
+          integrations={integrations}
           onCreate={async (form) => {
             setSubmitted(form);
             try {
               await navigator.clipboard.writeText(
-                `Autograph App Builder brief\n\nApp Name:\n${form.appName}\n\nRepository:\n${form.repository}\n\nApp Brief:\n${form.brief}`,
+                `Autograph App Builder brief\n\nApp Name:\n${form.appName}\n\nRepository:\n${form.repository}\n\nModel:\n${form.modelId}${form.vercelInstallationId ? `\n\nVercel Installation:\n${form.vercelInstallationId}` : ""}${form.githubInstallationId ? `\n\nGitHub Installation:\n${form.githubInstallationId}` : ""}\n\nApp Brief:\n${form.brief}`,
               );
             } catch {}
             setScreen("handoff");

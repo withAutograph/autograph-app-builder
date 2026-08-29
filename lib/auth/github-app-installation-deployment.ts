@@ -36,7 +36,10 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       status: 303,
       headers: {
         ...noStoreHeaders,
-        Location: `${origin}/github/installations?status=${status}`,
+        Location:
+          status === "connected"
+            ? `${origin}/?github=connected`
+            : `${origin}/github/installations?status=failed`,
       },
     });
 
