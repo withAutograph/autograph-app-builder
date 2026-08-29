@@ -4,13 +4,16 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { resolveAuthCallbackURL } from "@/lib/auth/preview-auth-ui";
 
 export default function SettingUpPage() {
   const router = useRouter();
   const session = authClient.useSession();
 
   useEffect(() => {
-    if (session.data?.user) router.replace("/");
+    if (session.data?.user) {
+      router.replace(resolveAuthCallbackURL("/", window.location.search));
+    }
   }, [router, session.data?.user]);
 
   return (

@@ -19,6 +19,7 @@ import type { ComponentProps } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { resolveAuthCallbackURL } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
 
@@ -51,7 +52,9 @@ export function ProviderButton({
     socialSignInMode,
   } = useAuth();
 
-  const callbackURL = `${baseURL}${redirectTo}`;
+  const callback = resolveAuthCallbackURL("/", window.location.search);
+  const callbackURL = new URL(`${baseURL}${redirectTo}`);
+  callbackURL.searchParams.set("callbackURL", callback);
 
   const { mutate: signInSocial, isPending: signInSocialPending } =
     useSignInSocial(authClient);
@@ -74,15 +77,18 @@ export function ProviderButton({
       signInPopup(
         {
           provider: providerId,
-          callbackURL,
+          callbackURL: callbackURL.toString(),
           requestSignUp: view === "signUp",
         },
-        { onSuccess: () => navigate({ to: redirectTo }) },
+        {
+          onSuccess: () =>
+            navigate({ to: callbackURL.pathname + callbackURL.search }),
+        },
       );
       return;
     }
 
-    signInSocial({ provider: providerId, callbackURL });
+    signInSocial({ provider: providerId, callbackURL: callbackURL.toString() });
   };
 
   return (
