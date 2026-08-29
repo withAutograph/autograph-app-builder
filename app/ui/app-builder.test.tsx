@@ -601,6 +601,9 @@ describe("Vercel-faithful App Builder flow", () => {
         'button[aria-label="Only use providers that support Zero Data Retention."]',
       ),
     ).not.toBeNull();
+    expect(
+      view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked,
+    ).toBe(false);
     await click(privacy);
     expect(privacy.checked).toBe(false);
     expect(view.textContent).toContain("Public Repository Name");
