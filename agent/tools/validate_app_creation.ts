@@ -24,6 +24,7 @@ import {
   executeProposalBoundValidation,
   fixtureValidationCommandExecutor,
   sandboxValidationCommandExecutor,
+  verifyTargetValidationProtectedTrees,
 } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
@@ -208,48 +209,33 @@ export default defineTool({
       appId: current.appSpec.appId,
       verifyProtectedState: async () => {
         const latest = appBuilderWorkflowState.get();
-        if (
-          latest.phase !== "validation_pending" ||
-          latest.validationAttempt.digest !== attempt.digest
-        )
-          throw new Error("The workflow changed during target validation.");
-        const readinessAfter = await inspectTargetExecutionReadiness({
-          state: latest,
+        const expectedPending = {
+          ...base,
+          phase: "validation_pending" as const,
+          validationAttempt: attempt,
+        };
+        await verifyTargetValidationProtectedTrees({
           sandbox,
-          expectedProposalDigest: latest.proposal.digest,
-        });
-        if (!readinessAfter.targetCommandReady)
-          throw new Error(
-            "Target execution readiness drifted during validation.",
-          );
-        const preparedAfter = fixture
-          ? await inspectFixtureApplyOverlay(
-              sandbox,
-              current.workspace.workspacePath,
-              current.appSpec.appId,
-            )
-          : await inspectApplyOverlay(sandbox, current.workspace.workspacePath);
-        const planningAfter = fixture
-          ? await inspectFixtureApplyOverlay(
-              sandbox,
-              planningRoot,
-              current.appSpec.appId,
-            )
-          : await inspectApplyOverlay(sandbox, planningRoot);
-        assertTargetValidationSourceBindings({
           apply: current.applyReceipt,
-          planningTreeDigest: planningAfter.treeDigest,
-          preparedTreeDigest: preparedAfter.treeDigest,
+          planningRoot,
+          preparedRoot: current.workspace.workspacePath,
+          assertWorkflowState: () =>
+            assertExactWorkflowState(
+              latest,
+              expectedPending,
+              "target validation protected-state check",
+            ),
+          ...(fixture
+            ? {
+                snapshotter: (fixtureSandbox, root) =>
+                  inspectFixtureApplyOverlay(
+                    fixtureSandbox,
+                    root,
+                    current.appSpec.appId,
+                  ),
+              }
+            : {}),
         });
-        const appliedDuring = fixture
-          ? await inspectFixtureApplyOverlay(
-              sandbox,
-              current.applyReceipt.applyRoot,
-              current.appSpec.appId,
-            )
-          : await inspectApplyOverlay(sandbox, current.applyReceipt.applyRoot);
-        if (appliedDuring.treeDigest !== current.applyReceipt.postTreeDigest)
-          throw new Error("The applied overlay changed during validation.");
       },
     });
     const appliedAfter = fixture

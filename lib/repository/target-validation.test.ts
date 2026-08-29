@@ -13,9 +13,11 @@ import {
   createTargetValidationAttempt,
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
+  TARGET_VALIDATION_RELAY_CALL_BUDGET,
   type TargetValidationReceipt,
   type ValidationCommandExecutor,
   validationOverlayRoot,
+  verifyTargetValidationProtectedTrees,
 } from "./target-validation";
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
@@ -389,6 +391,108 @@ describe("proposal-bound target validation", () => {
       expect(command).toContain("readlink --");
     }
   });
+
+  it("keeps the two-command protected validation below the relay ceiling", async () => {
+    const { run, sandbox } = sandboxFixture();
+    const relayCall = vi.fn();
+    const snapshotter = vi.fn(async (_sandbox: SandboxSession, root = "") => {
+      relayCall();
+      return snapshot(
+        root === "/workspace/repository"
+          ? apply.preparedTreeDigest
+          : root === "/workspace/planning"
+            ? apply.planningTreeDigest
+            : apply.postTreeDigest,
+      );
+    });
+    const executor = vi.fn(async () => {
+      relayCall();
+      return { exitCode: 0, stdout: "passed", stderr: "" };
+    });
+    const verifyProtectedState = () =>
+      verifyTargetValidationProtectedTrees({
+        sandbox,
+        apply,
+        planningRoot: "/workspace/planning",
+        preparedRoot: "/workspace/repository",
+        assertWorkflowState: () => undefined,
+        snapshotter,
+      });
+    const result = await executeProposalBoundValidation({
+      sandbox,
+      executor,
+      snapshotter,
+      verifyProtectedState,
+      apply,
+      attempt: createTargetValidationAttempt(apply, "validation-call"),
+      appId: "example",
+    });
+    expect(result.ok).toBe(true);
+    const relayCalls = run.mock.calls.length + relayCall.mock.calls.length;
+    expect(relayCalls).toBe(TARGET_VALIDATION_RELAY_CALL_BUDGET);
+    expect(relayCalls).toBeLessThan(128);
+  });
+
+  it("rejects stale workflow state before protected-tree inspection", async () => {
+    const { sandbox } = sandboxFixture();
+    const snapshotter = vi.fn(async () => snapshot(apply.postTreeDigest));
+    await expect(
+      verifyTargetValidationProtectedTrees({
+        sandbox,
+        apply,
+        planningRoot: "/workspace/planning",
+        preparedRoot: "/workspace/repository",
+        assertWorkflowState: () => {
+          throw new Error("stale workflow state");
+        },
+        snapshotter,
+      }),
+    ).rejects.toThrow("stale workflow state");
+    expect(snapshotter).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "prepared",
+      [
+        snapshot(digest("0")),
+        snapshot(apply.planningTreeDigest),
+        snapshot(apply.postTreeDigest),
+      ],
+    ],
+    [
+      "planning",
+      [
+        snapshot(apply.preparedTreeDigest),
+        snapshot(digest("0")),
+        snapshot(apply.postTreeDigest),
+      ],
+    ],
+    [
+      "applied",
+      [
+        snapshot(apply.preparedTreeDigest),
+        snapshot(apply.planningTreeDigest),
+        snapshot(digest("0")),
+      ],
+    ],
+  ] as const)(
+    "rejects %s tree drift during protected validation",
+    async (_name, snapshots) => {
+      const { sandbox } = sandboxFixture();
+      const remaining = [...snapshots];
+      await expect(
+        verifyTargetValidationProtectedTrees({
+          sandbox,
+          apply,
+          planningRoot: "/workspace/planning",
+          preparedRoot: "/workspace/repository",
+          assertWorkflowState: () => undefined,
+          snapshotter: async () => remaining.shift()!,
+        }),
+      ).rejects.toThrow(/changed/u);
+    },
+  );
 
   it("records a command failure and does not dispatch later validation", async () => {
     const { sandbox } = sandboxFixture();

@@ -109,6 +109,10 @@ export type TargetValidationResult =
   | { ok: true; receipt: TargetValidationReceipt }
   | { ok: false; receipt: TargetValidationFailureReceipt };
 
+// Two fixed commands, each with three materialization calls, one input
+// snapshot, one command, and three three-tree protected-state snapshots.
+export const TARGET_VALIDATION_RELAY_CALL_BUDGET = 28;
+
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
@@ -425,6 +429,30 @@ export function appliedOverlayDriftFailure(input: {
     input.receipt.commands,
     "applied-overlay-drift",
   );
+}
+
+export async function verifyTargetValidationProtectedTrees(input: {
+  sandbox: SandboxSession;
+  apply: TargetApplyReceipt;
+  planningRoot: string;
+  preparedRoot: string;
+  assertWorkflowState: () => void;
+  snapshotter?: typeof inspectApplyOverlay;
+}): Promise<void> {
+  input.assertWorkflowState();
+  const snapshotter = input.snapshotter ?? inspectApplyOverlay;
+  const [prepared, planning, applied] = await Promise.all([
+    snapshotter(input.sandbox, input.preparedRoot),
+    snapshotter(input.sandbox, input.planningRoot),
+    snapshotter(input.sandbox, input.apply.applyRoot),
+  ]);
+  assertTargetValidationSourceBindings({
+    apply: input.apply,
+    planningTreeDigest: planning.treeDigest,
+    preparedTreeDigest: prepared.treeDigest,
+  });
+  if (applied.treeDigest !== input.apply.postTreeDigest)
+    throw new Error("The applied overlay changed during validation.");
 }
 
 export async function executeProposalBoundValidation(input: {
