@@ -26,6 +26,7 @@ export function Providers({ children }: { children: ReactNode }) {
           replace ? router.replace(to) : router.push(to)
         }
         plugins={[oauthProviderPlugin()]}
+        emailAndPassword={{ enabled: false }}
         redirectTo="/auth/setting-up?callbackURL=%2F"
         socialProviders={[
           { id: "vercel", label: "Vercel", icon: <SiVercel /> },
