@@ -8,8 +8,8 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "904835ee9ade7591b057c9d12ebe5930cb93c9de";
-export const ARRUSTED_TARGET_TREE = "3b67b31a01c7ccc052ade8520acb7d0887489540";
+export const ARRUSTED_TARGET_SHA = "d15606efe06d9150ecc7230e054d17c50b269d84";
+export const ARRUSTED_TARGET_TREE = "5616c24161fc051d65bbad0f169d284d53ecf5e7";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_RUST_VERSION = "1.97.1";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
