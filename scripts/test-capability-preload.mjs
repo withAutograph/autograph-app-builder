@@ -84,6 +84,8 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
       : undefined;
   if (eveEnvelope?.bodyTimeout === "360000")
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = eveEnvelope.bodyTimeout;
+  if (eveEnvelope?.headersTimeout === "360000")
+    environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = eveEnvelope.headersTimeout;
   return environment;
 }
 

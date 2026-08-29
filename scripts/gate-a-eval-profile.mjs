@@ -19,6 +19,7 @@ export const gateAEnvironmentFields = Object.freeze([
   "REPOSITORY_LOCAL_ROOTS",
   "REPOSITORY_WORKSPACE_ROOT",
   "WORKFLOW_LOCAL_BODY_TIMEOUT_MS",
+  "WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS",
 ]);
 
 const imagePattern =
@@ -259,6 +260,7 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
   } else {
     environment.APP_BUILDER_REAL_SANDBOX = "1";
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = "360000";
+    environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = "360000";
     if (profile.profile === "hosted-artifact")
       environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF = "1";
     if (profile.image !== null)

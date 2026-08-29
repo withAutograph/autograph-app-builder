@@ -73,6 +73,7 @@ describe("test capability preload", () => {
         EVE_DEV_WORKER_APP_ROOT: "/hostile/app-root",
         WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
         WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile-timeout",
+        WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "hostile-timeout",
         PORT: "43123",
         EVE_DEV_WORKFLOW_TRANSPORT_SECRET: "hostile-secret",
         EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile-sandbox",
@@ -95,8 +96,10 @@ describe("test capability preload", () => {
       nestedAppRoot: string | null;
       nestedEveDev: string | null;
       nestedWorkflowBodyTimeout: string | null;
+      nestedWorkflowHeadersTimeout: string | null;
       workflowBaseUrl: string | null;
       workflowBodyTimeout: string | null;
+      workflowHeadersTimeout: string | null;
       port: string | null;
       hasTransportSecret: boolean;
       sandboxRunId: string | null;
@@ -114,6 +117,7 @@ describe("test capability preload", () => {
     expect(result.eveDev).toBeNull();
     expect(result.workflowBaseUrl).toBeNull();
     expect(result.workflowBodyTimeout).toBeNull();
+    expect(result.workflowHeadersTimeout).toBeNull();
     expect(result.port).toBeNull();
     expect(result.hasTransportSecret).toBe(false);
     expect(result.sandboxRunId).toBeNull();
@@ -125,6 +129,7 @@ describe("test capability preload", () => {
     expect(result.nestedAppRoot).toBe(repositoryRoot);
     expect(result.nestedEveDev).toBeNull();
     expect(result.nestedWorkflowBodyTimeout).toBeNull();
+    expect(result.nestedWorkflowHeadersTimeout).toBeNull();
     for (const hostileEveDev of [undefined, "0", "hostile"]) {
       const environment = { ...process.env, EVE_DEV: hostileEveDev };
       const hostileWorker = new Worker(workerFixture, { env: environment });

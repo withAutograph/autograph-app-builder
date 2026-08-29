@@ -221,6 +221,9 @@ export async function runWithTestCapability(options: {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
         options.gateAEvalProfile,
       ),
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
+        options.gateAEvalProfile,
+      ),
       NODE_OPTIONS: `--import=${preload}`,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,

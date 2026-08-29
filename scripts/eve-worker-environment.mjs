@@ -62,9 +62,9 @@ function validateTransportSecret(value) {
   return value;
 }
 
-function validateBodyTimeout(value) {
+function validateWorkflowTimeout(value, field) {
   if (value === undefined) return undefined;
-  if (value !== "360000") fail("body timeout");
+  if (value !== "360000") fail(field);
   return value;
 }
 
@@ -92,8 +92,13 @@ export function captureEveWorkerEnvelope(source, expectedAppRoot) {
       source.EVE_EVALUATION_RUN_ID,
       "evaluation run id",
     ),
-    bodyTimeout: validateBodyTimeout(
+    bodyTimeout: validateWorkflowTimeout(
       source.WORKFLOW_LOCAL_BODY_TIMEOUT_MS,
+      "body timeout",
+    ),
+    headersTimeout: validateWorkflowTimeout(
+      source.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS,
+      "headers timeout",
     ),
   });
 }
@@ -109,6 +114,7 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
         "bodyTimeout",
         "developmentSandboxRunId",
         "evaluationRunId",
+        "headersTimeout",
         "port",
         "transportSecret",
         "version",
@@ -130,6 +136,7 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
       EVE_EVALUATION: "1",
       EVE_EVALUATION_RUN_ID: value.evaluationRunId,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: value.bodyTimeout,
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: value.headersTimeout,
     },
     expectedAppRoot,
   );
@@ -148,4 +155,7 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
   if (captured.bodyTimeout === undefined)
     delete environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS;
   else environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = captured.bodyTimeout;
+  if (captured.headersTimeout === undefined)
+    delete environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS;
+  else environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = captured.headersTimeout;
 }
