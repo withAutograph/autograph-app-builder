@@ -52,7 +52,7 @@ export type GitHubRepositoryObservation = {
   installationIdentityDigest: Digest;
   releaseGate: {
     name: typeof REPOSITORY_RELEASE_GATE;
-    configured: false;
+    configured: boolean;
   };
   digest: Digest;
 };
@@ -105,7 +105,7 @@ export type DraftPullRequestProposal = {
   repositoryObservationDigest: Digest;
   releaseGate: {
     name: typeof REPOSITORY_RELEASE_GATE;
-    configured: false;
+    configured: boolean;
   };
   reviewDigest: Digest;
   changeSetDigest: Digest;
@@ -183,7 +183,7 @@ export type DraftPullRequestSuccessReceipt = {
   changeSetDigest: Digest;
   changedContentDigest: Digest;
   normalizedChangedPaths: readonly string[];
-  releaseGateAbsent: true;
+  releaseGateUnchanged: true;
   recoveredFromPending: boolean;
   providerReadBackDigest: Digest;
   digest: Digest;
@@ -995,11 +995,9 @@ export function createRepositoryObservation(
     !isDigest(input.installationIdentityDigest) ||
     !exactKeys(input.releaseGate, ["name", "configured"]) ||
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    input.releaseGate.configured !== false
+    typeof input.releaseGate.configured !== "boolean"
   )
-    throw new Error(
-      "The repository observation is invalid or release-enabled.",
-    );
+    throw new Error("The repository observation is invalid.");
   const unsigned = { version: GITHUB_PUBLICATION_VERSION, ...input };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -1058,8 +1056,7 @@ export async function resolveImmutableExistingSource(input: {
     repository.installationIdentityDigest !== installation.digest ||
     repository.repositoryId !== input.repositoryId ||
     repository.headSha !== input.expectedSha ||
-    repository.headTree !== input.expectedTree ||
-    !releaseGateAbsent(repository)
+    repository.headTree !== input.expectedTree
   )
     throw new Error(
       "The GitHub source changed or is outside the approved installation.",
@@ -1106,8 +1103,7 @@ export function assertExactImmutableGitHubSourceReceipt(
     receipt.repository.headSha !== receipt.resolvedSha ||
     receipt.repository.headTree !== receipt.resolvedTree ||
     receipt.repository.installationIdentityDigest !==
-      receipt.installationIdentityDigest ||
-    !releaseGateAbsent(receipt.repository)
+      receipt.installationIdentityDigest
   )
     throw new Error("The immutable GitHub source receipt is malformed.");
 }
@@ -1297,7 +1293,7 @@ export function createDraftPullRequestProposal(input: {
     baseSha: input.repository.headSha,
     baseTree: input.repository.headTree,
     repositoryObservationDigest: input.repository.digest,
-    releaseGate: { name: REPOSITORY_RELEASE_GATE, configured: false as const },
+    releaseGate: input.repository.releaseGate,
     reviewDigest: input.review.digest,
     changeSetDigest: input.review.changeSetDigest,
     changedContentDigest: input.review.changedContentDigest,
@@ -1337,7 +1333,7 @@ export function assertExactDraftPullRequestProposal(
     !isObjectId(proposal.baseTree) ||
     !isDigest(proposal.repositoryObservationDigest) ||
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    proposal.releaseGate.configured !== false ||
+    typeof proposal.releaseGate.configured !== "boolean" ||
     !isDigest(proposal.reviewDigest) ||
     !isDigest(proposal.changeSetDigest) ||
     !isDigest(proposal.changedContentDigest) ||
@@ -1423,7 +1419,9 @@ function assertDraftReadBack(
     readBack.repository.repositoryId !== proposal.repositoryId ||
     readBack.repository.headSha !== proposal.baseSha ||
     readBack.repository.headTree !== proposal.baseTree ||
-    !releaseGateAbsent(readBack.repository) ||
+    readBack.repository.releaseGate.name !== proposal.releaseGate.name ||
+    readBack.repository.releaseGate.configured !==
+      proposal.releaseGate.configured ||
     JSON.stringify(canonicalPathsOrEmpty(readBack.changedPathsSinceBase)) !==
       JSON.stringify(readBack.changedPathsSinceBase) ||
     canonicalPathsOrEmpty(readBack.changedPathsSinceBase).some((path) =>
@@ -1542,7 +1540,7 @@ export function assertCanonicalGitHubMutationReceipt(
               "changeSetDigest",
               "changedContentDigest",
               "normalizedChangedPaths",
-              "releaseGateAbsent",
+              "releaseGateUnchanged",
               "recoveredFromPending",
               "providerReadBackDigest",
             ];
@@ -1570,7 +1568,9 @@ export function assertCanonicalGitHubMutationReceipt(
     if (
       !isDigest(value.providerReadBackDigest) ||
       !isDigest(value.installationIdentityDigest) ||
-      value.releaseGateAbsent !== true
+      (value.kind === "fresh-repository"
+        ? value.releaseGateAbsent !== true
+        : value.releaseGateUnchanged !== true)
     )
       throw new Error("GitHub success receipt read-back binding is invalid.");
     if (value.kind === "fresh-repository") {
@@ -1721,7 +1721,7 @@ function draftSuccess(input: {
     changeSetDigest: input.readBack.pullRequest.changeSetDigest,
     changedContentDigest: input.readBack.branch.changedContentDigest,
     normalizedChangedPaths: input.readBack.branch.normalizedChangedPaths,
-    releaseGateAbsent: true as const,
+    releaseGateUnchanged: true as const,
     recoveredFromPending: input.recovered,
     providerReadBackDigest: input.readBack.digest,
   });

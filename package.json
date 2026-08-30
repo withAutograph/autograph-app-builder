@@ -28,7 +28,10 @@
     "install:portable-plugin": "mise run package:install-portable --",
     "smoke:portable-plugin": "mise run package:smoke-portable --",
     "prove:hosted-plugin": "mise run package:prove-hosted --",
-    "test:portable-plugin": "mise run package:test-portable"
+    "test:portable-plugin": "mise run package:test-portable",
+    "storybook": "mise run storybook:dev",
+    "build-storybook": "mise run storybook:build",
+    "test-storybook": "mise run storybook:test"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -90,7 +93,17 @@
     "tsx": "4.23.12",
     "typescript": "6.0.3",
     "vitest": "4.1.10",
-    "yaml": "2.9.0"
+    "yaml": "2.9.0",
+    "storybook": "^10.5.10",
+    "@storybook/nextjs-vite": "^10.5.10",
+    "@storybook/addon-vitest": "^10.5.10",
+    "@storybook/addon-a11y": "^10.5.10",
+    "@storybook/addon-docs": "^10.5.10",
+    "vite": "latest",
+    "eslint-plugin-storybook": "^10.5.10",
+    "@vitest/browser-playwright": "4.1.10",
+    "@vitest/coverage-v8": "4.1.10",
+    "playwright": "latest"
   },
   "packageManager": "pnpm@11.7.0",
   "engines": {

@@ -5,14 +5,14 @@ import { useMemo, useState, type ChangeEvent } from "react";
 import { CopyIcon } from "../ui/brand";
 import styles from "../ui/public-site.module.css";
 
-type Brief = {
+export type Brief = {
   objective: string;
   repository: string;
   constraints: string;
   doneWhen: string;
 };
 
-const emptyBrief: Brief = {
+export const emptyBrief: Brief = {
   objective: "",
   repository: "",
   constraints: "",
@@ -71,8 +71,14 @@ function PreviewValue({
   );
 }
 
-export function WorkspaceBrief() {
-  const [brief, setBrief] = useState<Brief>(emptyBrief);
+export function WorkspaceBrief({
+  initialBrief = emptyBrief,
+  writeToClipboard = (value) => navigator.clipboard.writeText(value),
+}: {
+  initialBrief?: Brief;
+  writeToClipboard?: (value: string) => Promise<void>;
+}) {
+  const [brief, setBrief] = useState<Brief>(initialBrief);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -86,7 +92,7 @@ export function WorkspaceBrief() {
 
   async function copyBrief() {
     try {
-      await navigator.clipboard.writeText(clipboardText);
+      await writeToClipboard(clipboardText);
       setCopyState("copied");
     } catch {
       setCopyState("failed");

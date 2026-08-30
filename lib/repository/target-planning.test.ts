@@ -18,13 +18,18 @@ function sandboxFixture() {
     [
       ".app-builder/source-files.json",
       JSON.stringify([
-        { path: "microfrontends.json" },
-        { path: "apps/shell/app/auth/[[...path]]/page.tsx" },
-        { path: "docs/assets/Autograph FavIcon.png" },
+        { path: "microfrontends.json", mode: "100644" },
+        { path: "apps/shell/app/auth/[[...path]]/page.tsx", mode: "100644" },
+        { path: "apps/vendor/app/page.tsx", mode: "100644" },
+        { path: "docs/assets/Autograph FavIcon.png", mode: "100644" },
       ]),
     ],
     ["repository/microfrontends.json", "{}\n"],
     ["repository/apps/shell/app/auth/[[...path]]/page.tsx", "export {};\n"],
+    [
+      "repository/apps/vendor/app/page.tsx",
+      "export default function Page() {}\n",
+    ],
     ["repository/docs/assets/Autograph FavIcon.png", "fixture\n"],
   ]);
   const run = vi.fn(async (input: unknown) => {
@@ -148,5 +153,78 @@ describe("typed target identity and planning", () => {
       abortSignal: expect.any(AbortSignal),
     });
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+  });
+
+  it("binds existing-app postimages to exact source preimages", async () => {
+    const { sandbox } = sandboxFixture();
+    const fixture = fixtureTargetCommandExecutor();
+    const result = await executeTargetIdentityAndPlanning({
+      sandbox,
+      executor: fixture,
+      appId: "vendor",
+      appSpecContent: "accepted",
+      appSpecDigest: "a".repeat(64),
+      artifactRevision: "b".repeat(64),
+      existingAppChanges: [
+        {
+          path: "apps/vendor/app/page.tsx",
+          content: "export default function Page() { return 'Finance'; }\n",
+        },
+      ],
+    });
+    expect("operation" in result.proposal && result.proposal.operation).toBe(
+      "iterate-existing-app",
+    );
+    if (!("operation" in result.proposal)) throw new Error("missing iteration");
+    expect(result.proposal.iteration.changes[0]).toMatchObject({
+      path: "apps/vendor/app/page.tsx",
+      before: { mode: "644" },
+      after: { mode: "644" },
+    });
+  });
+
+  it("refuses to run the creation planner for an existing application", async () => {
+    const { sandbox } = sandboxFixture();
+    const executor = vi.fn(fixtureTargetCommandExecutor());
+    await expect(
+      executeTargetIdentityAndPlanning({
+        sandbox,
+        executor,
+        appId: "vendor",
+        appSpecContent: "accepted",
+        appSpecDigest: "a".repeat(64),
+        artifactRevision: "b".repeat(64),
+      }),
+    ).rejects.toThrow(
+      "The requested application already exists. Inspect its app-owned source files",
+    );
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(executor).toHaveBeenCalledWith(
+      expect.objectContaining({ command: "identity" }),
+    );
+  });
+
+  it("rejects path escapes, other-app paths, and missing preimages", async () => {
+    const { sandbox } = sandboxFixture();
+    const base = {
+      sandbox,
+      executor: fixtureTargetCommandExecutor(),
+      appId: "vendor",
+      appSpecContent: "accepted",
+      appSpecDigest: "a".repeat(64),
+      artifactRevision: "b".repeat(64),
+    };
+    for (const path of [
+      "../secrets",
+      "apps/shell/app/page.tsx",
+      "apps/vendor/app/missing.tsx",
+      "apps/vendor/app.contract.json",
+    ])
+      await expect(
+        executeTargetIdentityAndPlanning({
+          ...base,
+          existingAppChanges: [{ path, content: "changed\n" }],
+        }),
+      ).rejects.toThrow();
   });
 });

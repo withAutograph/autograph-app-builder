@@ -387,6 +387,42 @@ describe("proposal-bound target apply", () => {
     });
   });
 
+  it("does not remove a competing call's final overlay when its atomic claim loses", async () => {
+    const fixture = sandboxFixture();
+    fixture.run
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "mkdir: materializing: File exists",
+      });
+
+    await expect(
+      executeProposalBoundApply({
+        sandbox: fixture.sandbox,
+        executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        binding,
+        artifactRevision: binding.artifactRevision,
+        proposal,
+        appliedByCallId: "competing-apply-call",
+      }),
+    ).rejects.toThrow(/already being materialized/u);
+
+    expect(fixture.removePath).not.toHaveBeenCalled();
+    expect(fixture.removePath).not.toHaveBeenCalledWith({
+      path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+      recursive: true,
+      force: true,
+    });
+    const claim = fixture.run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .find((command) => command.includes("/materializing"));
+    expect(claim).toBe(
+      `mkdir /workspace/.app-builder/apply/${binding.proposalDigest}/materializing`,
+    );
+  });
+
   it("records normalized pre/post overlay changes and a strict target receipt", async () => {
     const { run, sandbox, writeTextFile, writeBinaryFile, removePath } =
       sandboxFixture();
@@ -441,6 +477,33 @@ describe("proposal-bound target apply", () => {
       path: `.app-builder/apply/${binding.proposalDigest}/repository/prototype/expense-review/app-spec.md`,
       content: acceptedAppSpec,
     });
+  });
+
+  it("copies a Vercel planning overlay with its workspace-materialized dependency root", async () => {
+    const { run, sandbox } = sandboxFixture();
+    const snapshots = [planning, before, before, after];
+    const result = await executeProposalBoundApply({
+      sandbox,
+      executor: async () => ({
+        exitCode: 0,
+        stdout: JSON.stringify(commandReceipt()),
+        stderr: "",
+      }),
+      snapshotter: async () => snapshots.shift()!,
+      binding,
+      artifactRevision: binding.artifactRevision,
+      proposal,
+      appliedByCallId: "hosted-apply-call",
+      environment: { APP_BUILDER_REAL_SANDBOX: "1", VERCEL: "1" },
+    });
+    expect(result.ok).toBe(true);
+    const overlayCopy = run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .find((command) => command.includes("cp -R"));
+    expect(overlayCopy).toContain(
+      `/workspace/.app-builder/hosted-dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+    );
+    expect(overlayCopy).not.toContain("/opt/app-builder/dependencies/");
   });
 
   it("binds the pristine prepared tree separately from injected planning config", async () => {
@@ -638,6 +701,102 @@ describe("proposal-bound target apply", () => {
       abortSignal: expect.any(AbortSignal),
     });
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+  });
+
+  it("applies an existing-app replacement only when its source preimage matches", async () => {
+    const beforeContent = "export default function Page() {}\n";
+    const afterContent =
+      "export default function Page() { return 'Finance'; }\n";
+    const path = "apps/vendor/app/page.tsx";
+    const iteration = {
+      ...proposal,
+      operation: "iterate-existing-app" as const,
+      contract: {
+        ...proposal.contract,
+        appId: "vendor",
+        appSpec: {
+          path: "prototype/vendor/app-spec.md",
+          sha256: acceptedAppSpecDigest,
+        },
+      },
+      futurePath: "apps/vendor/app.contract.json",
+      plan: {
+        ...proposal.plan,
+        source: {
+          ...proposal.plan.source,
+          workspacePath: "apps/vendor",
+          packageName: "@autograph/vendor",
+        },
+        product: {
+          ...proposal.plan.product,
+          appSpec: {
+            path: "prototype/vendor/app-spec.md",
+            sha256: acceptedAppSpecDigest,
+          },
+        },
+        topology: {
+          ...proposal.plan.topology,
+          projectName: "apps-vendor",
+          packageName: "@autograph/vendor",
+          routes: ["/vendor", "/vendor/:path*"],
+          proposedDigest: proposal.plan.topology.currentDigest,
+        },
+      },
+      iteration: {
+        changes: [
+          {
+            path,
+            before: {
+              mode: "644",
+              digest: createHash("sha256").update(beforeContent).digest("hex"),
+            },
+            after: {
+              mode: "644",
+              digest: createHash("sha256").update(afterContent).digest("hex"),
+              content: afterContent,
+            },
+          },
+        ],
+        digest: "f".repeat(64),
+      },
+    } satisfies TargetProposal;
+    const writeTextFile = vi.fn(async () => undefined);
+    const readBinaryFile = vi.fn(async () => Buffer.from(beforeContent));
+    const run = vi.fn();
+    const result = await sandboxApplyCommandExecutor()({
+      sandbox: {
+        id: "sandbox",
+        readBinaryFile,
+        writeTextFile,
+        run,
+      } as unknown as SandboxSession,
+      appId: "vendor",
+      applyRoot: "/workspace/overlay",
+      proposalPath: "/workspace/proposal.json",
+      proposal: iteration,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(writeTextFile).toHaveBeenCalledWith({
+      path: `overlay/${path}`,
+      content: afterContent,
+    });
+    expect(run).not.toHaveBeenCalled();
+
+    readBinaryFile.mockResolvedValueOnce(Buffer.from("stale\n"));
+    const stale = await sandboxApplyCommandExecutor()({
+      sandbox: {
+        id: "sandbox",
+        readBinaryFile,
+        writeTextFile,
+        run,
+      } as unknown as SandboxSession,
+      appId: "vendor",
+      applyRoot: "/workspace/overlay",
+      proposalPath: "/workspace/proposal.json",
+      proposal: iteration,
+    });
+    expect(stale).toMatchObject({ exitCode: 2 });
+    expect(writeTextFile).toHaveBeenCalledTimes(1);
   });
 
   it("snapshots the overlay in one sandbox process without per-file commands", async () => {

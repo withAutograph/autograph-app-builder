@@ -28,6 +28,41 @@ describe("build-ready AppSpec validation", () => {
     });
   });
 
+  it.each([
+    ["without a blank line", "## Build handoff\n```json"],
+    ["with extra blank lines", "## Build handoff\n\n\n```json"],
+    ["with an uppercase fence language", "## Build handoff\n\n```JSON"],
+  ])("accepts harmless handoff Markdown %s", (_label, headingAndFence) => {
+    expect(
+      validateBuildReadyAppSpec(
+        completeAppSpec().replace(
+          "## Build handoff\n\n```json",
+          headingAndFence,
+        ),
+      ),
+    ).toEqual({ valid: true });
+  });
+
+  it("accepts CRLF and trailing whitespace", () => {
+    expect(
+      validateBuildReadyAppSpec(
+        `${completeAppSpec().replaceAll("\n", "\r\n")}\r\n  `,
+      ),
+    ).toEqual({ valid: true });
+  });
+
+  it.each([
+    ["trailing prose", `${completeAppSpec()}\nnot part of the handoff`],
+    ["wrong fence language", completeAppSpec().replace("```json", "```yaml")],
+  ])("rejects %s after the terminal handoff", (_label, content) => {
+    expect(validateBuildReadyAppSpec(content)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "build_handoff_format" }),
+      ]),
+    });
+  });
+
   it("returns exact repair instructions for missing sections and handoff", () => {
     const result = validateBuildReadyAppSpec(
       "## Status and prototype\n\nA first prototype.",

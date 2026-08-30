@@ -20,6 +20,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: mise run dependencies:install
+      - run: mise run storybook:install-browser
       - run: mise run ci-repository
 
   eve-general:

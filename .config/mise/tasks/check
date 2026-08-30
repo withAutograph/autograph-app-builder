@@ -9,5 +9,7 @@ mise run format-check
 mise run lint
 mise run typecheck
 mise run test:unit
+mise run storybook:build
+mise run storybook:test
 mise run test:postgres-sandbox-leases
 mise run package:validate

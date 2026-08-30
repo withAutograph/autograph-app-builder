@@ -848,8 +848,8 @@
 .sectionField {
   padding-top: 0;
 }
-.modelField + .sectionField {
-  margin-top: 44px;
+.sectionField + .modelField {
+  margin-top: 20px;
 }
 .sectionField + .sectionField {
   margin-top: 20px;

@@ -23,11 +23,21 @@ import {
 
 export default defineTool({
   description:
-    "Required completion gate for every app-creation turn. Automatically run the two fixed read-only target commands for app identity and canonical planning after a complete AppSpec is recorded. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
+    "Required completion gate for every app creation or existing-app iteration. Run it only after dependency preparation. For an existing app, first call inspect_existing_app after workspace preparation, read the bounded app-owned files, and provide every exact replacement as existingAppChanges; never call this tool without those changes for an existing app. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    existingAppChanges: z
+      .array(
+        z.strictObject({
+          path: z.string().min(1).max(512),
+          content: z.string().max(262_144),
+        }),
+      )
+      .min(1)
+      .max(32)
+      .optional(),
   }),
-  async execute({ expectedAppSpecDigest }, ctx) {
+  async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target identity and planning");
     if (
@@ -89,6 +99,7 @@ export default defineTool({
       dependencyCacheDigest: execution.dependencyCacheDigest,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
+      existingAppChanges,
     };
     let identityReceipt: TargetIdentityReceipt | undefined =
       current.phase === "identity_resolved"

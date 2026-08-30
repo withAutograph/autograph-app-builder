@@ -50,3 +50,6 @@ next-env.d.ts
 # Keep application sources visible even when a global Git ignore contains lib/.
 !/lib/
 !/lib/**
+
+*storybook.log
+storybook-static

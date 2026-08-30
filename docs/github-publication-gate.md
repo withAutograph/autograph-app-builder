@@ -107,7 +107,10 @@ The boundary supports four operations:
 Repository creation and draft-PR publication are separate approvals. Each
 proposal binds the exact installation identity, selected repository or private
 destination, reviewed change-set digest, source/base SHA and tree, and the
-absence of `REPOSITORY_RELEASE_ENABLED`. Immediately before mutation, the
+observed `REPOSITORY_RELEASE_ENABLED` state. A fresh repository must keep the
+gate absent. An existing repository may already have the gate configured; draft
+pull-request publication carries that exact observation through the sealed
+proposal and receipt and must not change it. Immediately before mutation, the
 adapter must re-observe those bindings and refuse stale base state, changed-path
 overlap, branch or destination collision, release-gate drift, or digest drift.
 

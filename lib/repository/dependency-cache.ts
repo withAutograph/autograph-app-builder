@@ -202,6 +202,16 @@ const hostedPlanningDependencyCacheEnabled = (
   environment.VERCEL === "1" ||
   hostedArtifactDependencyCacheEnabled(environment);
 
+export function materializedDependencyNodeModulesRoot(
+  contentDigest: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const immutableImageRoot = dependencyCacheNodeModulesRoot(contentDigest);
+  if (hostedPlanningDependencyCacheEnabled(environment))
+    return `/workspace/.app-builder/hosted-dependencies/${contentDigest}/node_modules`;
+  return immutableImageRoot;
+}
+
 function dependencyCachePaths(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
@@ -387,9 +397,10 @@ export async function materializeOfflineDependencies(input: {
   if (!fixtureDependencyCacheEnabled(environment)) {
     const hostedPlanning = hostedPlanningDependencyCacheEnabled(environment);
     const hostedDependencyRoot = `/workspace/.app-builder/hosted-dependencies/${observed.contentDigest}`;
-    const absoluteNodeModules = hostedPlanning
-      ? `${hostedDependencyRoot}/node_modules`
-      : dependencyCacheNodeModulesRoot(observed.contentDigest);
+    const absoluteNodeModules = materializedDependencyNodeModulesRoot(
+      observed.contentDigest,
+      environment,
+    );
     const installHostedClosure = hostedPlanning
       ? `if [ ! -d ${absoluteNodeModules} ]; then rm -rf ${hostedDependencyRoot} && install -d -m 0755 ${hostedDependencyRoot} && tar --extract --gzip --file ${dependencyCachePaths(environment).archive} --directory ${hostedDependencyRoot} --no-same-owner --no-same-permissions && chmod -R a-w,a+rX ${hostedDependencyRoot}; fi && `
       : "";

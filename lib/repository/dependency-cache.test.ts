@@ -18,6 +18,7 @@ import {
   DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
   assertExactDependencyTargetBinding,
   inspectDependencyCache,
+  materializedDependencyNodeModulesRoot,
   materializeOfflineDependencies,
 } from "./dependency-cache";
 
@@ -138,6 +139,20 @@ function hostedPlanningSandbox(
 }
 
 describe("offline dependency cache", () => {
+  it("resolves the materialized closure root for local and Vercel sandboxes", () => {
+    expect(materializedDependencyNodeModulesRoot(archiveDigest, {})).toBe(
+      `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
+    );
+    expect(
+      materializedDependencyNodeModulesRoot(archiveDigest, { VERCEL: "1" }),
+    ).toBe(
+      `/workspace/.app-builder/hosted-dependencies/${archiveDigest}/node_modules`,
+    );
+    expect(() =>
+      materializedDependencyNodeModulesRoot("invalid", { VERCEL: "1" }),
+    ).toThrow(/content digest is invalid/u);
+  });
+
   it("accepts only the exact narrow hosted planning closure", async () => {
     const { run, sandbox } = hostedPlanningSandbox();
     const observed = await inspectDependencyCache(sandbox, { VERCEL: "1" });

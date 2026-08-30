@@ -7,6 +7,7 @@ import {
   GitHubOutcomeUnknownError,
   assertCanonicalGitHubMutationReceipt,
   assertExactDraftPullRequestProposal,
+  assertExactFreshRepositoryProposal,
   assertExactGitHubPublicationContent,
   assertExactInstallationIdentity,
   assertExactRepositoryObservation,
@@ -503,7 +504,7 @@ describe("closed GitHub publication contract", () => {
       ).rejects.toThrow(/invalid/u);
   });
 
-  it("rejects repository observation unknown keys, digest drift, and release gate drift", () => {
+  it("accepts exact active release-gate observations and rejects schema or digest drift", () => {
     const repo = repository(installation("resolve-existing-source"));
     expect(() =>
       assertExactRepositoryObservation({ ...repo, url: "private" } as never),
@@ -511,12 +512,31 @@ describe("closed GitHub publication contract", () => {
     expect(() =>
       assertExactRepositoryObservation({ ...repo, headTree: "9".repeat(40) }),
     ).toThrow(/non-canonical/u);
+    const active = repository(installation("resolve-existing-source"), {
+      releaseGate: { name: "REPOSITORY_RELEASE_ENABLED", configured: true },
+    });
+    expect(active.releaseGate.configured).toBe(true);
+    expect(() => assertExactRepositoryObservation(active)).not.toThrow();
+  });
+
+  it("keeps fresh repositories release-disabled", () => {
+    const adapter = new Adapter();
+    const proposal = freshProposal(adapter);
+    const unsigned = {
+      ...proposal,
+      releaseGate: {
+        name: "REPOSITORY_RELEASE_ENABLED" as const,
+        configured: true,
+      },
+    };
+    delete (unsigned as Partial<typeof proposal>).digest;
+    const releaseEnabled = {
+      ...unsigned,
+      digest: hash(unsigned),
+    };
     expect(() =>
-      createRepositoryObservation({
-        ...repo,
-        releaseGate: { name: "REPOSITORY_RELEASE_ENABLED", configured: true },
-      } as never),
-    ).toThrow(/release-enabled/u);
+      assertExactFreshRepositoryProposal(releaseEnabled as never),
+    ).toThrow(/malformed/u);
   });
 
   it("rejects proposal unknown keys, unsafe names, titles, and paths", () => {
@@ -795,6 +815,56 @@ describe("closed GitHub publication contract", () => {
       expect(draftChange.after.bytes).toEqual(reviewedBytes);
     }
     assertCanonicalGitHubMutationReceipt(result);
+  });
+
+  it("publishes to an active repository only while the release gate remains unchanged", async () => {
+    const adapter = new Adapter();
+    adapter.publishRepo = repository(adapter.identities.publish, {
+      releaseGate: {
+        name: "REPOSITORY_RELEASE_ENABLED",
+        configured: true,
+      },
+    });
+    const store = new Store();
+    const proposal = draftProposal(adapter);
+    expect(proposal.releaseGate.configured).toBe(true);
+
+    const result = await publishApprovedDraftPullRequest({
+      adapter,
+      store,
+      proposal,
+      review: review(),
+      contentSource: publicationContentSource(),
+      approvedByCallId: "approve-active-repository",
+    });
+
+    expect(result.releaseGateUnchanged).toBe(true);
+    expect(result).not.toHaveProperty("releaseGateAbsent");
+    assertCanonicalGitHubMutationReceipt(result);
+  });
+
+  it("rejects release-gate drift after the draft proposal is sealed", async () => {
+    const adapter = new Adapter();
+    const proposal = draftProposal(adapter);
+    const changedGate = repository(adapter.identities.publish, {
+      releaseGate: {
+        name: "REPOSITORY_RELEASE_ENABLED",
+        configured: true,
+      },
+    });
+    adapter.draftOutcome = draftReadBack(proposal, changedGate);
+
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        store: new Store(),
+        proposal,
+        review: review(),
+        contentSource: publicationContentSource(),
+        approvedByCallId: "approve-stale-gate",
+      }),
+    ).rejects.toThrow(/stale or overlapping/u);
+    expect(adapter.draftCalls).toBe(0);
   });
 
   it("keeps content-source failures pending without provider dispatch and permits explicit recovery", async () => {

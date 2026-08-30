@@ -69,6 +69,16 @@ isolated workspace.
    workflow instead of writing a final answer.
    Never accept an operator-declared cache digest or substitute arbitrary shell,
    arguments, cwd, env, or network access.
+   When the requested app already exists, inspect only the bounded app-owned
+   files needed for the change through `inspect_existing_app` after source and
+   workspace preparation. First list its available paths, then read the selected
+   files and draft their exact replacements. Only after those reads settle,
+   call `plan_app_creation` once with every replacement in
+   `existingAppChanges`; never call the creation-planning shape for an app that
+   already exists and never dispatch these stateful steps in parallel.
+   The planner binds every replacement to its immutable source preimage and
+   rejects paths outside that app. Keep this implementation drafting silent;
+   do not ask the user to approve file inspection, drafting, or overlay apply.
    Record prototype artifacts only through the typed session-scoped artifact
    tools; changed artifact bytes invalidate later receipts.
    Internal acceptance remains bound to the exact source, prepared tree, and
