@@ -49,11 +49,6 @@ const databaseUrlSchema = z
     }
   }, "Preview OAuth requires PostgreSQL.");
 
-const selfServiceSignupEnvironmentSchema = z
-  .enum(["0", "1"])
-  .default("0")
-  .transform((value) => value === "1");
-
 const vercelUserInfoSchema = z
   .object({
     sub: z.string().min(1).max(512),
@@ -231,7 +226,6 @@ const previewOAuthRuntimeConfigSchema = z
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value))
       .optional(),
-    selfServiceSignupEnabled: z.boolean(),
     passkeyOnboarding: z.custom<PasskeyOnboardingConfig>().nullable(),
   })
   .strict()
@@ -357,9 +351,6 @@ export function readPreviewOAuthRuntimeConfig(
       githubClientSecret: environment.GITHUB_CLIENT_SECRET,
       vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
       vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
-      selfServiceSignupEnabled: selfServiceSignupEnvironmentSchema.parse(
-        environment.SELF_SERVICE_SIGNUP_ENABLED,
-      ),
       passkeyOnboarding: null,
     });
   }
@@ -389,9 +380,6 @@ export function readPreviewOAuthRuntimeConfig(
     githubClientSecret: environment.GITHUB_CLIENT_SECRET,
     vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
     vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
-    selfServiceSignupEnabled: selfServiceSignupEnvironmentSchema.parse(
-      environment.SELF_SERVICE_SIGNUP_ENABLED,
-    ),
     passkeyOnboarding,
   });
 }

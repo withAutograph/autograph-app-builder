@@ -496,11 +496,12 @@ workspace without being represented as email-verified. Production onboarding
 remains disabled. The App Builder does not accept or store a user password.
 Before the first provider session, the server
 reuses one exact membership, accepts one matching invitation, or—only when
-`SELF_SERVICE_SIGNUP_ENABLED=1`—creates one Better Auth personal organization
-and owner membership transactionally. Same-email provider accounts link only
-when both identities are verified; differing emails require explicit signed-in
-linking. Provider identity proves the user only; repository mutation remains a
-separate approval-bound capability. The exact contract and rollout are in
+the Vercel-managed `self-service-signup` flag resolves enabled—creates one
+Better Auth personal organization and owner membership transactionally.
+Same-email provider accounts link only when both identities are verified;
+differing emails require explicit signed-in linking. Provider identity proves
+the user only; repository mutation remains a separate approval-bound
+capability. The exact contract and rollout are in
 [self-serve onboarding](docs/self-serve-onboarding.md).
 Activating the checked-in CIMD policy remains separately authorized because
 discovery may create, persist, or refresh an authorization-server client record;

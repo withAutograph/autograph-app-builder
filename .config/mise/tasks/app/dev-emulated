@@ -56,6 +56,5 @@ EMULATE_VERCEL_TEAM_ID=autograph-local \
 EMULATE_GITHUB_INSTALLATION_ID=1001 \
 EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app \
 EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)" \
-SELF_SERVICE_SIGNUP_ENABLED=1 \
 .config/mise/scripts/trusted-node-launcher \
   "$(mise which node)" node_modules/next/dist/bin/next dev --experimental-https --port 3001 "$@"

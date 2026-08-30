@@ -88,10 +88,6 @@ export type BuilderDraft = {
   repositoryEditedByUser: boolean;
 };
 
-function connectionsAreEnabled() {
-  return process.env.NEXT_PUBLIC_FEATURE_CONNECTIONS === "true";
-}
-
 const builderDraftStorageKey = (resumeKey: string) =>
   `autograph-builder-draft:${resumeKey}`;
 const builderDraftCache = new Map<
@@ -952,6 +948,7 @@ export function AnonymousBuilder({
 export function Builder({
   initialBrief,
   onCreate,
+  connectionsEnabled,
   integrations,
   providerNotices,
   initialDraft,
@@ -959,12 +956,12 @@ export function Builder({
 }: {
   initialBrief: string;
   onCreate: (form: BuilderForm, resumeKey?: string) => void;
+  connectionsEnabled: boolean;
   integrations: BuilderIntegrationState;
   providerNotices: ProviderConnectionNotice[];
   initialDraft?: BuilderDraft;
   resumeKey?: string;
 }) {
-  const connectionsEnabled = connectionsAreEnabled();
   const router = useRouter();
   const generatedNameSeed = useId();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
@@ -2021,11 +2018,13 @@ codex plugin add app-builder@autograph`;
 
 export function AppBuilder({
   authenticated,
+  connectionsEnabled = false,
   integrations,
   providerNotices = [],
   providerResumeKey,
 }: {
   authenticated: boolean;
+  connectionsEnabled?: boolean;
   integrations: BuilderIntegrationState;
   providerNotices?: ProviderConnectionNotice[];
   providerResumeKey?: string;
@@ -2071,6 +2070,7 @@ export function AppBuilder({
           initialBrief={savedBrief}
           initialDraft={resumedDraft}
           resumeKey={providerResumeKey}
+          connectionsEnabled={connectionsEnabled}
           integrations={integrations}
           providerNotices={providerNotices}
           onCreate={(form) => {

@@ -9,12 +9,5 @@ const config: StorybookConfig = {
   ],
   framework: "@storybook/nextjs-vite",
   staticDirs: ["../public"],
-  async viteFinal(config) {
-    config.define = {
-      ...(config.define ?? {}),
-      "process.env.NEXT_PUBLIC_FEATURE_CONNECTIONS": JSON.stringify("true"),
-    };
-    return config;
-  },
 };
 export default config;

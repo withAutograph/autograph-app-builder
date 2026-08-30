@@ -82,7 +82,7 @@ const form: BuilderForm = {
 const meta = {
   title: "Pages/Create App/App Builder",
   component: AppBuilder,
-  args: { authenticated: true, integrations },
+  args: { authenticated: true, connectionsEnabled: true, integrations },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof AppBuilder>;
 
@@ -145,6 +145,7 @@ export const RestoredDraft: Story = {
   render: () => (
     <Builder
       initialBrief=""
+      connectionsEnabled
       integrations={integrations}
       providerNotices={[]}
       onCreate={fn()}
@@ -170,6 +171,7 @@ export const BuilderInteractions: Story = {
   render: () => (
     <Builder
       initialBrief=""
+      connectionsEnabled
       integrations={integrations}
       providerNotices={[]}
       onCreate={fn()}
