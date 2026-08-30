@@ -22,6 +22,7 @@ const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_FILES = 10_000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_MATERIAL_BYTES = 100 * 1024 * 1024;
+const MAX_INSTALLATION_REPOSITORIES = 10_000;
 
 const decimal = z.string().regex(/^[1-9]\d*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
@@ -114,6 +115,13 @@ function decimalProperty(value: unknown, key: string): string {
   )
     throw new Error("invalid-response");
   return String(result);
+}
+
+function safeRepositoryIdNumber(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value)
+    throw new Error("invalid-response");
+  return parsed;
 }
 
 function booleanProperty(value: unknown, key: string): boolean {
@@ -367,7 +375,7 @@ export function createGitHubAppHttpProvider(input: {
         permissions: permissionRequest(permissions),
         ...(repositoryIds === undefined
           ? {}
-          : { repository_ids: repositoryIds.map(Number) }),
+          : { repository_ids: repositoryIds.map(safeRepositoryIdNumber) }),
       },
       expected: [201],
     });
@@ -387,7 +395,7 @@ export function createGitHubAppHttpProvider(input: {
   ): Promise<readonly string[]> {
     const accessToken = await token(permissions);
     const ids: string[] = [];
-    for (let page = 1; page <= 5; page += 1) {
+    for (let page = 1; ; page += 1) {
       const response = await github({
         path: `/installation/repositories?per_page=100&page=${page}`,
         authorization: accessToken,
@@ -397,8 +405,9 @@ export function createGitHubAppHttpProvider(input: {
       ids.push(
         ...repositories.map((repository) => decimalProperty(repository, "id")),
       );
+      if (ids.length > MAX_INSTALLATION_REPOSITORIES)
+        throw new Error("installation-too-large");
       if (repositories.length < 100) break;
-      if (page === 5) throw new Error("installation-too-large");
     }
     return [...new Set(ids)].toSorted();
   }
