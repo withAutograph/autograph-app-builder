@@ -8,8 +8,8 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49";
-export const ARRUSTED_TARGET_TREE = "88ead91d7b11aae11c526f1c2ee40f5b6db70642";
+export const ARRUSTED_TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
+export const ARRUSTED_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_RUST_VERSION = "1.97.1";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
@@ -66,7 +66,7 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     sha: gitObjectId,
     tree: gitObjectId,
     miseConfigSha256: z.literal(
-      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
     ),
     miseLockSha256: z.literal(
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
@@ -87,7 +87,7 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     createAppSha256: z.literal(ARRUSTED_CREATE_APP_SHA256),
     appTemplatePackageSha256: z.literal(ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256),
     repositoryPreflightSha256: z.literal(
-      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
     ),
     repositoryExecSha256: z.literal(
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
@@ -117,7 +117,7 @@ export const hostedExecutionDependencyCacheManifestSchema = z.strictObject({
     sha: z.literal(ARRUSTED_TARGET_SHA),
     tree: z.literal(ARRUSTED_TARGET_TREE),
     miseConfigSha256: z.literal(
-      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
     ),
     miseLockSha256: z.literal(
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
@@ -132,7 +132,7 @@ export const hostedExecutionDependencyCacheManifestSchema = z.strictObject({
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     ),
     repositoryPreflightSha256: z.literal(
-      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
     ),
     repositoryExecSha256: z.literal(
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
@@ -275,7 +275,7 @@ function fixtureManifest(
       sha: target.sourceSha,
       tree: target.sourceTree,
       miseConfigSha256:
-        "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+        "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
       miseLockSha256:
         "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
       bunLockSha256:
@@ -290,7 +290,7 @@ function fixtureManifest(
       createAppSha256: ARRUSTED_CREATE_APP_SHA256,
       appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
       repositoryPreflightSha256:
-        "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+        "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
       repositoryExecSha256:
         "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
     },

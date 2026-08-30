@@ -378,7 +378,7 @@ mismatched environment bindings use the non-executing fallback. Production
 support here is source capability, not activation evidence.
 
 Rebuild the seed with `mise run hosted:artifact-build -- --arrusted-root
-<exact-clean-checkout> --output artifacts/hosted/arrusted-ffa0c34a-preview.tar.gz`.
+<exact-clean-checkout> --output artifacts/hosted/arrusted-d378904a-preview.tar.gz`.
 Validate its server-only placement, exact bytes, and real offline target
 commands with `mise run test:hosted-sandbox`.
 Run `mise run hosted:artifact-prove-typed -- --image <exact-local-digest-ref>
