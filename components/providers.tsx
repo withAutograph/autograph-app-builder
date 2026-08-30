@@ -1,7 +1,6 @@
 "use client";
 
 import { QueryClientProvider } from "@tanstack/react-query";
-import { passkeyPlugin } from "@better-auth-ui/core/plugins/passkey";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -12,6 +11,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
 import { oauthProviderPlugin } from "@/lib/auth/oauth-provider-plugin";
+import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
 export function Providers({

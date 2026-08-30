@@ -223,4 +223,28 @@ describe("Preview OAuth deployment handlers", () => {
       expect(source).not.toContain("createPostgresOAuthMembershipAuthority");
     }
   });
+
+  it("uses the Better Auth UI passkey registry surfaces", async () => {
+    const [providers, passkeyPlugin, signIn, accountSettings, onboarding] =
+      await Promise.all([
+        readFile("components/providers.tsx", "utf8"),
+        readFile("lib/auth/passkey-plugin.ts", "utf8"),
+        readFile("components/auth/sign-in.tsx", "utf8"),
+        readFile(
+          "components/auth/settings/account/account-settings.tsx",
+          "utf8",
+        ),
+        readFile("components/auth/passkey-sign-in-actions.tsx", "utf8"),
+      ]);
+
+    expect(providers).toContain(
+      'import { passkeyPlugin } from "@/lib/auth/passkey-plugin"',
+    );
+    expect(passkeyPlugin).toContain("authButtons: [PasskeyButton]");
+    expect(passkeyPlugin).toContain("securityCards: [Passkeys]");
+    expect(signIn).toContain("plugin.authButtons");
+    expect(accountSettings).toContain("plugin.securityCards");
+    expect(onboarding).toContain("useAddPasskey(authClient)");
+    expect(onboarding).not.toContain("authClient.signIn.passkey");
+  });
 });
