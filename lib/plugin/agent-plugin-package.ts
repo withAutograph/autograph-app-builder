@@ -16,7 +16,7 @@ import { isReservedPublicReleaseHostname } from "./public-release-endpoint.ts";
 
 const SPEC_VERSION = "1.0.0";
 export const AUTOGRAPH_PACKAGE_VERSION = "0.2.1";
-export const AUTOGRAPH_MCP_SERVER_NAME = "autograph-app-builder";
+export const AUTOGRAPH_MCP_SERVER_NAME = "app-builder";
 export const AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT = "http://127.0.0.1:3000/mcp";
 const PLUGIN_SCHEMA = `https://agent-plugins.org/schemas/${SPEC_VERSION}/plugin.schema.json`;
 const MCP_SCHEMA = `https://agent-plugins.org/schemas/${SPEC_VERSION}/mcp.schema.json`;

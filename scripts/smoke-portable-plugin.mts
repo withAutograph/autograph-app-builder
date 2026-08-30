@@ -48,7 +48,7 @@ if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES))
 
 for (const client of ["vscode", "cursor", "codex"] as const) {
   const root = join(installRoot, client);
-  const pluginRoot = join(root, "autograph-app-builder");
+  const pluginRoot = join(root, "app-builder");
   await validateAgentPluginPackage({
     pluginRoot,
     repositoryRoot: resolve("."),
@@ -58,7 +58,7 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
   for (const [path, digest] of Object.entries(
     receipt.coreFiles as Record<string, string>,
   )) {
-    const relativePath = path.replace(/^autograph-app-builder\//u, "");
+    const relativePath = path.replace(/^app-builder\//u, "");
     const bytes = await readFile(join(pluginRoot, relativePath));
     if (sha256(bytes) !== digest)
       throw new Error(`${client} installed bytes drifted at ${relativePath}.`);
@@ -80,8 +80,8 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
   if (
     harness.format !== "agent-plugins-client-harness-v2" ||
     harness.client !== client ||
-    harness.pluginRoot !== "./autograph-app-builder" ||
-    harness.mcp !== "./autograph-app-builder/mcp.json" ||
+    harness.pluginRoot !== "./app-builder" ||
+    harness.mcp !== "./app-builder/mcp.json" ||
     harness.transport?.type !== "streamable-http" ||
     harness.transport?.url !== receipt.endpoint ||
     harness.oauth?.protectedResourceMetadata !==

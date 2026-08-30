@@ -51,7 +51,7 @@ normalized import receipt, and opens a reviewed pull request. Product
 repositories do not receive credentials that can write directly to marketplace
 `main`.
 
-The marketplace entry remains named `autograph-app-builder` because it must
+The marketplace entry remains named `app-builder` because it must
 match the immutable package manifest. The marketplace itself is named
 `autograph`; the duplicated word is meaningful package identity rather than a
 second copy of product branding.
@@ -62,7 +62,7 @@ Users register the organization marketplace once:
 
 ```sh
 codex plugin marketplace add withAutograph/marketplace
-codex plugin add autograph-app-builder@autograph
+codex plugin add app-builder@autograph
 ```
 
 Marketplace `main` is the normal upgrade channel:
@@ -91,7 +91,7 @@ usable without universal-directory approval.
   package version, archive digests, and exactly the five `autograph_*` tools.
 - The marketplace imports the published bytes without rebuilding them.
 - A clean Codex profile can register `withAutograph/marketplace`, install
-  `autograph-app-builder@autograph`, complete OAuth against
+  `app-builder@autograph`, complete OAuth against
   `new.autograph.so`, and discover exactly five Autograph tools.
 - The source checkout's loopback adapter is never an installation source.
 - Neither repository contains embedded credentials.

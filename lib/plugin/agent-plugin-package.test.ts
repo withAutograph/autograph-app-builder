@@ -33,7 +33,7 @@ const writeMcpHeaders = async (
   const mcp = JSON.parse(
     await readFile(resolve(repositoryRoot, "mcp.json"), "utf8"),
   );
-  mcp.mcpServers["autograph-app-builder"].headers = headers;
+  mcp.mcpServers["app-builder"].headers = headers;
   await writeFile(resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
 
@@ -65,7 +65,7 @@ describe("Agent Plugins package", () => {
   it("builds and validates a client-neutral artifact", async () => {
     const output = resolve(
       repositoryRoot,
-      ".artifacts/agent-plugin/autograph-app-builder-test",
+      ".artifacts/agent-plugin/app-builder-test",
     );
     await buildAgentPluginPackage({ repositoryRoot, outputRoot: output });
     await expect(
@@ -75,7 +75,7 @@ describe("Agent Plugins package", () => {
         packageKind: "generated-artifact",
       }),
     ).resolves.toEqual({
-      name: "autograph-app-builder",
+      name: "app-builder",
       version: "0.2.1",
       specification: "1.0.0",
       packageKind: "generated-artifact",
@@ -155,7 +155,7 @@ describe("Agent Plugins package", () => {
   ])("rejects %s", async (_name, endpoint) => {
     const root = await copyPortablePackage();
     await writeMcp(root, (mcp) => {
-      mcp.mcpServers["autograph-app-builder"].url = endpoint;
+      mcp.mcpServers["app-builder"].url = endpoint;
     });
     await expect(
       validateAgentPluginPackage({
@@ -176,7 +176,7 @@ describe("Agent Plugins package", () => {
     });
     await expect(
       validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-    ).rejects.toThrow("exactly one autograph-app-builder MCP server");
+    ).rejects.toThrow("exactly one app-builder MCP server");
   });
 
   it("rejects package symlinks", async () => {
@@ -224,7 +224,7 @@ allowed-tools: "autograph_start autograph_get"
     );
     await expect(
       validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-    ).resolves.toMatchObject({ name: "autograph-app-builder" });
+    ).resolves.toMatchObject({ name: "app-builder" });
   });
 
   it.each([
@@ -272,12 +272,12 @@ allowed-tools: "autograph_start autograph_get"
   it("accepts valid public declarative HTTP headers", async () => {
     const root = await copyPortablePackage();
     await writeMcpHeaders(root, {
-      "X-Client-Name": "autograph-app-builder",
+      "X-Client-Name": "app-builder",
       "X-Public-Tenant": "public-tenant",
     });
     await expect(
       validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-    ).resolves.toMatchObject({ name: "autograph-app-builder" });
+    ).resolves.toMatchObject({ name: "app-builder" });
   });
 
   it.each([
@@ -325,10 +325,7 @@ allowed-tools: "autograph_start autograph_get"
     await expect(
       buildAgentPluginPackage({
         repositoryRoot: root,
-        outputRoot: resolve(
-          root,
-          ".artifacts/agent-plugin/autograph-app-builder",
-        ),
+        outputRoot: resolve(root, ".artifacts/agent-plugin/app-builder"),
       }),
     ).rejects.toThrow("must be a real directory");
   });

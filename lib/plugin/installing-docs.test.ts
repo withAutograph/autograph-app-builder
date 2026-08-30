@@ -87,14 +87,12 @@ describe("public plugin installation documentation", () => {
 
     const auditLog = await runInstall(script, "none");
     expect(auditLog).toContain(
-      "tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
+      "tar -xzf app-builder-codex-marketplace-0.2.1.tar.gz",
     );
     expect(auditLog).toMatch(
-      /codex plugin marketplace add .*autograph-app-builder-marketplace-0\.2\.1/u,
+      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.1/u,
     );
-    expect(auditLog).toContain(
-      "codex plugin add autograph-app-builder@autograph",
-    );
+    expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
 
   it("uses the shared marketplace as the primary README installation path", async () => {
@@ -104,9 +102,7 @@ describe("public plugin installation documentation", () => {
     expect(script).toContain(
       "codex plugin marketplace add withAutograph/marketplace",
     );
-    expect(script).toContain(
-      "codex plugin add autograph-app-builder@autograph",
-    );
+    expect(script).toContain("codex plugin add app-builder@autograph");
     expect(script).not.toContain("gh release download");
     expect(script).not.toContain("tar -xzf");
   });
@@ -120,9 +116,9 @@ describe("public plugin installation documentation", () => {
     expect(documentation).toMatch(
       /These\s+commands fail closed until `v0\.2\.1` exists/u,
     );
-    expect(documentation).toContain("autograph-app-builder-0.2.1.tar.gz");
+    expect(documentation).toContain("app-builder-0.2.1.tar.gz");
     expect(documentation).toContain(
-      "autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
+      "app-builder-codex-marketplace-0.2.1.tar.gz",
     );
     expect(documentation).toContain(
       "Publish `v0.2.1` only through the existing tag-triggered",

@@ -16,7 +16,7 @@ Register the Autograph marketplace once, then install App Builder:
 ```sh
 (
   codex plugin marketplace add withAutograph/marketplace
-  codex plugin add autograph-app-builder@autograph
+  codex plugin add app-builder@autograph
 )
 ```
 
@@ -292,7 +292,7 @@ Build the client-neutral installable directory with:
 mise run package:build
 ```
 
-The result is `.artifacts/agent-plugin/autograph-app-builder/`. It is validated
+The result is `.artifacts/agent-plugin/app-builder/`. It is validated
 as a clean generated artifact containing exactly the portable manifest, MCP
 declaration, Agent Skills, and license. It deliberately excludes
 `.codex-plugin/plugin.json` and `.app.json`, which are generated OpenAI/Codex

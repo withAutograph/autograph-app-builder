@@ -6,8 +6,8 @@ Once the pre-release `v0.2.1` GitHub release is published, use its public
 [release assets](https://github.com/withAutograph/autograph-app-builder/releases)
 until the shared marketplace is available. The release contains:
 
-- `autograph-app-builder-0.2.1.tar.gz`
-- `autograph-app-builder-codex-marketplace-0.2.1.tar.gz`
+- `app-builder-0.2.1.tar.gz`
+- `app-builder-codex-marketplace-0.2.1.tar.gz`
 - `release-receipt.json`
 - `SHA256SUMS`
 
@@ -19,8 +19,8 @@ commands fail closed until `v0.2.1` exists:
 (
   set -eu
   release_version=0.2.1
-  release_dir="$PWD/autograph-app-builder-release-$release_version"
-  marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
+  release_dir="$PWD/app-builder-release-$release_version"
+  marketplace_dir="$PWD/app-builder-marketplace-$release_version"
   mkdir "$release_dir" "$marketplace_dir"
   gh release download "v$release_version" \
     --repo withAutograph/autograph-app-builder \
@@ -30,13 +30,13 @@ commands fail closed until `v0.2.1` exists:
   gh release verify "v$release_version" \
     --repo withAutograph/autograph-app-builder
   gh release verify-asset "v$release_version" \
-    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    "app-builder-codex-marketplace-$release_version.tar.gz" \
     --repo withAutograph/autograph-app-builder
   tar -xzf \
-    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    "app-builder-codex-marketplace-$release_version.tar.gz" \
     -C "$marketplace_dir"
   codex plugin marketplace add "$marketplace_dir"
-  codex plugin add autograph-app-builder@autograph
+  codex plugin add app-builder@autograph
 )
 ```
 
@@ -64,7 +64,7 @@ shared catalog and install its `autograph` listing:
 (
   set -eu
   codex plugin marketplace add withAutograph/marketplace
-  codex plugin add autograph-app-builder@autograph
+  codex plugin add app-builder@autograph
 )
 ```
 
@@ -97,8 +97,8 @@ doesn't offer a catalog listing.
 
 Every release contains:
 
-- `autograph-app-builder-0.2.1.tar.gz`, the portable Agent Plugins package
-- `autograph-app-builder-codex-marketplace-0.2.1.tar.gz`, a self-contained
+- `app-builder-0.2.1.tar.gz`, the portable Agent Plugins package
+- `app-builder-codex-marketplace-0.2.1.tar.gz`, a self-contained
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
@@ -113,7 +113,7 @@ then extract the portable archive:
 (
   set -eu
   release_version=0.2.1
-  release_dir="$PWD/autograph-app-builder-release-$release_version"
+  release_dir="$PWD/app-builder-release-$release_version"
   mkdir "$release_dir"
   gh release download "v$release_version" \
     --repo withAutograph/autograph-app-builder \
@@ -123,13 +123,13 @@ then extract the portable archive:
   gh release verify "v$release_version" \
     --repo withAutograph/autograph-app-builder
   gh release verify-asset "v$release_version" \
-    "autograph-app-builder-$release_version.tar.gz" \
+    "app-builder-$release_version.tar.gz" \
     --repo withAutograph/autograph-app-builder
-  tar -xzf "autograph-app-builder-$release_version.tar.gz"
+  tar -xzf "app-builder-$release_version.tar.gz"
 )
 ```
 
-Add the extracted `$release_dir/autograph-app-builder/` directory using the
+Add the extracted `$release_dir/app-builder/` directory using the
 client’s local Agent Plugin installation procedure.
 
 ### Local Codex marketplace archive
@@ -149,13 +149,13 @@ marketplace directory:
 ```sh
 (
   set -eu
-  codex plugin remove autograph-app-builder@autograph
+  codex plugin remove app-builder@autograph
   codex plugin marketplace remove autograph
-  mkdir autograph-app-builder-marketplace-0.2.1
-  tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz \
-    -C autograph-app-builder-marketplace-0.2.1
-  codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.2.1"
-  codex plugin add autograph-app-builder@autograph
+  mkdir app-builder-marketplace-0.2.1
+  tar -xzf app-builder-codex-marketplace-0.2.1.tar.gz \
+    -C app-builder-marketplace-0.2.1
+  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.1"
+  codex plugin add app-builder@autograph
 )
 ```
 

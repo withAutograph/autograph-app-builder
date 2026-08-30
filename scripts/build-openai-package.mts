@@ -90,7 +90,7 @@ const manifest = {
   },
 };
 const apps = connectionId
-  ? { apps: { "autograph-app-builder": { id: connectionId } } }
+  ? { apps: { "app-builder": { id: connectionId } } }
   : { apps: {} };
 await mkdir(resolve(".codex-plugin"), { recursive: true });
 await writeFile(
