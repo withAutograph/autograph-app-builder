@@ -12,6 +12,8 @@ import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import { readLocalProviderEmulation } from "../integrations/local-provider-emulation";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
+import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
+import { createPostgresGitHubUserCredentialStore } from "../provisioning/postgres-github-user-credential";
 import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
 import {
   providerConnectionRedirect,
@@ -210,6 +212,14 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const config = readGitHubAppInstallationEnvironment(environment);
   const previewConfig = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(previewConfig.databaseUrl);
+  let credentialStore:
+    ReturnType<typeof createPostgresGitHubUserCredentialStore> | undefined;
+  try {
+    credentialStore = createPostgresGitHubUserCredentialStore({
+      database,
+      config: readGitHubUserCredentialEnvironment(environment),
+    });
+  } catch {}
   const membership = createPostgresPreviewOrganizationAuthority(database, {
     issuer: previewConfig.issuer,
     audience: previewConfig.resource,
@@ -222,6 +232,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       isActiveMember: (authority) => membership.isActiveMember(authority),
     },
     installationStore: createPostgresHostedGitHubInstallationStore(database),
+    credentialStore,
     emulation: readLocalProviderEmulation(environment),
   });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({

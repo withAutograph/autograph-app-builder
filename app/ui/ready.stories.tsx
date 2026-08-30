@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { storyForm } from "@/.storybook/create-app/app-builder-fixtures";
+import {
+  storyForm,
+  storyProvisioning,
+} from "@/.storybook/create-app/app-builder-fixtures";
 import { Ready } from "./app-builder";
 
 const meta = {
@@ -8,6 +11,9 @@ const meta = {
   component: Ready,
   args: {
     form: storyForm,
+    requestId: storyProvisioning.requestId,
+    initialProvisioning: storyProvisioning,
+    provisioningEnabled: true,
     initialAttempt: "attempted",
     initialClipboardState: "copied",
     onReset: fn(),
@@ -25,6 +31,70 @@ export const BriefTooLong: Story = {
     form: { ...storyForm, brief: "x".repeat(8_100) },
     initialAttempt: "too-long",
     initialClipboardState: "failed",
+  },
+};
+export const GitHubOnly: Story = {
+  args: {
+    form: { ...storyForm, vercelInstallationId: undefined },
+    initialProvisioning: {
+      ...storyProvisioning,
+      vercel: {
+        status: "skipped",
+        code: "not_selected",
+        retryable: false,
+      },
+    },
+  },
+};
+export const VercelOnly: Story = {
+  args: {
+    form: { ...storyForm, githubInstallationId: undefined },
+    initialProvisioning: {
+      ...storyProvisioning,
+      github: {
+        status: "skipped",
+        code: "not_selected",
+        retryable: false,
+      },
+      vercel: {
+        ...storyProvisioning.vercel,
+        linkedGitHubRepository: undefined,
+      },
+    },
+  },
+};
+export const WithoutProviders: Story = {
+  args: {
+    form: {
+      ...storyForm,
+      githubInstallationId: undefined,
+      vercelInstallationId: undefined,
+    },
+    initialProvisioning: {
+      ...storyProvisioning,
+      github: {
+        status: "skipped",
+        code: "not_selected",
+        retryable: false,
+      },
+      vercel: {
+        status: "skipped",
+        code: "not_selected",
+        retryable: false,
+      },
+    },
+  },
+};
+export const PartialFailure: Story = {
+  args: {
+    initialProvisioning: {
+      ...storyProvisioning,
+      vercel: {
+        status: "failed",
+        code: "provider_rejected",
+        retryable: true,
+      },
+    },
   },
 };
 export const DismissInstallInstructions: Story = {

@@ -9,6 +9,7 @@ import {
 } from "../db/schema";
 import {
   encryptVercelToken,
+  decryptVercelToken,
   type VercelAuthorizationStateStore,
   type VercelInstallationBinding,
   type VercelIntegrationConfig,
@@ -28,6 +29,51 @@ function tenant(
     eq(table.workspaceId, authority.workspaceId),
     eq(table.ownerUserId, authority.ownerUserId),
   );
+}
+
+export async function readActiveVercelInstallationToken(input: {
+  database: Database;
+  config: VercelIntegrationConfig;
+  authority: unknown;
+  installationId: string;
+}) {
+  const authority = hostedTenantAuthoritySchema.parse(input.authority);
+  const rows = await input.database
+    .select()
+    .from(hostedVercelInstallations)
+    .where(
+      and(
+        tenant(hostedVercelInstallations, authority),
+        eq(hostedVercelInstallations.installationId, input.installationId),
+        eq(hostedVercelInstallations.active, true),
+      ),
+    )
+    .limit(1);
+  const row = rows[0];
+  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion)
+    return undefined;
+  return {
+    binding: {
+      installationId: row.installationId,
+      scopeId: row.scopeId,
+      scopeType: row.scopeType as "team" | "user",
+      displayName: row.displayName,
+      slug: row.slug,
+      plan: row.plan,
+      active: row.active,
+      updatedAt: row.updatedAt,
+    },
+    token: decryptVercelToken({
+      encryptedToken: row.encryptedToken,
+      tokenIv: row.tokenIv,
+      tokenTag: row.tokenTag,
+      key: input.config.tokenKey,
+      associatedData: JSON.stringify({
+        ...authority,
+        installationId: row.installationId,
+      }),
+    }),
+  };
 }
 
 export function createPostgresVercelAuthorizationStateStore(

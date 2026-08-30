@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Build the immutable source-only Arrusted starter release"
+set -eu
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" \
+  .config/mise/scripts/repository/build-starter-source-release.mts \
+  "$@"

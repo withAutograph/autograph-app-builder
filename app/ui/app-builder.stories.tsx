@@ -17,6 +17,7 @@ const meta = {
     authenticated: true,
     connectionsEnabled,
     comingSoonEnabled,
+    provisioningEnabled: true,
     integrations: storyIntegrations,
   },
   parameters: {

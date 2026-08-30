@@ -49,21 +49,29 @@ atomically consumes the installation state, creates a second tenant-bound
 authorization state, and redirects through GitHub's web authorization flow
 with S256 PKCE. The authorization callback atomically consumes that second
 state before exchanging the one-time code and derived verifier. The returned
-GitHub user token is request-local: the callback uses it only against the fixed
+GitHub user token is initially request-local: the callback uses it only against
+the fixed
 `api.github.com` `/user` and paginated `/user/installations` endpoints, accepts
-only one unambiguous active installation for the configured
-App ID, checks personal installations against the caller, rechecks live App
-Builder membership, and then writes the existing tenant installation binding.
-It never persists or returns the code, client secret, user token, refresh
-token, raw provider response, or authorization header. A replay, tenant change,
-provider drift, membership change, or suspended installation fails closed without
-a binding. Both GitHub repository selections (`selected` and `all`) are supported;
-the live installation identity and per-operation repository authorization checks
-remain required.
+only one unambiguous active installation for the configured App ID, checks
+personal installations against the caller, rechecks live App Builder
+membership, and then writes the existing tenant installation binding.
+For pre-handoff personal-repository creation, it also encrypts the GitHub App
+user access and refresh token set with the dedicated versioned credential key;
+plaintext tokens remain request-local and are never returned or logged.
+Expiring credentials use atomic compare-and-set rotation. Confirmed `401`,
+installation deletion/suspension, or `github_app_authorization.revoked`
+webhook events deactivate the affected credential or binding. It never
+persists or returns the code, client secret, plaintext token, raw provider
+response, or authorization header. A replay, tenant change,
+provider drift, membership change, or suspended installation fails closed
+without a binding. Both GitHub repository selections (`selected` and `all`) are
+supported; the live installation identity and per-operation repository
+authorization checks remain required.
 
 This route adds the exact hosted environment fields
 `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
-`GITHUB_APP_INSTALL_STATE_SECRET`. The existing `GITHUB_CLIENT_ID` and
+`GITHUB_APP_INSTALL_STATE_SECRET`, `GITHUB_APP_USER_TOKEN_KEY`,
+`GITHUB_APP_USER_TOKEN_KEY_VERSION`, and `GITHUB_APP_WEBHOOK_SECRET`. The existing `GITHUB_CLIENT_ID` and
 `GITHUB_CLIENT_SECRET` remain the separate invited-user sign-in provider.
 `GITHUB_TOKEN` and `GITHUB_API_URL` are forbidden ambient overrides. Migration
 `0007_github_installation_authorization` owns the digest-only, one-time state
@@ -81,6 +89,17 @@ operation-scoped installation tokens: metadata read, contents read/write,
 workflows read/write, pull requests read/write, administration read/write, and
 variables read. The App Builder narrows these permissions again for each
 operation and performs no repository mutation during the connection flow.
+
+The separate web handoff provisioning path is gated by
+`builder-resource-provisioning`. It journals intent before provider calls,
+creates a public or private repository from the exact content-addressed
+Arrusted starter as one parentless `main` commit, and verifies the repository
+ID, privacy, SHA, tree, and complete blob inventory before reporting success.
+Organization creation uses the selected installation token with Administration
+write. Personal creation uses the encrypted GitHub App user credential because
+`POST /user/repos` does not accept an installation token. This does not change
+the five-tool public MCP surface or bypass the later reviewed-change-set
+publication gate.
 
 Leave GitHub App **Request user authorization (OAuth) during installation**
 disabled for this flow. When enabled, GitHub bypasses the setup URL and starts
