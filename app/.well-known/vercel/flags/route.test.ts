@@ -55,7 +55,10 @@ describe("Vercel Flags discovery route", () => {
       hints: [],
     });
     expect(getProviderData).toHaveBeenCalledWith(
-      expect.objectContaining({ builderConnectionsFlag, selfServiceSignupFlag }),
+      expect.objectContaining({
+        builderConnectionsFlag,
+        selfServiceSignupFlag,
+      }),
     );
   });
 });
