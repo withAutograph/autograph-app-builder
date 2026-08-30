@@ -37,7 +37,12 @@ export function createPreviewEmulateHandler(input: {
     // app's canonical-origin gate rather than a seeded GitHub OAuth app.
     strictGitHubOAuth: false,
   });
-  return createEmulateHandler({
+  const persistence = createPreviewEmulatePersistence({
+    namespace: input.emulation.namespace,
+    store: createPostgresPreviewEmulateStateStore(input.databaseUrl),
+  });
+  let pendingPersistence = Promise.resolve();
+  const handler = createEmulateHandler({
     services: {
       github: {
         emulator: github,
@@ -48,11 +53,27 @@ export function createPreviewEmulateHandler(input: {
         seed: seed.vercel as unknown as Record<string, unknown>,
       },
     },
-    persistence: createPreviewEmulatePersistence({
-      namespace: input.emulation.namespace,
-      store: createPostgresPreviewEmulateStateStore(input.databaseUrl),
-    }),
+    persistence: {
+      load: persistence.load,
+      save(state) {
+        pendingPersistence = persistence.save(state);
+        return pendingPersistence;
+      },
+    },
   });
+  const durableHandler = {} as Handler;
+  for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"] as const) {
+    durableHandler[method] = async (request, context) => {
+      const response = await handler[method](request, context);
+      // adapter-next queues persistence after producing the response. Await its
+      // save before returning so a serverless invocation cannot freeze with an
+      // OAuth code only resident in memory.
+      await Promise.resolve();
+      await pendingPersistence;
+      return response;
+    };
+  }
+  return durableHandler;
 }
 
 function handler(environment: NodeJS.ProcessEnv) {
