@@ -16,4 +16,11 @@ export default defineConfig({
     video: "off",
   },
   projects: [{ name: "auth-chromium", use: { browserName: "chromium" } }],
+  webServer: {
+    command: "mise run app:dev-emulated",
+    url: "https://localhost:3001/auth/sign-in",
+    ignoreHTTPSErrors: true,
+    reuseExistingServer: false,
+    timeout: 180_000,
+  },
 });
