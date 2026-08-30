@@ -79,10 +79,13 @@ const form: BuilderForm = {
   modelId: "openai/gpt-5.6-sol",
 };
 
+const connectionsEnabled =
+  process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED === "true";
+
 const meta = {
   title: "Pages/Create App/App Builder",
   component: AppBuilder,
-  args: { authenticated: true, connectionsEnabled: true, integrations },
+  args: { authenticated: true, connectionsEnabled, integrations },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof AppBuilder>;
 
@@ -145,7 +148,7 @@ export const RestoredDraft: Story = {
   render: () => (
     <Builder
       initialBrief=""
-      connectionsEnabled
+      connectionsEnabled={connectionsEnabled}
       integrations={integrations}
       providerNotices={[]}
       onCreate={fn()}
@@ -171,7 +174,7 @@ export const BuilderInteractions: Story = {
   render: () => (
     <Builder
       initialBrief=""
-      connectionsEnabled
+      connectionsEnabled={connectionsEnabled}
       integrations={integrations}
       providerNotices={[]}
       onCreate={fn()}
@@ -184,6 +187,12 @@ export const BuilderInteractions: Story = {
     await expect(canvas.getByPlaceholderText("my-app")).toHaveValue(
       "finance-hub",
     );
+    if (!connectionsEnabled) {
+      expect(
+        canvas.queryByRole("button", { name: "Show more connections" }),
+      ).toBeNull();
+      return;
+    }
     await userEvent.click(
       canvas.getByRole("button", { name: "Show more connections" }),
     );

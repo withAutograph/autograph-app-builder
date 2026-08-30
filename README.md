@@ -506,6 +506,11 @@ differing emails require explicit signed-in linking. Provider identity proves
 the user only; repository mutation remains a separate approval-bound
 capability. The exact contract and rollout are in
 [self-serve onboarding](docs/self-serve-onboarding.md).
+Storybook resolves `builder-connections` from the same Vercel Flags declaration
+when it starts or builds, passing only that Boolean result to its browser
+bundle. Pull `FLAGS` before running Storybook and restart or rebuild it after a
+dashboard change; without the SDK key, Storybook fails closed with Connections
+hidden.
 Activating the checked-in CIMD policy remains separately authorized because
 discovery may create, persist, or refresh an authorization-server client record;
 DCR remains disabled. The checked-in MCP and store contracts contain no
