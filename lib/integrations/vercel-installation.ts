@@ -150,6 +150,10 @@ const teamSchema = z
       .optional(),
   })
   .passthrough();
+const teamResponseSchema = z.union([
+  teamSchema,
+  z.object({ team: teamSchema }).transform(({ team }) => team),
+]);
 const userSchema = z
   .object({
     user: z
@@ -284,15 +288,7 @@ export function createVercelInstallationAuthorization(input: {
           },
         );
         if (!response.ok) throw new Error("scope-read-failed");
-        const payload: unknown = await response.json();
-        const team = teamSchema.parse(
-          input.emulation &&
-            typeof payload === "object" &&
-            payload !== null &&
-            "team" in payload
-            ? payload.team
-            : payload,
-        );
+        const team = teamResponseSchema.parse(await response.json());
         binding = {
           installationId,
           scopeId: team.id,
