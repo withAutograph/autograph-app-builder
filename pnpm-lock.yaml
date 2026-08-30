@@ -7,6 +7,9 @@ settings:
 overrides:
   ohash: 2.0.11
 
+patchedDependencies:
+  '@emulators/core@0.10.0': 9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4
+
 importers:
 
   .:
@@ -43,7 +46,7 @@ importers:
         version: 0.10.0
       '@emulators/core':
         specifier: 0.10.0
-        version: 0.10.0
+        version: 0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)
       '@emulators/github':
         specifier: 0.10.0
         version: 0.10.0
@@ -6474,19 +6477,19 @@ snapshots:
 
   '@emulators/adapter-next@0.10.0':
     dependencies:
-      '@emulators/core': 0.10.0
+      '@emulators/core': 0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)
 
-  '@emulators/core@0.10.0':
+  '@emulators/core@0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)':
     dependencies:
       jose: 6.2.10
 
   '@emulators/github@0.10.0':
     dependencies:
-      '@emulators/core': 0.10.0
+      '@emulators/core': 0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)
 
   '@emulators/vercel@0.10.0':
     dependencies:
-      '@emulators/core': 0.10.0
+      '@emulators/core': 0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
