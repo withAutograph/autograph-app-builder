@@ -244,7 +244,7 @@ bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '
 rustc --version | grep -E '^rustc 1[.]97[.]1 '
-node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49"||cache.target.tree!=="88ead91d7b11aae11c526f1c2ee40f5b6db70642") process.exit(1)' \
+node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="d378904a05e1bc2c0896886e6fbd3b816babaee2"||cache.target.tree!=="6735f4b45cc2b29a139531a41dac990c925e0d39") process.exit(1)' \
   && (cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)`;
 }
 

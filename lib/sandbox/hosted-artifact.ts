@@ -1,24 +1,24 @@
 export const HOSTED_ARTIFACT_CONTRACT_VERSION = 1;
 export const HOSTED_ARTIFACT_RELEASE_TAG =
-  "hosted-arrusted-ffa0c34a-execution-v3";
-export const HOSTED_ARTIFACT_RELEASE_NAME = "arrusted-ffa0c34a-preview.tar.gz";
+  "hosted-arrusted-d378904a-execution-v4";
+export const HOSTED_ARTIFACT_RELEASE_NAME = "arrusted-d378904a-preview.tar.gz";
 export const HOSTED_ARTIFACT_URL = `https://github.com/withAutograph/autograph-app-builder/releases/download/${HOSTED_ARTIFACT_RELEASE_TAG}/${HOSTED_ARTIFACT_RELEASE_NAME}`;
-export const HOSTED_ARTIFACT_BYTES = 181_139_242;
+export const HOSTED_ARTIFACT_BYTES = 180_168_876;
 export const HOSTED_ARTIFACT_SHA256 =
-  "c619ed74cc451a9b3ba7424d5f31da11611af0dd2d5f85299d3bbb82c9e3dcf0";
+  "0fa5754204b55a8c67232892c78a1e70f89f95633e48d79158ce1bbbb6cc91cb";
 export const HOSTED_SOURCE_PATH =
   "/opt/app-builder/hosted-source/arrusted-development";
 export const HOSTED_SOURCE_ARCHIVE_SHA256 =
-  "c62f35b5811496093bf7f6435eadd8f1822844e6aeea01ac00a9cc38cb1bcf5a";
-export const HOSTED_SOURCE_ARCHIVE_BYTES = 4_036_880;
+  "b8094adda43c73e3107dc6cf413861c0080a5ac8cc5045249a05990e3c799e44";
+export const HOSTED_SOURCE_ARCHIVE_BYTES = 4_037_050;
 export const HOSTED_SOURCE_ENTRY_COUNT = 1_749;
 export const HOSTED_SOURCE_WORKSPACE_DIGEST =
-  "3fe09ef0605b9beb3360add82cf9f56d7114330c7c93a16c635de5c524c82a2f";
+  "ee6eb2e560b4bf3f4cd0faff390fa4c7d1787e865e96fd78752cc50df5bed025";
 export const HOSTED_DEPENDENCY_MANIFEST_SHA256 =
-  "7ad9e12b0ee7a0d6aa0a681600d270d817d92536ebb6fca37d4986093e03350b";
+  "aa50cf4f027396908bcd6600a475bb3f1a98409cd0019279938585dfaa50a43c";
 export const HOSTED_DEPENDENCY_ARCHIVE_SHA256 =
-  "dcdd38dcdd34a9cd060e021cd71584df039b9a79d6f16fd7e966cf82dd168242";
-export const HOSTED_DEPENDENCY_ARCHIVE_BYTES = 177_381_378;
+  "7ae0a108f9e0ec7e01f8624a058a0afc1056fa6f2a74925e6ab6fcff7819d6e6";
+export const HOSTED_DEPENDENCY_ARCHIVE_BYTES = 176_411_280;
 
 export function hostedExecutionArtifactDigest(): string {
   return `vercel-sandbox-seed@sha256:${HOSTED_ARTIFACT_SHA256}`;

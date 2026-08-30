@@ -23,9 +23,9 @@ import { create as createTar } from "tar";
 
 import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts";
 
-const TARGET_SHA = "ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49";
-const TARGET_TREE = "88ead91d7b11aae11c526f1c2ee40f5b6db70642";
-const OUTPUT_NAME = "arrusted-ffa0c34a-preview.tar.gz";
+const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
+const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
+const OUTPUT_NAME = "arrusted-d378904a-preview.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
 const EXECUTION_ROOT_PACKAGES = [
@@ -50,7 +50,7 @@ const SOURCE_FILE = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u;
 
 const targetDigests = {
   miseConfigSha256:
-    "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+    "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
   miseLockSha256:
     "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
   bunLockSha256:
@@ -60,7 +60,7 @@ const targetDigests = {
   appContractSha256:
     "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
   repositoryPreflightSha256:
-    "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+    "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
   repositoryExecSha256:
     "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
 } as const;
@@ -406,9 +406,9 @@ try {
       sha: TARGET_SHA,
       tree: TARGET_TREE,
       eligibilityDigest:
-        "c47f3c720cce4b4bcf64e430d248284570776f48a886c20fc18d255815985c6e",
+        "c7e00f034e0c36452b7c43a5544f5b5486240cc45f5d624f4e9134924af0e735",
       contractDigest:
-        "f3c8499305c983b3d82f3b78687f4106a149decd7faa486d3d106bdaf83e928f",
+        "be880ed1dcd6c450457a888b78fea704e3ffe62e121e6be118c83c2800a67d03",
       workspaceDigest: sha256(JSON.stringify(entries)),
     },
     source: {

@@ -1283,7 +1283,7 @@ wait
       readFileSync("containers/eve-sandbox/Dockerfile"),
     );
     expect(dockerfileDigest).toBe(
-      "5960ee6e7dd1d3a4aa424bcde4c920b8c9c40abd14cced7a489f98736e9b43aa",
+      "05e47db175d19c836d95be2e628e36cf7c7a2859dc8fbd92ac5c07573db0ad5b",
     );
     expect(
       readFileSync("containers/eve-sandbox/README.md", "utf8"),
