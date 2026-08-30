@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +8,23 @@ import {
 } from "./postgres-github-installation-store";
 
 describe("tenant GitHub installation binding schema", () => {
+  it("scopes a repeated installation to its tenant while retaining same-tenant idempotency", async () => {
+    const migration = await readFile(
+      "drizzle/0014_tenant_github_installation_uniqueness.sql",
+      "utf8",
+    );
+
+    expect(migration).toContain(
+      'DROP INDEX IF EXISTS "hosted_github_installation_binding_id_uidx";',
+    );
+    expect(migration).toContain(
+      'ON "hosted_github_installation_binding" ("installation_id", "issuer", "audience", "workspace_id", "owner_user_id");',
+    );
+    expect(migration).not.toContain(
+      'ON "hosted_github_installation_binding" ("installation_id");',
+    );
+  });
+
   it("accepts one exact active installation identity", () => {
     expect(
       hostedGitHubInstallationBindingSchema.parse({

@@ -39,9 +39,7 @@ export type GitHubOAuthErrorCategory =
   | "unverified_user_email";
 
 export type GitHubOAuthCallbackError =
-  | "access_denied"
-  | "temporarily_unavailable"
-  | "server_error";
+  "access_denied" | "temporarily_unavailable" | "server_error";
 
 export class GitHubInstallationAuthorizationError extends Error {
   constructor(
@@ -73,9 +71,7 @@ const githubLoginSchema = z
 const configSchema = z
   .object({
     appId: decimalSchema,
-    appSlug: z
-      .string()
-      .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u),
+    appSlug: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u),
     clientId: z
       .string()
       .min(1)
@@ -685,9 +681,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         now: appliedAt,
       });
     } catch {
-      throw new GitHubInstallationAuthorizationError(
-        "durable-tenant-binding",
-      );
+      throw new GitHubInstallationAuthorizationError("durable-tenant-binding");
     }
   }
 
@@ -719,10 +713,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         });
         const redirect = input.emulation
           ? new URL("/local-connections/github", config.issuer)
-          : new URL(
-              `/apps/${config.appSlug}/installations/new`,
-              GITHUB_ORIGIN,
-            );
+          : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
         redirect.searchParams.set("state", state.state);
         return {
           version: 1 as const,
