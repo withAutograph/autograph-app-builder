@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
     "/*": [
       "./node_modules/@emulators/core/dist/fonts/**/*",
       "./node_modules/.pnpm/@emulators+core@*/node_modules/@emulators/core/dist/fonts/**/*",
+      "./node_modules/@emulators/github/dist/fonts/**/*",
+      "./node_modules/.pnpm/@emulators+github@*/node_modules/@emulators/github/dist/fonts/**/*",
+      "./node_modules/@emulators/vercel/dist/fonts/**/*",
+      "./node_modules/.pnpm/@emulators+vercel@*/node_modules/@emulators/vercel/dist/fonts/**/*",
     ],
   },
   async headers() {
