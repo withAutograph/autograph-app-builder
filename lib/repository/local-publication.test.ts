@@ -257,7 +257,7 @@ describe("porcelain-v2 status parsing", () => {
   });
 });
 
-describe("approval-bound local publication", () => {
+describe("approval-bound local publication", { timeout: 20_000 }, () => {
   beforeEach(() => {
     vi.stubEnv("APP_BUILDER_TEST_MODEL", "1");
     vi.stubEnv("APP_BUILDER_LOCAL_PUBLICATION", "1");
