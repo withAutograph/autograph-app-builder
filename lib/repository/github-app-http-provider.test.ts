@@ -179,7 +179,11 @@ function json(value: unknown, status = 200, requestId = "REQUEST_1") {
   });
 }
 
-function providerFetch(input?: { extraPermission?: boolean; fail?: boolean }) {
+function providerFetch(input?: {
+  extraPermission?: boolean;
+  fail?: boolean;
+  repositorySelection?: "all" | "selected";
+}) {
   const calls: Array<{ url: string; init: RequestInit; body: unknown }> = [];
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
@@ -191,7 +195,7 @@ function providerFetch(input?: { extraPermission?: boolean; fail?: boolean }) {
       return json({
         id: 456,
         account: { id: 789, login: "withAutograph", type: "Organization" },
-        repository_selection: "selected",
+        repository_selection: input?.repositorySelection ?? "selected",
       });
     }
     if (url.endsWith("/app/installations/456/access_tokens")) {
@@ -326,6 +330,21 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       );
     },
   );
+
+  it("preserves an all-repositories installation through the adapter", async () => {
+    const adapter = createGitHubAppPublicationAdapter(
+      createProvider(
+        providerFetch({ repositorySelection: "all" }).implementation,
+      ),
+    );
+
+    await expect(
+      adapter.inspectInstallation("resolve-existing-source"),
+    ).resolves.toMatchObject({
+      repositorySelection: "all",
+      selectedRepositoryIds: ["100", "200"],
+    });
+  });
 
   it("rejects an escalated token response and sanitizes transport bodies", async () => {
     const escalated = createGitHubAppPublicationAdapter(

@@ -743,10 +743,7 @@ export function createGitHubAppInstallationAuthorization(input: {
               appId: config.appId,
               requestedInstallationId: state.installationId,
             });
-        if (
-          installation.repositorySelection !== "selected" ||
-          installation.suspendedAt !== null
-        ) {
+        if (installation.suspendedAt !== null) {
           throw new Error("installation-mismatch");
         }
         if (
@@ -786,7 +783,7 @@ export function createGitHubAppInstallationAuthorization(input: {
             JSON.stringify({ id: providerUserId, login: providerLogin }),
           ),
           accountType: binding.accountType,
-          repositorySelection: "selected" as const,
+          repositorySelection: installation.repositorySelection,
           setupAction: state.setupAction,
           returnState: state.returnState,
           appliedAt: appliedAt.toISOString(),

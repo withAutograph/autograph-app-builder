@@ -342,7 +342,7 @@ export function createGitHubAppHttpProvider(input: {
     const accountType = stringProperty(account, "type");
     if (
       decimalProperty(response.body, "id") !== config.installationId ||
-      selection !== "selected" ||
+      (selection !== "all" && selection !== "selected") ||
       (accountType !== "Organization" && accountType !== "User")
     )
       throw new Error("invalid-response");
@@ -351,7 +351,7 @@ export function createGitHubAppHttpProvider(input: {
       accountId: decimalProperty(account, "id"),
       accountLogin: stringProperty(account, "login"),
       accountType: accountType as "Organization" | "User",
-      repositorySelection: "selected" as const,
+      repositorySelection: selection,
     };
   }
 

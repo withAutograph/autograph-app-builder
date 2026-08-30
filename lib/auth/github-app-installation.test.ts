@@ -117,7 +117,10 @@ async function prepareAuthorization(
   };
 }
 
-function successfulFetch(seen: Array<{ url: string; init?: RequestInit }>) {
+function successfulFetch(
+  seen: Array<{ url: string; init?: RequestInit }>,
+  repositorySelection: "all" | "selected" = "selected",
+) {
   return vi.fn<typeof fetch>(async (resource, init) => {
     const url = String(resource);
     seen.push({ url, init });
@@ -142,7 +145,7 @@ function successfulFetch(seen: Array<{ url: string; init?: RequestInit }>) {
             app_id: 12345,
             app_slug: "autograph-app-builder",
             target_type: "Organization",
-            repository_selection: "selected",
+            repository_selection: repositorySelection,
             suspended_at: null,
             account: {
               id: 149546148,
@@ -278,6 +281,26 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).toHaveBeenCalledOnce();
   });
 
+  it("binds an active all-repositories installation to the same tenant", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const { authorization, bind, events } = harness({
+      fetch: successfulFetch(requests, "all"),
+    });
+    const { authorizeState } = await prepareAuthorization(authorization);
+
+    await expect(
+      authorization.complete(
+        authorizationCallbackUrl(authorizeState),
+        authority,
+      ),
+    ).resolves.toMatchObject({
+      status: "bound",
+      repositorySelection: "all",
+    });
+    expect(events).toContain("installation:bind");
+    expect(bind).toHaveBeenCalledWith(expect.objectContaining({ authority }));
+  });
+
   it("rejects a cross-workspace state and inactive membership before exchange", async () => {
     const request = vi.fn<typeof fetch>();
     const active = harness({ fetch: request });
@@ -296,6 +319,35 @@ describe("public GitHub App installation authorization", () => {
       "GitHub App installation authorization failed.",
     );
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when installation OAuth returns a code without tenant-bound state", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+
+    await expect(
+      authorization.complete(
+        "https://builder.example/github/installations/callback?code=one-time-code",
+        authority,
+      ),
+    ).rejects.toThrow("GitHub App installation authorization failed.");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a code is mixed with setup callback parameters", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const begun = await authorization.begin(authority);
+    const state = new URL(begun.redirectUrl).searchParams.get("state")!;
+    const callback = new URL(setupCallbackUrl(state));
+    callback.searchParams.set("code", "one-time-code");
+
+    await expect(
+      authorization.complete(callback.toString(), authority),
+    ).rejects.toThrow("GitHub App installation authorization failed.");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
   });
 
   it("fails closed on provider drift without leaking provider responses", async () => {

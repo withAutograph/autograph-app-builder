@@ -459,6 +459,21 @@ describe("closed GitHub publication contract", () => {
     expect(publish.permissions.workflows).toBe("write");
   });
 
+  it("preserves all-repository selection in the closed installation identity", () => {
+    const identity = createGitHubInstallationIdentity({
+      operation: "resolve-existing-source",
+      installationId: "10",
+      accountId: "20",
+      accountLogin: "withAutograph",
+      accountType: "Organization",
+      repositorySelection: "all",
+      selectedRepositoryIds: ["100"],
+    });
+
+    expect(identity.repositorySelection).toBe("all");
+    expect(() => assertExactInstallationIdentity(identity)).not.toThrow();
+  });
+
   it("rejects unknown keys and permission escalation", () => {
     const identity = installation("publish-draft-pull-request");
     expect(() =>
