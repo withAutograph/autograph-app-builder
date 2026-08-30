@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { GeistSans } from "geist/font/sans";
 
+import { AppShell } from "@/components/app-shell";
 import { Providers } from "@/components/providers";
+import { AppShell } from "@/components/app-shell";
 
 import "./globals.css";
 
@@ -29,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               process.env.VERCEL_AUTH_CLIENT_SECRET),
           )}
         >
-          {children}
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

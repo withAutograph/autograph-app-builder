@@ -1,6 +1,6 @@
 import type { Preview } from "@storybook/nextjs-vite";
-import { GeistSans } from "geist/font/sans";
 
+import { AppShell } from "../components/app-shell";
 import { Providers } from "../components/providers";
 import "../app/globals.css";
 
@@ -16,13 +16,11 @@ const preview: Preview = {
   },
   decorators: [
     (Story) => (
-      <div
-        className={`${GeistSans.className} min-h-screen bg-background text-foreground antialiased`}
-      >
+      <AppShell>
         <Providers>
           <Story />
         </Providers>
-      </div>
+      </AppShell>
     ),
   ],
 };
