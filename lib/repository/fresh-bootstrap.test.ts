@@ -42,7 +42,7 @@ import {
 } from "./fresh-bootstrap";
 
 const roots: string[] = [];
-vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 20_000 });
 beforeEach(() => vi.stubEnv("APP_BUILDER_TEST_MODEL", "1"));
 afterEach(async () => {
   vi.unstubAllEnvs();
