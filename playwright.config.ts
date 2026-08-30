@@ -27,7 +27,7 @@ export default defineConfig({
   },
   projects: [{ name: "auth-chromium", use: { browserName: "chromium" } }],
   webServer: {
-    command: `PATH=${JSON.stringify(webServerPath)} ${JSON.stringify(mise)} run app:dev-emulated`,
+    command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
     url: "https://localhost:3001/auth/sign-in",
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,

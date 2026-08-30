@@ -5,6 +5,7 @@ set -eu
 app_origin=https://localhost:3001
 "$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
 emulate_pid=
+app_pid=
 if ! lsof -nP -iTCP:4000 -sTCP:LISTEN >/dev/null 2>&1; then
   "$(mise which pnpm)" exec emulate start --service vercel,github --seed .emulate/config.yaml &
   emulate_pid=$!
@@ -32,8 +33,13 @@ done
 DATABASE_URL=postgresql://postgres@127.0.0.1:54329/autograph_app_builder \
   mise run database:migrate
 cleanup() {
+  if [ -n "$app_pid" ]; then
+    kill "$app_pid" 2>/dev/null || true
+    wait "$app_pid" 2>/dev/null || true
+  fi
   if [ -n "$emulate_pid" ]; then
     kill "$emulate_pid" 2>/dev/null || true
+    wait "$emulate_pid" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT INT TERM
@@ -58,4 +64,6 @@ EMULATE_GITHUB_INSTALLATION_ID=1001 \
 EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app \
 EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)" \
 .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/next/dist/bin/next dev --experimental-https --port 3001 "$@"
+  "$(mise which node)" node_modules/next/dist/bin/next dev --experimental-https --port 3001 "$@" &
+app_pid=$!
+wait "$app_pid"
