@@ -961,6 +961,7 @@ function Builder({
     initialDraft?.repositoryEditedByUser ?? false,
   );
   const hasGeneratedInitialAppName = useRef(false);
+  const hasUnsavedChanges = useRef(false);
   const suppressUnsavedWarning = useRef(false);
   const resumedVercelConnection = providerNotices.some(
     (notice) => notice.provider === "vercel" && notice.status === "connected",
@@ -1029,6 +1030,7 @@ function Builder({
     });
   }, [initialDraft]);
   const updateBrief = (brief: string) => {
+    if (brief !== form.brief) hasUnsavedChanges.current = true;
     setForm((current) => {
       if (appNameEditedByUser.current) return { ...current, brief };
       const appName =
@@ -1045,6 +1047,7 @@ function Builder({
   };
   const addConnection = (name: string) => {
     if (comingSoonConnections.has(name)) return;
+    hasUnsavedChanges.current = true;
     setForm((current) => ({
       ...current,
       connections: current.connections.includes(name)
@@ -1053,6 +1056,7 @@ function Builder({
     }));
   };
   const removeConnection = (name: string) => {
+    hasUnsavedChanges.current = true;
     setForm((current) => ({
       ...current,
       connections: current.connections.filter((item) => item !== name),
@@ -1071,13 +1075,13 @@ function Builder({
     setConnectionFlow(null);
   };
   useEffect(() => {
-    if (!form.appName && !form.repository) return;
     const warn = (event: BeforeUnloadEvent) => {
-      if (!suppressUnsavedWarning.current) event.preventDefault();
+      if (hasUnsavedChanges.current && !suppressUnsavedWarning.current)
+        event.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [form.appName, form.repository]);
+  }, []);
   useEffect(() => {
     if (!initialDraft) return;
     const id =
@@ -1173,6 +1177,7 @@ function Builder({
             onChange={(event) => {
               appNameEditedByUser.current = true;
               const appName = event.target.value;
+              if (appName !== form.appName) hasUnsavedChanges.current = true;
               setForm((current) => ({
                 ...current,
                 appName,
@@ -1232,7 +1237,10 @@ function Builder({
               inputId="vercel-team"
               value={team}
               options={teamOptions}
-              onChange={setTeam}
+              onChange={(value) => {
+                if (value !== team) hasUnsavedChanges.current = true;
+                setTeam(value);
+              }}
               prefix={<span className={styles.teamDot} data-team={team} />}
               menuFooter={{
                 value: "create-team",
@@ -1286,7 +1294,10 @@ function Builder({
                   inputId="git-scope"
                   value={gitScope}
                   options={gitScopeOptions}
-                  onChange={setGitScope}
+                  onChange={(value) => {
+                    if (value !== gitScope) hasUnsavedChanges.current = true;
+                    setGitScope(value);
+                  }}
                   prefix={<FaGithub size={16} />}
                   menuFooter={{
                     value: "add-github",
@@ -1340,6 +1351,8 @@ function Builder({
                       value={form.repository}
                       onChange={(event) => {
                         repositoryEditedByUser.current = true;
+                        if (event.target.value !== form.repository)
+                          hasUnsavedChanges.current = true;
                         setForm({ ...form, repository: event.target.value });
                       }}
                       placeholder="my-app"
@@ -1351,12 +1364,14 @@ function Builder({
                       <input
                         type="checkbox"
                         checked={form.privateRepository}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          if (event.target.checked !== form.privateRepository)
+                            hasUnsavedChanges.current = true;
                           setForm({
                             ...form,
                             privateRepository: event.target.checked,
-                          })
-                        }
+                          });
+                        }}
                       />
                       <span>
                         <i>
@@ -1391,6 +1406,7 @@ function Builder({
               checked={zdrOnly}
               onChange={(event) => {
                 const checked = event.target.checked;
+                if (checked !== zdrOnly) hasUnsavedChanges.current = true;
                 setZdrOnly(checked);
                 if (
                   checked &&
@@ -1413,7 +1429,10 @@ function Builder({
             }
             value={model}
             options={modelOptions}
-            onChange={setModel}
+            onChange={(value) => {
+              if (value !== model) hasUnsavedChanges.current = true;
+              setModel(value);
+            }}
             prefix={<Search size={15} />}
             showSelectedCheck={false}
             placeholder={
@@ -1465,7 +1484,11 @@ function Builder({
                 value="codex"
                 required
                 checked={form.buildDestination === "codex"}
-                onChange={() => setForm({ ...form, buildDestination: "codex" })}
+                onChange={() => {
+                  if (form.buildDestination !== "codex")
+                    hasUnsavedChanges.current = true;
+                  setForm({ ...form, buildDestination: "codex" });
+                }}
               />
             </label>
             <label>
@@ -1477,9 +1500,11 @@ function Builder({
                 value="cursor"
                 required
                 checked={form.buildDestination === "cursor"}
-                onChange={() =>
-                  setForm({ ...form, buildDestination: "cursor" })
-                }
+                onChange={() => {
+                  if (form.buildDestination !== "cursor")
+                    hasUnsavedChanges.current = true;
+                  setForm({ ...form, buildDestination: "cursor" });
+                }}
               />
             </label>
           </div>

@@ -313,6 +313,28 @@ describe("Vercel-faithful App Builder flow", () => {
     );
   });
 
+  it("only warns before unloading after a user changes the builder form", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    const beforeEditing = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeEditing);
+    expect(beforeEditing.defaultPrevented).toBe(false);
+
+    await fill(
+      view.querySelector<HTMLInputElement>("#app-name")!,
+      "Changed App",
+    );
+
+    const afterEditing = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(afterEditing);
+    expect(afterEditing.defaultPrevented).toBe(true);
+  });
+
   it("preserves a builder draft before a first-use provider connection", async () => {
     const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(resumeKey);
