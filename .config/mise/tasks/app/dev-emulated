@@ -109,11 +109,12 @@ if [ "${CI:-}" = true ]; then
     --experimental-https \
     --experimental-https-key "$certificate_key" \
     --experimental-https-cert "$certificate" \
+    --hostname 0.0.0.0 \
     --port "$app_port" "$@" &
 else
   .config/mise/scripts/trusted-node-launcher \
     "$(mise which node)" node_modules/next/dist/bin/next dev \
-    --experimental-https --port "$app_port" "$@" &
+    --experimental-https --hostname 0.0.0.0 --port "$app_port" "$@" &
 fi
 app_pid=$!
 printf 'app_pid=%s\nemulate_pid=%s\n' "$app_pid" "$emulate_pid" >"$pid_file"

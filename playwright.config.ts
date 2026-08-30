@@ -39,9 +39,8 @@ export default defineConfig({
   ],
   webServer: {
     command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
-    // Linux runners may resolve localhost to ::1 while Next's default dev
-    // listener is IPv4. Probe the same server explicitly over loopback IPv4;
-    // browser navigation still uses the required localhost WebAuthn origin.
+    // The dev server binds IPv4 explicitly so Linux and macOS probe the same
+    // listener while browser navigation retains the localhost WebAuthn origin.
     url: `https://127.0.0.1:${appPort}/auth/sign-in`,
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
