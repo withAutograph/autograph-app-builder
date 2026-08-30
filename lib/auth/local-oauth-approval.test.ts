@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { ProviderEmulation } from "../integrations/local-provider-emulation";
-import { parseLocalOAuthAuthorization } from "./local-oauth-approval";
+import {
+  parseLocalOAuthAuthorization,
+  signLocalOAuthApproval,
+  verifyLocalOAuthApproval,
+} from "./local-oauth-approval";
 
 const emulation: ProviderEmulation = {
   mode: "local",
@@ -57,5 +61,32 @@ describe("local OAuth approval", () => {
         values: { ...base.values, ...override },
       }),
     ).toThrow();
+  });
+
+  it("signs a short-lived approval bound to provider and origin", () => {
+    const authorization = parseLocalOAuthAuthorization(base).authorization;
+    const approval = signLocalOAuthApproval(
+      {
+        provider: "github",
+        origin: emulation.canonicalOrigin,
+        authorization,
+        expiresAt: 2_000,
+      },
+      emulation.relaySecret,
+    );
+    expect(
+      verifyLocalOAuthApproval(approval, emulation.relaySecret, 1_000),
+    ).toEqual({
+      provider: "github",
+      origin: emulation.canonicalOrigin,
+      authorization,
+      expiresAt: 2_000,
+    });
+    expect(() =>
+      verifyLocalOAuthApproval(`${approval}x`, emulation.relaySecret, 1_000),
+    ).toThrow("invalid-approval");
+    expect(() =>
+      verifyLocalOAuthApproval(approval, emulation.relaySecret, 2_000),
+    ).toThrow("expired-approval");
   });
 });

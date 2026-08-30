@@ -14,6 +14,7 @@ import {
 import {
   localOAuthProviderDetails,
   parseLocalOAuthAuthorization,
+  signFreshLocalOAuthApproval,
 } from "@/lib/auth/local-oauth-approval";
 import {
   readProviderEmulation,
@@ -69,10 +70,14 @@ export default async function LocalOAuthApprovalPage({
 
   const details = localOAuthProviderDetails(parsed.provider);
   const ProviderMark = parsed.provider === "github" ? FaGithub : VercelMark;
-  const approvalParams = new URLSearchParams();
-  for (const [name, value] of Object.entries(parsed.authorization)) {
-    if (value) approvalParams.set(name, value);
-  }
+  const approval = signFreshLocalOAuthApproval(
+    {
+      provider: parsed.provider,
+      origin: emulation.canonicalOrigin,
+      authorization: parsed.authorization,
+    },
+    emulation.relaySecret,
+  );
 
   return (
     <main className="flex min-h-svh flex-col bg-background text-foreground">
@@ -137,7 +142,7 @@ export default async function LocalOAuthApprovalPage({
             {emulation.mode === "preview" ? (
               <a
                 className={buttonVariants({ className: "h-10 w-full" })}
-                href={`/local-oauth/${parsed.provider}/approve?${approvalParams}`}
+                href={`/local-oauth/${parsed.provider}/approve/${approval}`}
               >
                 Continue with {details.name}
               </a>

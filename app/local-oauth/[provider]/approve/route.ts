@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { parseLocalOAuthAuthorization } from "@/lib/auth/local-oauth-approval";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
-async function completeAuthorization(
+export async function completeAuthorization(
   request: Request,
   context: { params: Promise<{ provider: string }> },
   values: Record<string, string | undefined>,

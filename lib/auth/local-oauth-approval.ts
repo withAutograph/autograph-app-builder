@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
 import { z } from "zod";
 
 import type { ProviderEmulation } from "../integrations/local-provider-emulation";
@@ -29,6 +31,59 @@ const authorizationSchema = z
   });
 
 export type LocalOAuthAuthorization = z.infer<typeof authorizationSchema>;
+
+const approvalRelaySchema = z
+  .object({
+    provider: localOAuthProviderSchema,
+    origin: z.string().url(),
+    authorization: authorizationSchema,
+    expiresAt: z.number().int().positive(),
+  })
+  .strict();
+
+export function signLocalOAuthApproval(
+  input: z.infer<typeof approvalRelaySchema>,
+  secret: string,
+) {
+  const payload = Buffer.from(
+    JSON.stringify(approvalRelaySchema.parse(input)),
+  ).toString("base64url");
+  const signature = createHmac("sha256", secret)
+    .update(payload)
+    .digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+export function signFreshLocalOAuthApproval(
+  input: Omit<z.infer<typeof approvalRelaySchema>, "expiresAt">,
+  secret: string,
+) {
+  return signLocalOAuthApproval(
+    { ...input, expiresAt: Date.now() + 5 * 60_000 },
+    secret,
+  );
+}
+
+export function verifyLocalOAuthApproval(
+  value: string,
+  secret: string,
+  now = Date.now(),
+) {
+  const [payload, signature, extra] = value.split(".");
+  if (!payload || !signature || extra) throw new Error("invalid-approval");
+  const expected = createHmac("sha256", secret).update(payload).digest();
+  const provided = Buffer.from(signature, "base64url");
+  if (
+    provided.length !== expected.length ||
+    !timingSafeEqual(provided, expected)
+  )
+    throw new Error("invalid-approval");
+  const result = approvalRelaySchema.parse(
+    JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
+  );
+  if (result.expiresAt <= now) throw new Error("expired-approval");
+  return result;
+}
 
 export function parseLocalOAuthAuthorization(input: {
   provider: string;
