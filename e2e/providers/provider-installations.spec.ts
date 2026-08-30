@@ -15,14 +15,21 @@ async function extendGitHubOAuthCallback(
   page: import("playwright/test").Page,
   extensions: ReadonlyArray<readonly [string, string]>,
 ) {
-  await page.route(`**${githubCallbackPath}?*`, async (route) => {
+  let redirected = false;
+  await page.route(`**${githubCallbackPath}**`, async (route) => {
     const url = new URL(route.request().url());
     // The installation callback has no OAuth code. Preserve it so the server
     // creates its one-time authorization state before altering only the
     // provider's final OAuth return.
-    if (!url.searchParams.has("code")) return route.fallback();
+    if (redirected || !url.searchParams.has("code")) return route.fallback();
     for (const [key, value] of extensions) url.searchParams.append(key, value);
-    await route.continue({ url: url.toString() });
+    // A redirect exercises the real callback route while ensuring Playwright
+    // does not discard the rewritten navigation URL.
+    redirected = true;
+    await route.fulfill({
+      status: 302,
+      headers: { location: url.toString() },
+    });
   });
 }
 
