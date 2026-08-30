@@ -11,8 +11,8 @@ if (!mise) throw new Error("The mise executable is unavailable.");
 const webServerPath = `${dirname(process.execPath)}:${dirname(mise)}:/usr/bin:/bin`;
 
 export default defineConfig({
-  testDir: "./e2e/auth",
-  outputDir: "test-results/auth-e2e-emulated",
+  testDir: "./e2e",
+  outputDir: "test-results/web-product-e2e-emulated",
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -27,7 +27,7 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "auth-chromium",
+      name: "web-product-chromium",
       use: {
         browserName: "chromium",
         launchOptions: { args: ["--ignore-certificate-errors"] },
