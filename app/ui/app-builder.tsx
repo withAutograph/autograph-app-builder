@@ -32,7 +32,17 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { SiOpenai, SiQuickbooks, SiSage, SiXero } from "react-icons/si";
+import {
+  SiBitbucket,
+  SiCloudflare,
+  SiGitlab,
+  SiNetlify,
+  SiOpenai,
+  SiQuickbooks,
+  SiSage,
+  SiVercel,
+  SiXero,
+} from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import { UserButton } from "../../components/auth/user/user-button";
@@ -59,8 +69,8 @@ export type BuilderForm = {
   modelId: string;
 };
 export type ProviderField = "vercel" | "github";
-type StorageProvider = "github";
-type DeploymentProvider = "vercel";
+type StorageProvider = "github" | "gitlab" | "bitbucket";
+type DeploymentProvider = "vercel" | "netlify" | "cloudflare";
 export type BuilderDraft = {
   version: 1;
   form: BuilderForm;
@@ -112,9 +122,8 @@ function parseBuilderDraft(value: string | null): BuilderDraft | undefined {
             ? parsed.form.buildDestination
             : "codex",
       },
-      storageProvider: parsed.storageProvider === null ? null : "github",
-      deploymentProvider:
-        parsed.deploymentProvider === "vercel" ? "vercel" : null,
+      storageProvider: "github",
+      deploymentProvider: "vercel",
     } as BuilderDraft;
   } catch {
     return undefined;
@@ -240,15 +249,25 @@ const comingSoonConnections = new Set([
 const connectionKind = new Map<string, string>(featuredConnections);
 
 const storageProviderOptions = [
-  ["GitHub", "github"],
-  ["GitLab", "gitlab"],
-  ["Bitbucket", "bitbucket"],
+  { name: "GitHub", provider: "github", icon: FaGithub, available: true },
+  { name: "GitLab", provider: "gitlab", icon: SiGitlab, available: false },
+  {
+    name: "Bitbucket",
+    provider: "bitbucket",
+    icon: SiBitbucket,
+    available: false,
+  },
 ] as const;
 
 const deploymentProviderOptions = [
-  ["Vercel", "vercel"],
-  ["Netlify", "netlify"],
-  ["Cloudflare", "cloudflare"],
+  { name: "Vercel", provider: "vercel", icon: SiVercel, available: true },
+  { name: "Netlify", provider: "netlify", icon: SiNetlify, available: false },
+  {
+    name: "Cloudflare",
+    provider: "cloudflare",
+    icon: SiCloudflare,
+    available: false,
+  },
 ] as const;
 
 const connectionDescriptions: Record<string, string> = {
@@ -1022,13 +1041,9 @@ export function Builder({
     initialDraft?.connectedConnections ?? [],
   );
   const [storageProvider, setStorageProvider] =
-    useState<StorageProvider | null>(
-      initialDraft?.storageProvider === null ? null : "github",
-    );
+    useState<StorageProvider>("github");
   const [deploymentProvider, setDeploymentProvider] =
-    useState<DeploymentProvider | null>(
-      initialDraft?.deploymentProvider ?? null,
-    );
+    useState<DeploymentProvider>("vercel");
   const visibleProviderNotices = providerNotices.filter(
     (notice) =>
       !(
@@ -1279,222 +1294,250 @@ export function Builder({
         <fieldset className={`${styles.sectionField} ${styles.deploySection}`}>
           <legend>Deploy to</legend>
           <p>Where do you want to deploy this app?</p>
-          <div className={styles.connectionGrid}>
-            {deploymentProviderOptions
-              .filter(
-                ([, provider]) =>
-                  provider !== deploymentProvider ||
-                  integrations.vercel.status === "unavailable",
-              )
-              .map(([name, provider]) => {
-                const comingSoon =
-                  provider !== "vercel" ||
-                  integrations.vercel.status === "unavailable";
-                return (
-                  <button
-                    type="button"
-                    key={provider}
-                    aria-label={
-                      comingSoon ? `${name} coming soon` : `Add ${name}`
-                    }
-                    disabled={comingSoon}
-                    onClick={() => {
-                      hasUnsavedChanges.current = true;
-                      setDeploymentProvider("vercel");
-                    }}
-                  >
-                    <Globe size={18} aria-hidden="true" />
-                    {name}
-                    {comingSoon ? (
-                      <span className={styles.comingSoon}>Coming soon</span>
-                    ) : null}
-                  </button>
-                );
-              })}
+          <div
+            className={styles.providerTabs}
+            role="tablist"
+            aria-label="Deployment provider"
+          >
+            {deploymentProviderOptions.map((option) => {
+              const unavailable =
+                !option.available ||
+                integrations.vercel.status === "unavailable";
+              const Icon = option.icon;
+              return (
+                <button
+                  type="button"
+                  role="tab"
+                  key={option.provider}
+                  data-provider={option.provider}
+                  aria-selected={deploymentProvider === option.provider}
+                  aria-controls={
+                    unavailable
+                      ? undefined
+                      : `deployment-provider-${option.provider}`
+                  }
+                  disabled={unavailable}
+                  onClick={() => {
+                    hasUnsavedChanges.current = true;
+                    setDeploymentProvider(option.provider);
+                  }}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  <span>{option.name}</span>
+                  {unavailable ? (
+                    <span className={styles.comingSoon}>Coming soon</span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
           {deploymentProvider === "vercel" &&
           integrations.vercel.status !== "unavailable" ? (
             <div
-              className={styles.connectedList}
-              aria-label="Selected deployment provider"
+              className={styles.providerPanel}
+              id="deployment-provider-vercel"
+              role="tabpanel"
             >
-              <article>
-                <span>
-                  <Globe size={18} aria-hidden="true" />
-                </span>
-                <div>
-                  <strong>Vercel</strong>
-                  <p>Deploy your app with Vercel.</p>
-                  {integrations.vercel.status === "connected" ? (
-                    <SearchCombobox
-                      label="Select a Vercel Team"
-                      inputId="vercel-team"
-                      value={team}
-                      options={teamOptions}
-                      onChange={(value) => {
-                        if (value !== team) hasUnsavedChanges.current = true;
-                        setTeam(value);
-                      }}
-                      prefix={
-                        <span className={styles.teamDot} data-team={team} />
-                      }
-                      optionIcon={(option) => (
-                        <span
-                          className={styles.teamDot}
-                          data-team={option.value}
-                        />
-                      )}
-                      detailPills
-                    />
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => beginProviderConnection("vercel")}
-                >
-                  Connect
-                </button>
-              </article>
+              <div className={styles.integrationField}>
+                <span>Vercel Team (Optional)</span>
+                {integrations.vercel.status === "connected" ? (
+                  <SearchCombobox
+                    label="Select a Vercel Team"
+                    inputId="vercel-team"
+                    value={team}
+                    options={teamOptions}
+                    onChange={(value) => {
+                      if (value !== team) hasUnsavedChanges.current = true;
+                      setTeam(value);
+                    }}
+                    prefix={
+                      <span className={styles.teamDot} data-team={team} />
+                    }
+                    menuFooter={{
+                      value: "create-team",
+                      label: "Connect another Vercel team",
+                    }}
+                    onFooterSelect={() => beginProviderConnection("vercel")}
+                    optionIcon={(option) => (
+                      <span
+                        className={styles.teamDot}
+                        data-team={option.value}
+                      />
+                    )}
+                    footerIcon={<PlusCircle size={18} />}
+                    detailPills
+                  />
+                ) : (
+                  <button
+                    className={styles.connectProvider}
+                    type="button"
+                    id="vercel-team"
+                    onClick={() => beginProviderConnection("vercel")}
+                  >
+                    Connect to Vercel
+                  </button>
+                )}
+                <small className={styles.integrationHelp}>
+                  Connect Vercel and Autograph can create and deploy the project
+                  for you. You can also skip this and deploy later.
+                </small>
+              </div>
             </div>
           ) : null}
         </fieldset>
         <fieldset className={`${styles.sectionField} ${styles.storeSection}`}>
           <legend>Store in</legend>
           <p>Where do you want to store this app?</p>
-          <div className={styles.connectionGrid}>
-            {storageProviderOptions
-              .filter(
-                ([, provider]) =>
-                  provider !== storageProvider ||
-                  integrations.github.status === "unavailable",
-              )
-              .map(([name, provider]) => {
-                const comingSoon =
-                  provider !== "github" ||
-                  integrations.github.status === "unavailable";
-                return (
-                  <button
-                    type="button"
-                    key={provider}
-                    aria-label={
-                      comingSoon ? `${name} coming soon` : `Add ${name}`
-                    }
-                    disabled={comingSoon}
-                    onClick={() => {
-                      hasUnsavedChanges.current = true;
-                      setStorageProvider("github");
-                    }}
-                  >
-                    {provider === "github" ? (
-                      <FaGithub size={18} aria-hidden="true" />
-                    ) : (
-                      <GitBranch size={18} aria-hidden="true" />
-                    )}
-                    {name}
-                    {comingSoon ? (
-                      <span className={styles.comingSoon}>Coming soon</span>
-                    ) : null}
-                  </button>
-                );
-              })}
+          <div
+            className={styles.providerTabs}
+            role="tablist"
+            aria-label="Storage provider"
+          >
+            {storageProviderOptions.map((option) => {
+              const unavailable =
+                !option.available ||
+                integrations.github.status === "unavailable";
+              const Icon = option.icon;
+              return (
+                <button
+                  type="button"
+                  role="tab"
+                  key={option.provider}
+                  data-provider={option.provider}
+                  aria-selected={storageProvider === option.provider}
+                  aria-controls={
+                    unavailable
+                      ? undefined
+                      : `storage-provider-${option.provider}`
+                  }
+                  disabled={unavailable}
+                  onClick={() => {
+                    hasUnsavedChanges.current = true;
+                    setStorageProvider(option.provider);
+                  }}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  <span>{option.name}</span>
+                  {unavailable ? (
+                    <span className={styles.comingSoon}>Coming soon</span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
           {storageProvider === "github" &&
           integrations.github.status !== "unavailable" ? (
             <div
-              className={styles.connectedList}
-              aria-label="Selected storage provider"
+              className={styles.providerPanel}
+              id="storage-provider-github"
+              role="tabpanel"
             >
-              <article>
-                <span>
-                  <FaGithub size={18} aria-hidden="true" />
-                </span>
-                <div>
-                  <strong>GitHub</strong>
-                  <p>Store your app source and configuration in GitHub.</p>
-                  {integrations.github.status === "connected" ? (
-                    <SearchCombobox
-                      label="Git Scope"
-                      inputId="git-scope"
-                      value={gitScope}
-                      options={gitScopeOptions}
-                      onChange={(value) => {
-                        if (value !== gitScope)
-                          hasUnsavedChanges.current = true;
-                        setGitScope(value);
-                      }}
-                      prefix={<FaGithub size={16} />}
-                      optionIcon={() => <FaGithub size={16} />}
-                    />
+              <div className={styles.repoScope}>
+                <div
+                  className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}
+                >
+                  <div className={styles.integrationField}>
+                    <span>Git Scope (Optional)</span>
+                    {integrations.github.status === "connected" ? (
+                      <SearchCombobox
+                        label="Git Scope"
+                        inputId="git-scope"
+                        value={gitScope}
+                        options={gitScopeOptions}
+                        onChange={(value) => {
+                          if (value !== gitScope)
+                            hasUnsavedChanges.current = true;
+                          setGitScope(value);
+                        }}
+                        prefix={<FaGithub size={16} />}
+                        menuFooter={{
+                          value: "add-github",
+                          label: "Add GitHub Scope",
+                        }}
+                        onFooterSelect={() => beginProviderConnection("github")}
+                        optionIcon={() => <FaGithub size={16} />}
+                        footerIcon={<Plus size={21} />}
+                      />
+                    ) : (
+                      <button
+                        className={styles.connectProvider}
+                        type="button"
+                        id="git-scope"
+                        onClick={() => beginProviderConnection("github")}
+                      >
+                        Connect to GitHub
+                      </button>
+                    )}
+                  </div>
+                  {gitScope ? (
+                    <>
+                      <span className={styles.slash} aria-hidden="true">
+                        /
+                      </span>
+                      <div className={styles.repoLabel}>
+                        {form.privateRepository ? "Private" : "Public"}{" "}
+                        Repository Name
+                        <div className={styles.lockedInput}>
+                          <input
+                            id="repository-name"
+                            name="repository-name"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={form.repository}
+                            onChange={(event) => {
+                              repositoryEditedByUser.current = true;
+                              if (event.target.value !== form.repository)
+                                hasUnsavedChanges.current = true;
+                              setForm({
+                                ...form,
+                                repository: event.target.value,
+                              });
+                            }}
+                            placeholder="my-app"
+                          />
+                          <label
+                            className={styles.privacyToggle}
+                            aria-label="Private repository"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={form.privateRepository}
+                              onChange={(event) => {
+                                if (
+                                  event.target.checked !==
+                                  form.privateRepository
+                                )
+                                  hasUnsavedChanges.current = true;
+                                setForm({
+                                  ...form,
+                                  privateRepository: event.target.checked,
+                                });
+                              }}
+                            />
+                            <span>
+                              <i>
+                                {form.privateRepository ? (
+                                  <FaLock size={11} />
+                                ) : (
+                                  <FaLockOpen size={12} />
+                                )}
+                              </i>
+                            </span>
+                            <em role="tooltip">
+                              This repository will be{" "}
+                              {form.privateRepository ? "private" : "public"}.
+                            </em>
+                          </label>
+                        </div>
+                      </div>
+                    </>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => beginProviderConnection("github")}
-                >
-                  Connect
-                </button>
-                <button
-                  type="button"
-                  aria-label="Remove GitHub"
-                  onClick={() => {
-                    hasUnsavedChanges.current = true;
-                    setStorageProvider(null);
-                    setGitScope("");
-                  }}
-                >
-                  <X size={17} />
-                </button>
-              </article>
-            </div>
-          ) : null}
-          {storageProvider === "github" && gitScope ? (
-            <div className={styles.repoLabel}>
-              {form.privateRepository ? "Private" : "Public"} Repository Name
-              <div className={styles.lockedInput}>
-                <input
-                  id="repository-name"
-                  name="repository-name"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={form.repository}
-                  onChange={(event) => {
-                    repositoryEditedByUser.current = true;
-                    if (event.target.value !== form.repository)
-                      hasUnsavedChanges.current = true;
-                    setForm({ ...form, repository: event.target.value });
-                  }}
-                  placeholder="my-app"
-                />
-                <label
-                  className={styles.privacyToggle}
-                  aria-label="Private repository"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.privateRepository}
-                    onChange={(event) => {
-                      if (event.target.checked !== form.privateRepository)
-                        hasUnsavedChanges.current = true;
-                      setForm({
-                        ...form,
-                        privateRepository: event.target.checked,
-                      });
-                    }}
-                  />
-                  <span>
-                    <i>
-                      {form.privateRepository ? (
-                        <FaLock size={11} />
-                      ) : (
-                        <FaLockOpen size={12} />
-                      )}
-                    </i>
-                  </span>
-                  <em role="tooltip">
-                    This repository will be{" "}
-                    {form.privateRepository ? "private" : "public"}.
-                  </em>
-                </label>
+                <small className={styles.integrationHelp}>
+                  Connect GitHub and Autograph can create and configure the
+                  repository for you. You can also skip this and connect a
+                  repository later.
+                </small>
               </div>
             </div>
           ) : null}
