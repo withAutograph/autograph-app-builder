@@ -5,7 +5,7 @@ import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 
 const databasePort = process.env.APP_BUILDER_DATABASE_PORT || "54329";
 const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
-const appProtocol = process.env.CI ? "http" : "https";
+const appProtocol = "https";
 const emulateBasePort = Number(process.env.EMULATE_BASE_PORT || "4000");
 export const appOrigin = `${appProtocol}://localhost:${appPort}`;
 export const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/autograph_app_builder`;

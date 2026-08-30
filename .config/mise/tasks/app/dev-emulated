@@ -7,9 +7,6 @@ emulate_base_port=${EMULATE_BASE_PORT:-4000}
 github_emulate_port=$((emulate_base_port + 1))
 database_port=${APP_BUILDER_DATABASE_PORT:-54329}
 app_protocol=https
-if [ "${CI:-}" = true ]; then
-  app_protocol=http
-fi
 app_origin=$app_protocol://localhost:$app_port
 pid_file=.emulate/dev-emulated.pids
 "$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
@@ -108,16 +105,9 @@ export EMULATE_VERCEL_TEAM_ID=autograph-local
 export EMULATE_GITHUB_INSTALLATION_ID=1001
 export EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app
 export EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)"
-if [ "${CI:-}" = true ]; then
-  .config/mise/scripts/trusted-node-launcher \
-    "$(mise which node)" node_modules/next/dist/bin/next dev \
-    --hostname 0.0.0.0 \
-    --port "$app_port" "$@" &
-else
-  .config/mise/scripts/trusted-node-launcher \
-    "$(mise which node)" node_modules/next/dist/bin/next dev \
-    --experimental-https --hostname 0.0.0.0 --port "$app_port" "$@" &
-fi
+.config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/next/dist/bin/next dev \
+  --experimental-https --hostname 0.0.0.0 --port "$app_port" "$@" &
 app_pid=$!
 printf 'app_pid=%s\nemulate_pid=%s\n' "$app_pid" "$emulate_pid" >"$pid_file"
 wait "$app_pid"

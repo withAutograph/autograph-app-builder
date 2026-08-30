@@ -13,7 +13,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 attempt=0
-until curl --fail --silent "http://127.0.0.1:${APP_BUILDER_LOCAL_PORT:-3001}/auth/sign-in" >/dev/null; do
+until curl --fail --insecure --silent "https://127.0.0.1:${APP_BUILDER_LOCAL_PORT:-3001}/auth/sign-in" >/dev/null; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 300 ]; then
     echo "emulated auth app did not become ready" >&2
