@@ -42,11 +42,19 @@ export type GitHubOAuthErrorCategory =
 export type GitHubOAuthCallbackError =
   "access_denied" | "temporarily_unavailable" | "server_error";
 
+type GitHubCallbackDiagnostic = {
+  queryKeys: string[];
+  statePresent: boolean;
+  stateLength?: number;
+  error?: GitHubOAuthCallbackError;
+};
+
 export class GitHubInstallationAuthorizationError extends Error {
   constructor(
     readonly stage: GitHubInstallationAuthorizationFailureStage,
     readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
     readonly returnState?: ProviderConnectionReturn,
+    readonly callback?: GitHubCallbackDiagnostic,
   ) {
     super(FAILURE_MESSAGE);
   }
@@ -58,6 +66,7 @@ export function githubInstallationAuthorizationDiagnostic(error: unknown) {
   return {
     stage: error.stage,
     ...(error.category === undefined ? {} : { category: error.category }),
+    ...(error.callback === undefined ? {} : { callback: error.callback }),
   };
 }
 
@@ -409,8 +418,10 @@ function callbackInput(url: string) {
     if (
       query.getAll("code").length !== 1 ||
       query.getAll("state").length !== 1 ||
-      query.has("installation_id") ||
-      query.has("setup_action")
+      query.has("installation_id") !== query.has("setup_action") ||
+      (query.has("installation_id") &&
+        (query.getAll("installation_id").length !== 1 ||
+          query.getAll("setup_action").length !== 1))
     ) {
       throw new Error("invalid-callback");
     }
@@ -422,6 +433,14 @@ function callbackInput(url: string) {
         .max(512)
         .refine((value) => !/[\0\r\n]/u.test(value))
         .parse(code),
+      ...(query.has("installation_id")
+        ? {
+            installationId: decimalSchema.parse(query.get("installation_id")),
+            setupAction: z
+              .enum(["install", "update"])
+              .parse(query.get("setup_action")),
+          }
+        : {}),
       state,
     };
   }
@@ -437,6 +456,33 @@ function callbackInput(url: string) {
     installationId: decimalSchema.parse(query.get("installation_id")),
     setupAction: z.enum(["install", "update"]).parse(query.get("setup_action")),
     state,
+  };
+}
+
+function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
+  const query = new URL(url).searchParams;
+  const allowed = new Set([
+    "code",
+    "error",
+    "error_description",
+    "error_uri",
+    "installation_id",
+    "setup_action",
+    "state",
+  ]);
+  const state = query.get("state");
+  const error = query.get("error");
+  return {
+    queryKeys: [
+      ...new Set([...query.keys()].filter((key) => allowed.has(key))),
+    ].sort(),
+    statePresent: state !== null,
+    ...(state === null ? {} : { stateLength: state.length }),
+    ...(["access_denied", "temporarily_unavailable", "server_error"].includes(
+      error ?? "",
+    )
+      ? { error: error as GitHubOAuthCallbackError }
+      : {}),
   };
 }
 
@@ -750,6 +796,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         let authority: HostedTenantAuthority;
         let callback: ReturnType<typeof callbackInput>;
         let state: ReturnType<typeof verifyState>;
+        const callbackDiagnostic = githubCallbackDiagnostic(inputUrl);
         try {
           authority = hostedTenantAuthoritySchema.parse(authorityInput);
           callback = callbackInput(inputUrl);
@@ -762,6 +809,9 @@ export function createGitHubAppInstallationAuthorization(input: {
         } catch {
           throw new GitHubInstallationAuthorizationError(
             "callback-state-validation",
+            undefined,
+            undefined,
+            callbackDiagnostic,
           );
         }
         const current = now();
@@ -858,6 +908,12 @@ export function createGitHubAppInstallationAuthorization(input: {
         ) {
           throw new Error("state-phase-mismatch");
         }
+        if (
+          callback.installationId !== undefined &&
+          (callback.installationId !== state.installationId ||
+            callback.setupAction !== state.setupAction)
+        )
+          throw new Error("installation-mismatch");
 
         const tokens = await userAccessToken({
           config,
