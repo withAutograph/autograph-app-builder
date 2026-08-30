@@ -403,6 +403,34 @@ describe("proposal-bound target validation", () => {
     }
   });
 
+  it("copies validation overlays with the Vercel workspace-materialized dependency root", async () => {
+    const { run, sandbox } = sandboxFixture();
+    const snapshots = [
+      snapshot(apply.postTreeDigest),
+      snapshot(apply.postTreeDigest),
+    ];
+    const result = await executeProposalBoundValidation({
+      sandbox,
+      executor: async () => ({ exitCode: 0, stdout: "passed", stderr: "" }),
+      snapshotter: async () => snapshots.shift()!,
+      apply,
+      attempt: createTargetValidationAttempt(apply, "hosted-validation"),
+      appId: "example",
+      environment: { APP_BUILDER_REAL_SANDBOX: "1", VERCEL: "1" },
+    });
+    expect(result.ok).toBe(true);
+    const copyCommands = run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .filter((command) => command.includes("cp -R"));
+    expect(copyCommands).toHaveLength(2);
+    for (const command of copyCommands) {
+      expect(command).toContain(
+        `/workspace/.app-builder/hosted-dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
+      );
+      expect(command).not.toContain("/opt/app-builder/dependencies/");
+    }
+  });
+
   it("keeps the two-command protected validation below the relay ceiling", async () => {
     const { run, sandbox } = sandboxFixture();
     const relayCall = vi.fn();

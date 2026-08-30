@@ -479,6 +479,33 @@ describe("proposal-bound target apply", () => {
     });
   });
 
+  it("copies a Vercel planning overlay with its workspace-materialized dependency root", async () => {
+    const { run, sandbox } = sandboxFixture();
+    const snapshots = [planning, before, before, after];
+    const result = await executeProposalBoundApply({
+      sandbox,
+      executor: async () => ({
+        exitCode: 0,
+        stdout: JSON.stringify(commandReceipt()),
+        stderr: "",
+      }),
+      snapshotter: async () => snapshots.shift()!,
+      binding,
+      artifactRevision: binding.artifactRevision,
+      proposal,
+      appliedByCallId: "hosted-apply-call",
+      environment: { APP_BUILDER_REAL_SANDBOX: "1", VERCEL: "1" },
+    });
+    expect(result.ok).toBe(true);
+    const overlayCopy = run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .find((command) => command.includes("cp -R"));
+    expect(overlayCopy).toContain(
+      `/workspace/.app-builder/hosted-dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+    );
+    expect(overlayCopy).not.toContain("/opt/app-builder/dependencies/");
+  });
+
   it("binds the pristine prepared tree separately from injected planning config", async () => {
     const injectedConfig = {
       path: ".config/mise/config.app-builder.toml",

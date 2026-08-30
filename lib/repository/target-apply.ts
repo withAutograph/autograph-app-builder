@@ -8,7 +8,7 @@ import { hasTestCapability } from "../testing/test-capability";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
-  dependencyCacheNodeModulesRoot,
+  materializedDependencyNodeModulesRoot,
   planningOverlayRoot,
 } from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
@@ -204,6 +204,7 @@ export async function materializeFreshApplyOverlay(input: {
   dependencyCacheContentDigest: string;
   proposalDigest: string;
   proposal: TargetProposal;
+  environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<{
   applyRoot: string;
   proposalPath: string;
@@ -236,10 +237,12 @@ export async function materializeFreshApplyOverlay(input: {
       "The proposal apply overlay is already being materialized.",
     );
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
-  const dependencyRoot = dependencyCacheNodeModulesRoot(
+  const environment = input.environment ?? process.env;
+  const dependencyRoot = materializedDependencyNodeModulesRoot(
     input.dependencyCacheContentDigest,
+    environment,
   );
-  const copyCommand = hasTestCapability("simulated-target")
+  const copyCommand = hasTestCapability("simulated-target", environment)
     ? `cp -R ${planningRoot} ${absoluteRoot}`
     : `test -L ${planningRoot}/node_modules && test "$(readlink -- ${planningRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "${dependencyRoot}"`;
   const copy = await input.sandbox.run({
@@ -684,6 +687,7 @@ export async function executeProposalBoundApply(input: {
   artifactRevision: string;
   proposal: TargetProposal;
   appliedByCallId: string;
+  environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<TargetApplyResult> {
   if (
     input.binding.appSpecDigest !== input.proposal.contract.appSpec.sha256 ||
@@ -700,6 +704,7 @@ export async function executeProposalBoundApply(input: {
     dependencyCacheContentDigest: input.binding.dependencyCacheContentDigest,
     proposalDigest: input.binding.proposalDigest,
     proposal: input.proposal,
+    environment: input.environment,
   });
   let planning: OverlaySnapshot;
   let prepared: OverlaySnapshot;
