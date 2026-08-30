@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
   createGitHubAppInstallationAuthorization,
+  githubInstallationAuthorizationFailureStage,
   readGitHubAppInstallationEnvironment,
   type GitHubInstallationAuthorizationStateStore,
 } from "./github-app-installation";
@@ -403,6 +404,36 @@ describe("public GitHub App installation authorization", () => {
     expect(message).toBe("GitHub App installation authorization failed.");
     expect(message).not.toContain("provider-drift-sentinel");
     expect(message).not.toContain("github-user-token-sentinel-value");
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("classifies a token exchange failure without retaining provider data", async () => {
+    const request = vi.fn<typeof fetch>(async () =>
+      Response.json(
+        {
+          error: "bad_verification_code",
+          error_description: "provider-detail-sentinel",
+        },
+        { status: 400 },
+      ),
+    );
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+
+    let error: unknown;
+    try {
+      await authorization.complete(
+        authorizationCallbackUrl(authorizeState),
+        authority,
+      );
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(githubInstallationAuthorizationFailureStage(error)).toBe(
+      "user-token-exchange",
+    );
+    expect(String(error)).not.toContain("provider-detail-sentinel");
     expect(bind).not.toHaveBeenCalled();
   });
 

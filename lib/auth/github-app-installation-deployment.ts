@@ -3,6 +3,7 @@ import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
   createGitHubAppInstallationAuthorization,
+  githubInstallationAuthorizationFailureStage,
   readGitHubAppInstallationEnvironment,
 } from "./github-app-installation";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
@@ -65,13 +66,17 @@ export function createGitHubAppInstallationRouteHandlers(input: {
   return {
     async start(request: Request): Promise<Response> {
       const startedAt = Date.now();
-      const fail = (reason: ProviderConnectionFailureReason) => {
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        detail?: string,
+      ) => {
         logProviderConnectionFailure({
           request,
           provider: "github",
           phase: "start",
           reason,
           startedAt,
+          detail,
         });
         return redirect("failed", reason);
       };
@@ -127,13 +132,17 @@ export function createGitHubAppInstallationRouteHandlers(input: {
 
     async callback(request: Request): Promise<Response> {
       const startedAt = Date.now();
-      const fail = (reason: ProviderConnectionFailureReason) => {
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        detail?: string,
+      ) => {
         logProviderConnectionFailure({
           request,
           provider: "github",
           phase: "callback",
           reason,
           startedAt,
+          detail,
         });
         return redirect("failed", reason);
       };
@@ -175,8 +184,11 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           });
         }
         return redirect("connected", undefined, result.returnState);
-      } catch {
-        return fail("callback-invalid");
+      } catch (error) {
+        return fail(
+          "callback-invalid",
+          githubInstallationAuthorizationFailureStage(error),
+        );
       }
     },
   };

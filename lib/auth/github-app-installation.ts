@@ -20,6 +20,20 @@ const STATE_LIFETIME_MS = 10 * 60 * 1_000;
 const MAX_RESPONSE_BYTES = 2 * 1_024 * 1_024;
 const FAILURE_MESSAGE = "GitHub App installation authorization failed.";
 
+export type GitHubInstallationAuthorizationFailureStage = "user-token-exchange";
+
+export class GitHubInstallationAuthorizationError extends Error {
+  constructor(readonly stage: GitHubInstallationAuthorizationFailureStage) {
+    super(FAILURE_MESSAGE);
+  }
+}
+
+export function githubInstallationAuthorizationFailureStage(error: unknown) {
+  return error instanceof GitHubInstallationAuthorizationError
+    ? error.stage
+    : undefined;
+}
+
 type HostedTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 const decimalSchema = z.string().regex(/^[1-9][0-9]*$/u);
@@ -694,18 +708,23 @@ export function createGitHubAppInstallationAuthorization(input: {
           throw new Error("state-phase-mismatch");
         }
 
-        const token = await userAccessToken({
-          config,
-          code: callback.code,
-          codeVerifier: codeVerifier(config.stateSecret, state.nonce),
-          request: input.emulation
-            ? (((url, init) =>
-                request(
-                  `${input.emulation!.githubOrigin}${new URL(String(url)).pathname}`,
-                  init,
-                )) as typeof fetch)
-            : request,
-        });
+        let token: string;
+        try {
+          token = await userAccessToken({
+            config,
+            code: callback.code,
+            codeVerifier: codeVerifier(config.stateSecret, state.nonce),
+            request: input.emulation
+              ? (((url, init) =>
+                  request(
+                    `${input.emulation!.githubOrigin}${new URL(String(url)).pathname}`,
+                    init,
+                  )) as typeof fetch)
+              : request,
+          });
+        } catch {
+          throw new GitHubInstallationAuthorizationError("user-token-exchange");
+        }
         const githubRequest = input.emulation
           ? (args: Parameters<typeof githubJson>[0]) =>
               githubJson({
@@ -788,7 +807,8 @@ export function createGitHubAppInstallationAuthorization(input: {
           returnState: state.returnState,
           appliedAt: appliedAt.toISOString(),
         };
-      } catch {
+      } catch (error) {
+        if (error instanceof GitHubInstallationAuthorizationError) throw error;
         throw new Error(FAILURE_MESSAGE);
       }
     },
