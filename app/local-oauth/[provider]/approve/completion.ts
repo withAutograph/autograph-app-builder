@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { parseLocalOAuthAuthorization } from "@/lib/auth/local-oauth-approval";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
+import { providerEmulationFetch } from "@/lib/integrations/provider-emulation-fetch";
 
 export async function completeAuthorization(
   context: { params: Promise<{ provider: string }> },
@@ -38,21 +39,24 @@ export async function completeAuthorization(
           }
         : {}),
     });
-    const response = await fetch(callback, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      redirect: "manual",
-      cache: "no-store",
-    });
+    const response = await providerEmulationFetch(
+      callback,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+        redirect: "manual",
+        cache: "no-store",
+      },
+      emulation,
+    );
     const location = response.headers.get("location");
     if (!location || response.status < 300 || response.status >= 400)
       throw new Error("Emulated OAuth approval failed.");
     const destination = new URL(location);
     const callbackValidation = {
       origin: destination.origin === appOrigin,
-      path:
-        destination.pathname === `/api/auth/callback/${parsed.provider}`,
+      path: destination.pathname === `/api/auth/callback/${parsed.provider}`,
       codeCount: destination.searchParams.getAll("code").length,
       stateCount: destination.searchParams.getAll("state").length,
       stateMatches:

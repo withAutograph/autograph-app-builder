@@ -37,7 +37,9 @@ import {
 import {
   providerEmulationEnvironment,
   readProviderEmulation,
+  type ProviderEmulation,
 } from "../integrations/local-provider-emulation";
+import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 
 const databaseUrlSchema = z
   .string()
@@ -77,23 +79,28 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   code: string;
   redirectURI: string;
   codeVerifier?: string;
+  emulation: ProviderEmulation;
 }) {
-  const response = await fetch(input.tokenUrl, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
+  const response = await providerEmulationFetch(
+    input.tokenUrl,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: input.clientId,
+        client_secret: input.clientSecret,
+        code: input.code,
+        ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
+        redirect_uri: input.redirectURI,
+      }),
+      cache: "no-store",
+      redirect: "error",
     },
-    body: new URLSearchParams({
-      client_id: input.clientId,
-      client_secret: input.clientSecret,
-      code: input.code,
-      ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
-      redirect_uri: input.redirectURI,
-    }),
-    cache: "no-store",
-    redirect: "error",
-  });
+    input.emulation,
+  );
   if (!response.ok) throw new Error("Emulated OAuth token exchange failed.");
   const body = (await response.json()) as {
     access_token?: unknown;
@@ -480,15 +487,17 @@ export function createPreviewOAuthServer(input: {
               code: data.code,
               redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
+              emulation: localEmulation,
             }),
           getUserInfo: async (tokens) => {
-            const response = await fetch(
+            const response = await providerEmulationFetch(
               `${localEmulation.githubOrigin}/user`,
               {
                 headers: { Authorization: `Bearer ${tokens.accessToken}` },
                 cache: "no-store",
                 redirect: "error",
               },
+              localEmulation,
             );
             if (!response.ok) return null;
             const profile = (await response.json()) as {
@@ -532,9 +541,10 @@ export function createPreviewOAuthServer(input: {
               code: data.code,
               redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
+              emulation: localEmulation,
             }),
           getUserInfo: async (tokens) => {
-            const response = await fetch(
+            const response = await providerEmulationFetch(
               `${localEmulation.vercelOrigin}/login/oauth/userinfo`,
               {
                 // Emulate currently does not expose OAuth-issued Vercel
@@ -546,6 +556,7 @@ export function createPreviewOAuthServer(input: {
                 cache: "no-store",
                 redirect: "error",
               },
+              localEmulation,
             );
             if (!response.ok) return null;
             const profile = vercelUserInfoSchema.safeParse(
