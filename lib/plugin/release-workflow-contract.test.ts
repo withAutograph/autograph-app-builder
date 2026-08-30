@@ -23,5 +23,9 @@ describe("pre-release publication workflow", () => {
     expect(workflow).toContain(
       "--json isDraft,isPrerelease --jq '(.isDraft | not) and .isPrerelease'",
     );
+    expect(workflow).toContain(".artifacts/release/app-builder-*.tar.gz");
+    expect(workflow).not.toContain(
+      ".artifacts/release/autograph-app-builder-*.tar.gz",
+    );
   });
 });

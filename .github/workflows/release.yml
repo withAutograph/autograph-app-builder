@@ -66,7 +66,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            .artifacts/release/autograph-app-builder-*.tar.gz
+            .artifacts/release/app-builder-*.tar.gz
             .artifacts/release/release-receipt.json
             .artifacts/release/SHA256SUMS
       - name: Publish immutable release assets
@@ -81,14 +81,14 @@ jobs:
             --verify-tag \
             --title "Autograph App Builder $GITHUB_REF_NAME" \
             --generate-notes \
-            .artifacts/release/autograph-app-builder-*.tar.gz \
+            .artifacts/release/app-builder-*.tar.gz \
             .artifacts/release/release-receipt.json \
             .artifacts/release/SHA256SUMS
 
           test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '.isDraft and .isPrerelease')" = true
           test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')" -eq 4
           for asset in \
-            .artifacts/release/autograph-app-builder-*.tar.gz \
+            .artifacts/release/app-builder-*.tar.gz \
             .artifacts/release/release-receipt.json \
             .artifacts/release/SHA256SUMS; do
             asset_name="$(basename "$asset")"
@@ -109,7 +109,7 @@ jobs:
           test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq .isImmutable)" = true
           gh release verify "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
           for asset in \
-            .artifacts/release/autograph-app-builder-*.tar.gz \
+            .artifacts/release/app-builder-*.tar.gz \
             .artifacts/release/release-receipt.json \
             .artifacts/release/SHA256SUMS; do
             gh release verify-asset "$GITHUB_REF_NAME" "$asset" --repo "$GITHUB_REPOSITORY"
