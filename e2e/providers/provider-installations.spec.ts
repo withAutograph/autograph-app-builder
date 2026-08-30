@@ -9,6 +9,36 @@ import {
   resetApplicationState,
 } from "../support/harness";
 
+const githubCallbackPath = "/github/installations/callback";
+
+async function extendGitHubOAuthCallback(
+  page: import("playwright/test").Page,
+  extensions: ReadonlyArray<readonly [string, string]>,
+) {
+  await page.route(`**${githubCallbackPath}?*`, async (route) => {
+    const url = new URL(route.request().url());
+    // The installation callback has no OAuth code. Preserve it so the server
+    // creates its one-time authorization state before altering only the
+    // provider's final OAuth return.
+    if (!url.searchParams.has("code")) return route.fallback();
+    for (const [key, value] of extensions) url.searchParams.append(key, value);
+    await route.continue({ url: url.toString() });
+  });
+}
+
+function expectGitHubControlAndNoOAuthLeak(
+  page: import("playwright/test").Page,
+  rawValues: ReadonlyArray<string>,
+) {
+  const messages: string[] = [];
+  page.on("console", (message) => messages.push(message.text()));
+  return async () => {
+    await expect(page.getByRole("checkbox", { name: /GitHub/u })).toBeVisible();
+    for (const rawValue of rawValues)
+      expect(messages.join("\n")).not.toContain(rawValue);
+  };
+}
+
 test.beforeEach(async () => resetApplicationState());
 
 for (const provider of ["GitHub", "Vercel"] as const) {
@@ -64,6 +94,82 @@ test("reconnecting a provider updates the existing binding without duplication",
   await expect(page).toHaveURL(/https:\/\/localhost:3001\//u);
   expect((await applicationCounts()).githubInstallations).toBe(1);
 });
+
+test("GitHub installation update accepts OAuth provider extensions and retains the organization scope", async ({
+  page,
+}) => {
+  await finishOAuth(page, "GitHub");
+  await page.goto("/");
+  await installProvider(page, "GitHub");
+
+  await extendGitHubOAuthCallback(page, [
+    ["iss", "https://provider-extension.invalid"],
+    ["iss", "https://provider-extension.invalid/again"],
+    ["future_provider_extension", "opaque-provider-value"],
+    ["future_provider_extension", "opaque-provider-value-2"],
+  ]);
+  const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, [
+    "opaque-provider-value",
+    "opaque-provider-value-2",
+  ]);
+
+  await page.getByLabel("Git Scope").click();
+  await page.getByText("Add GitHub Scope").click();
+  await expect(page).toHaveURL(/\/github\/installations/u);
+  await page
+    .getByRole("button", { name: "Install or update GitHub access" })
+    .click();
+  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await page.getByRole("button", { name: /autograph-dev/u }).click();
+
+  await expect(page).toHaveURL(/\?github=connected&resume=/u);
+  await expect(page.getByText("GitHub connected successfully.")).toBeVisible();
+  await expect(page.getByLabel("Git Scope")).toHaveValue("withAutograph");
+  expect((await applicationCounts()).githubInstallations).toBe(1);
+
+  await page.goto("/");
+  await expect(page).toHaveURL(/https:\/\/localhost:3001\/$/u);
+  await expect(page.getByLabel("Git Scope")).toHaveValue("withAutograph");
+  await assertNoLeak();
+});
+
+for (const key of [
+  "code",
+  "state",
+  "installation_id",
+  "setup_action",
+] as const) {
+  test(`GitHub OAuth callback rejects duplicate app-owned ${key}`, async ({
+    page,
+  }) => {
+    await finishOAuth(page, "GitHub");
+    await page.goto("/");
+    await extendGitHubOAuthCallback(
+      page,
+      key === "installation_id" || key === "setup_action"
+        ? [
+            ["installation_id", "1001"],
+            ["installation_id", "1001"],
+            ["setup_action", "install"],
+            ["setup_action", "install"],
+          ]
+        : [
+            [key, "duplicate-app-owned-value"],
+            [key, "duplicate-app-owned-value"],
+          ],
+    );
+    const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, [
+      "duplicate-app-owned-value",
+    ]);
+
+    await installProvider(page, "GitHub");
+    await expect(page).toHaveURL(
+      /github=failed&githubReason=callback-invalid/u,
+    );
+    expect((await applicationCounts()).githubInstallations).toBe(0);
+    await assertNoLeak();
+  });
+}
 
 test("provider substitution and malformed callback fail without a binding", async ({
   page,
