@@ -46,6 +46,7 @@ export type GitHubOAuthCallbackError =
 type GitHubCallbackDiagnostic = {
   queryKeys: string[];
   keyCounts: Record<string, number>;
+  unknownKeyCount: number;
   codePresent: boolean;
   codeLength?: number;
   statePresent: boolean;
@@ -63,7 +64,23 @@ type GitHubStateValidationDiagnostic = {
     | "state-authority-digest"
     | "state-time";
   stateDigest?: string;
+  callbackParseReason?:
+    | "unknown-key"
+    | "duplicate-key"
+    | "state-format"
+    | "callback-shape"
+    | "code-format";
 };
+
+class GitHubCallbackParseError extends Error {
+  constructor(
+    readonly reason: NonNullable<
+      GitHubStateValidationDiagnostic["callbackParseReason"]
+    >,
+  ) {
+    super("invalid-callback");
+  }
+}
 
 class GitHubStateValidationError extends Error {
   constructor(readonly diagnostic: GitHubStateValidationDiagnostic) {
@@ -446,11 +463,17 @@ function callbackInput(url: string) {
     "setup_action",
     "state",
   ]);
-  for (const key of query.keys()) {
-    if (!allowed.has(key) || query.getAll(key).length !== 1)
-      throw new Error("invalid-callback");
-  }
-  const state = z.string().min(1).max(2_048).parse(query.get("state"));
+  if ([...query.keys()].some((key) => !allowed.has(key)))
+    throw new GitHubCallbackParseError("unknown-key");
+  if ([...allowed].some((key) => query.getAll(key).length > 1))
+    throw new GitHubCallbackParseError("duplicate-key");
+  const stateResult = z
+    .string()
+    .min(1)
+    .max(2_048)
+    .safeParse(query.get("state"));
+  if (!stateResult.success) throw new GitHubCallbackParseError("state-format");
+  const state = stateResult.data;
   const code = query.get("code");
   const oauthError = query.get("error");
   if (oauthError !== null) {
@@ -463,9 +486,10 @@ function callbackInput(url: string) {
         oauthError,
       )
     )
-      throw new Error("invalid-callback");
+      throw new GitHubCallbackParseError("callback-shape");
     for (const key of ["error_description", "error_uri"])
-      if (query.getAll(key).length > 1) throw new Error("invalid-callback");
+      if (query.getAll(key).length > 1)
+        throw new GitHubCallbackParseError("duplicate-key");
     return {
       kind: "oauth-error" as const,
       error: oauthError as GitHubOAuthCallbackError,
@@ -481,16 +505,18 @@ function callbackInput(url: string) {
         (query.getAll("installation_id").length !== 1 ||
           query.getAll("setup_action").length !== 1))
     ) {
-      throw new Error("invalid-callback");
+      throw new GitHubCallbackParseError("callback-shape");
     }
+    const codeResult = z
+      .string()
+      .min(1)
+      .max(MAX_CALLBACK_CODE_LENGTH)
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .safeParse(code);
+    if (!codeResult.success) throw new GitHubCallbackParseError("code-format");
     return {
       kind: "authorize" as const,
-      code: z
-        .string()
-        .min(1)
-        .max(MAX_CALLBACK_CODE_LENGTH)
-        .refine((value) => !/[\0\r\n]/u.test(value))
-        .parse(code),
+      code: codeResult.data,
       ...(query.has("installation_id")
         ? {
             installationId: decimalSchema.parse(query.get("installation_id")),
@@ -507,7 +533,7 @@ function callbackInput(url: string) {
     query.getAll("installation_id").length !== 1 ||
     query.getAll("setup_action").length !== 1
   ) {
-    throw new Error("invalid-callback");
+    throw new GitHubCallbackParseError("callback-shape");
   }
   return {
     kind: "install" as const,
@@ -538,6 +564,8 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
     keyCounts: Object.fromEntries(
       [...allowed].map((key) => [key, query.getAll(key).length]),
     ),
+    unknownKeyCount: [...query.keys()].filter((key) => !allowed.has(key))
+      .length,
     codePresent: code !== null,
     ...(code === null ? {} : { codeLength: code.length }),
     statePresent: state !== null,
@@ -874,13 +902,18 @@ export function createGitHubAppInstallationAuthorization(input: {
         }
         try {
           callback = callbackInput(inputUrl);
-        } catch {
+        } catch (error) {
           throw new GitHubInstallationAuthorizationError(
             "callback-state-validation",
             undefined,
             undefined,
             callbackDiagnostic,
-            { substage: "callback-parse" },
+            {
+              substage: "callback-parse",
+              ...(error instanceof GitHubCallbackParseError
+                ? { callbackParseReason: error.reason }
+                : {}),
+            },
           );
         }
         try {
