@@ -197,6 +197,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");
     expect(view.textContent).toContain("Build with");
+    expect(view.textContent).toContain("Store in");
+    expect(view.textContent).toContain("Deploy to");
     expect(view.textContent).toContain("Where do you want to build this app?");
     expect(view.textContent).toContain("ChatGPT / Codex");
     expect(view.textContent).toContain("Cursor");

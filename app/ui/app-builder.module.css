@@ -854,6 +854,21 @@
 .sectionField + .sectionField {
   margin-top: 20px;
 }
+.buildSection {
+  order: 1;
+}
+.buildSection + .modelField {
+  order: 1;
+}
+.storeSection {
+  order: 2;
+}
+.deploySection {
+  order: 3;
+}
+.connectionsSection {
+  order: 4;
+}
 .sectionField legend {
   font-size: 20px;
   font-weight: 650;

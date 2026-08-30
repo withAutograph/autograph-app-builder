@@ -1240,10 +1240,12 @@ export function Builder({
           </a>
           .
         </p>
-        <div className={styles.integrationField}>
-          <span>Vercel Team (Optional)</span>
-          {integrations.vercel.status === "connected" ? (
-            <SearchCombobox
+        <fieldset className={`${styles.sectionField} ${styles.deploySection}`}>
+          <legend>Deploy to</legend>
+          <div className={styles.integrationField}>
+            <span>Vercel Team (Optional)</span>
+            {integrations.vercel.status === "connected" ? (
+              <SearchCombobox
               label="Select a Vercel Team"
               inputId="vercel-team"
               value={team}
@@ -1262,41 +1264,44 @@ export function Builder({
                 <span className={styles.teamDot} data-team={option.value} />
               )}
               footerIcon={<PlusCircle size={18} />}
-              detailPills
-            />
-          ) : integrations.vercel.status === "unavailable" ? (
-            <button className={styles.connectProvider} type="button" disabled>
-              Connect to Vercel
-            </button>
-          ) : (
-            <button
+                detailPills
+              />
+            ) : integrations.vercel.status === "unavailable" ? (
+              <button className={styles.connectProvider} type="button" disabled>
+                Connect to Vercel
+              </button>
+            ) : (
+              <button
               className={styles.connectProvider}
               type="button"
               id="vercel-team"
               onClick={() => beginProviderConnection("vercel")}
-            >
-              Connect to Vercel
-            </button>
-          )}
-          <small className={styles.integrationHelp}>
-            Connect Vercel and Autograph can create and deploy the project for
-            you. You can also skip this and deploy later.
-          </small>
-          {integrations.vercel.status === "unavailable" ? (
-            <p className={styles.integrationUnavailable} role="alert">
-              {providerConnectionFailureMessage(
-                "Vercel",
-                integrations.vercel.unavailableReason,
-              )}
-            </p>
-          ) : null}
-        </div>
-        <div className={styles.repoScope}>
-          <div
+              >
+                Connect to Vercel
+              </button>
+            )}
+            <small className={styles.integrationHelp}>
+              Connect Vercel and Autograph can create and deploy the project for
+              you. You can also skip this and deploy later.
+            </small>
+            {integrations.vercel.status === "unavailable" ? (
+              <p className={styles.integrationUnavailable} role="alert">
+                {providerConnectionFailureMessage(
+                  "Vercel",
+                  integrations.vercel.unavailableReason,
+                )}
+              </p>
+            ) : null}
+          </div>
+        </fieldset>
+        <fieldset className={`${styles.sectionField} ${styles.storeSection}`}>
+          <legend>Store in</legend>
+          <div className={styles.repoScope}>
+            <div
             className={`${styles.repoRow} ${
               gitScope ? styles.repoRowWithRepository : ""
             }`}
-          >
+            >
             <div className={styles.integrationField}>
               <span>Git Scope (Optional)</span>
               {integrations.github.status === "connected" ? (
@@ -1402,13 +1407,14 @@ export function Builder({
                 </div>
               </>
             ) : null}
+            </div>
+            <small className={styles.integrationHelp}>
+              Connect GitHub and Autograph can create and configure the repository
+              for you. You can also skip this and connect a repository later.
+            </small>
           </div>
-          <small className={styles.integrationHelp}>
-            Connect GitHub and Autograph can create and configure the repository
-            for you. You can also skip this and connect a repository later.
-          </small>
-        </div>
-        <fieldset className={styles.sectionField}>
+        </fieldset>
+        <fieldset className={`${styles.sectionField} ${styles.buildSection}`}>
           <legend>Build with</legend>
           <p id="build-destination-help">
             Where do you want to build this app?
@@ -1524,7 +1530,9 @@ export function Builder({
           </fieldset>
         ) : null}
         {connectionsEnabled ? (
-          <fieldset className={styles.sectionField}>
+          <fieldset
+            className={`${styles.sectionField} ${styles.connectionsSection}`}
+          >
             <legend>Connections</legend>
             <p>Give this app access to tools and data from other services.</p>
             <label className={styles.searchBox}>
