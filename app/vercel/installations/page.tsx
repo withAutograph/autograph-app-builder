@@ -3,6 +3,11 @@ import {
   providerConnectionFailureMessage,
 } from "@/lib/integrations/provider-connection-status";
 import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
+import {
+  ProviderConnection,
+  ProviderConnectionNotice,
+} from "@/app/ui/provider-connection";
+import { SiVercel } from "react-icons/si";
 
 type Props = {
   searchParams: Promise<{
@@ -21,31 +26,20 @@ export default async function VercelInstallationsPage({ searchParams }: Props) {
     resumeKey: resume,
   });
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <p className="eyebrow">Autograph App Builder</p>
-        <h1>Connect a Vercel team</h1>
-        <p>
-          Choose the Vercel account Autograph may use for projects and
-          deployments. Connecting it does not create or deploy anything yet.
-        </p>
-        {status === "failed" ? (
-          <p role="alert">
-            {providerConnectionFailureMessage("Vercel", failureReason)}
-          </p>
-        ) : null}
-        <form method="post" action="/vercel/installations/start">
-          <input name="returnTo" type="hidden" value={returnState.returnTo} />
-          {returnState.resumeKey ? (
-            <input
-              name="resumeKey"
-              type="hidden"
-              value={returnState.resumeKey}
-            />
-          ) : null}
-          <button type="submit">Connect to Vercel</button>
-        </form>
-      </section>
-    </main>
+    <ProviderConnection
+      action="/vercel/installations/start"
+      buttonLabel="Connect to Vercel"
+      description="Choose the Vercel account Autograph may use for projects and deployments. Connecting it does not create or deploy anything yet."
+      icon={<SiVercel size={22} />}
+      returnTo={returnState.returnTo}
+      resumeKey={returnState.resumeKey}
+      title="Connect a Vercel team"
+    >
+      {status === "failed" ? (
+        <ProviderConnectionNotice status="error">
+          {providerConnectionFailureMessage("Vercel", failureReason)}
+        </ProviderConnectionNotice>
+      ) : null}
+    </ProviderConnection>
   );
 }
