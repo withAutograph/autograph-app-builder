@@ -265,16 +265,20 @@ test("provider account supports multiple passkeys but retains its final passkey"
     expect(list.ok()).toBeTruthy();
     const credentials = (await list.json()) as Array<{ id: string }>;
     expect(credentials).toHaveLength(2);
-    const firstDeletion = await page.request.post(
-      "/api/auth/passkey/delete-passkey",
-      { data: { id: credentials[0].id } },
-    );
-    expect(firstDeletion.ok()).toBeTruthy();
-    const finalDeletion = await page.request.post(
-      "/api/auth/passkey/delete-passkey",
-      { data: { id: credentials[1].id } },
-    );
-    expect(finalDeletion.ok()).toBeFalsy();
+    const deletePasskey = (id: string) =>
+      page.evaluate(async (passkeyId) => {
+        const response = await fetch("/api/auth/passkey/delete-passkey", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: passkeyId }),
+        });
+        return { ok: response.ok, status: response.status };
+      }, id);
+    expect((await deletePasskey(credentials[0].id)).ok).toBeTruthy();
+    expect(await deletePasskey(credentials[1].id)).toMatchObject({
+      ok: false,
+      status: 400,
+    });
     expect((await authCounts()).passkeys).toBe(1);
   } finally {
     await authenticator?.dispose();
