@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { authorizationRequest } from "./story-fixtures";
+import { McpStoryFrame } from "./story-frame";
 import { AuthorizationControl } from "./view";
 
 const meta = {
@@ -13,6 +14,13 @@ const meta = {
     onRefresh: fn(async () => {}),
     request: authorizationRequest,
   },
+  decorators: [
+    (Story) => (
+      <McpStoryFrame>
+        <Story />
+      </McpStoryFrame>
+    ),
+  ],
 } satisfies Meta<typeof AuthorizationControl>;
 export default meta;
 type Story = StoryObj<typeof meta>;

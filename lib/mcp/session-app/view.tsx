@@ -209,13 +209,13 @@ export function SessionAppView({
 
   if (!result)
     return (
-      <main className="shell">
+      <main className="mcpApp shell">
         <p>Loading requested controls…</p>
       </main>
     );
   if (state === "submitted" || result.status !== "input_required")
     return (
-      <main className="shell success" role="status">
+      <main className="mcpApp shell success" role="status">
         <span>✓</span>
         <div>
           <strong>Response received</strong>
@@ -225,7 +225,7 @@ export function SessionAppView({
     );
 
   return (
-    <main className="shell">
+    <main className="mcpApp shell">
       <header>
         <div>
           <strong>Autograph App Builder</strong>

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
 import styles from "../../app/ui/app-builder.module.css";
+import { CreateAppStoryFrame } from "../../app/ui/create-app-story-frame";
 import { ChoiceCard } from "./choice-card";
 
 const meta = {
@@ -16,9 +17,11 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className={styles.optionGrid}>
-        <Story />
-      </div>
+      <CreateAppStoryFrame>
+        <div className={styles.optionGrid}>
+          <Story />
+        </div>
+      </CreateAppStoryFrame>
     ),
   ],
 } satisfies Meta<typeof ChoiceCard>;

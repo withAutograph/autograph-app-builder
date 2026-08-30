@@ -1,12 +1,20 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { freeformRequest } from "./story-fixtures";
+import { McpStoryFrame } from "./story-frame";
 import { InputControl } from "./view";
 
 const meta = {
   title: "Create App/MCP Blocks/Freeform Request",
   component: InputControl,
   args: { request: freeformRequest, onAnswer: fn() },
+  decorators: [
+    (Story) => (
+      <McpStoryFrame>
+        <Story />
+      </McpStoryFrame>
+    ),
+  ],
 } satisfies Meta<typeof InputControl>;
 export default meta;
 type Story = StoryObj<typeof meta>;

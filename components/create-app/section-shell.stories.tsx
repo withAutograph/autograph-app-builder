@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import styles from "../../app/ui/app-builder.module.css";
+import { CreateAppStoryFrame } from "../../app/ui/create-app-story-frame";
 import { SectionShell } from "./choice-card";
 
 const meta = {
@@ -13,6 +14,13 @@ const meta = {
     description: "Give this app access to tools and data from other services.",
     children: <button type="button">Add connection</button>,
   },
+  decorators: [
+    (Story) => (
+      <CreateAppStoryFrame>
+        <Story />
+      </CreateAppStoryFrame>
+    ),
+  ],
 } satisfies Meta<typeof SectionShell>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -2,6 +2,7 @@ import type { Preview } from "@storybook/nextjs-vite";
 
 import { Providers } from "../components/providers";
 import "../app/globals.css";
+import "./preview.css";
 
 const preview: Preview = {
   parameters: {
@@ -15,9 +16,11 @@ const preview: Preview = {
   },
   decorators: [
     (Story) => (
-      <Providers>
-        <Story />
-      </Providers>
+      <div style={{ minHeight: "100vh" }}>
+        <Providers>
+          <Story />
+        </Providers>
+      </div>
     ),
   ],
 };

@@ -1,11 +1,19 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { InfoTooltip } from "./app-builder";
+import { CreateAppStoryFrame } from "./create-app-story-frame";
 
 const meta = {
   title: "Create App/Primitives/Tooltip",
   component: InfoTooltip,
   args: { children: "Only use approved providers." },
+  decorators: [
+    (Story) => (
+      <CreateAppStoryFrame>
+        <Story />
+      </CreateAppStoryFrame>
+    ),
+  ],
 } satisfies Meta<typeof InfoTooltip>;
 export default meta;
 type Story = StoryObj<typeof meta>;
