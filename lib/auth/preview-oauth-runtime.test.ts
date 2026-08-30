@@ -135,28 +135,12 @@ describe("Preview OAuth runtime configuration", () => {
       environment: "preview",
       githubClientId: "github-client-id",
       githubClientSecret: "github-client-secret",
-      selfServiceSignupEnabled: false,
     });
     for (const field of ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const) {
       expect(() =>
         readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
       ).toThrow();
     }
-  });
-
-  it("enables personal workspace signup only for the exact feature flag", () => {
-    expect(
-      readPreviewOAuthRuntimeConfig({
-        ...environment,
-        SELF_SERVICE_SIGNUP_ENABLED: "1",
-      }),
-    ).toMatchObject({ selfServiceSignupEnabled: true });
-    expect(() =>
-      readPreviewOAuthRuntimeConfig({
-        ...environment,
-        SELF_SERVICE_SIGNUP_ENABLED: "true",
-      }),
-    ).toThrow();
   });
 
   it("requires Vercel authentication credentials", () => {

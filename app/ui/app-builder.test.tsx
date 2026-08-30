@@ -5,8 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.stubEnv("NEXT_PUBLIC_FEATURE_CONNECTIONS", "true");
-
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
   refresh: vi.fn(),
@@ -105,10 +103,14 @@ function AppBuilder(
     user?: { name: string; email: string };
   },
 ) {
-  const { user, ...componentProps } = props;
+  const { user, connectionsEnabled = true, ...componentProps } = props;
   void user;
   return (
-    <AppBuilderComponent {...componentProps} integrations={integrationState} />
+    <AppBuilderComponent
+      {...componentProps}
+      connectionsEnabled={connectionsEnabled}
+      integrations={integrationState}
+    />
   );
 }
 
@@ -182,6 +184,32 @@ describe("Vercel-faithful App Builder flow", () => {
         ?.textContent,
     ).toBe("Sign Up");
     expect(view.querySelector("button")?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("hides Connections when the server feature flag is disabled", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        connectionsEnabled={false}
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    expect(view.textContent).not.toContain("Connections");
+    expect(view.querySelector('[name="connection-search"]')).toBeNull();
+  });
+
+  it("shows Connections when the server feature flag is enabled", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        connectionsEnabled
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    expect(view.textContent).toContain("Connections");
+    expect(view.querySelector('[name="connection-search"]')).not.toBeNull();
   });
 
   it("keeps the approved field substitutions and Vercel control order", async () => {
@@ -518,6 +546,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilderComponent
         authenticated
+        connectionsEnabled
         providerResumeKey={resumeKey}
         providerNotices={[{ provider: "vercel", status: "failed" }]}
         integrations={integrationState}

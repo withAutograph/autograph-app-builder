@@ -99,10 +99,11 @@ export function createPostgresPreviewOrganizationAuthority(
   authority: {
     issuer: string;
     audience: string;
-    selfServiceSignupEnabled?: boolean;
-    passkeySelfServiceEnabled?: boolean;
   },
-  options: { generateId?: () => string } = {},
+  options: {
+    generateId?: () => string;
+    isSelfServiceSignupEnabled?: () => Promise<boolean>;
+  } = {},
 ): PostgresPreviewOrganizationAuthority {
   const generateId = options.generateId ?? randomUUID;
   return {
@@ -243,10 +244,12 @@ export function createPostgresPreviewOrganizationAuthority(
         ) {
           throw new OrganizationProvisioningError("access-revoked");
         }
-        if (
-          authority.selfServiceSignupEnabled !== true &&
-          !(passkeyIdentity && authority.passkeySelfServiceEnabled === true)
-        ) {
+        let selfServiceSignupEnabled = false;
+        try {
+          selfServiceSignupEnabled =
+            (await options.isSelfServiceSignupEnabled?.()) === true;
+        } catch {}
+        if (!selfServiceSignupEnabled) {
           throw new OrganizationProvisioningError("signup-disabled");
         }
 

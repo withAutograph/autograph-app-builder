@@ -33,7 +33,8 @@ Before Better Auth persists a session, the authority locks the user row and:
    owns a persisted GitHub or Vercel account;
 2. reuses exactly one membership bound to the configured issuer and resource;
 3. otherwise accepts exactly one unexpired invitation for that authority;
-4. otherwise, when `SELF_SERVICE_SIGNUP_ENABLED=1`, creates one personal
+4. otherwise, when the Vercel-managed `self-service-signup` flag resolves
+   enabled, creates one personal
    organization, random workspace ID, owner membership, and
    `personal_workspace` row in the same transaction; and
 5. re-reads the exact membership before setting
@@ -53,16 +54,19 @@ is derived from the organization row and never from request input.
 1. Run the case-insensitive email-collision audit embedded in migration `0011`.
    A collision stops the migration and requires explicit operator
    reconciliation.
-2. Deploy the additive schema and runtime with
-   `SELF_SERVICE_SIGNUP_ENABLED=0`.
-3. Verify existing memberships and invitations, then enable the flag in
-   Preview and exercise both providers, linking, retries, and tenant denial.
-4. Enable the flag in Production only after the exact Preview behavior passes.
+2. Deploy the additive schema and runtime. Until the Vercel flag is promoted,
+   the checked-in default remains disabled.
+3. Promote the discovered Boolean flags and configure `builder-connections`
+   off in Development, Preview, and Production, and `self-service-signup` on
+   in Development, Preview, and Production.
+4. Verify both providers, linking, retries, and tenant denial after the Vercel
+   configuration is live.
 5. Monitor sanitized signup, linking, retry, ambiguity, and denial outcomes;
    never log tokens or provider credentials.
 
-Rollback sets `SELF_SERVICE_SIGNUP_ENABLED=0`. Existing organizations and
-memberships remain valid and no destructive down migration is required.
+Rollback sets `self-service-signup` to disabled in Vercel Flags. Existing
+organizations and memberships remain valid and no destructive down migration
+is required.
 
 The [Better Auth Infrastructure dashboard](better-auth-infrastructure.md) is
 the operator surface for users, sessions, organizations, members, invitations,
