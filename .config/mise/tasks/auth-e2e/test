@@ -2,8 +2,9 @@
 #MISE description="Run Chromium web product E2E against local Emulate and PostgreSQL"
 set -eu
 
-if lsof -nP -iTCP:3001 -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "web product E2E requires exclusive access to https://localhost:3001" >&2
+app_port=${APP_BUILDER_LOCAL_PORT:-3001}
+if lsof -nP -iTCP:"$app_port" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "web product E2E requires exclusive access to https://localhost:$app_port" >&2
   exit 1
 fi
 mise run auth-e2e:reset

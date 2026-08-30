@@ -184,6 +184,7 @@ describe("Preview OAuth runtime configuration", () => {
         EVE_HOSTED_ADAPTER: "1",
         APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        APP_BUILDER_DATABASE_PORT: "54339",
         PASSKEY_ONBOARDING: "local-preview-v1",
         BETTER_AUTH_URL: "https://localhost:3001/api/auth",
         MCP_RESOURCE_URL: "https://localhost:3001/mcp",
@@ -201,7 +202,7 @@ describe("Preview OAuth runtime configuration", () => {
     ).toMatchObject({
       environment: "local",
       databaseUrl:
-        "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+        "postgresql://postgres@127.0.0.1:54339/autograph_app_builder",
       passkeyOnboarding: {
         origin: "https://localhost:3001",
         rpId: "localhost",
@@ -221,6 +222,28 @@ describe("Preview OAuth runtime configuration", () => {
         EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
       }),
     ).toThrow("Local provider emulation is unavailable");
+
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        EVE_HOSTED_ADAPTER: "1",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        APP_BUILDER_DATABASE_PORT: "not-a-port",
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        GITHUB_CLIENT_ID: "local-github-client",
+        GITHUB_CLIENT_SECRET: "local-github-secret".repeat(2),
+        VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
+        VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret".repeat(2),
+        VERCEL_EMULATOR_URL: "http://localhost:4000",
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+      }),
+    ).toThrow("Local authentication database port is invalid");
   });
 
   it("starts an enabled Preview with passkeys and no OAuth credentials", () => {

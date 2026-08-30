@@ -391,14 +391,17 @@ export function readPreviewOAuthRuntimeConfig(
       });
     }
     const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
+    const localDatabasePort = environment.APP_BUILDER_DATABASE_PORT ?? "54329";
+    if (!/^\d{2,5}$/u.test(localDatabasePort)) {
+      throw new Error("Local authentication database port is invalid.");
+    }
     return previewOAuthRuntimeConfigSchema.parse({
       hostedAdapter: environment.EVE_HOSTED_ADAPTER,
       environment: "local",
       issuer: environment.BETTER_AUTH_URL,
       resource: environment.MCP_RESOURCE_URL,
       secret: environment.BETTER_AUTH_SECRET,
-      databaseUrl:
-        "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+      databaseUrl: `postgresql://postgres@127.0.0.1:${localDatabasePort}/autograph_app_builder`,
       githubClientId: environment.GITHUB_CLIENT_ID,
       githubClientSecret: environment.GITHUB_CLIENT_SECRET,
       vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,

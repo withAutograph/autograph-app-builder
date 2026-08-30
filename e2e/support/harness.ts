@@ -3,8 +3,8 @@ import { expect, type BrowserContext, type Page } from "playwright/test";
 
 import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 
-export const databaseUrl =
-  "postgresql://postgres@127.0.0.1:54329/autograph_app_builder";
+const databasePort = process.env.APP_BUILDER_DATABASE_PORT || "54329";
+export const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/autograph_app_builder`;
 
 export async function resetApplicationState() {
   const sql = postgres(databaseUrl, { max: 1 });

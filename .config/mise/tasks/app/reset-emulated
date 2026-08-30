@@ -15,7 +15,7 @@ if [ -f "$pid_file" ]; then
   done
 fi
 worktree_id=$(basename "$(dirname "$(pwd -P)")")
-database_container="autograph-app-builder-web-product-e2e-postgres-$worktree_id"
+database_container=${APP_BUILDER_DATABASE_CONTAINER:-autograph-app-builder-web-product-e2e-postgres-$worktree_id}
 "$docker" rm -f "$database_container" >/dev/null 2>&1 || true
 if [ -d "$state_dir" ]; then
   find "$state_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
