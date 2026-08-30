@@ -66,12 +66,12 @@ logic.
 
 Use the following ownership split.
 
-| Concern | Owner |
-| --- | --- |
-| GitHub authorization URL, authorization-code exchange, refresh behavior, and OAuth protocol details | `@octokit/oauth-app` |
-| GitHub App JWT creation, installation access tokens, App/installation REST client | `@octokit/auth-app` and `@octokit/app` |
-| GitHub webhook verification and dispatch, when webhooks are activated | `@octokit/webhooks` or `@octokit/app` |
-| Tenant-bound state, PKCE correlation, membership policy, installation binding, return state, and UI | App Builder |
+| Concern                                                                                             | Owner                                  |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| GitHub authorization URL, authorization-code exchange, refresh behavior, and OAuth protocol details | `@octokit/oauth-app`                   |
+| GitHub App JWT creation, installation access tokens, App/installation REST client                   | `@octokit/auth-app` and `@octokit/app` |
+| GitHub webhook verification and dispatch, when webhooks are activated                               | `@octokit/webhooks` or `@octokit/app`  |
+| Tenant-bound state, PKCE correlation, membership policy, installation binding, return state, and UI | App Builder                            |
 
 The App Builder callback route remains the only public callback endpoint. It
 will first use the application-owned state record to establish the tenant and
