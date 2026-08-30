@@ -173,20 +173,29 @@ test("missing credential and verification failure remain authentication-only", a
   }
 });
 
-test("an interrupted passkey ceremony remains on Sign In", async ({
+test("a paused passkey ceremony returns to Sign In when it resumes", async ({
   context,
   page,
 }) => {
   const authenticator = await VirtualAuthenticator.create(context, page);
-  await authenticator.setPresence(false);
-  await page.goto("/auth/sign-in");
-  await page.getByRole("button", { name: "Continue with Passkey" }).click();
-  await authenticator.dispose();
-  await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
-  ).toBeVisible();
-  await expect(page).toHaveURL(/\/auth\/sign-in/u);
-  expect((await authCounts()).users).toBe(0);
+  try {
+    await authenticator.setPresence(false);
+    await page.goto("/auth/sign-in");
+    const continueWithPasskey = page.getByRole("button", {
+      name: "Continue with Passkey",
+    });
+    await continueWithPasskey.click();
+    await expect(continueWithPasskey).toBeDisabled();
+
+    await authenticator.setPresence(true);
+    await expect(
+      page.getByRole("button", { name: "Passkey failed (try again)" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/sign-in/u);
+    expect((await authCounts()).users).toBe(0);
+  } finally {
+    await authenticator.dispose();
+  }
 });
 
 test("an authenticator credential missing from server storage is not recreated", async ({
