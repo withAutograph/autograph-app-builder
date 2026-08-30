@@ -1,4 +1,4 @@
-import { vercelAdapter } from "@flags-sdk/vercel";
+import { createVercelAdapter } from "@flags-sdk/vercel";
 import type { Adapter } from "flags";
 import { flag } from "flags/next";
 
@@ -22,10 +22,29 @@ function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<
   ValueType,
   EntitiesType
 > {
-  // The Vercel adapter validates FLAGS at construction time. Keep local
-  // startup, test runs, and unavailable managers fail-closed instead.
-  if (!process.env.FLAGS) return failClosedAdapter<ValueType, EntitiesType>();
-  return vercelAdapter<ValueType, EntitiesType>();
+  let adapter: Adapter<ValueType, EntitiesType> | undefined;
+
+  function resolveAdapter() {
+    const sdkKey = process.env.FLAGS;
+    if (!sdkKey) return failClosedAdapter<ValueType, EntitiesType>();
+    adapter ??= createVercelAdapter(sdkKey)<ValueType, EntitiesType>();
+    return adapter;
+  }
+
+  return {
+    // `flag()` resolves adapter metadata during module initialization, before
+    // Next has loaded `.env.local`. Keep the SDK key lazy so local evaluation
+    // uses its server-only value at request time.
+    origin: () => ({
+      provider: "vercel",
+      get sdkKey() {
+        return process.env.FLAGS;
+      },
+    }),
+    async decide(input) {
+      return resolveAdapter().decide(input);
+    },
+  };
 }
 
 export const builderConnectionsFlag = flag<boolean>({
