@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+import { storyForm } from "@/.storybook/create-app/app-builder-fixtures";
 import { Ready } from "./app-builder";
-import { storyForm } from "./create-app-story-fixtures";
 
 const meta = {
   title: "Create App/Flow/Ready",

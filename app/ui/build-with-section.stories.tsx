@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { BuildWithSection } from "./app-builder";
-import { CreateAppStoryFrame } from "./create-app-story-frame";
 
 const meta = {
   title: "Create App/Sections/Build With",
@@ -9,9 +9,9 @@ const meta = {
   args: { selected: "codex", onChange: fn() },
   decorators: [
     (Story) => (
-      <CreateAppStoryFrame>
+      <CreateAppFormStoryLayout>
         <Story />
-      </CreateAppStoryFrame>
+      </CreateAppFormStoryLayout>
     ),
   ],
 } satisfies Meta<typeof BuildWithSection>;

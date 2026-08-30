@@ -1,6 +1,5 @@
+import type { BuilderForm } from "@/app/ui/app-builder";
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
-
-import type { BuilderForm } from "./app-builder";
 
 export const storyIntegrations = {
   vercel: {

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+import { storyTeamOptions } from "@/.storybook/create-app/app-builder-fixtures";
+import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { DeployToSection } from "./app-builder";
-import { CreateAppStoryFrame } from "./create-app-story-frame";
-import { storyTeamOptions } from "./create-app-story-fixtures";
 
 const meta = {
   title: "Create App/Sections/Deploy To",
@@ -19,9 +19,9 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <CreateAppStoryFrame>
+      <CreateAppFormStoryLayout>
         <Story />
-      </CreateAppStoryFrame>
+      </CreateAppFormStoryLayout>
     ),
   ],
 } satisfies Meta<typeof DeployToSection>;

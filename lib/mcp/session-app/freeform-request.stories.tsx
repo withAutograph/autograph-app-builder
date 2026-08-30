@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { freeformRequest } from "./story-fixtures";
-import { McpStoryFrame } from "./story-frame";
+import { freeformRequest } from "@/.storybook/create-app/mcp-fixtures";
+import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { InputControl } from "./view";
 
 const meta = {
@@ -10,9 +10,9 @@ const meta = {
   args: { request: freeformRequest, onAnswer: fn() },
   decorators: [
     (Story) => (
-      <McpStoryFrame>
+      <McpBlockStoryLayout>
         <Story />
-      </McpStoryFrame>
+      </McpBlockStoryLayout>
     ),
   ],
 } satisfies Meta<typeof InputControl>;

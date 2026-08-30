@@ -6,7 +6,7 @@ import {
   choiceRequest,
   freeformRequest,
   sessionResult,
-} from "./story-fixtures";
+} from "@/.storybook/create-app/mcp-fixtures";
 import { SessionAppView } from "./view";
 
 const mixedResult = sessionResult([

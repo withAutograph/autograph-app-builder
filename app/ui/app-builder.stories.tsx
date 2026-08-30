@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
+import { storyIntegrations } from "@/.storybook/create-app/app-builder-fixtures";
+
 import { AppBuilder } from "./app-builder";
-import { storyIntegrations } from "./create-app-story-fixtures";
 
 const meta = {
   title: "Create App/Page",

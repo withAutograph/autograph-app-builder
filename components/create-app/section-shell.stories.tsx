@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
+import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
+
 import styles from "../../app/ui/app-builder.module.css";
-import { CreateAppStoryFrame } from "../../app/ui/create-app-story-frame";
 import { SectionShell } from "./choice-card";
 
 const meta = {
@@ -16,9 +17,9 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <CreateAppStoryFrame>
+      <CreateAppFormStoryLayout>
         <Story />
-      </CreateAppStoryFrame>
+      </CreateAppFormStoryLayout>
     ),
   ],
 } satisfies Meta<typeof SectionShell>;

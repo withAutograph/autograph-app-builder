@@ -1,4 +1,4 @@
-import type { EveSessionResult, PublicInputRequest } from "../contracts";
+import type { EveSessionResult, PublicInputRequest } from "@/lib/mcp/contracts";
 
 export const choiceRequest: PublicInputRequest = {
   requestId: "build-client",
