@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 
 import { defineConfig, devices } from "playwright/test";
 
@@ -7,6 +8,7 @@ const mise = [
   `${process.env.HOME}/.local/bin/mise`,
 ].find(existsSync);
 if (!mise) throw new Error("The mise executable is unavailable.");
+const webServerPath = `${dirname(mise)}:/usr/bin:/bin`;
 
 export default defineConfig({
   testDir: "./e2e/auth",
@@ -25,7 +27,7 @@ export default defineConfig({
   },
   projects: [{ name: "auth-chromium", use: { browserName: "chromium" } }],
   webServer: {
-    command: `${mise} run app:dev-emulated`,
+    command: `PATH=${JSON.stringify(webServerPath)} ${JSON.stringify(mise)} run app:dev-emulated`,
     url: "https://localhost:3001/auth/sign-in",
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
