@@ -1,6 +1,8 @@
 "use client";
 
+import type { MultiSessionAuthClient } from "@better-auth-ui/core/plugins/multi-session";
 import { useAuth, useSession } from "@better-auth-ui/react";
+import { useSetActiveSession } from "@better-auth-ui/react/plugins/multi-session";
 import {
   ChevronsUpDown,
   LogIn,
@@ -81,8 +83,8 @@ function renderUserLink(
 /**
  * Render a user dropdown button that shows user info, settings, theme controls, and authentication actions.
  *
- * Includes user profile, settings, and sign-in/sign-up/sign-out actions
- * depending on authentication state.
+ * Includes user profile, settings link, optional multi-session account switching, theme picker,
+ * and sign-in/sign-up/sign-out actions depending on authentication state.
  *
  * @param className - Additional CSS classes applied to the button trigger
  * @param align - Alignment of the dropdown menu relative to the trigger
@@ -103,8 +105,9 @@ export function UserButton({
   hideSettings = false,
 }: UserButtonProps) {
   const { authClient, basePaths, viewPaths, localization, navigate } =
-    useAuth();
+    useAuth<MultiSessionAuthClient>();
 
+  const { isPending: settingActiveSession } = useSetActiveSession(authClient);
   const { data: session, isPending: sessionPending } = useSession(authClient);
 
   const userLinks = links?.flatMap((link, index) => {
@@ -141,8 +144,8 @@ export function UserButton({
           <UserAvatar />
         ) : (
           <>
-            {session || sessionPending ? (
-              <UserView />
+            {session || sessionPending || settingActiveSession ? (
+              <UserView isPending={!!settingActiveSession} />
             ) : (
               <>
                 <UserAvatar />
