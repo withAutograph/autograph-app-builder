@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { z } from "zod";
 
 const repositorySchema = z
@@ -202,11 +204,18 @@ export function providerEmulationEnvironment(
     MCP_OAUTH_JWKS_URL: `${emulation.canonicalOrigin}/api/auth/jwks`,
     GITHUB_CLIENT_ID: emulation.githubClientId,
     GITHUB_CLIENT_SECRET: emulation.githubClientSecret,
+    GITHUB_APP_ID: "12345",
     GITHUB_APP_CLIENT_ID: emulation.githubClientId,
     GITHUB_APP_CLIENT_SECRET: emulation.githubClientSecret,
+    GITHUB_APP_INSTALL_STATE_SECRET: emulation.relaySecret,
     VERCEL_AUTH_CLIENT_ID: emulation.vercelClientId,
     VERCEL_AUTH_CLIENT_SECRET: emulation.vercelClientSecret,
+    VERCEL_INTEGRATION_SLUG: "autograph-app-builder",
     VERCEL_INTEGRATION_CLIENT_ID: emulation.vercelClientId,
     VERCEL_INTEGRATION_CLIENT_SECRET: emulation.vercelClientSecret,
+    VERCEL_INTEGRATION_TOKEN_KEY: createHash("sha256")
+      .update(`preview-vercel-token:${emulation.relaySecret}`)
+      .digest("base64"),
+    VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "preview-emulation-v1",
   };
 }

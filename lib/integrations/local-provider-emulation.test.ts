@@ -76,6 +76,10 @@ describe("local provider emulation", () => {
     ).toMatchObject({
       BETTER_AUTH_URL: "https://app-commit-team.vercel.app/api/auth",
       MCP_RESOURCE_URL: "https://app-commit-team.vercel.app/mcp",
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_INSTALL_STATE_SECRET: previewSecrets.EMULATE_PREVIEW_RELAY_SECRET,
+      VERCEL_INTEGRATION_SLUG: "autograph-app-builder",
+      VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "preview-emulation-v1",
     });
   });
 
