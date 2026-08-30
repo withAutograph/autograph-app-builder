@@ -8,6 +8,7 @@ import {
   type PreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
 import { selfServiceSignupFlag } from "../feature-flags";
+import { readProviderEmulation } from "../integrations/local-provider-emulation";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
 
@@ -25,8 +26,11 @@ let deploymentRuntime: PreviewOAuthDeploymentRuntime | undefined;
 export function selfServiceSignupAuthority(
   environment: PreviewOAuthRuntimeConfig["environment"],
   managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
+  emulated = false,
 ) {
-  return environment === "local" ? async () => true : managedAuthority;
+  return environment === "local" || emulated
+    ? async () => true
+    : managedAuthority;
 }
 
 function getPreviewOAuthDeploymentRuntime(
@@ -35,6 +39,7 @@ function getPreviewOAuthDeploymentRuntime(
   if (deploymentRuntime !== undefined) return deploymentRuntime;
   const config = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(config.databaseUrl);
+  const providerEmulation = readProviderEmulation(environment);
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
     database,
     {
@@ -44,6 +49,8 @@ function getPreviewOAuthDeploymentRuntime(
     {
       isSelfServiceSignupEnabled: selfServiceSignupAuthority(
         config.environment,
+        selfServiceSignupFlag,
+        Boolean(providerEmulation),
       ),
     },
   );

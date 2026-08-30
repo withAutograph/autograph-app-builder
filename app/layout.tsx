@@ -14,6 +14,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const showLocalAuthProviders = process.env.NODE_ENV === "development";
+  const showPreviewEmulatedAuthProviders =
+    process.env.VERCEL_ENV === "preview" &&
+    process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === "1";
 
   return (
     <html lang="en" className={`${GeistSans.className} h-full antialiased`}>
@@ -21,10 +24,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <AppShell
           githubAuthEnabled={Boolean(
             showLocalAuthProviders ||
+            showPreviewEmulatedAuthProviders ||
             (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
           )}
           vercelAuthEnabled={Boolean(
             showLocalAuthProviders ||
+            showPreviewEmulatedAuthProviders ||
             (process.env.VERCEL_AUTH_CLIENT_ID &&
               process.env.VERCEL_AUTH_CLIENT_SECRET),
           )}
