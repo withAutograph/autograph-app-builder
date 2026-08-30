@@ -354,6 +354,35 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).toHaveBeenCalledOnce();
   });
 
+  it("accepts GitHub's OAuth callback shape with signed installation metadata", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(requests),
+    });
+    const begun = await authorization.begin(authority);
+    const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
+    const authorize = await authorization.complete(
+      setupCallbackUrl(installState, "update"),
+      authority,
+    );
+    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    const callback = new URL(
+      authorizationCallbackUrl(
+        new URL(authorize.redirectUrl).searchParams.get("state")!,
+      ),
+    );
+    callback.searchParams.set("installation_id", "98765");
+    callback.searchParams.set("setup_action", "update");
+
+    await expect(
+      authorization.complete(callback.toString(), authority),
+    ).resolves.toMatchObject({
+      status: "bound",
+      setupAction: "update",
+    });
+    expect(bind).toHaveBeenCalledOnce();
+  });
+
   it("rejects a cross-workspace state and inactive membership before exchange", async () => {
     const request = vi.fn<typeof fetch>();
     const active = harness({ fetch: request });
@@ -388,8 +417,9 @@ describe("public GitHub App installation authorization", () => {
       error = caught;
     }
     expect(error).toBeInstanceOf(Error);
-    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
+    expect(githubInstallationAuthorizationDiagnostic(error)).toMatchObject({
       stage: "callback-state-validation",
+      callback: { queryKeys: ["code"], statePresent: false },
     });
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();

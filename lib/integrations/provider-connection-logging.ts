@@ -6,7 +6,16 @@ export function logProviderConnectionFailure(input: {
   phase: "start" | "callback";
   reason: ProviderConnectionFailureReason;
   startedAt: number;
-  diagnostic?: { stage: string; category?: string };
+  diagnostic?: {
+    stage: string;
+    category?: string;
+    callback?: {
+      queryKeys: string[];
+      statePresent: boolean;
+      stateLength?: number;
+      error?: string;
+    };
+  };
 }) {
   console.error(
     JSON.stringify({
