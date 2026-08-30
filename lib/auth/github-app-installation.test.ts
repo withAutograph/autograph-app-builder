@@ -383,6 +383,21 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).toHaveBeenCalledOnce();
   });
 
+  it("accepts a bounded opaque GitHub OAuth code with the minimal callback shape", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(requests),
+    });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.set("code", "c".repeat(1_024));
+
+    await expect(
+      authorization.complete(callback.toString(), authority),
+    ).resolves.toMatchObject({ status: "bound" });
+    expect(bind).toHaveBeenCalledOnce();
+  });
+
   it("rejects a cross-workspace state and inactive membership before exchange", async () => {
     const request = vi.fn<typeof fetch>();
     const active = harness({ fetch: request });
@@ -494,6 +509,33 @@ describe("public GitHub App installation authorization", () => {
     await expect(
       authorization.complete(callback.toString(), authority),
     ).rejects.toThrow("GitHub App installation authorization failed.");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("retains duplicate callback-key rejection with safe cardinality diagnostics", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.append("code", "second-code");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(githubInstallationAuthorizationDiagnostic(error)).toMatchObject({
+      stage: "callback-state-validation",
+      callback: {
+        queryKeys: ["code", "state"],
+        keyCounts: { code: 2, state: 1 },
+        codePresent: true,
+        codeLength: "one-time-code".length,
+      },
+      stateValidation: { substage: "callback-parse" },
+    });
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });

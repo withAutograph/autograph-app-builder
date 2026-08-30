@@ -18,6 +18,7 @@ const GITHUB_API_ORIGIN = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
 const USER_AGENT = "autograph-app-builder-github-installation";
 const STATE_LIFETIME_MS = 10 * 60 * 1_000;
+const MAX_CALLBACK_CODE_LENGTH = 2_048;
 const MAX_RESPONSE_BYTES = 2 * 1_024 * 1_024;
 const FAILURE_MESSAGE = "GitHub App installation authorization failed.";
 
@@ -44,6 +45,9 @@ export type GitHubOAuthCallbackError =
 
 type GitHubCallbackDiagnostic = {
   queryKeys: string[];
+  keyCounts: Record<string, number>;
+  codePresent: boolean;
+  codeLength?: number;
   statePresent: boolean;
   stateLength?: number;
   error?: GitHubOAuthCallbackError;
@@ -484,7 +488,7 @@ function callbackInput(url: string) {
       code: z
         .string()
         .min(1)
-        .max(512)
+        .max(MAX_CALLBACK_CODE_LENGTH)
         .refine((value) => !/[\0\r\n]/u.test(value))
         .parse(code),
       ...(query.has("installation_id")
@@ -525,11 +529,17 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
     "state",
   ]);
   const state = query.get("state");
+  const code = query.get("code");
   const error = query.get("error");
   return {
     queryKeys: [
       ...new Set([...query.keys()].filter((key) => allowed.has(key))),
     ].sort(),
+    keyCounts: Object.fromEntries(
+      [...allowed].map((key) => [key, query.getAll(key).length]),
+    ),
+    codePresent: code !== null,
+    ...(code === null ? {} : { codeLength: code.length }),
     statePresent: state !== null,
     ...(state === null ? {} : { stateLength: state.length }),
     ...(["access_denied", "temporarily_unavailable", "server_error"].includes(
