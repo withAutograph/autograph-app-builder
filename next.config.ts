@@ -3,6 +3,9 @@ import { withEmulate } from "@emulators/adapter-next";
 import { withEve } from "eve/next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/**": ["./node_modules/@emulators/core/dist/fonts/**"],
+  },
   async headers() {
     return [
       {
