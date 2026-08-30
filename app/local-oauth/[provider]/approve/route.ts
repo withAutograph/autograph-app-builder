@@ -34,7 +34,7 @@ export async function GET(
         authorizationFields.map((name) => [
           name,
           searchParams.getAll(name).length === 1
-            ? searchParams.get(name) ?? undefined
+            ? (searchParams.get(name) ?? undefined)
             : undefined,
         ]),
       ),
@@ -53,7 +53,10 @@ export async function POST(
 ) {
   try {
     const emulation = readProviderEmulation(process.env);
-    if (!emulation || request.headers.get("origin") !== emulation.canonicalOrigin)
+    if (
+      !emulation ||
+      request.headers.get("origin") !== emulation.canonicalOrigin
+    )
       throw new Error("Invalid approval origin.");
     const form = await request.formData();
     return completeAuthorization(

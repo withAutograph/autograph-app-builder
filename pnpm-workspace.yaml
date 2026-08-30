@@ -30,6 +30,6 @@ minimumReleaseAgeExclude:
   - "@better-auth/infra@0.4.5"
 
 patchedDependencies:
-  '@emulators/core@0.10.0': patches/@emulators__core@0.10.0.patch
-  '@emulators/github@0.10.0': patches/@emulators__github@0.10.0.patch
-  '@emulators/vercel@0.10.0': patches/@emulators__vercel@0.10.0.patch
+  "@emulators/core@0.10.0": patches/@emulators__core@0.10.0.patch
+  "@emulators/github@0.10.0": patches/@emulators__github@0.10.0.patch
+  "@emulators/vercel@0.10.0": patches/@emulators__vercel@0.10.0.patch

@@ -12,7 +12,9 @@ const entrypoints = new Set();
 const packages = ["github", "vercel"];
 
 for (const packageName of packages) {
-  entrypoints.add(fileURLToPath(import.meta.resolve(`@emulators/${packageName}`)));
+  entrypoints.add(
+    fileURLToPath(import.meta.resolve(`@emulators/${packageName}`)),
+  );
 }
 
 // Vercel can restore both patched and original pnpm package directories from its
@@ -22,7 +24,9 @@ for (const packageName of packages) {
 const pnpmDirectories = await readdir(join("node_modules", ".pnpm"));
 for (const packageName of packages) {
   const prefix = `@emulators+${packageName}@0.10.0`;
-  for (const directory of pnpmDirectories.filter((name) => name.startsWith(prefix))) {
+  for (const directory of pnpmDirectories.filter((name) =>
+    name.startsWith(prefix),
+  )) {
     entrypoints.add(
       join(
         "node_modules",
@@ -44,4 +48,6 @@ for (const entrypoint of entrypoints) {
   await writeFile(entrypoint, source.replace(eagerAssets, ""));
 }
 
-console.log(`Prepared ${entrypoints.size} Emulate provider runtime entrypoints.`);
+console.log(
+  `Prepared ${entrypoints.size} Emulate provider runtime entrypoints.`,
+);

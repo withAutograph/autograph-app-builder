@@ -12,10 +12,7 @@ export async function GET(
     if (!emulation || emulation.mode !== "preview")
       throw new Error("Preview authentication emulation is unavailable.");
     const { provider, approval } = await context.params;
-    const verified = verifyLocalOAuthApproval(
-      approval,
-      emulation.relaySecret,
-    );
+    const verified = verifyLocalOAuthApproval(approval, emulation.relaySecret);
     if (
       verified.provider !== provider ||
       verified.origin !== emulation.canonicalOrigin
