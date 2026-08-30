@@ -173,7 +173,7 @@ test("missing credential and verification failure remain authentication-only", a
   }
 });
 
-test("a paused passkey ceremony returns to Sign In when it resumes", async ({
+test("a paused passkey ceremony stays authentication-only", async ({
   context,
   page,
 }) => {
@@ -188,10 +188,8 @@ test("a paused passkey ceremony returns to Sign In when it resumes", async ({
     await expect(continueWithPasskey).toBeDisabled();
 
     await authenticator.setPresence(true);
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
+    await expect(continueWithPasskey).toBeDisabled();
     expect((await authCounts()).users).toBe(0);
   } finally {
     await authenticator.dispose();

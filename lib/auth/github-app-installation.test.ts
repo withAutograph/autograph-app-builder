@@ -563,6 +563,9 @@ describe("public GitHub App installation authorization", () => {
       callback: {
         queryKeys: ["code", "state"],
         unknownKeyCount: 1,
+        unknownKeyDigests: [
+          "7e8a234a4c768bf9b54a09439b84eedbecf182c780df77a88dc882ce1c57f642",
+        ],
       },
       stateValidation: {
         substage: "callback-parse",
@@ -573,6 +576,40 @@ describe("public GitHub App installation authorization", () => {
       "provider-detail-sentinel",
     );
     expect(JSON.stringify(diagnostic)).not.toContain("secret-value");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("classifies only allowlisted unknown callback names without accepting them", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.set("redirect_uri", "https://attacker.example/");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: {
+        unknownKeyCount: 1,
+        safeUnknownKeyNames: ["redirect_uri"],
+        unknownKeyDigests: [
+          "1e919ea04769b8dc080085afe35451099f697a19bad646c5698ec38f8ed9a50b",
+        ],
+      },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "unknown-key",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("attacker.example");
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });

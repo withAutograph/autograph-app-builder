@@ -47,6 +47,8 @@ type GitHubCallbackDiagnostic = {
   queryKeys: string[];
   keyCounts: Record<string, number>;
   unknownKeyCount: number;
+  safeUnknownKeyNames?: string[];
+  unknownKeyDigests?: string[];
   codePresent: boolean;
   codeLength?: number;
   statePresent: boolean;
@@ -235,6 +237,20 @@ function githubOAuthErrorCategory(value: unknown) {
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+// These fixed protocol field names contain no user data. Unknown names stay
+// redacted, including when a caller deliberately uses a value-like name.
+const safeUnknownCallbackKeyNames = new Set([
+  "allow_signup",
+  "client_id",
+  "code_challenge",
+  "code_challenge_method",
+  "login",
+  "prompt",
+  "redirect_uri",
+  "response_type",
+  "scope",
+]);
 
 const canonicalAuthority = (authority: HostedTenantAuthority) =>
   JSON.stringify({
@@ -557,6 +573,9 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
   const state = query.get("state");
   const code = query.get("code");
   const error = query.get("error");
+  const unknownKeys = [
+    ...new Set([...query.keys()].filter((key) => !allowed.has(key))),
+  ];
   return {
     queryKeys: [
       ...new Set([...query.keys()].filter((key) => allowed.has(key))),
@@ -564,8 +583,20 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
     keyCounts: Object.fromEntries(
       [...allowed].map((key) => [key, query.getAll(key).length]),
     ),
-    unknownKeyCount: [...query.keys()].filter((key) => !allowed.has(key))
-      .length,
+    unknownKeyCount: unknownKeys.length,
+    ...(unknownKeys.length === 0
+      ? {}
+      : {
+          unknownKeyDigests: unknownKeys.slice(0, 3).map(sha256),
+          ...(unknownKeys.some((key) => safeUnknownCallbackKeyNames.has(key))
+            ? {
+                safeUnknownKeyNames: unknownKeys
+                  .filter((key) => safeUnknownCallbackKeyNames.has(key))
+                  .slice(0, 3)
+                  .sort(),
+              }
+            : {}),
+        }),
     codePresent: code !== null,
     ...(code === null ? {} : { codeLength: code.length }),
     statePresent: state !== null,
