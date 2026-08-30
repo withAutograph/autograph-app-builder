@@ -147,7 +147,15 @@ function buildDestinationLabel(destination: BuildDestination) {
 }
 
 function buildAppHandoffPrompt(form: BuilderForm) {
-  return `Use the Autograph App Builder plugin to create this app. If the plugin is unavailable, stop and explain how to install it. Do not use another app builder or edit the target repository directly.
+  return `Use the Autograph App Builder plugin to create this app.
+
+If Autograph App Builder is unavailable, install the official plugin first:
+
+codex plugin marketplace add withAutograph/marketplace --ref main
+codex plugin marketplace upgrade autograph
+codex plugin add app-builder@autograph
+
+Verify that app-builder@autograph is enabled, then say: “Autograph App Builder is ready. Open a fresh Codex task and resend this app brief to begin.” Keep commands, versions, endpoints, and repository diagnostics under an optional Details section instead of leading with them. Do not use another app builder or edit the target repository directly.
 
 App Name:
 ${form.appName}
@@ -1649,7 +1657,9 @@ function Ready({
   initialClipboardState: ClipboardState;
   onReset: () => void;
 }) {
-  const command = "$ npx plugins add withAutograph/autograph-app-builder";
+  const command = `codex plugin marketplace add withAutograph/marketplace --ref main
+codex plugin marketplace upgrade autograph
+codex plugin add app-builder@autograph`;
   const [showInstall, setShowInstall] = useState(true);
   const [retryClipboardState, setRetryClipboardState] =
     useState<ClipboardState>("idle");
@@ -1722,8 +1732,8 @@ function Ready({
               </button>
             </div>
             <p>
-              Turn your coding agent into an Autograph expert. Copy and run this
-              in your terminal to install the plugin.
+              Run this once in Codex&apos;s terminal. Then open a fresh task and
+              describe the app you want to create.
             </p>
             <div className={styles.command}>
               <code>{command}</code>

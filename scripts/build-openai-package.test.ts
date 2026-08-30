@@ -109,7 +109,7 @@ describe("OpenAI package generator", () => {
         expect(prompt.length).toBeLessThanOrEqual(128);
       }
       expect(manifest.interface.defaultPrompt).toEqual([
-        "Create a polished personal finance dashboard",
+        "Create an app for [who it is for, what they need to do, and the outcome you want]",
         "Build an event planning app for coordinating guests, schedules, and tasks",
         "Design a customer feedback app with a clear review workflow",
       ]);
