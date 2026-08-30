@@ -38,13 +38,15 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
-    url: `${appProtocol}://127.0.0.1:${appPort}/auth/sign-in`,
-    ignoreHTTPSErrors: true,
-    reuseExistingServer: false,
-    // A cold Linux runner must download/start PostgreSQL, seed both emulators,
-    // generate the local certificate, and compile the first Next.js route.
-    timeout: 300_000,
-  },
+  webServer: process.env.APP_BUILDER_EXTERNAL_WEB_SERVER
+    ? undefined
+    : {
+        command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
+        url: `${appProtocol}://127.0.0.1:${appPort}/auth/sign-in`,
+        ignoreHTTPSErrors: true,
+        reuseExistingServer: false,
+        // A cold local checkout must initialize PostgreSQL, seed both
+        // emulators, generate the certificate, and compile the first route.
+        timeout: 300_000,
+      },
 });

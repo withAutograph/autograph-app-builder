@@ -3,11 +3,13 @@
 set -eu
 
 app_port=${APP_BUILDER_LOCAL_PORT:-3001}
-if lsof -nP -iTCP:"$app_port" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "web product E2E requires exclusive access to https://localhost:$app_port" >&2
-  exit 1
+if [ "${APP_BUILDER_EXTERNAL_WEB_SERVER:-0}" != 1 ]; then
+  if lsof -nP -iTCP:"$app_port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "web product E2E requires exclusive access to https://localhost:$app_port" >&2
+    exit 1
+  fi
+  mise run auth-e2e:reset
+  trap 'mise run auth-e2e:reset >/dev/null 2>&1 || true' EXIT INT TERM
 fi
-mise run auth-e2e:reset
-trap 'mise run auth-e2e:reset >/dev/null 2>&1 || true' EXIT INT TERM
 .config/mise/scripts/trusted-node-launcher \
   "$(mise which pnpm)" exec playwright test --config=playwright.config.ts "$@"
