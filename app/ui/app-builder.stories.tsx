@@ -8,6 +8,7 @@ import { AppBuilder } from "./app-builder";
 
 const connectionsEnabled =
   process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED === "true";
+const comingSoonEnabled = true;
 
 const meta = {
   title: "Create App/Page",
@@ -15,6 +16,7 @@ const meta = {
   args: {
     authenticated: true,
     connectionsEnabled,
+    comingSoonEnabled,
     integrations: storyIntegrations,
   },
   parameters: {
