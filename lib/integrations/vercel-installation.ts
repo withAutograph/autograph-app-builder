@@ -247,7 +247,9 @@ export function createVercelInstallationAuthorization(input: {
               client_secret: config.clientSecret,
               code,
               redirect_uri: new URL(
-                "/vercel/installations/callback",
+                input.emulation
+                  ? "/local-connections/vercel/oauth-callback"
+                  : "/vercel/installations/callback",
                 config.issuer,
               ).toString(),
             }),
@@ -272,7 +274,15 @@ export function createVercelInstallationAuthorization(input: {
           },
         );
         if (!response.ok) throw new Error("scope-read-failed");
-        const team = teamSchema.parse(await response.json());
+        const payload: unknown = await response.json();
+        const team = teamSchema.parse(
+          input.emulation &&
+            typeof payload === "object" &&
+            payload !== null &&
+            "team" in payload
+            ? payload.team
+            : payload,
+        );
         binding = {
           installationId,
           scopeId: team.id,

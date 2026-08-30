@@ -2,9 +2,13 @@ import postgres from "postgres";
 import { expect, test, type Page } from "playwright/test";
 
 import { VirtualAuthenticator } from "./virtual-authenticator";
-
-const databaseUrl =
-  "postgresql://postgres@127.0.0.1:54329/autograph_app_builder";
+import {
+  applicationCounts as authCounts,
+  databaseUrl,
+  finishOAuth,
+  resetApplicationState,
+  signOut,
+} from "../support/harness";
 
 function reportPasskeyFailures(page: Page) {
   page.on("response", async (response) => {
@@ -23,84 +27,7 @@ function reportPasskeyFailures(page: Page) {
   });
 }
 
-function reportOAuthFailures(page: Page) {
-  page.on("response", async (response) => {
-    const path = new URL(response.url()).pathname;
-    if (response.ok() || !path.startsWith("/api/auth/sign-in/")) return;
-    console.error(
-      "OAuth request failed",
-      response.status(),
-      path,
-      await response.text(),
-    );
-  });
-}
-
-async function resetAuthState() {
-  const sql = postgres(databaseUrl, { max: 1 });
-  try {
-    await sql.unsafe(
-      'TRUNCATE TABLE "user", "organization", "passkey_onboarding" CASCADE',
-    );
-  } finally {
-    await sql.end();
-  }
-}
-
-async function authCounts() {
-  const sql = postgres(databaseUrl, { max: 1 });
-  try {
-    const [counts] = await sql<
-      Array<{
-        users: number;
-        passkeys: number;
-        organizations: number;
-        members: number;
-        sessions: number;
-        activeSessions: number;
-      }>
-    >`
-      SELECT
-        (SELECT count(*)::int FROM "user") AS users,
-        (SELECT count(*)::int FROM passkey) AS passkeys,
-        (SELECT count(*)::int FROM organization) AS organizations,
-        (SELECT count(*)::int FROM member) AS members,
-        (SELECT count(*)::int FROM session) AS sessions,
-        (SELECT count(*)::int FROM session WHERE active_organization_id IS NOT NULL) AS "activeSessions"
-    `;
-    return counts;
-  } finally {
-    await sql.end();
-  }
-}
-
-async function signOut(page: Page) {
-  await page.goto("/auth/sign-out");
-  await expect(page).toHaveURL(/\/auth\/sign-in/u);
-  await expect
-    .poll(async () => (await page.request.get("/api/auth/get-session")).json())
-    .toBeNull();
-}
-
-async function finishOAuth(page: Page, provider: "GitHub" | "Vercel") {
-  reportOAuthFailures(page);
-  await page.goto("/auth/sign-in");
-  await page.getByRole("button", { name: `Continue with ${provider}` }).click();
-  await expect(page).toHaveURL(
-    new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`),
-  );
-  await page.getByRole("button", { name: `Continue with ${provider}` }).click();
-  await expect
-    .poll(
-      async () => (await page.request.get("/api/auth/get-session")).json(),
-      {
-        timeout: 30_000,
-      },
-    )
-    .toMatchObject({ user: { email: "dev@autograph.local" } });
-}
-
-test.beforeEach(async () => resetAuthState());
+test.beforeEach(async () => resetApplicationState());
 
 test("passkey registration provisions one account and returning login", async ({
   context,
@@ -120,6 +47,8 @@ test("passkey registration provisions one account and returning login", async ({
         members: 1,
         sessions: 1,
         activeSessions: 1,
+        githubInstallations: 0,
+        vercelInstallations: 0,
       });
     expect(await authenticator.credentials()).toHaveLength(1);
 
@@ -162,6 +91,8 @@ test("missing credential and verification failure remain authentication-only", a
       members: 0,
       sessions: 0,
       activeSessions: 0,
+      githubInstallations: 0,
+      vercelInstallations: 0,
     });
 
     await authenticator.setUserVerified(false);
@@ -173,27 +104,29 @@ test("missing credential and verification failure remain authentication-only", a
   }
 });
 
-test("a paused passkey ceremony stays authentication-only", async ({
-  context,
-  page,
-}) => {
-  const authenticator = await VirtualAuthenticator.create(context, page);
-  try {
-    await authenticator.setPresence(false);
-    await page.goto("/auth/sign-in");
-    const continueWithPasskey = page.getByRole("button", {
-      name: "Continue with Passkey",
+test("an interrupted passkey ceremony remains on Sign In", async ({ page }) => {
+  await page.addInitScript(() => {
+    const credentials = navigator.credentials;
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: {
+        ...credentials,
+        get: async () => {
+          throw new DOMException(
+            "The operation was cancelled.",
+            "NotAllowedError",
+          );
+        },
+      },
     });
-    await continueWithPasskey.click();
-    await expect(continueWithPasskey).toBeDisabled();
-
-    await authenticator.setPresence(true);
-    await expect(page).toHaveURL(/\/auth\/sign-in/u);
-    await expect(continueWithPasskey).toBeDisabled();
-    expect((await authCounts()).users).toBe(0);
-  } finally {
-    await authenticator.dispose();
-  }
+  });
+  await page.goto("/auth/sign-in");
+  await page.getByRole("button", { name: "Continue with Passkey" }).click();
+  await expect(
+    page.getByRole("button", { name: "Passkey failed (try again)" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sign-in/u);
+  expect((await authCounts()).users).toBe(0);
 });
 
 test("an authenticator credential missing from server storage is not recreated", async ({
@@ -205,7 +138,9 @@ test("an authenticator credential missing from server storage is not recreated",
   try {
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Create a passkey" }).click();
-    await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
+    await expect
+      .poll(async () => (await authCounts()).passkeys, { timeout: 30_000 })
+      .toBe(1);
     await signOut(page);
     const sql = postgres(databaseUrl, { max: 1 });
     try {

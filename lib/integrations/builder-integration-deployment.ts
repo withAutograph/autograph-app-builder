@@ -26,6 +26,19 @@ type BuilderIntegrationRequest = {
     }
 );
 
+const databases = new Map<
+  string,
+  ReturnType<typeof openHostedPostgresDatabase>
+>();
+
+function databaseFor(databaseUrl: string) {
+  const existing = databases.get(databaseUrl);
+  if (existing) return existing;
+  const database = openHostedPostgresDatabase(databaseUrl);
+  databases.set(databaseUrl, database);
+  return database;
+}
+
 export async function loadBuilderIntegrationState(
   input: BuilderIntegrationRequest,
 ): Promise<BuilderIntegrationState> {
@@ -51,7 +64,7 @@ export async function loadBuilderIntegrationState(
   let database: ReturnType<typeof openHostedPostgresDatabase>;
   try {
     preview = readPreviewOAuthRuntimeConfig(input.environment);
-    database = openHostedPostgresDatabase(preview.databaseUrl);
+    database = databaseFor(preview.databaseUrl);
   } catch {
     return builderIntegrationStateSchema.parse({
       vercel: unavailable("configuration-unavailable"),

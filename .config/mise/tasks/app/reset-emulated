@@ -3,8 +3,20 @@
 set -eu
 
 state_dir=.emulate
+pid_file="$state_dir/dev-emulated.pids"
 docker=$(mise which docker)
-"$docker" rm -f autograph-app-builder-emulated-postgres >/dev/null 2>&1 || true
+if [ -f "$pid_file" ]; then
+  for key in app_pid emulate_pid; do
+    pid=$(sed -n "s/^${key}=\([0-9][0-9]*\)$/\1/p" "$pid_file")
+    if [ -n "$pid" ]; then
+      pkill -TERM -P "$pid" 2>/dev/null || true
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+fi
+worktree_id=$(basename "$(dirname "$(pwd -P)")")
+database_container="autograph-app-builder-web-product-e2e-postgres-$worktree_id"
+"$docker" rm -f "$database_container" >/dev/null 2>&1 || true
 if [ -d "$state_dir" ]; then
   find "$state_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 fi

@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Prepare deterministic local auth emulation and Chromium"
+#MISE description="Prepare deterministic local web product emulation and Chromium"
 set -eu
 
 mise run app:reset-emulated
