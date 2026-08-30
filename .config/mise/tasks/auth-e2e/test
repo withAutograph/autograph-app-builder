@@ -1,0 +1,28 @@
+#!/bin/sh
+#MISE description="Run Chromium auth E2E against local Emulate and PostgreSQL"
+set -eu
+
+if lsof -nP -iTCP:3001 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "auth E2E requires exclusive access to https://localhost:3001" >&2
+  exit 1
+fi
+mise run auth-e2e:reset
+mise run app:dev-emulated &
+server_pid=$!
+cleanup() {
+  kill "$server_pid" 2>/dev/null || true
+  wait "$server_pid" 2>/dev/null || true
+  mise run auth-e2e:reset >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+attempt=0
+until curl --fail --silent --insecure https://localhost:3001/auth/sign-in >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 180 ]; then
+    echo "local emulated app did not become ready" >&2
+    exit 1
+  fi
+  sleep 1
+done
+.config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/playwright/cli.js test --config=playwright.config.ts "$@"

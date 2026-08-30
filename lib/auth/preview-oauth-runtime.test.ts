@@ -165,6 +165,7 @@ describe("Preview OAuth runtime configuration", () => {
         EVE_HOSTED_ADAPTER: "1",
         APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        PASSKEY_ONBOARDING: "local-preview-v1",
         BETTER_AUTH_URL: "https://localhost:3001/api/auth",
         MCP_RESOURCE_URL: "https://localhost:3001/mcp",
         BETTER_AUTH_SECRET: "a".repeat(32),
@@ -182,6 +183,12 @@ describe("Preview OAuth runtime configuration", () => {
       environment: "local",
       databaseUrl:
         "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+      passkeyOnboarding: {
+        origin: "https://localhost:3001",
+        rpId: "localhost",
+        deploymentId: "local",
+        secureCookies: true,
+      },
     });
     expect(() =>
       readPreviewOAuthRuntimeConfig({

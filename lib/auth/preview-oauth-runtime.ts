@@ -339,6 +339,7 @@ export function readPreviewOAuthRuntimeConfig(
     if (environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1") {
       throw new Error("Local authentication emulation is unavailable.");
     }
+    const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
     return previewOAuthRuntimeConfigSchema.parse({
       hostedAdapter: environment.EVE_HOSTED_ADAPTER,
       environment: "local",
@@ -351,7 +352,7 @@ export function readPreviewOAuthRuntimeConfig(
       githubClientSecret: environment.GITHUB_CLIENT_SECRET,
       vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
       vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
-      passkeyOnboarding: null,
+      passkeyOnboarding,
     });
   }
   const passkeyOnboarding = readPasskeyOnboardingConfig(environment);

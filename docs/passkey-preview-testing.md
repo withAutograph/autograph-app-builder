@@ -20,8 +20,9 @@ PASSKEY_ONBOARDING=local-preview-v1
 Run `mise run app:dev`, open `http://localhost:3000/auth/sign-in`, and choose
 **Continue with Passkey**. If the browser cannot authenticate, the page remains
 on sign-in and changes the action to **Passkey failed (try again)**. Retrying
-starts the registration recovery ceremony without adding a second passkey
-button. After registration, sign out and use **Continue with Passkey** to exercise the
+repeats authentication and never creates an account. New users must follow the
+explicit **Create an account with a passkey** link to Sign Up. After
+registration, sign out and use **Continue with Passkey** to exercise the
 returning-user flow. Browsers treat `localhost` as a
 WebAuthn secure context; use `localhost` consistently rather than switching
 between it and `127.0.0.1` because credentials are RP-ID scoped.
@@ -32,6 +33,20 @@ passkey action beside it.
 To reset a local identity, remove its organization/member, session, passkey, and
 user records together in a transaction. Do not reuse that procedure against
 Preview or Production data.
+
+For deterministic local OAuth and WebAuthn coverage, run:
+
+```sh
+mise run auth-e2e:setup
+mise run auth-e2e:test
+```
+
+The repository starts HTTPS on exact `https://localhost:3001`, PostgreSQL, and
+the GitHub and Vercel Emulate services. Playwright uses a Chromium virtual
+authenticator; Better Auth requests, callbacks, sessions, and workspace
+provisioning remain real. Use `mise run auth-e2e:reset` to remove only ignored
+emulator and database state. The test task also performs this cleanup when it
+exits.
 
 ## Vercel Preview
 
@@ -58,4 +73,8 @@ origin and deployment binding.
 
 Passkey-first accounts have no verified email recovery. Add a second passkey in
 Account settings before treating the account as durable. The server refuses to
-delete the final passkey. OAuth linking remains separate from passkey recovery.
+delete the final passkey. A credential that exists on an authenticator but is
+missing from server storage is intentionally treated as unrecognized; sign-in
+fails generically and does not recreate the user or workspace. If every passkey
+for an unlinked passkey-only account is lost, the account cannot be recovered.
+OAuth linking remains separate from passkey recovery.
