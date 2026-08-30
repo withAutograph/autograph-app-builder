@@ -188,10 +188,8 @@ test("a paused passkey ceremony returns to Sign In when it resumes", async ({
     await expect(continueWithPasskey).toBeDisabled();
 
     await authenticator.setPresence(true);
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
+    await expect(continueWithPasskey).toBeEnabled();
     expect((await authCounts()).users).toBe(0);
   } finally {
     await authenticator.dispose();
