@@ -44,11 +44,12 @@ until "$docker" exec "$database_container" \
   fi
   sleep 0.1
 done
+sleep 1
+migration_url="postgresql://postgres@127.0.0.1:$database_port/autograph_app_builder?connect_timeout=2"
 attempt=0
-until DATABASE_URL="postgresql://postgres@127.0.0.1:$database_port/autograph_app_builder" \
-  mise run database:migrate; do
+until DATABASE_URL="$migration_url" mise run database:migrate; do
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 20 ]; then
+  if [ "$attempt" -ge 30 ]; then
     echo "local emulated PostgreSQL migrations did not become ready" >&2
     exit 1
   fi
