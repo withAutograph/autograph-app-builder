@@ -29,7 +29,7 @@ export default async function GitHubInstallationsPage({ searchParams }: Props) {
     <ProviderConnection
       action="/github/installations/start"
       buttonLabel="Install or update GitHub access"
-      description="Choose the repositories this workspace may inspect or update, or allow all repositories. GitHub will ask you to confirm the installation and return here."
+      description="Choose the repositories this workspace may inspect or update, or allow all repositories. For an existing installation, GitHub must have Redirect on update enabled to return here."
       icon={<FaGithub size={23} />}
       returnTo={returnState.returnTo}
       resumeKey={returnState.resumeKey}

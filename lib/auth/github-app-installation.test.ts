@@ -77,10 +77,13 @@ function harness(input?: { membership?: () => boolean; fetch?: typeof fetch }) {
   return { authorization, bind, events, membership };
 }
 
-function setupCallbackUrl(state: string) {
+function setupCallbackUrl(
+  state: string,
+  setupAction: "install" | "update" = "install",
+) {
   const url = new URL("https://builder.example/github/installations/callback");
   url.searchParams.set("installation_id", "98765");
-  url.searchParams.set("setup_action", "install");
+  url.searchParams.set("setup_action", setupAction);
   url.searchParams.set("state", state);
   return url.toString();
 }
@@ -299,6 +302,30 @@ describe("public GitHub App installation authorization", () => {
     });
     expect(events).toContain("installation:bind");
     expect(bind).toHaveBeenCalledWith(expect.objectContaining({ authority }));
+  });
+
+  it("rebinds an existing installation after a signed GitHub update callback", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(requests),
+    });
+    const begun = await authorization.begin(authority);
+    const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
+    const authorize = await authorization.complete(
+      setupCallbackUrl(installState, "update"),
+      authority,
+    );
+    if (authorize.status !== "redirect") throw new Error("expected redirect");
+
+    await expect(
+      authorization.complete(
+        authorizationCallbackUrl(
+          new URL(authorize.redirectUrl).searchParams.get("state")!,
+        ),
+        authority,
+      ),
+    ).resolves.toMatchObject({ status: "bound", setupAction: "update" });
+    expect(bind).toHaveBeenCalledOnce();
   });
 
   it("rejects a cross-workspace state and inactive membership before exchange", async () => {

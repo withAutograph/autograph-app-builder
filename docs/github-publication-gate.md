@@ -73,8 +73,10 @@ the public installation flow.
 Register the GitHub App under the Autograph organization with the exact slug
 `autograph-app-builder`. Use `https://www.autograph.so/` as its public homepage
 and configure both its callback URL and setup URL as
-`<APP_ORIGIN>/github/installations/callback`. Choose either repository selection
-offered by GitHub and only the maximum repository permissions exercised by the
+`<APP_ORIGIN>/github/installations/callback`. Enable **Redirect on update** so an
+existing installation returns to the same state-bound flow after its repository
+access changes. Choose either repository selection offered by GitHub and only the
+maximum repository permissions exercised by the
 operation-scoped installation tokens: metadata read, contents read/write,
 workflows read/write, pull requests read/write, administration read/write, and
 variables read. The App Builder narrows these permissions again for each
