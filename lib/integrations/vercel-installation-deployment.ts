@@ -181,7 +181,24 @@ export function createVercelInstallationDeploymentHandler(
         authority,
       );
       return redirect("connected", undefined, result.returnState);
-    } catch {
+    } catch (error) {
+      if (kind === "callback") {
+        const detail =
+          error instanceof Error &&
+          /^(?:token-exchange-failed:[0-9]{3}:[a-z0-9_-]+|scope-read-failed|state-invalid|membership-inactive)$/u.test(
+            error.message,
+          )
+            ? error.message
+            : "invalid-response";
+        console.error(
+          JSON.stringify({
+            level: "error",
+            message: "provider_connection_callback_detail",
+            provider: "vercel",
+            detail,
+          }),
+        );
+      }
       return fail(
         kind === "callback" ? "callback-invalid" : "authorization-failed",
       );

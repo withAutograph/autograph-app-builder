@@ -256,7 +256,17 @@ export function createVercelInstallationAuthorization(input: {
             signal: AbortSignal.timeout(8_000),
           },
         );
-        if (!tokenResponse.ok) throw new Error("token-exchange-failed");
+        if (!tokenResponse.ok) {
+          const errorPayload = z
+            .object({ error: z.string().max(64).optional() })
+            .safeParse(await tokenResponse.json().catch(() => ({})));
+          const errorCode = errorPayload.success
+            ? errorPayload.data.error
+            : undefined;
+          throw new Error(
+            `token-exchange-failed:${tokenResponse.status}:${errorCode ?? "unknown"}`,
+          );
+        }
         return tokenResponseSchema.parse(await tokenResponse.json())
           .access_token;
       })();
