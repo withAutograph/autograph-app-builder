@@ -174,6 +174,44 @@ describe("Preview OAuth runtime configuration", () => {
     }
   });
 
+  it("accepts Emulate credentials only through the explicit local gate", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        EVE_HOSTED_ADAPTER: "1",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        GITHUB_CLIENT_ID: "local-github-client",
+        GITHUB_CLIENT_SECRET: "local-github-secret",
+        VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
+        VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret",
+        VERCEL_EMULATOR_URL: "http://localhost:4000",
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+      }),
+    ).toMatchObject({
+      environment: "local",
+      databaseUrl:
+        "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+    });
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        VERCEL_EMULATOR_URL: "http://localhost:4000",
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+      }),
+    ).toThrow("Local provider emulation is unavailable");
+  });
+
   it("accepts Production only when Vercel and the configured environment agree", () => {
     expect(
       readPreviewOAuthRuntimeConfig({

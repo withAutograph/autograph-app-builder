@@ -3,6 +3,8 @@
 set -eu
 
 state_dir=.emulate
+docker=$(mise which docker)
+"$docker" rm -f autograph-app-builder-emulated-postgres >/dev/null 2>&1 || true
 if [ -d "$state_dir" ]; then
   find "$state_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 fi

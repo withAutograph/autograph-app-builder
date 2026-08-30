@@ -29,7 +29,7 @@ const launcher = resolve(
   ".config/mise/scripts/trusted-node-launcher",
 );
 const launcherDigest =
-  "75c0415e950ddb0af8dfa80a0b452ba75c5ee9402c8eed703ec5715d0e24da54";
+  "e3057e24657135676bbee5f5ca27eca0840e866b8e3ed073b89d23e8963124be";
 const allowedEnvironment = [
   "HOME",
   "TMPDIR",
