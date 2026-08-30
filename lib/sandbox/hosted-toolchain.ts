@@ -91,8 +91,19 @@ command -v sha256sum >/dev/null
 command -v unzip >/dev/null
 work="$(mktemp -d /tmp/app-builder-toolchain.XXXXXX)"
 seed='/workspace/.app-builder/hosted-seed.tar.gz'
-trap 'find "$work" -depth -delete 2>/dev/null || true; rm -f "$seed"' EXIT
+stage='prepare-workspace'
+cleanup() {
+  status=$?
+  if [ "$status" -ne 0 ]; then printf 'hosted_toolchain_bootstrap_failed:%s\n' "$stage" >&2; fi
+  find "$work" -depth -delete 2>/dev/null || true
+  rm -f "$seed"
+  exit "$status"
+}
+trap cleanup EXIT
+install -d -m 0755 /workspace/.app-builder
+stage='artifact-download'
 curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "$seed"
+stage='artifact-verification'
 test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
 echo '${HOSTED_ARTIFACT_SHA256}  /workspace/.app-builder/hosted-seed.tar.gz' | sha256sum --check --strict
 tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions
@@ -133,6 +144,7 @@ command -v sha256sum >/dev/null
 work="$(mktemp -d /tmp/app-builder-hosted-artifact.XXXXXX)"
 seed='/workspace/.app-builder/hosted-seed.tar.gz'
 trap 'find "$work" -depth -delete 2>/dev/null || true; rm -f "$seed"' EXIT
+install -d -m 0755 /workspace/.app-builder
 curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "$seed"
 test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
 printf '%s  %s\n' '${HOSTED_ARTIFACT_SHA256}' "$seed" | sha256sum --check --strict

@@ -7,6 +7,7 @@ import {
   selectSandboxDefinition,
 } from "@/lib/sandbox/backend";
 import {
+  HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedArtifactWorkspaceInstallCommand,
   hostedToolchainBootstrapCommand,
   hostedToolchainRevalidationKey,
@@ -39,8 +40,14 @@ const bootstrapHostedVercelSandbox: NonNullable<
     command: hostedToolchainBootstrapCommand(),
     abortSignal: AbortSignal.timeout(120_000),
   });
-  if (result.exitCode !== 0)
-    throw new Error("The pinned Vercel Sandbox toolchain failed to install.");
+  if (result.exitCode !== 0) {
+    const stage = result.stderr.match(
+      /hosted_toolchain_bootstrap_failed:[a-z-]+/u,
+    )?.[0];
+    throw new Error(
+      `The pinned Vercel Sandbox toolchain failed to install (${stage ?? "unknown-stage"}).`,
+    );
+  }
 };
 
 function createVercelDefinition() {
@@ -70,7 +77,11 @@ function createMicrosandboxDefinition() {
     }),
     async bootstrap({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-      const sandbox = await use();
+      const sandbox = await use(
+        useHostedArtifactProof
+          ? { networkPolicy: { allow: [...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS] } }
+          : undefined,
+      );
       if (useHostedArtifactProof) {
         const result = await sandbox.run({
           command: hostedArtifactWorkspaceInstallCommand(),
@@ -81,6 +92,10 @@ function createMicrosandboxDefinition() {
             "The hosted planning artifact failed to materialize.",
           );
       }
+    },
+    async onSession({ use }) {
+      // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
+      await use({ networkPolicy: "deny-all" });
     },
     revalidationKey: () =>
       `${sandboxRevalidationKey(image, plan.kind)}:${

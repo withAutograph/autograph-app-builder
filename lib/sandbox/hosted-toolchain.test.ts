@@ -41,6 +41,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
 
   it("downloads to temporary files, verifies, and installs without piping code", () => {
     const command = hostedToolchainBootstrapCommand();
+    expect(
+      command.indexOf("install -d -m 0755 /workspace/.app-builder"),
+    ).toBeLessThan(command.indexOf("curl --fail"));
+    expect(command).toContain("hosted_toolchain_bootstrap_failed:%s");
     expect(command).toContain('case "$(uname -m)"');
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("sudo install --owner=root --group=root");
@@ -81,6 +85,9 @@ describe("hosted Vercel Sandbox toolchain", () => {
 
   it("materializes the sealed dependency closure in the proof workspace", () => {
     const command = hostedArtifactWorkspaceInstallCommand();
+    expect(
+      command.indexOf("install -d -m 0755 /workspace/.app-builder"),
+    ).toBeLessThan(command.indexOf("curl --fail"));
     expect(command).toContain(
       "/workspace/.app-builder/hosted-dependency-cache",
     );
@@ -101,6 +108,8 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(definition).toContain("seedFiles: readHostedManagedSeedFiles()");
     expect(definition).not.toContain("readHostedArtifactBytes");
     expect(definition).toContain('await use({ networkPolicy: "deny-all" })');
+    expect(definition).toContain("HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS");
+    expect(definition).toContain("useHostedArtifactProof");
     expect(definition).toContain(
       "revalidationKey: hostedToolchainRevalidationKey",
     );
