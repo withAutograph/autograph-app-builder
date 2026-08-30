@@ -74,10 +74,12 @@ export type AppSpecValidationResult =
 export function validateBuildReadyAppSpec(
   content: string,
 ): AppSpecValidationResult {
+  const normalizedContent = content.replace(/\r\n?/gu, "\n");
   const issues: AppSpecValidationIssue[] = [];
   for (const heading of REQUIRED_APP_SPEC_HEADINGS) {
     const count =
-      content.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ?? 0;
+      normalizedContent.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ??
+      0;
     if (count === 0)
       issues.push({
         code: "missing_heading",
@@ -92,8 +94,21 @@ export function validateBuildReadyAppSpec(
       });
   }
 
+  const handoffHeading = /(?:^|\n)## Build handoff[ \t]*(?:\r?\n)/u.exec(
+    normalizedContent,
+  );
+  const handoffSection =
+    handoffHeading === null
+      ? undefined
+      : normalizedContent
+          .slice(handoffHeading.index + handoffHeading[0].length)
+          .trim();
   const block =
-    /(?:^|\n)## Build handoff\n\n```json\n([\s\S]*?)\n```\s*$/u.exec(content);
+    handoffSection === undefined
+      ? null
+      : /^[ \t]*```json[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*$/iu.exec(
+          handoffSection,
+        );
   if (block?.[1] === undefined) {
     issues.push({
       code: "build_handoff_format",
