@@ -413,6 +413,27 @@ export function createPreviewOAuthServer(input: {
     config.environment === "local"
       ? readLocalProviderEmulation(process.env)
       : undefined;
+  const {
+    githubClientId,
+    githubClientSecret,
+    vercelClientId,
+    vercelClientSecret,
+  } = config;
+  if (
+    localEmulation &&
+    (!githubClientId ||
+      !githubClientSecret ||
+      !vercelClientId ||
+      !vercelClientSecret)
+  ) {
+    throw new Error(
+      "Local provider emulation requires GitHub and Vercel OAuth credentials.",
+    );
+  }
+  const localGithubClientId = githubClientId ?? "";
+  const localGithubClientSecret = githubClientSecret ?? "";
+  const localVercelClientId = vercelClientId ?? "";
+  const localVercelClientSecret = vercelClientSecret ?? "";
   const localProviderConfigs: GenericOAuthConfig[] = localEmulation
     ? [
         {
@@ -420,16 +441,16 @@ export function createPreviewOAuthServer(input: {
           name: "GitHub",
           authorizationUrl: `${resourceOrigin}/local-oauth/github/authorize`,
           tokenUrl: `${localEmulation.githubOrigin}/login/oauth/access_token`,
-          clientId: config.githubClientId,
-          clientSecret: config.githubClientSecret,
+          clientId: localGithubClientId,
+          clientSecret: localGithubClientSecret,
           tokenEndpointAuth: { method: "client_secret_post" },
           accountIssuer: localEmulation.githubOrigin,
           scopes: ["read:user", "user:email"],
           getToken: (data) =>
             exchangeLocalEmulatedOAuthCode({
               tokenUrl: `${localEmulation.githubOrigin}/login/oauth/access_token`,
-              clientId: config.githubClientId,
-              clientSecret: config.githubClientSecret,
+              clientId: localGithubClientId,
+              clientSecret: localGithubClientSecret,
               code: data.code,
               redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
@@ -468,8 +489,8 @@ export function createPreviewOAuthServer(input: {
           name: "Vercel",
           authorizationUrl: `${resourceOrigin}/local-oauth/vercel/authorize`,
           tokenUrl: `${localEmulation.vercelOrigin}/login/oauth/token`,
-          clientId: config.vercelClientId,
-          clientSecret: config.vercelClientSecret,
+          clientId: localVercelClientId,
+          clientSecret: localVercelClientSecret,
           tokenEndpointAuth: { method: "client_secret_post" },
           accountIssuer: localEmulation.vercelOrigin,
           scopes: ["openid", "email", "profile"],
@@ -480,8 +501,8 @@ export function createPreviewOAuthServer(input: {
           getToken: (data) =>
             exchangeLocalEmulatedOAuthCode({
               tokenUrl: `${localEmulation.vercelOrigin}/login/oauth/token`,
-              clientId: config.vercelClientId,
-              clientSecret: config.vercelClientSecret,
+              clientId: localVercelClientId,
+              clientSecret: localVercelClientSecret,
               code: data.code,
               redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
@@ -621,38 +642,38 @@ export function createPreviewOAuthServer(input: {
                 membership: input.membership,
               }),
             ),
-             cimd(
+            cimd(
               buildPreviewCimdOptions({
                 fetchClientMetadataResource:
                   input.fetchClientMetadata ??
                   fetchPreviewClientMetadataResource,
               }),
-             ),
-             ...(localEmulation
-               ? [genericOAuth({ config: localProviderConfigs })]
-               : config.vercelClientId && config.vercelClientSecret
-               ? [
-                  genericOAuth({
-                    config: [
-                      {
-                        providerId: "vercel",
-                        name: "Vercel",
-                        discoveryUrl:
-                          "https://vercel.com/.well-known/openid-configuration",
-                        requireIdTokenVerification: true,
-                        clientId: config.vercelClientId,
-                        clientSecret: config.vercelClientSecret,
-                        tokenEndpointAuth: { method: "client_secret_post" },
-                        scopes: ["openid", "email", "profile"],
-                        getUserInfo: fetchVerifiedVercelUserInfo,
-                        disableSignUp: false,
-                        overrideUserInfo: false,
-                      },
-                    ],
-                   }),
-                 ]
-               : []),
-           ]),
+            ),
+            ...(localEmulation
+              ? [genericOAuth({ config: localProviderConfigs })]
+              : config.vercelClientId && config.vercelClientSecret
+                ? [
+                    genericOAuth({
+                      config: [
+                        {
+                          providerId: "vercel",
+                          name: "Vercel",
+                          discoveryUrl:
+                            "https://vercel.com/.well-known/openid-configuration",
+                          requireIdTokenVerification: true,
+                          clientId: config.vercelClientId,
+                          clientSecret: config.vercelClientSecret,
+                          tokenEndpointAuth: { method: "client_secret_post" },
+                          scopes: ["openid", "email", "profile"],
+                          getUserInfo: fetchVerifiedVercelUserInfo,
+                          disableSignUp: false,
+                          overrideUserInfo: false,
+                        },
+                      ],
+                    }),
+                  ]
+                : []),
+          ]),
       nextCookies(),
     ],
   });
