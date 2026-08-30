@@ -387,36 +387,37 @@ export async function executeTargetIdentityAndPlanning(input: {
   if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity))
     throw new Error("Target identity did not match the accepted AppSpec.");
   await input.onIdentity?.(identity);
-  if (input.existingAppChanges !== undefined) {
-    const manifestSource = await input.sandbox.readTextFile({
-      path: ".app-builder/source-files.json",
-    });
-    if (manifestSource === null)
-      throw new Error("Prepared source manifest is missing.");
-    const manifest = JSON.parse(manifestSource) as unknown;
-    if (!Array.isArray(manifest))
-      throw new Error("Prepared source manifest is invalid.");
-    const files = new Map(
-      manifest.flatMap((candidate): [string, { mode: string }][] => {
-        if (
-          typeof candidate !== "object" ||
-          candidate === null ||
-          !("path" in candidate) ||
-          typeof candidate.path !== "string" ||
-          !("mode" in candidate) ||
-          typeof candidate.mode !== "string"
-        )
-          return [];
-        return [
-          [candidate.path, { mode: candidate.mode.replace(/^100/u, "") }],
-        ];
-      }),
-    );
-    if (
-      ![...files.keys()].some((path) =>
-        path.startsWith(`${identity.workspacePath}/`),
+  const manifestSource = await input.sandbox.readTextFile({
+    path: ".app-builder/source-files.json",
+  });
+  if (manifestSource === null)
+    throw new Error("Prepared source manifest is missing.");
+  const manifest = JSON.parse(manifestSource) as unknown;
+  if (!Array.isArray(manifest))
+    throw new Error("Prepared source manifest is invalid.");
+  const files = new Map(
+    manifest.flatMap((candidate): [string, { mode: string }][] => {
+      if (
+        typeof candidate !== "object" ||
+        candidate === null ||
+        !("path" in candidate) ||
+        typeof candidate.path !== "string" ||
+        !("mode" in candidate) ||
+        typeof candidate.mode !== "string"
       )
-    )
+        return [];
+      return [[candidate.path, { mode: candidate.mode.replace(/^100/u, "") }]];
+    }),
+  );
+  const existingApplication = [...files.keys()].some((path) =>
+    path.startsWith(`${identity.workspacePath}/`),
+  );
+  if (existingApplication && input.existingAppChanges === undefined)
+    throw new Error(
+      "The requested application already exists. Inspect its app-owned source files, then retry target planning with exact replacement contents.",
+    );
+  if (input.existingAppChanges !== undefined) {
+    if (!existingApplication)
       throw new Error("The requested existing application does not exist.");
     const seen = new Set<string>();
     const changes: TargetIterationChange[] = [];

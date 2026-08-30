@@ -12,7 +12,7 @@ const maximumTotalBytes = 1_048_576;
 
 export default defineTool({
   description:
-    "Read a bounded set of regular text files from one existing application in the immutable prepared source. This is a read-only implementation-planning operation and never writes or publishes.",
+    "After source and workspace preparation, read a bounded set of regular text files from one existing application in the immutable prepared source. First call with no paths to list app-owned files, then call with the selected paths to obtain exact preimages for replacement drafting. This is a read-only implementation-planning operation and never writes or publishes.",
   inputSchema: z.strictObject({
     appId: z.string().min(1),
     paths: z.array(z.string().min(1).max(512)).max(32).default([]),

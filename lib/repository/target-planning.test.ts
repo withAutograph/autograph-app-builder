@@ -183,6 +183,27 @@ describe("typed target identity and planning", () => {
     });
   });
 
+  it("refuses to run the creation planner for an existing application", async () => {
+    const { sandbox } = sandboxFixture();
+    const executor = vi.fn(fixtureTargetCommandExecutor());
+    await expect(
+      executeTargetIdentityAndPlanning({
+        sandbox,
+        executor,
+        appId: "vendor",
+        appSpecContent: "accepted",
+        appSpecDigest: "a".repeat(64),
+        artifactRevision: "b".repeat(64),
+      }),
+    ).rejects.toThrow(
+      "The requested application already exists. Inspect its app-owned source files",
+    );
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(executor).toHaveBeenCalledWith(
+      expect.objectContaining({ command: "identity" }),
+    );
+  });
+
   it("rejects path escapes, other-app paths, and missing preimages", async () => {
     const { sandbox } = sandboxFixture();
     const base = {
