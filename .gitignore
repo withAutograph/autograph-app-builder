@@ -20,6 +20,7 @@
 # production
 /build
 /.artifacts/
+/.emulate/
 
 # misc
 .DS_Store

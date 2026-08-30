@@ -16,4 +16,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withEve(nextConfig);
+// The local OAuth emulator only needs the application routes. Starting Eve's
+// development sidecar would introduce an unrelated agent runtime requirement
+// and prevents the sign-in UI from coming up.
+export default process.env.APP_BUILDER_LOCAL_AUTH_EMULATION === "1"
+  ? nextConfig
+  : withEve(nextConfig);

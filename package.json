@@ -6,6 +6,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "mise run app:dev",
+    "dev:emulated": "mise run app:dev-emulated",
+    "reset:emulated": "mise run app:reset-emulated",
     "build": "mise run app:build",
     "start": "mise run app:start",
     "lint": "mise run lint",
@@ -71,6 +73,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "emulate": "0.10.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.3.0",
     "@types/react": "19.2.18",

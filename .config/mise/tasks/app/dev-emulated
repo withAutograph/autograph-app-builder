@@ -1,0 +1,61 @@
+#!/bin/sh
+#MISE description="Run Next with local Vercel and GitHub Emulate connections"
+set -eu
+
+app_origin=https://localhost:3001
+"$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
+emulate_pid=
+if ! lsof -nP -iTCP:4000 -sTCP:LISTEN >/dev/null 2>&1; then
+  "$(mise which pnpm)" exec emulate start --service vercel,github --seed .emulate/config.yaml &
+  emulate_pid=$!
+fi
+docker=$(mise which docker)
+database_container=autograph-app-builder-emulated-postgres
+if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
+  "$docker" run --detach --name "$database_container" \
+    --env POSTGRES_HOST_AUTH_METHOD=trust \
+    --env POSTGRES_DB=autograph_app_builder \
+    --publish 127.0.0.1:54329:5432 \
+    --volume "$PWD/.emulate/postgres:/var/lib/postgresql/data" \
+    postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 >/dev/null
+fi
+"$docker" start "$database_container" >/dev/null 2>&1 || true
+attempt=0
+until "$docker" exec "$database_container" pg_isready -U postgres >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 50 ]; then
+    echo "local emulated PostgreSQL did not become ready" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+DATABASE_URL=postgresql://postgres@127.0.0.1:54329/autograph_app_builder \
+  mise run database:migrate
+cleanup() {
+  if [ -n "$emulate_pid" ]; then
+    kill "$emulate_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+APP_BUILDER_LOCAL_PROVIDER_EMULATION=1 \
+APP_BUILDER_LOCAL_AUTH_EMULATION=1 \
+EVE_HOSTED_ADAPTER=1 \
+BETTER_AUTH_URL="$app_origin/api/auth" \
+MCP_RESOURCE_URL="$app_origin/mcp" \
+BETTER_AUTH_SECRET="$(tr -d '\n' < .emulate/better-auth-secret)" \
+GITHUB_CLIENT_ID=Iv1_local_app_client \
+GITHUB_CLIENT_SECRET=local-github-client-secret-value \
+VERCEL_AUTH_CLIENT_ID=local-vercel-client \
+VERCEL_AUTH_CLIENT_SECRET=local-vercel-client-secret \
+VERCEL_EMULATOR_URL=http://localhost:4000 \
+GITHUB_EMULATOR_URL=http://localhost:4001 \
+EMULATE_PROVIDER_TOKEN=emulate_local_provider_token \
+EMULATE_VERCEL_CONFIGURATION_ID=icfg_local_1 \
+EMULATE_VERCEL_TEAM_ID=autograph-local \
+EMULATE_GITHUB_INSTALLATION_ID=1001 \
+EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app \
+EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)" \
+SELF_SERVICE_SIGNUP_ENABLED=1 \
+.config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/next/dist/bin/next dev --experimental-https --port 3001 "$@"
