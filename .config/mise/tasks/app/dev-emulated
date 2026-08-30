@@ -49,15 +49,20 @@ if [ "$external_database" != 1 ]; then
   done
 fi
 migration_url="postgresql://postgres@127.0.0.1:$database_port/autograph_app_builder?connect_timeout=2"
-attempt=0
-until DATABASE_URL="$migration_url" mise run database:migrate; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 30 ]; then
-    echo "local emulated PostgreSQL migrations did not become ready" >&2
-    exit 1
-  fi
-  sleep 0.5
-done
+if [ "$external_database" = 1 ]; then
+  printf '%s' "$migration_url" | \
+    "$(mise which node)" --import tsx lib/db/migrate.mts --database-url-fd 0
+else
+  attempt=0
+  until DATABASE_URL="$migration_url" mise run database:migrate; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 30 ]; then
+      echo "local emulated PostgreSQL migrations did not become ready" >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
+fi
 cleanup() {
   if [ -n "$app_pid" ]; then
     pkill -TERM -P "$app_pid" 2>/dev/null || true
