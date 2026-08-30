@@ -18,3 +18,13 @@ export function resolveAuthCallbackURL(
     return defaultURL;
   }
 }
+
+export function resolveProviderCallbackURL(
+  redirectTo: string,
+  callbackURL: string,
+  origin: string,
+) {
+  const providerCallbackURL = new URL(redirectTo, origin);
+  providerCallbackURL.searchParams.set("callbackURL", callbackURL);
+  return providerCallbackURL;
+}

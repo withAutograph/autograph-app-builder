@@ -19,7 +19,10 @@ import type { ComponentProps } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { resolveAuthCallbackURL } from "@/lib/auth/preview-auth-ui";
+import {
+  resolveAuthCallbackURL,
+  resolveProviderCallbackURL,
+} from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
 
@@ -68,8 +71,11 @@ export function ProviderButton({
       window.location.search,
       window.location.origin,
     );
-    const callbackURL = new URL(redirectTo, window.location.origin);
-    callbackURL.searchParams.set("callbackURL", callback);
+    const callbackURL = resolveProviderCallbackURL(
+      redirectTo,
+      callback,
+      window.location.origin,
+    );
 
     if (socialSignInMode === "popup") {
       signInPopup(
