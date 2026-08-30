@@ -41,7 +41,7 @@ const installationSnapshotSchema = z
     accountId: decimal,
     accountLogin: z.string().min(1).max(100),
     accountType: z.enum(["Organization", "User"]),
-    repositorySelection: z.literal("selected"),
+    repositorySelection: z.enum(["all", "selected"]),
     selectedRepositoryIds: z.array(decimal),
     grantedPermissions: permissionSnapshotSchema,
   })

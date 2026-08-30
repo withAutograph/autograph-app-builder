@@ -1720,6 +1720,58 @@
   font-size: 12px;
   text-align: center;
 }
+.resourceCards {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+.resourceCards article {
+  min-height: 68px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.resourceCards article[data-status="failed"],
+.resourceCards article[data-status="skipped"] {
+  background: var(--soft);
+}
+.resourceCards article > span {
+  color: var(--muted);
+}
+.resourceCards article > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.resourceCards article strong {
+  font-size: 13px;
+}
+.resourceCards article a,
+.resourceCards article small {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.resourceCards article a {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.resourceCards article > button {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 0 10px;
+  font-size: 12px;
+}
 .installCard > div:first-child {
   display: flex;
   align-items: center;

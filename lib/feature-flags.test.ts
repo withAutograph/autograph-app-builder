@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   builderComingSoonFlag,
   builderConnectionsFlag,
+  builderResourceProvisioningFlag,
   selfServiceSignupFlag,
 } from "./feature-flags";
 
@@ -26,6 +27,10 @@ describe("Vercel feature flags", () => {
       { value: false, label: "Disabled" },
       { value: true, label: "Enabled" },
     ]);
+    expect(builderResourceProvisioningFlag.key).toBe(
+      "builder-resource-provisioning",
+    );
+    expect(builderResourceProvisioningFlag.defaultValue).toBe(false);
   });
 
   it("falls closed when Vercel does not provide an SDK key", async () => {

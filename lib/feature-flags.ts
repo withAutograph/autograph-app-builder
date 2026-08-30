@@ -55,6 +55,15 @@ export const builderConnectionsFlag = flag<boolean>({
   options: booleanOptions,
 });
 
+export const builderResourceProvisioningFlag = flag<boolean>({
+  key: "builder-resource-provisioning",
+  adapter: managedVercelAdapter,
+  defaultValue: false,
+  description:
+    "Provision selected GitHub repositories and Vercel projects before handoff.",
+  options: booleanOptions,
+});
+
 export const builderComingSoonFlag = flag<boolean>({
   key: "builder-coming-soon",
   adapter: managedVercelAdapter,

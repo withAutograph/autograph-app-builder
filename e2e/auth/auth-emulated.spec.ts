@@ -138,7 +138,9 @@ test("an authenticator credential missing from server storage is not recreated",
   try {
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Create a passkey" }).click();
-    await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
+    await expect
+      .poll(async () => (await authCounts()).passkeys, { timeout: 30_000 })
+      .toBe(1);
     await signOut(page);
     const sql = postgres(databaseUrl, { max: 1 });
     try {

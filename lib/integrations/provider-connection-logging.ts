@@ -6,6 +6,20 @@ export function logProviderConnectionFailure(input: {
   phase: "start" | "callback";
   reason: ProviderConnectionFailureReason;
   startedAt: number;
+  diagnostic?: {
+    stage: string;
+    category?: string;
+    callback?: {
+      queryKeys: string[];
+      keyCounts: Record<string, number>;
+      codePresent: boolean;
+      codeLength?: number;
+      statePresent: boolean;
+      stateLength?: number;
+      error?: string;
+    };
+    stateValidation?: { substage: string; stateDigest?: string };
+  };
 }) {
   console.error(
     JSON.stringify({
@@ -14,6 +28,9 @@ export function logProviderConnectionFailure(input: {
       provider: input.provider,
       phase: input.phase,
       reason: input.reason,
+      ...(input.diagnostic === undefined
+        ? {}
+        : { diagnostic: input.diagnostic }),
       requestId: input.request.headers.get("x-vercel-id") ?? "unavailable",
       durationMs: Math.max(0, Date.now() - input.startedAt),
     }),

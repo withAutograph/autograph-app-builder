@@ -58,8 +58,11 @@ test("Codex handoff includes connected provider choices and supports reset", asy
   expect(state.opened).toHaveLength(1);
   expect(state.clipboard[0]).toContain("App Name:\nSupport Console");
   expect(state.clipboard[0]).toContain("Repository:\nsupport-console");
-  expect(state.clipboard[0]).toContain("Vercel Installation:\nicfg_local_1");
-  expect(state.clipboard[0]).toContain("GitHub Installation:\n1001");
+  expect(state.clipboard[0]).toContain(
+    "Setup Still Needed:\n- GitHub: resource provisioning is not active for this environment.\n- Vercel: resource provisioning is not active for this environment.",
+  );
+  expect(state.clipboard[0]).not.toContain("GitHub Resource:");
+  expect(state.clipboard[0]).not.toContain("Vercel Resource:");
   expect(state.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
   expect(new URL(state.opened[0]!).searchParams.get("prompt")).toBe(
     state.clipboard[0],

@@ -8,18 +8,21 @@ pid_file=.emulate/dev-emulated.pids
 emulate_pid=
 app_pid=
 if ! lsof -nP -iTCP:4000 -sTCP:LISTEN >/dev/null 2>&1; then
-  "$(mise which pnpm)" exec emulate start --service vercel,github --seed .emulate/config.yaml &
+  "$(mise which node)" node_modules/emulate/dist/index.js \
+    start --service vercel,github --seed .emulate/config.yaml &
   emulate_pid=$!
 fi
 docker=$(mise which docker)
-database_container=autograph-app-builder-emulated-postgres
+worktree_id=$(basename "$(dirname "$(pwd -P)")")
+database_container="autograph-app-builder-web-product-e2e-postgres-$worktree_id"
 if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
   "$docker" run --detach --name "$database_container" \
     --env POSTGRES_HOST_AUTH_METHOD=trust \
     --env POSTGRES_DB=autograph_app_builder \
     --publish 127.0.0.1:54329:5432 \
     --volume "$PWD/.emulate/postgres:/var/lib/postgresql/data" \
-    postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 >/dev/null
+    postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 \
+    -c max_connections=500 >/dev/null
 fi
 "$docker" start "$database_container" >/dev/null 2>&1 || true
 attempt=0
@@ -39,10 +42,12 @@ DATABASE_URL=postgresql://postgres@127.0.0.1:54329/autograph_app_builder \
   mise run database:migrate
 cleanup() {
   if [ -n "$app_pid" ]; then
+    pkill -TERM -P "$app_pid" 2>/dev/null || true
     kill "$app_pid" 2>/dev/null || true
     wait "$app_pid" 2>/dev/null || true
   fi
   if [ -n "$emulate_pid" ]; then
+    pkill -TERM -P "$emulate_pid" 2>/dev/null || true
     kill "$emulate_pid" 2>/dev/null || true
     wait "$emulate_pid" 2>/dev/null || true
   fi
@@ -60,6 +65,7 @@ BETTER_AUTH_SECRET="$(tr -d '\n' < .emulate/better-auth-secret)" \
 GITHUB_CLIENT_ID=Iv1_local_app_client \
 GITHUB_CLIENT_SECRET=local-github-client-secret-value \
 GITHUB_APP_ID=12345 \
+GITHUB_APP_SLUG=autograph-app-builder-local \
 GITHUB_APP_CLIENT_ID=Iv1_local_app_client \
 GITHUB_APP_CLIENT_SECRET=local-github-client-secret-value \
 GITHUB_APP_INSTALL_STATE_SECRET=local-github-install-state-secret-value \

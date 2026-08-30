@@ -6,6 +6,7 @@ import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integrat
 import {
   builderComingSoonFlag,
   builderConnectionsFlag,
+  builderResourceProvisioningFlag,
 } from "@/lib/feature-flags";
 import {
   parseProviderConnectionFailureReason,
@@ -68,18 +69,25 @@ async function currentUser() {
 }
 
 export default async function Home({ searchParams }: PageProps) {
-  const [query, user, connectionsEnabled, comingSoonEnabled] =
-    await Promise.all([
-      searchParams,
-      currentUser(),
-      builderConnectionsFlag(),
-      builderComingSoonFlag(),
-    ]);
+  const [
+    query,
+    user,
+    connectionsEnabled,
+    comingSoonEnabled,
+    provisioningEnabled,
+  ] = await Promise.all([
+    searchParams,
+    currentUser(),
+    builderConnectionsFlag(),
+    builderComingSoonFlag(),
+    builderResourceProvisioningFlag(),
+  ]);
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
     const status = query[provider];
     if (status !== "connected" && status !== "failed") continue;
+    if (provider === "github" && status === "failed") continue;
     notices.push({
       provider,
       status,
@@ -118,6 +126,7 @@ export default async function Home({ searchParams }: PageProps) {
       authenticated={authenticated && mode !== "anonymous"}
       connectionsEnabled={connectionsEnabled}
       comingSoonEnabled={comingSoonEnabled}
+      provisioningEnabled={provisioningEnabled}
       integrations={integrations}
       providerNotices={notices}
       providerResumeKey={parseProviderResumeKey(query.resume)}

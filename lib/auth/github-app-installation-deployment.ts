@@ -3,6 +3,8 @@ import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
   createGitHubAppInstallationAuthorization,
+  githubInstallationAuthorizationDiagnostic,
+  GitHubInstallationAuthorizationError,
   readGitHubAppInstallationEnvironment,
 } from "./github-app-installation";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
@@ -10,6 +12,8 @@ import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import { readLocalProviderEmulation } from "../integrations/local-provider-emulation";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
+import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
+import { createPostgresGitHubUserCredentialStore } from "../provisioning/postgres-github-user-credential";
 import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
 import {
   providerConnectionRedirect,
@@ -65,15 +69,20 @@ export function createGitHubAppInstallationRouteHandlers(input: {
   return {
     async start(request: Request): Promise<Response> {
       const startedAt = Date.now();
-      const fail = (reason: ProviderConnectionFailureReason) => {
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
+      ) => {
         logProviderConnectionFailure({
           request,
           provider: "github",
           phase: "start",
           reason,
           startedAt,
+          diagnostic,
         });
-        return redirect("failed", reason);
+        return redirect("failed", reason, returnState);
       };
       if (
         request.method !== "POST" ||
@@ -127,15 +136,20 @@ export function createGitHubAppInstallationRouteHandlers(input: {
 
     async callback(request: Request): Promise<Response> {
       const startedAt = Date.now();
-      const fail = (reason: ProviderConnectionFailureReason) => {
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
+      ) => {
         logProviderConnectionFailure({
           request,
           provider: "github",
           phase: "callback",
           reason,
           startedAt,
+          diagnostic,
         });
-        return redirect("failed", reason);
+        return redirect("failed", reason, returnState);
       };
       if (request.method !== "GET") return fail("request-invalid");
 
@@ -175,8 +189,14 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           });
         }
         return redirect("connected", undefined, result.returnState);
-      } catch {
-        return fail("callback-invalid");
+      } catch (error) {
+        return fail(
+          "callback-invalid",
+          githubInstallationAuthorizationDiagnostic(error),
+          error instanceof GitHubInstallationAuthorizationError
+            ? error.returnState
+            : undefined,
+        );
       }
     },
   };
@@ -192,6 +212,14 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const config = readGitHubAppInstallationEnvironment(environment);
   const previewConfig = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(previewConfig.databaseUrl);
+  let credentialStore:
+    ReturnType<typeof createPostgresGitHubUserCredentialStore> | undefined;
+  try {
+    credentialStore = createPostgresGitHubUserCredentialStore({
+      database,
+      config: readGitHubUserCredentialEnvironment(environment),
+    });
+  } catch {}
   const membership = createPostgresPreviewOrganizationAuthority(database, {
     issuer: previewConfig.issuer,
     audience: previewConfig.resource,
@@ -204,6 +232,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       isActiveMember: (authority) => membership.isActiveMember(authority),
     },
     installationStore: createPostgresHostedGitHubInstallationStore(database),
+    credentialStore,
     emulation: readLocalProviderEmulation(environment),
   });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({

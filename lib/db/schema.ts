@@ -738,7 +738,6 @@ export const hostedGitHubInstallations = pgTable(
       table.workspaceId,
       table.ownerUserId,
     ),
-    uniqueIndex("hosted_github_installation_id_uidx").on(table.installationId),
     check(
       "hosted_github_installation_id_check",
       sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
@@ -779,8 +778,12 @@ export const hostedGitHubInstallationBindings = pgTable(
         table.installationId,
       ],
     }),
-    uniqueIndex("hosted_github_installation_binding_id_uidx").on(
+    uniqueIndex("hosted_github_installation_binding_id_tenant_uidx").on(
       table.installationId,
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
     ),
     check(
       "hosted_github_installation_binding_id_check",
@@ -829,6 +832,95 @@ export const hostedVercelInstallations = pgTable(
     check(
       "hosted_vercel_installation_scope_type_check",
       sql`${table.scopeType} IN ('team', 'user')`,
+    ),
+  ],
+);
+
+export const hostedGitHubUserCredentials = pgTable(
+  "hosted_github_user_credential",
+  {
+    ...hostedGitHubTenantColumns,
+    providerUserId: text("provider_user_id").notNull(),
+    providerLogin: text("provider_login").notNull(),
+    encryptedCredential: text("encrypted_credential").notNull(),
+    credentialIv: text("credential_iv").notNull(),
+    credentialTag: text("credential_tag").notNull(),
+    keyVersion: text("key_version").notNull(),
+    revision: integer("revision").notNull().default(1),
+    active: boolean("active").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_github_user_credential_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.providerUserId,
+      ],
+    }),
+    check(
+      "hosted_github_user_credential_provider_user_id_check",
+      sql`${table.providerUserId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_user_credential_revision_check",
+      sql`${table.revision} > 0`,
+    ),
+  ],
+);
+
+export const builderProvisioningJournals = pgTable(
+  "builder_provisioning_journal",
+  {
+    ...hostedGitHubTenantColumns,
+    requestId: text("request_id").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    state: text("state").notNull(),
+    revision: integer("revision").notNull().default(1),
+    record: jsonb("record").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "builder_provisioning_journal_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.requestId,
+      ],
+    }),
+    index("builder_provisioning_journal_retention_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.updatedAt,
+    ),
+    check(
+      "builder_provisioning_journal_request_id_check",
+      sql`${table.requestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_provisioning_journal_request_digest_check",
+      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "builder_provisioning_journal_state_check",
+      sql`${table.state} IN ('pending', 'settled')`,
+    ),
+    check(
+      "builder_provisioning_journal_revision_check",
+      sql`${table.revision} > 0`,
+    ),
+    check(
+      "builder_provisioning_journal_record_check",
+      sql`jsonb_typeof(${table.record}) = 'object'`,
     ),
   ],
 );

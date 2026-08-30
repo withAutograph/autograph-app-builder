@@ -1,5 +1,6 @@
 import type { BuilderForm } from "@/app/ui/app-builder";
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
 
 export const storyIntegrations = {
   vercel: {
@@ -72,6 +73,47 @@ export const storyForm: BuilderForm = {
   githubInstallationId: "101",
   modelId: "openai/gpt-5.6-sol",
 };
+
+export const storyProvisioning = {
+  version: 1,
+  requestId: "123e4567-e89b-42d3-a456-426614174000",
+  requestDigest: "1".repeat(64),
+  appId: "vendor-portal",
+  status: "settled",
+  github: {
+    status: "succeeded",
+    installationId: "101",
+    repositoryId: "202",
+    owner: "withAutograph",
+    name: "vendor-portal",
+    fullName: "withAutograph/vendor-portal",
+    url: "https://github.com/withAutograph/vendor-portal",
+    scope: { type: "organization", id: "88", login: "withAutograph" },
+    visibility: "private",
+    defaultBranch: "main",
+    headSha: "a".repeat(40),
+    headTree: "b".repeat(40),
+    starter: {
+      sourceSha: "c".repeat(40),
+      sourceTree: "b".repeat(40),
+      archiveSha256: "d".repeat(64),
+      archiveBytes: 1024,
+      manifestSha256: "e".repeat(64),
+    },
+  },
+  vercel: {
+    status: "succeeded",
+    installationId: "vercel-autograph",
+    projectId: "prj_123",
+    name: "apps-vendor-portal",
+    dashboardUrl: "https://vercel.com/autograph/apps-vendor-portal",
+    scope: { type: "team", id: "team_123", slug: "autograph" },
+    framework: "nextjs",
+    rootDirectory: "apps/vendor-portal",
+    linkedGitHubRepository: "withAutograph/vendor-portal",
+  },
+  updatedAt: "2026-08-30T12:00:00.000Z",
+} satisfies BuilderProvisionResponse;
 
 export const storyTeamOptions = storyIntegrations.vercel.scopes.map(
   (scope) => ({
