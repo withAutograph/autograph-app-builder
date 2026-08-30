@@ -4,4 +4,6 @@ set -eu
 
 mise run agent:build
 mise run mcp:ui-build
+.config/mise/scripts/trusted-node-launcher "$(mise which node)" \
+  .config/mise/scripts/prepare-emulate-runtime.mjs
 exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" node_modules/next/dist/bin/next build
