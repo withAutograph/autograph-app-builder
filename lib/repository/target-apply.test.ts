@@ -387,6 +387,42 @@ describe("proposal-bound target apply", () => {
     });
   });
 
+  it("does not remove a competing call's final overlay when its atomic claim loses", async () => {
+    const fixture = sandboxFixture();
+    fixture.run
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "mkdir: materializing: File exists",
+      });
+
+    await expect(
+      executeProposalBoundApply({
+        sandbox: fixture.sandbox,
+        executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        binding,
+        artifactRevision: binding.artifactRevision,
+        proposal,
+        appliedByCallId: "competing-apply-call",
+      }),
+    ).rejects.toThrow(/already being materialized/u);
+
+    expect(fixture.removePath).not.toHaveBeenCalled();
+    expect(fixture.removePath).not.toHaveBeenCalledWith({
+      path: `.app-builder/apply/${binding.proposalDigest}/repository`,
+      recursive: true,
+      force: true,
+    });
+    const claim = fixture.run.mock.calls
+      .map(([request]) => (request as { command: string }).command)
+      .find((command) => command.includes("/materializing"));
+    expect(claim).toBe(
+      `mkdir /workspace/.app-builder/apply/${binding.proposalDigest}/materializing`,
+    );
+  });
+
   it("records normalized pre/post overlay changes and a strict target receipt", async () => {
     const { run, sandbox, writeTextFile, writeBinaryFile, removePath } =
       sandboxFixture();
