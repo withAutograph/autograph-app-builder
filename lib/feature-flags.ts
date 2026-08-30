@@ -55,6 +55,14 @@ export const builderConnectionsFlag = flag<boolean>({
   options: booleanOptions,
 });
 
+export const builderComingSoonFlag = flag<boolean>({
+  key: "builder-coming-soon",
+  adapter: managedVercelAdapter,
+  defaultValue: false,
+  description: "Show Coming soon builder options and connections.",
+  options: booleanOptions,
+});
+
 export const selfServiceSignupFlag = flag<boolean>({
   key: "self-service-signup",
   adapter: managedVercelAdapter,
