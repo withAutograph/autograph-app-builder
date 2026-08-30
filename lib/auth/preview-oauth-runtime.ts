@@ -329,6 +329,7 @@ export function createPreviewOAuthServer(input: {
   fetchClientMetadata?: typeof fetchPreviewClientMetadataResource;
 }) {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
+  const resourceOrigin = new URL(config.resource).origin;
   const localEmulation =
     config.environment === "local"
       ? readLocalProviderEmulation(process.env)
@@ -338,7 +339,7 @@ export function createPreviewOAuthServer(input: {
         {
           providerId: "github",
           name: "GitHub",
-          authorizationUrl: `${localEmulation.githubOrigin}/login/oauth/authorize`,
+          authorizationUrl: `${resourceOrigin}/local-oauth/github/authorize`,
           tokenUrl: `${localEmulation.githubOrigin}/login/oauth/access_token`,
           clientId: config.githubClientId,
           clientSecret: config.githubClientSecret,
@@ -386,7 +387,7 @@ export function createPreviewOAuthServer(input: {
         {
           providerId: "vercel",
           name: "Vercel",
-          authorizationUrl: `${localEmulation.vercelOrigin}/oauth/authorize`,
+          authorizationUrl: `${resourceOrigin}/local-oauth/vercel/authorize`,
           tokenUrl: `${localEmulation.vercelOrigin}/login/oauth/token`,
           clientId: config.vercelClientId,
           clientSecret: config.vercelClientSecret,
@@ -443,7 +444,6 @@ export function createPreviewOAuthServer(input: {
         },
       ]
     : [];
-  const resourceOrigin = new URL(config.resource).origin;
   const infrastructure = resolveBetterAuthInfrastructure(
     input.infrastructure ?? {
       environment: {},
