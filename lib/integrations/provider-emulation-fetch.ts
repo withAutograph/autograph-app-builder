@@ -1,7 +1,6 @@
 import type { ProviderEmulation } from "./local-provider-emulation";
-import { invokePreviewEmulateRequest } from "./preview-emulate-handler";
 
-export function providerEmulationFetch(
+export async function providerEmulationFetch(
   input: string | URL,
   init: RequestInit | undefined,
   emulation: ProviderEmulation,
@@ -13,5 +12,11 @@ export function providerEmulationFetch(
     !url.pathname.startsWith("/api/emulate/")
   )
     throw new Error("Invalid Preview emulator request.");
+  // Keep the embedded emulator out of unrelated auth requests. Besides making
+  // sign-in startup lighter, this gives the emulator its own traced chunk with
+  // its runtime assets instead of evaluating provider UI code at module load.
+  const { invokePreviewEmulateRequest } = await import(
+    "./preview-emulate-handler"
+  );
   return invokePreviewEmulateRequest(new Request(url, init));
 }
