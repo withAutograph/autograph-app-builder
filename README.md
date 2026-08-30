@@ -327,6 +327,37 @@ mise run test:agent
 mise run local:dev
 ```
 
+For provider OAuth and Connect development, `mise run app:dev-emulated`
+starts HTTPS Next.js, PostgreSQL, and Emulate's seeded GitHub and Vercel
+services. Local emulator state and generated credentials live only under the
+gitignored `.emulate/` directory. Reset them with
+`mise run app:reset-emulated`.
+
+Vercel Preview deployments use the same typed seed through the embedded
+same-origin routes at `/api/emulate/github` and `/api/emulate/vercel`.
+Activation requires `APP_BUILDER_PREVIEW_PROVIDER_EMULATION=1`, exact
+`VERCEL_ENV=preview`, and the server-only `EMULATE_PREVIEW_*` credentials
+listed in `.env.example`. The canonical callback origin is the branch URL,
+with the immutable deployment URL as fallback; only HTTPS `*.vercel.app`
+origins are accepted. Emulator state is stored in PostgreSQL under a normalized
+repository/project/branch namespace, so it survives redeployments of the same
+branch and is isolated from other branches.
+
+After supplying the Preview database URL only to the task process, reset one
+exact branch with:
+
+```bash
+DATABASE_URL=... mise run app:reset-preview-emulated -- \
+  --repository autograph-app-builder \
+  --project prj_example \
+  --branch feature/example
+```
+
+The next request reseeds that branch. There is no HTTP reset endpoint. Vercel
+Deployment Protection remains the outer access boundary. Preview credentials
+must never use a `NEXT_PUBLIC_*` name or be copied to Production; Production
+always retains the fixed live GitHub and Vercel origins.
+
 For a non-interactive smoke test through App Builder itself:
 
 ```bash

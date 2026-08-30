@@ -14,7 +14,7 @@ import {
   type HostedAdminPlanRequest,
 } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "./provider-connection-return";
-import type { LocalProviderEmulation } from "./local-provider-emulation";
+import type { ProviderEmulation } from "./local-provider-emulation";
 
 type Authority = HostedAdminPlanRequest["authority"];
 
@@ -170,7 +170,7 @@ export function createVercelInstallationAuthorization(input: {
   fetch?: typeof fetch;
   now?: () => number;
   nonce?: () => string;
-  emulation?: LocalProviderEmulation;
+  emulation?: ProviderEmulation;
 }) {
   const config = configSchema.parse(input.config);
   const request = input.fetch ?? fetch;

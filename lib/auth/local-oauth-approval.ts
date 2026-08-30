@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { LocalProviderEmulation } from "../integrations/local-provider-emulation";
+import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 
 export const localOAuthProviderSchema = z.enum(["github", "vercel"]);
 export type LocalOAuthProvider = z.infer<typeof localOAuthProviderSchema>;
@@ -34,7 +34,7 @@ export function parseLocalOAuthAuthorization(input: {
   provider: string;
   values: Record<string, string | undefined>;
   appOrigin: string;
-  emulation: LocalProviderEmulation;
+  emulation: ProviderEmulation;
   githubClientId: string;
   vercelClientId: string;
 }): { provider: LocalOAuthProvider; authorization: LocalOAuthAuthorization } {

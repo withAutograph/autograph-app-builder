@@ -34,7 +34,10 @@ import {
   hostedDeploymentEnvironmentSchema,
   readHostedDeploymentEnvironment,
 } from "../hosted/deployment-environment";
-import { readLocalProviderEmulation } from "../integrations/local-provider-emulation";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+} from "../integrations/local-provider-emulation";
 
 const databaseUrlSchema = z
   .string()
@@ -350,10 +353,31 @@ export function authRateLimitForLocalEmulation(localEmulation: boolean) {
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
-  const localEmulation = readLocalProviderEmulation(environment);
+  const resolvedEnvironment = providerEmulationEnvironment(environment);
+  const localEmulation = readProviderEmulation(resolvedEnvironment);
   if (localEmulation) {
-    if (environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1") {
+    if (
+      localEmulation.mode === "local" &&
+      environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1"
+    ) {
       throw new Error("Local authentication emulation is unavailable.");
+    }
+    if (localEmulation.mode === "preview") {
+      const deploymentEnvironment =
+        readHostedDeploymentEnvironment(resolvedEnvironment);
+      return previewOAuthRuntimeConfigSchema.parse({
+        hostedAdapter: resolvedEnvironment.EVE_HOSTED_ADAPTER,
+        environment: deploymentEnvironment,
+        issuer: resolvedEnvironment.BETTER_AUTH_URL,
+        resource: resolvedEnvironment.MCP_RESOURCE_URL,
+        secret: resolvedEnvironment.BETTER_AUTH_SECRET,
+        databaseUrl: resolvedEnvironment.DATABASE_URL,
+        githubClientId: resolvedEnvironment.GITHUB_CLIENT_ID,
+        githubClientSecret: resolvedEnvironment.GITHUB_CLIENT_SECRET,
+        vercelClientId: resolvedEnvironment.VERCEL_AUTH_CLIENT_ID,
+        vercelClientSecret: resolvedEnvironment.VERCEL_AUTH_CLIENT_SECRET,
+        passkeyOnboarding: readPasskeyOnboardingConfig(resolvedEnvironment),
+      });
     }
     const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
     return previewOAuthRuntimeConfigSchema.parse({
@@ -414,10 +438,7 @@ export function createPreviewOAuthServer(input: {
 }) {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
   const resourceOrigin = new URL(config.resource).origin;
-  const localEmulation =
-    config.environment === "local"
-      ? readLocalProviderEmulation(process.env)
-      : undefined;
+  const localEmulation = readProviderEmulation(process.env);
   const {
     githubClientId,
     githubClientSecret,

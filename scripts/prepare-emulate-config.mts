@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 
+import { providerEmulationSeed } from "../lib/integrations/provider-emulation-seed";
+
 const stateDirectory = path.join(process.cwd(), ".emulate");
 const keyPath = path.join(stateDirectory, "github-app-private-key.pem");
 const configPath = path.join(stateDirectory, "config.yaml");
@@ -26,8 +28,6 @@ try {
     .toString();
   await writeFile(keyPath, privateKey, { mode: 0o600 });
 }
-const config = YAML.parse(await readFile("emulate.config.yaml", "utf8"));
-config.github.apps[0].private_key = privateKey;
 try {
   await readFile(relayPath, "utf8");
 } catch {
@@ -42,12 +42,13 @@ try {
   authSecret = randomBytes(32).toString("base64url");
   await writeFile(authSecretPath, authSecret, { mode: 0o600 });
 }
-config.vercel.integrations[0].redirect_uris = [
-  `${appOrigin.origin}/local-connections/vercel/oauth-callback`,
-  `${appOrigin.origin}/api/auth/callback/vercel`,
-];
-config.github.oauth_apps[0].redirect_uris = [
-  `${appOrigin.origin}/github/installations/callback`,
-  `${appOrigin.origin}/api/auth/callback/github`,
-];
+const config = providerEmulationSeed({
+  origin: appOrigin.origin,
+  githubAppPrivateKey: privateKey,
+  githubClientId: "Iv1_local_app_client",
+  githubClientSecret: "local-github-client-secret-value",
+  vercelClientId: "local-vercel-client",
+  vercelClientSecret: "local-vercel-client-secret",
+  strictGitHubOAuth: true,
+});
 await writeFile(configPath, YAML.stringify(config), { mode: 0o600 });

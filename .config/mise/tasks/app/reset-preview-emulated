@@ -1,0 +1,21 @@
+#!/bin/sh
+#MISE description="Reset one exact Preview branch's persisted provider emulator state"
+set -eu
+
+if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
+  echo "app:reset-preview-emulated requires DATABASE_URL" >&2
+  exit 64
+fi
+if [ "$#" -ne 6 ] || [ "$1" != "--repository" ] || [ "$3" != "--project" ] || [ "$5" != "--branch" ]; then
+  echo "usage: mise run app:reset-preview-emulated -- --repository REPO --project PROJECT_ID --branch BRANCH" >&2
+  exit 64
+fi
+
+database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$database_url" | (
+  unset database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx scripts/reset-preview-emulate-state.mts \
+    --database-url-fd 0 "$@"
+)

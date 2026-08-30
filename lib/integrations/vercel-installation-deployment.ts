@@ -20,7 +20,10 @@ import {
   readVercelIntegrationEnvironment,
   verifyVercelWebhook,
 } from "./vercel-installation";
-import { readLocalProviderEmulation } from "./local-provider-emulation";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+} from "./local-provider-emulation";
 import {
   signInForWorkspaceRedirect,
   workspaceOnboardingRedirect,
@@ -34,9 +37,10 @@ const noStoreHeaders = {
 function deployment(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  const preview = readPreviewOAuthRuntimeConfig(environment);
-  const config = readVercelIntegrationEnvironment(environment);
-  const emulation = readLocalProviderEmulation(environment);
+  const resolvedEnvironment = providerEmulationEnvironment(environment);
+  const preview = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
+  const config = readVercelIntegrationEnvironment(resolvedEnvironment);
+  const emulation = readProviderEmulation(resolvedEnvironment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const membership = createPostgresPreviewOrganizationAuthority(database, {
     issuer: preview.issuer,
@@ -48,7 +52,7 @@ function deployment(
   });
   const authorityForRequest = async (request: Request) => {
     const session = await ensurePreviewOAuthDeploymentSessionOrganization({
-      environment,
+      environment: resolvedEnvironment,
       headers: request.headers,
     });
     return session
@@ -82,7 +86,9 @@ export function createVercelInstallationDeploymentHandler(
 ) {
   return async (request: Request) => {
     const startedAt = Date.now();
-    const origin = new URL(environment.APP_ORIGIN ?? request.url).origin;
+    const resolvedEnvironment = providerEmulationEnvironment(environment);
+    const origin = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url)
+      .origin;
     const redirect = (
       status: "connected" | "failed",
       reason?: ProviderConnectionFailureReason,

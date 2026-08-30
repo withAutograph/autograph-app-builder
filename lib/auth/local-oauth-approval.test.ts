@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import type { LocalProviderEmulation } from "../integrations/local-provider-emulation";
+import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import { parseLocalOAuthAuthorization } from "./local-oauth-approval";
 
-const emulation: LocalProviderEmulation = {
+const emulation: ProviderEmulation = {
+  mode: "local",
+  canonicalOrigin: "https://localhost:3001",
   githubOrigin: "http://localhost:4001",
   vercelOrigin: "http://localhost:4000",
   token: "emulate_local_provider_token",
   githubRepository: "autograph-local/demo-app",
   relaySecret: "a".repeat(32),
+  githubClientId: "github-client",
+  githubClientSecret: "g".repeat(20),
+  vercelClientId: "vercel-client",
+  vercelClientSecret: "v".repeat(20),
 };
 
 const base = {

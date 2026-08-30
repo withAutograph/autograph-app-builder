@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { parseLocalOAuthAuthorization } from "@/lib/auth/local-oauth-approval";
-import { readLocalProviderEmulation } from "@/lib/integrations/local-provider-emulation";
+import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
 export async function POST(
   request: Request,
@@ -9,10 +9,10 @@ export async function POST(
 ) {
   try {
     const { provider } = await context.params;
-    const emulation = readLocalProviderEmulation(process.env);
-    if (!emulation || process.env.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1")
+    const emulation = readProviderEmulation(process.env);
+    if (!emulation)
       throw new Error("Local authentication emulation is unavailable.");
-    const appOrigin = new URL(process.env.BETTER_AUTH_URL!).origin;
+    const appOrigin = emulation.canonicalOrigin;
     if (request.headers.get("origin") !== appOrigin)
       throw new Error("Invalid approval origin.");
     const form = await request.formData();
@@ -36,8 +36,8 @@ export async function POST(
       ),
       appOrigin,
       emulation,
-      githubClientId: process.env.GITHUB_CLIENT_ID!,
-      vercelClientId: process.env.VERCEL_AUTH_CLIENT_ID!,
+      githubClientId: emulation.githubClientId,
+      vercelClientId: emulation.vercelClientId,
     });
 
     const callback =

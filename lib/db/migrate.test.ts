@@ -48,6 +48,17 @@ describe("database migration secret boundary", () => {
     expect(verification).not.toContain("process.env.DATABASE_URL");
   });
 
+  it("keeps the branch emulator reset task-scoped and secret-blind", async () => {
+    const [task, reset] = await Promise.all([
+      readFile(".config/mise/tasks/app/reset-preview-emulated", "utf8"),
+      readFile("scripts/reset-preview-emulate-state.mts", "utf8"),
+    ]);
+    expect(task).toContain("unset DATABASE_URL");
+    expect(task).toContain("--database-url-fd 0");
+    expect(task).toContain("--branch");
+    expect(reset).not.toContain("process.env.DATABASE_URL");
+  });
+
   it("adds exact tenant retention indexes without weakening durable keys", async () => {
     const migration = await readFile(
       "drizzle/0003_hosted_retention_indexes.sql",
@@ -92,6 +103,17 @@ describe("database migration secret boundary", () => {
     expect(migration).toContain(
       'CREATE UNIQUE INDEX "hosted_github_installation_id_uidx" ON "hosted_github_installation" ("installation_id")',
     );
+    expect(migration).not.toMatch(/token|client_secret|private_key/iu);
+  });
+
+  it("isolates bounded Preview emulator documents by branch namespace", async () => {
+    const migration = await readFile(
+      "drizzle/0016_emulate_preview_state.sql",
+      "utf8",
+    );
+    expect(migration).toContain('CREATE TABLE "emulate_preview_state"');
+    expect(migration).toContain('"namespace" text PRIMARY KEY NOT NULL');
+    expect(migration).toContain('octet_length("state") BETWEEN 2 AND 8388608');
     expect(migration).not.toMatch(/token|client_secret|private_key/iu);
   });
 });
