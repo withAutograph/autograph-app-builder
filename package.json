@@ -18,6 +18,7 @@
     "test:agent": "mise run test:agent",
     "test:sandbox-toolchain": "mise run test:sandbox-toolchain",
     "test:hosted-sandbox": "mise run test:hosted-sandbox",
+    "test:auth-e2e": "mise run auth-e2e:test",
     "check": "mise run check",
     "configure": "mise run package:configure --",
     "validate:plugin": "mise run package:validate",

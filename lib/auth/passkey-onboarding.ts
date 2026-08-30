@@ -105,11 +105,27 @@ export function readPasskeyOnboardingConfig(
 
   if (
     environment.NODE_ENV === "production" ||
-    !isLoopback(hostname) ||
-    !origin.startsWith("http://")
+    environment.VERCEL_ENV !== undefined ||
+    !isLoopback(hostname)
   ) {
     throw new Error(
-      "Local passkey onboarding requires a non-Production loopback HTTP origin.",
+      "Local passkey onboarding requires a non-Production loopback origin.",
+    );
+  }
+  const localProviderEmulation =
+    environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === "1";
+  const localAuthEmulation =
+    environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1";
+  const isHttps = origin.startsWith("https://");
+  if (
+    (!origin.startsWith("http://") && !isHttps) ||
+    (isHttps &&
+      (origin !== "https://localhost:3001" ||
+        !localProviderEmulation ||
+        !localAuthEmulation))
+  ) {
+    throw new Error(
+      "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates.",
     );
   }
   return {
@@ -117,7 +133,7 @@ export function readPasskeyOnboardingConfig(
     rpId: hostname,
     deploymentId: "local",
     secret,
-    secureCookies: false,
+    secureCookies: isHttps,
   };
 }
 

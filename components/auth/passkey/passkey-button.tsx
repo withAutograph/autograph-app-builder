@@ -1,6 +1,10 @@
 "use client";
 
-import { type AuthView, authMutationKeys } from "@better-auth-ui/core";
+import {
+  type AuthView,
+  authMutationKeys,
+  getAuthLinkURL,
+} from "@better-auth-ui/core";
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import {
@@ -33,8 +37,15 @@ type OnboardingResponse = { context?: unknown };
  * @param view - Current auth view. Selects registration on `"signUp"`.
  */
 export function PasskeyButton({ view }: PasskeyButtonProps) {
-  const { authClient, localization, redirectTo, navigate } =
-    useAuth<PasskeyAuthClient>();
+  const {
+    authClient,
+    basePaths,
+    Link,
+    localization,
+    redirectTo,
+    navigate,
+    viewPaths,
+  } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
   const signInPasskey = useSignInPasskey(authClient);
@@ -61,11 +72,6 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     setPending(true);
 
     try {
-      if (failed) {
-        await createPasskey();
-        return;
-      }
-
       const result = await signInPasskey.mutateAsync({ autoFill: false });
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
@@ -127,6 +133,20 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
                 passkeyLocalization.passkey,
               )}
       </Button>
+      {view !== "signUp" && (
+        <p className="text-muted-foreground text-center text-xs">
+          New to Autograph?{" "}
+          <Link
+            href={getAuthLinkURL(
+              `${basePaths.auth}/${viewPaths.auth.signUp}`,
+              redirectTo,
+            )}
+            className="underline underline-offset-4"
+          >
+            Create an account with a passkey
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

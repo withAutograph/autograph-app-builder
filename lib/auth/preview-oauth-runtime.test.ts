@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  authRateLimitForLocalEmulation,
   fetchVerifiedVercelUserInfo,
   readPreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
@@ -21,6 +22,24 @@ const environment = {
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
+  it("keeps hosted rate limits strict while allowing a complete local emulation run", () => {
+    const hostedRateLimit = authRateLimitForLocalEmulation(false);
+    const localRateLimit = authRateLimitForLocalEmulation(true);
+
+    expect(hostedRateLimit).toMatchObject({ max: 60 });
+    expect(localRateLimit).toMatchObject({ max: 600 });
+    expect(localRateLimit.customRules?.["/oauth2/token"]).toEqual({
+      window: 60,
+      max: 180,
+    });
+    expect(localRateLimit).toMatchObject({
+      customRules: {
+        "/sign-in/social": { window: 60, max: 60 },
+      },
+    });
+    expect("/sign-in/social" in hostedRateLimit.customRules).toBe(false);
+  });
+
   const idToken = (claims: Record<string, unknown>) =>
     `${Buffer.from(JSON.stringify({ alg: "ES256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
 
@@ -165,6 +184,7 @@ describe("Preview OAuth runtime configuration", () => {
         EVE_HOSTED_ADAPTER: "1",
         APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        PASSKEY_ONBOARDING: "local-preview-v1",
         BETTER_AUTH_URL: "https://localhost:3001/api/auth",
         MCP_RESOURCE_URL: "https://localhost:3001/mcp",
         BETTER_AUTH_SECRET: "a".repeat(32),
@@ -182,6 +202,12 @@ describe("Preview OAuth runtime configuration", () => {
       environment: "local",
       databaseUrl:
         "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+      passkeyOnboarding: {
+        origin: "https://localhost:3001",
+        rpId: "localhost",
+        deploymentId: "local",
+        secureCookies: true,
+      },
     });
     expect(() =>
       readPreviewOAuthRuntimeConfig({
