@@ -7,6 +7,7 @@ import {
   HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES,
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
+  HOSTED_NODE_VERSION,
   HOSTED_TOOLCHAIN_CONTRACT_VERSION,
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedToolchainArtifacts,
@@ -30,12 +31,15 @@ describe("hosted Vercel Sandbox toolchain", () => {
     for (const artifact of Object.values(hostedToolchainArtifacts)) {
       expect(artifact.miseUrl).toContain(`v${HOSTED_MISE_VERSION}`);
       expect(artifact.bunUrl).toContain(`bun-v${HOSTED_BUN_VERSION}`);
+      expect(artifact.nodeUrl).toContain(`v${HOSTED_NODE_VERSION}`);
       expect(artifact.miseSha256).toMatch(/^[0-9a-f]{64}$/u);
       expect(artifact.bunSha256).toMatch(/^[0-9a-f]{64}$/u);
+      expect(artifact.nodeSha256).toMatch(/^[0-9a-f]{64}$/u);
     }
     expect(HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS).toEqual([
       "github.com",
       "release-assets.githubusercontent.com",
+      "nodejs.org",
     ]);
   });
 
@@ -50,6 +54,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).toContain("sudo install --owner=root --group=root");
     expect(command).toContain("mise --version");
     expect(command).toContain("bun --version");
+    expect(command).toContain("node --version");
+    expect(command).toContain(
+      'sudo install --owner=root --group=root --mode=0755 "$work/$node_directory/bin/node" /usr/local/bin/node',
+    );
     expect(command).not.toMatch(/curl[^\n]*\|/u);
     expect(command).not.toMatch(/token|password|authorization/iu);
   });
@@ -70,9 +78,9 @@ describe("hosted Vercel Sandbox toolchain", () => {
   });
 
   it("binds snapshot revalidation to the contract, inputs, and exact command bytes", () => {
-    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(3);
+    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(4);
     expect(hostedToolchainRevalidationKey()).toMatch(
-      /^autograph-app-builder-vercel-toolchain-v3:[0-9a-f]{64}$/u,
+      /^autograph-app-builder-vercel-toolchain-v4:[0-9a-f]{64}$/u,
     );
     expect(hostedToolchainRevalidationKey()).toBe(
       hostedToolchainRevalidationKey(),
