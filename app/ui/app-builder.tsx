@@ -122,8 +122,9 @@ function parseBuilderDraft(value: string | null): BuilderDraft | undefined {
             ? parsed.form.buildDestination
             : "codex",
       },
-      storageProvider: "github",
-      deploymentProvider: "vercel",
+      storageProvider: parsed.storageProvider === null ? null : "github",
+      deploymentProvider:
+        parsed.deploymentProvider === "vercel" ? "vercel" : null,
     } as BuilderDraft;
   } catch {
     return undefined;
@@ -1041,9 +1042,13 @@ export function Builder({
     initialDraft?.connectedConnections ?? [],
   );
   const [storageProvider, setStorageProvider] =
-    useState<StorageProvider>("github");
+    useState<StorageProvider | null>(
+      initialDraft?.storageProvider === null ? null : "github",
+    );
   const [deploymentProvider, setDeploymentProvider] =
-    useState<DeploymentProvider>("vercel");
+    useState<DeploymentProvider | null>(
+      initialDraft?.deploymentProvider === "vercel" ? "vercel" : null,
+    );
   const visibleProviderNotices = providerNotices.filter(
     (notice) =>
       !(
@@ -1182,8 +1187,12 @@ export function Builder({
           ...form,
           appName,
           repository: form.repository.trim(),
-          ...(team ? { vercelInstallationId: team } : {}),
-          ...(gitScope ? { githubInstallationId: gitScope } : {}),
+          ...(deploymentProvider === "vercel" && team
+            ? { vercelInstallationId: team }
+            : {}),
+          ...(storageProvider === "github" && gitScope
+            ? { githubInstallationId: gitScope }
+            : {}),
           modelId: model,
         },
         resumeKey,
@@ -1295,8 +1304,8 @@ export function Builder({
           <legend>Deploy to</legend>
           <p>Where do you want to deploy this app?</p>
           <div
-            className={styles.providerTabs}
-            role="tablist"
+            className={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
+            role="group"
             aria-label="Deployment provider"
           >
             {deploymentProviderOptions.map((option) => {
@@ -1305,29 +1314,30 @@ export function Builder({
                 integrations.vercel.status === "unavailable";
               const Icon = option.icon;
               return (
-                <button
-                  type="button"
-                  role="tab"
+                <label
                   key={option.provider}
                   data-provider={option.provider}
-                  aria-selected={deploymentProvider === option.provider}
-                  aria-controls={
-                    unavailable
-                      ? undefined
-                      : `deployment-provider-${option.provider}`
-                  }
-                  disabled={unavailable}
-                  onClick={() => {
-                    hasUnsavedChanges.current = true;
-                    setDeploymentProvider(option.provider);
-                  }}
+                  className={unavailable ? styles.unavailableOption : undefined}
                 >
                   <Icon size={18} aria-hidden="true" />
-                  <span>{option.name}</span>
-                  {unavailable ? (
-                    <span className={styles.comingSoon}>Coming soon</span>
-                  ) : null}
-                </button>
+                  <span>
+                    {option.name}
+                    {unavailable ? <small>Coming soon</small> : null}
+                  </span>
+                  <input
+                    type="checkbox"
+                    name="deployment-provider"
+                    value={option.provider}
+                    disabled={unavailable}
+                    checked={deploymentProvider === option.provider}
+                    onChange={() => {
+                      hasUnsavedChanges.current = true;
+                      setDeploymentProvider((current) =>
+                        current === option.provider ? null : option.provider,
+                      );
+                    }}
+                  />
+                </label>
               );
             })}
           </div>
@@ -1336,7 +1346,6 @@ export function Builder({
             <div
               className={styles.providerPanel}
               id="deployment-provider-vercel"
-              role="tabpanel"
             >
               <div className={styles.integrationField}>
                 <span>Vercel Team (Optional)</span>
@@ -1389,8 +1398,8 @@ export function Builder({
           <legend>Store in</legend>
           <p>Where do you want to store this app?</p>
           <div
-            className={styles.providerTabs}
-            role="tablist"
+            className={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
+            role="group"
             aria-label="Storage provider"
           >
             {storageProviderOptions.map((option) => {
@@ -1399,39 +1408,36 @@ export function Builder({
                 integrations.github.status === "unavailable";
               const Icon = option.icon;
               return (
-                <button
-                  type="button"
-                  role="tab"
+                <label
                   key={option.provider}
                   data-provider={option.provider}
-                  aria-selected={storageProvider === option.provider}
-                  aria-controls={
-                    unavailable
-                      ? undefined
-                      : `storage-provider-${option.provider}`
-                  }
-                  disabled={unavailable}
-                  onClick={() => {
-                    hasUnsavedChanges.current = true;
-                    setStorageProvider(option.provider);
-                  }}
+                  className={unavailable ? styles.unavailableOption : undefined}
                 >
                   <Icon size={18} aria-hidden="true" />
-                  <span>{option.name}</span>
-                  {unavailable ? (
-                    <span className={styles.comingSoon}>Coming soon</span>
-                  ) : null}
-                </button>
+                  <span>
+                    {option.name}
+                    {unavailable ? <small>Coming soon</small> : null}
+                  </span>
+                  <input
+                    type="checkbox"
+                    name="storage-provider"
+                    value={option.provider}
+                    disabled={unavailable}
+                    checked={storageProvider === option.provider}
+                    onChange={() => {
+                      hasUnsavedChanges.current = true;
+                      setStorageProvider((current) =>
+                        current === option.provider ? null : option.provider,
+                      );
+                    }}
+                  />
+                </label>
               );
             })}
           </div>
           {storageProvider === "github" &&
           integrations.github.status !== "unavailable" ? (
-            <div
-              className={styles.providerPanel}
-              id="storage-provider-github"
-              role="tabpanel"
-            >
+            <div className={styles.providerPanel} id="storage-provider-github">
               <div className={styles.repoScope}>
                 <div
                   className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}

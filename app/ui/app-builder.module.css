@@ -872,57 +872,65 @@
 .builderCard > .createButton {
   order: 5;
 }
-.providerTabs {
-  display: grid;
+.optionGrid.providerChoiceGrid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
 }
-.providerTabs button {
+.providerChoiceGrid label {
   min-width: 0;
-  height: 46px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 0 12px;
-  font-size: 14px;
-  text-align: left;
   cursor: pointer;
 }
-.providerTabs button[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--border), var(--text) 55%);
-  background: var(--hover);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border), var(--text) 20%);
+.providerChoiceGrid label > span {
+  min-width: 0;
 }
-.providerTabs button:disabled {
+.providerChoiceGrid small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.providerChoiceGrid .unavailableOption {
   cursor: not-allowed;
-  opacity: 0.72;
+  color: var(--muted);
+  background: var(--soft);
 }
-.providerTabs button > svg {
+.providerChoiceGrid label > svg {
   flex: 0 0 auto;
 }
-.providerTabs button[data-provider="github"] > svg,
-.providerTabs button[data-provider="vercel"] > svg {
+.providerChoiceGrid label[data-provider="github"] > svg,
+.providerChoiceGrid label[data-provider="vercel"] > svg {
   color: var(--text);
 }
-.providerTabs button[data-provider="gitlab"] > svg {
+.providerChoiceGrid label[data-provider="gitlab"] > svg {
   color: #fc6d26;
 }
-.providerTabs button[data-provider="bitbucket"] > svg {
+.providerChoiceGrid label[data-provider="bitbucket"] > svg {
   color: #0052cc;
 }
-.providerTabs button[data-provider="netlify"] > svg {
+.providerChoiceGrid label[data-provider="netlify"] > svg {
   color: #00a8a8;
 }
-.providerTabs button[data-provider="cloudflare"] > svg {
+.providerChoiceGrid label[data-provider="cloudflare"] > svg {
   color: #f38020;
 }
-.providerTabs .comingSoon {
+.optionGrid.providerChoiceGrid input {
   margin-left: auto;
+  border-radius: 4px;
+}
+.optionGrid.providerChoiceGrid input:checked {
+  border-color: #171717;
+  background: #171717;
+  box-shadow: inset 0 0 0 1px #171717;
+}
+.optionGrid.providerChoiceGrid input:checked::after {
+  content: "✓";
+  display: block;
+  color: #fff;
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+}
+.optionGrid.providerChoiceGrid input:disabled {
+  opacity: 0.55;
 }
 .providerPanel {
   padding-top: 4px;

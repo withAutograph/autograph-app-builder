@@ -192,7 +192,7 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
-    expect(view.textContent).toContain("Vercel Team (Optional)");
+    expect(view.textContent).not.toContain("Vercel Team (Optional)");
     expect(view.textContent).toContain("Git Scope (Optional)");
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");
@@ -231,37 +231,49 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(destinations[2]?.required).toBe(true);
     expect(destinations[0]?.disabled).toBe(true);
 
-    const storageTabs = [
-      ...view.querySelectorAll<HTMLButtonElement>(
-        '[role="tablist"][aria-label="Storage provider"] [role="tab"]',
+    const storageOptions = [
+      ...view.querySelectorAll<HTMLInputElement>(
+        '[role="group"][aria-label="Storage provider"] input',
       ),
     ];
-    const deploymentTabs = [
-      ...view.querySelectorAll<HTMLButtonElement>(
-        '[role="tablist"][aria-label="Deployment provider"] [role="tab"]',
+    const deploymentOptions = [
+      ...view.querySelectorAll<HTMLInputElement>(
+        '[role="group"][aria-label="Deployment provider"] input',
       ),
     ];
-    expect(storageTabs.map((tab) => tab.textContent)).toEqual([
-      "GitHub",
-      "GitLabComing soon",
-      "BitbucketComing soon",
+    expect(storageOptions.map((option) => option.value)).toEqual([
+      "github",
+      "gitlab",
+      "bitbucket",
     ]);
-    expect(deploymentTabs.map((tab) => tab.textContent)).toEqual([
-      "Vercel",
-      "NetlifyComing soon",
-      "CloudflareComing soon",
+    expect(deploymentOptions.map((option) => option.value)).toEqual([
+      "vercel",
+      "netlify",
+      "cloudflare",
     ]);
-    expect(storageTabs[0]?.getAttribute("aria-selected")).toBe("true");
-    expect(deploymentTabs[0]?.getAttribute("aria-selected")).toBe("true");
-    expect(storageTabs[1]?.disabled).toBe(true);
-    expect(deploymentTabs[1]?.disabled).toBe(true);
-    expect(storageTabs.every((tab) => tab.querySelector("svg"))).toBe(true);
-    expect(deploymentTabs.every((tab) => tab.querySelector("svg"))).toBe(true);
+    expect(storageOptions[0]?.checked).toBe(true);
+    expect(deploymentOptions[0]?.checked).toBe(false);
+    expect(storageOptions[1]?.disabled).toBe(true);
+    expect(deploymentOptions[1]?.disabled).toBe(true);
     expect(
-      storageTabs.every((tab) => tab.querySelector("input") === null),
+      [...view.querySelectorAll("[data-provider]")].every((option) =>
+        Boolean(option.querySelector("svg")),
+      ),
     ).toBe(true);
-    expect(view.querySelector('[role="tabpanel"] #git-scope')).not.toBeNull();
-    expect(view.querySelector('[role="tabpanel"] #vercel-team')).not.toBeNull();
+    expect(view.querySelector("#git-scope")).not.toBeNull();
+    expect(view.querySelector("#vercel-team")).toBeNull();
+
+    await click(deploymentOptions[0]!);
+    expect(deploymentOptions[0]?.checked).toBe(true);
+    expect(view.querySelector("#vercel-team")).not.toBeNull();
+    expect(view.textContent).not.toContain("Connect to Vercel");
+    await click(deploymentOptions[0]!);
+    expect(deploymentOptions[0]?.checked).toBe(false);
+    expect(view.querySelector("#vercel-team")).toBeNull();
+
+    await click(storageOptions[0]!);
+    expect(storageOptions[0]?.checked).toBe(false);
+    expect(view.querySelector("#git-scope")).toBeNull();
 
     const accessibility = await axe.run(view, {
       rules: { "color-contrast": { enabled: false } },
@@ -361,13 +373,13 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(view.textContent).not.toContain("active App Builder workspace");
     expect(
-      view.querySelector<HTMLButtonElement>(
-        '[role="tab"][data-provider="vercel"]',
+      view.querySelector<HTMLInputElement>(
+        'input[name="deployment-provider"][value="vercel"]',
       )?.disabled,
     ).toBe(true);
     expect(
-      view.querySelector<HTMLButtonElement>(
-        '[role="tab"][data-provider="github"]',
+      view.querySelector<HTMLInputElement>(
+        'input[name="storage-provider"][value="github"]',
       )?.disabled,
     ).toBe(true);
     expect(view.querySelector('a[href="/vercel/installations"]')).toBeNull();
@@ -444,6 +456,11 @@ describe("Vercel-faithful App Builder flow", () => {
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
       "# Restored App\n\nKeep this brief through the provider flow.",
+    );
+    await click(
+      view.querySelector<HTMLInputElement>(
+        'input[name="deployment-provider"][value="vercel"]',
+      )!,
     );
     await click(
       [...view.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -638,6 +655,11 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
 
+    await click(
+      view.querySelector<HTMLInputElement>(
+        'input[name="deployment-provider"][value="vercel"]',
+      )!,
+    );
     const team = view.querySelector<HTMLInputElement>(
       '[aria-label="Select a Vercel Team"]',
     )!;
@@ -936,7 +958,7 @@ describe("Vercel-faithful App Builder flow", () => {
     }
     expect(view.querySelector('[data-kind="netsuite"] svg')).toBeNull();
     expect(
-      view.querySelector('[role="tab"][data-provider="vercel"]'),
+      view.querySelector('input[name="deployment-provider"][value="vercel"]'),
     ).not.toBeNull();
 
     const connectionSearch = view.querySelector<HTMLInputElement>(
