@@ -201,6 +201,8 @@ function dependencyClosure(root: string): Map<string, string> {
       if (dependencyPath === undefined) return false;
       const dependencyVersion = packageVersion(dependencyPath);
       const rootVersion = rootVersions.get(dependency);
+      if (rootVersion === undefined)
+        rootVersions.set(dependency, dependencyVersion);
       const dependencyDestination =
         rootVersion === undefined || rootVersion === dependencyVersion
           ? dependency
