@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
-import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import {
+  disconnectedBuilderIntegrationState,
+  type BuilderIntegrationState,
+} from "@/lib/integrations/builder-state";
 
 import {
   AnonymousBuilder,
@@ -85,14 +88,35 @@ const connectionsEnabled =
 const meta = {
   title: "Pages/Create App/App Builder",
   component: AppBuilder,
-  args: { authenticated: true, connectionsEnabled, integrations },
+  args: {
+    authenticated: true,
+    connectionsEnabled,
+    integrations: disconnectedBuilderIntegrationState,
+  },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof AppBuilder>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Authenticated: Story = {};
+export const Authenticated: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("button", { name: "Connect to Vercel" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Connect to GitHub" }),
+    ).toBeVisible();
+    await expect(window.getComputedStyle(canvasElement).fontFamily).toContain(
+      "GeistSans",
+    );
+  },
+};
+
+export const ConnectedProviders: Story = {
+  args: { integrations },
+};
 
 export const ProviderUnavailable: Story = {
   args: {
