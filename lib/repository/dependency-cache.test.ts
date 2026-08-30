@@ -165,6 +165,9 @@ describe("offline dependency cache", () => {
     expect(producer).toContain('"@autograph",\n    "vite-config"');
     expect(producer).toContain('scope: "builder-execution"');
     expect(producer).toContain('platform: "linux/x86_64"');
+    expect(producer).toContain(
+      "rootVersions.set(dependency, dependencyVersion)",
+    );
   });
 
   it("resolves the materialized closure root for local and Vercel sandboxes", () => {
