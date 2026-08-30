@@ -199,7 +199,6 @@ export function previewUserManagementPlugins(
               type: "string",
               required: true,
               input: false,
-              fieldName: "workspace_id",
             },
           },
         },
