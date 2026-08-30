@@ -81,8 +81,8 @@ function renderUserLink(
 /**
  * Render a user dropdown button that shows user info, settings, theme controls, and authentication actions.
  *
- * Includes user profile, settings link, optional multi-session account switching, theme picker,
- * and sign-in/sign-up/sign-out actions depending on authentication state.
+ * Includes user profile, settings, and sign-in/sign-up/sign-out actions
+ * depending on authentication state.
  *
  * @param className - Additional CSS classes applied to the button trigger
  * @param align - Alignment of the dropdown menu relative to the trigger

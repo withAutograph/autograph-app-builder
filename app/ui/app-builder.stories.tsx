@@ -5,6 +5,7 @@ import {
   disconnectedBuilderIntegrationState,
   type BuilderIntegrationState,
 } from "@/lib/integrations/builder-state";
+import { storybookAuthenticatedSession } from "../../.storybook/auth-session";
 
 import {
   AnonymousBuilder,
@@ -93,7 +94,10 @@ const meta = {
     connectionsEnabled,
     integrations: disconnectedBuilderIntegrationState,
   },
-  parameters: { layout: "fullscreen" },
+  parameters: {
+    layout: "fullscreen",
+    authSession: storybookAuthenticatedSession,
+  },
 } satisfies Meta<typeof AppBuilder>;
 
 export default meta;
@@ -112,11 +116,14 @@ export const Authenticated: Story = {
       "GeistSans",
     );
 
-    const avatarSkeleton = canvasElement.querySelector<HTMLElement>(
-      '[data-slot="skeleton"]',
+    const avatar = canvasElement.querySelector<HTMLElement>(
+      '[data-slot="avatar"]',
     );
-    await expect(avatarSkeleton).not.toBeNull();
-    await expect(window.getComputedStyle(avatarSkeleton!).width).toBe("32px");
+    await expect(avatar).not.toBeNull();
+    await expect(window.getComputedStyle(avatar!).width).toBe("32px");
+    await expect(
+      canvasElement.querySelector('[data-slot="avatar-fallback"]'),
+    ).toHaveTextContent("AU");
   },
 };
 
@@ -157,6 +164,7 @@ export const ModelUnavailable: Story = {
 
 export const Anonymous: Story = {
   args: { authenticated: false },
+  parameters: { authSession: null },
 };
 
 export const AnonymousBriefAction: Story = {
