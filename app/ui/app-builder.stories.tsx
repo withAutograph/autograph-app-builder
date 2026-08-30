@@ -111,6 +111,12 @@ export const Authenticated: Story = {
     await expect(window.getComputedStyle(canvasElement).fontFamily).toContain(
       "GeistSans",
     );
+
+    const avatarSkeleton = canvasElement.querySelector<HTMLElement>(
+      '[data-slot="skeleton"]',
+    );
+    await expect(avatarSkeleton).not.toBeNull();
+    await expect(window.getComputedStyle(avatarSkeleton!).width).toBe("32px");
   },
 };
 
