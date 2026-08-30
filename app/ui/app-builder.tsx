@@ -352,7 +352,16 @@ export function appNameFromBrief(brief: string) {
     .join(" ");
 }
 
-function randomAppName(seed: string) {
+function randomAppName(seed?: string) {
+  if (!seed) {
+    const adjective =
+      randomNameAdjectives[
+        Math.floor(Math.random() * randomNameAdjectives.length)
+      ];
+    const noun =
+      randomNameNouns[Math.floor(Math.random() * randomNameNouns.length)];
+    return `${adjective} ${noun}`;
+  }
   const hash = [...seed].reduce(
     (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
     0,
@@ -928,8 +937,7 @@ function Builder({
   )
     ? preferredModelId
     : (integrations.models.defaultModelId ?? allModelOptions[0]?.value ?? "");
-  const initialAppName =
-    appNameFromBrief(initialBrief) || randomAppName(generatedNameSeed);
+  const initialAppName = randomAppName(generatedNameSeed);
   const [form, setForm] = useState<BuilderForm>(
     initialDraft
       ? {
@@ -952,6 +960,7 @@ function Builder({
   const repositoryEditedByUser = useRef(
     initialDraft?.repositoryEditedByUser ?? false,
   );
+  const hasGeneratedInitialAppName = useRef(false);
   const suppressUnsavedWarning = useRef(false);
   const resumedVercelConnection = providerNotices.some(
     (notice) => notice.provider === "vercel" && notice.status === "connected",
@@ -1004,6 +1013,21 @@ function Builder({
     integrations.models.status === "ready" &&
     model,
   );
+  useEffect(() => {
+    if (initialDraft || hasGeneratedInitialAppName.current) return;
+    hasGeneratedInitialAppName.current = true;
+    setForm((current) => {
+      if (appNameEditedByUser.current || repositoryEditedByUser.current) {
+        return current;
+      }
+      const appName = randomAppName();
+      return {
+        ...current,
+        appName,
+        repository: repositoryNameFromAppName(appName),
+      };
+    });
+  }, [initialDraft]);
   const updateBrief = (brief: string) => {
     setForm((current) => {
       if (appNameEditedByUser.current) return { ...current, brief };
