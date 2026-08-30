@@ -738,7 +738,6 @@ export const hostedGitHubInstallations = pgTable(
       table.workspaceId,
       table.ownerUserId,
     ),
-    uniqueIndex("hosted_github_installation_id_uidx").on(table.installationId),
     check(
       "hosted_github_installation_id_check",
       sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
@@ -779,8 +778,12 @@ export const hostedGitHubInstallationBindings = pgTable(
         table.installationId,
       ],
     }),
-    uniqueIndex("hosted_github_installation_binding_id_uidx").on(
+    uniqueIndex("hosted_github_installation_binding_id_tenant_uidx").on(
       table.installationId,
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
     ),
     check(
       "hosted_github_installation_binding_id_check",

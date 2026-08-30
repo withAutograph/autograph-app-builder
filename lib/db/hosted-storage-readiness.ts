@@ -21,6 +21,7 @@ export const hostedStorageMigrationTags = [
   "0011_self_service_onboarding",
   "0012_provider_connection_return_state",
   "0013_passkey_onboarding",
+  "0014_tenant_github_installation_uniqueness",
 ] as const;
 
 const contractSourcePaths = [
@@ -459,11 +460,10 @@ export const hostedStorageExpectedIndexes = [
   ],
   ["github_publication_proposal", "github_publication_proposal_pk"],
   ["hosted_github_installation", "hosted_github_installation_id_tenant_uidx"],
-  ["hosted_github_installation", "hosted_github_installation_id_uidx"],
   ["hosted_github_installation", "hosted_github_installation_pk"],
   [
     "hosted_github_installation_binding",
-    "hosted_github_installation_binding_id_uidx",
+    "hosted_github_installation_binding_id_tenant_uidx",
   ],
   [
     "hosted_github_installation_binding",

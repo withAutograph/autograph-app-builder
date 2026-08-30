@@ -668,6 +668,29 @@ export function createGitHubAppInstallationAuthorization(input: {
   const now = input.now ?? Date.now;
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
 
+  async function persistInstallationBinding(
+    authority: HostedTenantAuthority,
+    installation: ReturnType<typeof installationIdentity>,
+    appliedAt: Date,
+  ) {
+    try {
+      return await input.installationStore.bind({
+        authority,
+        binding: {
+          installationId: installation.installationId,
+          accountId: installation.accountId,
+          accountLogin: installation.accountLogin,
+          accountType: installation.accountType,
+        },
+        now: appliedAt,
+      });
+    } catch {
+      throw new GitHubInstallationAuthorizationError(
+        "durable-tenant-binding",
+      );
+    }
+  }
+
   return {
     async begin(
       authorityInput: HostedTenantAuthority,
@@ -910,23 +933,11 @@ export function createGitHubAppInstallationAuthorization(input: {
         }
 
         const appliedAt = new Date(now());
-        let binding: Awaited<ReturnType<typeof input.installationStore.bind>>;
-        try {
-          binding = await input.installationStore.bind({
-            authority,
-            binding: {
-              installationId: installation.installationId,
-              accountId: installation.accountId,
-              accountLogin: installation.accountLogin,
-              accountType: installation.accountType,
-            },
-            now: appliedAt,
-          });
-        } catch {
-          throw new GitHubInstallationAuthorizationError(
-            "durable-tenant-binding",
-          );
-        }
+        const binding = await persistInstallationBinding(
+          authority,
+          installation,
+          appliedAt,
+        );
         return {
           version: 1 as const,
           action: "github-app.installation.complete" as const,
