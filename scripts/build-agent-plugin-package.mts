@@ -7,7 +7,7 @@ import {
 const repositoryRoot = resolve(".");
 const outputRoot = resolve(
   repositoryRoot,
-  ".artifacts/agent-plugin/autograph-app-builder",
+  ".artifacts/agent-plugin/app-builder",
 );
 await validateAgentPluginPackage({
   pluginRoot: repositoryRoot,

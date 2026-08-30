@@ -24,7 +24,7 @@ export const portableReleaseReceiptSchema = z
   .object({
     format: z.literal("autograph-portable-plugin-release-v3"),
     specification: z.literal("1.0.0"),
-    name: z.literal("autograph-app-builder"),
+    name: z.literal("app-builder"),
     version: z.literal("0.2.1"),
     source: z
       .object({
@@ -218,7 +218,7 @@ export async function verifyPortableProofArtifact(input: {
     JSON.stringify(marketplaceAdapter) !==
     JSON.stringify({
       mcpServers: {
-        "autograph-app-builder": {
+        "app-builder": {
           type: "http",
           url: receipt.endpoint,
         },
@@ -318,8 +318,8 @@ export async function verifyPortableProofArtifact(input: {
       .object({
         format: z.literal("agent-plugins-client-harness-v2"),
         client: z.literal(client),
-        pluginRoot: z.literal("./autograph-app-builder"),
-        mcp: z.literal("./autograph-app-builder/mcp.json"),
+        pluginRoot: z.literal("./app-builder"),
+        mcp: z.literal("./app-builder/mcp.json"),
         transport: z
           .object({
             type: z.literal("streamable-http"),
@@ -353,7 +353,7 @@ export async function verifyPortableProofArtifact(input: {
             sha256: z.literal(receipt.archive.sha256),
           })
           .strict(),
-        pluginRoot: z.literal("./autograph-app-builder"),
+        pluginRoot: z.literal("./app-builder"),
       })
       .strict()
       .parse(

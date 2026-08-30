@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "autograph-app-builder",
+  "name": "app-builder",
   "version": "0.2.1",
   "description": "Design and create apps with Autograph App Builder.",
   "author": {

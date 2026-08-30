@@ -14,13 +14,13 @@ describe("Codex adapter", () => {
     expect(manifest.apps).toBeUndefined();
     expect(mcp).toEqual({
       mcpServers: {
-        "autograph-app-builder": {
+        "app-builder": {
           type: "http",
           url: "http://127.0.0.1:3000/mcp",
         },
       },
     });
-    expect(portableMcp.mcpServers["autograph-app-builder"].url).toBe(
+    expect(portableMcp.mcpServers["app-builder"].url).toBe(
       "http://127.0.0.1:3000/mcp",
     );
     for (const prompt of manifest.interface.defaultPrompt) {
