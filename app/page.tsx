@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
 import { resolveWorkspaceOnboardingState } from "@/lib/auth/workspace-onboarding";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
+import { providerEmulationEnablesConnections } from "@/lib/integrations/local-provider-emulation";
 import {
   builderComingSoonFlag,
   builderConnectionsFlag,
@@ -68,6 +69,11 @@ async function currentUser() {
   };
 }
 
+async function resolveConnectionsEnabled() {
+  if (providerEmulationEnablesConnections(process.env)) return true;
+  return builderConnectionsFlag();
+}
+
 export default async function Home({ searchParams }: PageProps) {
   const [
     query,
@@ -78,7 +84,7 @@ export default async function Home({ searchParams }: PageProps) {
   ] = await Promise.all([
     searchParams,
     currentUser(),
-    builderConnectionsFlag(),
+    resolveConnectionsEnabled(),
     builderComingSoonFlag(),
     builderResourceProvisioningFlag(),
   ]);

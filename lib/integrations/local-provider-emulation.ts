@@ -189,6 +189,16 @@ export function readProviderEmulation(
   return local ?? preview;
 }
 
+export function providerEmulationEnablesConnections(
+  environment: Readonly<Record<string, string | undefined>>,
+) {
+  try {
+    return Boolean(readProviderEmulation(environment));
+  } catch {
+    return false;
+  }
+}
+
 export function providerEmulationEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
