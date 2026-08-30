@@ -9,6 +9,8 @@ overrides:
 
 patchedDependencies:
   '@emulators/core@0.10.0': 9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4
+  '@emulators/github@0.10.0': 2e9510aa61981a6ca705851c19c8d72a8174cf4f19695e93923ab1796ee53282
+  '@emulators/vercel@0.10.0': d51209b623d4600231afd907828a5cbaefea72f575ae88bd95509590b5bf8169
 
 importers:
 
@@ -49,10 +51,10 @@ importers:
         version: 0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)
       '@emulators/github':
         specifier: 0.10.0
-        version: 0.10.0
+        version: 0.10.0(patch_hash=2e9510aa61981a6ca705851c19c8d72a8174cf4f19695e93923ab1796ee53282)
       '@emulators/vercel':
         specifier: 0.10.0
-        version: 0.10.0
+        version: 0.10.0(patch_hash=d51209b623d4600231afd907828a5cbaefea72f575ae88bd95509590b5bf8169)
       '@flags-sdk/vercel':
         specifier: 1.4.7
         version: 1.4.7(flags@4.3.0(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(ws@8.21.3)
@@ -6483,11 +6485,11 @@ snapshots:
     dependencies:
       jose: 6.2.10
 
-  '@emulators/github@0.10.0':
+  '@emulators/github@0.10.0(patch_hash=2e9510aa61981a6ca705851c19c8d72a8174cf4f19695e93923ab1796ee53282)':
     dependencies:
       '@emulators/core': 0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)
 
-  '@emulators/vercel@0.10.0':
+  '@emulators/vercel@0.10.0(patch_hash=d51209b623d4600231afd907828a5cbaefea72f575ae88bd95509590b5bf8169)':
     dependencies:
       '@emulators/core': 0.10.0(patch_hash=9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4)
 

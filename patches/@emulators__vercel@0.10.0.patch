@@ -1,0 +1,16 @@
+diff --git a/dist/index.js b/dist/index.js
+index 8b2dfef417d404c5de0fe5aa1f0ab3840e166121..dbe5a594b896782253454e5c9186c7e5b04bf081 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -289,11 +289,6 @@ function debug(label, ...args) {
+   }
+ }
+ var __dirname = dirname(fileURLToPath(import.meta.url));
+-var FONTS = {
+-  "geist-sans.woff2": readFileSync(join(__dirname, "fonts", "geist-sans.woff2")),
+-  "GeistPixel-Square.woff2": readFileSync(join(__dirname, "fonts", "GeistPixel-Square.woff2"))
+-};
+-var FAVICON = readFileSync(join(__dirname, "fonts", "favicon.ico"));
+ function escapeHtml(s) {
+   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+ }
