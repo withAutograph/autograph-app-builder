@@ -243,6 +243,8 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyPlugin).toContain("authButtons: [PasskeyButton]");
     expect(passkeyPlugin).toContain("securityCards: [Passkeys]");
     expect(signIn).toContain("plugin.authButtons");
+    expect(signIn).toContain('className="flex flex-col gap-3"');
+    expect(signIn).not.toContain('className="flex flex-col gap-6"');
     expect(accountSettings).toContain("plugin.securityCards");
     expect(passkeyButton).toContain("useSignInPasskey(authClient)");
     expect(passkeyButton).toContain("useAddPasskey(authClient)");
