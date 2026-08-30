@@ -1,6 +1,6 @@
 export const HOSTED_ARTIFACT_CONTRACT_VERSION = 1;
 export const HOSTED_ARTIFACT_RELEASE_TAG =
-  "hosted-arrusted-ffa0c34a-execution-v1";
+  "hosted-arrusted-ffa0c34a-execution-v2";
 export const HOSTED_ARTIFACT_RELEASE_NAME = "arrusted-ffa0c34a-preview.tar.gz";
 export const HOSTED_ARTIFACT_URL = `https://github.com/withAutograph/autograph-app-builder/releases/download/${HOSTED_ARTIFACT_RELEASE_TAG}/${HOSTED_ARTIFACT_RELEASE_NAME}`;
 export const HOSTED_ARTIFACT_BYTES = 152_130_068;
