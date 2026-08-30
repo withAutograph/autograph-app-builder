@@ -1,7 +1,10 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveAuthCallbackURL } from "./preview-auth-ui";
+import {
+  resolveAuthCallbackURL,
+  resolveProviderCallbackURL,
+} from "./preview-auth-ui";
 
 const originalWindow = globalThis.window;
 
@@ -55,6 +58,18 @@ describe("Preview Better Auth UI", () => {
         "https://builder.example.test",
       ),
     ).toBe("/workspace?source=oauth");
+  });
+
+  it("builds the provider callback from the site origin", () => {
+    expect(
+      resolveProviderCallbackURL(
+        "/auth/setting-up?callbackURL=%2F",
+        "/workspace?source=oauth",
+        "https://builder.example.test",
+      ).toString(),
+    ).toBe(
+      "https://builder.example.test/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Doauth",
+    );
   });
 
   it("forwards the complete signed OAuth query through social sign-in", async () => {
