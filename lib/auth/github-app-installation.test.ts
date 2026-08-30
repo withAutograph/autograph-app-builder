@@ -450,6 +450,33 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).not.toHaveBeenCalled();
   });
 
+  it("classifies a 2xx OAuth error response without retaining provider data", async () => {
+    const request = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        error: "redirect_uri_mismatch",
+        error_description: "provider-detail-sentinel",
+      }),
+    );
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    let error: unknown;
+    try {
+      await authorization.complete(
+        authorizationCallbackUrl(authorizeState),
+        authority,
+      );
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
+      stage: "token-exchange-oauth-error",
+      category: "redirect_uri_mismatch",
+    });
+    expect(String(error)).not.toContain("provider-detail-sentinel");
+    expect(bind).not.toHaveBeenCalled();
+  });
+
   it("requires selected, active, exact-app installation identity", async () => {
     const request = vi.fn<typeof fetch>(async (resource) => {
       const url = String(resource);

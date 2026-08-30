@@ -25,6 +25,7 @@ export type GitHubInstallationAuthorizationFailureStage =
   | "membership-state-consumption"
   | "token-exchange-transport"
   | "token-exchange-non-2xx"
+  | "token-exchange-oauth-error"
   | "token-response-schema"
   | "github-user-verification"
   | "installation-identity-validation"
@@ -162,6 +163,15 @@ export interface GitHubInstallationMembershipAuthority {
 }
 
 type Fetch = typeof fetch;
+
+function githubOAuthErrorCategory(value: unknown) {
+  return value === "incorrect_client_credentials" ||
+    value === "redirect_uri_mismatch" ||
+    value === "bad_verification_code" ||
+    value === "unverified_user_email"
+    ? value
+    : undefined;
+}
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -433,16 +443,8 @@ async function userAccessToken(input: {
     let category: GitHubOAuthErrorCategory | undefined;
     try {
       const responseBody = await boundedJson(response);
-      if (record(responseBody)) {
-        const value = responseBody.error;
-        if (
-          value === "incorrect_client_credentials" ||
-          value === "redirect_uri_mismatch" ||
-          value === "bad_verification_code" ||
-          value === "unverified_user_email"
-        )
-          category = value;
-      }
+      if (record(responseBody))
+        category = githubOAuthErrorCategory(responseBody.error);
     } catch {
       // The diagnostic remains bounded when an error response is malformed.
     }
@@ -467,6 +469,11 @@ async function userAccessToken(input: {
     "refresh_token_expires_in",
   ]);
   try {
+    if ("error" in body)
+      throw new GitHubInstallationAuthorizationError(
+        "token-exchange-oauth-error",
+        githubOAuthErrorCategory(body.error),
+      );
     if (Object.keys(body).some((key) => !allowed.has(key)))
       throw new Error("invalid-response");
     const accessToken = stringProperty(body, "access_token");
@@ -505,7 +512,8 @@ async function userAccessToken(input: {
     )
       throw new Error("invalid-response");
     return accessToken;
-  } catch {
+  } catch (error) {
+    if (error instanceof GitHubInstallationAuthorizationError) throw error;
     throw new GitHubInstallationAuthorizationError("token-response-schema");
   }
 }
