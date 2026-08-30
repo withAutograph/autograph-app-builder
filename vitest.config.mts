@@ -13,7 +13,11 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          exclude: [...configDefaults.exclude, "**/.eve/**"],
+          exclude: [
+            ...configDefaults.exclude,
+            "**/.eve/**",
+            "**/.storybook/visual/**",
+          ],
           pool: "threads",
         },
       },
