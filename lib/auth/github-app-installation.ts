@@ -49,12 +49,31 @@ type GitHubCallbackDiagnostic = {
   error?: GitHubOAuthCallbackError;
 };
 
+type GitHubStateValidationDiagnostic = {
+  substage:
+    | "authority-parse"
+    | "callback-parse"
+    | "state-format"
+    | "state-signature"
+    | "state-schema"
+    | "state-authority-digest"
+    | "state-time";
+  stateDigest?: string;
+};
+
+class GitHubStateValidationError extends Error {
+  constructor(readonly diagnostic: GitHubStateValidationDiagnostic) {
+    super("invalid-state");
+  }
+}
+
 export class GitHubInstallationAuthorizationError extends Error {
   constructor(
     readonly stage: GitHubInstallationAuthorizationFailureStage,
     readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
     readonly returnState?: ProviderConnectionReturn,
     readonly callback?: GitHubCallbackDiagnostic,
+    readonly stateValidation?: GitHubStateValidationDiagnostic,
   ) {
     super(FAILURE_MESSAGE);
   }
@@ -67,6 +86,9 @@ export function githubInstallationAuthorizationDiagnostic(error: unknown) {
     stage: error.stage,
     ...(error.category === undefined ? {} : { category: error.category }),
     ...(error.callback === undefined ? {} : { callback: error.callback }),
+    ...(error.stateValidation === undefined
+      ? {}
+      : { stateValidation: error.stateValidation }),
   };
 }
 
@@ -325,9 +347,18 @@ function verifyState(input: {
   stateSecret: string;
   now: number;
 }) {
-  if (input.state.length > 2_048) throw new Error("invalid-state");
+  const diagnostic = { stateDigest: sha256(input.state) };
+  if (input.state.length > 2_048)
+    throw new GitHubStateValidationError({
+      substage: "state-format",
+      ...diagnostic,
+    });
   const segments = input.state.split(".");
-  if (segments.length !== 2) throw new Error("invalid-state");
+  if (segments.length !== 2)
+    throw new GitHubStateValidationError({
+      substage: "state-format",
+      ...diagnostic,
+    });
   const [payload, providedSignature] = segments as [string, string];
   const expectedSignature = createHmac("sha256", input.stateSecret)
     .update("github-installation-state\n")
@@ -337,30 +368,53 @@ function verifyState(input: {
   try {
     provided = Buffer.from(providedSignature, "base64url");
   } catch {
-    throw new Error("invalid-state");
+    throw new GitHubStateValidationError({
+      substage: "state-format",
+      ...diagnostic,
+    });
   }
   if (
     provided.byteLength !== expectedSignature.byteLength ||
     !timingSafeEqual(provided, expectedSignature)
   ) {
-    throw new Error("invalid-state");
+    throw new GitHubStateValidationError({
+      substage: "state-signature",
+      ...diagnostic,
+    });
   }
   let decoded: unknown;
   try {
     decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
   } catch {
-    throw new Error("invalid-state");
+    throw new GitHubStateValidationError({
+      substage: "state-schema",
+      ...diagnostic,
+    });
   }
-  const parsed = statePayloadSchema.parse(decoded);
+  let parsed: z.infer<typeof statePayloadSchema>;
+  try {
+    parsed = statePayloadSchema.parse(decoded);
+  } catch {
+    throw new GitHubStateValidationError({
+      substage: "state-schema",
+      ...diagnostic,
+    });
+  }
   const nowSeconds = Math.floor(input.now / 1_000);
+  if (parsed.authorityDigest !== authorityDigest(input.authority))
+    throw new GitHubStateValidationError({
+      substage: "state-authority-digest",
+      ...diagnostic,
+    });
   if (
-    parsed.authorityDigest !== authorityDigest(input.authority) ||
     parsed.expiresAt <= nowSeconds ||
     parsed.issuedAt > nowSeconds + 30 ||
     parsed.expiresAt - parsed.issuedAt !== STATE_LIFETIME_MS / 1_000
-  ) {
-    throw new Error("invalid-state");
-  }
+  )
+    throw new GitHubStateValidationError({
+      substage: "state-time",
+      ...diagnostic,
+    });
   return {
     stateDigest: sha256(input.state),
     authorityDigest: parsed.authorityDigest,
@@ -799,19 +853,42 @@ export function createGitHubAppInstallationAuthorization(input: {
         const callbackDiagnostic = githubCallbackDiagnostic(inputUrl);
         try {
           authority = hostedTenantAuthoritySchema.parse(authorityInput);
-          callback = callbackInput(inputUrl);
-          state = verifyState({
-            state: callback.state,
-            authority,
-            stateSecret: config.stateSecret,
-            now: now(),
-          });
         } catch {
           throw new GitHubInstallationAuthorizationError(
             "callback-state-validation",
             undefined,
             undefined,
             callbackDiagnostic,
+            { substage: "authority-parse" },
+          );
+        }
+        try {
+          callback = callbackInput(inputUrl);
+        } catch {
+          throw new GitHubInstallationAuthorizationError(
+            "callback-state-validation",
+            undefined,
+            undefined,
+            callbackDiagnostic,
+            { substage: "callback-parse" },
+          );
+        }
+        try {
+          state = verifyState({
+            state: callback.state,
+            authority,
+            stateSecret: config.stateSecret,
+            now: now(),
+          });
+        } catch (error) {
+          throw new GitHubInstallationAuthorizationError(
+            "callback-state-validation",
+            undefined,
+            undefined,
+            callbackDiagnostic,
+            error instanceof GitHubStateValidationError
+              ? error.diagnostic
+              : { substage: "state-schema" },
           );
         }
         const current = now();
