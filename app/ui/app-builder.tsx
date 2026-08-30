@@ -45,6 +45,8 @@ import {
 } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import { SectionShell } from "../../components/create-app/choice-card";
+import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
 import { UserButton } from "../../components/auth/user/user-button";
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
@@ -1300,49 +1302,28 @@ export function Builder({
           </a>
           .
         </p>
-        <fieldset className={`${styles.sectionField} ${styles.deploySection}`}>
-          <legend>Deploy to</legend>
-          <p>Where do you want to deploy this app?</p>
-          <div
-            className={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
-            role="group"
-            aria-label="Deployment provider"
-          >
-            {deploymentProviderOptions.map((option) => {
-              const unavailable =
-                !option.available ||
-                integrations.vercel.status === "unavailable";
-              const Icon = option.icon;
-              return (
-                <label
-                  key={option.provider}
-                  data-provider={option.provider}
-                  className={unavailable ? styles.unavailableOption : undefined}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  <span>
-                    {option.name}
-                    {unavailable ? <small>Coming soon</small> : null}
-                  </span>
-                  <input
-                    type="checkbox"
-                    name="deployment-provider"
-                    value={option.provider}
-                    disabled={unavailable}
-                    checked={
-                      !unavailable && deploymentProvider === option.provider
-                    }
-                    onChange={() => {
-                      hasUnsavedChanges.current = true;
-                      setDeploymentProvider((current) =>
-                        current === option.provider ? null : option.provider,
-                      );
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </div>
+        <ProviderChoiceSection
+          className={`${styles.sectionField} ${styles.deploySection}`}
+          section="deploy-to"
+          title="Deploy to"
+          description="Where do you want to deploy this app?"
+          label="Deployment provider"
+          name="deployment-provider"
+          gridClassName={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
+          unavailableClassName={styles.unavailableOption}
+          options={deploymentProviderOptions.map((option) => ({
+            ...option,
+            available:
+              option.available && integrations.vercel.status !== "unavailable",
+          }))}
+          selected={deploymentProvider}
+          onChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setDeploymentProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+        >
           {deploymentProvider === "vercel" &&
           integrations.vercel.status !== "unavailable" ? (
             <div
@@ -1395,50 +1376,29 @@ export function Builder({
               </div>
             </div>
           ) : null}
-        </fieldset>
-        <fieldset className={`${styles.sectionField} ${styles.storeSection}`}>
-          <legend>Store in</legend>
-          <p>Where do you want to store this app?</p>
-          <div
-            className={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
-            role="group"
-            aria-label="Storage provider"
-          >
-            {storageProviderOptions.map((option) => {
-              const unavailable =
-                !option.available ||
-                integrations.github.status === "unavailable";
-              const Icon = option.icon;
-              return (
-                <label
-                  key={option.provider}
-                  data-provider={option.provider}
-                  className={unavailable ? styles.unavailableOption : undefined}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  <span>
-                    {option.name}
-                    {unavailable ? <small>Coming soon</small> : null}
-                  </span>
-                  <input
-                    type="checkbox"
-                    name="storage-provider"
-                    value={option.provider}
-                    disabled={unavailable}
-                    checked={
-                      !unavailable && storageProvider === option.provider
-                    }
-                    onChange={() => {
-                      hasUnsavedChanges.current = true;
-                      setStorageProvider((current) =>
-                        current === option.provider ? null : option.provider,
-                      );
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </div>
+        </ProviderChoiceSection>
+        <ProviderChoiceSection
+          className={`${styles.sectionField} ${styles.storeSection}`}
+          section="store-in"
+          title="Store in"
+          description="Where do you want to store this app?"
+          label="Storage provider"
+          name="storage-provider"
+          gridClassName={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
+          unavailableClassName={styles.unavailableOption}
+          options={storageProviderOptions.map((option) => ({
+            ...option,
+            available:
+              option.available && integrations.github.status !== "unavailable",
+          }))}
+          selected={storageProvider}
+          onChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setStorageProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+        >
           {storageProvider === "github" &&
           integrations.github.status !== "unavailable" ? (
             <div className={styles.providerPanel} id="storage-provider-github">
@@ -1551,17 +1511,17 @@ export function Builder({
               </div>
             </div>
           ) : null}
-        </fieldset>
-        <fieldset className={`${styles.sectionField} ${styles.buildSection}`}>
-          <legend>Build with</legend>
-          <p id="build-destination-help">
-            Where do you want to build this app?
-          </p>
+        </ProviderChoiceSection>
+        <SectionShell
+          className={`${styles.sectionField} ${styles.buildSection}`}
+          section="build-with"
+          title="Build with"
+          description="Where do you want to build this app?"
+        >
           <div
             className={`${styles.optionGrid} ${styles.buildDestinationGrid}`}
             role="radiogroup"
             aria-label="Build destination"
-            aria-describedby="build-destination-help"
           >
             <label className={styles.unavailableOption}>
               <Monitor size={18} aria-hidden="true" />
@@ -1609,7 +1569,7 @@ export function Builder({
               />
             </label>
           </div>
-        </fieldset>
+        </SectionShell>
         {form.buildDestination === "web" ? (
           <fieldset className={styles.modelField}>
             <legend>Model</legend>
@@ -1668,11 +1628,12 @@ export function Builder({
           </fieldset>
         ) : null}
         {connectionsEnabled ? (
-          <fieldset
+          <SectionShell
             className={`${styles.sectionField} ${styles.connectionsSection}`}
+            section="connections"
+            title="Connections"
+            description="Give this app access to tools and data from other services."
           >
-            <legend>Connections</legend>
-            <p>Give this app access to tools and data from other services.</p>
             <label className={styles.searchBox}>
               <Search size={15} aria-hidden="true" />
               <span className={styles.srOnly}>Search connections</span>
@@ -1770,7 +1731,7 @@ export function Builder({
                 ))}
               </div>
             ) : null}
-          </fieldset>
+          </SectionShell>
         ) : null}
         <button
           className={styles.createButton}

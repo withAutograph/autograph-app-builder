@@ -398,6 +398,7 @@ export function projectInstalledEveEvent(
         },
       ];
     case "authorization.required":
+      const authorization = event.data.authorization;
       return [
         {
           type: "input.requested",
@@ -410,6 +411,27 @@ export function projectInstalledEveEvent(
             kind: "authorization",
             title: event.data.name,
             description: event.data.description,
+            ...(authorization === undefined
+              ? {}
+              : {
+                  authorization: {
+                    ...(authorization.url === undefined
+                      ? {}
+                      : { url: authorization.url }),
+                    ...(authorization.userCode === undefined
+                      ? {}
+                      : { userCode: authorization.userCode }),
+                    ...(authorization.expiresAt === undefined
+                      ? {}
+                      : { expiresAt: authorization.expiresAt }),
+                    ...(authorization.instructions === undefined
+                      ? {}
+                      : { instructions: authorization.instructions }),
+                    ...(authorization.displayName === undefined
+                      ? {}
+                      : { displayName: authorization.displayName }),
+                  },
+                }),
             allowFreeform: false,
           },
         },

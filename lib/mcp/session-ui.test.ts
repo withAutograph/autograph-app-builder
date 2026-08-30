@@ -9,55 +9,42 @@ import {
   sessionUiHtml,
 } from "./session-ui";
 
-describe("Autograph App Builder MCP App progress UI", () => {
+describe("Autograph App Builder contextual MCP App", () => {
   it("uses the MCP Apps resource profile and protocol handshake", () => {
     expect(MCP_APP_RESOURCE_MIME_TYPE).toBe("text/html;profile=mcp-app");
-    expect(sessionUiHtml).toContain('method:"ui/initialize"');
-    expect(sessionUiHtml).toContain('"ui/notifications/tool-result"');
-    expect(sessionUiHtml).toContain('"ui/notifications/initialized"');
+    expect(sessionUiHtml).toContain("ui/initialize");
+    expect(sessionUiHtml).toContain("ui/notifications/tool-result");
+    expect(sessionUiHtml).toContain("ui/notifications/initialized");
   });
 
   it("keeps the package, portable, Codex, and runtime versions aligned", () => {
     expect(APP_VERSION).toBe(packageManifest.version);
     expect(portableManifest.version).toBe(packageManifest.version);
     expect(codexManifest.version).toBe(packageManifest.version);
-    expect(sessionUiHtml).toContain(`version:"${packageManifest.version}"`);
+    expect(sessionUiHtml).toContain(packageManifest.version);
   });
 
-  it("keeps a stable viewport and respects reduced motion", () => {
-    expect(sessionUiHtml).toContain("height:312px");
+  it("uses responsive sizing and respects reduced motion", () => {
+    expect(sessionUiHtml).toContain("min-height:100%");
     expect(sessionUiHtml).toContain("overflow:hidden");
     expect(sessionUiHtml).toContain("prefers-reduced-motion:reduce");
   });
 
-  it("uses product language while retaining private handshake identifiers", () => {
+  it("uses focused product language without an event log", () => {
     expect(sessionUiHtml).toContain("<title>Autograph App Builder</title>");
-    expect(sessionUiHtml).toContain(
-      'aria-label="Autograph App Builder progress"',
-    );
-    expect(sessionUiHtml).toContain("Connecting to Autograph App Builder");
-    expect(sessionUiHtml).toContain('id="subtitle">App build');
-    expect(sessionUiHtml).toContain("Build updates will appear here");
-    expect(sessionUiHtml).toContain(
-      'label.textContent="Autograph App Builder"',
-    );
-    expect(sessionUiHtml).toContain(
-      "Autograph App Builder is waiting for your response",
-    );
-    expect(sessionUiHtml).toContain("Autograph App Builder is working");
-    expect(sessionUiHtml).toContain("App build finished");
-    expect(sessionUiHtml).toContain("App build failed");
-    expect(sessionUiHtml).toContain("App build cancelled");
-    expect(sessionUiHtml).not.toContain("App build stopped");
-    expect(sessionUiHtml).toContain('id:"eve-session-init"');
+    expect(sessionUiHtml).toContain("Complete the requested details");
+    expect(sessionUiHtml).toContain("Loading requested controls");
+    expect(sessionUiHtml).toContain("Answer in chat to continue");
+    expect(sessionUiHtml).not.toContain("Build updates will appear here");
+    expect(sessionUiHtml).not.toContain(" events");
     expect(sessionUiHtml).not.toContain("Eve session");
-    expect(sessionUiHtml).not.toContain("Connecting to Eve");
   });
 
-  it("renders untrusted event content as text and removes the placeholder", () => {
-    expect(sessionUiHtml).toContain("document.createTextNode(body)");
-    expect(sessionUiHtml).not.toContain("innerHTML");
-    expect(sessionUiHtml).not.toContain("Complete the production bridge");
+  it("supports interactive submission and authorization", () => {
+    expect(sessionUiHtml).toContain("autograph_respond");
+    expect(sessionUiHtml).toContain("autograph_get");
+    expect(sessionUiHtml).toContain("ui/open-link");
+    expect(sessionUiHtml).toContain("Check connection");
   });
 
   it("never embeds generated app previews", () => {
