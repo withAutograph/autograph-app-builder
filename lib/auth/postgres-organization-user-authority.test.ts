@@ -157,8 +157,9 @@ describe("PostgreSQL Better Auth organization authority", () => {
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      { ...binding, passkeySelfServiceEnabled: true },
+      binding,
       {
+        isSelfServiceSignupEnabled: vi.fn(async () => true),
         generateId: vi
           .fn()
           .mockReturnValueOnce("organization_one")
@@ -174,6 +175,32 @@ describe("PostgreSQL Better Auth organization authority", () => {
       workspaceId: "workspace_one",
     });
     expect(state.execute).toHaveBeenCalledTimes(10);
+  });
+
+  it("requires the self-service flag for a passkey-verified principal", async () => {
+    const state = createDatabase([
+      [
+        {
+          ...user,
+          email: "internal@passkey.autograph.invalid",
+          email_verified: false,
+        },
+      ],
+      [],
+      [{ id: "passkey_one" }],
+      [],
+      [],
+      [],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      binding,
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).rejects.toMatchObject({ reason: "signup-disabled" });
+    expect(state.execute).toHaveBeenCalledTimes(6);
   });
 
   it("keeps personal creation disabled while preserving existing and invited access", async () => {
