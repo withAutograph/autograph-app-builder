@@ -891,7 +891,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         const callbackDiagnostic = githubCallbackDiagnostic(inputUrl);
         try {
           authority = hostedTenantAuthoritySchema.parse(authorityInput);
-        } catch (error) {
+        } catch {
           throw new GitHubInstallationAuthorizationError(
             "callback-state-validation",
             undefined,
