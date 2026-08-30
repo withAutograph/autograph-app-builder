@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("pre-release publication workflow", () => {
-  it("publishes v0.2.2 as a prerelease without marking it latest", async () => {
+  it("publishes v0.2.3 as a prerelease without marking it latest", async () => {
     const workflow = await readFile(
       resolve(".github/workflows/release.yml"),
       "utf8",
