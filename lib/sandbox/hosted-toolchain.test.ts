@@ -63,12 +63,36 @@ describe("hosted Vercel Sandbox toolchain", () => {
       command.indexOf("install -d -m 0755 /workspace/.app-builder"),
     ).toBeLessThan(command.indexOf("curl --fail"));
     expect(command).toContain("hosted_toolchain_bootstrap_failed:%s");
+    for (const stage of [
+      "artifact-verification",
+      "mise-download-verification",
+      "bun-download-verification",
+      "node-download-verification",
+      "cargo-download-verification",
+      "rustc-download-verification",
+      "rust-std-download-verification",
+      "toolchain-extraction",
+      "toolchain-installation",
+      "workspace-source-installation",
+      "toolchain-readback",
+    ])
+      expect(command).toContain(`stage='${stage}'`);
     expect(command).toContain('case "$(uname -m)"');
+    expect(command).toContain("command -v python3 >/dev/null");
+    expect(command).toContain('archive.extractall(destination, filter="data")');
+    expect(command).toContain('extract_verified_archive "$seed" "$work"');
+    expect(command).toContain(
+      'extract_verified_archive "$artifact/source-tree.tar.gz" /workspace/repository',
+    );
+    expect(command).not.toContain(
+      'tar --extract --gzip --file "$seed" --directory "$work"',
+    );
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("sudo install --owner=root --group=root");
     expect(command).toContain("mise --version");
     expect(command).toContain("bun --version");
     expect(command).toContain("node --version");
+    expect(command).toContain("node -e 'const fs=require");
     expect(command).toContain("cargo --version");
     expect(command).toContain("rustc --version");
     expect(command).toContain(
@@ -85,7 +109,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     const command = hostedToolchainBootstrapCommand();
     expect(command).toContain("rm -rf /workspace/repository");
     expect(command).toContain(
-      'tar --extract --gzip --file "$artifact/source-tree.tar.gz" --directory /workspace/repository',
+      'extract_verified_archive "$artifact/source-tree.tar.gz" /workspace/repository',
     );
     expect(command).toContain("/workspace/.app-builder/source-files.json");
     expect(command).toContain(

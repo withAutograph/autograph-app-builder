@@ -146,8 +146,28 @@ case "$(uname -m)" in
 esac
 command -v curl >/dev/null
 command -v git >/dev/null
+command -v python3 >/dev/null
 command -v sha256sum >/dev/null
 command -v unzip >/dev/null
+extract_verified_archive() {
+  python3 - "$1" "$2" <<'PY'
+import pathlib
+import sys
+import tarfile
+
+archive_path = sys.argv[1]
+destination = pathlib.Path(sys.argv[2]).resolve()
+destination.mkdir(parents=True, exist_ok=True)
+with tarfile.open(archive_path, "r:*") as archive:
+    for member in archive.getmembers():
+        member_path = pathlib.PurePosixPath(member.name)
+        if member_path.is_absolute() or ".." in member_path.parts:
+            raise SystemExit("unsafe archive path")
+        if not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
+            raise SystemExit("unsupported archive entry")
+    archive.extractall(destination, filter="data")
+PY
+}
 work="$(mktemp -d /tmp/app-builder-toolchain.XXXXXX)"
 seed='/workspace/.app-builder/hosted-seed.tar.gz'
 stage='prepare-workspace'
@@ -165,30 +185,38 @@ curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "
 stage='artifact-verification'
 test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
 echo '${HOSTED_ARTIFACT_SHA256}  /workspace/.app-builder/hosted-seed.tar.gz' | sha256sum --check --strict
-tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions
+extract_verified_archive "$seed" "$work"
 artifact="$work/.app-builder-hosted-seed"
 test "$(stat --format='%s' "$artifact/source-tree.tar.gz")" = '${HOSTED_SOURCE_ARCHIVE_BYTES}'
 printf '%s  %s\n' '${HOSTED_SOURCE_ARCHIVE_SHA256}' "$artifact/source-tree.tar.gz" | sha256sum --check --strict
 test "$(stat --format='%s' "$artifact/dependency-cache/node-modules.tar.gz")" = '${HOSTED_DEPENDENCY_ARCHIVE_BYTES}'
 printf '%s  %s\n' '${HOSTED_DEPENDENCY_ARCHIVE_SHA256}' "$artifact/dependency-cache/node-modules.tar.gz" | sha256sum --check --strict
 printf '%s  %s\n' '${HOSTED_DEPENDENCY_MANIFEST_SHA256}' "$artifact/dependency-cache/manifest.json" | sha256sum --check --strict
+stage='mise-download-verification'
 curl --fail --location --silent --show-error "$mise_url" --output "$work/mise"
 echo "$mise_sha  $work/mise" | sha256sum --check --strict
+stage='bun-download-verification'
 curl --fail --location --silent --show-error "$bun_url" --output "$work/bun.zip"
 echo "$bun_sha  $work/bun.zip" | sha256sum --check --strict
+stage='node-download-verification'
 curl --fail --location --silent --show-error "$node_url" --output "$work/node.tar.gz"
 echo "$node_sha  $work/node.tar.gz" | sha256sum --check --strict
+stage='cargo-download-verification'
 curl --fail --location --silent --show-error "$cargo_url" --output "$work/cargo.tar.xz"
 echo "$cargo_sha  $work/cargo.tar.xz" | sha256sum --check --strict
+stage='rustc-download-verification'
 curl --fail --location --silent --show-error "$rustc_url" --output "$work/rustc.tar.xz"
 echo "$rustc_sha  $work/rustc.tar.xz" | sha256sum --check --strict
+stage='rust-std-download-verification'
 curl --fail --location --silent --show-error "$rust_std_url" --output "$work/rust-std.tar.xz"
 echo "$rust_std_sha  $work/rust-std.tar.xz" | sha256sum --check --strict
+stage='toolchain-extraction'
 unzip -q "$work/bun.zip" -d "$work"
-tar --extract --gzip --file "$work/node.tar.gz" --directory "$work" --no-same-owner --no-same-permissions
-tar --extract --xz --file "$work/cargo.tar.xz" --directory "$work" --no-same-owner --no-same-permissions
-tar --extract --xz --file "$work/rustc.tar.xz" --directory "$work" --no-same-owner --no-same-permissions
-tar --extract --xz --file "$work/rust-std.tar.xz" --directory "$work" --no-same-owner --no-same-permissions
+extract_verified_archive "$work/node.tar.gz" "$work"
+extract_verified_archive "$work/cargo.tar.xz" "$work"
+extract_verified_archive "$work/rustc.tar.xz" "$work"
+extract_verified_archive "$work/rust-std.tar.xz" "$work"
+stage='toolchain-installation'
 sudo install --owner=root --group=root --mode=0755 "$work/mise" /usr/local/bin/mise
 sudo install --owner=root --group=root --mode=0755 "$work/$bun_directory/bun" /usr/local/bin/bun
 sudo install --owner=root --group=root --mode=0755 "$work/$node_directory/bin/node" /usr/local/bin/node
@@ -203,18 +231,20 @@ sudo install --owner=root --group=root --mode=0444 "$artifact/source-files.json"
 sudo install --owner=root --group=root --mode=0444 "$artifact/source-checksums.sha256" /opt/app-builder/hosted-source/arrusted-development/source-checksums.sha256
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/manifest.json" /opt/app-builder/dependency-cache/manifest.json
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
+stage='workspace-source-installation'
 rm -rf /workspace/repository
 install -d -m 0755 /workspace/repository /workspace/.app-builder
-tar --extract --gzip --file "$artifact/source-tree.tar.gz" --directory /workspace/repository --no-same-owner --no-same-permissions
+extract_verified_archive "$artifact/source-tree.tar.gz" /workspace/repository
 install -m 0644 "$artifact/source-files.json" /workspace/.app-builder/source-files.json
 install -m 0644 "$artifact/source-checksums.sha256" /workspace/.app-builder/source-checksums.sha256
+stage='toolchain-readback'
 git --version
 mise --version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '
 rustc --version | grep -E '^rustc 1[.]97[.]1 '
-bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49"||cache.target.tree!=="88ead91d7b11aae11c526f1c2ee40f5b6db70642") process.exit(1)' \
+node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49"||cache.target.tree!=="88ead91d7b11aae11c526f1c2ee40f5b6db70642") process.exit(1)' \
   && (cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)`;
 }
 
