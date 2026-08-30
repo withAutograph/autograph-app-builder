@@ -25,7 +25,14 @@ export async function GET(
       { params: Promise.resolve({ provider }) },
       verified.authorization,
     );
-  } catch {
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        message: "preview_oauth_approval_relay_failed",
+        reason: error instanceof Error ? error.message : "unknown",
+      }),
+    );
     return new Response("Invalid local OAuth approval", {
       status: 400,
       headers: { "Cache-Control": "no-store" },

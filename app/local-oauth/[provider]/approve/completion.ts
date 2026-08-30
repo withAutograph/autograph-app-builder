@@ -58,7 +58,14 @@ export async function completeAuthorization(
     )
       throw new Error("Emulated OAuth callback is invalid.");
     return NextResponse.redirect(destination, { status: 303 });
-  } catch {
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        message: "local_oauth_approval_failed",
+        reason: error instanceof Error ? error.message : "unknown",
+      }),
+    );
     return new Response("Invalid local OAuth approval", {
       status: 400,
       headers: { "Cache-Control": "no-store" },
