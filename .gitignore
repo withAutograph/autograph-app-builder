@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/test-results
 
 # next.js
 /.next/
@@ -20,6 +21,7 @@
 # production
 /build
 /.artifacts/
+/.emulate/
 
 # misc
 .DS_Store

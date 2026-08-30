@@ -5,7 +5,6 @@ import { createPostgresPreviewOrganizationAuthority } from "./postgres-organizat
 const binding = {
   issuer: "https://new.autograph.so/api/auth",
   audience: "https://new.autograph.so/mcp",
-  selfServiceSignupEnabled: true,
 };
 
 const user = {
@@ -46,7 +45,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      { ...binding, selfServiceSignupEnabled: false },
+      binding,
     );
 
     await expect(
@@ -84,7 +83,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      { ...binding, selfServiceSignupEnabled: false },
+      binding,
       {
         generateId: vi
           .fn()
@@ -119,6 +118,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
       state.database,
       binding,
       {
+        isSelfServiceSignupEnabled: vi.fn(async () => true),
         generateId: vi
           .fn()
           .mockReturnValueOnce("organization_one")
@@ -136,6 +136,73 @@ describe("PostgreSQL Better Auth organization authority", () => {
     expect(state.execute).toHaveBeenCalledTimes(9);
   });
 
+  it("creates a personal workspace for a passkey-verified principal", async () => {
+    const state = createDatabase([
+      [
+        {
+          ...user,
+          email: "internal@passkey.autograph.invalid",
+          email_verified: false,
+        },
+      ],
+      [],
+      [{ id: "passkey_one" }],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [organization],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      binding,
+      {
+        isSelfServiceSignupEnabled: vi.fn(async () => true),
+        generateId: vi
+          .fn()
+          .mockReturnValueOnce("organization_one")
+          .mockReturnValueOnce("workspace_one")
+          .mockReturnValueOnce("member_one"),
+      },
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).resolves.toEqual({
+      organizationId: "organization_one",
+      workspaceId: "workspace_one",
+    });
+    expect(state.execute).toHaveBeenCalledTimes(10);
+  });
+
+  it("requires the self-service flag for a passkey-verified principal", async () => {
+    const state = createDatabase([
+      [
+        {
+          ...user,
+          email: "internal@passkey.autograph.invalid",
+          email_verified: false,
+        },
+      ],
+      [],
+      [{ id: "passkey_one" }],
+      [],
+      [],
+      [],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      binding,
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).rejects.toMatchObject({ reason: "signup-disabled" });
+    expect(state.execute).toHaveBeenCalledTimes(6);
+  });
+
   it("keeps personal creation disabled while preserving existing and invited access", async () => {
     const state = createDatabase([
       [user],
@@ -146,18 +213,43 @@ describe("PostgreSQL Better Auth organization authority", () => {
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      { ...binding, selfServiceSignupEnabled: false },
+      binding,
     );
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).rejects.toMatchObject({ reason: "signup-disabled" });
+    expect(state.execute).toHaveBeenCalledTimes(5);
+  });
+
+  it("fails closed when self-service signup cannot be evaluated", async () => {
+    const state = createDatabase([
+      [user],
+      [{ provider_id: "github" }],
+      [],
+      [],
+      [],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      binding,
+      {
+        isSelfServiceSignupEnabled: vi.fn(async () => {
+          throw new Error("feature flags unavailable");
+        }),
+      },
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).rejects.toMatchObject({ reason: "signup-disabled" });
+    expect(state.execute).toHaveBeenCalledTimes(5);
   });
 
   it.each([
     {
       name: "an unverified user",
-      results: [[{ ...user, email_verified: false }]],
+      results: [[{ ...user, email_verified: false }], [], []],
       reason: "verified-identity-required",
     },
     {
@@ -167,7 +259,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
     },
     {
       name: "a user without a GitHub or Vercel account",
-      results: [[user], []],
+      results: [[user], [], []],
       reason: "verified-identity-required",
     },
     {

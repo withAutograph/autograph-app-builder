@@ -60,7 +60,12 @@ describe("hosted Vercel sandbox backend", () => {
     expect(factory).toHaveBeenCalledOnce();
     expect(options).toBeDefined();
     expect(options!.networkPolicy).toEqual({
-      allow: ["github.com", "release-assets.githubusercontent.com"],
+      allow: [
+        "github.com",
+        "release-assets.githubusercontent.com",
+        "nodejs.org",
+        "static.rust-lang.org",
+      ],
     });
     expect(options!.resources).toEqual({ vcpus: 2 });
     expect(options!.timeout).toBe(900_000);

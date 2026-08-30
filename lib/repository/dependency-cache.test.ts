@@ -25,15 +25,15 @@ import {
 const archiveDigest = "a".repeat(64);
 const hostedArchiveDigest =
   "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
-const hostedPlanningManifest = {
+const hostedExecutionManifest = {
   version: 1,
-  scope: "identity-planning",
-  platform: "linux/portable",
+  scope: "builder-execution",
+  platform: "linux/x86_64",
   target: {
     sha: ARRUSTED_TARGET_SHA,
     tree: ARRUSTED_TARGET_TREE,
     miseConfigSha256:
-      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
     miseLockSha256:
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     bunLockSha256:
@@ -43,7 +43,7 @@ const hostedPlanningManifest = {
     appContractSha256:
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     repositoryPreflightSha256:
-      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
     repositoryExecSha256:
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
   },
@@ -64,7 +64,7 @@ const manifest = {
     sha: ARRUSTED_TARGET_SHA,
     tree: ARRUSTED_TARGET_TREE,
     miseConfigSha256:
-      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
     miseLockSha256:
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
     bunLockSha256:
@@ -79,7 +79,7 @@ const manifest = {
     createAppSha256: ARRUSTED_CREATE_APP_SHA256,
     appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
     repositoryPreflightSha256:
-      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
     repositoryExecSha256:
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
   },
@@ -120,8 +120,8 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   return { run, sandbox };
 }
 
-function hostedPlanningSandbox(
-  inputManifest: unknown = hostedPlanningManifest,
+function hostedExecutionSandbox(
+  inputManifest: unknown = hostedExecutionManifest,
 ) {
   const run = vi
     .fn()
@@ -139,6 +139,37 @@ function hostedPlanningSandbox(
 }
 
 describe("offline dependency cache", () => {
+  it("builds the hosted seed as an execution-complete Linux closure", () => {
+    const producer = readFileSync(
+      ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
+      "utf8",
+    );
+    for (const packageName of [
+      "@testing-library/react",
+      "@tailwindcss/vite",
+      "@vitejs/plugin-react",
+      "next",
+      "react",
+      "react-dom",
+      "typescript",
+      "turbo",
+      "vite-plus",
+      "vitest",
+    ])
+      expect(producer).toContain(`"${packageName}"`);
+    expect(producer).toContain(
+      'process.platform !== "linux" || process.arch !== "x64"',
+    );
+    expect(producer).toContain('["vp", "../vite-plus/bin/vp"]');
+    expect(producer).toContain('["turbo", "../turbo/bin/turbo"]');
+    expect(producer).toContain('"@autograph",\n    "vite-config"');
+    expect(producer).toContain('scope: "builder-execution"');
+    expect(producer).toContain('platform: "linux/x86_64"');
+    expect(producer).toContain(
+      "rootVersions.set(dependency, dependencyVersion)",
+    );
+  });
+
   it("resolves the materialized closure root for local and Vercel sandboxes", () => {
     expect(materializedDependencyNodeModulesRoot(archiveDigest, {})).toBe(
       `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
@@ -153,23 +184,55 @@ describe("offline dependency cache", () => {
     ).toThrow(/content digest is invalid/u);
   });
 
-  it("accepts only the exact narrow hosted planning closure", async () => {
-    const { run, sandbox } = hostedPlanningSandbox();
-    const observed = await inspectDependencyCache(sandbox, { VERCEL: "1" });
+  it("accepts the exact hosted execution closure", async () => {
+    const { run, sandbox } = hostedExecutionSandbox();
+    const observed = await inspectDependencyCache(sandbox, {
+      ...process.env,
+      APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
+      APP_BUILDER_REAL_SANDBOX: "1",
+    });
 
-    expect(observed.manifest.scope).toBe("identity-planning");
+    expect(observed.manifest.scope).toBe("builder-execution");
     expect(observed.contentDigest).toBe(hostedArchiveDigest);
     expect(run).toHaveBeenNthCalledWith(2, {
-      command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH}`,
+      command: `sha256sum -- /workspace/.app-builder/hosted-dependency-cache/node-modules.tar.gz && stat --format='%s' -- /workspace/.app-builder/hosted-dependency-cache/node-modules.tar.gz`,
       workingDirectory: "/workspace",
       abortSignal: expect.any(AbortSignal),
     });
   });
 
-  it("rejects hosted planning receipt drift before reading archives", async () => {
-    const { run, sandbox } = hostedPlanningSandbox({
-      ...hostedPlanningManifest,
-      target: { ...hostedPlanningManifest.target, sha: "0".repeat(40) },
+  it("rejects hosted execution receipt drift before reading archives", async () => {
+    const { run, sandbox } = hostedExecutionSandbox({
+      ...hostedExecutionManifest,
+      target: { ...hostedExecutionManifest.target, sha: "0".repeat(40) },
+    });
+
+    await expect(
+      inspectDependencyCache(sandbox, {
+        ...process.env,
+        APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
+        APP_BUILDER_REAL_SANDBOX: "1",
+      }),
+    ).rejects.toThrow("manifest drifted");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts the embedded execution-complete cache on Vercel", async () => {
+    const { run, sandbox } = hostedExecutionSandbox();
+
+    await expect(
+      inspectDependencyCache(sandbox, { VERCEL: "1" }),
+    ).resolves.toEqual(
+      expect.objectContaining({ contentDigest: hostedArchiveDigest }),
+    );
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects the former planning-only cache on Vercel", async () => {
+    const { run, sandbox } = hostedExecutionSandbox({
+      ...hostedExecutionManifest,
+      scope: "identity-planning",
+      platform: "linux/portable",
     });
 
     await expect(
@@ -274,6 +337,32 @@ describe("offline dependency cache", () => {
     );
     expect(linkCommand).toContain("test -d");
     expect(linkCommand).toContain("test ! -L");
+    for (const required of [
+      ".bin/next",
+      ".bin/turbo",
+      ".bin/vp",
+      "@autograph/vite-config/package.json",
+      "@tailwindcss/vite/package.json",
+      "@testing-library/react/package.json",
+      "@vitejs/plugin-react/package.json",
+      "next/package.json",
+      "react/package.json",
+      "react-dom/package.json",
+      "typescript/package.json",
+      "turbo/package.json",
+      "vite-plus/package.json",
+      "vitest/package.json",
+    ])
+      expect(linkCommand).toContain(
+        `/opt/app-builder/dependencies/${archiveDigest}/node_modules/${required}`,
+      );
+    expect(linkCommand).toContain(
+      `test -x /opt/app-builder/dependencies/${archiveDigest}/node_modules/.bin/vp`,
+    );
+    expect(linkCommand).toContain(
+      `test -x /opt/app-builder/dependencies/${archiveDigest}/node_modules/.bin/turbo`,
+    );
+    expect(linkCommand).toContain('await import("@autograph/vite-config")');
     expect(linkCommand).toContain("\\( -type f -o -type d \\) -perm /222");
     expect(linkCommand).toContain("ln -s");
     expect(linkCommand).toContain(

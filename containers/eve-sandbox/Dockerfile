@@ -55,9 +55,9 @@ RUN set -eux; \
 
 FROM toolchain AS dependency-cache
 
-ARG TARGET_SHA=ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49
-ARG TARGET_TREE=88ead91d7b11aae11c526f1c2ee40f5b6db70642
-ARG MISE_CONFIG_SHA256=be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8
+ARG TARGET_SHA=d378904a05e1bc2c0896886e6fbd3b816babaee2
+ARG TARGET_TREE=6735f4b45cc2b29a139531a41dac990c925e0d39
+ARG MISE_CONFIG_SHA256=da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199
 ARG MISE_LOCK_SHA256=415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462
 ARG BUN_LOCK_SHA256=e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0
 ARG CARGO_LOCK_SHA256=8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb
@@ -66,7 +66,7 @@ ARG APP_CONTRACT_SHA256=03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17
 ARG APP_VALIDATION_SHA256=db6cac93c5a89ba26db8274312959114d674ec1901ee9fcd93ab9d6ef2c503a5
 ARG CREATE_APP_SHA256=357d18e3cb355736638ed087355739858da59cf7c43dc09755ac1c589a4397ff
 ARG APP_TEMPLATE_PACKAGE_SHA256=c7cb64a189e464abd5f1825db52dcdac62c3898940826d9ae49553291d35d762
-ARG REPOSITORY_PREFLIGHT_SHA256=7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340
+ARG REPOSITORY_PREFLIGHT_SHA256=c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba
 ARG REPOSITORY_EXEC_SHA256=7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc
 
 COPY --from=arrusted-target / /tmp/arrusted-target
@@ -92,7 +92,15 @@ RUN set -eux; \
     rm -rf node_modules; \
     bun install --frozen-lockfile --ignore-scripts --linker=hoisted; \
     test "$(bun --version)" = "1.3.14"; \
+    test -x node_modules/.bin/vp; \
+    test -f node_modules/@testing-library/react/package.json; \
     test "$(bun -e 'console.log(require("./node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"; \
+    test -f node_modules/next/package.json; \
+    test -f node_modules/react/package.json; \
+    test -f node_modules/react-dom/package.json; \
+    test -f node_modules/typescript/package.json; \
+    test -f node_modules/vite-plus/package.json; \
+    test -f node_modules/vitest/package.json; \
     cd packages/platform-microfrontends; \
     test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "8.4.2"; \
     test "$(bun -e 'console.log(require("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json").version)')" = "6.3.0"; \

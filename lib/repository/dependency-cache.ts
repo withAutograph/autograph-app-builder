@@ -8,8 +8,8 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
-export const ARRUSTED_TARGET_SHA = "ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49";
-export const ARRUSTED_TARGET_TREE = "88ead91d7b11aae11c526f1c2ee40f5b6db70642";
+export const ARRUSTED_TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
+export const ARRUSTED_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 export const ARRUSTED_BUN_VERSION = "1.3.14";
 export const ARRUSTED_RUST_VERSION = "1.97.1";
 export const ARRUSTED_MICROFRONTENDS_VERSION = "2.4.0";
@@ -33,18 +33,40 @@ export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
 export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 
+const REQUIRED_EXECUTION_PACKAGES = [
+  ".bin/next",
+  ".bin/turbo",
+  ".bin/vp",
+  "@autograph/vite-config/package.json",
+  "@tailwindcss/vite/package.json",
+  "@testing-library/react/package.json",
+  "@vercel/microfrontends/package.json",
+  "@vitejs/plugin-react/package.json",
+  "next/package.json",
+  "react/package.json",
+  "react-dom/package.json",
+  "typescript/package.json",
+  "turbo/package.json",
+  "vite-plus/package.json",
+  "vitest/package.json",
+] as const;
+
 const sha256Digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
 
 const dependencyCacheManifestShapeSchema = z.strictObject({
   version: z.literal(1),
   scope: z.literal("builder-execution"),
-  platform: z.union([z.literal("linux/arm64"), z.literal("linux/portable")]),
+  platform: z.union([
+    z.literal("linux/arm64"),
+    z.literal("linux/x86_64"),
+    z.literal("linux/portable"),
+  ]),
   target: z.strictObject({
     sha: gitObjectId,
     tree: gitObjectId,
     miseConfigSha256: z.literal(
-      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
     ),
     miseLockSha256: z.literal(
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
@@ -65,7 +87,7 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     createAppSha256: z.literal(ARRUSTED_CREATE_APP_SHA256),
     appTemplatePackageSha256: z.literal(ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256),
     repositoryPreflightSha256: z.literal(
-      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
     ),
     repositoryExecSha256: z.literal(
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
@@ -87,15 +109,15 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
   }),
 });
 
-export const hostedPlanningDependencyCacheManifestSchema = z.strictObject({
+export const hostedExecutionDependencyCacheManifestSchema = z.strictObject({
   version: z.literal(1),
-  scope: z.literal("identity-planning"),
-  platform: z.literal("linux/portable"),
+  scope: z.literal("builder-execution"),
+  platform: z.literal("linux/x86_64"),
   target: z.strictObject({
     sha: z.literal(ARRUSTED_TARGET_SHA),
     tree: z.literal(ARRUSTED_TARGET_TREE),
     miseConfigSha256: z.literal(
-      "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
     ),
     miseLockSha256: z.literal(
       "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
@@ -110,7 +132,7 @@ export const hostedPlanningDependencyCacheManifestSchema = z.strictObject({
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     ),
     repositoryPreflightSha256: z.literal(
-      "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
     ),
     repositoryExecSha256: z.literal(
       "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
@@ -136,7 +158,7 @@ export const dependencyCacheManifestSchema =
 
 export type DependencyCacheManifest =
   | z.infer<typeof dependencyCacheManifestShapeSchema>
-  | z.infer<typeof hostedPlanningDependencyCacheManifestSchema>;
+  | z.infer<typeof hostedExecutionDependencyCacheManifestSchema>;
 
 export type ObservedDependencyCache = {
   manifest: DependencyCacheManifest;
@@ -196,7 +218,13 @@ const hostedArtifactDependencyCacheEnabled = (
   environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF === "1" &&
   hasTestCapability("mock-model", environment);
 
-const hostedPlanningDependencyCacheEnabled = (
+const hostedSeedDependencyCacheEnabled = (
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
+  environment.VERCEL === "1" ||
+  hostedArtifactDependencyCacheEnabled(environment);
+
+const hostedWorkspaceDependencyExtractionEnabled = (
   environment: Readonly<Record<string, string | undefined>>,
 ) =>
   environment.VERCEL === "1" ||
@@ -207,7 +235,7 @@ export function materializedDependencyNodeModulesRoot(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
   const immutableImageRoot = dependencyCacheNodeModulesRoot(contentDigest);
-  if (hostedPlanningDependencyCacheEnabled(environment))
+  if (hostedWorkspaceDependencyExtractionEnabled(environment))
     return `/workspace/.app-builder/hosted-dependencies/${contentDigest}/node_modules`;
   return immutableImageRoot;
 }
@@ -247,7 +275,7 @@ function fixtureManifest(
       sha: target.sourceSha,
       tree: target.sourceTree,
       miseConfigSha256:
-        "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+        "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
       miseLockSha256:
         "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
       bunLockSha256:
@@ -262,7 +290,7 @@ function fixtureManifest(
       createAppSha256: ARRUSTED_CREATE_APP_SHA256,
       appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
       repositoryPreflightSha256:
-        "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+        "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
       repositoryExecSha256:
         "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
     },
@@ -318,17 +346,17 @@ export async function inspectDependencyCache(
   } catch {
     throw new Error("The fixed offline dependency cache manifest is invalid.");
   }
-  const hostedPlanning = hostedPlanningDependencyCacheEnabled(environment);
+  const hostedExecution = hostedSeedDependencyCacheEnabled(environment);
   const validated = (
-    hostedPlanning
-      ? hostedPlanningDependencyCacheManifestSchema
+    hostedExecution
+      ? hostedExecutionDependencyCacheManifestSchema
       : dependencyCacheManifestSchema
   ).safeParse(parsed);
   if (!validated.success)
     throw new Error("The fixed offline dependency cache manifest drifted.");
 
   const archiveResult = await sandbox.run({
-    command: hostedPlanning
+    command: hostedExecution
       ? `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive}`
       : `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive} && sha256sum -- ${cachePaths.cargoArchive} && stat --format='%s' -- ${cachePaths.cargoArchive}`,
     workingDirectory: "/workspace",
@@ -347,7 +375,7 @@ export async function inspectDependencyCache(
   const observedBytes = Number(sizeLine);
   const observedCargoDigest = cargoChecksumLine?.trim().split(/\s+/u)[0];
   const observedCargoBytes = Number(cargoSizeLine);
-  const fullClosure = hostedPlanning
+  const fullClosure = hostedExecution
     ? undefined
     : dependencyCacheManifestSchema.parse(validated.data).closure;
   if (
@@ -395,18 +423,22 @@ export async function materializeOfflineDependencies(input: {
   });
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
-    const hostedPlanning = hostedPlanningDependencyCacheEnabled(environment);
+    const hostedExecution =
+      hostedWorkspaceDependencyExtractionEnabled(environment);
     const hostedDependencyRoot = `/workspace/.app-builder/hosted-dependencies/${observed.contentDigest}`;
     const absoluteNodeModules = materializedDependencyNodeModulesRoot(
       observed.contentDigest,
       environment,
     );
-    const installHostedClosure = hostedPlanning
+    const installHostedClosure = hostedExecution
       ? `if [ ! -d ${absoluteNodeModules} ]; then rm -rf ${hostedDependencyRoot} && install -d -m 0755 ${hostedDependencyRoot} && tar --extract --gzip --file ${dependencyCachePaths(environment).archive} --directory ${hostedDependencyRoot} --no-same-owner --no-same-permissions && chmod -R a-w,a+rX ${hostedDependencyRoot}; fi && `
       : "";
     await ensureSandboxDirectories(input.sandbox, [root]);
+    const requiredExecutionClosure = REQUIRED_EXECUTION_PACKAGES.map(
+      (path) => `test -e ${absoluteNodeModules}/${path}`,
+    ).join(" && ");
     const extraction = await input.sandbox.run({
-      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}" && cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
@@ -438,7 +470,7 @@ export async function materializeOfflineDependencies(input: {
     throw new Error("The required offline dependency closure drifted.");
   if (
     !fixtureDependencyCacheEnabled(environment) &&
-    !hostedPlanningDependencyCacheEnabled(environment)
+    !hostedArtifactDependencyCacheEnabled(environment)
   ) {
     const resolution = await input.sandbox.run({
       command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
@@ -452,18 +484,20 @@ export async function materializeOfflineDependencies(input: {
     );
     if (resolution.exitCode !== 0)
       throw new Error("The required offline dependency closure is incomplete.");
-    const rustToolchain = await input.sandbox.run({
-      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
-      workingDirectory: `/workspace/${root}`,
-      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
-    });
-    boundedOutput(
-      rustToolchain.stdout,
-      rustToolchain.stderr,
-      "Offline Rust toolchain inspection",
-    );
-    if (rustToolchain.exitCode !== 0)
-      throw new Error("The required offline Rust toolchain is incomplete.");
+    if (!hostedSeedDependencyCacheEnabled(environment)) {
+      const rustToolchain = await input.sandbox.run({
+        command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
+        workingDirectory: `/workspace/${root}`,
+        abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+      });
+      boundedOutput(
+        rustToolchain.stdout,
+        rustToolchain.stderr,
+        "Offline Rust toolchain inspection",
+      );
+      if (rustToolchain.exitCode !== 0)
+        throw new Error("The required offline Rust toolchain is incomplete.");
+    }
   }
   return { ...observed, planningRoot: `/workspace/${root}` };
 }

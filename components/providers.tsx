@@ -11,9 +11,18 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
 import { oauthProviderPlugin } from "@/lib/auth/oauth-provider-plugin";
+import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({
+  children,
+  githubAuthEnabled,
+  vercelAuthEnabled,
+}: {
+  children: ReactNode;
+  githubAuthEnabled: boolean;
+  vercelAuthEnabled: boolean;
+}) {
   const router = useRouter();
   const queryClient = getQueryClient();
 
@@ -25,12 +34,14 @@ export function Providers({ children }: { children: ReactNode }) {
         navigate={({ to, replace }) =>
           replace ? router.replace(to) : router.push(to)
         }
-        plugins={[oauthProviderPlugin()]}
+        plugins={[oauthProviderPlugin(), passkeyPlugin({ autoFill: false })]}
         emailAndPassword={{ enabled: false }}
         redirectTo="/auth/setting-up?callbackURL=%2F"
         socialProviders={[
-          { id: "vercel", label: "Vercel", icon: <SiVercel /> },
-          "github",
+          ...(vercelAuthEnabled
+            ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }]
+            : []),
+          ...(githubAuthEnabled ? (["github"] as const) : []),
         ]}
       >
         <TooltipProvider>{children}</TooltipProvider>

@@ -89,7 +89,7 @@ describe("bounded sandbox command", () => {
       'wait "$monitor"',
     ])
       expect(command).toContain(required);
-    expect(command).toContain("ulimit -f 131072");
+    expect(command).toContain("ulimit -f 262144");
     expect(command.match(/node -e/g)).toHaveLength(1);
     expect(command).not.toContain("bun -e");
     for (const repeatedProcess of [

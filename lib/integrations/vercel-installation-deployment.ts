@@ -20,6 +20,7 @@ import {
   readVercelIntegrationEnvironment,
   verifyVercelWebhook,
 } from "./vercel-installation";
+import { readLocalProviderEmulation } from "./local-provider-emulation";
 import {
   signInForWorkspaceRedirect,
   workspaceOnboardingRedirect,
@@ -35,6 +36,7 @@ function deployment(
 ) {
   const preview = readPreviewOAuthRuntimeConfig(environment);
   const config = readVercelIntegrationEnvironment(environment);
+  const emulation = readLocalProviderEmulation(environment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const membership = createPostgresPreviewOrganizationAuthority(database, {
     issuer: preview.issuer,
@@ -69,6 +71,7 @@ function deployment(
       membership: {
         isActiveMember: (authority) => membership.isActiveMember(authority),
       },
+      emulation,
     }),
   };
 }

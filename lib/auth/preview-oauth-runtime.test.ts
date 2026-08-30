@@ -17,6 +17,7 @@ const environment = {
   GITHUB_CLIENT_SECRET: "github-client-secret",
   VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
   VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
+  PASSKEY_ONBOARDING: undefined,
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
@@ -134,28 +135,12 @@ describe("Preview OAuth runtime configuration", () => {
       environment: "preview",
       githubClientId: "github-client-id",
       githubClientSecret: "github-client-secret",
-      selfServiceSignupEnabled: false,
     });
     for (const field of ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const) {
       expect(() =>
         readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
       ).toThrow();
     }
-  });
-
-  it("enables personal workspace signup only for the exact feature flag", () => {
-    expect(
-      readPreviewOAuthRuntimeConfig({
-        ...environment,
-        SELF_SERVICE_SIGNUP_ENABLED: "1",
-      }),
-    ).toMatchObject({ selfServiceSignupEnabled: true });
-    expect(() =>
-      readPreviewOAuthRuntimeConfig({
-        ...environment,
-        SELF_SERVICE_SIGNUP_ENABLED: "true",
-      }),
-    ).toThrow();
   });
 
   it("requires Vercel authentication credentials", () => {
@@ -172,6 +157,100 @@ describe("Preview OAuth runtime configuration", () => {
         readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
       ).toThrow();
     }
+  });
+
+  it("accepts Emulate credentials only through the explicit local gate", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        EVE_HOSTED_ADAPTER: "1",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        GITHUB_CLIENT_ID: "local-github-client",
+        GITHUB_CLIENT_SECRET: "local-github-secret",
+        VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
+        VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret",
+        VERCEL_EMULATOR_URL: "http://localhost:4000",
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+      }),
+    ).toMatchObject({
+      environment: "local",
+      databaseUrl:
+        "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+    });
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        VERCEL_EMULATOR_URL: "http://localhost:4000",
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+      }),
+    ).toThrow("Local provider emulation is unavailable");
+  });
+
+  it("starts an enabled Preview with passkeys and no OAuth credentials", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        GITHUB_CLIENT_ID: undefined,
+        GITHUB_CLIENT_SECRET: undefined,
+        VERCEL_AUTH_CLIENT_ID: undefined,
+        VERCEL_AUTH_CLIENT_SECRET: undefined,
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
+        VERCEL_URL: "builder.example.test",
+        BETTER_AUTH_URL: undefined,
+        MCP_RESOURCE_URL: undefined,
+      }),
+    ).toMatchObject({
+      environment: "preview",
+      issuer: "https://builder.example.test/api/auth",
+      resource: "https://builder.example.test/mcp",
+      githubClientId: undefined,
+      vercelClientId: undefined,
+      passkeyOnboarding: { deploymentId: "dpl_preview_123" },
+    });
+  });
+
+  it("rejects a partially configured OAuth provider", () => {
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
+        VERCEL_URL: "builder.example.test",
+        GITHUB_CLIENT_SECRET: undefined,
+      }),
+    ).toThrow("both client ID and client secret");
+  });
+
+  it("starts locally for passkeys without OAuth provider credentials", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        NODE_ENV: "development",
+        BETTER_AUTH_URL: "http://localhost:3000/api/auth",
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        DATABASE_URL: "postgresql://runtime:secret@localhost/app",
+        PASSKEY_ONBOARDING: "local-preview-v1",
+      }),
+    ).toMatchObject({
+      environment: "development",
+      hostedAdapter: "0",
+      githubClientId: undefined,
+      vercelClientId: undefined,
+      passkeyOnboarding: { deploymentId: "local" },
+    });
   });
 
   it("accepts Production only when Vercel and the configured environment agree", () => {

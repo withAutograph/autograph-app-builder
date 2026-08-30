@@ -14,6 +14,7 @@ import {
   type HostedAdminPlanRequest,
 } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "./provider-connection-return";
+import type { LocalProviderEmulation } from "./local-provider-emulation";
 
 type Authority = HostedAdminPlanRequest["authority"];
 
@@ -169,6 +170,7 @@ export function createVercelInstallationAuthorization(input: {
   fetch?: typeof fetch;
   now?: () => number;
   nonce?: () => string;
+  emulation?: LocalProviderEmulation;
 }) {
   const config = configSchema.parse(input.config);
   const request = input.fetch ?? fetch;
@@ -193,10 +195,9 @@ export function createVercelInstallationAuthorization(input: {
         expiresAt: new Date(issuedAt + 10 * 60_000),
         returnState,
       });
-      const url = new URL(
-        `/integrations/${config.slug}/new`,
-        "https://vercel.com",
-      );
+      const url = input.emulation
+        ? new URL("/local-connections/vercel", config.issuer)
+        : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
       return url.toString();
     },
@@ -230,30 +231,33 @@ export function createVercelInstallationAuthorization(input: {
       });
       if (!returnState) throw new Error("state-invalid");
 
-      const tokenResponse = await request(
-        "https://api.vercel.com/v2/oauth/access_token",
-        {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/x-www-form-urlencoded",
+      const token = await (async () => {
+        const tokenResponse = await request(
+          input.emulation
+            ? `${input.emulation.vercelOrigin}/login/oauth/token`
+            : "https://api.vercel.com/v2/oauth/access_token",
+          {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              client_id: config.clientId,
+              client_secret: config.clientSecret,
+              code,
+              redirect_uri: new URL(
+                "/vercel/installations/callback",
+                config.issuer,
+              ).toString(),
+            }),
+            signal: AbortSignal.timeout(8_000),
           },
-          body: new URLSearchParams({
-            client_id: config.clientId,
-            client_secret: config.clientSecret,
-            code,
-            redirect_uri: new URL(
-              "/vercel/installations/callback",
-              config.issuer,
-            ).toString(),
-          }),
-          signal: AbortSignal.timeout(8_000),
-        },
-      );
-      if (!tokenResponse.ok) throw new Error("token-exchange-failed");
-      const { access_token: token } = tokenResponseSchema.parse(
-        await tokenResponse.json(),
-      );
+        );
+        if (!tokenResponse.ok) throw new Error("token-exchange-failed");
+        return tokenResponseSchema.parse(await tokenResponse.json())
+          .access_token;
+      })();
       const headers = {
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
@@ -261,7 +265,7 @@ export function createVercelInstallationAuthorization(input: {
       let binding: Omit<VercelInstallationBinding, "active" | "updatedAt">;
       if (teamId) {
         const response = await request(
-          `https://api.vercel.com/v2/teams/${encodeURIComponent(teamId)}`,
+          `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/teams/${encodeURIComponent(teamId)}`,
           {
             headers,
             signal: AbortSignal.timeout(8_000),
@@ -278,10 +282,13 @@ export function createVercelInstallationAuthorization(input: {
           plan: team.billing?.plan ?? "unknown",
         };
       } else {
-        const response = await request("https://api.vercel.com/v2/user", {
-          headers,
-          signal: AbortSignal.timeout(8_000),
-        });
+        const response = await request(
+          `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/user`,
+          {
+            headers,
+            signal: AbortSignal.timeout(8_000),
+          },
+        );
         if (!response.ok) throw new Error("scope-read-failed");
         const { user } = userSchema.parse(await response.json());
         binding = {

@@ -13,6 +13,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -22,16 +23,34 @@ import { create as createTar } from "tar";
 
 import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts";
 
-const TARGET_SHA = "ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49";
-const TARGET_TREE = "88ead91d7b11aae11c526f1c2ee40f5b6db70642";
-const OUTPUT_NAME = "arrusted-ffa0c34a-preview.tar.gz";
+const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
+const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
+const OUTPUT_NAME = "arrusted-d378904a-preview.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
+const EXECUTION_ROOT_PACKAGES = [
+  "@tailwindcss/vite",
+  "@testing-library/jest-dom",
+  "@testing-library/react",
+  "@types/node",
+  "@types/react",
+  "@types/react-dom",
+  "@vercel/microfrontends",
+  "@vitejs/plugin-react",
+  "babel-plugin-react-compiler",
+  "next",
+  "react",
+  "react-dom",
+  "typescript",
+  "turbo",
+  "vite-plus",
+  "vitest",
+] as const;
 const SOURCE_FILE = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u;
 
 const targetDigests = {
   miseConfigSha256:
-    "be05ac034f1d73b62526a81b8353963692817dfbedce6698e5ff4baacbb0e3a8",
+    "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
   miseLockSha256:
     "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
   bunLockSha256:
@@ -41,7 +60,7 @@ const targetDigests = {
   appContractSha256:
     "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
   repositoryPreflightSha256:
-    "7c6f5fb5f44aaf436cfc558ea82cc78dae02895dd7012497fa0c1ee7dc589340",
+    "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
   repositoryExecSha256:
     "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
 } as const;
@@ -123,12 +142,32 @@ function packageResolutionRoot(packagePath: string): string {
   return packagePath.slice(0, index + marker.length - 1);
 }
 
+function packageVersion(packagePath: string): string {
+  const manifest = JSON.parse(
+    readFileSync(join(packagePath, "package.json"), "utf8"),
+  ) as { version?: string };
+  if (typeof manifest.version !== "string")
+    throw new Error("Dependency package version is missing.");
+  return manifest.version;
+}
+
 function dependencyClosure(root: string): Map<string, string> {
   const installedRoot = join(root, "node_modules");
-  const pending = [{ name: REQUIRED_PACKAGE, resolutionRoot: installedRoot }];
+  const pending = EXECUTION_ROOT_PACKAGES.map((name) => ({
+    name,
+    resolutionRoot: installedRoot,
+    destination: name,
+  }));
   const packages = new Map<string, string>();
+  const rootVersions = new Map<string, string>();
+  for (const name of EXECUTION_ROOT_PACKAGES) {
+    const packagePath = packageRoot(installedRoot, installedRoot, name);
+    if (packagePath === undefined)
+      throw new Error(`Dependency ${name} is missing.`);
+    rootVersions.set(name, packageVersion(packagePath));
+  }
   while (pending.length > 0) {
-    const { name, resolutionRoot } = pending.shift()!;
+    const { name, resolutionRoot, destination } = pending.shift()!;
     const packagePath = packageRoot(installedRoot, resolutionRoot, name);
     if (packagePath === undefined)
       throw new Error(`Dependency ${name} is missing.`);
@@ -144,29 +183,47 @@ function dependencyClosure(root: string): Map<string, string> {
       manifest.version !== REQUIRED_PACKAGE_VERSION
     )
       throw new Error("The required microfrontends version drifted.");
-    const existing = packages.get(name);
+    const existing = packages.get(destination);
     if (existing !== undefined) {
-      const existingVersion = JSON.parse(
-        readFileSync(join(existing, "package.json"), "utf8"),
-      ) as { version?: string };
-      if (existingVersion.version !== manifest.version)
-        throw new Error(`Dependency ${name} requires conflicting versions.`);
+      if (packageVersion(existing) !== manifest.version)
+        throw new Error(`Dependency destination ${destination} drifted.`);
       continue;
     }
-    packages.set(name, packagePath);
+    packages.set(destination, packagePath);
+    if (!rootVersions.has(name)) rootVersions.set(name, manifest.version!);
     const childResolutionRoot = packageResolutionRoot(packagePath);
+    const enqueue = (dependency: string) => {
+      const dependencyPath = packageRoot(
+        installedRoot,
+        childResolutionRoot,
+        dependency,
+      );
+      if (dependencyPath === undefined) return false;
+      const dependencyVersion = packageVersion(dependencyPath);
+      const rootVersion = rootVersions.get(dependency);
+      if (rootVersion === undefined)
+        rootVersions.set(dependency, dependencyVersion);
+      const dependencyDestination =
+        rootVersion === undefined || rootVersion === dependencyVersion
+          ? dependency
+          : join(destination, "node_modules", dependency);
+      pending.push({
+        name: dependency,
+        resolutionRoot: childResolutionRoot,
+        destination: dependencyDestination,
+      });
+      return true;
+    };
     for (const dependency of Object.keys(
       manifest.dependencies ?? {},
     ).toSorted())
-      pending.push({ name: dependency, resolutionRoot: childResolutionRoot });
+      if (!enqueue(dependency))
+        throw new Error(`Dependency ${dependency} is missing.`);
     for (const dependency of Object.keys(
       manifest.optionalDependencies ?? {},
     ).toSorted()) {
-      if (
-        packageRoot(installedRoot, childResolutionRoot, dependency) !==
-        undefined
-      )
-        pending.push({ name: dependency, resolutionRoot: childResolutionRoot });
+      if (dependency.includes("musl")) continue;
+      enqueue(dependency);
     }
   }
   return new Map(
@@ -187,8 +244,6 @@ function normalizeTree(root: string): void {
       if (!within(root, target))
         throw new Error("Artifact symlink escapes its root.");
     } else if (entry.isFile()) {
-      if (path.endsWith(".node"))
-        throw new Error("Hosted dependency closure must be platform-portable.");
       chmodSync(path, entry.mode & 0o111 ? 0o755 : 0o644);
     } else {
       throw new Error("Artifact contains an unsupported filesystem entry.");
@@ -222,6 +277,8 @@ function writeGzipTar(
 }
 
 const { arrustedRoot, output } = parseArguments(process.argv.slice(2));
+if (process.platform !== "linux" || process.arch !== "x64")
+  throw new Error("Hosted execution artifacts must be built on Linux x86_64.");
 const scratch = mkdtempSync(join(tmpdir(), "app-builder-hosted-artifact."));
 try {
   const commit = git(
@@ -284,6 +341,38 @@ try {
     mkdirSync(dirname(destination), { recursive: true });
     cpSync(source, destination, { dereference: true, recursive: true });
   }
+  const viteConfigDestination = join(
+    dependencyStage,
+    "@autograph",
+    "vite-config",
+  );
+  mkdirSync(dirname(viteConfigDestination), { recursive: true });
+  cpSync(join(arrustedRoot, "packages", "vite-config"), viteConfigDestination, {
+    dereference: true,
+    recursive: true,
+  });
+  const binaryDirectory = join(dependencyStage, ".bin");
+  mkdirSync(binaryDirectory, { recursive: true });
+  for (const [name, target] of [
+    ["next", "../next/dist/bin/next"],
+    ["turbo", "../turbo/bin/turbo"],
+    ["vp", "../vite-plus/bin/vp"],
+  ] as const)
+    symlinkSync(target, join(binaryDirectory, name));
+  for (const binary of ["next", "turbo", "vp"] as const)
+    execFileSync(
+      process.execPath,
+      [join(binaryDirectory, binary), "--version"],
+      {
+        cwd: dependencyStage,
+        encoding: "utf8",
+      },
+    );
+  execFileSync(
+    process.execPath,
+    ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],
+    { cwd: dependencyStage, encoding: "utf8" },
+  );
   normalizeTree(join(scratch, "dependency-stage"));
   const dependencyArchive = join(dependencyRoot, "node-modules.tar.gz");
   writeGzipTar(
@@ -295,8 +384,8 @@ try {
   const archiveSha256 = sha256(readFileSync(dependencyArchive));
   const dependencyManifest = {
     version: 1,
-    scope: "identity-planning",
-    platform: "linux/portable",
+    scope: "builder-execution",
+    platform: "linux/x86_64",
     target: { sha: TARGET_SHA, tree: TARGET_TREE, ...targetDigests },
     runtime: { bun: "1.3.14" },
     closure: {
@@ -317,9 +406,9 @@ try {
       sha: TARGET_SHA,
       tree: TARGET_TREE,
       eligibilityDigest:
-        "c47f3c720cce4b4bcf64e430d248284570776f48a886c20fc18d255815985c6e",
+        "c7e00f034e0c36452b7c43a5544f5b5486240cc45f5d624f4e9134924af0e735",
       contractDigest:
-        "f3c8499305c983b3d82f3b78687f4106a149decd7faa486d3d106bdaf83e928f",
+        "be880ed1dcd6c450457a888b78fea704e3ffe62e121e6be118c83c2800a67d03",
       workspaceDigest: sha256(JSON.stringify(entries)),
     },
     source: {

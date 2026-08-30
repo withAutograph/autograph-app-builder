@@ -1,12 +1,18 @@
 @font-face {
-  font-family: "Geist Storybook";
+  font-family: "GeistSans";
   src: url("../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2")
     format("woff2");
+  font-display: swap;
   font-style: normal;
   font-weight: 100 900;
-  font-display: swap;
 }
 
 :root {
-  --font-geist-sans: "Geist Storybook";
+  --font-geist-sans: "GeistSans";
+}
+
+body {
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

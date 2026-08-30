@@ -6,6 +6,7 @@ import {
   createPreviewOAuthServer,
   readPreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
+import { selfServiceSignupFlag } from "../feature-flags";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
 
@@ -31,8 +32,8 @@ function getPreviewOAuthDeploymentRuntime(
     {
       issuer: config.issuer,
       audience: config.resource,
-      selfServiceSignupEnabled: config.selfServiceSignupEnabled,
     },
+    { isSelfServiceSignupEnabled: selfServiceSignupFlag },
   );
   deploymentRuntime = {
     organizationAuthority,

@@ -378,7 +378,7 @@ mismatched environment bindings use the non-executing fallback. Production
 support here is source capability, not activation evidence.
 
 Rebuild the seed with `mise run hosted:artifact-build -- --arrusted-root
-<exact-clean-checkout> --output artifacts/hosted/arrusted-ffa0c34a-preview.tar.gz`.
+<exact-clean-checkout> --output artifacts/hosted/arrusted-d378904a-preview.tar.gz`.
 Validate its server-only placement, exact bytes, and real offline target
 commands with `mise run test:hosted-sandbox`.
 Run `mise run hosted:artifact-prove-typed -- --image <exact-local-digest-ref>
@@ -488,15 +488,29 @@ authenticated user action.
 Those routes construct lazily and fail closed until the checked-in schema is
 separately applied and the exact supported environment is configured; their
 presence does not create a client, consent, grant, key, membership, or token.
-Hosted identity uses verified GitHub or Vercel sign-in. The App Builder does
-not accept or store a user password. Before the first session, the server
+Hosted identity uses verified GitHub or Vercel sign-in. Local development and
+Deployment-Protected Preview deployments may separately enable passkey-first
+testing as described in [passkey testing](docs/passkey-preview-testing.md).
+Stable callback origins and deployment receipts for hosted integration tests
+are documented in
+[Preview integration testing](docs/preview-integration-testing.md).
+Passkey users receive a real Better Auth session and deployment-bound personal
+workspace without being represented as email-verified. Production onboarding
+remains disabled. The App Builder does not accept or store a user password.
+Before the first provider session, the server
 reuses one exact membership, accepts one matching invitation, or—only when
-`SELF_SERVICE_SIGNUP_ENABLED=1`—creates one Better Auth personal organization
-and owner membership transactionally. Same-email provider accounts link only
-when both identities are verified; differing emails require explicit signed-in
-linking. Provider identity proves the user only; repository mutation remains a
-separate approval-bound capability. The exact contract and rollout are in
+the Vercel-managed `self-service-signup` flag resolves enabled—creates one
+Better Auth personal organization and owner membership transactionally.
+Same-email provider accounts link only when both identities are verified;
+differing emails require explicit signed-in linking. Provider identity proves
+the user only; repository mutation remains a separate approval-bound
+capability. The exact contract and rollout are in
 [self-serve onboarding](docs/self-serve-onboarding.md).
+Storybook resolves `builder-connections` from the same Vercel Flags declaration
+when it starts or builds, passing only that Boolean result to its browser
+bundle. Pull `FLAGS` before running Storybook and restart or rebuild it after a
+dashboard change; without the SDK key, Storybook fails closed with Connections
+hidden.
 Activating the checked-in CIMD policy remains separately authorized because
 discovery may create, persist, or refresh an authorization-server client record;
 DCR remains disabled. The checked-in MCP and store contracts contain no
