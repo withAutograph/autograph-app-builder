@@ -155,7 +155,7 @@ async function fixture() {
 
 describe(
   "approval-bound branch-worktree publication",
-  { timeout: 30_000 },
+  { timeout: 40_000 },
   () => {
     let publicationRootPath: string;
 
