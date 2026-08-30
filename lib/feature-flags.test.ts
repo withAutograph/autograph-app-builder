@@ -35,4 +35,25 @@ describe("Vercel feature flags", () => {
       }),
     ).resolves.toBe(false);
   });
+
+  it("waits to create the Vercel adapter until a server SDK key is available", async () => {
+    vi.stubEnv("FLAGS", "");
+    vi.resetModules();
+    const decide = vi.fn(async () => true);
+    const createVercelAdapter = vi.fn(() => () => ({ decide }));
+    vi.doMock("@flags-sdk/vercel", () => ({ createVercelAdapter }));
+
+    const { builderConnectionsFlag: delayedFlag } =
+      await import("./feature-flags");
+    vi.stubEnv("FLAGS", "server-sdk-key");
+
+    await expect(
+      delayedFlag.run({
+        identify: {},
+        request: new Request("https://agent.example.com"),
+      }),
+    ).resolves.toBe(true);
+    expect(createVercelAdapter).toHaveBeenCalledWith("server-sdk-key");
+    expect(decide).toHaveBeenCalledOnce();
+  });
 });
