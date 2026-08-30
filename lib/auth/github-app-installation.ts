@@ -14,6 +14,7 @@ import type { HostedGitHubInstallationStore } from "../repository/postgres-githu
 import type { GitHubUserCredentialStore } from "../provisioning/github-user-credential";
 
 const GITHUB_ORIGIN = "https://github.com";
+const GITHUB_OAUTH_ISSUER = "https://github.com";
 const GITHUB_API_ORIGIN = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
 const USER_AGENT = "autograph-app-builder-github-installation";
@@ -21,6 +22,16 @@ const STATE_LIFETIME_MS = 10 * 60 * 1_000;
 const MAX_CALLBACK_CODE_LENGTH = 2_048;
 const MAX_RESPONSE_BYTES = 2 * 1_024 * 1_024;
 const FAILURE_MESSAGE = "GitHub App installation authorization failed.";
+const githubCallbackKeys = [
+  "code",
+  "error",
+  "error_description",
+  "error_uri",
+  "installation_id",
+  "iss",
+  "setup_action",
+  "state",
+] as const;
 
 export type GitHubInstallationAuthorizationFailureStage =
   | "callback-state-validation"
@@ -46,6 +57,9 @@ export type GitHubOAuthCallbackError =
 type GitHubCallbackDiagnostic = {
   queryKeys: string[];
   keyCounts: Record<string, number>;
+  unknownKeyCount: number;
+  safeUnknownKeyNames?: string[];
+  unknownKeyDigests?: string[];
   codePresent: boolean;
   codeLength?: number;
   statePresent: boolean;
@@ -63,7 +77,24 @@ type GitHubStateValidationDiagnostic = {
     | "state-authority-digest"
     | "state-time";
   stateDigest?: string;
+  callbackParseReason?:
+    | "unknown-key"
+    | "duplicate-key"
+    | "state-format"
+    | "callback-shape"
+    | "code-format"
+    | "issuer-mismatch";
 };
+
+class GitHubCallbackParseError extends Error {
+  constructor(
+    readonly reason: NonNullable<
+      GitHubStateValidationDiagnostic["callbackParseReason"]
+    >,
+  ) {
+    super("invalid-callback");
+  }
+}
 
 class GitHubStateValidationError extends Error {
   constructor(readonly diagnostic: GitHubStateValidationDiagnostic) {
@@ -218,6 +249,20 @@ function githubOAuthErrorCategory(value: unknown) {
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+// These fixed protocol field names contain no user data. Unknown names stay
+// redacted, including when a caller deliberately uses a value-like name.
+const safeUnknownCallbackKeyNames = new Set([
+  "allow_signup",
+  "client_id",
+  "code_challenge",
+  "code_challenge_method",
+  "login",
+  "prompt",
+  "redirect_uri",
+  "response_type",
+  "scope",
+]);
 
 const canonicalAuthority = (authority: HostedTenantAuthority) =>
   JSON.stringify({
@@ -435,22 +480,25 @@ function verifyState(input: {
   };
 }
 
+function verifyOAuthIssuer(query: URLSearchParams) {
+  if (query.get("iss") !== GITHUB_OAUTH_ISSUER)
+    throw new GitHubCallbackParseError("issuer-mismatch");
+}
+
 function callbackInput(url: string) {
   const query = new URL(url).searchParams;
-  const allowed = new Set([
-    "code",
-    "error",
-    "error_description",
-    "error_uri",
-    "installation_id",
-    "setup_action",
-    "state",
-  ]);
-  for (const key of query.keys()) {
-    if (!allowed.has(key) || query.getAll(key).length !== 1)
-      throw new Error("invalid-callback");
-  }
-  const state = z.string().min(1).max(2_048).parse(query.get("state"));
+  const allowed = new Set<string>(githubCallbackKeys);
+  if ([...query.keys()].some((key) => !allowed.has(key)))
+    throw new GitHubCallbackParseError("unknown-key");
+  if ([...allowed].some((key) => query.getAll(key).length > 1))
+    throw new GitHubCallbackParseError("duplicate-key");
+  const stateResult = z
+    .string()
+    .min(1)
+    .max(2_048)
+    .safeParse(query.get("state"));
+  if (!stateResult.success) throw new GitHubCallbackParseError("state-format");
+  const state = stateResult.data;
   const code = query.get("code");
   const oauthError = query.get("error");
   if (oauthError !== null) {
@@ -463,9 +511,11 @@ function callbackInput(url: string) {
         oauthError,
       )
     )
-      throw new Error("invalid-callback");
+      throw new GitHubCallbackParseError("callback-shape");
     for (const key of ["error_description", "error_uri"])
-      if (query.getAll(key).length > 1) throw new Error("invalid-callback");
+      if (query.getAll(key).length > 1)
+        throw new GitHubCallbackParseError("duplicate-key");
+    if (query.has("iss")) verifyOAuthIssuer(query);
     return {
       kind: "oauth-error" as const,
       error: oauthError as GitHubOAuthCallbackError,
@@ -481,16 +531,19 @@ function callbackInput(url: string) {
         (query.getAll("installation_id").length !== 1 ||
           query.getAll("setup_action").length !== 1))
     ) {
-      throw new Error("invalid-callback");
+      throw new GitHubCallbackParseError("callback-shape");
     }
+    const codeResult = z
+      .string()
+      .min(1)
+      .max(MAX_CALLBACK_CODE_LENGTH)
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .safeParse(code);
+    if (!codeResult.success) throw new GitHubCallbackParseError("code-format");
+    if (query.has("iss")) verifyOAuthIssuer(query);
     return {
       kind: "authorize" as const,
-      code: z
-        .string()
-        .min(1)
-        .max(MAX_CALLBACK_CODE_LENGTH)
-        .refine((value) => !/[\0\r\n]/u.test(value))
-        .parse(code),
+      code: codeResult.data,
       ...(query.has("installation_id")
         ? {
             installationId: decimalSchema.parse(query.get("installation_id")),
@@ -503,11 +556,12 @@ function callbackInput(url: string) {
     };
   }
   if (
+    query.has("iss") ||
     query.getAll("state").length !== 1 ||
     query.getAll("installation_id").length !== 1 ||
     query.getAll("setup_action").length !== 1
   ) {
-    throw new Error("invalid-callback");
+    throw new GitHubCallbackParseError("callback-shape");
   }
   return {
     kind: "install" as const,
@@ -519,18 +573,13 @@ function callbackInput(url: string) {
 
 function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
   const query = new URL(url).searchParams;
-  const allowed = new Set([
-    "code",
-    "error",
-    "error_description",
-    "error_uri",
-    "installation_id",
-    "setup_action",
-    "state",
-  ]);
+  const allowed = new Set<string>(githubCallbackKeys);
   const state = query.get("state");
   const code = query.get("code");
   const error = query.get("error");
+  const unknownKeys = [
+    ...new Set([...query.keys()].filter((key) => !allowed.has(key))),
+  ];
   return {
     queryKeys: [
       ...new Set([...query.keys()].filter((key) => allowed.has(key))),
@@ -538,6 +587,20 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
     keyCounts: Object.fromEntries(
       [...allowed].map((key) => [key, query.getAll(key).length]),
     ),
+    unknownKeyCount: unknownKeys.length,
+    ...(unknownKeys.length === 0
+      ? {}
+      : {
+          unknownKeyDigests: unknownKeys.slice(0, 3).map(sha256),
+          ...(unknownKeys.some((key) => safeUnknownCallbackKeyNames.has(key))
+            ? {
+                safeUnknownKeyNames: unknownKeys
+                  .filter((key) => safeUnknownCallbackKeyNames.has(key))
+                  .slice(0, 3)
+                  .sort(),
+              }
+            : {}),
+        }),
     codePresent: code !== null,
     ...(code === null ? {} : { codeLength: code.length }),
     statePresent: state !== null,
@@ -874,13 +937,18 @@ export function createGitHubAppInstallationAuthorization(input: {
         }
         try {
           callback = callbackInput(inputUrl);
-        } catch {
+        } catch (error) {
           throw new GitHubInstallationAuthorizationError(
             "callback-state-validation",
             undefined,
             undefined,
             callbackDiagnostic,
-            { substage: "callback-parse" },
+            {
+              substage: "callback-parse",
+              ...(error instanceof GitHubCallbackParseError
+                ? { callbackParseReason: error.reason }
+                : {}),
+            },
           );
         }
         try {

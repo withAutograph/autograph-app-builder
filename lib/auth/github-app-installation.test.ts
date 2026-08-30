@@ -265,7 +265,7 @@ describe("public GitHub App installation authorization", () => {
     const state = new URL(authorize.redirectUrl).searchParams.get("state")!;
     await expect(
       authorization.complete(
-        `https://builder.example/github/installations/callback?error=access_denied&error_description=secret-provider-detail&state=${encodeURIComponent(state)}`,
+        `https://builder.example/github/installations/callback?error=access_denied&error_description=secret-provider-detail&iss=https%3A%2F%2Fgithub.com&state=${encodeURIComponent(state)}`,
         authority,
       ),
     ).rejects.toMatchObject({
@@ -373,6 +373,7 @@ describe("public GitHub App installation authorization", () => {
     );
     callback.searchParams.set("installation_id", "98765");
     callback.searchParams.set("setup_action", "update");
+    callback.searchParams.set("iss", "https://github.com");
 
     await expect(
       authorization.complete(callback.toString(), authority),
@@ -383,7 +384,7 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).toHaveBeenCalledOnce();
   });
 
-  it("accepts a bounded opaque GitHub OAuth code with the minimal callback shape", async () => {
+  it("accepts a bounded opaque GitHub OAuth code with issuer identification", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
@@ -391,6 +392,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorizeState } = await prepareAuthorization(authorization);
     const callback = new URL(authorizationCallbackUrl(authorizeState));
     callback.searchParams.set("code", "c".repeat(1_024));
+    callback.searchParams.set("iss", "https://github.com");
 
     await expect(
       authorization.complete(callback.toString(), authority),
@@ -531,11 +533,172 @@ describe("public GitHub App installation authorization", () => {
       callback: {
         queryKeys: ["code", "state"],
         keyCounts: { code: 2, state: 1 },
+        unknownKeyCount: 0,
         codePresent: true,
         codeLength: "one-time-code".length,
       },
-      stateValidation: { substage: "callback-parse" },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "duplicate-key",
+      },
     });
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("rejects a duplicated OAuth issuer before exchange without retaining it", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.append("iss", "https://github.com");
+    callback.searchParams.append("iss", "https://github.com");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: { keyCounts: { iss: 2 }, unknownKeyCount: 0 },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "duplicate-key",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("https://github.com");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mismatched OAuth issuer before exchange without retaining it", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.set("iss", "https://github.example");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: {
+        queryKeys: ["code", "iss", "state"],
+        keyCounts: { iss: 1 },
+        unknownKeyCount: 0,
+      },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "issuer-mismatch",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("https://github.example");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("rejects issuer identification on an installation-only callback", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const begun = await authorization.begin(authority);
+    const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
+    const callback = new URL(setupCallbackUrl(installState));
+    callback.searchParams.set("iss", "https://github.com");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: { keyCounts: { iss: 1 }, unknownKeyCount: 0 },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "callback-shape",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("https://github.com");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown callback keys without retaining their names or values", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.set("provider-detail-sentinel", "secret-value");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: {
+        queryKeys: ["code", "state"],
+        unknownKeyCount: 1,
+        unknownKeyDigests: [
+          "7e8a234a4c768bf9b54a09439b84eedbecf182c780df77a88dc882ce1c57f642",
+        ],
+      },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "unknown-key",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain(
+      "provider-detail-sentinel",
+    );
+    expect(JSON.stringify(diagnostic)).not.toContain("secret-value");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("classifies only allowlisted unknown callback names without accepting them", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.set("redirect_uri", "https://attacker.example/");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: {
+        unknownKeyCount: 1,
+        safeUnknownKeyNames: ["redirect_uri"],
+        unknownKeyDigests: [
+          "1e919ea04769b8dc080085afe35451099f697a19bad646c5698ec38f8ed9a50b",
+        ],
+      },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "unknown-key",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("attacker.example");
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });
