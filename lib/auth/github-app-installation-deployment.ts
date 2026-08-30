@@ -3,7 +3,7 @@ import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
   createGitHubAppInstallationAuthorization,
-  githubInstallationAuthorizationFailureStage,
+  githubInstallationAuthorizationDiagnostic,
   readGitHubAppInstallationEnvironment,
 } from "./github-app-installation";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
@@ -68,7 +68,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       const startedAt = Date.now();
       const fail = (
         reason: ProviderConnectionFailureReason,
-        detail?: string,
+        diagnostic?: { stage: string; category?: string },
       ) => {
         logProviderConnectionFailure({
           request,
@@ -76,7 +76,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           phase: "start",
           reason,
           startedAt,
-          detail,
+          diagnostic,
         });
         return redirect("failed", reason);
       };
@@ -134,7 +134,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       const startedAt = Date.now();
       const fail = (
         reason: ProviderConnectionFailureReason,
-        detail?: string,
+        diagnostic?: { stage: string; category?: string },
       ) => {
         logProviderConnectionFailure({
           request,
@@ -142,7 +142,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           phase: "callback",
           reason,
           startedAt,
-          detail,
+          diagnostic,
         });
         return redirect("failed", reason);
       };
@@ -187,7 +187,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       } catch (error) {
         return fail(
           "callback-invalid",
-          githubInstallationAuthorizationFailureStage(error),
+          githubInstallationAuthorizationDiagnostic(error),
         );
       }
     },

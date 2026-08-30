@@ -139,7 +139,10 @@ describe("GitHub App installation routes", () => {
       .mockImplementation(() => undefined);
     const { route, complete } = handlers();
     complete.mockRejectedValueOnce(
-      new GitHubInstallationAuthorizationError("user-token-exchange"),
+      new GitHubInstallationAuthorizationError(
+        "token-exchange-non-2xx",
+        "redirect_uri_mismatch",
+      ),
     );
     const response = await route.callback(
       new Request(
@@ -151,7 +154,9 @@ describe("GitHub App installation routes", () => {
       "https://builder.example/?github=failed&githubReason=callback-invalid",
     );
     const logged = String(error.mock.calls[0]?.[0]);
-    expect(logged).toContain('"detail":"user-token-exchange"');
+    expect(logged).toContain(
+      '"diagnostic":{"stage":"token-exchange-non-2xx","category":"redirect_uri_mismatch"}',
+    );
     expect(logged).not.toContain("secret-code");
   });
 

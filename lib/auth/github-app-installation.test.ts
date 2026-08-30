@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
   createGitHubAppInstallationAuthorization,
-  githubInstallationAuthorizationFailureStage,
+  githubInstallationAuthorizationDiagnostic,
   readGitHubAppInstallationEnvironment,
   type GitHubInstallationAuthorizationStateStore,
 } from "./github-app-installation";
@@ -353,12 +353,19 @@ describe("public GitHub App installation authorization", () => {
     const request = vi.fn<typeof fetch>();
     const { authorization, bind } = harness({ fetch: request });
 
-    await expect(
-      authorization.complete(
+    let error: unknown;
+    try {
+      await authorization.complete(
         "https://builder.example/github/installations/callback?code=one-time-code",
         authority,
-      ),
-    ).rejects.toThrow("GitHub App installation authorization failed.");
+      );
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
+      stage: "callback-state-validation",
+    });
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });
@@ -393,17 +400,22 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
     let message = "";
+    let error: unknown;
     try {
       await authorization.complete(
         authorizationCallbackUrl(authorizeState),
         authority,
       );
-    } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
+    } catch (caught) {
+      message = caught instanceof Error ? caught.message : String(caught);
+      error = caught;
     }
     expect(message).toBe("GitHub App installation authorization failed.");
     expect(message).not.toContain("provider-drift-sentinel");
     expect(message).not.toContain("github-user-token-sentinel-value");
+    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
+      stage: "token-response-schema",
+    });
     expect(bind).not.toHaveBeenCalled();
   });
 
@@ -430,9 +442,10 @@ describe("public GitHub App installation authorization", () => {
       error = caught;
     }
     expect(error).toBeInstanceOf(Error);
-    expect(githubInstallationAuthorizationFailureStage(error)).toBe(
-      "user-token-exchange",
-    );
+    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
+      stage: "token-exchange-non-2xx",
+      category: "bad_verification_code",
+    });
     expect(String(error)).not.toContain("provider-detail-sentinel");
     expect(bind).not.toHaveBeenCalled();
   });
