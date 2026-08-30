@@ -5,6 +5,7 @@ import {
   APP_BUILDER_SOURCE_VERSION,
   sourceWorkflowState,
 } from "@/lib/agent/source-state";
+import { existingRepositoryAcquisitionReceipt } from "@/lib/agent/existing-app-sequencing";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
 export default defineTool({
@@ -15,11 +16,12 @@ export default defineTool({
   }),
   async execute({ expectedSourceReceiptDigest }, ctx) {
     const current = sourceWorkflowState.get();
+    const existing = existingRepositoryAcquisitionReceipt(
+      current,
+      expectedSourceReceiptDigest,
+    );
+    if (existing !== undefined) return existing;
     if (current.phase === "empty") throw new Error("No source was reviewed.");
-    if (current.receipt.sourceKind !== "fresh-template")
-      throw new Error("Acquisition approval only applies to fresh templates.");
-    if (current.receipt.digest !== expectedSourceReceiptDigest)
-      throw new Error("The source receipt does not match the reviewed source.");
     const currentReceipt = await inspectSourceReceipt(
       current.receipt.sourceKind,
       current.receipt.sourcePath,
