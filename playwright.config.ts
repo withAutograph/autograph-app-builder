@@ -8,7 +8,7 @@ const mise = [
   `${process.env.HOME}/.local/bin/mise`,
 ].find(existsSync);
 if (!mise) throw new Error("The mise executable is unavailable.");
-const webServerPath = `${dirname(mise)}:/usr/bin:/bin`;
+const webServerPath = `${dirname(process.execPath)}:${dirname(mise)}:/usr/bin:/bin`;
 
 export default defineConfig({
   testDir: "./e2e/auth",
