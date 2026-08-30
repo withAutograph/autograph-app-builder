@@ -15,6 +15,7 @@ export function logProviderConnectionFailure(input: {
       stateLength?: number;
       error?: string;
     };
+    stateValidation?: { substage: string; stateDigest?: string };
   };
 }) {
   console.error(

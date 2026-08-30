@@ -420,6 +420,64 @@ describe("public GitHub App installation authorization", () => {
     expect(githubInstallationAuthorizationDiagnostic(error)).toMatchObject({
       stage: "callback-state-validation",
       callback: { queryKeys: ["code"], statePresent: false },
+      stateValidation: { substage: "callback-parse" },
+    });
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("classifies a tampered OAuth state without retaining callback secrets", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const replacement = authorizeState.endsWith("A") ? "B" : "A";
+    const callback = authorizationCallbackUrl(
+      `${authorizeState.slice(0, -1)}${replacement}`,
+    );
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback, authority);
+    } catch (caught) {
+      error = caught;
+    }
+
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: { queryKeys: ["code", "state"], statePresent: true },
+      stateValidation: {
+        substage: "state-signature",
+        stateDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain(authorizeState);
+    expect(JSON.stringify(diagnostic)).not.toContain("one-time-code");
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("classifies tenant authority drift before state consumption", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+
+    let error: unknown;
+    try {
+      await authorization.complete(authorizationCallbackUrl(authorizeState), {
+        ...authority,
+        workspaceId: "workspace_other",
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(githubInstallationAuthorizationDiagnostic(error)).toMatchObject({
+      stage: "callback-state-validation",
+      stateValidation: {
+        substage: "state-authority-digest",
+        stateDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      },
     });
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
