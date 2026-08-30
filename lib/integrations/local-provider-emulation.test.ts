@@ -60,7 +60,8 @@ describe("local provider emulation", () => {
       canonicalOrigin: "https://app-git-feature-team.vercel.app",
       githubOrigin:
         "https://app-git-feature-team.vercel.app/api/emulate/github",
-      namespace: "autograph-app-builder:prj_preview:feature/provider-emulation",
+      namespace:
+        "autograph-app-builder:prj_preview:feature/provider-emulation:seed-v2",
     });
     expect(
       providerEmulationEnvironment({

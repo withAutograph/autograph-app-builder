@@ -78,7 +78,7 @@ export function previewEmulationNamespace(input: {
   project: string;
   branch: string;
 }) {
-  return `${input.repository.toLowerCase()}:${input.project.toLowerCase()}:${input.branch}`;
+  return `${input.repository.toLowerCase()}:${input.project.toLowerCase()}:${input.branch}:seed-v2`;
 }
 
 export function readPreviewProviderEmulation(
