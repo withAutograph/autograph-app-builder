@@ -4,6 +4,7 @@ import {
   HOSTED_ARTIFACT_BYTES,
   HOSTED_ARTIFACT_CONTRACT_VERSION,
   HOSTED_ARTIFACT_SHA256,
+  HOSTED_ARTIFACT_URL,
   HOSTED_DEPENDENCY_ARCHIVE_BYTES,
   HOSTED_DEPENDENCY_ARCHIVE_SHA256,
   HOSTED_DEPENDENCY_MANIFEST_SHA256,
@@ -77,6 +78,7 @@ command -v unzip >/dev/null
 work="$(mktemp -d /tmp/app-builder-toolchain.XXXXXX)"
 seed='/workspace/.app-builder/hosted-seed.tar.gz'
 trap 'find "$work" -depth -delete 2>/dev/null || true; rm -f "$seed"' EXIT
+curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "$seed"
 test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
 echo '${HOSTED_ARTIFACT_SHA256}  /workspace/.app-builder/hosted-seed.tar.gz' | sha256sum --check --strict
 tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions
@@ -107,7 +109,7 @@ install -m 0644 "$artifact/source-checksums.sha256" /workspace/.app-builder/sour
 git --version
 mise --version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
-bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/portable"||cache.target.sha!=="ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49"||cache.target.tree!=="88ead91d7b11aae11c526f1c2ee40f5b6db70642") process.exit(1)' \
+bun -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="ffa0c34adad449c1fe9a7d64d2178cb01bfc8d49"||cache.target.tree!=="88ead91d7b11aae11c526f1c2ee40f5b6db70642") process.exit(1)' \
   && (cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)`;
 }
 
@@ -117,6 +119,7 @@ command -v sha256sum >/dev/null
 work="$(mktemp -d /tmp/app-builder-hosted-artifact.XXXXXX)"
 seed='/workspace/.app-builder/hosted-seed.tar.gz'
 trap 'find "$work" -depth -delete 2>/dev/null || true; rm -f "$seed"' EXIT
+curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "$seed"
 test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
 printf '%s  %s\n' '${HOSTED_ARTIFACT_SHA256}' "$seed" | sha256sum --check --strict
 tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions

@@ -1,17 +1,11 @@
-import { createHash } from "node:crypto";
-
-import {
-  HOSTED_ARTIFACT_BASE64,
-  HOSTED_ARTIFACT_EMBEDDED_BYTES,
-  HOSTED_ARTIFACT_EMBEDDED_SHA256,
-} from "./hosted-artifact.generated";
-
 export const HOSTED_ARTIFACT_CONTRACT_VERSION = 1;
-export const HOSTED_ARTIFACT_PATH =
-  "artifacts/hosted/arrusted-ffa0c34a-preview.tar.gz";
-export const HOSTED_ARTIFACT_BYTES = 5_623_242;
+export const HOSTED_ARTIFACT_RELEASE_TAG =
+  "hosted-arrusted-ffa0c34a-execution-v1";
+export const HOSTED_ARTIFACT_RELEASE_NAME = "arrusted-ffa0c34a-preview.tar.gz";
+export const HOSTED_ARTIFACT_URL = `https://github.com/withAutograph/autograph-app-builder/releases/download/${HOSTED_ARTIFACT_RELEASE_TAG}/${HOSTED_ARTIFACT_RELEASE_NAME}`;
+export const HOSTED_ARTIFACT_BYTES = 152_130_068;
 export const HOSTED_ARTIFACT_SHA256 =
-  "f66bcf6504cd72141f3c6fe683ddf008c88e07c76ef2e308c2cd6681c7731cd4";
+  "b60085e4365b1b48f6fd2bc0e59b8c40a36bc47c8f295cef5418c50bd2f4d317";
 export const HOSTED_SOURCE_PATH =
   "/opt/app-builder/hosted-source/arrusted-development";
 export const HOSTED_SOURCE_ARCHIVE_SHA256 =
@@ -21,29 +15,10 @@ export const HOSTED_SOURCE_ENTRY_COUNT = 1_749;
 export const HOSTED_SOURCE_WORKSPACE_DIGEST =
   "3fe09ef0605b9beb3360add82cf9f56d7114330c7c93a16c635de5c524c82a2f";
 export const HOSTED_DEPENDENCY_MANIFEST_SHA256 =
-  "03fdbc11d4da690f4361b26b35b7d34b30d439f111d2b3d6721b81cfe3dde2cf";
+  "9ea1b704dca91153c389b27440c2e33a3ae4474bb2bfc8c3749e11be3aea830d";
 export const HOSTED_DEPENDENCY_ARCHIVE_SHA256 =
-  "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
-export const HOSTED_DEPENDENCY_ARCHIVE_BYTES = 1_356_765;
-
-const sha256 = (value: Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
-
-/** Decodes the server-only embedded asset and rejects generated-byte drift. */
-export function readHostedArtifactBytes(): Buffer {
-  if (
-    HOSTED_ARTIFACT_EMBEDDED_BYTES !== HOSTED_ARTIFACT_BYTES ||
-    HOSTED_ARTIFACT_EMBEDDED_SHA256 !== HOSTED_ARTIFACT_SHA256
-  )
-    throw new Error("The embedded hosted Arrusted artifact is stale.");
-  const content = Buffer.from(HOSTED_ARTIFACT_BASE64, "base64");
-  if (
-    content.byteLength !== HOSTED_ARTIFACT_BYTES ||
-    sha256(content) !== HOSTED_ARTIFACT_SHA256
-  )
-    throw new Error("The hosted Arrusted artifact is missing or drifted.");
-  return content;
-}
+  "fe8d50896ea7a7cb5d7b426d343f53fe196761ac3073874eebb922225933f860";
+export const HOSTED_DEPENDENCY_ARCHIVE_BYTES = 148_306_235;
 
 export function hostedExecutionArtifactDigest(): string {
   return `vercel-sandbox-seed@sha256:${HOSTED_ARTIFACT_SHA256}`;

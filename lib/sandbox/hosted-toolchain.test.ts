@@ -75,7 +75,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("node-modules.tar.gz");
     expect(command).not.toContain("/opt/app-builder/dependency-cache");
-    expect(command).not.toMatch(/curl|sudo|token|password|authorization/iu);
+    expect(command).not.toMatch(/sudo|token|password|authorization/iu);
+    expect(command).toContain(
+      "releases/download/hosted-arrusted-ffa0c34a-execution-v1",
+    );
   });
 
   it("narrows live sessions after the bootstrap snapshot", () => {
@@ -84,7 +87,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(definition).toContain("runtimeRecoveryPrewarmInput: () => ({");
     expect(definition).toContain("bootstrap: bootstrapHostedVercelSandbox");
     expect(definition).toContain("seedFiles: readHostedManagedSeedFiles()");
-    expect(definition).toContain("readHostedArtifactBytes()");
+    expect(definition).not.toContain("readHostedArtifactBytes");
     expect(definition).toContain('await use({ networkPolicy: "deny-all" })');
     expect(definition).toContain(
       "revalidationKey: hostedToolchainRevalidationKey",
