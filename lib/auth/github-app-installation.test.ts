@@ -531,11 +531,48 @@ describe("public GitHub App installation authorization", () => {
       callback: {
         queryKeys: ["code", "state"],
         keyCounts: { code: 2, state: 1 },
+        unknownKeyCount: 0,
         codePresent: true,
         codeLength: "one-time-code".length,
       },
-      stateValidation: { substage: "callback-parse" },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "duplicate-key",
+      },
     });
+    expect(request).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown callback keys without retaining their names or values", async () => {
+    const request = vi.fn<typeof fetch>();
+    const { authorization, bind } = harness({ fetch: request });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.set("provider-detail-sentinel", "secret-value");
+
+    let error: unknown;
+    try {
+      await authorization.complete(callback.toString(), authority);
+    } catch (caught) {
+      error = caught;
+    }
+    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      stage: "callback-state-validation",
+      callback: {
+        queryKeys: ["code", "state"],
+        unknownKeyCount: 1,
+      },
+      stateValidation: {
+        substage: "callback-parse",
+        callbackParseReason: "unknown-key",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain(
+      "provider-detail-sentinel",
+    );
+    expect(JSON.stringify(diagnostic)).not.toContain("secret-value");
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });

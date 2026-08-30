@@ -12,6 +12,7 @@ export function logProviderConnectionFailure(input: {
     callback?: {
       queryKeys: string[];
       keyCounts: Record<string, number>;
+      unknownKeyCount: number;
       codePresent: boolean;
       codeLength?: number;
       statePresent: boolean;
