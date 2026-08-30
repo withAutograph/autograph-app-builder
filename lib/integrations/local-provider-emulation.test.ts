@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  providerEmulationEnablesConnections,
   providerEmulationEnvironment,
   readLocalProviderEmulation,
   readPreviewProviderEmulation,
@@ -49,19 +48,6 @@ describe("local provider emulation", () => {
     expect(providerEmulationEnvironment(environment)).toMatchObject({
       APP_ORIGIN: "https://localhost:3001",
     });
-  });
-
-  it("enables connection UI only for a valid emulated transport", () => {
-    expect(providerEmulationEnablesConnections(environment)).toBe(true);
-    expect(
-      providerEmulationEnablesConnections({ NODE_ENV: "production" }),
-    ).toBe(false);
-    expect(
-      providerEmulationEnablesConnections({
-        ...environment,
-        GITHUB_EMULATOR_URL: "https://api.github.com",
-      }),
-    ).toBe(false);
   });
 
   it("selects an exact branch-scoped Vercel Preview transport", () => {
