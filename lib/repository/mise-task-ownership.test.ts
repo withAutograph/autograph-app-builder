@@ -51,6 +51,10 @@ describe("mise-owned repository operations", () => {
       expect(job.steps).toContainEqual({
         run: "mise run dependencies:install",
       });
+      if (jobName === "repository")
+        expect(job.steps).toContainEqual({
+          run: "mise run storybook:install-browser",
+        });
       expect(job.steps).toContainEqual({ run: `mise run ${taskName}` });
     }
 
@@ -72,6 +76,11 @@ describe("mise-owned repository operations", () => {
     expect(fresh).not.toContain("test:sandbox-toolchain");
     const sandbox = await read(".config/mise/tasks/ci-sandbox-toolchain");
     expect(sandbox).toContain("mise run test:sandbox-toolchain");
+    const installBrowser = await read(
+      ".config/mise/tasks/storybook/install-browser",
+    );
+    expect(installBrowser).toContain("node_modules/playwright/cli.js");
+    expect(installBrowser).toContain("install --with-deps chromium");
 
     const task = await read(".config/mise/tasks/ci");
     for (const operation of [
