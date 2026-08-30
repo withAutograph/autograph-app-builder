@@ -132,7 +132,7 @@ export default async function LocalOAuthApprovalPage({
 
             <form
               method={emulation.mode === "preview" ? "get" : "post"}
-              action={`/local-oauth/${parsed.provider}/authorize/complete`}
+              action={`/local-oauth/${parsed.provider}/authorize/approve`}
             >
               {Object.entries(parsed.authorization).map(([name, value]) =>
                 value ? (
