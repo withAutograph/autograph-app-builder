@@ -333,7 +333,17 @@ export const previewOAuthRateLimit = {
 
 export function authRateLimitForLocalEmulation(localEmulation: boolean) {
   return localEmulation
-    ? { ...previewOAuthRateLimit, max: 600 }
+    ? {
+        ...previewOAuthRateLimit,
+        max: 600,
+        customRules: {
+          ...previewOAuthRateLimit.customRules,
+          // Better Auth applies a stricter three-request default to sign-in
+          // routes. A complete emulated suite intentionally performs several
+          // independent and returning OAuth sign-ins from one loopback client.
+          "/sign-in/social": { window: 60, max: 60 },
+        },
+      }
     : previewOAuthRateLimit;
 }
 

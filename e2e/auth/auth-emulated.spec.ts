@@ -239,7 +239,8 @@ test("provider account supports multiple passkeys but retains its final passkey"
   page,
 }) => {
   reportPasskeyFailures(page);
-  const authenticator = await VirtualAuthenticator.create(context, page);
+  let authenticator: VirtualAuthenticator | undefined =
+    await VirtualAuthenticator.create(context, page);
   try {
     await finishOAuth(page, "GitHub");
     await page.goto("/settings/account");
@@ -250,19 +251,15 @@ test("provider account supports multiple passkeys but retains its final passkey"
     await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
     await expect(dialog).toBeHidden();
 
-    await authenticator.setPresence(false);
-    const secondAuthenticator = await VirtualAuthenticator.create(
-      context,
-      page,
-    );
-    try {
-      await page.getByRole("button", { name: "Add passkey" }).first().click();
-      await dialog.getByLabel("Name").fill("Second passkey");
-      await dialog.getByRole("button", { name: "Add passkey" }).click();
-      await expect.poll(async () => (await authCounts()).passkeys).toBe(2);
-    } finally {
-      await secondAuthenticator.dispose();
-    }
+    // Chromium permits only one internal authenticator per browser context.
+    // Removing the first authenticator models switching to a second device
+    // while retaining the first credential in Better Auth's real database.
+    await authenticator.dispose();
+    authenticator = await VirtualAuthenticator.create(context, page);
+    await page.getByRole("button", { name: "Add passkey" }).first().click();
+    await dialog.getByLabel("Name").fill("Second passkey");
+    await dialog.getByRole("button", { name: "Add passkey" }).click();
+    await expect.poll(async () => (await authCounts()).passkeys).toBe(2);
 
     const list = await page.request.get("/api/auth/passkey/list-user-passkeys");
     expect(list.ok()).toBeTruthy();
@@ -280,6 +277,6 @@ test("provider account supports multiple passkeys but retains its final passkey"
     expect(finalDeletion.ok()).toBeFalsy();
     expect((await authCounts()).passkeys).toBe(1);
   } finally {
-    await authenticator.dispose();
+    await authenticator?.dispose();
   }
 });

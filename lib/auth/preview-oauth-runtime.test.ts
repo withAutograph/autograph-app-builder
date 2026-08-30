@@ -23,11 +23,21 @@ const environment = {
 
 describe("Preview OAuth runtime configuration", () => {
   it("keeps hosted rate limits strict while allowing a complete local emulation run", () => {
-    expect(authRateLimitForLocalEmulation(false)).toMatchObject({ max: 60 });
-    expect(authRateLimitForLocalEmulation(true)).toMatchObject({ max: 600 });
-    expect(
-      authRateLimitForLocalEmulation(true).customRules?.["/oauth2/token"],
-    ).toEqual({ window: 60, max: 180 });
+    const hostedRateLimit = authRateLimitForLocalEmulation(false);
+    const localRateLimit = authRateLimitForLocalEmulation(true);
+
+    expect(hostedRateLimit).toMatchObject({ max: 60 });
+    expect(localRateLimit).toMatchObject({ max: 600 });
+    expect(localRateLimit.customRules?.["/oauth2/token"]).toEqual({
+      window: 60,
+      max: 180,
+    });
+    expect(localRateLimit).toMatchObject({
+      customRules: {
+        "/sign-in/social": { window: 60, max: 60 },
+      },
+    });
+    expect("/sign-in/social" in hostedRateLimit.customRules).toBe(false);
   });
 
   const idToken = (claims: Record<string, unknown>) =>
