@@ -43,14 +43,8 @@ export function ProviderButton({
   className,
   ...props
 }: ProviderButtonProps) {
-  const {
-    authClient,
-    baseURL,
-    localization,
-    navigate,
-    redirectTo,
-    socialSignInMode,
-  } = useAuth();
+  const { authClient, localization, navigate, redirectTo, socialSignInMode } =
+    useAuth();
 
   const { mutate: signInSocial, isPending: signInSocialPending } =
     useSignInSocial(authClient);
@@ -74,7 +68,7 @@ export function ProviderButton({
       window.location.search,
       window.location.origin,
     );
-    const callbackURL = new URL(`${baseURL}${redirectTo}`);
+    const callbackURL = new URL(redirectTo, window.location.origin);
     callbackURL.searchParams.set("callbackURL", callback);
 
     if (socialSignInMode === "popup") {
