@@ -24,8 +24,8 @@ export async function completeAuthorization(
     });
     const callback =
       parsed.provider === "github"
-        ? new URL("/login/oauth/callback", emulation.githubOrigin)
-        : new URL("/oauth/authorize/callback", emulation.vercelOrigin);
+        ? new URL(`${emulation.githubOrigin}/login/oauth/callback`)
+        : new URL(`${emulation.vercelOrigin}/oauth/authorize/callback`);
     const body = new URLSearchParams({
       [parsed.provider === "github" ? "login" : "username"]: "autograph-dev",
       redirect_uri: parsed.authorization.redirect_uri,
