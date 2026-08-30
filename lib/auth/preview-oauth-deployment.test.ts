@@ -6,9 +6,25 @@ import {
   createPreviewOAuthRequestHandler,
   createPreviewOAuthWellKnownHandler,
   ensurePreviewSessionOrganization,
+  selfServiceSignupAuthority,
 } from "./preview-oauth-deployment";
 
 describe("Preview OAuth deployment handlers", () => {
+  it("enables self-service signup only for the gated local emulator", async () => {
+    const managedAuthority = vi.fn(async () => false);
+
+    await expect(
+      selfServiceSignupAuthority("local", managedAuthority)(),
+    ).resolves.toBe(true);
+    await expect(
+      selfServiceSignupAuthority("preview", managedAuthority)(),
+    ).resolves.toBe(false);
+    await expect(
+      selfServiceSignupAuthority("production", managedAuthority)(),
+    ).resolves.toBe(false);
+    expect(managedAuthority).toHaveBeenCalledTimes(2);
+  });
+
   it("provisions and activates a workspace for an existing signed-in user", async () => {
     const getSession = vi.fn(async () => ({
       session: { activeOrganizationId: null },

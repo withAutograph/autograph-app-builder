@@ -5,6 +5,7 @@ import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
   createPreviewOAuthServer,
   readPreviewOAuthRuntimeConfig,
+  type PreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
 import { selfServiceSignupFlag } from "../feature-flags";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
@@ -21,6 +22,13 @@ interface PreviewOAuthDeploymentRuntime {
 
 let deploymentRuntime: PreviewOAuthDeploymentRuntime | undefined;
 
+export function selfServiceSignupAuthority(
+  environment: PreviewOAuthRuntimeConfig["environment"],
+  managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
+) {
+  return environment === "local" ? async () => true : managedAuthority;
+}
+
 function getPreviewOAuthDeploymentRuntime(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthDeploymentRuntime {
@@ -33,7 +41,11 @@ function getPreviewOAuthDeploymentRuntime(
       issuer: config.issuer,
       audience: config.resource,
     },
-    { isSelfServiceSignupEnabled: selfServiceSignupFlag },
+    {
+      isSelfServiceSignupEnabled: selfServiceSignupAuthority(
+        config.environment,
+      ),
+    },
   );
   deploymentRuntime = {
     organizationAuthority,

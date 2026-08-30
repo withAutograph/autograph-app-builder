@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "playwright/test";
 
+const mise = `${process.env.HOME}/.local/bin/mise`;
+
 export default defineConfig({
   testDir: "./e2e/auth",
   outputDir: "test-results/auth-e2e-emulated",
@@ -17,7 +19,7 @@ export default defineConfig({
   },
   projects: [{ name: "auth-chromium", use: { browserName: "chromium" } }],
   webServer: {
-    command: "mise run app:dev-emulated",
+    command: `${mise} run app:dev-emulated`,
     url: "https://localhost:3001/auth/sign-in",
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,

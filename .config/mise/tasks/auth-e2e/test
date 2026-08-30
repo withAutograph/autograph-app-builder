@@ -8,4 +8,5 @@ if lsof -nP -iTCP:3001 -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 mise run auth-e2e:reset
 trap 'mise run auth-e2e:reset >/dev/null 2>&1 || true' EXIT INT TERM
-"$(mise which pnpm)" exec playwright test --config=playwright.config.ts "$@"
+.config/mise/scripts/trusted-node-launcher \
+  "$(mise which pnpm)" exec playwright test --config=playwright.config.ts "$@"
