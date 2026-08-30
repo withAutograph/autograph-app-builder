@@ -1,7 +1,6 @@
 import type { Preview } from "@storybook/nextjs-vite";
 
 import { AppShell } from "../components/app-shell";
-import { Providers } from "../components/providers";
 import "../app/globals.css";
 
 const preview: Preview = {
@@ -17,9 +16,7 @@ const preview: Preview = {
   decorators: [
     (Story) => (
       <AppShell>
-        <Providers>
-          <Story />
-        </Providers>
+        <Story />
       </AppShell>
     ),
   ],

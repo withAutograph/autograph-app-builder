@@ -1,12 +1,27 @@
 import type { ReactNode } from "react";
 import { GeistSans } from "geist/font/sans";
 
-export function AppShell({ children }: { children: ReactNode }) {
+import { Providers } from "@/components/providers";
+
+export function AppShell({
+  children,
+  githubAuthEnabled = false,
+  vercelAuthEnabled = false,
+}: {
+  children: ReactNode;
+  githubAuthEnabled?: boolean;
+  vercelAuthEnabled?: boolean;
+}) {
   return (
     <div
-      className={`${GeistSans.className} min-h-screen bg-background text-foreground antialiased`}
+      className={`${GeistSans.className} flex min-h-screen flex-col bg-background text-foreground antialiased`}
     >
-      {children}
+      <Providers
+        githubAuthEnabled={githubAuthEnabled}
+        vercelAuthEnabled={vercelAuthEnabled}
+      >
+        {children}
+      </Providers>
     </div>
   );
 }
