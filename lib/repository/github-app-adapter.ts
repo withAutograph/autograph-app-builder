@@ -184,9 +184,6 @@ function repositoryObservation(
     repositorySnapshotSchema,
     snapshotInput,
   );
-  if (snapshot.repositoryVariableNames.includes(REPOSITORY_RELEASE_GATE)) {
-    throw new Error("The repository release gate is configured.");
-  }
   return createRepositoryObservation({
     repositoryId: snapshot.repositoryId,
     owner: snapshot.owner,
@@ -196,7 +193,12 @@ function repositoryObservation(
     headSha: snapshot.headSha,
     headTree: snapshot.headTree,
     installationIdentityDigest,
-    releaseGate: { name: REPOSITORY_RELEASE_GATE, configured: false },
+    releaseGate: {
+      name: REPOSITORY_RELEASE_GATE,
+      configured: snapshot.repositoryVariableNames.includes(
+        REPOSITORY_RELEASE_GATE,
+      ),
+    },
   });
 }
 

@@ -418,7 +418,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     ).rejects.toThrow();
   });
 
-  it("sanitizes provider errors and refuses a configured release gate", async () => {
+  it("sanitizes provider errors and records a configured release gate", async () => {
     const provider = new Provider();
     provider.throwInspection = true;
     const adapter = createGitHubAppPublicationAdapter(provider);
@@ -440,7 +440,12 @@ describe("GitHub runtime adapter and durable-store composition", () => {
         repositoryId: "100",
         ref: "refs/heads/main",
       }),
-    ).rejects.toThrow(/release gate/u);
+    ).resolves.toMatchObject({
+      releaseGate: {
+        name: "REPOSITORY_RELEASE_ENABLED",
+        configured: true,
+      },
+    });
 
     provider.inspectRepository = async () => ({
       ...provider.repositorySnapshot(),
