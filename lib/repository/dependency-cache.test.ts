@@ -146,10 +146,13 @@ describe("offline dependency cache", () => {
     );
     for (const packageName of [
       "@testing-library/react",
+      "@tailwindcss/vite",
+      "@vitejs/plugin-react",
       "next",
       "react",
       "react-dom",
       "typescript",
+      "turbo",
       "vite-plus",
       "vitest",
     ])
@@ -157,7 +160,9 @@ describe("offline dependency cache", () => {
     expect(producer).toContain(
       'process.platform !== "linux" || process.arch !== "x64"',
     );
-    expect(producer).toContain('join(dependencyStage, ".bin", "vp")');
+    expect(producer).toContain('["vp", "../vite-plus/bin/vp"]');
+    expect(producer).toContain('["turbo", "../turbo/bin/turbo"]');
+    expect(producer).toContain('"@autograph",\n    "vite-config"');
     expect(producer).toContain('scope: "builder-execution"');
     expect(producer).toContain('platform: "linux/x86_64"');
   });
@@ -330,12 +335,18 @@ describe("offline dependency cache", () => {
     expect(linkCommand).toContain("test -d");
     expect(linkCommand).toContain("test ! -L");
     for (const required of [
+      ".bin/next",
+      ".bin/turbo",
       ".bin/vp",
+      "@autograph/vite-config/package.json",
+      "@tailwindcss/vite/package.json",
       "@testing-library/react/package.json",
+      "@vitejs/plugin-react/package.json",
       "next/package.json",
       "react/package.json",
       "react-dom/package.json",
       "typescript/package.json",
+      "turbo/package.json",
       "vite-plus/package.json",
       "vitest/package.json",
     ])
@@ -345,6 +356,10 @@ describe("offline dependency cache", () => {
     expect(linkCommand).toContain(
       `test -x /opt/app-builder/dependencies/${archiveDigest}/node_modules/.bin/vp`,
     );
+    expect(linkCommand).toContain(
+      `test -x /opt/app-builder/dependencies/${archiveDigest}/node_modules/.bin/turbo`,
+    );
+    expect(linkCommand).toContain('await import("@autograph/vite-config")');
     expect(linkCommand).toContain("\\( -type f -o -type d \\) -perm /222");
     expect(linkCommand).toContain("ln -s");
     expect(linkCommand).toContain(

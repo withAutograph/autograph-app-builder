@@ -13,6 +13,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -28,17 +29,20 @@ const OUTPUT_NAME = "arrusted-ffa0c34a-preview.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
 const EXECUTION_ROOT_PACKAGES = [
+  "@tailwindcss/vite",
   "@testing-library/jest-dom",
   "@testing-library/react",
   "@types/node",
   "@types/react",
   "@types/react-dom",
   "@vercel/microfrontends",
+  "@vitejs/plugin-react",
   "babel-plugin-react-compiler",
   "next",
   "react",
   "react-dom",
   "typescript",
+  "turbo",
   "vite-plus",
   "vitest",
 ] as const;
@@ -335,13 +339,38 @@ try {
     mkdirSync(dirname(destination), { recursive: true });
     cpSync(source, destination, { dereference: true, recursive: true });
   }
-  const vpSource = realpathSync(
-    join(arrustedRoot, "node_modules", ".bin", "vp"),
+  const viteConfigDestination = join(
+    dependencyStage,
+    "@autograph",
+    "vite-config",
   );
-  const vpDestination = join(dependencyStage, ".bin", "vp");
-  mkdirSync(dirname(vpDestination), { recursive: true });
-  cpSync(vpSource, vpDestination);
-  chmodSync(vpDestination, 0o755);
+  mkdirSync(dirname(viteConfigDestination), { recursive: true });
+  cpSync(join(arrustedRoot, "packages", "vite-config"), viteConfigDestination, {
+    dereference: true,
+    recursive: true,
+  });
+  const binaryDirectory = join(dependencyStage, ".bin");
+  mkdirSync(binaryDirectory, { recursive: true });
+  for (const [name, target] of [
+    ["next", "../next/dist/bin/next"],
+    ["turbo", "../turbo/bin/turbo"],
+    ["vp", "../vite-plus/bin/vp"],
+  ] as const)
+    symlinkSync(target, join(binaryDirectory, name));
+  for (const binary of ["next", "turbo", "vp"] as const)
+    execFileSync(
+      process.execPath,
+      [join(binaryDirectory, binary), "--version"],
+      {
+        cwd: dependencyStage,
+        encoding: "utf8",
+      },
+    );
+  execFileSync(
+    process.execPath,
+    ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],
+    { cwd: dependencyStage, encoding: "utf8" },
+  );
   normalizeTree(join(scratch, "dependency-stage"));
   const dependencyArchive = join(dependencyRoot, "node-modules.tar.gz");
   writeGzipTar(
