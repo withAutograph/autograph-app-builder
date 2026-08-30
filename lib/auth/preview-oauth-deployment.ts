@@ -37,6 +37,27 @@ function getPreviewOAuthDeploymentRuntime(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthDeploymentRuntime {
   if (deploymentRuntime !== undefined) return deploymentRuntime;
+  let providerEmulation: ReturnType<typeof readProviderEmulation>;
+  try {
+    providerEmulation = readProviderEmulation(environment);
+  } catch (cause) {
+    const invalidFields =
+      cause &&
+      typeof cause === "object" &&
+      "issues" in cause &&
+      Array.isArray(cause.issues)
+        ? cause.issues
+            .map((issue) =>
+              issue && typeof issue === "object" && "path" in issue
+                ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
+                : "unknown",
+            )
+            .join(",")
+        : "unknown";
+    throw new Error(`preview-oauth-emulation-config:${invalidFields}`, {
+      cause,
+    });
+  }
   let config: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
   try {
     config = readPreviewOAuthRuntimeConfig(environment);
@@ -44,12 +65,6 @@ function getPreviewOAuthDeploymentRuntime(
     throw new Error("preview-oauth-config", { cause });
   }
   const database = openHostedPostgresDatabase(config.databaseUrl);
-  let providerEmulation: ReturnType<typeof readProviderEmulation>;
-  try {
-    providerEmulation = readProviderEmulation(environment);
-  } catch (cause) {
-    throw new Error("preview-oauth-emulation-config", { cause });
-  }
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
     database,
     {
