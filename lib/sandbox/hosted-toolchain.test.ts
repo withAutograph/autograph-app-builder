@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 import {
+  HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES,
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
   HOSTED_TOOLCHAIN_CONTRACT_VERSION,
@@ -14,6 +16,16 @@ import {
 } from "./hosted-toolchain";
 
 describe("hosted Vercel Sandbox toolchain", () => {
+  it("reserves enough single-file capacity for the pinned bootstrap artifact", () => {
+    expect(SANDBOX_EXECUTION_POLICY.command.maximumFileBytes).toBe(268_435_456);
+    expect(SANDBOX_EXECUTION_POLICY.command.maximumFileBytes).toBeGreaterThan(
+      HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES,
+    );
+    expect(() =>
+      hostedToolchainBootstrapCommand(HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES - 1),
+    ).toThrow("cannot hold the hosted artifact");
+  });
+
   it("pins both supported Linux architectures by checksum", () => {
     for (const artifact of Object.values(hostedToolchainArtifacts)) {
       expect(artifact.miseUrl).toContain(`v${HOSTED_MISE_VERSION}`);
@@ -29,6 +41,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
 
   it("downloads to temporary files, verifies, and installs without piping code", () => {
     const command = hostedToolchainBootstrapCommand();
+    expect(
+      command.indexOf("install -d -m 0755 /workspace/.app-builder"),
+    ).toBeLessThan(command.indexOf("curl --fail"));
+    expect(command).toContain("hosted_toolchain_bootstrap_failed:%s");
     expect(command).toContain('case "$(uname -m)"');
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("sudo install --owner=root --group=root");
@@ -69,13 +85,19 @@ describe("hosted Vercel Sandbox toolchain", () => {
 
   it("materializes the sealed dependency closure in the proof workspace", () => {
     const command = hostedArtifactWorkspaceInstallCommand();
+    expect(
+      command.indexOf("install -d -m 0755 /workspace/.app-builder"),
+    ).toBeLessThan(command.indexOf("curl --fail"));
     expect(command).toContain(
       "/workspace/.app-builder/hosted-dependency-cache",
     );
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("node-modules.tar.gz");
     expect(command).not.toContain("/opt/app-builder/dependency-cache");
-    expect(command).not.toMatch(/curl|sudo|token|password|authorization/iu);
+    expect(command).not.toMatch(/sudo|token|password|authorization/iu);
+    expect(command).toContain(
+      "releases/download/hosted-arrusted-ffa0c34a-execution-v3",
+    );
   });
 
   it("narrows live sessions after the bootstrap snapshot", () => {
@@ -84,8 +106,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(definition).toContain("runtimeRecoveryPrewarmInput: () => ({");
     expect(definition).toContain("bootstrap: bootstrapHostedVercelSandbox");
     expect(definition).toContain("seedFiles: readHostedManagedSeedFiles()");
-    expect(definition).toContain("readHostedArtifactBytes()");
+    expect(definition).not.toContain("readHostedArtifactBytes");
     expect(definition).toContain('await use({ networkPolicy: "deny-all" })');
+    expect(definition).toContain("HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS");
+    expect(definition).toContain("useHostedArtifactProof");
     expect(definition).toContain(
       "revalidationKey: hostedToolchainRevalidationKey",
     );

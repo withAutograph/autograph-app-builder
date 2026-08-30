@@ -33,13 +33,35 @@ export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
 export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 
+const REQUIRED_EXECUTION_PACKAGES = [
+  ".bin/next",
+  ".bin/turbo",
+  ".bin/vp",
+  "@autograph/vite-config/package.json",
+  "@tailwindcss/vite/package.json",
+  "@testing-library/react/package.json",
+  "@vercel/microfrontends/package.json",
+  "@vitejs/plugin-react/package.json",
+  "next/package.json",
+  "react/package.json",
+  "react-dom/package.json",
+  "typescript/package.json",
+  "turbo/package.json",
+  "vite-plus/package.json",
+  "vitest/package.json",
+] as const;
+
 const sha256Digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
 
 const dependencyCacheManifestShapeSchema = z.strictObject({
   version: z.literal(1),
   scope: z.literal("builder-execution"),
-  platform: z.union([z.literal("linux/arm64"), z.literal("linux/portable")]),
+  platform: z.union([
+    z.literal("linux/arm64"),
+    z.literal("linux/x86_64"),
+    z.literal("linux/portable"),
+  ]),
   target: z.strictObject({
     sha: gitObjectId,
     tree: gitObjectId,
@@ -87,10 +109,10 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
   }),
 });
 
-export const hostedPlanningDependencyCacheManifestSchema = z.strictObject({
+export const hostedExecutionDependencyCacheManifestSchema = z.strictObject({
   version: z.literal(1),
-  scope: z.literal("identity-planning"),
-  platform: z.literal("linux/portable"),
+  scope: z.literal("builder-execution"),
+  platform: z.literal("linux/x86_64"),
   target: z.strictObject({
     sha: z.literal(ARRUSTED_TARGET_SHA),
     tree: z.literal(ARRUSTED_TARGET_TREE),
@@ -136,7 +158,7 @@ export const dependencyCacheManifestSchema =
 
 export type DependencyCacheManifest =
   | z.infer<typeof dependencyCacheManifestShapeSchema>
-  | z.infer<typeof hostedPlanningDependencyCacheManifestSchema>;
+  | z.infer<typeof hostedExecutionDependencyCacheManifestSchema>;
 
 export type ObservedDependencyCache = {
   manifest: DependencyCacheManifest;
@@ -196,7 +218,13 @@ const hostedArtifactDependencyCacheEnabled = (
   environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF === "1" &&
   hasTestCapability("mock-model", environment);
 
-const hostedPlanningDependencyCacheEnabled = (
+const hostedSeedDependencyCacheEnabled = (
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
+  environment.VERCEL === "1" ||
+  hostedArtifactDependencyCacheEnabled(environment);
+
+const hostedWorkspaceDependencyExtractionEnabled = (
   environment: Readonly<Record<string, string | undefined>>,
 ) =>
   environment.VERCEL === "1" ||
@@ -207,7 +235,7 @@ export function materializedDependencyNodeModulesRoot(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
   const immutableImageRoot = dependencyCacheNodeModulesRoot(contentDigest);
-  if (hostedPlanningDependencyCacheEnabled(environment))
+  if (hostedWorkspaceDependencyExtractionEnabled(environment))
     return `/workspace/.app-builder/hosted-dependencies/${contentDigest}/node_modules`;
   return immutableImageRoot;
 }
@@ -318,17 +346,17 @@ export async function inspectDependencyCache(
   } catch {
     throw new Error("The fixed offline dependency cache manifest is invalid.");
   }
-  const hostedPlanning = hostedPlanningDependencyCacheEnabled(environment);
+  const hostedExecution = hostedSeedDependencyCacheEnabled(environment);
   const validated = (
-    hostedPlanning
-      ? hostedPlanningDependencyCacheManifestSchema
+    hostedExecution
+      ? hostedExecutionDependencyCacheManifestSchema
       : dependencyCacheManifestSchema
   ).safeParse(parsed);
   if (!validated.success)
     throw new Error("The fixed offline dependency cache manifest drifted.");
 
   const archiveResult = await sandbox.run({
-    command: hostedPlanning
+    command: hostedExecution
       ? `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive}`
       : `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive} && sha256sum -- ${cachePaths.cargoArchive} && stat --format='%s' -- ${cachePaths.cargoArchive}`,
     workingDirectory: "/workspace",
@@ -347,7 +375,7 @@ export async function inspectDependencyCache(
   const observedBytes = Number(sizeLine);
   const observedCargoDigest = cargoChecksumLine?.trim().split(/\s+/u)[0];
   const observedCargoBytes = Number(cargoSizeLine);
-  const fullClosure = hostedPlanning
+  const fullClosure = hostedExecution
     ? undefined
     : dependencyCacheManifestSchema.parse(validated.data).closure;
   if (
@@ -395,18 +423,22 @@ export async function materializeOfflineDependencies(input: {
   });
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
-    const hostedPlanning = hostedPlanningDependencyCacheEnabled(environment);
+    const hostedExecution =
+      hostedWorkspaceDependencyExtractionEnabled(environment);
     const hostedDependencyRoot = `/workspace/.app-builder/hosted-dependencies/${observed.contentDigest}`;
     const absoluteNodeModules = materializedDependencyNodeModulesRoot(
       observed.contentDigest,
       environment,
     );
-    const installHostedClosure = hostedPlanning
+    const installHostedClosure = hostedExecution
       ? `if [ ! -d ${absoluteNodeModules} ]; then rm -rf ${hostedDependencyRoot} && install -d -m 0755 ${hostedDependencyRoot} && tar --extract --gzip --file ${dependencyCachePaths(environment).archive} --directory ${hostedDependencyRoot} --no-same-owner --no-same-permissions && chmod -R a-w,a+rX ${hostedDependencyRoot}; fi && `
       : "";
     await ensureSandboxDirectories(input.sandbox, [root]);
+    const requiredExecutionClosure = REQUIRED_EXECUTION_PACKAGES.map(
+      (path) => `test -e ${absoluteNodeModules}/${path}`,
+    ).join(" && ");
     const extraction = await input.sandbox.run({
-      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}" && cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
@@ -438,7 +470,7 @@ export async function materializeOfflineDependencies(input: {
     throw new Error("The required offline dependency closure drifted.");
   if (
     !fixtureDependencyCacheEnabled(environment) &&
-    !hostedPlanningDependencyCacheEnabled(environment)
+    !hostedArtifactDependencyCacheEnabled(environment)
   ) {
     const resolution = await input.sandbox.run({
       command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
@@ -452,18 +484,20 @@ export async function materializeOfflineDependencies(input: {
     );
     if (resolution.exitCode !== 0)
       throw new Error("The required offline dependency closure is incomplete.");
-    const rustToolchain = await input.sandbox.run({
-      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
-      workingDirectory: `/workspace/${root}`,
-      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
-    });
-    boundedOutput(
-      rustToolchain.stdout,
-      rustToolchain.stderr,
-      "Offline Rust toolchain inspection",
-    );
-    if (rustToolchain.exitCode !== 0)
-      throw new Error("The required offline Rust toolchain is incomplete.");
+    if (!hostedSeedDependencyCacheEnabled(environment)) {
+      const rustToolchain = await input.sandbox.run({
+        command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
+        workingDirectory: `/workspace/${root}`,
+        abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+      });
+      boundedOutput(
+        rustToolchain.stdout,
+        rustToolchain.stderr,
+        "Offline Rust toolchain inspection",
+      );
+      if (rustToolchain.exitCode !== 0)
+        throw new Error("The required offline Rust toolchain is incomplete.");
+    }
   }
   return { ...observed, planningRoot: `/workspace/${root}` };
 }

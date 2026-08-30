@@ -1,18 +1,15 @@
-import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
-import { extract } from "tar";
 
 import {
   HOSTED_ARTIFACT_BYTES,
-  HOSTED_ARTIFACT_PATH,
+  HOSTED_ARTIFACT_RELEASE_NAME,
+  HOSTED_ARTIFACT_RELEASE_TAG,
   HOSTED_ARTIFACT_SHA256,
+  HOSTED_ARTIFACT_URL,
   HOSTED_SOURCE_PATH,
   hostedExecutionArtifactDigest,
-  readHostedArtifactBytes,
 } from "./hosted-artifact";
 import {
   HOSTED_CONTRACT_DIGEST,
@@ -23,25 +20,19 @@ import {
 import {
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
-  hostedPlanningDependencyCacheManifestSchema,
 } from "../repository/dependency-cache";
 
-const sha256 = (value: Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
-
 describe("hosted Arrusted artifact", () => {
-  it("keeps exact artifact bytes embedded in the Eve service bundle", () => {
-    const content = readHostedArtifactBytes();
-    const authoredContent = readFileSync(HOSTED_ARTIFACT_PATH);
-    expect(content.byteLength).toBe(HOSTED_ARTIFACT_BYTES);
-    expect(sha256(content)).toBe(HOSTED_ARTIFACT_SHA256);
-    expect(authoredContent.byteLength).toBe(HOSTED_ARTIFACT_BYTES);
-    expect(sha256(authoredContent)).toBe(HOSTED_ARTIFACT_SHA256);
-    expect(HOSTED_ARTIFACT_PATH).toMatch(/^artifacts\/hosted\//u);
-    expect(HOSTED_ARTIFACT_PATH).not.toMatch(/^public\//u);
+  it("pins an immutable release asset without embedding its bytes", () => {
+    expect(HOSTED_ARTIFACT_URL).toBe(
+      `https://github.com/withAutograph/autograph-app-builder/releases/download/${HOSTED_ARTIFACT_RELEASE_TAG}/${HOSTED_ARTIFACT_RELEASE_NAME}`,
+    );
+    expect(HOSTED_ARTIFACT_BYTES).toBe(181_139_242);
+    expect(HOSTED_ARTIFACT_SHA256).toMatch(/^[0-9a-f]{64}$/u);
+    expect(existsSync("lib/sandbox/hosted-artifact.generated.ts")).toBe(false);
     expect(existsSync("public/hosted-artifacts")).toBe(false);
     expect(readFileSync("next.config.ts", "utf8")).not.toContain(
-      `"./${HOSTED_ARTIFACT_PATH}"`,
+      "artifacts/hosted",
     );
     expect(hostedExecutionArtifactDigest()).toBe(
       `vercel-sandbox-seed@sha256:${HOSTED_ARTIFACT_SHA256}`,
@@ -77,32 +68,13 @@ describe("hosted Arrusted artifact", () => {
     },
   );
 
-  it("binds the authored artifact to the exact hosted planning receipt", () => {
-    const root = mkdtempSync(join(tmpdir(), "hosted-artifact-binding-"));
-    try {
-      extract({ cwd: root, file: HOSTED_ARTIFACT_PATH, sync: true });
-      const seed = join(root, ".app-builder-hosted-seed");
-      const artifactManifest = JSON.parse(
-        readFileSync(join(seed, "artifact-manifest.json"), "utf8"),
-      ) as { target: Record<string, unknown> };
-      const dependencyManifest = JSON.parse(
-        readFileSync(join(seed, "dependency-cache", "manifest.json"), "utf8"),
-      ) as unknown;
-
-      expect(artifactManifest.target).toEqual(
-        expect.objectContaining({
-          sha: ARRUSTED_TARGET_SHA,
-          tree: ARRUSTED_TARGET_TREE,
-          eligibilityDigest: HOSTED_ELIGIBILITY_DIGEST,
-          contractDigest: HOSTED_CONTRACT_DIGEST,
-        }),
-      );
-      expect(
-        hostedPlanningDependencyCacheManifestSchema.parse(dependencyManifest),
-      ).toEqual(dependencyManifest);
-    } finally {
-      rmSync(root, { force: true, recursive: true });
-    }
+  it("binds release identity to the exact hosted execution receipt", () => {
+    expect(HOSTED_ARTIFACT_RELEASE_TAG).toContain(
+      ARRUSTED_TARGET_SHA.slice(0, 8),
+    );
+    expect(HOSTED_ELIGIBILITY_DIGEST).toMatch(/^[0-9a-f]{64}$/u);
+    expect(HOSTED_CONTRACT_DIGEST).toMatch(/^[0-9a-f]{64}$/u);
+    expect(ARRUSTED_TARGET_TREE).toMatch(/^[0-9a-f]{40}$/u);
   });
 
   it("rejects a hosted source before inspection when environments differ", () => {

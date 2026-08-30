@@ -13,6 +13,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -27,6 +28,24 @@ const TARGET_TREE = "88ead91d7b11aae11c526f1c2ee40f5b6db70642";
 const OUTPUT_NAME = "arrusted-ffa0c34a-preview.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
+const EXECUTION_ROOT_PACKAGES = [
+  "@tailwindcss/vite",
+  "@testing-library/jest-dom",
+  "@testing-library/react",
+  "@types/node",
+  "@types/react",
+  "@types/react-dom",
+  "@vercel/microfrontends",
+  "@vitejs/plugin-react",
+  "babel-plugin-react-compiler",
+  "next",
+  "react",
+  "react-dom",
+  "typescript",
+  "turbo",
+  "vite-plus",
+  "vitest",
+] as const;
 const SOURCE_FILE = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u;
 
 const targetDigests = {
@@ -123,12 +142,32 @@ function packageResolutionRoot(packagePath: string): string {
   return packagePath.slice(0, index + marker.length - 1);
 }
 
+function packageVersion(packagePath: string): string {
+  const manifest = JSON.parse(
+    readFileSync(join(packagePath, "package.json"), "utf8"),
+  ) as { version?: string };
+  if (typeof manifest.version !== "string")
+    throw new Error("Dependency package version is missing.");
+  return manifest.version;
+}
+
 function dependencyClosure(root: string): Map<string, string> {
   const installedRoot = join(root, "node_modules");
-  const pending = [{ name: REQUIRED_PACKAGE, resolutionRoot: installedRoot }];
+  const pending = EXECUTION_ROOT_PACKAGES.map((name) => ({
+    name,
+    resolutionRoot: installedRoot,
+    destination: name,
+  }));
   const packages = new Map<string, string>();
+  const rootVersions = new Map<string, string>();
+  for (const name of EXECUTION_ROOT_PACKAGES) {
+    const packagePath = packageRoot(installedRoot, installedRoot, name);
+    if (packagePath === undefined)
+      throw new Error(`Dependency ${name} is missing.`);
+    rootVersions.set(name, packageVersion(packagePath));
+  }
   while (pending.length > 0) {
-    const { name, resolutionRoot } = pending.shift()!;
+    const { name, resolutionRoot, destination } = pending.shift()!;
     const packagePath = packageRoot(installedRoot, resolutionRoot, name);
     if (packagePath === undefined)
       throw new Error(`Dependency ${name} is missing.`);
@@ -144,29 +183,45 @@ function dependencyClosure(root: string): Map<string, string> {
       manifest.version !== REQUIRED_PACKAGE_VERSION
     )
       throw new Error("The required microfrontends version drifted.");
-    const existing = packages.get(name);
+    const existing = packages.get(destination);
     if (existing !== undefined) {
-      const existingVersion = JSON.parse(
-        readFileSync(join(existing, "package.json"), "utf8"),
-      ) as { version?: string };
-      if (existingVersion.version !== manifest.version)
-        throw new Error(`Dependency ${name} requires conflicting versions.`);
+      if (packageVersion(existing) !== manifest.version)
+        throw new Error(`Dependency destination ${destination} drifted.`);
       continue;
     }
-    packages.set(name, packagePath);
+    packages.set(destination, packagePath);
+    if (!rootVersions.has(name)) rootVersions.set(name, manifest.version!);
     const childResolutionRoot = packageResolutionRoot(packagePath);
+    const enqueue = (dependency: string) => {
+      const dependencyPath = packageRoot(
+        installedRoot,
+        childResolutionRoot,
+        dependency,
+      );
+      if (dependencyPath === undefined) return false;
+      const dependencyVersion = packageVersion(dependencyPath);
+      const rootVersion = rootVersions.get(dependency);
+      const dependencyDestination =
+        rootVersion === undefined || rootVersion === dependencyVersion
+          ? dependency
+          : join(destination, "node_modules", dependency);
+      pending.push({
+        name: dependency,
+        resolutionRoot: childResolutionRoot,
+        destination: dependencyDestination,
+      });
+      return true;
+    };
     for (const dependency of Object.keys(
       manifest.dependencies ?? {},
     ).toSorted())
-      pending.push({ name: dependency, resolutionRoot: childResolutionRoot });
+      if (!enqueue(dependency))
+        throw new Error(`Dependency ${dependency} is missing.`);
     for (const dependency of Object.keys(
       manifest.optionalDependencies ?? {},
     ).toSorted()) {
-      if (
-        packageRoot(installedRoot, childResolutionRoot, dependency) !==
-        undefined
-      )
-        pending.push({ name: dependency, resolutionRoot: childResolutionRoot });
+      if (dependency.includes("musl")) continue;
+      enqueue(dependency);
     }
   }
   return new Map(
@@ -187,8 +242,6 @@ function normalizeTree(root: string): void {
       if (!within(root, target))
         throw new Error("Artifact symlink escapes its root.");
     } else if (entry.isFile()) {
-      if (path.endsWith(".node"))
-        throw new Error("Hosted dependency closure must be platform-portable.");
       chmodSync(path, entry.mode & 0o111 ? 0o755 : 0o644);
     } else {
       throw new Error("Artifact contains an unsupported filesystem entry.");
@@ -222,6 +275,8 @@ function writeGzipTar(
 }
 
 const { arrustedRoot, output } = parseArguments(process.argv.slice(2));
+if (process.platform !== "linux" || process.arch !== "x64")
+  throw new Error("Hosted execution artifacts must be built on Linux x86_64.");
 const scratch = mkdtempSync(join(tmpdir(), "app-builder-hosted-artifact."));
 try {
   const commit = git(
@@ -284,6 +339,38 @@ try {
     mkdirSync(dirname(destination), { recursive: true });
     cpSync(source, destination, { dereference: true, recursive: true });
   }
+  const viteConfigDestination = join(
+    dependencyStage,
+    "@autograph",
+    "vite-config",
+  );
+  mkdirSync(dirname(viteConfigDestination), { recursive: true });
+  cpSync(join(arrustedRoot, "packages", "vite-config"), viteConfigDestination, {
+    dereference: true,
+    recursive: true,
+  });
+  const binaryDirectory = join(dependencyStage, ".bin");
+  mkdirSync(binaryDirectory, { recursive: true });
+  for (const [name, target] of [
+    ["next", "../next/dist/bin/next"],
+    ["turbo", "../turbo/bin/turbo"],
+    ["vp", "../vite-plus/bin/vp"],
+  ] as const)
+    symlinkSync(target, join(binaryDirectory, name));
+  for (const binary of ["next", "turbo", "vp"] as const)
+    execFileSync(
+      process.execPath,
+      [join(binaryDirectory, binary), "--version"],
+      {
+        cwd: dependencyStage,
+        encoding: "utf8",
+      },
+    );
+  execFileSync(
+    process.execPath,
+    ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],
+    { cwd: dependencyStage, encoding: "utf8" },
+  );
   normalizeTree(join(scratch, "dependency-stage"));
   const dependencyArchive = join(dependencyRoot, "node-modules.tar.gz");
   writeGzipTar(
@@ -295,8 +382,8 @@ try {
   const archiveSha256 = sha256(readFileSync(dependencyArchive));
   const dependencyManifest = {
     version: 1,
-    scope: "identity-planning",
-    platform: "linux/portable",
+    scope: "builder-execution",
+    platform: "linux/x86_64",
     target: { sha: TARGET_SHA, tree: TARGET_TREE, ...targetDigests },
     runtime: { bun: "1.3.14" },
     closure: {

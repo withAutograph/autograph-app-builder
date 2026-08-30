@@ -92,7 +92,15 @@ RUN set -eux; \
     rm -rf node_modules; \
     bun install --frozen-lockfile --ignore-scripts --linker=hoisted; \
     test "$(bun --version)" = "1.3.14"; \
+    test -x node_modules/.bin/vp; \
+    test -f node_modules/@testing-library/react/package.json; \
     test "$(bun -e 'console.log(require("./node_modules/@vercel/microfrontends/package.json").version)')" = "2.4.0"; \
+    test -f node_modules/next/package.json; \
+    test -f node_modules/react/package.json; \
+    test -f node_modules/react-dom/package.json; \
+    test -f node_modules/typescript/package.json; \
+    test -f node_modules/vite-plus/package.json; \
+    test -f node_modules/vitest/package.json; \
     cd packages/platform-microfrontends; \
     test "$(bun -e 'console.log(require("path-to-regexp/package.json").version)')" = "8.4.2"; \
     test "$(bun -e 'console.log(require("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json").version)')" = "6.3.0"; \
