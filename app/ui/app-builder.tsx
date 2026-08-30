@@ -1616,7 +1616,8 @@ export function Builder({
     (notice) =>
       !(
         notice.status === "failed" &&
-        notice.reason === "configuration-unavailable"
+        (notice.reason === "configuration-unavailable" ||
+          notice.provider === "github")
       ),
   );
   const modelOptions = zdrOnly

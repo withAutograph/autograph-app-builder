@@ -3,6 +3,8 @@ import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
   createGitHubAppInstallationAuthorization,
+  githubInstallationAuthorizationDiagnostic,
+  GitHubInstallationAuthorizationError,
   readGitHubAppInstallationEnvironment,
 } from "./github-app-installation";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
@@ -65,15 +67,20 @@ export function createGitHubAppInstallationRouteHandlers(input: {
   return {
     async start(request: Request): Promise<Response> {
       const startedAt = Date.now();
-      const fail = (reason: ProviderConnectionFailureReason) => {
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
+      ) => {
         logProviderConnectionFailure({
           request,
           provider: "github",
           phase: "start",
           reason,
           startedAt,
+          diagnostic,
         });
-        return redirect("failed", reason);
+        return redirect("failed", reason, returnState);
       };
       if (
         request.method !== "POST" ||
@@ -127,15 +134,20 @@ export function createGitHubAppInstallationRouteHandlers(input: {
 
     async callback(request: Request): Promise<Response> {
       const startedAt = Date.now();
-      const fail = (reason: ProviderConnectionFailureReason) => {
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
+      ) => {
         logProviderConnectionFailure({
           request,
           provider: "github",
           phase: "callback",
           reason,
           startedAt,
+          diagnostic,
         });
-        return redirect("failed", reason);
+        return redirect("failed", reason, returnState);
       };
       if (request.method !== "GET") return fail("request-invalid");
 
@@ -175,8 +187,14 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           });
         }
         return redirect("connected", undefined, result.returnState);
-      } catch {
-        return fail("callback-invalid");
+      } catch (error) {
+        return fail(
+          "callback-invalid",
+          githubInstallationAuthorizationDiagnostic(error),
+          error instanceof GitHubInstallationAuthorizationError
+            ? error.returnState
+            : undefined,
+        );
       }
     },
   };

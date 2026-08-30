@@ -179,7 +179,12 @@ function json(value: unknown, status = 200, requestId = "REQUEST_1") {
   });
 }
 
-function providerFetch(input?: { extraPermission?: boolean; fail?: boolean }) {
+function providerFetch(input?: {
+  extraPermission?: boolean;
+  fail?: boolean;
+  repositorySelection?: "all" | "selected";
+  repositoryPages?: Array<Array<number | string>>;
+}) {
   const calls: Array<{ url: string; init: RequestInit; body: unknown }> = [];
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
@@ -191,7 +196,7 @@ function providerFetch(input?: { extraPermission?: boolean; fail?: boolean }) {
       return json({
         id: 456,
         account: { id: 789, login: "withAutograph", type: "Organization" },
-        repository_selection: "selected",
+        repository_selection: input?.repositorySelection ?? "selected",
       });
     }
     if (url.endsWith("/app/installations/456/access_tokens")) {
@@ -209,7 +214,9 @@ function providerFetch(input?: { extraPermission?: boolean; fail?: boolean }) {
       );
     }
     if (url.includes("/installation/repositories?")) {
-      return json({ repositories: [{ id: 100 }, { id: 200 }] });
+      const page = Number(new URL(url).searchParams.get("page"));
+      const repositoryIds = input?.repositoryPages?.[page - 1] ?? [100, 200];
+      return json({ repositories: repositoryIds.map((id) => ({ id })) });
     }
     throw new Error(`Unexpected URL: ${url}`);
   };
@@ -326,6 +333,58 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       );
     },
   );
+
+  it("preserves an all-repositories installation through the adapter", async () => {
+    const adapter = createGitHubAppPublicationAdapter(
+      createProvider(
+        providerFetch({ repositorySelection: "all" }).implementation,
+      ),
+    );
+
+    await expect(
+      adapter.inspectInstallation("resolve-existing-source"),
+    ).resolves.toMatchObject({
+      repositorySelection: "all",
+      selectedRepositoryIds: ["100", "200"],
+    });
+  });
+
+  it("continues all-repository pagination beyond five full pages", async () => {
+    const pages = Array.from({ length: 5 }, (_, page) =>
+      Array.from({ length: 100 }, (_, index) => page * 100 + index + 1),
+    );
+    pages.push([501]);
+    const mock = providerFetch({
+      repositorySelection: "all",
+      repositoryPages: pages,
+    });
+    const adapter = createGitHubAppPublicationAdapter(
+      createProvider(mock.implementation),
+    );
+
+    await expect(
+      adapter.inspectInstallation("resolve-existing-source"),
+    ).resolves.toMatchObject({
+      repositorySelection: "all",
+      selectedRepositoryIds: expect.arrayContaining(["1", "500", "501"]),
+    });
+    expect(
+      mock.calls.filter(({ url }) =>
+        url.includes("/installation/repositories?"),
+      ),
+    ).toHaveLength(6);
+  });
+
+  it("rejects repository IDs that cannot round-trip as safe JSON integers", async () => {
+    const provider = createProvider(providerFetch().implementation);
+
+    await expect(
+      provider.inspectRepository({
+        repositoryId: "9007199254740993",
+        ref: "main",
+      }),
+    ).rejects.toThrow("invalid-response");
+  });
 
   it("rejects an escalated token response and sanitizes transport bodies", async () => {
     const escalated = createGitHubAppPublicationAdapter(

@@ -51,13 +51,15 @@ with S256 PKCE. The authorization callback atomically consumes that second
 state before exchanging the one-time code and derived verifier. The returned
 GitHub user token is request-local: the callback uses it only against the fixed
 `api.github.com` `/user` and paginated `/user/installations` endpoints, accepts
-only one unambiguous active selected-repository installation for the configured
+only one unambiguous active installation for the configured
 App ID, checks personal installations against the caller, rechecks live App
 Builder membership, and then writes the existing tenant installation binding.
 It never persists or returns the code, client secret, user token, refresh
 token, raw provider response, or authorization header. A replay, tenant change,
-provider drift, membership change, suspended installation, or all-repository
-selection fails closed without a binding.
+provider drift, membership change, or suspended installation fails closed without
+a binding. Both GitHub repository selections (`selected` and `all`) are supported;
+the live installation identity and per-operation repository authorization checks
+remain required.
 
 This route adds the exact hosted environment fields
 `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
@@ -71,12 +73,23 @@ the public installation flow.
 Register the GitHub App under the Autograph organization with the exact slug
 `autograph-app-builder`. Use `https://www.autograph.so/` as its public homepage
 and configure both its callback URL and setup URL as
-`<APP_ORIGIN>/github/installations/callback`. Request selected-repository
-installation and only the maximum repository permissions exercised by the
+`<APP_ORIGIN>/github/installations/callback`. Enable **Redirect on update** so an
+existing installation returns to the same state-bound flow after its repository
+access changes. Choose either repository selection offered by GitHub and only the
+maximum repository permissions exercised by the
 operation-scoped installation tokens: metadata read, contents read/write,
 workflows read/write, pull requests read/write, administration read/write, and
 variables read. The App Builder narrows these permissions again for each
 operation and performs no repository mutation during the connection flow.
+
+Leave GitHub App **Request user authorization (OAuth) during installation**
+disabled for this flow. When enabled, GitHub bypasses the setup URL and starts
+its OAuth flow directly, returning a code to the first registered callback URL
+without this flow's tenant-bound state. The callback rejects that response before
+code exchange or binding rather than accepting an unbound authorization. Multiple
+registered callback URLs do not select a tenant callback for that automatic flow;
+the configured App Builder callback and setup URL must be the same exact
+`<APP_ORIGIN>/github/installations/callback` URL.
 
 `composeGitHubPublicationRuntime` enables the typed tools only when an adapter,
 proposal store, and receipt store are all injected with `enabled: true`. The

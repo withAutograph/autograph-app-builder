@@ -250,6 +250,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0013_passkey_onboarding",
           breakpoints: true,
         },
+        {
+          idx: 13,
+          version: "7",
+          when: 1_788_094_800_000,
+          tag: "0014_tenant_github_installation_uniqueness",
+          breakpoints: true,
+        },
       ],
     });
   });

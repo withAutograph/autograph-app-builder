@@ -16,7 +16,7 @@ const meta = {
     buttonLabel: "Install or update GitHub access",
     children: null,
     description:
-      "Choose only the repositories this workspace may inspect or update. GitHub will ask you to confirm the installation and return here.",
+      "Choose the repositories this workspace may inspect or update, or allow all repositories. For an existing installation, GitHub must have Redirect on update enabled to return here.",
     icon: <FaGithub size={23} />,
     returnTo: "/",
     resumeKey: "resume-123",
