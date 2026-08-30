@@ -4,6 +4,7 @@ import { createPostgresHostedGitHubInstallationStore } from "../repository/postg
 import {
   createGitHubAppInstallationAuthorization,
   githubInstallationAuthorizationDiagnostic,
+  GitHubInstallationAuthorizationError,
   readGitHubAppInstallationEnvironment,
 } from "./github-app-installation";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
@@ -69,6 +70,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       const fail = (
         reason: ProviderConnectionFailureReason,
         diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
       ) => {
         logProviderConnectionFailure({
           request,
@@ -78,7 +80,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           startedAt,
           diagnostic,
         });
-        return redirect("failed", reason);
+        return redirect("failed", reason, returnState);
       };
       if (
         request.method !== "POST" ||
@@ -188,6 +190,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         return fail(
           "callback-invalid",
           githubInstallationAuthorizationDiagnostic(error),
+          error instanceof GitHubInstallationAuthorizationError
+            ? error.returnState
+            : undefined,
         );
       }
     },

@@ -17,6 +17,7 @@ const authority = {
 
 const config = {
   appId: "12345",
+  appSlug: "autograph-app-builder",
   clientId: "Iv1_app_client",
   clientSecret: "client-secret-sentinel-value",
   stateSecret: "state-secret-sentinel-value-with-32-characters",
@@ -169,6 +170,7 @@ describe("public GitHub App installation authorization", () => {
     expect(
       readGitHubAppInstallationEnvironment({
         GITHUB_APP_ID: config.appId,
+        GITHUB_APP_SLUG: config.appSlug,
         GITHUB_APP_CLIENT_ID: config.clientId,
         GITHUB_APP_CLIENT_SECRET: config.clientSecret,
         GITHUB_APP_INSTALL_STATE_SECRET: config.stateSecret,
@@ -179,6 +181,7 @@ describe("public GitHub App installation authorization", () => {
     expect(() =>
       readGitHubAppInstallationEnvironment({
         GITHUB_APP_ID: config.appId,
+        GITHUB_APP_SLUG: config.appSlug,
         GITHUB_APP_CLIENT_ID: config.clientId,
         GITHUB_APP_CLIENT_SECRET: config.clientSecret,
         GITHUB_APP_INSTALL_STATE_SECRET: config.stateSecret,
@@ -248,6 +251,28 @@ describe("public GitHub App installation authorization", () => {
     expect(String(requests[1]?.init?.headers)).not.toContain(
       "github-user-token-sentinel-value",
     );
+  });
+
+  it("returns an allowlisted OAuth denial to the signed destination without leaking details", async () => {
+    const { authorization } = harness();
+    const begun = await authorization.begin(authority, { returnTo: "/" });
+    const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
+    const authorize = await authorization.complete(
+      setupCallbackUrl(installState),
+      authority,
+    );
+    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    const state = new URL(authorize.redirectUrl).searchParams.get("state")!;
+    await expect(
+      authorization.complete(
+        `https://builder.example/github/installations/callback?error=access_denied&error_description=secret-provider-detail&state=${encodeURIComponent(state)}`,
+        authority,
+      ),
+    ).rejects.toMatchObject({
+      stage: "oauth-callback-error",
+      category: "access_denied",
+      returnState: { returnTo: "/" },
+    });
   });
 
   it("fails replay before another provider request or binding", async () => {

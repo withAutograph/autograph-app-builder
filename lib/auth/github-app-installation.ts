@@ -27,6 +27,7 @@ export type GitHubInstallationAuthorizationFailureStage =
   | "token-exchange-non-2xx"
   | "token-exchange-oauth-error"
   | "token-response-schema"
+  | "oauth-callback-error"
   | "github-user-verification"
   | "installation-identity-validation"
   | "durable-tenant-binding";
@@ -37,10 +38,16 @@ export type GitHubOAuthErrorCategory =
   | "bad_verification_code"
   | "unverified_user_email";
 
+export type GitHubOAuthCallbackError =
+  | "access_denied"
+  | "temporarily_unavailable"
+  | "server_error";
+
 export class GitHubInstallationAuthorizationError extends Error {
   constructor(
     readonly stage: GitHubInstallationAuthorizationFailureStage,
-    readonly category?: GitHubOAuthErrorCategory,
+    readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
+    readonly returnState?: ProviderConnectionReturn,
   ) {
     super(FAILURE_MESSAGE);
   }
@@ -66,6 +73,9 @@ const githubLoginSchema = z
 const configSchema = z
   .object({
     appId: decimalSchema,
+    appSlug: z
+      .string()
+      .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u),
     clientId: z
       .string()
       .min(1)
@@ -130,6 +140,7 @@ export function readGitHubAppInstallationEnvironment(
   }
   const parsed = configSchema.safeParse({
     appId: environment.GITHUB_APP_ID,
+    appSlug: environment.GITHUB_APP_SLUG,
     clientId: environment.GITHUB_APP_CLIENT_ID,
     clientSecret: environment.GITHUB_APP_CLIENT_SECRET,
     stateSecret: environment.GITHUB_APP_INSTALL_STATE_SECRET,
@@ -362,13 +373,41 @@ function verifyState(input: {
 
 function callbackInput(url: string) {
   const query = new URL(url).searchParams;
-  const allowed = new Set(["code", "installation_id", "setup_action", "state"]);
+  const allowed = new Set([
+    "code",
+    "error",
+    "error_description",
+    "error_uri",
+    "installation_id",
+    "setup_action",
+    "state",
+  ]);
   for (const key of query.keys()) {
     if (!allowed.has(key) || query.getAll(key).length !== 1)
       throw new Error("invalid-callback");
   }
   const state = z.string().min(1).max(2_048).parse(query.get("state"));
   const code = query.get("code");
+  const oauthError = query.get("error");
+  if (oauthError !== null) {
+    if (
+      code !== null ||
+      query.has("installation_id") ||
+      query.has("setup_action") ||
+      query.getAll("error").length !== 1 ||
+      !["access_denied", "temporarily_unavailable", "server_error"].includes(
+        oauthError,
+      )
+    )
+      throw new Error("invalid-callback");
+    for (const key of ["error_description", "error_uri"])
+      if (query.getAll(key).length > 1) throw new Error("invalid-callback");
+    return {
+      kind: "oauth-error" as const,
+      error: oauthError as GitHubOAuthCallbackError,
+      state,
+    };
+  }
   if (code !== null) {
     if (
       query.getAll("code").length !== 1 ||
@@ -573,6 +612,7 @@ async function accessibleInstallation(input: {
   request: Fetch;
   token: string;
   appId: string;
+  appSlug: string;
   requestedInstallationId?: string;
 }) {
   const candidates: ReturnType<typeof installationIdentity>[] = [];
@@ -598,7 +638,7 @@ async function accessibleInstallation(input: {
       const installation = installationIdentity(value);
       if (
         installation.appId === input.appId &&
-        installation.appSlug === "autograph-app-builder" &&
+        installation.appSlug === input.appSlug &&
         installation.targetType === installation.accountType &&
         (input.requestedInstallationId === undefined ||
           installation.installationId === input.requestedInstallationId)
@@ -657,7 +697,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         const redirect = input.emulation
           ? new URL("/local-connections/github", config.issuer)
           : new URL(
-              "/apps/autograph-app-builder/installations/new",
+              `/apps/${config.appSlug}/installations/new`,
               GITHUB_ORIGIN,
             );
         redirect.searchParams.set("state", state.state);
@@ -712,6 +752,13 @@ export function createGitHubAppInstallationAuthorization(input: {
             "membership-state-consumption",
           );
         }
+
+        if (callback.kind === "oauth-error")
+          throw new GitHubInstallationAuthorizationError(
+            "oauth-callback-error",
+            callback.error,
+            state.returnState,
+          );
 
         if (callback.kind === "install") {
           if (
@@ -839,6 +886,7 @@ export function createGitHubAppInstallationAuthorization(input: {
                 request,
                 token,
                 appId: config.appId,
+                appSlug: config.appSlug,
                 requestedInstallationId: state.installationId,
               });
           if (installation.suspendedAt !== null) throw new Error();
