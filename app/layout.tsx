@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { GeistSans } from "geist/font/sans";
 
-import { Providers } from "@/components/providers";
+import { AppShell } from "@/components/app-shell";
 
 import "./globals.css";
 
@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${GeistSans.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <Providers
+        <AppShell
           githubAuthEnabled={Boolean(
             showLocalAuthProviders ||
             (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           )}
         >
           {children}
-        </Providers>
+        </AppShell>
       </body>
     </html>
   );

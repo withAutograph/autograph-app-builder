@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
-import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import {
+  disconnectedBuilderIntegrationState,
+  type BuilderIntegrationState,
+} from "@/lib/integrations/builder-state";
+import { storybookAuthenticatedSession } from "../../.storybook/auth-session";
 
 import {
   AnonymousBuilder,
@@ -85,14 +89,40 @@ const connectionsEnabled =
 const meta = {
   title: "Pages/Create App/App Builder",
   component: AppBuilder,
-  args: { authenticated: true, connectionsEnabled, integrations },
-  parameters: { layout: "fullscreen" },
+  args: {
+    authenticated: true,
+    connectionsEnabled,
+    integrations: disconnectedBuilderIntegrationState,
+  },
+  parameters: {
+    layout: "fullscreen",
+    authSession: storybookAuthenticatedSession,
+  },
 } satisfies Meta<typeof AppBuilder>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Authenticated: Story = {};
+export const Authenticated: Story = {
+  play: async ({ canvasElement }) => {
+    await expect(window.getComputedStyle(canvasElement).fontFamily).toContain(
+      "GeistSans",
+    );
+
+    const avatar = canvasElement.querySelector<HTMLElement>(
+      '[data-slot="avatar"]',
+    );
+    await expect(avatar).not.toBeNull();
+    await expect(window.getComputedStyle(avatar!).width).toBe("32px");
+    await expect(
+      canvasElement.querySelector('[data-slot="avatar-fallback"]'),
+    ).toHaveTextContent("AU");
+  },
+};
+
+export const ConnectedProviders: Story = {
+  args: { integrations },
+};
 
 export const ProviderUnavailable: Story = {
   args: {
@@ -127,6 +157,7 @@ export const ModelUnavailable: Story = {
 
 export const Anonymous: Story = {
   args: { authenticated: false },
+  parameters: { authSession: null },
 };
 
 export const AnonymousBriefAction: Story = {

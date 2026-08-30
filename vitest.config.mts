@@ -13,8 +13,14 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          exclude: [...configDefaults.exclude, "**/.eve/**"],
+          exclude: [
+            ...configDefaults.exclude,
+            "**/.eve/**",
+            "**/.storybook/visual/**",
+          ],
+          maxWorkers: 2,
           pool: "threads",
+          testTimeout: 10_000,
         },
       },
       {
@@ -24,6 +30,8 @@ export default defineConfig({
         ],
         test: {
           name: "storybook",
+          fileParallelism: false,
+          maxWorkers: 1,
           browser: {
             enabled: true,
             headless: true,
