@@ -25,7 +25,15 @@ export default defineConfig({
     trace: "retain-on-failure",
     video: "off",
   },
-  projects: [{ name: "auth-chromium", use: { browserName: "chromium" } }],
+  projects: [
+    {
+      name: "auth-chromium",
+      use: {
+        browserName: "chromium",
+        launchOptions: { args: ["--ignore-certificate-errors"] },
+      },
+    },
+  ],
   webServer: {
     command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
     url: "https://localhost:3001/auth/sign-in",

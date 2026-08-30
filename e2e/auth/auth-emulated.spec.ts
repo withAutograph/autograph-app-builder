@@ -45,9 +45,11 @@ async function authCounts() {
 }
 
 async function signOut(page: Page) {
-  const response = await page.request.post("/api/auth/sign-out");
-  expect(response.ok()).toBeTruthy();
-  await page.goto("/auth/sign-in");
+  await page.goto("/auth/sign-out");
+  await expect(page).toHaveURL(/\/auth\/sign-in/u);
+  await expect
+    .poll(async () => (await page.request.get("/api/auth/get-session")).json())
+    .toBeNull();
 }
 
 async function finishOAuth(page: Page, provider: "GitHub" | "Vercel") {
@@ -207,13 +209,14 @@ test("provider account supports multiple passkeys but retains its final passkey"
     await finishOAuth(page, "GitHub");
     await page.goto("/settings/account");
     await page.getByRole("button", { name: "Add passkey" }).first().click();
-    await page.getByLabel("Name").fill("OAuth recovery passkey");
-    await page.getByRole("button", { name: "Add passkey" }).last().click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Name").fill("OAuth recovery passkey");
+    await dialog.getByRole("button", { name: "Add passkey" }).click();
     await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
 
     await page.getByRole("button", { name: "Add passkey" }).first().click();
-    await page.getByLabel("Name").fill("Second passkey");
-    await page.getByRole("button", { name: "Add passkey" }).last().click();
+    await dialog.getByLabel("Name").fill("Second passkey");
+    await dialog.getByRole("button", { name: "Add passkey" }).click();
     await expect.poll(async () => (await authCounts()).passkeys).toBe(2);
 
     const list = await page.request.get("/api/auth/passkey/list-user-passkeys");
