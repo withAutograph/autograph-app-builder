@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { signLocalVercelRelay } from "@/lib/integrations/local-oauth-relay";
 
 const allowed = new Set(["vercel", "github"]);
 
@@ -23,17 +24,33 @@ export async function POST(
   const callback = new URL(`/${provider}/installations/callback`, origin);
   callback.searchParams.set("state", state);
   if (provider === "vercel") {
-    callback.searchParams.set("code", "emulated");
-    callback.searchParams.set(
-      "configurationId",
-      process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? "icfg_local_1",
+    const secret = process.env.EMULATE_LOCAL_RELAY_SECRET;
+    if (!secret)
+      return new Response("Local relay unavailable", { status: 503 });
+    const relay = signLocalVercelRelay(
+      {
+        state,
+        configurationId:
+          process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? "icfg_local_1",
+        teamId: process.env.EMULATE_VERCEL_TEAM_ID ?? "autograph-local",
+        expiresAt: Date.now() + 600_000,
+      },
+      secret,
     );
-    callback.searchParams.set(
-      "teamId",
-      process.env.EMULATE_VERCEL_TEAM_ID ?? "autograph-local",
+    const authorize = new URL(
+      "/oauth/authorize",
+      process.env.VERCEL_EMULATOR_URL,
     );
-  } else if (phase === "authorize") {
-    callback.searchParams.set("code", "emulated");
+    authorize.searchParams.set(
+      "client_id",
+      process.env.VERCEL_INTEGRATION_CLIENT_ID ?? "local-vercel-client",
+    );
+    authorize.searchParams.set(
+      "redirect_uri",
+      `${origin}/local-connections/vercel/oauth-callback`,
+    );
+    authorize.searchParams.set("state", relay);
+    return NextResponse.redirect(authorize, { status: 303 });
   } else {
     callback.searchParams.set(
       "installation_id",

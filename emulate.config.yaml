@@ -15,7 +15,8 @@ vercel:
     - client_id: local-vercel-client
       client_secret: local-vercel-client-secret
       name: Autograph App Builder Local
-      redirect_uris: ["https://localhost:3000/vercel/installations/callback"]
+      redirect_uris:
+        ["https://localhost:3000/local-connections/vercel/oauth-callback"]
 github:
   users:
     - login: autograph-dev
@@ -37,3 +38,8 @@ github:
           account: autograph-local
           repository_selection: selected
           repositories: [autograph-local/demo-app]
+  oauth_apps:
+    - client_id: Iv1_local_app_client
+      client_secret: local-github-client-secret-value
+      name: Autograph App Builder Local
+      redirect_uris: ["https://localhost:3000/github/installations/callback"]

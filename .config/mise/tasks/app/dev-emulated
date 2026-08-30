@@ -15,5 +15,6 @@ EMULATE_VERCEL_CONFIGURATION_ID=icfg_local_1 \
 EMULATE_VERCEL_TEAM_ID=autograph-local \
 EMULATE_GITHUB_INSTALLATION_ID=1001 \
 EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app \
+EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)" \
 .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/next/dist/bin/next dev "$@"
+  "$(mise which node)" node_modules/next/dist/bin/next dev --experimental-https "$@"

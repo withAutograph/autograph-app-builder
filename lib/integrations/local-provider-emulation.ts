@@ -23,6 +23,7 @@ export type LocalProviderEmulation = {
   githubOrigin: string;
   token: string;
   githubRepository: string;
+  relaySecret: string;
 };
 
 /** The only development transport override. It is unavailable in deployed code. */
@@ -43,6 +44,7 @@ export function readLocalProviderEmulation(
       githubOrigin: localOrigin,
       token: z.string().min(20).max(512),
       githubRepository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
+      relaySecret: z.string().min(32).max(512),
     })
     .strict()
     .parse({
@@ -50,5 +52,6 @@ export function readLocalProviderEmulation(
       githubOrigin: environment.GITHUB_EMULATOR_URL,
       token: environment.EMULATE_PROVIDER_TOKEN,
       githubRepository: environment.EMULATE_GITHUB_REPOSITORY,
+      relaySecret: environment.EMULATE_LOCAL_RELAY_SECRET,
     });
 }

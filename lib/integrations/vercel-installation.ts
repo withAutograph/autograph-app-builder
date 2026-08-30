@@ -231,34 +231,33 @@ export function createVercelInstallationAuthorization(input: {
       });
       if (!returnState) throw new Error("state-invalid");
 
-      const token =
-        input.emulation && code === "emulated"
-          ? input.emulation.token
-          : await (async () => {
-              const tokenResponse = await request(
-                "https://api.vercel.com/v2/oauth/access_token",
-                {
-                  method: "POST",
-                  headers: {
-                    Accept: "application/json",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                  },
-                  body: new URLSearchParams({
-                    client_id: config.clientId,
-                    client_secret: config.clientSecret,
-                    code,
-                    redirect_uri: new URL(
-                      "/vercel/installations/callback",
-                      config.issuer,
-                    ).toString(),
-                  }),
-                  signal: AbortSignal.timeout(8_000),
-                },
-              );
-              if (!tokenResponse.ok) throw new Error("token-exchange-failed");
-              return tokenResponseSchema.parse(await tokenResponse.json())
-                .access_token;
-            })();
+      const token = await (async () => {
+        const tokenResponse = await request(
+          input.emulation
+            ? `${input.emulation.vercelOrigin}/login/oauth/token`
+            : "https://api.vercel.com/v2/oauth/access_token",
+          {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              client_id: config.clientId,
+              client_secret: config.clientSecret,
+              code,
+              redirect_uri: new URL(
+                "/vercel/installations/callback",
+                config.issuer,
+              ).toString(),
+            }),
+            signal: AbortSignal.timeout(8_000),
+          },
+        );
+        if (!tokenResponse.ok) throw new Error("token-exchange-failed");
+        return tokenResponseSchema.parse(await tokenResponse.json())
+          .access_token;
+      })();
       const headers = {
         Accept: "application/json",
         Authorization: `Bearer ${token}`,

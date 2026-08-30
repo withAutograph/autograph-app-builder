@@ -661,11 +661,10 @@ export function createGitHubAppInstallationAuthorization(input: {
               now: issuedAt,
             }).nonce,
           );
-          const authorizeUrl = input.emulation
-            ? new URL("/local-connections/github", config.issuer)
-            : new URL("/login/oauth/authorize", GITHUB_ORIGIN);
-          if (input.emulation)
-            authorizeUrl.searchParams.set("phase", "authorize");
+          const authorizeUrl = new URL(
+            "/login/oauth/authorize",
+            input.emulation?.githubOrigin ?? GITHUB_ORIGIN,
+          );
           authorizeUrl.searchParams.set("client_id", config.clientId);
           authorizeUrl.searchParams.set(
             "redirect_uri",
@@ -695,15 +694,18 @@ export function createGitHubAppInstallationAuthorization(input: {
           throw new Error("state-phase-mismatch");
         }
 
-        const token =
-          input.emulation && callback.code === "emulated"
-            ? input.emulation.token
-            : await userAccessToken({
-                config,
-                code: callback.code,
-                codeVerifier: codeVerifier(config.stateSecret, state.nonce),
-                request,
-              });
+        const token = await userAccessToken({
+          config,
+          code: callback.code,
+          codeVerifier: codeVerifier(config.stateSecret, state.nonce),
+          request: input.emulation
+            ? (((url, init) =>
+                request(
+                  `${input.emulation!.githubOrigin}${new URL(String(url)).pathname}`,
+                  init,
+                )) as typeof fetch)
+            : request,
+        });
         const githubRequest = input.emulation
           ? (args: Parameters<typeof githubJson>[0]) =>
               githubJson({

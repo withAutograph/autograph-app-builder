@@ -8,6 +8,7 @@ const environment = {
   GITHUB_EMULATOR_URL: "https://github.emulate.localhost",
   EMULATE_PROVIDER_TOKEN: "x".repeat(20),
   EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+  EMULATE_LOCAL_RELAY_SECRET: "s".repeat(32),
 };
 
 describe("local provider emulation", () => {
