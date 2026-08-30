@@ -17,6 +17,7 @@ const environment = {
   GITHUB_CLIENT_SECRET: "github-client-secret",
   VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
   VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
+  PASSKEY_ONBOARDING: undefined,
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
@@ -210,6 +211,62 @@ describe("Preview OAuth runtime configuration", () => {
         EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
       }),
     ).toThrow("Local provider emulation is unavailable");
+  });
+
+  it("starts an enabled Preview with passkeys and no OAuth credentials", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        GITHUB_CLIENT_ID: undefined,
+        GITHUB_CLIENT_SECRET: undefined,
+        VERCEL_AUTH_CLIENT_ID: undefined,
+        VERCEL_AUTH_CLIENT_SECRET: undefined,
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
+        VERCEL_URL: "builder.example.test",
+        BETTER_AUTH_URL: undefined,
+        MCP_RESOURCE_URL: undefined,
+      }),
+    ).toMatchObject({
+      environment: "preview",
+      issuer: "https://builder.example.test/api/auth",
+      resource: "https://builder.example.test/mcp",
+      githubClientId: undefined,
+      vercelClientId: undefined,
+      passkeyOnboarding: { deploymentId: "dpl_preview_123" },
+    });
+  });
+
+  it("rejects a partially configured OAuth provider", () => {
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
+        VERCEL_URL: "builder.example.test",
+        GITHUB_CLIENT_SECRET: undefined,
+      }),
+    ).toThrow("both client ID and client secret");
+  });
+
+  it("starts locally for passkeys without OAuth provider credentials", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        NODE_ENV: "development",
+        BETTER_AUTH_URL: "http://localhost:3000/api/auth",
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        DATABASE_URL: "postgresql://runtime:secret@localhost/app",
+        PASSKEY_ONBOARDING: "local-preview-v1",
+      }),
+    ).toMatchObject({
+      environment: "development",
+      hostedAdapter: "0",
+      githubClientId: undefined,
+      vercelClientId: undefined,
+      passkeyOnboarding: { deploymentId: "local" },
+    });
   });
 
   it("accepts Production only when Vercel and the configured environment agree", () => {

@@ -132,7 +132,13 @@ export function createPreviewUserManagementLifecycle(
       };
     },
 
-    async beforeSessionCreate<T extends { userId: string }>(session: T) {
+    async beforeSessionCreate<T extends { userId: string }>(
+      session: T,
+      context?: { path?: string } | null,
+    ) {
+      // Passkey onboarding provisions its organization and activates it using
+      // the same adapter transaction that creates the credential and session.
+      if (context?.path === "/passkey/verify-registration") return;
       try {
         const ensured = await authority.ensureOrganizationForVerifiedUser({
           userId: session.userId,
@@ -193,7 +199,6 @@ export function previewUserManagementPlugins(
               type: "string",
               required: true,
               input: false,
-              fieldName: "workspace_id",
             },
           },
         },

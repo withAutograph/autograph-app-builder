@@ -185,7 +185,7 @@ describe("Preview OAuth deployment handlers", () => {
     expect(runtime).toContain("overrideUserInfo: false");
     expect(runtime).not.toContain("trustedProviders");
     expect(providers).toContain('id: "vercel"');
-    expect(providers).toContain('"github",');
+    expect(providers).toContain('["github"] as const');
     expect(providers).toContain("emailAndPassword={{ enabled: false }}");
     expect(authClient).toContain("oauthProviderClient()");
     expect(signIn).toContain("<ProviderButtons");
@@ -222,5 +222,60 @@ describe("Preview OAuth deployment handlers", () => {
       expect(source).toContain("createPostgresPreviewOrganizationAuthority");
       expect(source).not.toContain("createPostgresOAuthMembershipAuthority");
     }
+  });
+
+  it("uses the Better Auth UI passkey registry surfaces", async () => {
+    const [
+      providers,
+      passkeyPlugin,
+      signIn,
+      signUp,
+      accountSettings,
+      passkeyButton,
+    ] = await Promise.all([
+      readFile("components/providers.tsx", "utf8"),
+      readFile("lib/auth/passkey-plugin.ts", "utf8"),
+      readFile("components/auth/sign-in.tsx", "utf8"),
+      readFile("components/auth/sign-up.tsx", "utf8"),
+      readFile("components/auth/settings/account/account-settings.tsx", "utf8"),
+      readFile("components/auth/passkey/passkey-button.tsx", "utf8"),
+    ]);
+
+    expect(providers).toContain(
+      'import { passkeyPlugin } from "@/lib/auth/passkey-plugin"',
+    );
+    expect(passkeyPlugin).toContain("authButtons: [PasskeyButton]");
+    expect(passkeyPlugin).toContain("securityCards: [Passkeys]");
+    expect(signIn).toContain("plugin.authButtons");
+    expect(signIn).toContain('className="flex flex-col gap-3"');
+    expect(signIn).not.toContain('className="flex flex-col gap-6"');
+    expect(signUp).toContain("plugin.authButtons");
+    expect(signUp).toContain('view="signUp"');
+    expect(signUp).toContain('className="flex flex-col gap-3"');
+    expect(accountSettings).toContain("plugin.securityCards");
+    expect(passkeyButton).toContain("useSignInPasskey(authClient)");
+    expect(passkeyButton).toContain("useAddPasskey(authClient)");
+    expect(passkeyButton).toContain("await signInPasskey.mutateAsync");
+    expect(passkeyButton).toContain("await addPasskey.mutateAsync");
+    expect(passkeyButton).toContain("passkeyClientError(result)");
+    expect(passkeyButton).toContain('"Passkey failed (try again)"');
+    expect(passkeyButton).toContain('view === "signUp"');
+    expect(passkeyButton).toContain('"Create a passkey"');
+    expect(passkeyButton).not.toContain("setShowRegistration");
+    expect(passkeyButton).not.toContain('if (view === "signUp") return null');
+    expect(passkeyButton).toContain(
+      'fetch("/api/auth/passkey/onboarding-context"',
+    );
+  });
+
+  it("keeps the OAuth provider choices visible during local development", async () => {
+    const layout = await readFile("app/layout.tsx", "utf8");
+
+    expect(layout).toContain(
+      'const showLocalAuthProviders = process.env.NODE_ENV === "development"',
+    );
+    expect(layout.match(/showLocalAuthProviders \|\|/g)).toHaveLength(2);
+    expect(layout).toContain("process.env.GITHUB_CLIENT_ID");
+    expect(layout).toContain("process.env.VERCEL_AUTH_CLIENT_ID");
   });
 });

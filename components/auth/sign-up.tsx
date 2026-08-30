@@ -205,7 +205,15 @@ export function SignUp({
       </CardHeader>
 
       <CardContent>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-3">
+          {plugins.flatMap((plugin) =>
+            (plugin.authButtons ?? []).map((AuthButton, index) => (
+              <AuthButton
+                key={`${plugin.id}-${index.toString()}`}
+                view="signUp"
+              />
+            )),
+          )}
           {socialPosition === "top" && (
             <>
               {socialProviders && socialProviders.length > 0 && (

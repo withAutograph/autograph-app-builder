@@ -35,6 +35,21 @@ const verifiedUser = {
 };
 
 describe("Preview Better Auth user management", () => {
+  it("keeps the workspace field aligned with the Drizzle model key", () => {
+    const [organizationPlugin] =
+      previewUserManagementPlugins(createAuthority());
+    const schema = organizationPlugin?.schema as {
+      organization?: {
+        fields?: Record<string, { fieldName?: string }>;
+      };
+    };
+
+    expect(schema.organization?.fields?.workspaceId).toEqual(
+      expect.objectContaining({ required: true, input: false }),
+    );
+    expect(schema.organization?.fields?.workspaceId?.fieldName).toBeUndefined();
+  });
+
   it.each(["/callback/github", "/callback/vercel"])(
     "admits a verified provider callback at %s and normalizes its email",
     async (path) => {
@@ -90,6 +105,19 @@ describe("Preview Better Auth user management", () => {
     expect(authority.ensureOrganizationForVerifiedUser).toHaveBeenCalledWith({
       userId: verifiedUser.id,
     });
+  });
+
+  it("defers first passkey workspace reconciliation until registration commits", async () => {
+    const authority = createAuthority();
+    const lifecycle = createPreviewUserManagementLifecycle(authority);
+
+    await expect(
+      lifecycle.beforeSessionCreate(
+        { userId: verifiedUser.id },
+        { path: "/passkey/verify-registration" },
+      ),
+    ).resolves.toBeUndefined();
+    expect(authority.ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
   });
 
   it("registers workspace provisioning on Better Auth session creation", async () => {

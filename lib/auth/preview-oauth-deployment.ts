@@ -32,6 +32,7 @@ function getPreviewOAuthDeploymentRuntime(
       issuer: config.issuer,
       audience: config.resource,
       selfServiceSignupEnabled: config.selfServiceSignupEnabled,
+      passkeySelfServiceEnabled: config.passkeyOnboarding !== null,
     },
   );
   deploymentRuntime = {

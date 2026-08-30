@@ -100,6 +100,7 @@ export function createPostgresPreviewOrganizationAuthority(
     issuer: string;
     audience: string;
     selfServiceSignupEnabled?: boolean;
+    passkeySelfServiceEnabled?: boolean;
   },
   options: { generateId?: () => string } = {},
 ): PostgresPreviewOrganizationAuthority {
@@ -126,13 +127,6 @@ export function createPostgresPreviewOrganizationAuthority(
         if (user.banned === true) {
           throw new OrganizationProvisioningError("access-revoked");
         }
-        if (
-          user.email_verified !== true ||
-          user.email.trim().toLowerCase() !== user.email
-        ) {
-          throw new OrganizationProvisioningError("verified-identity-required");
-        }
-
         const accountsResult = await transaction.execute(sql`
           select "provider_id"
             from "account"
@@ -141,7 +135,22 @@ export function createPostgresPreviewOrganizationAuthority(
            order by "provider_id"
            limit 2
         `);
-        if (resultRows<{ provider_id: string }>(accountsResult).length === 0) {
+        const providerIdentity =
+          resultRows<{ provider_id: string }>(accountsResult).length > 0 &&
+          user.email_verified === true &&
+          user.email.trim().toLowerCase() === user.email;
+        let passkeyIdentity = false;
+        if (!providerIdentity) {
+          const passkeysResult = await transaction.execute(sql`
+            select "id"
+              from "passkey"
+             where "user_id" = ${userId}
+             limit 1
+          `);
+          passkeyIdentity =
+            resultRows<{ id: string }>(passkeysResult).length === 1;
+        }
+        if (!providerIdentity && !passkeyIdentity) {
           throw new OrganizationProvisioningError("verified-identity-required");
         }
 
@@ -234,7 +243,10 @@ export function createPostgresPreviewOrganizationAuthority(
         ) {
           throw new OrganizationProvisioningError("access-revoked");
         }
-        if (authority.selfServiceSignupEnabled !== true) {
+        if (
+          authority.selfServiceSignupEnabled !== true &&
+          !(passkeyIdentity && authority.passkeySelfServiceEnabled === true)
+        ) {
           throw new OrganizationProvisioningError("signup-disabled");
         }
 

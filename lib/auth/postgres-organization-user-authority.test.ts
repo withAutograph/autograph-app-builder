@@ -136,6 +136,46 @@ describe("PostgreSQL Better Auth organization authority", () => {
     expect(state.execute).toHaveBeenCalledTimes(9);
   });
 
+  it("creates a personal workspace for a passkey-verified principal", async () => {
+    const state = createDatabase([
+      [
+        {
+          ...user,
+          email: "internal@passkey.autograph.invalid",
+          email_verified: false,
+        },
+      ],
+      [],
+      [{ id: "passkey_one" }],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [organization],
+    ]);
+    const authority = createPostgresPreviewOrganizationAuthority(
+      state.database,
+      { ...binding, passkeySelfServiceEnabled: true },
+      {
+        generateId: vi
+          .fn()
+          .mockReturnValueOnce("organization_one")
+          .mockReturnValueOnce("workspace_one")
+          .mockReturnValueOnce("member_one"),
+      },
+    );
+
+    await expect(
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
+    ).resolves.toEqual({
+      organizationId: "organization_one",
+      workspaceId: "workspace_one",
+    });
+    expect(state.execute).toHaveBeenCalledTimes(10);
+  });
+
   it("keeps personal creation disabled while preserving existing and invited access", async () => {
     const state = createDatabase([
       [user],
@@ -157,7 +197,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
   it.each([
     {
       name: "an unverified user",
-      results: [[{ ...user, email_verified: false }]],
+      results: [[{ ...user, email_verified: false }], [], []],
       reason: "verified-identity-required",
     },
     {
@@ -167,7 +207,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
     },
     {
       name: "a user without a GitHub or Vercel account",
-      results: [[user], []],
+      results: [[user], [], []],
       reason: "verified-identity-required",
     },
     {

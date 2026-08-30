@@ -1,10 +1,9 @@
 "use client";
 
-import { useAuth } from "@better-auth-ui/react";
 import type { ComponentProps } from "react";
+import { useAuth } from "@better-auth-ui/react";
 
 import { cn } from "@/lib/utils";
-import { ChangeEmail } from "./change-email";
 import { UserProfile } from "./user-profile";
 
 export type AccountSettingsProps = {
@@ -28,12 +27,20 @@ export function AccountSettings({
   className,
   ...props
 }: AccountSettingsProps & ComponentProps<"div">) {
+  const { plugins } = useAuth();
+
   return (
     <div
       className={cn("flex w-full flex-col gap-4 md:gap-6", className)}
       {...props}
     >
       <UserProfile />
+      {plugins.flatMap(
+        (plugin) =>
+          plugin.securityCards?.map((SecurityCard, index) => (
+            <SecurityCard key={`${plugin.id}-${index.toString()}`} />
+          )) ?? [],
+      )}
     </div>
   );
 }

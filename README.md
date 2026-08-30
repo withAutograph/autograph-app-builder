@@ -488,8 +488,13 @@ authenticated user action.
 Those routes construct lazily and fail closed until the checked-in schema is
 separately applied and the exact supported environment is configured; their
 presence does not create a client, consent, grant, key, membership, or token.
-Hosted identity uses verified GitHub or Vercel sign-in. The App Builder does
-not accept or store a user password. Before the first session, the server
+Hosted identity uses verified GitHub or Vercel sign-in. Local development and
+Deployment-Protected Preview deployments may separately enable passkey-first
+testing as described in [passkey testing](docs/passkey-preview-testing.md).
+Passkey users receive a real Better Auth session and deployment-bound personal
+workspace without being represented as email-verified. Production onboarding
+remains disabled. The App Builder does not accept or store a user password.
+Before the first provider session, the server
 reuses one exact membership, accepts one matching invitation, or—only when
 `SELF_SERVICE_SIGNUP_ENABLED=1`—creates one Better Auth personal organization
 and owner membership transactionally. Same-email provider accounts link only
