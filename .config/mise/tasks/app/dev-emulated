@@ -24,27 +24,30 @@ fi
 docker=$(mise which docker)
 worktree_id=$(basename "$(dirname "$(pwd -P)")")
 database_container=${APP_BUILDER_DATABASE_CONTAINER:-autograph-app-builder-web-product-e2e-postgres-$worktree_id}
-if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
-  "$docker" run --detach --name "$database_container" \
-    --env POSTGRES_HOST_AUTH_METHOD=trust \
-    --env POSTGRES_DB=autograph_app_builder \
-    --publish "127.0.0.1:$database_port:5432" \
-    --volume "$PWD/.emulate/postgres:/var/lib/postgresql/data" \
-    postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 \
-    -c max_connections=500 >/dev/null
-fi
-"$docker" start "$database_container" >/dev/null 2>&1 || true
-attempt=0
-until "$docker" exec "$database_container" \
-  psql -U postgres -d autograph_app_builder -c 'SELECT 1' >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 300 ]; then
-    echo "local emulated PostgreSQL did not become ready" >&2
-    exit 1
+external_database=${APP_BUILDER_EXTERNAL_DATABASE:-0}
+if [ "$external_database" != 1 ]; then
+  if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
+    "$docker" run --detach --name "$database_container" \
+      --env POSTGRES_HOST_AUTH_METHOD=trust \
+      --env POSTGRES_DB=autograph_app_builder \
+      --publish "127.0.0.1:$database_port:5432" \
+      --volume "$PWD/.emulate/postgres:/var/lib/postgresql" \
+      postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 \
+      -c max_connections=500 >/dev/null
   fi
-  sleep 0.1
-done
-sleep 1
+  "$docker" start "$database_container" >/dev/null 2>&1 || true
+  attempt=0
+  until \
+    "$docker" exec "$database_container" \
+      psql -U postgres -d autograph_app_builder -c "SELECT 1" >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 300 ]; then
+      echo "local emulated PostgreSQL did not become ready" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+fi
 migration_url="postgresql://postgres@127.0.0.1:$database_port/autograph_app_builder?connect_timeout=2"
 attempt=0
 until DATABASE_URL="$migration_url" mise run database:migrate; do
