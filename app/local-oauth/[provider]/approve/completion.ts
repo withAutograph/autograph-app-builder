@@ -85,6 +85,13 @@ export async function completeAuthorization(
         level: "error",
         message: "local_oauth_approval_failed",
         reason: error instanceof Error ? error.message : "unknown",
+        databaseHost: (() => {
+          try {
+            return new URL(process.env.DATABASE_URL ?? "").hostname;
+          } catch {
+            return "invalid";
+          }
+        })(),
       }),
     );
     return new Response("Invalid local OAuth approval", {
