@@ -2,10 +2,12 @@ import postgres from "postgres";
 import { expect, test } from "playwright/test";
 
 import {
+  appOrigin,
   applicationCounts,
   databaseUrl,
   finishOAuth,
   installProvider,
+  localApprovalButtonName,
   resetApplicationState,
 } from "../support/harness";
 
@@ -111,9 +113,11 @@ test("reconnecting a provider updates the existing binding without duplication",
   await page
     .getByRole("button", { name: "Install or update GitHub access" })
     .click();
-  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await page
+    .getByRole("button", { name: localApprovalButtonName("GitHub") })
+    .click();
   await page.getByRole("button", { name: /autograph-dev/u }).click();
-  await expect(page).toHaveURL(/https:\/\/localhost:3001\//u);
+  await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"));
   expect((await applicationCounts()).githubInstallations).toBe(1);
 });
 
@@ -243,7 +247,9 @@ test("an expired provider authorization returns to a recoverable draft", async (
   } finally {
     await sql.end();
   }
-  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await page
+    .getByRole("button", { name: localApprovalButtonName("GitHub") })
+    .click();
   await expect(page).toHaveURL(/github=failed/u);
   expect(
     await page.evaluate(

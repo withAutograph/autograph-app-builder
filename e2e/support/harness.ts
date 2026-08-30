@@ -7,7 +7,14 @@ const databasePort = process.env.APP_BUILDER_DATABASE_PORT || "54329";
 const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
 const appProtocol = process.env.CI ? "http" : "https";
 const emulateBasePort = Number(process.env.EMULATE_BASE_PORT || "4000");
+export const appOrigin = `${appProtocol}://localhost:${appPort}`;
 export const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/autograph_app_builder`;
+
+export function localApprovalButtonName(provider: "GitHub" | "Vercel") {
+  return provider === "GitHub"
+    ? "Connect emulated GitHub App installation"
+    : "Connect emulated Vercel team";
+}
 
 export async function resetApplicationState() {
   const sql = postgres(databaseUrl, { max: 1 });
@@ -136,10 +143,7 @@ export async function installProvider(
   );
   await page
     .getByRole("button", {
-      name:
-        provider === "GitHub"
-          ? "Connect emulated GitHub App installation"
-          : "Connect emulated Vercel team",
+      name: localApprovalButtonName(provider),
     })
     .click();
   if (provider === "GitHub") {
@@ -153,10 +157,9 @@ export async function installProvider(
     );
     await page.getByRole("button", { name: /autograph-dev/u }).click();
   }
-  await expect(page).toHaveURL(
-    new RegExp(`^${appProtocol}://localhost:${appPort}/`, "u"),
-    { timeout: 30_000 },
-  );
+  await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"), {
+    timeout: 30_000,
+  });
   await expect(
     page.getByText(`${provider} connected successfully.`),
   ).toBeVisible();

@@ -3,6 +3,7 @@ import { expect, test } from "playwright/test";
 
 import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 import {
+  appOrigin,
   applicationCounts,
   databaseUrl,
   finishOAuth,
@@ -99,7 +100,7 @@ test("ambiguous and revoked workspace authority show recovery surfaces", async (
         (id, name, slug, created_at, issuer, audience, workspace_id)
       VALUES
         ('e2e-second-org', 'Second workspace', 'e2e-second-workspace', now(),
-         'https://localhost:3001/api/auth', 'https://localhost:3001/mcp',
+         ${`${appOrigin}/api/auth`}, ${`${appOrigin}/mcp`},
          'e2e-second-workspace')
     `;
     await sql`
