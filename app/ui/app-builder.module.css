@@ -854,6 +854,87 @@
 .sectionField + .sectionField {
   margin-top: 20px;
 }
+.buildSection {
+  order: 1;
+}
+.buildSection + .modelField {
+  order: 1;
+}
+.storeSection {
+  order: 2;
+}
+.deploySection {
+  order: 3;
+}
+.connectionsSection {
+  order: 4;
+}
+.builderCard > .createButton {
+  order: 5;
+}
+.optionGrid.providerChoiceGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.providerChoiceGrid label {
+  min-width: 0;
+  cursor: pointer;
+}
+.providerChoiceGrid label > span {
+  min-width: 0;
+}
+.providerChoiceGrid small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.providerChoiceGrid .unavailableOption {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: var(--soft);
+}
+.providerChoiceGrid label > svg {
+  flex: 0 0 auto;
+}
+.providerChoiceGrid label[data-provider="github"] > svg,
+.providerChoiceGrid label[data-provider="vercel"] > svg {
+  color: var(--text);
+}
+.providerChoiceGrid label[data-provider="gitlab"] > svg {
+  color: #fc6d26;
+}
+.providerChoiceGrid label[data-provider="bitbucket"] > svg {
+  color: #0052cc;
+}
+.providerChoiceGrid label[data-provider="netlify"] > svg {
+  color: #00a8a8;
+}
+.providerChoiceGrid label[data-provider="cloudflare"] > svg {
+  color: #f38020;
+}
+.optionGrid.providerChoiceGrid input {
+  margin-left: auto;
+  border-radius: 4px;
+}
+.optionGrid.providerChoiceGrid input:checked {
+  border-color: #171717;
+  background: #171717;
+  box-shadow: inset 0 0 0 1px #171717;
+}
+.optionGrid.providerChoiceGrid input:checked::after {
+  content: "✓";
+  display: block;
+  color: #fff;
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+}
+.optionGrid.providerChoiceGrid input:disabled {
+  opacity: 0.55;
+}
+.providerPanel {
+  padding-top: 4px;
+}
 .sectionField legend {
   font-size: 20px;
   font-weight: 650;
@@ -983,7 +1064,7 @@
   white-space: nowrap;
 }
 .connectionGrid button > svg {
-  margin-left: auto;
+  flex: 0 0 auto;
 }
 .connectionIcon {
   width: 20px;
