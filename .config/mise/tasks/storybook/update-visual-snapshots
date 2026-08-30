@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Deliberately update fixed-viewport Storybook visual baselines"
+set -eu
+
+mise run storybook:build
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" node_modules/playwright/cli.js test \
+  --config playwright.storybook.config.ts --update-snapshots=all "$@"
