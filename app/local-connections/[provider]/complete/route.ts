@@ -46,7 +46,7 @@ export async function POST(
       },
       emulation.relaySecret,
     );
-    const authorize = new URL("/oauth/authorize", emulation.vercelOrigin);
+    const authorize = new URL(`${emulation.vercelOrigin}/oauth/authorize`);
     authorize.searchParams.set("client_id", emulation.vercelClientId);
     authorize.searchParams.set(
       "redirect_uri",
