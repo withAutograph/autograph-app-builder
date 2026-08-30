@@ -9,15 +9,22 @@ import {
   assertExactDependencyTargetBinding,
   dependencyCacheReceiptDigest,
   inspectDependencyCache,
+  type ObservedDependencyCache,
 } from "../repository/dependency-cache";
 import { inspectPreparedSandboxWorkspace } from "../repository/supported-template";
-import { targetProposalSchema } from "../repository/target-planning";
+import {
+  targetExecutionBinding,
+  targetProposalSchema,
+} from "../repository/target-planning";
 import {
   configuredToolchainImage,
   requiredToolVersions,
   toolVersionMatches,
 } from "../sandbox/toolchain";
-import { sandboxBackendPlan } from "../sandbox/backend";
+import {
+  isHostedVercelSandboxBackend,
+  sandboxBackendPlan,
+} from "../sandbox/backend";
 import { sha256 } from "./workflow-state";
 
 export type ProposalWorkflowState = Extract<
@@ -120,6 +127,33 @@ export function targetExecutionBlockers(input: {
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
+export function resolveTargetExecutionEnvironment(input: {
+  environment: Readonly<Record<string, string | undefined>>;
+  fixture: boolean;
+  cache?: ObservedDependencyCache;
+}) {
+  const localImage = configuredToolchainImage(input.environment);
+  const backend = sandboxBackendPlan({
+    environment: input.environment,
+    fixture: input.fixture,
+    localImageConfigured: localImage !== undefined,
+  });
+  const cacheInspectable =
+    backend.blockers.length === 0 &&
+    (input.fixture ||
+      localImage !== undefined ||
+      isHostedVercelSandboxBackend(backend.kind));
+  const execution =
+    cacheInspectable && input.cache !== undefined
+      ? targetExecutionBinding(input.cache, input.environment)
+      : undefined;
+  return {
+    backend,
+    cacheInspectable,
+    imageDigest: execution?.imageDigest,
+  };
+}
+
 export async function inspectTargetExecutionReadiness(input: {
   state: ProposalWorkflowState;
   sandbox: SandboxSession;
@@ -169,22 +203,24 @@ export async function inspectTargetExecutionReadiness(input: {
           };
         }),
       );
-  const image = fixture
-    ? input.state.dependencyReceipt.imageDigest
-    : configuredToolchainImage(environment);
-  const backend = sandboxBackendPlan({
+  const executionEnvironment = resolveTargetExecutionEnvironment({
     environment,
     fixture,
-    localImageConfigured: image !== undefined,
   });
-  const cache =
-    image === undefined
-      ? undefined
-      : await inspectDependencyCache(
-          input.sandbox,
-          environment,
-          input.state.workspace,
-        ).catch(() => undefined);
+  const cache = executionEnvironment.cacheInspectable
+    ? await inspectDependencyCache(
+        input.sandbox,
+        environment,
+        input.state.workspace,
+      ).catch(() => undefined)
+    : undefined;
+  const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
+    environment,
+    fixture,
+    cache,
+  });
+  const image = resolvedExecutionEnvironment.imageDigest;
+  const backend = resolvedExecutionEnvironment.backend;
   if (cache !== undefined)
     assertExactDependencyTargetBinding({
       workspace: input.state.workspace,
