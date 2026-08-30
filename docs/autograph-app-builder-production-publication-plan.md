@@ -16,7 +16,7 @@ one auditable package identity.
 
 ## Canonical package release
 
-`v0.2.1` must be published only by the tag-triggered
+`v0.2.2` must be published only by the tag-triggered
 `.github/workflows/release.yml` workflow. The tag target must equal current
 `main`, exact-SHA push CI must have succeeded, and
 `AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` must name the accepted hosted-proof
@@ -43,7 +43,7 @@ After the immutable product release exists, run the marketplace repository's
 **Import plugin release** workflow with:
 
 - repository: `withAutograph/autograph-app-builder`
-- version: `0.2.1`
+- version: `0.2.2`
 
 The marketplace independently downloads and verifies the release, checks the
 receipt and attestations, extracts only the generated Codex package, retains a
