@@ -74,3 +74,26 @@ Supporting passkeys on a stable alias requires a separate reviewed runtime
 change for alias verification, deployment binding, trusted origins, cookies,
 and RP migration. Documentation or an environment override alone is not
 sufficient.
+
+## Deferred hosted auth E2E
+
+Hosted authentication automation is intentionally not part of the local
+Emulate test lane. A future implementation should use two protected targets:
+
+- a generated Preview deployment for full passkey E2E, preserving the exact
+  deployment hostname as the WebAuthn RP ID; and
+- a second protected Vercel project with a stable hostname, deployed from the
+  same immutable source SHA, for GitHub and Vercel callback smoke tests.
+
+That hosted design must create an isolated disposable Neon branch, apply the
+real migrations, keep any Vercel Protection Bypass secret only in the CI secret
+store, record the deployment IDs, generated URLs, source SHA, database branch,
+and test result, and clean up both deployments and data after the run. The
+stable target must use integration-only provider applications whose registered
+callbacks exactly match its hostname.
+
+The Emulate services and every `APP_BUILDER_LOCAL_*_EMULATION` setting are
+local-only and must never be exposed or enabled in a Vercel deployment. Hosted
+automation, the second Vercel project, real provider test accounts, disposable
+Neon orchestration, and Preview merge gates are deferred in their entirety;
+this repository does not partially configure any of them.

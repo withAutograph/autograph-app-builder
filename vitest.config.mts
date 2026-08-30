@@ -17,6 +17,7 @@ export default defineConfig({
             ...configDefaults.exclude,
             "**/.eve/**",
             "**/.storybook/visual/**",
+            "**/e2e/**",
           ],
           maxWorkers: 2,
           pool: "threads",

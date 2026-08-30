@@ -75,6 +75,19 @@ jobs:
       - run: mise run dependencies:install
       - run: mise run ci-package-build
 
+  auth-e2e-emulated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run ci-auth-e2e-emulated
+
   check:
     if: ${{ always() }}
     needs:
@@ -83,6 +96,7 @@ jobs:
       - eve-fresh-bootstrap
       - sandbox-toolchain
       - package-build
+      - auth-e2e-emulated
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI lane
@@ -92,3 +106,4 @@ jobs:
           test "${{ needs.eve-fresh-bootstrap.result }}" = success
           test "${{ needs.sandbox-toolchain.result }}" = success
           test "${{ needs.package-build.result }}" = success
+          test "${{ needs.auth-e2e-emulated.result }}" = success

@@ -103,12 +103,18 @@ function AppBuilder(
     user?: { name: string; email: string };
   },
 ) {
-  const { user, connectionsEnabled = true, ...componentProps } = props;
+  const {
+    user,
+    connectionsEnabled = true,
+    comingSoonEnabled = true,
+    ...componentProps
+  } = props;
   void user;
   return (
     <AppBuilderComponent
       {...componentProps}
       connectionsEnabled={connectionsEnabled}
+      comingSoonEnabled={comingSoonEnabled}
       integrations={integrationState}
     />
   );
@@ -169,6 +175,16 @@ afterEach(async () => {
 });
 
 describe("Vercel-faithful App Builder flow", () => {
+  it("hides Coming soon elements by default", async () => {
+    const view = await render(
+      <AppBuilderComponent authenticated integrations={integrationState} />,
+    );
+
+    expect(view.textContent).not.toContain("Coming soon");
+    expect(view.textContent).not.toContain("Web Chat");
+    expect(view.textContent).not.toContain("Ramp");
+  });
+
   it("renders the anonymous composer with authentication handoff", async () => {
     const view = await render(
       <AppBuilder authenticated={false} user={{ name: "", email: "" }} />,
@@ -339,6 +355,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilderComponent
         authenticated
+        comingSoonEnabled
         providerResumeKey={resumeKey}
         integrations={integrationState}
       />,
@@ -374,6 +391,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilderComponent
         authenticated
+        comingSoonEnabled
         integrations={{
           ...integrationState,
           vercel: {
@@ -431,6 +449,22 @@ describe("Vercel-faithful App Builder flow", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(accessibility.violations).toEqual([]);
+  });
+
+  it("keeps GitHub failures out of the shared provider notice area", async () => {
+    const view = await render(
+      <AppBuilderComponent
+        authenticated
+        connectionsEnabled
+        integrations={integrationState}
+        providerNotices={[
+          { provider: "github", status: "failed", reason: "callback-invalid" },
+        ]}
+      />,
+    );
+
+    expect(view.textContent).not.toContain("GitHub could not be connected");
+    expect(view.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("waits to show repository controls until a GitHub scope is available", async () => {

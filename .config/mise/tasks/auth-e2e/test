@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Run Chromium auth E2E against local Emulate and PostgreSQL"
+set -eu
+
+if lsof -nP -iTCP:3001 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "auth E2E requires exclusive access to https://localhost:3001" >&2
+  exit 1
+fi
+mise run auth-e2e:reset
+trap 'mise run auth-e2e:reset >/dev/null 2>&1 || true' EXIT INT TERM
+.config/mise/scripts/trusted-node-launcher \
+  "$(mise which pnpm)" exec playwright test --config=playwright.config.ts "$@"

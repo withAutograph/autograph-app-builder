@@ -47,6 +47,8 @@ import {
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
+import { SectionShell } from "../../components/create-app/choice-card";
+import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
 import { UserButton } from "../../components/auth/user/user-button";
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
@@ -71,8 +73,8 @@ export type BuilderForm = {
   modelId: string;
 };
 export type ProviderField = "vercel" | "github";
-type StorageProvider = "github" | "gitlab" | "bitbucket";
-type DeploymentProvider = "vercel" | "netlify" | "cloudflare";
+export type StorageProvider = "github" | "gitlab" | "bitbucket";
+export type DeploymentProvider = "vercel" | "netlify" | "cloudflare";
 export type BuilderDraft = {
   version: 1;
   form: BuilderForm;
@@ -611,7 +613,7 @@ export function ConnectionIcon({
   );
 }
 
-type ComboOption = {
+export type ComboOption = {
   value: string;
   label: string;
   detail?: string;
@@ -824,6 +826,568 @@ export function Header() {
         <UserButton align="end" sideOffset={8} size="icon" />
       </div>
     </header>
+  );
+}
+
+export function ProviderNotices({
+  notices,
+}: {
+  notices: ProviderConnectionNotice[];
+}) {
+  if (!notices.length) return null;
+  return (
+    <div className={styles.providerNotices} aria-live="polite">
+      {notices.map((notice) => {
+        const provider = notice.provider === "vercel" ? "Vercel" : "GitHub";
+        return (
+          <p
+            key={`${notice.provider}-${notice.status}`}
+            role={notice.status === "failed" ? "alert" : "status"}
+            data-status={notice.status}
+          >
+            {notice.status === "connected" ? (
+              <>
+                <Check size={15} aria-hidden="true" />
+                {provider} connected successfully.
+              </>
+            ) : (
+              <>
+                <Info size={15} aria-hidden="true" />
+                {providerConnectionFailureMessage(provider, notice.reason)}
+              </>
+            )}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+export function AppDetailsSection({
+  appName,
+  brief,
+  onAppNameChange,
+  onBriefChange,
+  onCycleBrief,
+}: {
+  appName: string;
+  brief: string;
+  onAppNameChange: (value: string) => void;
+  onBriefChange: (value: string) => void;
+  onCycleBrief: () => void;
+}) {
+  return (
+    <>
+      <label htmlFor="app-name">
+        App Name
+        <input
+          id="app-name"
+          name="app-name"
+          autoComplete="off"
+          spellCheck={false}
+          value={appName}
+          onChange={(event) => onAppNameChange(event.target.value)}
+          placeholder="support-app"
+        />
+      </label>
+      <label htmlFor="app-brief">
+        App Brief
+        <div className={styles.briefField}>
+          <textarea
+            id="app-brief"
+            name="app-brief"
+            autoComplete="off"
+            value={brief}
+            onChange={(event) => onBriefChange(event.target.value)}
+            placeholder="Describe the app you want to build…"
+          />
+          <button
+            type="button"
+            aria-label="Try another app brief example"
+            onClick={onCycleBrief}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </label>
+      <p className={styles.helpText}>
+        Define this app’s users, workflow, constraints, and desired outcome.{" "}
+        <a
+          href="https://github.com/withAutograph/autograph-app-builder"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Read the App Builder docs ↗
+        </a>
+        .
+      </p>
+    </>
+  );
+}
+
+export function BuildWithSection({
+  children,
+  comingSoonEnabled = false,
+  selected,
+  onChange,
+}: {
+  children?: ReactNode;
+  comingSoonEnabled?: boolean;
+  selected: BuildDestination;
+  onChange: (destination: BuildDestination) => void;
+}) {
+  return (
+    <>
+      <SectionShell
+        className={`${styles.sectionField} ${styles.buildSection}`}
+        section="build-with"
+        title="Build with"
+        description="Where do you want to build this app?"
+      >
+        <div
+          className={`${styles.optionGrid} ${styles.buildDestinationGrid}`}
+          role="radiogroup"
+          aria-label="Build destination"
+        >
+          {comingSoonEnabled ? (
+            <label className={styles.unavailableOption}>
+              <Monitor size={18} aria-hidden="true" />
+              <span>
+                Web Chat <small>Coming soon</small>
+              </span>
+              <input
+                type="radio"
+                name="build-destination"
+                value="web"
+                disabled
+                checked={selected === "web"}
+              />
+            </label>
+          ) : null}
+          <label>
+            <SiOpenai size={18} aria-hidden="true" />
+            ChatGPT / Codex
+            <input
+              type="radio"
+              name="build-destination"
+              value="codex"
+              required
+              checked={selected === "codex"}
+              onChange={() => onChange("codex")}
+            />
+          </label>
+          <label>
+            <CursorMark />
+            Cursor
+            <input
+              type="radio"
+              name="build-destination"
+              value="cursor"
+              required
+              checked={selected === "cursor"}
+              onChange={() => onChange("cursor")}
+            />
+          </label>
+        </div>
+      </SectionShell>
+      {children}
+    </>
+  );
+}
+
+export function ModelControls({
+  available,
+  model,
+  onModelChange,
+  onRetry,
+  onZdrChange,
+  options,
+  zdrOnly,
+}: {
+  available: boolean;
+  model: string;
+  onModelChange: (value: string) => void;
+  onRetry: () => void;
+  onZdrChange: (value: boolean) => void;
+  options: ComboOption[];
+  zdrOnly: boolean;
+}) {
+  return (
+    <fieldset className={styles.modelField}>
+      <legend>Model</legend>
+      <label className={styles.checkLine}>
+        <input
+          type="checkbox"
+          name="zdr"
+          checked={zdrOnly}
+          onChange={(event) => onZdrChange(event.target.checked)}
+        />{" "}
+        Zero Data Retention
+        <InfoTooltip>
+          Only use providers that support Zero Data Retention.
+        </InfoTooltip>
+      </label>
+      <SearchCombobox
+        label={
+          options.find((option) => option.value === model)?.label ??
+          "Select model"
+        }
+        value={model}
+        options={options}
+        onChange={onModelChange}
+        prefix={<Search size={15} />}
+        showSelectedCheck={false}
+        placeholder={available ? "Select model" : "Models unavailable"}
+        disabled={!available}
+      />
+      {!available ? (
+        <button className={styles.retryModels} type="button" onClick={onRetry}>
+          Retry models
+        </button>
+      ) : null}
+    </fieldset>
+  );
+}
+
+export function DeployToSection({
+  available,
+  comingSoonEnabled = false,
+  connected,
+  onConnect,
+  onProviderChange,
+  onTeamChange,
+  selected,
+  team,
+  teamOptions,
+}: {
+  available: boolean;
+  comingSoonEnabled?: boolean;
+  connected: boolean;
+  onConnect: () => void;
+  onProviderChange: (provider: DeploymentProvider) => void;
+  onTeamChange: (value: string) => void;
+  selected: DeploymentProvider | null;
+  team: string;
+  teamOptions: ComboOption[];
+}) {
+  return (
+    <ProviderChoiceSection
+      className={`${styles.sectionField} ${styles.deploySection}`}
+      section="deploy-to"
+      title="Deploy to"
+      description="Where do you want to deploy this app?"
+      label="Deployment provider"
+      name="deployment-provider"
+      gridClassName={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
+      unavailableClassName={styles.unavailableOption}
+      options={deploymentProviderOptions
+        .map((option) => ({
+          ...option,
+          available: option.available && available,
+        }))
+        .filter((option) => comingSoonEnabled || option.available)}
+      selected={selected}
+      onChange={onProviderChange}
+    >
+      {selected === "vercel" && available ? (
+        <div className={styles.providerPanel} id="deployment-provider-vercel">
+          <div className={styles.integrationField}>
+            <span>Vercel Team (Optional)</span>
+            {connected ? (
+              <SearchCombobox
+                label="Select a Vercel Team"
+                inputId="vercel-team"
+                value={team}
+                options={teamOptions}
+                onChange={onTeamChange}
+                prefix={<span className={styles.teamDot} data-team={team} />}
+                menuFooter={{
+                  value: "create-team",
+                  label: "Connect another Vercel team",
+                }}
+                onFooterSelect={onConnect}
+                optionIcon={(option) => (
+                  <span className={styles.teamDot} data-team={option.value} />
+                )}
+                footerIcon={<PlusCircle size={18} />}
+                detailPills
+              />
+            ) : (
+              <button
+                className={styles.connectProvider}
+                type="button"
+                id="vercel-team"
+                onClick={onConnect}
+              >
+                Connect to Vercel
+              </button>
+            )}
+            <small className={styles.integrationHelp}>
+              Connect Vercel and Autograph can create and deploy the project for
+              you. You can also skip this and deploy later.
+            </small>
+          </div>
+        </div>
+      ) : null}
+    </ProviderChoiceSection>
+  );
+}
+
+export function StoreInSection({
+  available,
+  comingSoonEnabled = false,
+  connected,
+  gitScope,
+  gitScopeOptions,
+  onConnect,
+  onGitScopeChange,
+  onPrivacyChange,
+  onProviderChange,
+  onRepositoryChange,
+  privateRepository,
+  repository,
+  selected,
+}: {
+  available: boolean;
+  comingSoonEnabled?: boolean;
+  connected: boolean;
+  gitScope: string;
+  gitScopeOptions: ComboOption[];
+  onConnect: () => void;
+  onGitScopeChange: (value: string) => void;
+  onPrivacyChange: (value: boolean) => void;
+  onProviderChange: (provider: StorageProvider) => void;
+  onRepositoryChange: (value: string) => void;
+  privateRepository: boolean;
+  repository: string;
+  selected: StorageProvider | null;
+}) {
+  return (
+    <ProviderChoiceSection
+      className={`${styles.sectionField} ${styles.storeSection}`}
+      section="store-in"
+      title="Store in"
+      description="Where do you want to store this app?"
+      label="Storage provider"
+      name="storage-provider"
+      gridClassName={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
+      unavailableClassName={styles.unavailableOption}
+      options={storageProviderOptions
+        .map((option) => ({
+          ...option,
+          available: option.available && available,
+        }))
+        .filter((option) => comingSoonEnabled || option.available)}
+      selected={selected}
+      onChange={onProviderChange}
+    >
+      {selected === "github" && available ? (
+        <div className={styles.providerPanel} id="storage-provider-github">
+          <div className={styles.repoScope}>
+            <div
+              className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}
+            >
+              <div className={styles.integrationField}>
+                <span>Git Scope (Optional)</span>
+                {connected ? (
+                  <SearchCombobox
+                    label="Git Scope"
+                    inputId="git-scope"
+                    value={gitScope}
+                    options={gitScopeOptions}
+                    onChange={onGitScopeChange}
+                    prefix={<FaGithub size={16} />}
+                    menuFooter={{
+                      value: "add-github",
+                      label: "Add GitHub Scope",
+                    }}
+                    onFooterSelect={onConnect}
+                    optionIcon={() => <FaGithub size={16} />}
+                    footerIcon={<Plus size={21} />}
+                  />
+                ) : (
+                  <button
+                    className={styles.connectProvider}
+                    type="button"
+                    id="git-scope"
+                    onClick={onConnect}
+                  >
+                    Connect to GitHub
+                  </button>
+                )}
+              </div>
+              {gitScope ? (
+                <>
+                  <span className={styles.slash} aria-hidden="true">
+                    /
+                  </span>
+                  <div className={styles.repoLabel}>
+                    {privateRepository ? "Private" : "Public"} Repository Name
+                    <div className={styles.lockedInput}>
+                      <input
+                        id="repository-name"
+                        name="repository-name"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={repository}
+                        onChange={(event) =>
+                          onRepositoryChange(event.target.value)
+                        }
+                        placeholder="my-app"
+                      />
+                      <label
+                        className={styles.privacyToggle}
+                        aria-label="Private repository"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={privateRepository}
+                          onChange={(event) =>
+                            onPrivacyChange(event.target.checked)
+                          }
+                        />
+                        <span>
+                          <i>
+                            {privateRepository ? (
+                              <FaLock size={11} />
+                            ) : (
+                              <FaLockOpen size={12} />
+                            )}
+                          </i>
+                        </span>
+                        <em role="tooltip">
+                          This repository will be{" "}
+                          {privateRepository ? "private" : "public"}.
+                        </em>
+                      </label>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <small className={styles.integrationHelp}>
+              Connect GitHub and Autograph can create and configure the
+              repository for you. You can also skip this and connect a
+              repository later.
+            </small>
+          </div>
+        </div>
+      ) : null}
+    </ProviderChoiceSection>
+  );
+}
+
+export function ConnectionsSection({
+  connected,
+  comingSoonEnabled = false,
+  onAdd,
+  onCustomize,
+  onRemove,
+  onSearchChange,
+  onShowMore,
+  search,
+  selected,
+  showMore,
+}: {
+  connected: string[];
+  comingSoonEnabled?: boolean;
+  onAdd: (name: string) => void;
+  onCustomize: (name: string) => void;
+  onRemove: (name: string) => void;
+  onSearchChange: (value: string) => void;
+  onShowMore: () => void;
+  search: string;
+  selected: string[];
+  showMore: boolean;
+}) {
+  const normalizedSearch = search.trim().toLowerCase();
+  const available = (
+    showMore || normalizedSearch
+      ? allConnectionNames
+      : allConnectionNames.slice(0, 2)
+  ).filter(
+    (name) =>
+      !normalizedSearch || name.toLowerCase().includes(normalizedSearch),
+  );
+  return (
+    <SectionShell
+      className={`${styles.sectionField} ${styles.connectionsSection}`}
+      section="connections"
+      title="Connections"
+      description="Give this app access to tools and data from other services."
+    >
+      <label className={styles.searchBox}>
+        <Search size={15} aria-hidden="true" />
+        <span className={styles.srOnly}>Search connections</span>
+        <input
+          type="search"
+          name="connection-search"
+          autoComplete="off"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          onKeyDown={(event) => event.key === "Escape" && onSearchChange("")}
+          placeholder="Search connections…"
+        />
+        {search ? (
+          <button type="button" onClick={() => onSearchChange("")}>
+            Esc
+          </button>
+        ) : null}
+      </label>
+      <div className={styles.connectionGrid}>
+        {available
+          .filter((name) => !selected.includes(name))
+          .map((name) => {
+            const comingSoon = comingSoonConnections.has(name);
+            if (comingSoon && !comingSoonEnabled) return null;
+            return (
+              <button
+                type="button"
+                key={name}
+                aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
+                disabled={comingSoon}
+                onClick={() => onAdd(name)}
+              >
+                <ConnectionIcon kind={connectionKind.get(name)} name={name} />
+                {name}
+                {comingSoon ? (
+                  <span className={styles.comingSoon}>Coming soon</span>
+                ) : null}
+              </button>
+            );
+          })}
+      </div>
+      {!showMore && !search ? (
+        <button className={styles.showAll} type="button" onClick={onShowMore}>
+          Show more connections
+        </button>
+      ) : null}
+      {selected.length ? (
+        <div className={styles.connectedList} aria-label="Added connections">
+          {selected.map((name) => (
+            <article key={name}>
+              <span>
+                <ConnectionIcon kind={connectionKind.get(name)} name={name} />
+              </span>
+              <div>
+                <strong>{name}</strong>
+                <p>{connectionDescription(name)}</p>
+              </div>
+              <button type="button" onClick={() => onCustomize(name)}>
+                {connected.includes(name) ? "Customize" : "Connect"}
+              </button>
+              <button
+                type="button"
+                aria-label={`Remove ${name}`}
+                onClick={() => onRemove(name)}
+              >
+                <X size={17} />
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </SectionShell>
   );
 }
 
@@ -1090,6 +1654,7 @@ export function Builder({
   initialBrief,
   onCreate,
   connectionsEnabled,
+  comingSoonEnabled,
   integrations,
   providerNotices,
   initialDraft,
@@ -1098,6 +1663,7 @@ export function Builder({
   initialBrief: string;
   onCreate: (form: BuilderForm, resumeKey?: string) => void;
   connectionsEnabled: boolean;
+  comingSoonEnabled: boolean;
   integrations: BuilderIntegrationState;
   providerNotices: ProviderConnectionNotice[];
   initialDraft?: BuilderDraft;
@@ -1191,18 +1757,10 @@ export function Builder({
     (notice) =>
       !(
         notice.status === "failed" &&
-        notice.reason === "configuration-unavailable"
+        (notice.reason === "configuration-unavailable" ||
+          notice.provider === "github")
       ),
   );
-  const normalizedSearch = search.trim().toLowerCase();
-  const availableConnections =
-    showMoreConnections || normalizedSearch
-      ? allConnectionNames
-      : allConnectionNames.slice(0, 2);
-  const filtered = availableConnections.filter((name) => {
-    if (!normalizedSearch) return true;
-    return name.toLowerCase().includes(normalizedSearch);
-  });
   const modelOptions = zdrOnly
     ? allModelOptions.filter((option) =>
         integrations.models.entries.some(
@@ -1352,570 +1910,136 @@ export function Builder({
           <h1>Build an app</h1>
           <AutographMark compact />
         </div>
-        {visibleProviderNotices.length ? (
-          <div className={styles.providerNotices} aria-live="polite">
-            {visibleProviderNotices.map((notice) => {
-              const provider =
-                notice.provider === "vercel" ? "Vercel" : "GitHub";
-              return (
-                <p
-                  key={`${notice.provider}-${notice.status}`}
-                  role={notice.status === "failed" ? "alert" : "status"}
-                  data-status={notice.status}
-                >
-                  {notice.status === "connected" ? (
-                    <>
-                      <Check size={15} aria-hidden="true" />
-                      {provider} connected successfully.
-                    </>
-                  ) : (
-                    <>
-                      <Info size={15} aria-hidden="true" />
-                      {providerConnectionFailureMessage(
-                        provider,
-                        notice.reason,
-                      )}
-                    </>
-                  )}
-                </p>
-              );
-            })}
-          </div>
-        ) : null}
-        <label htmlFor="app-name">
-          App Name
-          <input
-            id="app-name"
-            name="app-name"
-            autoComplete="off"
-            spellCheck={false}
-            value={form.appName}
-            onChange={(event) => {
-              appNameEditedByUser.current = true;
-              const appName = event.target.value;
-              if (appName !== form.appName) hasUnsavedChanges.current = true;
-              setForm((current) => ({
-                ...current,
-                appName,
-                repository: repositoryEditedByUser.current
-                  ? current.repository
-                  : repositoryNameFromAppName(appName),
-              }));
-            }}
-            placeholder="support-app"
-          />
-        </label>
-        <label htmlFor="app-brief">
-          App Brief
-          <div className={styles.briefField}>
-            <textarea
-              id="app-brief"
-              name="app-brief"
-              autoComplete="off"
-              value={form.brief}
-              onChange={(event) => updateBrief(event.target.value)}
-              placeholder="Describe the app you want to build…"
-            />
-            <button
-              type="button"
-              aria-label="Try another app brief example"
-              onClick={() => {
-                const currentIndex = briefExamples.indexOf(
-                  form.brief as (typeof briefExamples)[number],
-                );
-                const nextIndex =
-                  currentIndex < 0
-                    ? 0
-                    : (currentIndex + 1) % briefExamples.length;
-                updateBrief(briefExamples[nextIndex]);
-              }}
-            >
-              <RefreshCw size={16} aria-hidden="true" />
-            </button>
-          </div>
-        </label>
-        <p className={styles.helpText}>
-          Define this app’s users, workflow, constraints, and desired outcome.{" "}
-          <a
-            href="https://github.com/withAutograph/autograph-app-builder"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Read the App Builder docs ↗
-          </a>
-          .
-        </p>
-        <fieldset className={`${styles.sectionField} ${styles.deploySection}`}>
-          <legend>Deploy to</legend>
-          <p>Where do you want to deploy this app?</p>
-          <div
-            className={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
-            role="group"
-            aria-label="Deployment provider"
-          >
-            {deploymentProviderOptions.map((option) => {
-              const unavailable =
-                !option.available ||
-                integrations.vercel.status === "unavailable";
-              const Icon = option.icon;
-              return (
-                <label
-                  key={option.provider}
-                  data-provider={option.provider}
-                  className={unavailable ? styles.unavailableOption : undefined}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  <span>
-                    {option.name}
-                    {unavailable ? <small>Coming soon</small> : null}
-                  </span>
-                  <input
-                    type="checkbox"
-                    name="deployment-provider"
-                    value={option.provider}
-                    disabled={unavailable}
-                    checked={
-                      !unavailable && deploymentProvider === option.provider
-                    }
-                    onChange={() => {
-                      hasUnsavedChanges.current = true;
-                      setDeploymentProvider((current) =>
-                        current === option.provider ? null : option.provider,
-                      );
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </div>
-          {deploymentProvider === "vercel" &&
-          integrations.vercel.status !== "unavailable" ? (
-            <div
-              className={styles.providerPanel}
-              id="deployment-provider-vercel"
-            >
-              <div className={styles.integrationField}>
-                <span>Vercel Team (Optional)</span>
-                {integrations.vercel.status === "connected" ? (
-                  <SearchCombobox
-                    label="Select a Vercel Team"
-                    inputId="vercel-team"
-                    value={team}
-                    options={teamOptions}
-                    onChange={(value) => {
-                      if (value !== team) hasUnsavedChanges.current = true;
-                      setTeam(value);
-                    }}
-                    prefix={
-                      <span className={styles.teamDot} data-team={team} />
-                    }
-                    menuFooter={{
-                      value: "create-team",
-                      label: "Connect another Vercel team",
-                    }}
-                    onFooterSelect={() => beginProviderConnection("vercel")}
-                    optionIcon={(option) => (
-                      <span
-                        className={styles.teamDot}
-                        data-team={option.value}
-                      />
-                    )}
-                    footerIcon={<PlusCircle size={18} />}
-                    detailPills
-                  />
-                ) : (
-                  <button
-                    className={styles.connectProvider}
-                    type="button"
-                    id="vercel-team"
-                    onClick={() => beginProviderConnection("vercel")}
-                  >
-                    Connect to Vercel
-                  </button>
-                )}
-                <small className={styles.integrationHelp}>
-                  Connect Vercel and Autograph can create and deploy the project
-                  for you. You can also skip this and deploy later.
-                </small>
-              </div>
-            </div>
-          ) : null}
-        </fieldset>
-        <fieldset className={`${styles.sectionField} ${styles.storeSection}`}>
-          <legend>Store in</legend>
-          <p>Where do you want to store this app?</p>
-          <div
-            className={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
-            role="group"
-            aria-label="Storage provider"
-          >
-            {storageProviderOptions.map((option) => {
-              const unavailable =
-                !option.available ||
-                integrations.github.status === "unavailable";
-              const Icon = option.icon;
-              return (
-                <label
-                  key={option.provider}
-                  data-provider={option.provider}
-                  className={unavailable ? styles.unavailableOption : undefined}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  <span>
-                    {option.name}
-                    {unavailable ? <small>Coming soon</small> : null}
-                  </span>
-                  <input
-                    type="checkbox"
-                    name="storage-provider"
-                    value={option.provider}
-                    disabled={unavailable}
-                    checked={
-                      !unavailable && storageProvider === option.provider
-                    }
-                    onChange={() => {
-                      hasUnsavedChanges.current = true;
-                      setStorageProvider((current) =>
-                        current === option.provider ? null : option.provider,
-                      );
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </div>
-          {storageProvider === "github" &&
-          integrations.github.status !== "unavailable" ? (
-            <div className={styles.providerPanel} id="storage-provider-github">
-              <div className={styles.repoScope}>
-                <div
-                  className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}
-                >
-                  <div className={styles.integrationField}>
-                    <span>Git Scope (Optional)</span>
-                    {integrations.github.status === "connected" ? (
-                      <SearchCombobox
-                        label="Git Scope"
-                        inputId="git-scope"
-                        value={gitScope}
-                        options={gitScopeOptions}
-                        onChange={(value) => {
-                          if (value !== gitScope)
-                            hasUnsavedChanges.current = true;
-                          setGitScope(value);
-                        }}
-                        prefix={<FaGithub size={16} />}
-                        menuFooter={{
-                          value: "add-github",
-                          label: "Add GitHub Scope",
-                        }}
-                        onFooterSelect={() => beginProviderConnection("github")}
-                        optionIcon={() => <FaGithub size={16} />}
-                        footerIcon={<Plus size={21} />}
-                      />
-                    ) : (
-                      <button
-                        className={styles.connectProvider}
-                        type="button"
-                        id="git-scope"
-                        onClick={() => beginProviderConnection("github")}
-                      >
-                        Connect to GitHub
-                      </button>
-                    )}
-                  </div>
-                  {gitScope ? (
-                    <>
-                      <span className={styles.slash} aria-hidden="true">
-                        /
-                      </span>
-                      <div className={styles.repoLabel}>
-                        {form.privateRepository ? "Private" : "Public"}{" "}
-                        Repository Name
-                        <div className={styles.lockedInput}>
-                          <input
-                            id="repository-name"
-                            name="repository-name"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={form.repository}
-                            onChange={(event) => {
-                              repositoryEditedByUser.current = true;
-                              if (event.target.value !== form.repository)
-                                hasUnsavedChanges.current = true;
-                              setForm({
-                                ...form,
-                                repository: event.target.value,
-                              });
-                            }}
-                            placeholder="my-app"
-                          />
-                          <label
-                            className={styles.privacyToggle}
-                            aria-label="Private repository"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={form.privateRepository}
-                              onChange={(event) => {
-                                if (
-                                  event.target.checked !==
-                                  form.privateRepository
-                                )
-                                  hasUnsavedChanges.current = true;
-                                setForm({
-                                  ...form,
-                                  privateRepository: event.target.checked,
-                                });
-                              }}
-                            />
-                            <span>
-                              <i>
-                                {form.privateRepository ? (
-                                  <FaLock size={11} />
-                                ) : (
-                                  <FaLockOpen size={12} />
-                                )}
-                              </i>
-                            </span>
-                            <em role="tooltip">
-                              This repository will be{" "}
-                              {form.privateRepository ? "private" : "public"}.
-                            </em>
-                          </label>
-                        </div>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-                <small className={styles.integrationHelp}>
-                  Connect GitHub and Autograph can create and configure the
-                  repository for you. You can also skip this and connect a
-                  repository later.
-                </small>
-              </div>
-            </div>
-          ) : null}
-        </fieldset>
-        <fieldset className={`${styles.sectionField} ${styles.buildSection}`}>
-          <legend>Build with</legend>
-          <p id="build-destination-help">
-            Where do you want to build this app?
-          </p>
-          <div
-            className={`${styles.optionGrid} ${styles.buildDestinationGrid}`}
-            role="radiogroup"
-            aria-label="Build destination"
-            aria-describedby="build-destination-help"
-          >
-            <label className={styles.unavailableOption}>
-              <Monitor size={18} aria-hidden="true" />
-              <span>
-                Web Chat <small>Coming soon</small>
-              </span>
-              <input
-                type="radio"
-                name="build-destination"
-                value="web"
-                disabled
-                checked={form.buildDestination === "web"}
-              />
-            </label>
-            <label>
-              <SiOpenai size={18} aria-hidden="true" />
-              ChatGPT / Codex
-              <input
-                type="radio"
-                name="build-destination"
-                value="codex"
-                required
-                checked={form.buildDestination === "codex"}
-                onChange={() => {
-                  if (form.buildDestination !== "codex")
-                    hasUnsavedChanges.current = true;
-                  setForm({ ...form, buildDestination: "codex" });
-                }}
-              />
-            </label>
-            <label>
-              <CursorMark />
-              Cursor
-              <input
-                type="radio"
-                name="build-destination"
-                value="cursor"
-                required
-                checked={form.buildDestination === "cursor"}
-                onChange={() => {
-                  if (form.buildDestination !== "cursor")
-                    hasUnsavedChanges.current = true;
-                  setForm({ ...form, buildDestination: "cursor" });
-                }}
-              />
-            </label>
-          </div>
-        </fieldset>
-        {form.buildDestination === "web" ? (
-          <fieldset className={styles.modelField}>
-            <legend>Model</legend>
-            <label className={styles.checkLine}>
-              <input
-                type="checkbox"
-                name="zdr"
-                checked={zdrOnly}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  if (checked !== zdrOnly) hasUnsavedChanges.current = true;
-                  setZdrOnly(checked);
-                  if (
-                    checked &&
-                    !integrations.models.entries.some(
-                      (entry) => entry.id === model && entry.zdr === "all",
-                    )
-                  )
-                    setModel("");
-                }}
-              />{" "}
-              Zero Data Retention
-              <InfoTooltip>
-                Only use providers that support Zero Data Retention.
-              </InfoTooltip>
-            </label>
-            <SearchCombobox
-              label={
-                modelOptions.find((option) => option.value === model)?.label ??
-                "Select model"
-              }
-              value={model}
+        <ProviderNotices notices={visibleProviderNotices} />
+        <AppDetailsSection
+          appName={form.appName}
+          brief={form.brief}
+          onAppNameChange={(appName) => {
+            appNameEditedByUser.current = true;
+            if (appName !== form.appName) hasUnsavedChanges.current = true;
+            setForm((current) => ({
+              ...current,
+              appName,
+              repository: repositoryEditedByUser.current
+                ? current.repository
+                : repositoryNameFromAppName(appName),
+            }));
+          }}
+          onBriefChange={updateBrief}
+          onCycleBrief={() => {
+            const currentIndex = briefExamples.indexOf(
+              form.brief as (typeof briefExamples)[number],
+            );
+            const nextIndex =
+              currentIndex < 0 ? 0 : (currentIndex + 1) % briefExamples.length;
+            updateBrief(briefExamples[nextIndex]);
+          }}
+        />
+        <DeployToSection
+          available={integrations.vercel.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
+          connected={integrations.vercel.status === "connected"}
+          selected={deploymentProvider}
+          team={team}
+          teamOptions={teamOptions}
+          onProviderChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setDeploymentProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+          onTeamChange={(value) => {
+            if (value !== team) hasUnsavedChanges.current = true;
+            setTeam(value);
+          }}
+          onConnect={() => beginProviderConnection("vercel")}
+        />
+        <StoreInSection
+          available={integrations.github.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
+          connected={integrations.github.status === "connected"}
+          selected={storageProvider}
+          gitScope={gitScope}
+          gitScopeOptions={gitScopeOptions}
+          repository={form.repository}
+          privateRepository={form.privateRepository}
+          onProviderChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setStorageProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+          onGitScopeChange={(value) => {
+            if (value !== gitScope) hasUnsavedChanges.current = true;
+            setGitScope(value);
+          }}
+          onRepositoryChange={(repository) => {
+            repositoryEditedByUser.current = true;
+            if (repository !== form.repository)
+              hasUnsavedChanges.current = true;
+            setForm((current) => ({ ...current, repository }));
+          }}
+          onPrivacyChange={(privateRepository) => {
+            if (privateRepository !== form.privateRepository)
+              hasUnsavedChanges.current = true;
+            setForm((current) => ({ ...current, privateRepository }));
+          }}
+          onConnect={() => beginProviderConnection("github")}
+        />
+        <BuildWithSection
+          comingSoonEnabled={comingSoonEnabled}
+          selected={form.buildDestination}
+          onChange={(buildDestination) => {
+            if (buildDestination !== form.buildDestination)
+              hasUnsavedChanges.current = true;
+            setForm((current) => ({ ...current, buildDestination }));
+          }}
+        >
+          {form.buildDestination === "web" ? (
+            <ModelControls
+              available={integrations.models.status === "ready"}
+              model={model}
               options={modelOptions}
-              onChange={(value) => {
+              zdrOnly={zdrOnly}
+              onModelChange={(value) => {
                 if (value !== model) hasUnsavedChanges.current = true;
                 setModel(value);
               }}
-              prefix={<Search size={15} />}
-              showSelectedCheck={false}
-              placeholder={
-                integrations.models.status === "ready"
-                  ? "Select model"
-                  : "Models unavailable"
-              }
-              disabled={integrations.models.status !== "ready"}
+              onZdrChange={(checked) => {
+                if (checked !== zdrOnly) hasUnsavedChanges.current = true;
+                setZdrOnly(checked);
+                if (
+                  checked &&
+                  !integrations.models.entries.some(
+                    (entry) => entry.id === model && entry.zdr === "all",
+                  )
+                )
+                  setModel("");
+              }}
+              onRetry={() => router.refresh()}
             />
-            {integrations.models.status === "unavailable" ? (
-              <button
-                className={styles.retryModels}
-                type="button"
-                onClick={() => router.refresh()}
-              >
-                Retry models
-              </button>
-            ) : null}
-          </fieldset>
-        ) : null}
+          ) : null}
+        </BuildWithSection>
         {connectionsEnabled ? (
-          <fieldset
-            className={`${styles.sectionField} ${styles.connectionsSection}`}
-          >
-            <legend>Connections</legend>
-            <p>Give this app access to tools and data from other services.</p>
-            <label className={styles.searchBox}>
-              <Search size={15} aria-hidden="true" />
-              <span className={styles.srOnly}>Search connections</span>
-              <input
-                type="search"
-                name="connection-search"
-                autoComplete="off"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onKeyDown={(event) => event.key === "Escape" && setSearch("")}
-                placeholder="Search connections…"
-              />
-              {search ? (
-                <button type="button" onClick={() => setSearch("")}>
-                  Esc
-                </button>
-              ) : null}
-            </label>
-            <div className={styles.connectionGrid}>
-              {filtered
-                .filter((name) => !form.connections.includes(name))
-                .map((name) => {
-                  const comingSoon = comingSoonConnections.has(name);
-                  return (
-                    <button
-                      type="button"
-                      key={name}
-                      aria-label={
-                        comingSoon ? `${name} coming soon` : `Add ${name}`
-                      }
-                      disabled={comingSoon}
-                      onClick={() => addConnection(name)}
-                    >
-                      <ConnectionIcon
-                        kind={connectionKind.get(name)}
-                        name={name}
-                      />
-                      {name}
-                      {comingSoon ? (
-                        <span className={styles.comingSoon}>Coming soon</span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-            </div>
-            {!showMoreConnections && !search ? (
-              <button
-                className={styles.showAll}
-                type="button"
-                onClick={() => setShowMoreConnections(true)}
-              >
-                Show more connections
-              </button>
-            ) : null}
-            {form.connections.length ? (
-              <div
-                className={styles.connectedList}
-                aria-label="Added connections"
-              >
-                {form.connections.map((name) => (
-                  <article key={name}>
-                    <span>
-                      <ConnectionIcon
-                        kind={connectionKind.get(name)}
-                        name={name}
-                      />
-                    </span>
-                    <div>
-                      <strong>{name}</strong>
-                      <p>{connectionDescription(name)}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setConnectionFlow({
-                          name,
-                          stage: connectedConnections.includes(name)
-                            ? "configure"
-                            : "connect",
-                        })
-                      }
-                    >
-                      {connectedConnections.includes(name)
-                        ? "Customize"
-                        : "Connect"}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${name}`}
-                      onClick={() => removeConnection(name)}
-                    >
-                      <X size={17} />
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-          </fieldset>
+          <ConnectionsSection
+            connected={connectedConnections}
+            comingSoonEnabled={comingSoonEnabled}
+            search={search}
+            selected={form.connections}
+            showMore={showMoreConnections}
+            onAdd={addConnection}
+            onRemove={removeConnection}
+            onSearchChange={setSearch}
+            onShowMore={() => setShowMoreConnections(true)}
+            onCustomize={(name) =>
+              setConnectionFlow({
+                name,
+                stage: connectedConnections.includes(name)
+                  ? "configure"
+                  : "connect",
+              })
+            }
+          />
         ) : null}
         <button
           className={styles.createButton}
@@ -2416,6 +2540,7 @@ codex plugin add app-builder@autograph`;
 export function AppBuilder({
   authenticated,
   connectionsEnabled = false,
+  comingSoonEnabled = false,
   provisioningEnabled = false,
   integrations,
   providerNotices = [],
@@ -2423,6 +2548,7 @@ export function AppBuilder({
 }: {
   authenticated: boolean;
   connectionsEnabled?: boolean;
+  comingSoonEnabled?: boolean;
   provisioningEnabled?: boolean;
   integrations: BuilderIntegrationState;
   providerNotices?: ProviderConnectionNotice[];
@@ -2504,6 +2630,7 @@ export function AppBuilder({
           initialDraft={resumedDraft}
           resumeKey={providerResumeKey}
           connectionsEnabled={connectionsEnabled}
+          comingSoonEnabled={comingSoonEnabled}
           integrations={integrations}
           providerNotices={providerNotices}
           onCreate={(form) => {

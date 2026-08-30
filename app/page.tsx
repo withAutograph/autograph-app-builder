@@ -4,6 +4,7 @@ import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/prev
 import { resolveWorkspaceOnboardingState } from "@/lib/auth/workspace-onboarding";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
 import {
+  builderComingSoonFlag,
   builderConnectionsFlag,
   builderResourceProvisioningFlag,
 } from "@/lib/feature-flags";
@@ -68,18 +69,25 @@ async function currentUser() {
 }
 
 export default async function Home({ searchParams }: PageProps) {
-  const [query, user, connectionsEnabled, provisioningEnabled] =
-    await Promise.all([
-      searchParams,
-      currentUser(),
-      builderConnectionsFlag(),
-      builderResourceProvisioningFlag(),
-    ]);
+  const [
+    query,
+    user,
+    connectionsEnabled,
+    comingSoonEnabled,
+    provisioningEnabled,
+  ] = await Promise.all([
+    searchParams,
+    currentUser(),
+    builderConnectionsFlag(),
+    builderComingSoonFlag(),
+    builderResourceProvisioningFlag(),
+  ]);
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
     const status = query[provider];
     if (status !== "connected" && status !== "failed") continue;
+    if (provider === "github" && status === "failed") continue;
     notices.push({
       provider,
       status,
@@ -117,6 +125,7 @@ export default async function Home({ searchParams }: PageProps) {
     <AppBuilder
       authenticated={authenticated && mode !== "anonymous"}
       connectionsEnabled={connectionsEnabled}
+      comingSoonEnabled={comingSoonEnabled}
       provisioningEnabled={provisioningEnabled}
       integrations={integrations}
       providerNotices={notices}

@@ -41,10 +41,60 @@ describe("passkey-first onboarding authority", () => {
     });
     expect(
       readPasskeyOnboardingConfig({
+        NODE_ENV: "development",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        BETTER_AUTH_SECRET: secret,
+        PASSKEY_ONBOARDING: "local-preview-v1",
+      }),
+    ).toMatchObject({
+      origin: "https://localhost:3001",
+      rpId: "localhost",
+      deploymentId: "local",
+      secureCookies: true,
+    });
+    expect(
+      readPasskeyOnboardingConfig({
         ...previewEnvironment,
         BETTER_AUTH_URL: undefined,
       }),
     ).toMatchObject({ origin: "https://preview.example.test" });
+  });
+
+  it("rejects HTTPS loopback without both local emulation gates", () => {
+    const localHttps = {
+      NODE_ENV: "development",
+      APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+      APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+      BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+      BETTER_AUTH_SECRET: secret,
+      PASSKEY_ONBOARDING: "local-preview-v1",
+    } as const;
+    expect(() =>
+      readPasskeyOnboardingConfig({
+        ...localHttps,
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: undefined,
+      }),
+    ).toThrow("explicit local provider and authentication emulation gates");
+    expect(() =>
+      readPasskeyOnboardingConfig({
+        ...localHttps,
+        APP_BUILDER_LOCAL_AUTH_EMULATION: undefined,
+      }),
+    ).toThrow("explicit local provider and authentication emulation gates");
+    expect(() =>
+      readPasskeyOnboardingConfig({
+        ...localHttps,
+        BETTER_AUTH_URL: "https://localhost:3002/api/auth",
+      }),
+    ).toThrow("explicit local provider and authentication emulation gates");
+    expect(() =>
+      readPasskeyOnboardingConfig({
+        ...localHttps,
+        VERCEL_ENV: "development",
+      }),
+    ).toThrow("non-Production loopback origin");
   });
 
   it("stays disabled without the exact feature flag", () => {

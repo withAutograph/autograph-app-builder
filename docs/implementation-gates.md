@@ -401,7 +401,7 @@ Builder resource provisioning is independently fail-closed behind
 `builder-resource-provisioning`. Do not enable that flag until all of the
 following are true in the target environment:
 
-1. Migration `0014_builder_resource_provisioning.sql` is applied and
+1. Migration `0015_builder_resource_provisioning.sql` is applied and
    `mise run hosted:storage-verify` proves the tenant-scoped provisioning
    journal, GitHub credential table, indexes, constraints, retention, and
    deletion coverage.

@@ -32,6 +32,7 @@ describe("mise-owned repository operations", () => {
       "eve-fresh-bootstrap": "ci-eve-fresh-bootstrap",
       "sandbox-toolchain": "ci-sandbox-toolchain",
       "package-build": "ci-package-build",
+      "auth-e2e-emulated": "ci-auth-e2e-emulated",
     } as const;
 
     expect(Object.keys(parsed.jobs).sort()).toEqual(
@@ -55,6 +56,11 @@ describe("mise-owned repository operations", () => {
         expect(job.steps).toContainEqual({
           run: "mise run storybook:install-browser",
         });
+      if (jobName === "auth-e2e-emulated") {
+        const authE2E = await read(".config/mise/tasks/ci-auth-e2e-emulated");
+        expect(authE2E).toContain("mise run auth-e2e:setup");
+        expect(authE2E).toContain("mise run auth-e2e:test");
+      }
       expect(job.steps).toContainEqual({ run: `mise run ${taskName}` });
     }
 

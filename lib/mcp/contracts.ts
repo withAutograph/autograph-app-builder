@@ -11,16 +11,68 @@ export const sessionStatusSchema = z.enum([
 
 export type EveSessionStatus = z.infer<typeof sessionStatusSchema>;
 
-export const publicInputRequestSchema = z.object({
-  requestId: z.string().min(1),
-  kind: z.enum(["approval", "question", "authorization"]),
-  title: z.string().min(1),
-  description: z.string().optional(),
-  options: z
-    .array(z.object({ id: z.string().min(1), label: z.string().min(1) }))
-    .optional(),
-  allowFreeform: z.boolean(),
-});
+function isLoopbackHostname(hostname: string): boolean {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(hostname.toLowerCase());
+}
+
+export const publicAuthorizationUrlSchema = z
+  .string()
+  .url()
+  .max(2_048)
+  .superRefine((value, context) => {
+    const url = new URL(value);
+    if (
+      url.username ||
+      url.password ||
+      (url.protocol !== "https:" &&
+        !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
+    )
+      context.addIssue({
+        code: "custom",
+        message:
+          "Authorization requires credential-free HTTPS or loopback URL.",
+      });
+  });
+
+export const inputPresentationSchema = z
+  .object({
+    section: z.enum(["build-with", "store-in", "deploy-to", "connections"]),
+    control: z.enum(["choice", "provider", "approval"]),
+  })
+  .strict();
+
+export const publicAuthorizationChallengeSchema = z
+  .object({
+    url: publicAuthorizationUrlSchema.optional(),
+    userCode: z.string().min(1).max(200).optional(),
+    expiresAt: z.iso.datetime().optional(),
+    instructions: z.string().min(1).max(2_000).optional(),
+    displayName: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+
+export const publicInputRequestSchema = z
+  .object({
+    requestId: z.string().min(1),
+    kind: z.enum(["approval", "question", "authorization"]),
+    title: z.string().min(1),
+    description: z.string().optional(),
+    options: z
+      .array(z.object({ id: z.string().min(1), label: z.string().min(1) }))
+      .optional(),
+    allowFreeform: z.boolean(),
+    presentation: inputPresentationSchema.optional(),
+    authorization: publicAuthorizationChallengeSchema.optional(),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    if (request.kind !== "authorization" && request.authorization)
+      context.addIssue({
+        code: "custom",
+        path: ["authorization"],
+        message: "Only authorization requests may include a challenge.",
+      });
+  });
 
 export type PublicInputRequest = z.infer<typeof publicInputRequestSchema>;
 
@@ -63,10 +115,6 @@ const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const repositoryPathSchema = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
-
-function isLoopbackHostname(hostname: string): boolean {
-  return ["localhost", "127.0.0.1", "[::1]"].includes(hostname.toLowerCase());
-}
 
 export const publicPrototypePreviewUrlSchema = z
   .string()

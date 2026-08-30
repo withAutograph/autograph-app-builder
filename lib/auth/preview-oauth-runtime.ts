@@ -331,6 +331,22 @@ export const previewOAuthRateLimit = {
   },
 } satisfies NonNullable<BetterAuthOptions["rateLimit"]>;
 
+export function authRateLimitForLocalEmulation(localEmulation: boolean) {
+  return localEmulation
+    ? {
+        ...previewOAuthRateLimit,
+        max: 600,
+        customRules: {
+          ...previewOAuthRateLimit.customRules,
+          // Better Auth applies a stricter three-request default to sign-in
+          // routes. A complete emulated suite intentionally performs several
+          // independent and returning OAuth sign-ins from one loopback client.
+          "/sign-in/social": { window: 60, max: 60 },
+        },
+      }
+    : previewOAuthRateLimit;
+}
+
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
@@ -339,6 +355,7 @@ export function readPreviewOAuthRuntimeConfig(
     if (environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1") {
       throw new Error("Local authentication emulation is unavailable.");
     }
+    const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
     return previewOAuthRuntimeConfigSchema.parse({
       hostedAdapter: environment.EVE_HOSTED_ADAPTER,
       environment: "local",
@@ -351,7 +368,7 @@ export function readPreviewOAuthRuntimeConfig(
       githubClientSecret: environment.GITHUB_CLIENT_SECRET,
       vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
       vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
-      passkeyOnboarding: null,
+      passkeyOnboarding,
     });
   }
   const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
@@ -590,7 +607,7 @@ export function createPreviewOAuthServer(input: {
       expiresIn: 60 * 60 * 8,
       updateAge: 60 * 60,
     },
-    rateLimit: previewOAuthRateLimit,
+    rateLimit: authRateLimitForLocalEmulation(localEmulation !== undefined),
     advanced: {
       cookiePrefix:
         config.environment === "preview"

@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Reset deterministic local auth E2E state"
+set -eu
+
+exec mise run app:reset-emulated

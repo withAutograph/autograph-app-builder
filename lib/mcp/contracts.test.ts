@@ -2,9 +2,65 @@ import { describe, expect, it } from "vitest";
 
 import {
   eveRespondInputSchema,
+  publicInputRequestSchema,
   publicImplementationPlanSchema,
   publicPrototypeSchema,
 } from "./contracts";
+
+describe("publicInputRequestSchema", () => {
+  const authorization = {
+    requestId: "authorize-one",
+    kind: "authorization" as const,
+    title: "GitHub",
+    allowFreeform: false,
+  };
+
+  it("accepts only safe authorization challenges", () => {
+    for (const url of [
+      "https://github.com/login/oauth/authorize?state=opaque",
+      "http://127.0.0.1:4000/callback",
+    ])
+      expect(
+        publicInputRequestSchema.safeParse({
+          ...authorization,
+          authorization: { url, displayName: "GitHub" },
+        }).success,
+      ).toBe(true);
+
+    for (const url of [
+      "http://github.example/authorize",
+      "https://user:secret@github.example/authorize",
+      "javascript:alert(1)",
+    ])
+      expect(
+        publicInputRequestSchema.safeParse({
+          ...authorization,
+          authorization: { url },
+        }).success,
+      ).toBe(false);
+  });
+
+  it("keeps presentation metadata closed and authorization-specific", () => {
+    expect(
+      publicInputRequestSchema.safeParse({
+        requestId: "choice-one",
+        kind: "question",
+        title: "Store in",
+        allowFreeform: false,
+        presentation: { section: "store-in", control: "provider" },
+      }).success,
+    ).toBe(true);
+    expect(
+      publicInputRequestSchema.safeParse({
+        requestId: "choice-one",
+        kind: "question",
+        title: "Store in",
+        allowFreeform: false,
+        authorization: { url: "https://github.com" },
+      }).success,
+    ).toBe(false);
+  });
+});
 
 const response = (requestId: string) => ({
   requestId,

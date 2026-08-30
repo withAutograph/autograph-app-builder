@@ -13,6 +13,7 @@ export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
 
 type Digest = string;
 type ObjectId = string;
+export type GitHubRepositorySelection = "all" | "selected";
 export type GitHubOperation =
   | "resolve-existing-source"
   | "create-fresh-repository"
@@ -34,7 +35,7 @@ export type GitHubInstallationIdentity = {
   accountId: string;
   accountLogin: string;
   accountType: "Organization" | "User";
-  repositorySelection: "selected";
+  repositorySelection: GitHubRepositorySelection;
   selectedRepositoryIds: readonly string[];
   permissions: GitHubPermissions;
   digest: Digest;
@@ -923,7 +924,8 @@ export function createGitHubInstallationIdentity(
     !isDecimal(input.accountId) ||
     !safeName(input.accountLogin) ||
     (input.accountType !== "Organization" && input.accountType !== "User") ||
-    input.repositorySelection !== "selected" ||
+    (input.repositorySelection !== "all" &&
+      input.repositorySelection !== "selected") ||
     !Array.isArray(input.selectedRepositoryIds) ||
     new Set(input.selectedRepositoryIds).size !==
       input.selectedRepositoryIds.length ||
@@ -937,7 +939,7 @@ export function createGitHubInstallationIdentity(
     accountId: input.accountId,
     accountLogin: input.accountLogin,
     accountType: input.accountType,
-    repositorySelection: "selected" as const,
+    repositorySelection: input.repositorySelection,
     selectedRepositoryIds: [...input.selectedRepositoryIds].toSorted(),
     permissions: githubPermissionsFor(input.operation),
   };

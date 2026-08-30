@@ -21,6 +21,46 @@ const STATE_LIFETIME_MS = 10 * 60 * 1_000;
 const MAX_RESPONSE_BYTES = 2 * 1_024 * 1_024;
 const FAILURE_MESSAGE = "GitHub App installation authorization failed.";
 
+export type GitHubInstallationAuthorizationFailureStage =
+  | "callback-state-validation"
+  | "membership-state-consumption"
+  | "token-exchange-transport"
+  | "token-exchange-non-2xx"
+  | "token-exchange-oauth-error"
+  | "token-response-schema"
+  | "oauth-callback-error"
+  | "github-user-verification"
+  | "installation-identity-validation"
+  | "durable-tenant-binding";
+
+export type GitHubOAuthErrorCategory =
+  | "incorrect_client_credentials"
+  | "redirect_uri_mismatch"
+  | "bad_verification_code"
+  | "unverified_user_email";
+
+export type GitHubOAuthCallbackError =
+  "access_denied" | "temporarily_unavailable" | "server_error";
+
+export class GitHubInstallationAuthorizationError extends Error {
+  constructor(
+    readonly stage: GitHubInstallationAuthorizationFailureStage,
+    readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
+    readonly returnState?: ProviderConnectionReturn,
+  ) {
+    super(FAILURE_MESSAGE);
+  }
+}
+
+export function githubInstallationAuthorizationDiagnostic(error: unknown) {
+  if (!(error instanceof GitHubInstallationAuthorizationError))
+    return undefined;
+  return {
+    stage: error.stage,
+    ...(error.category === undefined ? {} : { category: error.category }),
+  };
+}
+
 type HostedTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 const decimalSchema = z.string().regex(/^[1-9][0-9]*$/u);
@@ -32,6 +72,7 @@ const githubLoginSchema = z
 const configSchema = z
   .object({
     appId: decimalSchema,
+    appSlug: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u),
     clientId: z
       .string()
       .min(1)
@@ -96,6 +137,7 @@ export function readGitHubAppInstallationEnvironment(
   }
   const parsed = configSchema.safeParse({
     appId: environment.GITHUB_APP_ID,
+    appSlug: environment.GITHUB_APP_SLUG,
     clientId: environment.GITHUB_APP_CLIENT_ID,
     clientSecret: environment.GITHUB_APP_CLIENT_SECRET,
     stateSecret: environment.GITHUB_APP_INSTALL_STATE_SECRET,
@@ -129,6 +171,15 @@ export interface GitHubInstallationMembershipAuthority {
 }
 
 type Fetch = typeof fetch;
+
+function githubOAuthErrorCategory(value: unknown) {
+  return value === "incorrect_client_credentials" ||
+    value === "redirect_uri_mismatch" ||
+    value === "bad_verification_code" ||
+    value === "unverified_user_email"
+    ? value
+    : undefined;
+}
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -319,13 +370,41 @@ function verifyState(input: {
 
 function callbackInput(url: string) {
   const query = new URL(url).searchParams;
-  const allowed = new Set(["code", "installation_id", "setup_action", "state"]);
+  const allowed = new Set([
+    "code",
+    "error",
+    "error_description",
+    "error_uri",
+    "installation_id",
+    "setup_action",
+    "state",
+  ]);
   for (const key of query.keys()) {
     if (!allowed.has(key) || query.getAll(key).length !== 1)
       throw new Error("invalid-callback");
   }
   const state = z.string().min(1).max(2_048).parse(query.get("state"));
   const code = query.get("code");
+  const oauthError = query.get("error");
+  if (oauthError !== null) {
+    if (
+      code !== null ||
+      query.has("installation_id") ||
+      query.has("setup_action") ||
+      query.getAll("error").length !== 1 ||
+      !["access_denied", "temporarily_unavailable", "server_error"].includes(
+        oauthError,
+      )
+    )
+      throw new Error("invalid-callback");
+    for (const key of ["error_description", "error_uri"])
+      if (query.getAll(key).length > 1) throw new Error("invalid-callback");
+    return {
+      kind: "oauth-error" as const,
+      error: oauthError as GitHubOAuthCallbackError,
+      state,
+    };
+  }
   if (code !== null) {
     if (
       query.getAll("code").length !== 1 ||
@@ -372,29 +451,52 @@ async function userAccessToken(input: {
     "/github/installations/callback",
     input.config.issuer,
   ).toString();
-  const response = await input.request(
-    `${GITHUB_ORIGIN}/login/oauth/access_token`,
-    {
-      method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(15_000),
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": USER_AGENT,
+  let response: Response;
+  try {
+    response = await input.request(
+      `${GITHUB_ORIGIN}/login/oauth/access_token`,
+      {
+        method: "POST",
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": USER_AGENT,
+        },
+        body: new URLSearchParams({
+          client_id: input.config.clientId,
+          client_secret: input.config.clientSecret,
+          code: input.code,
+          code_verifier: input.codeVerifier,
+          redirect_uri: callback,
+        }),
       },
-      body: new URLSearchParams({
-        client_id: input.config.clientId,
-        client_secret: input.config.clientSecret,
-        code: input.code,
-        code_verifier: input.codeVerifier,
-        redirect_uri: callback,
-      }),
-    },
-  );
-  if (!response.ok) throw new Error("token-exchange-failed");
-  const body = await boundedJson(response);
-  if (!record(body)) throw new Error("invalid-response");
+    );
+  } catch {
+    throw new GitHubInstallationAuthorizationError("token-exchange-transport");
+  }
+  if (!response.ok) {
+    let category: GitHubOAuthErrorCategory | undefined;
+    try {
+      const responseBody = await boundedJson(response);
+      if (record(responseBody))
+        category = githubOAuthErrorCategory(responseBody.error);
+    } catch {
+      // The diagnostic remains bounded when an error response is malformed.
+    }
+    throw new GitHubInstallationAuthorizationError(
+      "token-exchange-non-2xx",
+      category,
+    );
+  }
+  let body: unknown;
+  try {
+    body = await boundedJson(response);
+    if (!record(body)) throw new Error("invalid-response");
+  } catch {
+    throw new GitHubInstallationAuthorizationError("token-response-schema");
+  }
   const allowed = new Set([
     "access_token",
     "token_type",
@@ -403,60 +505,67 @@ async function userAccessToken(input: {
     "refresh_token",
     "refresh_token_expires_in",
   ]);
-  if (Object.keys(body).some((key) => !allowed.has(key)))
-    throw new Error("invalid-response");
-  const accessToken = stringProperty(body, "access_token");
-  if (
-    accessToken.length < 20 ||
-    accessToken.length > 512 ||
-    /[\0\r\n]/u.test(accessToken) ||
-    stringProperty(body, "token_type") !== "bearer" ||
-    stringProperty(body, "scope") !== ""
-  ) {
-    throw new Error("invalid-response");
-  }
-  for (const key of ["expires_in", "refresh_token_expires_in"] as const) {
-    if (
-      key in body &&
-      (typeof body[key] !== "number" ||
-        !Number.isSafeInteger(body[key]) ||
-        body[key] <= 0)
-    ) {
+  try {
+    if ("error" in body)
+      throw new GitHubInstallationAuthorizationError(
+        "token-exchange-oauth-error",
+        githubOAuthErrorCategory(body.error),
+      );
+    if (Object.keys(body).some((key) => !allowed.has(key)))
       throw new Error("invalid-response");
+    const accessToken = stringProperty(body, "access_token");
+    if (
+      accessToken.length < 20 ||
+      accessToken.length > 512 ||
+      /[\0\r\n]/u.test(accessToken) ||
+      stringProperty(body, "token_type") !== "bearer" ||
+      stringProperty(body, "scope") !== ""
+    )
+      throw new Error("invalid-response");
+    for (const key of ["expires_in", "refresh_token_expires_in"] as const) {
+      if (
+        key in body &&
+        (typeof body[key] !== "number" ||
+          !Number.isSafeInteger(body[key]) ||
+          body[key] <= 0)
+      )
+        throw new Error("invalid-response");
     }
+    if (
+      "refresh_token" in body &&
+      (typeof body.refresh_token !== "string" ||
+        body.refresh_token.length < 20 ||
+        body.refresh_token.length > 512 ||
+        /[\0\r\n]/u.test(body.refresh_token))
+    )
+      throw new Error("invalid-response");
+    const expiring = "expires_in" in body;
+    if (
+      (expiring &&
+        (!("refresh_token" in body) ||
+          !("refresh_token_expires_in" in body))) ||
+      (!expiring &&
+        ("refresh_token" in body || "refresh_token_expires_in" in body))
+    )
+      throw new Error("invalid-response");
+    return {
+      accessToken,
+      ...(expiring
+        ? {
+            accessTokenExpiresAt: new Date(
+              input.now + Number(body.expires_in) * 1_000,
+            ).toISOString(),
+            refreshToken: stringProperty(body, "refresh_token"),
+            refreshTokenExpiresAt: new Date(
+              input.now + Number(body.refresh_token_expires_in) * 1_000,
+            ).toISOString(),
+          }
+        : {}),
+    };
+  } catch (error) {
+    if (error instanceof GitHubInstallationAuthorizationError) throw error;
+    throw new GitHubInstallationAuthorizationError("token-response-schema");
   }
-  if (
-    "refresh_token" in body &&
-    (typeof body.refresh_token !== "string" ||
-      body.refresh_token.length < 20 ||
-      body.refresh_token.length > 512 ||
-      /[\0\r\n]/u.test(body.refresh_token))
-  ) {
-    throw new Error("invalid-response");
-  }
-  const expiring = "expires_in" in body;
-  if (
-    (expiring &&
-      (!("refresh_token" in body) || !("refresh_token_expires_in" in body))) ||
-    (!expiring &&
-      ("refresh_token" in body || "refresh_token_expires_in" in body))
-  ) {
-    throw new Error("invalid-response");
-  }
-  return {
-    accessToken,
-    ...(expiring
-      ? {
-          accessTokenExpiresAt: new Date(
-            input.now + Number(body.expires_in) * 1_000,
-          ).toISOString(),
-          refreshToken: stringProperty(body, "refresh_token"),
-          refreshTokenExpiresAt: new Date(
-            input.now + Number(body.refresh_token_expires_in) * 1_000,
-          ).toISOString(),
-        }
-      : {}),
-  };
 }
 
 async function githubJson(input: {
@@ -514,6 +623,7 @@ async function accessibleInstallation(input: {
   request: Fetch;
   token: string;
   appId: string;
+  appSlug: string;
   requestedInstallationId?: string;
 }) {
   const candidates: ReturnType<typeof installationIdentity>[] = [];
@@ -539,7 +649,7 @@ async function accessibleInstallation(input: {
       const installation = installationIdentity(value);
       if (
         installation.appId === input.appId &&
-        installation.appSlug === "autograph-app-builder" &&
+        installation.appSlug === input.appSlug &&
         installation.targetType === installation.accountType &&
         (input.requestedInstallationId === undefined ||
           installation.installationId === input.requestedInstallationId)
@@ -570,6 +680,27 @@ export function createGitHubAppInstallationAuthorization(input: {
   const now = input.now ?? Date.now;
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
 
+  async function persistInstallationBinding(
+    authority: HostedTenantAuthority,
+    installation: ReturnType<typeof installationIdentity>,
+    appliedAt: Date,
+  ) {
+    try {
+      return await input.installationStore.bind({
+        authority,
+        binding: {
+          installationId: installation.installationId,
+          accountId: installation.accountId,
+          accountLogin: installation.accountLogin,
+          accountType: installation.accountType,
+        },
+        now: appliedAt,
+      });
+    } catch {
+      throw new GitHubInstallationAuthorizationError("durable-tenant-binding");
+    }
+  }
+
   return {
     async begin(
       authorityInput: HostedTenantAuthority,
@@ -598,10 +729,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         });
         const redirect = input.emulation
           ? new URL("/local-connections/github", config.issuer)
-          : new URL(
-              "/apps/autograph-app-builder/installations/new",
-              GITHUB_ORIGIN,
-            );
+          : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
         redirect.searchParams.set("state", state.state);
         return {
           version: 1 as const,
@@ -619,27 +747,48 @@ export function createGitHubAppInstallationAuthorization(input: {
 
     async complete(inputUrl: string, authorityInput: HostedTenantAuthority) {
       try {
-        const authority = hostedTenantAuthoritySchema.parse(authorityInput);
-        const callback = callbackInput(inputUrl);
-        const current = now();
-        const state = verifyState({
-          state: callback.state,
-          authority,
-          stateSecret: config.stateSecret,
-          now: current,
-        });
-        if (!(await input.membership.isActiveMember(authority)))
-          throw new Error("membership-inactive");
-        if (
-          !(await input.stateStore.consume({
-            stateDigest: state.stateDigest,
+        let authority: HostedTenantAuthority;
+        let callback: ReturnType<typeof callbackInput>;
+        let state: ReturnType<typeof verifyState>;
+        try {
+          authority = hostedTenantAuthoritySchema.parse(authorityInput);
+          callback = callbackInput(inputUrl);
+          state = verifyState({
+            state: callback.state,
             authority,
-            authorityDigest: state.authorityDigest,
-            now: new Date(current),
-          }))
-        ) {
-          throw new Error("state-replayed");
+            stateSecret: config.stateSecret,
+            now: now(),
+          });
+        } catch {
+          throw new GitHubInstallationAuthorizationError(
+            "callback-state-validation",
+          );
         }
+        const current = now();
+        try {
+          if (!(await input.membership.isActiveMember(authority)))
+            throw new Error("membership-inactive");
+          if (
+            !(await input.stateStore.consume({
+              stateDigest: state.stateDigest,
+              authority,
+              authorityDigest: state.authorityDigest,
+              now: new Date(current),
+            }))
+          )
+            throw new Error("state-replayed");
+        } catch {
+          throw new GitHubInstallationAuthorizationError(
+            "membership-state-consumption",
+          );
+        }
+
+        if (callback.kind === "oauth-error")
+          throw new GitHubInstallationAuthorizationError(
+            "oauth-callback-error",
+            callback.error,
+            state.returnState,
+          );
 
         if (callback.kind === "install") {
           if (
@@ -734,49 +883,70 @@ export function createGitHubAppInstallationAuthorization(input: {
                   )) as typeof fetch,
               })
           : githubJson;
-        const user = await githubRequest({
-          request,
-          token: tokens.accessToken,
-          path: "/user",
-        });
-        const providerUserId = decimalProperty(user, "id");
-        const providerLogin = githubLoginSchema.parse(
-          stringProperty(user, "login"),
-        );
-        const installation = input.emulation
-          ? await (async () => {
-              const response = await request(
-                `${input.emulation!.githubOrigin}/repos/${input.emulation!.githubRepository}/installation`,
-                { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
-              );
-              if (!response.ok) throw new Error("github-verification-failed");
-              const value = installationIdentity(await boundedJson(response));
-              if (
-                value.installationId !== state.installationId ||
-                value.appId !== config.appId
-              )
-                throw new Error("installation-mismatch");
-              return value;
-            })()
-          : await accessibleInstallation({
-              request,
-              token: tokens.accessToken,
-              appId: config.appId,
-              requestedInstallationId: state.installationId,
-            });
-        if (
-          installation.repositorySelection !== "selected" ||
-          installation.suspendedAt !== null
-        ) {
-          throw new Error("installation-mismatch");
+        let providerUserId: string;
+        let providerLogin: string;
+        try {
+          const user = await githubRequest({
+            request,
+            token: tokens.accessToken,
+            path: "/user",
+          });
+          providerUserId = decimalProperty(user, "id");
+          providerLogin = githubLoginSchema.parse(
+            stringProperty(user, "login"),
+          );
+        } catch {
+          throw new GitHubInstallationAuthorizationError(
+            "github-user-verification",
+          );
         }
-        if (
-          installation.accountType === "User" &&
-          installation.accountId !== providerUserId
-        )
-          throw new Error("installation-owner-mismatch");
-        if (!(await input.membership.isActiveMember(authority)))
-          throw new Error("membership-inactive");
+        let installation: ReturnType<typeof installationIdentity>;
+        try {
+          installation = input.emulation
+            ? await (async () => {
+                const response = await request(
+                  `${input.emulation!.githubOrigin}/repos/${input.emulation!.githubRepository}/installation`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${tokens.accessToken}`,
+                    },
+                  },
+                );
+                if (!response.ok) throw new Error("github-verification-failed");
+                const value = installationIdentity(await boundedJson(response));
+                if (
+                  value.installationId !== state.installationId ||
+                  value.appId !== config.appId
+                )
+                  throw new Error("installation-mismatch");
+                return value;
+              })()
+            : await accessibleInstallation({
+                request,
+                token: tokens.accessToken,
+                appId: config.appId,
+                appSlug: config.appSlug,
+                requestedInstallationId: state.installationId,
+              });
+          if (installation.suspendedAt !== null) throw new Error();
+          if (
+            installation.accountType === "User" &&
+            installation.accountId !== providerUserId
+          )
+            throw new Error();
+        } catch {
+          throw new GitHubInstallationAuthorizationError(
+            "installation-identity-validation",
+          );
+        }
+        try {
+          if (!(await input.membership.isActiveMember(authority)))
+            throw new Error("membership-inactive");
+        } catch {
+          throw new GitHubInstallationAuthorizationError(
+            "membership-state-consumption",
+          );
+        }
 
         const appliedAt = new Date(now());
         if (input.credentialStore) {
@@ -788,16 +958,11 @@ export function createGitHubAppInstallationAuthorization(input: {
             now: appliedAt,
           });
         }
-        const binding = await input.installationStore.bind({
+        const binding = await persistInstallationBinding(
           authority,
-          binding: {
-            installationId: installation.installationId,
-            accountId: installation.accountId,
-            accountLogin: installation.accountLogin,
-            accountType: installation.accountType,
-          },
-          now: appliedAt,
-        });
+          installation,
+          appliedAt,
+        );
         return {
           version: 1 as const,
           action: "github-app.installation.complete" as const,
@@ -816,12 +981,13 @@ export function createGitHubAppInstallationAuthorization(input: {
             JSON.stringify({ id: providerUserId, login: providerLogin }),
           ),
           accountType: binding.accountType,
-          repositorySelection: "selected" as const,
+          repositorySelection: installation.repositorySelection,
           setupAction: state.setupAction,
           returnState: state.returnState,
           appliedAt: appliedAt.toISOString(),
         };
-      } catch {
+      } catch (error) {
+        if (error instanceof GitHubInstallationAuthorizationError) throw error;
         throw new Error(FAILURE_MESSAGE);
       }
     },

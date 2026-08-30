@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  builderComingSoonFlag,
   builderConnectionsFlag,
   builderResourceProvisioningFlag,
   selfServiceSignupFlag,
@@ -18,6 +19,8 @@ describe("Vercel feature flags", () => {
       { value: false, label: "Disabled" },
       { value: true, label: "Enabled" },
     ]);
+    expect(builderComingSoonFlag.key).toBe("builder-coming-soon");
+    expect(builderComingSoonFlag.defaultValue).toBe(false);
     expect(selfServiceSignupFlag.key).toBe("self-service-signup");
     expect(selfServiceSignupFlag.defaultValue).toBe(false);
     expect(selfServiceSignupFlag.options).toEqual([

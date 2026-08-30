@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Run the complete emulated authentication CI lane"
+set -eu
+
+mise run auth-e2e:setup
+exec mise run auth-e2e:test
