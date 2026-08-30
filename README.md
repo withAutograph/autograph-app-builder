@@ -491,6 +491,9 @@ presence does not create a client, consent, grant, key, membership, or token.
 Hosted identity uses verified GitHub or Vercel sign-in. Local development and
 Deployment-Protected Preview deployments may separately enable passkey-first
 testing as described in [passkey testing](docs/passkey-preview-testing.md).
+Stable callback origins and deployment receipts for hosted integration tests
+are documented in
+[Preview integration testing](docs/preview-integration-testing.md).
 Passkey users receive a real Better Auth session and deployment-bound personal
 workspace without being represented as email-verified. Production onboarding
 remains disabled. The App Builder does not accept or store a user password.

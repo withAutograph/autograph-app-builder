@@ -49,8 +49,13 @@ agree exactly. Every generated Preview hostname is a different WebAuthn RP and
 therefore has independent passkeys and workspace data. Removing Deployment
 Protection requires removing the passkey flags first.
 
+Stable Preview endpoints and provider callback configuration are documented in
+[Preview integration testing](preview-integration-testing.md). Passkey QA
+continues to use the generated deployment hostname under the current exact
+origin and deployment binding.
+
 ## Recovery
 
 Passkey-first accounts have no verified email recovery. Add a second passkey in
 Account settings before treating the account as durable. The server refuses to
-delete the final passkey. OAuth linking and stable Preview aliases are deferred.
+delete the final passkey. OAuth linking remains separate from passkey recovery.
