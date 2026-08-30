@@ -20,6 +20,7 @@ type Story = StoryObj<typeof meta>;
 export const CodexSelected: Story = {};
 export const CursorSelected: Story = { args: { selected: "cursor" } };
 export const SelectCursor: Story = {
+  args: { comingSoonEnabled: true },
   play: async ({ canvasElement, args }) => {
     await userEvent.click(within(canvasElement).getByText("Cursor"));
     await expect(args.onChange).toHaveBeenCalledWith("cursor");
