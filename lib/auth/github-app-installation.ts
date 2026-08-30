@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
+import type { LocalProviderEmulation } from "../integrations/local-provider-emulation";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 
 const GITHUB_ORIGIN = "https://github.com";
@@ -546,6 +547,7 @@ export function createGitHubAppInstallationAuthorization(input: {
   fetch?: Fetch;
   now?: () => number;
   nonce?: () => string;
+  emulation?: LocalProviderEmulation;
 }) {
   const config = configSchema.parse(input.config);
   const request = input.fetch ?? fetch;
@@ -578,10 +580,12 @@ export function createGitHubAppInstallationAuthorization(input: {
           expiresAt: state.expiresAt,
           returnState,
         });
-        const redirect = new URL(
-          "/apps/autograph-app-builder/installations/new",
-          GITHUB_ORIGIN,
-        );
+        const redirect = input.emulation
+          ? new URL("/local-connections/github", config.issuer)
+          : new URL(
+              "/apps/autograph-app-builder/installations/new",
+              GITHUB_ORIGIN,
+            );
         redirect.searchParams.set("state", state.state);
         return {
           version: 1 as const,
@@ -657,7 +661,11 @@ export function createGitHubAppInstallationAuthorization(input: {
               now: issuedAt,
             }).nonce,
           );
-          const authorizeUrl = new URL("/login/oauth/authorize", GITHUB_ORIGIN);
+          const authorizeUrl = input.emulation
+            ? new URL("/local-connections/github", config.issuer)
+            : new URL("/login/oauth/authorize", GITHUB_ORIGIN);
+          if (input.emulation)
+            authorizeUrl.searchParams.set("phase", "authorize");
           authorizeUrl.searchParams.set("client_id", config.clientId);
           authorizeUrl.searchParams.set(
             "redirect_uri",
@@ -687,23 +695,52 @@ export function createGitHubAppInstallationAuthorization(input: {
           throw new Error("state-phase-mismatch");
         }
 
-        const token = await userAccessToken({
-          config,
-          code: callback.code,
-          codeVerifier: codeVerifier(config.stateSecret, state.nonce),
-          request,
-        });
-        const user = await githubJson({ request, token, path: "/user" });
+        const token =
+          input.emulation && callback.code === "emulated"
+            ? input.emulation.token
+            : await userAccessToken({
+                config,
+                code: callback.code,
+                codeVerifier: codeVerifier(config.stateSecret, state.nonce),
+                request,
+              });
+        const githubRequest = input.emulation
+          ? (args: Parameters<typeof githubJson>[0]) =>
+              githubJson({
+                ...args,
+                request: ((url, init) =>
+                  request(
+                    `${input.emulation!.githubOrigin}${new URL(String(url)).pathname}${new URL(String(url)).search}`,
+                    init,
+                  )) as typeof fetch,
+              })
+          : githubJson;
+        const user = await githubRequest({ request, token, path: "/user" });
         const providerUserId = decimalProperty(user, "id");
         const providerLogin = githubLoginSchema.parse(
           stringProperty(user, "login"),
         );
-        const installation = await accessibleInstallation({
-          request,
-          token,
-          appId: config.appId,
-          requestedInstallationId: state.installationId,
-        });
+        const installation = input.emulation
+          ? await (async () => {
+              const response = await request(
+                `${input.emulation!.githubOrigin}/repos/${input.emulation!.githubRepository}/installation`,
+                { headers: { Authorization: `Bearer ${token}` } },
+              );
+              if (!response.ok) throw new Error("github-verification-failed");
+              const value = installationIdentity(await boundedJson(response));
+              if (
+                value.installationId !== state.installationId ||
+                value.appId !== config.appId
+              )
+                throw new Error("installation-mismatch");
+              return value;
+            })()
+          : await accessibleInstallation({
+              request,
+              token,
+              appId: config.appId,
+              requestedInstallationId: state.installationId,
+            });
         if (
           installation.repositorySelection !== "selected" ||
           installation.suspendedAt !== null

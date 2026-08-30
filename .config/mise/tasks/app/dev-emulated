@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="Run Next with local Vercel and GitHub Emulate connections"
+set -eu
+
+"$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts
+"$(mise which pnpm)" exec emulate start --service vercel,github --seed .emulate/config.yaml &
+emulate_pid=$!
+trap 'kill "$emulate_pid" 2>/dev/null || true' EXIT INT TERM
+
+APP_BUILDER_LOCAL_PROVIDER_EMULATION=1 \
+VERCEL_EMULATOR_URL=http://localhost:4000 \
+GITHUB_EMULATOR_URL=http://localhost:4001 \
+EMULATE_PROVIDER_TOKEN=emulate_local_provider_token \
+EMULATE_VERCEL_CONFIGURATION_ID=icfg_local_1 \
+EMULATE_VERCEL_TEAM_ID=autograph-local \
+EMULATE_GITHUB_INSTALLATION_ID=1001 \
+EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app \
+.config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/next/dist/bin/next dev "$@"

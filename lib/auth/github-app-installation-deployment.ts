@@ -7,6 +7,7 @@ import {
 } from "./github-app-installation";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
+import { readLocalProviderEmulation } from "../integrations/local-provider-emulation";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
 import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
@@ -203,6 +204,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       isActiveMember: (authority) => membership.isActiveMember(authority),
     },
     installationStore: createPostgresHostedGitHubInstallationStore(database),
+    emulation: readLocalProviderEmulation(environment),
   });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     origin: new URL(config.issuer).origin,

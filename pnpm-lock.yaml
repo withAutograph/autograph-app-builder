@@ -141,6 +141,9 @@ importers:
       axe-core:
         specifier: 4.10.3
         version: 4.10.3
+      emulate:
+        specifier: 0.10.0
+        version: 0.10.0
       eslint:
         specifier: 9.39.5
         version: 9.39.5(jiti@2.7.0)
@@ -2509,6 +2512,10 @@ packages:
 
   emoji-regex@9.2.2:
     resolution: {integrity: sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==}
+
+  emulate@0.10.0:
+    resolution: {integrity: sha512-UBep7swzzmwPSdRFudo7jW4ukBFlF6Pk13wgJzQHtjvZm4a5iyP6b0uatj+HZoP6kENeoi4YyLv3ELUl5D6RnA==}
+    hasBin: true
 
   encodeurl@2.0.0:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
@@ -6952,6 +6959,12 @@ snapshots:
   emoji-regex@10.6.0: {}
 
   emoji-regex@9.2.2: {}
+
+  emulate@0.10.0:
+    dependencies:
+      commander: 14.0.3
+      picocolors: 1.1.1
+      yaml: 2.9.0
 
   encodeurl@2.0.0: {}
 

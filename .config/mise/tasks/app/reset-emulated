@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Reset only ignored local Emulate state"
+set -eu
+
+state_dir=.emulate
+if [ -d "$state_dir" ]; then
+  find "$state_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+fi
