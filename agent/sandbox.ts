@@ -16,7 +16,6 @@ import {
   sandboxRevalidationKey,
 } from "@/lib/sandbox/toolchain";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
-import { readHostedArtifactBytes } from "@/lib/sandbox/hosted-artifact";
 import { readHostedManagedSeedFiles } from "@/lib/sandbox/hosted-managed-seeds";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { ensureSandboxDirectories } from "@/lib/repository/sandbox-filesystem";
@@ -36,11 +35,6 @@ const bootstrapHostedVercelSandbox: NonNullable<
 > = async ({ use }) => {
   // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
   const sandbox = await use();
-  await ensureSandboxDirectories(sandbox, [".app-builder"]);
-  await sandbox.writeBinaryFile({
-    path: ".app-builder/hosted-seed.tar.gz",
-    content: readHostedArtifactBytes(),
-  });
   const result = await sandbox.run({
     command: hostedToolchainBootstrapCommand(),
     abortSignal: AbortSignal.timeout(120_000),
@@ -78,11 +72,6 @@ function createMicrosandboxDefinition() {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       const sandbox = await use();
       if (useHostedArtifactProof) {
-        await ensureSandboxDirectories(sandbox, [".app-builder"]);
-        await sandbox.writeBinaryFile({
-          path: ".app-builder/hosted-seed.tar.gz",
-          content: readHostedArtifactBytes(),
-        });
         const result = await sandbox.run({
           command: hostedArtifactWorkspaceInstallCommand(),
           abortSignal: AbortSignal.timeout(120_000),
