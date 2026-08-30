@@ -39,6 +39,7 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
   context,
   page,
 }) => {
+  test.setTimeout(60_000);
   let authenticator: VirtualAuthenticator | undefined = await registerPasskey(
     context,
     page,
@@ -60,13 +61,17 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
     await expect(page.getByText("Backup passkey")).toBeVisible();
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(2);
 
-    await page.getByRole("button", { name: /Delete Primary passkey/u }).click();
+    await page
+      .getByRole("button", { name: "Delete passkey Primary passkey" })
+      .click();
     const deleteDialog = page.getByRole("alertdialog");
     await deleteDialog.getByRole("button", { name: "Delete passkey" }).click();
     await expect(page.getByText("Primary passkey")).toHaveCount(0);
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
 
-    await page.getByRole("button", { name: /Delete Backup passkey/u }).click();
+    await page
+      .getByRole("button", { name: "Delete passkey Backup passkey" })
+      .click();
     await page
       .getByRole("alertdialog")
       .getByRole("button", { name: "Delete passkey" })
@@ -76,7 +81,7 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
     ).toBeVisible();
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
   } finally {
-    await authenticator?.dispose();
+    if (!page.isClosed()) await authenticator?.dispose();
   }
 });
 

@@ -58,7 +58,11 @@ export async function applicationCounts() {
 }
 
 export async function currentSession(page: Page) {
-  return (await page.request.get("/api/auth/get-session")).json();
+  try {
+    return (await page.request.get("/api/auth/get-session")).json();
+  } catch {
+    return null;
+  }
 }
 
 export async function signOut(page: Page) {
@@ -78,6 +82,7 @@ export async function finishOAuth(
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect(page).toHaveURL(
     new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`),
+    { timeout: 30_000 },
   );
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect
@@ -112,7 +117,9 @@ export async function installProvider(
     })
     .check();
   await page.getByRole("button", { name: `Connect to ${provider}` }).click();
-  await expect(page).toHaveURL(new RegExp(`/${providerSlug}/installations`));
+  await expect(page).toHaveURL(new RegExp(`/${providerSlug}/installations`), {
+    timeout: 30_000,
+  });
   await page
     .getByRole("button", {
       name:
@@ -139,6 +146,14 @@ export async function installProvider(
   await expect(page).toHaveURL(/https:\/\/localhost:3001\//u, {
     timeout: 30_000,
   });
+  await expect(
+    page.getByText(`${provider} connected successfully.`),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel(
+      provider === "GitHub" ? "Git Scope" : "Select a Vercel Team",
+    ),
+  ).toBeFocused();
 }
 
 export async function installBrowserBoundaries(

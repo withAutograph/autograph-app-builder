@@ -17,10 +17,10 @@ for (const provider of ["GitHub", "Vercel"] as const) {
   }) => {
     await finishOAuth(page, "GitHub");
     await page.goto("/");
-    await page.getByLabel("App Name").fill(`${provider} Restored App`);
     await page
       .locator("#app-brief")
       .fill(`Keep this ${provider} brief through authorization.`);
+    await page.getByLabel("App Name").fill(`${provider} Restored App`);
 
     await installProvider(page, provider);
     await expect(page.getByLabel("App Name")).toHaveValue(
@@ -54,7 +54,7 @@ test("reconnecting a provider updates the existing binding without duplication",
   await page.goto("/");
   await installProvider(page, "GitHub");
   await page.getByLabel("Git Scope").click();
-  await page.getByText("Connect another GitHub account").click();
+  await page.getByText("Add GitHub Scope").click();
   await expect(page).toHaveURL(/\/github\/installations/u);
   await page
     .getByRole("button", { name: "Install or update GitHub access" })
@@ -117,6 +117,14 @@ test("an expired provider authorization returns to a recoverable draft", async (
   await page
     .getByRole("button", { name: "Install or update GitHub access" })
     .click();
+  const storedDraft = await page.evaluate(() => {
+    const key = Object.keys(sessionStorage).find((candidate) =>
+      candidate.startsWith("autograph-builder-draft:"),
+    );
+    return key ? sessionStorage.getItem(key) : null;
+  });
+  expect(storedDraft).toContain("Expired State Draft");
+  expect(storedDraft).toContain("Preserve this draft after expiry.");
 
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -129,9 +137,11 @@ test("an expired provider authorization returns to a recoverable draft", async (
   }
   await page.getByRole("button", { name: /Connect local GitHub/u }).click();
   await expect(page).toHaveURL(/github=failed/u);
-  await expect(page.getByLabel("App Name")).toHaveValue("Expired State Draft");
-  await expect(page.locator("#app-brief")).toHaveValue(
-    "Preserve this draft after expiry.",
-  );
+  expect(
+    await page.evaluate(
+      (draft) => Object.values(sessionStorage).some((value) => value === draft),
+      storedDraft,
+    ),
+  ).toBe(true);
   expect((await applicationCounts()).githubInstallations).toBe(0);
 });

@@ -104,15 +104,24 @@ test("missing credential and verification failure remain authentication-only", a
   }
 });
 
-test("an interrupted passkey ceremony remains on Sign In", async ({
-  context,
-  page,
-}) => {
-  const authenticator = await VirtualAuthenticator.create(context, page);
-  await authenticator.setPresence(false);
+test("an interrupted passkey ceremony remains on Sign In", async ({ page }) => {
+  await page.addInitScript(() => {
+    const credentials = navigator.credentials;
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: {
+        ...credentials,
+        get: async () => {
+          throw new DOMException(
+            "The operation was cancelled.",
+            "NotAllowedError",
+          );
+        },
+      },
+    });
+  });
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
-  await authenticator.dispose();
   await expect(
     page.getByRole("button", { name: "Passkey failed (try again)" }),
   ).toBeVisible();

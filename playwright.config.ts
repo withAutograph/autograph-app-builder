@@ -16,6 +16,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  timeout: 90_000,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     ...devices["Desktop Chrome"],

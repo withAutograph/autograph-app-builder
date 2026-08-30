@@ -26,7 +26,7 @@ test("builder keeps generated fields user-owned and feature-gated", async ({
   const appName = page.getByLabel("App Name");
   await expect(appName).toHaveValue(/^[A-Z][a-z]+ [A-Z][a-z]+$/u);
   await expect(page.getByRole("group", { name: "Connections" })).toHaveCount(0);
-  await expect(page.getByRole("radio", { name: /Web Chat/u })).toBeDisabled();
+  await expect(page.getByRole("radio", { name: /Web Chat/u })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Create App" })).toBeDisabled();
 
   await page.locator("#app-brief").fill("Build a customer support workspace.");
@@ -47,9 +47,9 @@ test("Codex handoff includes connected provider choices and supports reset", asy
   await installProvider(page, "GitHub");
   await installProvider(page, "Vercel");
 
-  await page.getByLabel("App Name").fill("Support Console");
   await page.locator("#app-brief").fill("Build a support operations console.");
-  await page.getByLabel("Repository Name").fill("support-console");
+  await page.getByLabel("App Name").fill("Support Console");
+  await page.locator("#repository-name").fill("support-console");
   await page.getByLabel("Private repository").uncheck();
   await completeHandoff(page);
 

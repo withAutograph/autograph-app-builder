@@ -3,6 +3,7 @@
 set -eu
 
 app_origin=https://localhost:3001
+pid_file=.emulate/dev-emulated.pids
 "$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
 emulate_pid=
 app_pid=
@@ -22,14 +23,18 @@ if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
 fi
 "$docker" start "$database_container" >/dev/null 2>&1 || true
 attempt=0
-until "$docker" exec "$database_container" pg_isready -U postgres >/dev/null 2>&1; do
+until "$docker" exec "$database_container" \
+  psql -U postgres -d autograph_app_builder -c 'SELECT 1' >/dev/null 2>&1; do
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 50 ]; then
+  if [ "$attempt" -ge 300 ]; then
     echo "local emulated PostgreSQL did not become ready" >&2
     exit 1
   fi
   sleep 0.1
 done
+# Docker can report the database ready just before the published host port is
+# accepting connections.
+sleep 1
 DATABASE_URL=postgresql://postgres@127.0.0.1:54329/autograph_app_builder \
   mise run database:migrate
 cleanup() {
@@ -41,6 +46,7 @@ cleanup() {
     kill "$emulate_pid" 2>/dev/null || true
     wait "$emulate_pid" 2>/dev/null || true
   fi
+  rm -f "$pid_file"
 }
 trap cleanup EXIT INT TERM
 
@@ -53,8 +59,17 @@ MCP_RESOURCE_URL="$app_origin/mcp" \
 BETTER_AUTH_SECRET="$(tr -d '\n' < .emulate/better-auth-secret)" \
 GITHUB_CLIENT_ID=Iv1_local_app_client \
 GITHUB_CLIENT_SECRET=local-github-client-secret-value \
+GITHUB_APP_ID=12345 \
+GITHUB_APP_CLIENT_ID=Iv1_local_app_client \
+GITHUB_APP_CLIENT_SECRET=local-github-client-secret-value \
+GITHUB_APP_INSTALL_STATE_SECRET=local-github-install-state-secret-value \
 VERCEL_AUTH_CLIENT_ID=local-vercel-client \
 VERCEL_AUTH_CLIENT_SECRET=local-vercel-client-secret \
+VERCEL_INTEGRATION_SLUG=autograph-app-builder-local \
+VERCEL_INTEGRATION_CLIENT_ID=local-vercel-client \
+VERCEL_INTEGRATION_CLIENT_SECRET=local-vercel-client-secret \
+VERCEL_INTEGRATION_TOKEN_KEY=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE= \
+VERCEL_INTEGRATION_TOKEN_KEY_VERSION=local-v1 \
 VERCEL_EMULATOR_URL=http://localhost:4000 \
 GITHUB_EMULATOR_URL=http://localhost:4001 \
 EMULATE_PROVIDER_TOKEN=emulate_local_provider_token \
@@ -66,4 +81,5 @@ EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)" \
 .config/mise/scripts/trusted-node-launcher \
   "$(mise which node)" node_modules/next/dist/bin/next dev --experimental-https --port 3001 "$@" &
 app_pid=$!
+printf 'app_pid=%s\nemulate_pid=%s\n' "$app_pid" "$emulate_pid" >"$pid_file"
 wait "$app_pid"
