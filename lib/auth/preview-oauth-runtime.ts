@@ -331,6 +331,12 @@ export const previewOAuthRateLimit = {
   },
 } satisfies NonNullable<BetterAuthOptions["rateLimit"]>;
 
+export function authRateLimitForLocalEmulation(localEmulation: boolean) {
+  return localEmulation
+    ? { ...previewOAuthRateLimit, max: 600 }
+    : previewOAuthRateLimit;
+}
+
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
@@ -591,7 +597,7 @@ export function createPreviewOAuthServer(input: {
       expiresIn: 60 * 60 * 8,
       updateAge: 60 * 60,
     },
-    rateLimit: previewOAuthRateLimit,
+    rateLimit: authRateLimitForLocalEmulation(localEmulation !== undefined),
     advanced: {
       cookiePrefix:
         config.environment === "preview"

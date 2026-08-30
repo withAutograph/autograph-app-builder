@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  authRateLimitForLocalEmulation,
   fetchVerifiedVercelUserInfo,
   readPreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
@@ -21,6 +22,14 @@ const environment = {
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
+  it("keeps hosted rate limits strict while allowing a complete local emulation run", () => {
+    expect(authRateLimitForLocalEmulation(false)).toMatchObject({ max: 60 });
+    expect(authRateLimitForLocalEmulation(true)).toMatchObject({ max: 600 });
+    expect(
+      authRateLimitForLocalEmulation(true).customRules?.["/oauth2/token"],
+    ).toEqual({ window: 60, max: 180 });
+  });
+
   const idToken = (claims: Record<string, unknown>) =>
     `${Buffer.from(JSON.stringify({ alg: "ES256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
 
