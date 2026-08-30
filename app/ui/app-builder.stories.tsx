@@ -16,6 +16,7 @@ import {
   Ready,
   type BuilderForm,
 } from "./app-builder";
+import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
 
 const integrations = {
   vercel: {
@@ -82,6 +83,47 @@ const form: BuilderForm = {
   githubInstallationId: "101",
   modelId: "openai/gpt-5.6-sol",
 };
+
+const provisioning = {
+  version: 1,
+  requestId: "123e4567-e89b-42d3-a456-426614174000",
+  requestDigest: "1".repeat(64),
+  appId: "vendor-portal",
+  status: "settled",
+  github: {
+    status: "succeeded",
+    installationId: "101",
+    repositoryId: "202",
+    owner: "withAutograph",
+    name: "vendor-portal",
+    fullName: "withAutograph/vendor-portal",
+    url: "https://github.com/withAutograph/vendor-portal",
+    scope: { type: "organization", id: "88", login: "withAutograph" },
+    visibility: "private",
+    defaultBranch: "main",
+    headSha: "a".repeat(40),
+    headTree: "b".repeat(40),
+    starter: {
+      sourceSha: "c".repeat(40),
+      sourceTree: "b".repeat(40),
+      archiveSha256: "d".repeat(64),
+      archiveBytes: 1024,
+      manifestSha256: "e".repeat(64),
+    },
+  },
+  vercel: {
+    status: "succeeded",
+    installationId: "vercel-autograph",
+    projectId: "prj_123",
+    name: "apps-vendor-portal",
+    dashboardUrl: "https://vercel.com/autograph/apps-vendor-portal",
+    scope: { type: "team", id: "team_123", slug: "autograph" },
+    framework: "nextjs",
+    rootDirectory: "apps/vendor-portal",
+    linkedGitHubRepository: "withAutograph/vendor-portal",
+  },
+  updatedAt: "2026-08-30T12:00:00.000Z",
+} satisfies BuilderProvisionResponse;
 
 const connectionsEnabled =
   process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED === "true";
@@ -279,13 +321,23 @@ export const ConnectionDrawerCustomize: Story = {
 };
 
 export const HandoffProgress: Story = {
-  render: () => <Handoff onReady={fn()} />,
+  render: () => (
+    <Handoff
+      form={form}
+      requestId={provisioning.requestId}
+      provisioningEnabled={false}
+      onReady={fn()}
+    />
+  ),
 };
 
 export const ReadyToLaunch: Story = {
   render: () => (
     <Ready
       form={form}
+      requestId={provisioning.requestId}
+      initialProvisioning={provisioning}
+      provisioningEnabled
       initialAttempt="attempted"
       initialClipboardState="copied"
       onReset={fn()}
@@ -297,8 +349,115 @@ export const ReadyLongBrief: Story = {
   render: () => (
     <Ready
       form={{ ...form, brief: "x".repeat(8_100) }}
+      requestId={provisioning.requestId}
+      initialProvisioning={{
+        ...provisioning,
+        vercel: {
+          status: "failed",
+          code: "provider_rejected",
+          retryable: true,
+        },
+      }}
+      provisioningEnabled
       initialAttempt="too-long"
       initialClipboardState="failed"
+      onReset={fn()}
+    />
+  ),
+};
+
+export const ReadyGitHubOnly: Story = {
+  render: () => (
+    <Ready
+      form={{ ...form, vercelInstallationId: undefined }}
+      requestId={provisioning.requestId}
+      initialProvisioning={{
+        ...provisioning,
+        vercel: {
+          status: "skipped",
+          code: "not_selected",
+          retryable: false,
+        },
+      }}
+      provisioningEnabled
+      initialAttempt="attempted"
+      initialClipboardState="copied"
+      onReset={fn()}
+    />
+  ),
+};
+
+export const ReadyVercelOnly: Story = {
+  render: () => (
+    <Ready
+      form={{ ...form, githubInstallationId: undefined }}
+      requestId={provisioning.requestId}
+      initialProvisioning={{
+        ...provisioning,
+        github: {
+          status: "skipped",
+          code: "not_selected",
+          retryable: false,
+        },
+        vercel: {
+          ...provisioning.vercel,
+          linkedGitHubRepository: undefined,
+        },
+      }}
+      provisioningEnabled
+      initialAttempt="attempted"
+      initialClipboardState="copied"
+      onReset={fn()}
+    />
+  ),
+};
+
+export const ReadyWithoutProviders: Story = {
+  render: () => (
+    <Ready
+      form={{
+        ...form,
+        githubInstallationId: undefined,
+        vercelInstallationId: undefined,
+      }}
+      requestId={provisioning.requestId}
+      initialProvisioning={{
+        ...provisioning,
+        github: {
+          status: "skipped",
+          code: "not_selected",
+          retryable: false,
+        },
+        vercel: {
+          status: "skipped",
+          code: "not_selected",
+          retryable: false,
+        },
+      }}
+      provisioningEnabled
+      initialAttempt="attempted"
+      initialClipboardState="copied"
+      onReset={fn()}
+    />
+  ),
+};
+
+export const ReadyPartialFailure: Story = {
+  render: () => (
+    <Ready
+      form={form}
+      requestId={provisioning.requestId}
+      initialProvisioning={{
+        ...provisioning,
+        vercel: {
+          status: "failed",
+          code: "provider_rejected",
+          retryable: true,
+        },
+      }}
+      provisioningEnabled
+      initialAttempt="attempted"
+      initialClipboardState="copied"
       onReset={fn()}
     />
   ),

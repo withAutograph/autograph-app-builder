@@ -3,7 +3,10 @@ import { headers } from "next/headers";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
 import { resolveWorkspaceOnboardingState } from "@/lib/auth/workspace-onboarding";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
-import { builderConnectionsFlag } from "@/lib/feature-flags";
+import {
+  builderConnectionsFlag,
+  builderResourceProvisioningFlag,
+} from "@/lib/feature-flags";
 import {
   parseProviderConnectionFailureReason,
   type ProviderConnectionNotice,
@@ -65,11 +68,13 @@ async function currentUser() {
 }
 
 export default async function Home({ searchParams }: PageProps) {
-  const [query, user, connectionsEnabled] = await Promise.all([
-    searchParams,
-    currentUser(),
-    builderConnectionsFlag(),
-  ]);
+  const [query, user, connectionsEnabled, provisioningEnabled] =
+    await Promise.all([
+      searchParams,
+      currentUser(),
+      builderConnectionsFlag(),
+      builderResourceProvisioningFlag(),
+    ]);
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
@@ -112,6 +117,7 @@ export default async function Home({ searchParams }: PageProps) {
     <AppBuilder
       authenticated={authenticated && mode !== "anonymous"}
       connectionsEnabled={connectionsEnabled}
+      provisioningEnabled={provisioningEnabled}
       integrations={integrations}
       providerNotices={notices}
       providerResumeKey={parseProviderResumeKey(query.resume)}

@@ -807,6 +807,195 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).not.toContain("deployed");
   });
 
+  it("settles GitHub then Vercel before handoff and reopens only after an explicit successful retry", async () => {
+    vi.useFakeTimers();
+    const requestId = "123e4567-e89b-42d3-a456-426614174000";
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(requestId);
+    const events: string[] = [];
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const writeText = vi.fn(async (...values: [string]) => {
+      if (values.length === 1) events.push("clipboard");
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const github = {
+      status: "succeeded" as const,
+      installationId: "101",
+      repositoryId: "202",
+      owner: "jasonmorganson",
+      name: "provider-app",
+      fullName: "jasonmorganson/provider-app",
+      url: "https://github.com/jasonmorganson/provider-app",
+      scope: { type: "user" as const, id: "77", login: "jasonmorganson" },
+      visibility: "private" as const,
+      defaultBranch: "main" as const,
+      headSha: "a".repeat(40),
+      headTree: "b".repeat(40),
+      starter: {
+        sourceSha: "c".repeat(40),
+        sourceTree: "b".repeat(40),
+        archiveSha256: "d".repeat(64),
+        archiveBytes: 100,
+        manifestSha256: "e".repeat(64),
+      },
+    };
+    const base = {
+      version: 1 as const,
+      requestId,
+      requestDigest: "f".repeat(64),
+      appId: "provider-app",
+      github,
+      updatedAt: "2026-08-30T12:00:00.000Z",
+    };
+    let vercelAttempts = 0;
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          operation: "github" | "vercel";
+          requestId: string;
+        };
+        events.push(body.operation);
+        expect(body.requestId).toBe(requestId);
+        if (body.operation === "github")
+          return Response.json({
+            ...base,
+            status: "pending",
+            vercel: {
+              status: "failed",
+              code: "provider_unavailable",
+              retryable: true,
+            },
+          });
+        vercelAttempts += 1;
+        return Response.json({
+          ...base,
+          status: "settled",
+          vercel:
+            vercelAttempts === 1
+              ? {
+                  status: "failed",
+                  code: "provider_rejected",
+                  retryable: true,
+                }
+              : {
+                  status: "succeeded",
+                  installationId: "vercel-pylee",
+                  projectId: "prj_303",
+                  name: "apps-provider-app",
+                  dashboardUrl: "https://vercel.com/pylee/apps-provider-app",
+                  scope: { type: "team", id: "team_1", slug: "pylee" },
+                  framework: "nextjs",
+                  rootDirectory: "apps/provider-app",
+                  linkedGitHubRepository: "jasonmorganson/provider-app",
+                },
+        });
+      });
+    const view = await render(
+      <AppBuilder
+        authenticated
+        provisioningEnabled
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    await click(
+      view.querySelector<HTMLInputElement>(
+        'input[name="deployment-provider"][value="vercel"]',
+      )!,
+    );
+    await fill(
+      view.querySelector<HTMLInputElement>("#app-name")!,
+      "Provider App",
+    );
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "Build a provider-linked app.",
+    );
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Create App",
+      )!,
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(300));
+    expect(events).toEqual(["github", "vercel", "clipboard"]);
+    expect(view.textContent).toContain("jasonmorganson/provider-app");
+    expect(view.textContent).toContain("Vercel: the provider rejected");
+    expect(open).toHaveBeenCalledTimes(1);
+
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Retry",
+      )!,
+    );
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(view.textContent).toContain("apps-provider-app");
+    expect(open).toHaveBeenCalledTimes(1);
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Open in ChatGPT / Codex",
+      )!,
+    );
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(writeText.mock.calls.at(-1)?.[0]).toContain("Project ID: prj_303");
+  });
+
+  it("restores a settled request on Ready without relaunching the client", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const requestId = "123e4567-e89b-42d3-a456-426614174000";
+    sessionStorage.setItem(
+      "autograph-builder-active-provisioning",
+      JSON.stringify({
+        version: 1,
+        requestId,
+        phase: "ready",
+        form: {
+          appName: "Restored App",
+          repository: "restored-app",
+          brief: "Restore this exact handoff.",
+          privateRepository: true,
+          buildDestination: "codex",
+          connections: [],
+          githubInstallationId: "101",
+          modelId: "openai/gpt-5.6-sol",
+        },
+        provisioning: {
+          version: 1,
+          requestId,
+          requestDigest: "0".repeat(64),
+          appId: "restored-app",
+          status: "settled",
+          github: {
+            status: "failed",
+            code: "provider_unavailable",
+            retryable: true,
+          },
+          vercel: {
+            status: "skipped",
+            code: "not_selected",
+            retryable: false,
+          },
+          updatedAt: "2026-08-30T12:00:00.000Z",
+        },
+      }),
+    );
+    const view = await render(
+      <AppBuilder
+        authenticated
+        provisioningEnabled
+        user={{ name: "", email: "" }}
+      />,
+    );
+    await act(async () => new Promise(requestAnimationFrame));
+    expect(view.textContent).toContain("App Brief Ready!");
+    expect(view.textContent).toContain("Restored App");
+    expect(view.textContent).toContain(
+      "GitHub: the provider could not be reached",
+    );
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("opens Cursor when it is selected as the build destination", async () => {
     vi.useFakeTimers();
     const open = vi.spyOn(window, "open").mockReturnValue(null);

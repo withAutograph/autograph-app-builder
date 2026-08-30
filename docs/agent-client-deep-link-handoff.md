@@ -6,9 +6,12 @@ The app creation form has one required **Build with** destination. **ChatGPT /
 Codex** is selected by default, **Cursor** is selectable, and **Web Chat** is
 visible as a disabled **Coming soon** option.
 
-When the user clicks **Create App**, Autograph builds one canonical prompt from
-the app name, repository, selected model, provider and connection selections,
-and app brief. It then:
+When the user clicks **Create App**, Autograph first provisions only the
+selected providers. GitHub receives the exact verified Arrusted starter as one
+parentless `main` commit. Vercel receives a project with no deployment; when
+GitHub also succeeded, the Vercel project is linked to that repository. After
+all attempted provider setup settles, Autograph builds one canonical prompt
+from the app brief and the provider read-back receipts. It then:
 
 1. copies that prompt to the clipboard as a fallback;
 2. requests a launch of the selected client with the same prompt encoded in its
@@ -16,9 +19,12 @@ and app brief. It then:
 3. continues to the Ready screen whether or not the browser permits the custom
    URL.
 
-The Ready screen retains the copied brief, installation guidance, and a
-destination-specific retry button. Deep links only prefill a composer; they do
-not submit or execute the task.
+The Ready screen retains the copied brief, linked resource cards, sanitized
+partial failures, installation guidance, and a destination-specific retry
+button. A failed provider can be retried with the original request ID without
+recreating a successful resource. A successful retry refreshes the prompt, but
+the user explicitly reopens the client. Deep links only prefill a composer;
+they do not submit or execute the task.
 
 ## ChatGPT / Codex deep link
 

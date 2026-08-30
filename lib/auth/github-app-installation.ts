@@ -11,6 +11,7 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
 import type { LocalProviderEmulation } from "../integrations/local-provider-emulation";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
+import type { GitHubUserCredentialStore } from "../provisioning/github-user-credential";
 
 const GITHUB_ORIGIN = "https://github.com";
 const GITHUB_API_ORIGIN = "https://api.github.com";
@@ -365,7 +366,8 @@ async function userAccessToken(input: {
   code: string;
   codeVerifier: string;
   request: Fetch;
-}): Promise<string> {
+  now: number;
+}) {
   const callback = new URL(
     "/github/installations/callback",
     input.config.issuer,
@@ -441,7 +443,20 @@ async function userAccessToken(input: {
   ) {
     throw new Error("invalid-response");
   }
-  return accessToken;
+  return {
+    accessToken,
+    ...(expiring
+      ? {
+          accessTokenExpiresAt: new Date(
+            input.now + Number(body.expires_in) * 1_000,
+          ).toISOString(),
+          refreshToken: stringProperty(body, "refresh_token"),
+          refreshTokenExpiresAt: new Date(
+            input.now + Number(body.refresh_token_expires_in) * 1_000,
+          ).toISOString(),
+        }
+      : {}),
+  };
 }
 
 async function githubJson(input: {
@@ -544,6 +559,7 @@ export function createGitHubAppInstallationAuthorization(input: {
   stateStore: GitHubInstallationAuthorizationStateStore;
   membership: GitHubInstallationMembershipAuthority;
   installationStore: HostedGitHubInstallationStore;
+  credentialStore?: GitHubUserCredentialStore;
   fetch?: Fetch;
   now?: () => number;
   nonce?: () => string;
@@ -694,10 +710,11 @@ export function createGitHubAppInstallationAuthorization(input: {
           throw new Error("state-phase-mismatch");
         }
 
-        const token = await userAccessToken({
+        const tokens = await userAccessToken({
           config,
           code: callback.code,
           codeVerifier: codeVerifier(config.stateSecret, state.nonce),
+          now: current,
           request: input.emulation
             ? (((url, init) =>
                 request(
@@ -717,7 +734,11 @@ export function createGitHubAppInstallationAuthorization(input: {
                   )) as typeof fetch,
               })
           : githubJson;
-        const user = await githubRequest({ request, token, path: "/user" });
+        const user = await githubRequest({
+          request,
+          token: tokens.accessToken,
+          path: "/user",
+        });
         const providerUserId = decimalProperty(user, "id");
         const providerLogin = githubLoginSchema.parse(
           stringProperty(user, "login"),
@@ -726,7 +747,7 @@ export function createGitHubAppInstallationAuthorization(input: {
           ? await (async () => {
               const response = await request(
                 `${input.emulation!.githubOrigin}/repos/${input.emulation!.githubRepository}/installation`,
-                { headers: { Authorization: `Bearer ${token}` } },
+                { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
               );
               if (!response.ok) throw new Error("github-verification-failed");
               const value = installationIdentity(await boundedJson(response));
@@ -739,7 +760,7 @@ export function createGitHubAppInstallationAuthorization(input: {
             })()
           : await accessibleInstallation({
               request,
-              token,
+              token: tokens.accessToken,
               appId: config.appId,
               requestedInstallationId: state.installationId,
             });
@@ -758,6 +779,15 @@ export function createGitHubAppInstallationAuthorization(input: {
           throw new Error("membership-inactive");
 
         const appliedAt = new Date(now());
+        if (input.credentialStore) {
+          await input.credentialStore.bind({
+            authority,
+            providerUserId,
+            providerLogin,
+            tokens,
+            now: appliedAt,
+          });
+        }
         const binding = await input.installationStore.bind({
           authority,
           binding: {

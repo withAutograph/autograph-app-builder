@@ -396,3 +396,29 @@ Migration execution, deployment, and registration still require separate evidenc
 authority.
 
 Do not advertise exactly-once starts or a production installation until these gates have evidence.
+
+Builder resource provisioning is independently fail-closed behind
+`builder-resource-provisioning`. Do not enable that flag until all of the
+following are true in the target environment:
+
+1. Migration `0014_builder_resource_provisioning.sql` is applied and
+   `mise run hosted:storage-verify` proves the tenant-scoped provisioning
+   journal, GitHub credential table, indexes, constraints, retention, and
+   deletion coverage.
+2. The dedicated versioned GitHub user-token encryption key and GitHub webhook
+   secret are installed. A signed revocation test must deactivate the affected
+   credential or installation, and an expiring-token test must prove atomic
+   access/refresh-token rotation.
+3. The GitHub App has the required repository Administration and Contents
+   permissions, and the selected Vercel installation can link repositories
+   through its own GitHub integration. Prove organization, personal, team, and
+   personal-scope read-back without exposing either provider token.
+4. The pinned Arrusted starter archive and manifest are published at immutable,
+   content-addressed HTTPS URLs. Rebuild the artifact independently and prove
+   its exact source SHA, source tree, byte count, file manifest, archive
+   SHA-256, and manifest SHA-256 before configuring those URLs.
+5. A Preview proof creates and reads back an exact parentless GitHub `main`
+   commit and a linked or intentionally standalone Vercel project, while the
+   provider audit log proves that no deployments API was called. Keep the flag
+   disabled if any migration, secret, permission, immutable-artifact, or
+   provider read-back evidence is absent.

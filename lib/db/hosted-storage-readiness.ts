@@ -21,6 +21,7 @@ export const hostedStorageMigrationTags = [
   "0011_self_service_onboarding",
   "0012_provider_connection_return_state",
   "0013_passkey_onboarding",
+  "0014_builder_resource_provisioning",
 ] as const;
 
 const contractSourcePaths = [
@@ -37,6 +38,8 @@ const contractSourcePaths = [
   "lib/integrations/vercel-installation.ts",
   "lib/auth/postgres-organization-user-authority.ts",
   "lib/auth/passkey-onboarding.ts",
+  "lib/provisioning/postgres-journal.ts",
+  "lib/provisioning/postgres-github-user-credential.ts",
 ] as const;
 
 export const hostedStorageExpectedColumns = [
@@ -76,6 +79,27 @@ export const hostedStorageExpectedColumns = [
   ["agent_session", "session_id", "text", true],
   ["agent_session", "updated_at", "timestamp with time zone", true],
   ["agent_session", "workspace_id", "text", true],
+  ["builder_provisioning_journal", "audience", "text", true],
+  [
+    "builder_provisioning_journal",
+    "created_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["builder_provisioning_journal", "issuer", "text", true],
+  ["builder_provisioning_journal", "owner_user_id", "text", true],
+  ["builder_provisioning_journal", "record", "jsonb", true],
+  ["builder_provisioning_journal", "request_digest", "text", true],
+  ["builder_provisioning_journal", "request_id", "text", true],
+  ["builder_provisioning_journal", "revision", "integer", true],
+  ["builder_provisioning_journal", "state", "text", true],
+  [
+    "builder_provisioning_journal",
+    "updated_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["builder_provisioning_journal", "workspace_id", "text", true],
   ["github_installation_authorization_state", "audience", "text", true],
   ["github_installation_authorization_state", "authority_digest", "text", true],
   [
@@ -196,6 +220,24 @@ export const hostedStorageExpectedColumns = [
   ["hosted_github_publication_proposal", "proposal", "jsonb", true],
   ["hosted_github_publication_proposal", "proposal_digest", "text", true],
   ["hosted_github_publication_proposal", "workspace_id", "text", true],
+  ["hosted_github_user_credential", "active", "boolean", true],
+  ["hosted_github_user_credential", "audience", "text", true],
+  ["hosted_github_user_credential", "credential_iv", "text", true],
+  ["hosted_github_user_credential", "credential_tag", "text", true],
+  ["hosted_github_user_credential", "encrypted_credential", "text", true],
+  ["hosted_github_user_credential", "issuer", "text", true],
+  ["hosted_github_user_credential", "key_version", "text", true],
+  ["hosted_github_user_credential", "owner_user_id", "text", true],
+  ["hosted_github_user_credential", "provider_login", "text", true],
+  ["hosted_github_user_credential", "provider_user_id", "text", true],
+  ["hosted_github_user_credential", "revision", "integer", true],
+  [
+    "hosted_github_user_credential",
+    "updated_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["hosted_github_user_credential", "workspace_id", "text", true],
   ["hosted_vercel_installation", "active", "boolean", true],
   ["hosted_vercel_installation", "audience", "text", true],
   ["hosted_vercel_installation", "display_name", "text", true],
@@ -442,6 +484,11 @@ export const hostedStorageExpectedIndexes = [
   ["agent_session", "agent_session_owner_idx"],
   ["agent_session", "agent_session_retention_idx"],
   ["agent_session", "agent_session_tenant_pk"],
+  ["builder_provisioning_journal", "builder_provisioning_journal_pk"],
+  [
+    "builder_provisioning_journal",
+    "builder_provisioning_journal_retention_idx",
+  ],
   [
     "github_installation_authorization_state",
     "github_installation_authorization_state_expiry_idx",
@@ -486,6 +533,7 @@ export const hostedStorageExpectedIndexes = [
     "hosted_github_publication_proposal",
     "hosted_github_publication_proposal_pk",
   ],
+  ["hosted_github_user_credential", "hosted_github_user_credential_pk"],
   ["hosted_vercel_installation", "hosted_vercel_installation_id_uidx"],
   ["hosted_vercel_installation", "hosted_vercel_installation_pk"],
   ["hosted_workspace_membership", "hosted_workspace_membership_pk"],
@@ -552,6 +600,21 @@ export const hostedStorageExpectedConstraints = [
   ["account", "account_user_id_fkey"],
   ["agent_operation", "agent_operation_tenant_pk"],
   ["agent_session", "agent_session_tenant_pk"],
+  ["builder_provisioning_journal", "builder_provisioning_journal_pk"],
+  ["builder_provisioning_journal", "builder_provisioning_journal_record_check"],
+  [
+    "builder_provisioning_journal",
+    "builder_provisioning_journal_request_digest_check",
+  ],
+  [
+    "builder_provisioning_journal",
+    "builder_provisioning_journal_request_id_check",
+  ],
+  [
+    "builder_provisioning_journal",
+    "builder_provisioning_journal_revision_check",
+  ],
+  ["builder_provisioning_journal", "builder_provisioning_journal_state_check"],
   [
     "github_installation_authorization_state",
     "github_installation_authorization_authority_digest_check",
@@ -668,6 +731,15 @@ export const hostedStorageExpectedConstraints = [
   [
     "hosted_github_publication_proposal",
     "hosted_github_publication_proposal_record_check",
+  ],
+  ["hosted_github_user_credential", "hosted_github_user_credential_pk"],
+  [
+    "hosted_github_user_credential",
+    "hosted_github_user_credential_provider_user_id_check",
+  ],
+  [
+    "hosted_github_user_credential",
+    "hosted_github_user_credential_revision_check",
   ],
   ["hosted_vercel_installation", "hosted_vercel_installation_pk"],
   ["hosted_vercel_installation", "hosted_vercel_installation_scope_type_check"],
@@ -922,6 +994,8 @@ export async function verifyHostedStorageReadBack(input: {
       liveMembershipPredicateBound: true as const,
       githubJournalCompareAndSetBound: true as const,
       githubJournalExcludedFromTenantRetention: true as const,
+      builderProvisionJournalCompareAndSetBound: true as const,
+      githubUserCredentialEnvelopeBound: true as const,
       oauthAuthorizationSchemaBound: true as const,
       sandboxExecutionLeaseBound: true as const,
       storageContractDigest: contract.storageContractDigest,
