@@ -70,11 +70,12 @@ export function createPreviewEmulateHandler(input: {
       // adapter-next queues persistence after producing the response. Await its
       // save before returning so a serverless invocation cannot freeze with an
       // OAuth code only resident in memory.
-      for (;;) {
+      let stableTurns = 0;
+      while (stableTurns < 3) {
         const revision = persistenceRevision;
         await pendingPersistence;
         await new Promise<void>((resolve) => setImmediate(resolve));
-        if (revision === persistenceRevision) break;
+        stableTurns = revision === persistenceRevision ? stableTurns + 1 : 0;
       }
       return response;
     };
