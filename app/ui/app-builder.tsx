@@ -44,7 +44,7 @@ import {
 } from "../../lib/integrations/provider-connection-status";
 
 type Screen = "builder" | "handoff" | "ready";
-type BuildDestination = "codex" | "cursor";
+type BuildDestination = "web" | "codex" | "cursor";
 type ClipboardState = "idle" | "copied" | "failed";
 type HandoffAttempt = "attempted" | "blocked" | "too-long";
 type BuilderForm = {
@@ -102,7 +102,11 @@ function parseBuilderDraft(value: string | null): BuilderDraft | undefined {
       form: {
         ...parsed.form,
         buildDestination:
-          parsed.form.buildDestination === "cursor" ? "cursor" : "codex",
+          parsed.form.buildDestination === "web" ||
+          parsed.form.buildDestination === "codex" ||
+          parsed.form.buildDestination === "cursor"
+            ? parsed.form.buildDestination
+            : "codex",
       },
     } as BuilderDraft;
   } catch {
@@ -143,6 +147,7 @@ function CursorMark() {
 const maximumHandoffUrlLength = 8_000;
 
 function buildDestinationLabel(destination: BuildDestination) {
+  if (destination === "web") return "Web Chat";
   return destination === "codex" ? "ChatGPT / Codex" : "Cursor";
 }
 
@@ -1011,8 +1016,8 @@ function Builder({
   const canSubmit = Boolean(
     form.appName.trim() &&
     form.brief.trim() &&
-    integrations.models.status === "ready" &&
-    model,
+    (form.buildDestination !== "web" ||
+      (integrations.models.status === "ready" && model)),
   );
   useEffect(() => {
     if (initialDraft || hasGeneratedInitialAppName.current) return;
@@ -1397,61 +1402,6 @@ function Builder({
             for you. You can also skip this and connect a repository later.
           </small>
         </div>
-        <fieldset className={styles.modelField}>
-          <legend>Model</legend>
-          <label className={styles.checkLine}>
-            <input
-              type="checkbox"
-              name="zdr"
-              checked={zdrOnly}
-              onChange={(event) => {
-                const checked = event.target.checked;
-                if (checked !== zdrOnly) hasUnsavedChanges.current = true;
-                setZdrOnly(checked);
-                if (
-                  checked &&
-                  !integrations.models.entries.some(
-                    (entry) => entry.id === model && entry.zdr === "all",
-                  )
-                )
-                  setModel("");
-              }}
-            />{" "}
-            Zero Data Retention
-            <InfoTooltip>
-              Only use providers that support Zero Data Retention.
-            </InfoTooltip>
-          </label>
-          <SearchCombobox
-            label={
-              modelOptions.find((option) => option.value === model)?.label ??
-              "Select model"
-            }
-            value={model}
-            options={modelOptions}
-            onChange={(value) => {
-              if (value !== model) hasUnsavedChanges.current = true;
-              setModel(value);
-            }}
-            prefix={<Search size={15} />}
-            showSelectedCheck={false}
-            placeholder={
-              integrations.models.status === "ready"
-                ? "Select model"
-                : "Models unavailable"
-            }
-            disabled={integrations.models.status !== "ready"}
-          />
-          {integrations.models.status === "unavailable" ? (
-            <button
-              className={styles.retryModels}
-              type="button"
-              onClick={() => router.refresh()}
-            >
-              Retry models
-            </button>
-          ) : null}
-        </fieldset>
         <fieldset className={styles.sectionField}>
           <legend>Build with</legend>
           <p id="build-destination-help">
@@ -1473,6 +1423,7 @@ function Builder({
                 name="build-destination"
                 value="web"
                 disabled
+                checked={form.buildDestination === "web"}
               />
             </label>
             <label>
@@ -1509,6 +1460,63 @@ function Builder({
             </label>
           </div>
         </fieldset>
+        {form.buildDestination === "web" ? (
+          <fieldset className={styles.modelField}>
+            <legend>Model</legend>
+            <label className={styles.checkLine}>
+              <input
+                type="checkbox"
+                name="zdr"
+                checked={zdrOnly}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  if (checked !== zdrOnly) hasUnsavedChanges.current = true;
+                  setZdrOnly(checked);
+                  if (
+                    checked &&
+                    !integrations.models.entries.some(
+                      (entry) => entry.id === model && entry.zdr === "all",
+                    )
+                  )
+                    setModel("");
+                }}
+              />{" "}
+              Zero Data Retention
+              <InfoTooltip>
+                Only use providers that support Zero Data Retention.
+              </InfoTooltip>
+            </label>
+            <SearchCombobox
+              label={
+                modelOptions.find((option) => option.value === model)?.label ??
+                "Select model"
+              }
+              value={model}
+              options={modelOptions}
+              onChange={(value) => {
+                if (value !== model) hasUnsavedChanges.current = true;
+                setModel(value);
+              }}
+              prefix={<Search size={15} />}
+              showSelectedCheck={false}
+              placeholder={
+                integrations.models.status === "ready"
+                  ? "Select model"
+                  : "Models unavailable"
+              }
+              disabled={integrations.models.status !== "ready"}
+            />
+            {integrations.models.status === "unavailable" ? (
+              <button
+                className={styles.retryModels}
+                type="button"
+                onClick={() => router.refresh()}
+              >
+                Retry models
+              </button>
+            ) : null}
+          </fieldset>
+        ) : null}
         {connectionsEnabled ? (
           <fieldset className={styles.sectionField}>
             <legend>Connections</legend>
