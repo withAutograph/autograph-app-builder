@@ -137,6 +137,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       const fail = (
         reason: ProviderConnectionFailureReason,
         diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
       ) => {
         logProviderConnectionFailure({
           request,
@@ -146,7 +147,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           startedAt,
           diagnostic,
         });
-        return redirect("failed", reason);
+        return redirect("failed", reason, returnState);
       };
       if (request.method !== "GET") return fail("request-invalid");
 
