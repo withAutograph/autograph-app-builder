@@ -2,7 +2,7 @@ import { ArrowRight, Check, LockKeyhole } from "lucide-react";
 import { notFound } from "next/navigation";
 import { FaGithub } from "react-icons/fa";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -69,6 +69,10 @@ export default async function LocalOAuthApprovalPage({
 
   const details = localOAuthProviderDetails(parsed.provider);
   const ProviderMark = parsed.provider === "github" ? FaGithub : VercelMark;
+  const approvalParams = new URLSearchParams();
+  for (const [name, value] of Object.entries(parsed.authorization)) {
+    if (value) approvalParams.set(name, value);
+  }
 
   return (
     <main className="flex min-h-svh flex-col bg-background text-foreground">
@@ -130,19 +134,28 @@ export default async function LocalOAuthApprovalPage({
               </div>
             </div>
 
-            <form
-              method={emulation.mode === "preview" ? "get" : "post"}
-              action={`/local-oauth/${parsed.provider}/approve`}
-            >
-              {Object.entries(parsed.authorization).map(([name, value]) =>
-                value ? (
-                  <input key={name} type="hidden" name={name} value={value} />
-                ) : null,
-              )}
-              <Button className="h-10 w-full" type="submit">
+            {emulation.mode === "preview" ? (
+              <a
+                className={buttonVariants({ className: "h-10 w-full" })}
+                href={`/local-oauth/${parsed.provider}/approve?${approvalParams}`}
+              >
                 Continue with {details.name}
-              </Button>
-            </form>
+              </a>
+            ) : (
+              <form
+                method="post"
+                action={`/local-oauth/${parsed.provider}/approve`}
+              >
+                {Object.entries(parsed.authorization).map(([name, value]) =>
+                  value ? (
+                    <input key={name} type="hidden" name={name} value={value} />
+                  ) : null,
+                )}
+                <Button className="h-10 w-full" type="submit">
+                  Continue with {details.name}
+                </Button>
+              </form>
+            )}
           </CardContent>
 
           <CardFooter className="justify-center px-6 py-3 text-xs text-muted-foreground">
