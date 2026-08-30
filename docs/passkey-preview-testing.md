@@ -18,8 +18,10 @@ PASSKEY_ONBOARDING=local-preview-v1
 ```
 
 Run `mise run app:dev`, open `http://localhost:3000/auth/sign-in`, and choose
-**Create a passkey**. After registration, sign out and use **Sign in with a
-passkey** to exercise the returning-user flow. Browsers treat `localhost` as a
+**Continue with Passkey**. If the browser cannot authenticate, the page remains
+on sign-in and offers **Create a passkey** as a recovery action. After
+registration, sign out and use **Continue with Passkey** to exercise the
+returning-user flow. Browsers treat `localhost` as a
 WebAuthn secure context; use `localhost` consistently rather than switching
 between it and `127.0.0.1` because credentials are RP-ID scoped.
 

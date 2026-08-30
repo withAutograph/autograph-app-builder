@@ -248,6 +248,8 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyButton).toContain("useAddPasskey(authClient)");
     expect(passkeyButton).toContain("await signInPasskey.mutateAsync");
     expect(passkeyButton).toContain("await addPasskey.mutateAsync");
+    expect(passkeyButton).toContain("passkeyClientError(result)");
+    expect(passkeyButton).toContain("setShowRegistration(true)");
     expect(passkeyButton).toContain(
       'fetch("/api/auth/passkey/onboarding-context"',
     );

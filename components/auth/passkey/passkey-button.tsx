@@ -14,6 +14,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { passkeyClientError } from "@/lib/auth/passkey-client-result";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const addPasskey = useAddPasskey(authClient);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const [showRegistration, setShowRegistration] = useState(false);
 
   // Surfaces passkeys in the browser's autofill dropdown while the sign-in
   // form is open. The button stays for anyone who dismisses it.
@@ -64,34 +66,47 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const continueWithPasskey = async () => {
     setPending(true);
     setError(undefined);
+    setShowRegistration(false);
 
     try {
-      await signInPasskey.mutateAsync({ autoFill: false });
+      const result = await signInPasskey.mutateAsync({ autoFill: false });
+      const resultError = passkeyClientError(result);
+      if (resultError) throw resultError;
       navigate({ to: redirectTo });
-      return;
     } catch (signInError) {
-      try {
-        const response = await fetch("/api/auth/passkey/onboarding-context", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-          cache: "no-store",
-        });
-        const body = (await response.json()) as OnboardingResponse;
-        if (!response.ok || typeof body.context !== "string") {
-          setError(errorMessage(signInError));
-          return;
-        }
+      setError(errorMessage(signInError));
+      setShowRegistration(true);
+    } finally {
+      setPending(false);
+    }
+  };
 
-        await addPasskey.mutateAsync({
-          context: body.context,
-          createSession: true,
-          name: "Primary passkey",
-        });
-        navigate({ to: redirectTo });
-      } catch (onboardingError) {
-        setError(errorMessage(onboardingError));
+  const createPasskey = async () => {
+    setPending(true);
+    setError(undefined);
+
+    try {
+      const response = await fetch("/api/auth/passkey/onboarding-context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        cache: "no-store",
+      });
+      const body = (await response.json()) as OnboardingResponse;
+      if (!response.ok || typeof body.context !== "string") {
+        throw new Error("Passkey registration is unavailable.");
       }
+
+      const result = await addPasskey.mutateAsync({
+        context: body.context,
+        createSession: true,
+        name: "Primary passkey",
+      });
+      const resultError = passkeyClientError(result);
+      if (resultError) throw resultError;
+      navigate({ to: redirectTo });
+    } catch (onboardingError) {
+      setError(errorMessage(onboardingError));
     } finally {
       setPending(false);
     }
@@ -122,6 +137,16 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
+      )}
+      {showRegistration && (
+        <Button
+          type="button"
+          disabled={isPending || pending}
+          onClick={createPasskey}
+        >
+          <Fingerprint />
+          {passkeyLocalization.addPasskey}
+        </Button>
       )}
     </div>
   );
