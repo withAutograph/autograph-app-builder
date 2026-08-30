@@ -87,10 +87,10 @@ describe("public plugin installation documentation", () => {
 
     const auditLog = await runInstall(script, "none");
     expect(auditLog).toContain(
-      "tar -xzf app-builder-codex-marketplace-0.2.2.tar.gz",
+      "tar -xzf app-builder-codex-marketplace-0.2.3.tar.gz",
     );
     expect(auditLog).toMatch(
-      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.2/u,
+      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.3/u,
     );
     expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
@@ -111,17 +111,17 @@ describe("public plugin installation documentation", () => {
     const documentation = await readDocumentation("docs/installing.md");
 
     expect(documentation).toContain(
-      "Once the pre-release `v0.2.2` GitHub release is published",
+      "Once the pre-release `v0.2.3` GitHub release is published",
     );
     expect(documentation).toMatch(
-      /These\s+commands fail closed until `v0\.2\.2` exists/u,
+      /These\s+commands fail closed until `v0\.2\.3` exists/u,
     );
-    expect(documentation).toContain("app-builder-0.2.2.tar.gz");
+    expect(documentation).toContain("app-builder-0.2.3.tar.gz");
     expect(documentation).toContain(
-      "app-builder-codex-marketplace-0.2.2.tar.gz",
+      "app-builder-codex-marketplace-0.2.3.tar.gz",
     );
     expect(documentation).toContain(
-      "Publish `v0.2.2` only through the existing tag-triggered",
+      "Publish `v0.2.3` only through the existing tag-triggered",
     );
     expect(documentation).toContain(
       "`AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to",

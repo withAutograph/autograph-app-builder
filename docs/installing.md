@@ -2,23 +2,23 @@
 
 ## Install before shared marketplace publication
 
-Once the pre-release `v0.2.2` GitHub release is published, use its public
+Once the pre-release `v0.2.3` GitHub release is published, use its public
 [release assets](https://github.com/withAutograph/autograph-app-builder/releases)
 until the shared marketplace is available. The release contains:
 
-- `app-builder-0.2.2.tar.gz`
-- `app-builder-codex-marketplace-0.2.2.tar.gz`
+- `app-builder-0.2.3.tar.gz`
+- `app-builder-codex-marketplace-0.2.3.tar.gz`
 - `release-receipt.json`
 - `SHA256SUMS`
 
 Download the complete asset set, verify both archive checksums and GitHub's
 immutable release attestations, install, and open a new Codex task. These
-commands fail closed until `v0.2.2` exists:
+commands fail closed until `v0.2.3` exists:
 
 ```sh
 (
   set -eu
-  release_version=0.2.2
+  release_version=0.2.3
   release_dir="$PWD/app-builder-release-$release_version"
   marketplace_dir="$PWD/app-builder-marketplace-$release_version"
   mkdir "$release_dir" "$marketplace_dir"
@@ -112,8 +112,8 @@ doesn't offer a catalog listing.
 
 Every release contains:
 
-- `app-builder-0.2.2.tar.gz`, the portable Agent Plugins package
-- `app-builder-codex-marketplace-0.2.2.tar.gz`, a self-contained
+- `app-builder-0.2.3.tar.gz`, the portable Agent Plugins package
+- `app-builder-codex-marketplace-0.2.3.tar.gz`, a self-contained
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
@@ -127,7 +127,7 @@ then extract the portable archive:
 ```sh
 (
   set -eu
-  release_version=0.2.2
+  release_version=0.2.3
   release_dir="$PWD/app-builder-release-$release_version"
   mkdir "$release_dir"
   gh release download "v$release_version" \
@@ -166,10 +166,10 @@ marketplace directory:
   set -eu
   codex plugin remove app-builder@autograph
   codex plugin marketplace remove autograph
-  mkdir app-builder-marketplace-0.2.2
-  tar -xzf app-builder-codex-marketplace-0.2.2.tar.gz \
-    -C app-builder-marketplace-0.2.2
-  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.2"
+  mkdir app-builder-marketplace-0.2.3
+  tar -xzf app-builder-codex-marketplace-0.2.3.tar.gz \
+    -C app-builder-marketplace-0.2.3
+  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.3"
   codex plugin add app-builder@autograph
 )
 ```
@@ -193,7 +193,7 @@ publish or redistribute source-checkout bytes as an endpoint-bound release.
 
 ## Maintainer release flow
 
-Publish `v0.2.2` only through the existing tag-triggered
+Publish `v0.2.3` only through the existing tag-triggered
 `.github/workflows/release.yml` workflow. Do not create or upload the release
 manually. The tag may be created only after the exact release SHA has passed
 the hosted proof and `AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to
