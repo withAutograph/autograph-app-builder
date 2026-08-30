@@ -786,10 +786,12 @@ export function AppDetailsSection({
 
 export function BuildWithSection({
   children,
+  comingSoonEnabled = false,
   selected,
   onChange,
 }: {
   children?: ReactNode;
+  comingSoonEnabled?: boolean;
   selected: BuildDestination;
   onChange: (destination: BuildDestination) => void;
 }) {
@@ -806,19 +808,21 @@ export function BuildWithSection({
           role="radiogroup"
           aria-label="Build destination"
         >
-          <label className={styles.unavailableOption}>
-            <Monitor size={18} aria-hidden="true" />
-            <span>
-              Web Chat <small>Coming soon</small>
-            </span>
-            <input
-              type="radio"
-              name="build-destination"
-              value="web"
-              disabled
-              checked={selected === "web"}
-            />
-          </label>
+          {comingSoonEnabled ? (
+            <label className={styles.unavailableOption}>
+              <Monitor size={18} aria-hidden="true" />
+              <span>
+                Web Chat <small>Coming soon</small>
+              </span>
+              <input
+                type="radio"
+                name="build-destination"
+                value="web"
+                disabled
+                checked={selected === "web"}
+              />
+            </label>
+          ) : null}
           <label>
             <SiOpenai size={18} aria-hidden="true" />
             ChatGPT / Codex
@@ -906,6 +910,7 @@ export function ModelControls({
 
 export function DeployToSection({
   available,
+  comingSoonEnabled = false,
   connected,
   onConnect,
   onProviderChange,
@@ -915,6 +920,7 @@ export function DeployToSection({
   teamOptions,
 }: {
   available: boolean;
+  comingSoonEnabled?: boolean;
   connected: boolean;
   onConnect: () => void;
   onProviderChange: (provider: DeploymentProvider) => void;
@@ -933,10 +939,12 @@ export function DeployToSection({
       name="deployment-provider"
       gridClassName={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
       unavailableClassName={styles.unavailableOption}
-      options={deploymentProviderOptions.map((option) => ({
-        ...option,
-        available: option.available && available,
-      }))}
+      options={deploymentProviderOptions
+        .map((option) => ({
+          ...option,
+          available: option.available && available,
+        }))
+        .filter((option) => comingSoonEnabled || option.available)}
       selected={selected}
       onChange={onProviderChange}
     >
@@ -986,6 +994,7 @@ export function DeployToSection({
 
 export function StoreInSection({
   available,
+  comingSoonEnabled = false,
   connected,
   gitScope,
   gitScopeOptions,
@@ -999,6 +1008,7 @@ export function StoreInSection({
   selected,
 }: {
   available: boolean;
+  comingSoonEnabled?: boolean;
   connected: boolean;
   gitScope: string;
   gitScopeOptions: ComboOption[];
@@ -1021,10 +1031,12 @@ export function StoreInSection({
       name="storage-provider"
       gridClassName={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
       unavailableClassName={styles.unavailableOption}
-      options={storageProviderOptions.map((option) => ({
-        ...option,
-        available: option.available && available,
-      }))}
+      options={storageProviderOptions
+        .map((option) => ({
+          ...option,
+          available: option.available && available,
+        }))
+        .filter((option) => comingSoonEnabled || option.available)}
       selected={selected}
       onChange={onProviderChange}
     >
@@ -1126,6 +1138,7 @@ export function StoreInSection({
 
 export function ConnectionsSection({
   connected,
+  comingSoonEnabled = false,
   onAdd,
   onCustomize,
   onRemove,
@@ -1136,6 +1149,7 @@ export function ConnectionsSection({
   showMore,
 }: {
   connected: string[];
+  comingSoonEnabled?: boolean;
   onAdd: (name: string) => void;
   onCustomize: (name: string) => void;
   onRemove: (name: string) => void;
@@ -1184,6 +1198,7 @@ export function ConnectionsSection({
           .filter((name) => !selected.includes(name))
           .map((name) => {
             const comingSoon = comingSoonConnections.has(name);
+            if (comingSoon && !comingSoonEnabled) return null;
             return (
               <button
                 type="button"
@@ -1498,6 +1513,7 @@ export function Builder({
   initialBrief,
   onCreate,
   connectionsEnabled,
+  comingSoonEnabled,
   integrations,
   providerNotices,
   initialDraft,
@@ -1506,6 +1522,7 @@ export function Builder({
   initialBrief: string;
   onCreate: (form: BuilderForm, resumeKey?: string) => void;
   connectionsEnabled: boolean;
+  comingSoonEnabled: boolean;
   integrations: BuilderIntegrationState;
   providerNotices: ProviderConnectionNotice[];
   initialDraft?: BuilderDraft;
@@ -1771,6 +1788,7 @@ export function Builder({
         />
         <DeployToSection
           available={integrations.vercel.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
           connected={integrations.vercel.status === "connected"}
           selected={deploymentProvider}
           team={team}
@@ -1789,6 +1807,7 @@ export function Builder({
         />
         <StoreInSection
           available={integrations.github.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
           connected={integrations.github.status === "connected"}
           selected={storageProvider}
           gitScope={gitScope}
@@ -1819,6 +1838,7 @@ export function Builder({
           onConnect={() => beginProviderConnection("github")}
         />
         <BuildWithSection
+          comingSoonEnabled={comingSoonEnabled}
           selected={form.buildDestination}
           onChange={(buildDestination) => {
             if (buildDestination !== form.buildDestination)
@@ -1854,6 +1874,7 @@ export function Builder({
         {connectionsEnabled ? (
           <ConnectionsSection
             connected={connectedConnections}
+            comingSoonEnabled={comingSoonEnabled}
             search={search}
             selected={form.connections}
             showMore={showMoreConnections}
@@ -2121,12 +2142,14 @@ codex plugin add app-builder@autograph`;
 export function AppBuilder({
   authenticated,
   connectionsEnabled = false,
+  comingSoonEnabled = false,
   integrations,
   providerNotices = [],
   providerResumeKey,
 }: {
   authenticated: boolean;
   connectionsEnabled?: boolean;
+  comingSoonEnabled?: boolean;
   integrations: BuilderIntegrationState;
   providerNotices?: ProviderConnectionNotice[];
   providerResumeKey?: string;
@@ -2173,6 +2196,7 @@ export function AppBuilder({
           initialDraft={resumedDraft}
           resumeKey={providerResumeKey}
           connectionsEnabled={connectionsEnabled}
+          comingSoonEnabled={comingSoonEnabled}
           integrations={integrations}
           providerNotices={providerNotices}
           onCreate={(form) => {
