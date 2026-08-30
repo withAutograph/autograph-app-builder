@@ -78,6 +78,7 @@ jobs:
   auth-e2e-emulated:
     runs-on: ubuntu-latest
     env:
+      APP_BUILDER_DATABASE_PORT: "54329"
       APP_BUILDER_EXTERNAL_DATABASE: "1"
     services:
       postgres:
