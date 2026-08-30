@@ -4,7 +4,7 @@ import { readProviderEmulation } from "@/lib/integrations/local-provider-emulati
 import { completeAuthorization } from "../completion";
 
 export async function GET(
-  request: Request,
+  _request: Request,
   context: { params: Promise<{ provider: string; approval: string }> },
 ) {
   try {
@@ -12,12 +12,6 @@ export async function GET(
     if (!emulation || emulation.mode !== "preview")
       throw new Error("Preview authentication emulation is unavailable.");
     const { provider, approval } = await context.params;
-    const referer = new URL(request.headers.get("referer") ?? "");
-    if (
-      referer.origin !== emulation.canonicalOrigin ||
-      referer.pathname !== `/local-oauth/${provider}/authorize`
-    )
-      throw new Error("Invalid approval referer.");
     const verified = verifyLocalOAuthApproval(
       approval,
       emulation.relaySecret,
