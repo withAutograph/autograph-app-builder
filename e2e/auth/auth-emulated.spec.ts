@@ -23,6 +23,19 @@ function reportPasskeyFailures(page: Page) {
   });
 }
 
+function reportOAuthFailures(page: Page) {
+  page.on("response", async (response) => {
+    const path = new URL(response.url()).pathname;
+    if (response.ok() || !path.startsWith("/api/auth/sign-in/")) return;
+    console.error(
+      "OAuth request failed",
+      response.status(),
+      path,
+      await response.text(),
+    );
+  });
+}
+
 async function resetAuthState() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -70,6 +83,7 @@ async function signOut(page: Page) {
 }
 
 async function finishOAuth(page: Page, provider: "GitHub" | "Vercel") {
+  reportOAuthFailures(page);
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect(page).toHaveURL(
@@ -236,10 +250,19 @@ test("provider account supports multiple passkeys but retains its final passkey"
     await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
     await expect(dialog).toBeHidden();
 
-    await page.getByRole("button", { name: "Add passkey" }).first().click();
-    await dialog.getByLabel("Name").fill("Second passkey");
-    await dialog.getByRole("button", { name: "Add passkey" }).click();
-    await expect.poll(async () => (await authCounts()).passkeys).toBe(2);
+    await authenticator.setPresence(false);
+    const secondAuthenticator = await VirtualAuthenticator.create(
+      context,
+      page,
+    );
+    try {
+      await page.getByRole("button", { name: "Add passkey" }).first().click();
+      await dialog.getByLabel("Name").fill("Second passkey");
+      await dialog.getByRole("button", { name: "Add passkey" }).click();
+      await expect.poll(async () => (await authCounts()).passkeys).toBe(2);
+    } finally {
+      await secondAuthenticator.dispose();
+    }
 
     const list = await page.request.get("/api/auth/passkey/list-user-passkeys");
     expect(list.ok()).toBeTruthy();
