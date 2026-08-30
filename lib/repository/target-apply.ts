@@ -112,7 +112,7 @@ type ApplyResultBase = TargetApplyBinding & {
   preTree: readonly OverlayFile[];
   preTreeDigest: string;
   command: {
-    name: "create-app";
+    name: "create-app" | "iterate-existing-app";
     exitCode: number;
     stdoutDigest: string;
     stderrDigest: string;
@@ -534,17 +534,88 @@ function parseTargetReceipt(
 }
 
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
-  return async ({ sandbox, applyRoot, proposalPath }) =>
-    await sandbox.run({
+  return async ({ sandbox, applyRoot, proposalPath, proposal }) => {
+    if ("operation" in proposal) {
+      const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
+      for (const change of proposal.iteration.changes) {
+        const current = await sandbox.readBinaryFile({
+          path: `${relativeRoot}/${change.path}`,
+        });
+        if (
+          current === null ||
+          sha256(current) !== change.before.digest ||
+          change.after.digest !== sha256(change.after.content)
+        )
+          return {
+            exitCode: 2,
+            stdout: "",
+            stderr: "stale iteration preimage",
+          };
+      }
+      for (const change of proposal.iteration.changes)
+        await sandbox.writeTextFile({
+          path: `${relativeRoot}/${change.path}`,
+          content: change.after.content,
+        });
+      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const receipt: TargetApplyCommandReceipt = {
+        version: 1,
+        appId: proposal.contract.appId,
+        contractPath: proposal.futurePath,
+        workspacePath: proposal.plan.source.workspacePath,
+        topology: {
+          path: "microfrontends.json",
+          oldDigest,
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+        },
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        recovered: false,
+        omittedAuthorities: [
+          "provider-provisioning",
+          "deployment",
+          "production-readiness",
+        ],
+      };
+      return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
+    }
+    return await sandbox.run({
       command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools create:app -- --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
+  };
 }
 
 export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
+    if ("operation" in proposal) {
+      for (const change of proposal.iteration.changes)
+        await sandbox.writeTextFile({
+          path: `${relativeRoot}/${change.path}`,
+          content: change.after.content,
+        });
+      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const receipt: TargetApplyCommandReceipt = {
+        version: 1,
+        appId,
+        contractPath: proposal.futurePath,
+        workspacePath: proposal.plan.source.workspacePath,
+        topology: {
+          path: "microfrontends.json",
+          oldDigest,
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+        },
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        recovered: false,
+        omittedAuthorities: [
+          "provider-provisioning",
+          "deployment",
+          "production-readiness",
+        ],
+      };
+      return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
+    }
     await ensureSandboxDirectories(sandbox, [
       `${relativeRoot}/apps/${appId}`,
       `${relativeRoot}/apps/shell`,
@@ -669,7 +740,9 @@ export async function executeProposalBoundApply(input: {
     preTree: before.files,
     preTreeDigest: before.treeDigest,
     command: {
-      name: "create-app" as const,
+      name: ("operation" in input.proposal
+        ? "iterate-existing-app"
+        : "create-app") as "create-app" | "iterate-existing-app",
       exitCode: command.exitCode,
       stdoutDigest: sha256(command.stdout),
       stderrDigest: sha256(command.stderr),
@@ -708,16 +781,38 @@ export async function executeProposalBoundApply(input: {
   const acceptedAppSpec = after.files.find(
     ({ path }) => path === input.proposal.contract.appSpec.path,
   );
+  const iterationProposal =
+    "operation" in input.proposal ? input.proposal : undefined;
+  const requiredIterationPaths = iterationProposal
+    ? new Set(iterationProposal.iteration.changes.map(({ path }) => path))
+    : undefined;
   const missingRequiredChange =
     acceptedAppSpec?.digest !== input.proposal.contract.appSpec.sha256 ||
-    !changes.some(
-      ({ path }) =>
-        path === input.proposal.plan.topology.configPath ||
-        path.startsWith(`${input.proposal.plan.source.workspacePath}/`),
-    ) ||
-    !changes.some(
-      ({ path }) => path === input.proposal.plan.topology.configPath,
-    );
+    (iterationProposal !== undefined
+      ? iterationProposal.iteration.changes.some(
+          ({ path, after }) =>
+            after.digest ===
+              iterationProposal.iteration.changes.find(
+                (candidate) => candidate.path === path,
+              )?.before.digest ||
+            !changes.some(
+              (change) =>
+                change.path === path && change.after?.digest === after.digest,
+            ),
+        ) ||
+        changes.some(
+          ({ path }) =>
+            path !== input.proposal.contract.appSpec.path &&
+            !requiredIterationPaths?.has(path),
+        )
+      : !changes.some(
+          ({ path }) =>
+            path === input.proposal.plan.topology.configPath ||
+            path.startsWith(`${input.proposal.plan.source.workspacePath}/`),
+        ) ||
+        !changes.some(
+          ({ path }) => path === input.proposal.plan.topology.configPath,
+        ));
   const base = {
     ...attemptBase,
     postTree: after.files,

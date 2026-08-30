@@ -42,7 +42,7 @@ const appSpecBindingSchema = z.strictObject({
   sha256: digest,
 });
 
-export const targetProposalSchema = z.strictObject({
+const targetCreationProposalSchema = z.strictObject({
   contract: z.strictObject({
     version: z.literal(1),
     appId,
@@ -81,8 +81,33 @@ export const targetProposalSchema = z.strictObject({
   mutations: z.tuple([]),
 });
 
+const iterationChangeSchema = z.strictObject({
+  path: repositoryPath,
+  before: z.strictObject({ mode: z.string().regex(/^[0-7]{3,4}$/u), digest }),
+  after: z.strictObject({
+    mode: z.string().regex(/^[0-7]{3,4}$/u),
+    digest,
+    content: z.string().max(262_144),
+  }),
+});
+
+export const targetIterationProposalSchema =
+  targetCreationProposalSchema.extend({
+    operation: z.literal("iterate-existing-app"),
+    iteration: z.strictObject({
+      changes: z.array(iterationChangeSchema).min(1).max(32),
+      digest,
+    }),
+  });
+
+export const targetProposalSchema = z.union([
+  targetCreationProposalSchema,
+  targetIterationProposalSchema,
+]);
+
 export type TargetIdentity = z.infer<typeof targetIdentitySchema>;
 export type TargetProposal = z.infer<typeof targetProposalSchema>;
+export type TargetIterationChange = z.infer<typeof iterationChangeSchema>;
 
 export function targetContractDigest(
   contract: TargetProposal["contract"],
@@ -115,7 +140,7 @@ export type TargetCommandExecutor = (input: {
   appSpecDigest: string;
 }) => Promise<TargetCommandResult>;
 
-const sha256 = (value: string) =>
+const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
 function parseOutput<T>(
@@ -335,6 +360,7 @@ export async function executeTargetIdentityAndPlanning(input: {
   appSpecContent: string;
   appSpecDigest: string;
   artifactRevision: string;
+  existingAppChanges?: readonly { path: string; content: string }[];
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
 }) {
   const overlay = await materializePlanningOverlay(input);
@@ -361,6 +387,116 @@ export async function executeTargetIdentityAndPlanning(input: {
   if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity))
     throw new Error("Target identity did not match the accepted AppSpec.");
   await input.onIdentity?.(identity);
+  if (input.existingAppChanges !== undefined) {
+    const manifestSource = await input.sandbox.readTextFile({
+      path: ".app-builder/source-files.json",
+    });
+    if (manifestSource === null)
+      throw new Error("Prepared source manifest is missing.");
+    const manifest = JSON.parse(manifestSource) as unknown;
+    if (!Array.isArray(manifest))
+      throw new Error("Prepared source manifest is invalid.");
+    const files = new Map(
+      manifest.flatMap((candidate): [string, { mode: string }][] => {
+        if (
+          typeof candidate !== "object" ||
+          candidate === null ||
+          !("path" in candidate) ||
+          typeof candidate.path !== "string" ||
+          !("mode" in candidate) ||
+          typeof candidate.mode !== "string"
+        )
+          return [];
+        return [
+          [candidate.path, { mode: candidate.mode.replace(/^100/u, "") }],
+        ];
+      }),
+    );
+    if (
+      ![...files.keys()].some((path) =>
+        path.startsWith(`${identity.workspacePath}/`),
+      )
+    )
+      throw new Error("The requested existing application does not exist.");
+    const seen = new Set<string>();
+    const changes: TargetIterationChange[] = [];
+    for (const requested of input.existingAppChanges) {
+      if (
+        !safeSourcePath(requested.path) ||
+        !requested.path.startsWith(`${identity.workspacePath}/`) ||
+        requested.path === identity.contractPath ||
+        seen.has(requested.path)
+      )
+        throw new Error("An existing-app change path is not allowed.");
+      seen.add(requested.path);
+      const entry = files.get(requested.path);
+      if (entry === undefined)
+        throw new Error(
+          "An existing-app change is not bound to a source preimage.",
+        );
+      const before = await input.sandbox.readBinaryFile({
+        path: `repository/${requested.path}`,
+      });
+      if (before === null)
+        throw new Error("An existing-app source preimage is missing.");
+      changes.push({
+        path: requested.path,
+        before: { mode: entry.mode, digest: sha256(before) },
+        after: {
+          mode: entry.mode,
+          digest: sha256(requested.content),
+          content: requested.content,
+        },
+      });
+    }
+    if (changes.length === 0)
+      throw new Error("At least one existing-app change is required.");
+    const topologyBytes = await input.sandbox.readBinaryFile({
+      path: `repository/microfrontends.json`,
+    });
+    if (topologyBytes === null)
+      throw new Error("The existing application topology is missing.");
+    const topologyDigest = sha256(topologyBytes);
+    const contract = {
+      version: 1 as const,
+      appId: input.appId,
+      appSpec: {
+        path: identity.appSpecPath,
+        sha256: input.appSpecDigest,
+      },
+    };
+    const iterationDigest = sha256(JSON.stringify(changes));
+    const proposal = targetIterationProposalSchema.parse({
+      operation: "iterate-existing-app",
+      contract,
+      futurePath: identity.contractPath,
+      plan: {
+        source: {
+          workspacePath: identity.workspacePath,
+          runtime: "nextjs",
+          packageName: identity.packageName,
+          schema: { kind: "none" },
+        },
+        product: {
+          owner: "existing-application-owner",
+          appSpec: contract.appSpec,
+          optionalCapabilities: { integrations: [], hostedResources: [] },
+        },
+        topology: {
+          configPath: "microfrontends.json",
+          projectName: identity.projectName,
+          packageName: identity.packageName,
+          routes: identity.baseRoutes,
+          currentDigest: topologyDigest,
+          proposedDigest: topologyDigest,
+        },
+      },
+      blockers: [],
+      mutations: [],
+      iteration: { changes, digest: iterationDigest },
+    });
+    return { identity, proposal, ...overlay };
+  }
   const proposal = parseOutput(
     await input.executor({
       command: "planning",
