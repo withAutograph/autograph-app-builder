@@ -383,7 +383,11 @@ export function readPreviewOAuthRuntimeConfig(
         githubClientSecret: resolvedEnvironment.GITHUB_CLIENT_SECRET,
         vercelClientId: resolvedEnvironment.VERCEL_AUTH_CLIENT_ID,
         vercelClientSecret: resolvedEnvironment.VERCEL_AUTH_CLIENT_SECRET,
-        passkeyOnboarding: readPasskeyOnboardingConfig(resolvedEnvironment),
+        // Emulated Preview OAuth uses the stable branch hostname while WebAuthn
+        // is bound to Vercel's ephemeral deployment hostname. Keep passkey
+        // onboarding out of this provider-emulation mode instead of making the
+        // two origin authorities disagree.
+        passkeyOnboarding: null,
       });
     }
     const passkeyOnboarding = readPasskeyOnboardingConfig(environment);

@@ -294,6 +294,10 @@ describe("Preview OAuth runtime configuration", () => {
         EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
         EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
         EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
+        VERCEL_URL: "app-deployment-team.vercel.app",
       }),
     ).toMatchObject({
       environment: "preview",
@@ -301,6 +305,7 @@ describe("Preview OAuth runtime configuration", () => {
       resource: "https://app-git-feature-team.vercel.app/mcp",
       githubClientId: "preview-github-client",
       vercelClientId: "preview-vercel-client",
+      passkeyOnboarding: null,
     });
   });
 
