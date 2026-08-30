@@ -4,7 +4,10 @@ import { withEve } from "eve/next";
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
-    "/**": ["./node_modules/@emulators/core/dist/fonts/**"],
+    "/*": [
+      "./node_modules/@emulators/core/dist/fonts/**/*",
+      "./node_modules/.pnpm/@emulators+core@*/node_modules/@emulators/core/dist/fonts/**/*",
+    ],
   },
   async headers() {
     return [
