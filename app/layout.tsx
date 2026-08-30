@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { GeistSans } from "geist/font/sans";
 
-<<<<<<< HEAD
 import { AppShell } from "@/components/app-shell";
 
 import "./globals.css";
