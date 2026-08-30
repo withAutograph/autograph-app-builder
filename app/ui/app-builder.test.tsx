@@ -192,14 +192,16 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
-    expect(view.textContent).toContain("Vercel Team (Optional)");
-    expect(view.textContent).toContain("Git Scope (Optional)");
+    expect(view.textContent).not.toContain("Vercel Team (Optional)");
+    expect(view.textContent).not.toContain("Git Scope (Optional)");
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");
     expect(view.textContent).toContain("Build with");
     expect(view.textContent).toContain("Store in");
     expect(view.textContent).toContain("Deploy to");
     expect(view.textContent).toContain("Where do you want to build this app?");
+    expect(view.textContent).toContain("Where do you want to store this app?");
+    expect(view.textContent).toContain("Where do you want to deploy this app?");
     expect(view.textContent).toContain("ChatGPT / Codex");
     expect(view.textContent).toContain("Cursor");
     expect(view.textContent).toContain("Web Chat");

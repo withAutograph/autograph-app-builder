@@ -1242,8 +1242,8 @@ export function Builder({
         </p>
         <fieldset className={`${styles.sectionField} ${styles.deploySection}`}>
           <legend>Deploy to</legend>
+          <p>Where do you want to deploy this app?</p>
           <div className={styles.integrationField}>
-            <span>Vercel Team (Optional)</span>
             {integrations.vercel.status === "connected" ? (
               <SearchCombobox
                 label="Select a Vercel Team"
@@ -1296,6 +1296,7 @@ export function Builder({
         </fieldset>
         <fieldset className={`${styles.sectionField} ${styles.storeSection}`}>
           <legend>Store in</legend>
+          <p>Where do you want to store this app?</p>
           <div className={styles.repoScope}>
             <div
               className={`${styles.repoRow} ${
@@ -1303,7 +1304,6 @@ export function Builder({
               }`}
             >
               <div className={styles.integrationField}>
-                <span>Git Scope (Optional)</span>
                 {integrations.github.status === "connected" ? (
                   <SearchCombobox
                     label="Git Scope"
