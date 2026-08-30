@@ -9,7 +9,7 @@ const mise = [
 ].find(existsSync);
 if (!mise) throw new Error("The mise executable is unavailable.");
 const webServerPath = `${dirname(process.execPath)}:${dirname(mise)}:/usr/bin:/bin`;
-const appPort = process.env.APP_BUILDER_LOCAL_PORT ?? "3001";
+const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
 const appProtocol = process.env.CI ? "http" : "https";
 const appOrigin = `${appProtocol}://localhost:${appPort}`;
 
