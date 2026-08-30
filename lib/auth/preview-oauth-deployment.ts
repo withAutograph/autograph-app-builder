@@ -37,9 +37,19 @@ function getPreviewOAuthDeploymentRuntime(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthDeploymentRuntime {
   if (deploymentRuntime !== undefined) return deploymentRuntime;
-  const config = readPreviewOAuthRuntimeConfig(environment);
+  let config: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
+  try {
+    config = readPreviewOAuthRuntimeConfig(environment);
+  } catch (cause) {
+    throw new Error("preview-oauth-config", { cause });
+  }
   const database = openHostedPostgresDatabase(config.databaseUrl);
-  const providerEmulation = readProviderEmulation(environment);
+  let providerEmulation: ReturnType<typeof readProviderEmulation>;
+  try {
+    providerEmulation = readProviderEmulation(environment);
+  } catch (cause) {
+    throw new Error("preview-oauth-emulation-config", { cause });
+  }
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
     database,
     {
@@ -54,9 +64,9 @@ function getPreviewOAuthDeploymentRuntime(
       ),
     },
   );
-  deploymentRuntime = {
-    organizationAuthority,
-    auth: createPreviewOAuthServer({
+  let auth: PreviewOAuthServer;
+  try {
+    auth = createPreviewOAuthServer({
       config,
       database: drizzleAdapter(database, {
         provider: "pg",
@@ -74,8 +84,11 @@ function getPreviewOAuthDeploymentRuntime(
           environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY ===
           "verified-v1",
       },
-    }),
-  };
+    });
+  } catch (cause) {
+    throw new Error("preview-oauth-server", { cause });
+  }
+  deploymentRuntime = { organizationAuthority, auth };
   return deploymentRuntime;
 }
 
@@ -183,7 +196,9 @@ export function createPreviewOAuthRequestHandler(input: {
           level: "error",
           message: "preview_oauth_unavailable",
           reason:
-            error instanceof Error ? error.constructor.name : "UnknownError",
+            error instanceof Error && error.message.startsWith("preview-oauth-")
+              ? error.message
+              : "preview-oauth-request",
         }),
       );
       return Response.json(
