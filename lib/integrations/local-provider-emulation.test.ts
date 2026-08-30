@@ -44,6 +44,12 @@ describe("local provider emulation", () => {
     ).toThrow();
   });
 
+  it("exposes the canonical local origin to deployment handlers", () => {
+    expect(providerEmulationEnvironment(environment)).toMatchObject({
+      APP_ORIGIN: "https://localhost:3001",
+    });
+  });
+
   it("selects an exact branch-scoped Vercel Preview transport", () => {
     const preview = readPreviewProviderEmulation({
       NODE_ENV: "production",

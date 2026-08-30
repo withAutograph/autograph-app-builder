@@ -193,7 +193,9 @@ export function providerEmulationEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
   const emulation = readProviderEmulation(environment);
-  if (!emulation || emulation.mode === "local") return environment;
+  if (!emulation) return environment;
+  if (emulation.mode === "local")
+    return { ...environment, APP_ORIGIN: emulation.canonicalOrigin };
   return {
     ...environment,
     APP_ORIGIN: emulation.canonicalOrigin,
