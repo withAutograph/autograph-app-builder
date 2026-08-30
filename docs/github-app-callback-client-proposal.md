@@ -1,10 +1,12 @@
-# Proposal: use Octokit for GitHub App callback protocol handling
+# Octokit GitHub App client architecture
 
-## Decision requested
+## Decision
 
-Adopt GitHub's Octokit libraries for GitHub App OAuth and installation-token
-protocol mechanics. Retain a small App Builder-owned orchestration layer for
-tenant binding, authorization state, return routing, and product UX.
+Adopted. GitHub App connection, provisioning, and publication use Octokit for
+OAuth exchange and refresh, App authentication, installation-token minting,
+and GitHub REST mechanics. App Builder retains a small orchestration layer for
+tenant binding, authorization state, return routing, product UX, guarded
+transport, and provider postcondition validation.
 
 This is a reliability hardening proposal. It does not change the GitHub App's
 requested permissions, repository-selection UX, or the rule that GitHub errors
@@ -74,10 +76,13 @@ Use the following ownership split.
 | Tenant-bound state, PKCE correlation, membership policy, installation binding, return state, and UI | App Builder                            |
 
 The App Builder callback route remains the only public callback endpoint. It
-will first use the application-owned state record to establish the tenant and
-the expected continuation, then delegate provider-token work to Octokit. The
-route must not persist user OAuth tokens, refresh tokens, authorization codes,
-private keys, or raw provider responses.
+first uses the application-owned state record to establish the tenant and the
+expected continuation, then delegates provider-token work to Octokit. For
+personal-account repository creation, the route persists the GitHub App user
+access and refresh token set only in the existing encrypted, versioned,
+tenant-bound credential store. Plaintext credentials remain request-local.
+The route never persists authorization codes, private keys, authorization
+headers, or raw provider responses.
 
 The existing fixed API origin, bounded transport timeout, strict tenant scope,
 atomic state consumption, and safe diagnostics remain requirements. Octokit
@@ -111,24 +116,25 @@ but it would introduce a separate credential, tenancy, lifecycle, and
 compliance boundary. It is not a proportionate fix for a GitHub App callback
 client and does not eliminate the need for App Builder's binding policy.
 
-## Delivery plan
+## Implemented cutover
 
-1. Keep the immediate callback compatibility fix and its regression tests.
-2. Introduce Octokit behind a narrow internal `GitHubAppOAuthClient` port.
-   Preserve the existing application-facing input/output types.
-3. Move authorization URL construction and code exchange to
-   `@octokit/oauth-app`. Do not log raw `state`, `code`, tokens, request bodies,
-   or provider responses.
-4. Move App JWT and installation-token creation and GitHub installation reads
-   to `@octokit/app` / `@octokit/auth-app`.
-5. Add contract tests for installation, update, authorization-only, duplicate
-   parameter, provider-denial, expired-state, replay, tenant-change, and
-   account-mismatch cases. Add a production-like end-to-end test using the
-   actual GitHub App only where provider credentials and a disposable test
-   installation are authorized.
-6. Compare safe diagnostics and resulting bindings across the legacy and
-   Octokit-backed paths. Remove the handwritten HTTP OAuth implementation only
-   after the new path has passed the full repository gate and live verification.
+1. `@octokit/oauth-app` owns authorization URL construction, code exchange,
+   and expiring user-token refresh. App Builder adds its derived S256 PKCE
+   verifier at the guarded transport boundary because Octokit's GitHub App web
+   flow does not expose that parameter.
+2. `@octokit/app` and `@octokit/auth-app` own App JWTs and operation-scoped
+   installation tokens.
+3. Octokit owns REST request construction and response decoding across
+   connection, provisioning, and publication. A shared App Builder transport
+   keeps the fixed GitHub origins, redirects disabled, bounded response size,
+   timeout, API version, user agent, and silent internal logger.
+4. Callback parsing rejects duplicates of required and application-owned
+   fields while tolerating RFC 9207 `iss`, repeated provider extensions, and
+   future provider fields. Authorization codes remain opaque and have no
+   application-defined size or syntax bound.
+5. Existing adapter return types, public routes, environment names, schema,
+   selected/all repository behavior, and personal/organization creation remain
+   unchanged.
 
 ## Acceptance criteria
 
@@ -147,8 +153,34 @@ client and does not eliminate the need for App Builder's binding policy.
   GitHub responses.
 - GitHub failures appear in the GitHub connection UI, not as a global product
   error.
-- Full repository validation and a real production installation/update flow
-  pass before the migration is considered complete.
+- Full repository validation, exact-head CI, and a Vercel Preview pass before
+  the migration is merged. A real production installation/update flow remains
+  a deployment proof and is not implied by local or Preview validation.
+
+## PR #178 disposition
+
+PR #178 was audited at its exact unmerged head
+`301d70ed01c850b18fac5fb87d97a2ca4e45ae17`; its conflicting branch is not a
+cutover input. The commit-by-commit disposition is:
+
+| PR #178 commit | Concern                                   | Cutover disposition                                                                                                                                                                      |
+| -------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `d2caa882`     | Selected and all-repository installations | Preserve the existing UX and adapter behavior; Octokit replaces only provider mechanics.                                                                                                 |
+| `fefea785`     | Installation update redirects             | Preserve setup-action and installation correlation plus the existing callback/return route.                                                                                              |
+| `f1c150ab`     | OAuth exchange failure classification     | Preserve safe product stages/categories; delegate exchange protocol and response decoding to Octokit.                                                                                    |
+| `3a5b53bd`     | Secret-safe callback diagnostics          | Preserve bounded key/count/presence metadata without code, state, token, secret, or raw-response values.                                                                                 |
+| `3666e665`     | OAuth errors returned with HTTP 2xx       | Superseded by Octokit's OAuth response handling, with failures mapped into the existing product-safe error surface.                                                                      |
+| `7e8c8081`     | Callback state and PKCE handling          | Preserve signed tenant state, replay/membership checks, and PKCE correlation; remove provider-owned code syntax/size policy.                                                             |
+| `256a85ac`     | Installation repository response handling | Preserve selected/all response interpretation and publication authorization/postcondition checks behind Octokit REST.                                                                    |
+| `fbdfec65`     | Tenant-scoped installation uniqueness     | Already landed in the durable schema/store and remains unchanged.                                                                                                                        |
+| `dfe5c7bb`     | Tenant uniqueness regression coverage     | Already landed and remains applicable without importing the stale branch.                                                                                                                |
+| `2824475b`     | Return state on callback failure          | Preserve return routing in the existing route adapter and error type.                                                                                                                    |
+| `9c403fb3`     | GitHub-local failure UI                   | Already landed and remains the product error boundary.                                                                                                                                   |
+| `3be9b0b7`     | Scoped installation-index replacement     | Already landed in hosted storage and remains unchanged.                                                                                                                                  |
+| `301d70ed`     | Installation callback metadata            | Preserve required setup discriminators, but supersede its allowlist: tolerate RFC 9207 `iss` and future provider extensions while rejecting duplicate required/application-owned fields. |
+
+No schema, route, environment, UI, or provider-setting change is taken from the
+stale branch.
 
 ## References
 

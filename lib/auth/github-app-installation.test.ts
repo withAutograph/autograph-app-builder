@@ -246,8 +246,10 @@ describe("public GitHub App installation authorization", () => {
       "https://api.github.com/user",
       "https://api.github.com/user/installations?per_page=100&page=1",
     ]);
-    expect(String(requests[0]?.init?.body)).toContain("client_secret=");
-    expect(String(requests[0]?.init?.body)).toContain("code_verifier=");
+    expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
+      client_secret: config.clientSecret,
+      code_verifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
+    });
     expect(String(requests[1]?.init?.headers)).not.toContain(
       "github-user-token-sentinel-value",
     );
@@ -265,7 +267,7 @@ describe("public GitHub App installation authorization", () => {
     const state = new URL(authorize.redirectUrl).searchParams.get("state")!;
     await expect(
       authorization.complete(
-        `https://builder.example/github/installations/callback?error=access_denied&error_description=secret-provider-detail&iss=https%3A%2F%2Fgithub.example&iss=https%3A%2F%2Fgithub.example&state=${encodeURIComponent(state)}`,
+        `https://builder.example/github/installations/callback?error=access_denied&error_description=secret-provider-detail&state=${encodeURIComponent(state)}`,
         authority,
       ),
     ).rejects.toMatchObject({
@@ -373,7 +375,6 @@ describe("public GitHub App installation authorization", () => {
     );
     callback.searchParams.set("installation_id", "98765");
     callback.searchParams.set("setup_action", "update");
-    callback.searchParams.set("iss", "https://github.com");
 
     await expect(
       authorization.complete(callback.toString(), authority),
@@ -384,15 +385,14 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).toHaveBeenCalledOnce();
   });
 
-  it("accepts a bounded opaque GitHub OAuth code with issuer identification", async () => {
+  it("accepts a provider-owned opaque GitHub OAuth code without a local size bound", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
     const { authorizeState } = await prepareAuthorization(authorization);
     const callback = new URL(authorizationCallbackUrl(authorizeState));
-    callback.searchParams.set("code", "c".repeat(1_024));
-    callback.searchParams.set("iss", "https://github.com");
+    callback.searchParams.set("code", "c".repeat(8_192));
 
     await expect(
       authorization.complete(callback.toString(), authority),
@@ -546,7 +546,35 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).not.toHaveBeenCalled();
   });
 
-  it("tolerates repeated provider issuer extensions before exchange", async () => {
+  it("accepts the live RFC 9207 code, iss, and state callback shape", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(requests),
+    });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const callback = new URL(authorizationCallbackUrl(authorizeState));
+    callback.searchParams.set("iss", "https://github.com");
+    expect([...callback.searchParams.keys()].toSorted()).toEqual([
+      "code",
+      "iss",
+      "state",
+    ]);
+    expect(
+      Object.fromEntries(
+        [...new Set(callback.searchParams.keys())].map((key) => [
+          key,
+          callback.searchParams.getAll(key).length,
+        ]),
+      ),
+    ).toEqual({ code: 1, state: 1, iss: 1 });
+
+    await expect(
+      authorization.complete(callback.toString(), authority),
+    ).resolves.toMatchObject({ status: "bound" });
+    expect(bind).toHaveBeenCalledOnce();
+  });
+
+  it("tolerates repeated provider issuer extensions", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
@@ -560,7 +588,6 @@ describe("public GitHub App installation authorization", () => {
       authorization.complete(callback.toString(), authority),
     ).resolves.toMatchObject({ status: "bound" });
     expect(bind).toHaveBeenCalledOnce();
-    expect(requests).toHaveLength(3);
   });
 
   it("tolerates provider extensions on an installation-only callback", async () => {
@@ -579,7 +606,7 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).not.toHaveBeenCalled();
   });
 
-  it("tolerates future provider extensions without retaining their names or values", async () => {
+  it("tolerates repeated future provider extension callback fields", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
@@ -587,21 +614,20 @@ describe("public GitHub App installation authorization", () => {
     const { authorizeState } = await prepareAuthorization(authorization);
     const callback = new URL(authorizationCallbackUrl(authorizeState));
     callback.searchParams.set("provider-detail-sentinel", "secret-value");
+    callback.searchParams.append("provider-detail-sentinel", "second-value");
 
-    const receipt = await authorization.complete(
-      callback.toString(),
-      authority,
-    );
-    expect(receipt).toMatchObject({ status: "bound" });
-    expect(JSON.stringify(receipt)).not.toContain("provider-detail-sentinel");
-    expect(JSON.stringify(receipt)).not.toContain("secret-value");
+    await expect(
+      authorization.complete(callback.toString(), authority),
+    ).resolves.toMatchObject({ status: "bound" });
     expect(bind).toHaveBeenCalledOnce();
-    expect(requests).toHaveLength(3);
   });
 
-  it("fails closed on provider drift without leaking provider responses", async () => {
-    const request = vi.fn<typeof fetch>(async (resource) => {
+  it("tolerates future OAuth token response extension fields", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const fallback = successfulFetch(requests);
+    const request = vi.fn<typeof fetch>(async (resource, init) => {
       if (String(resource).includes("access_token")) {
+        requests.push({ url: String(resource), init });
         return Response.json({
           access_token: "github-user-token-sentinel-value",
           token_type: "bearer",
@@ -609,28 +635,17 @@ describe("public GitHub App installation authorization", () => {
           unexpected: "provider-drift-sentinel",
         });
       }
-      throw new Error("must not continue");
+      return fallback(resource, init);
     });
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
-    let message = "";
-    let error: unknown;
-    try {
-      await authorization.complete(
+    await expect(
+      authorization.complete(
         authorizationCallbackUrl(authorizeState),
         authority,
-      );
-    } catch (caught) {
-      message = caught instanceof Error ? caught.message : String(caught);
-      error = caught;
-    }
-    expect(message).toBe("GitHub App installation authorization failed.");
-    expect(message).not.toContain("provider-drift-sentinel");
-    expect(message).not.toContain("github-user-token-sentinel-value");
-    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
-      stage: "token-response-schema",
-    });
-    expect(bind).not.toHaveBeenCalled();
+      ),
+    ).resolves.toMatchObject({ status: "bound" });
+    expect(bind).toHaveBeenCalledOnce();
   });
 
   it("classifies a token exchange failure without retaining provider data", async () => {

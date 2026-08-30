@@ -305,12 +305,13 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         ),
       ).toBe(true);
       expect(appCall?.init.redirect).toBe("error");
-      const authorization = (appCall?.init.headers as Record<string, string>)
-        .Authorization;
-      const jwt = authorization.replace(/^Bearer /u, "");
+      const authorization = new Headers(appCall?.init.headers).get(
+        "authorization",
+      )!;
+      const jwt = authorization.replace(/^bearer /iu, "");
       expect(decodeProtectedHeader(jwt)).toEqual({ alg: "RS256", typ: "JWT" });
       expect(decodeJwt(jwt)).toMatchObject({ iss: "123" });
-      expect(decodeJwt(jwt).exp! - decodeJwt(jwt).iat!).toBe(540);
+      expect(decodeJwt(jwt).exp! - decodeJwt(jwt).iat!).toBe(600);
       expect(tokenCall?.body).toEqual({
         permissions: {
           metadata: "read",

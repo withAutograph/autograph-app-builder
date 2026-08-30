@@ -125,12 +125,15 @@ describe("GitHub starter repository provisioning", () => {
           parsedUrl.origin === "https://github.com" &&
           path === "/login/oauth/access_token"
         )
-          return Response.json({
-            access_token: "refreshed-github-user-token",
-            expires_in: 28_800,
-            refresh_token: "rotated-github-refresh-token",
-            refresh_token_expires_in: 15_768_000,
-          });
+          return Response.json(
+            {
+              access_token: "refreshed-github-user-token",
+              expires_in: 28_800,
+              refresh_token: "rotated-github-refresh-token",
+              refresh_token_expires_in: 15_768_000,
+            },
+            { headers: { date: "Sun, 30 Aug 2026 12:00:00 GMT" } },
+          );
         if (path === "/app/installations/101")
           return Response.json({
             id: 101,
@@ -147,7 +150,10 @@ describe("GitHub starter repository provisioning", () => {
           return Response.json({ id: 77, login: "octocat" });
         if (path.endsWith("/access_tokens"))
           return Response.json(
-            { token: "github-installation-access-token" },
+            {
+              token: "github-installation-access-token",
+              permissions: body.permissions,
+            },
             { status: 201 },
           );
         if (path === `/repos/${owner}/vendor-portal`)
@@ -301,7 +307,14 @@ describe("GitHub starter repository provisioning", () => {
         });
       if (path.endsWith("/access_tokens"))
         return Response.json(
-          { token: "github-installation-access-token" },
+          {
+            token: "github-installation-access-token",
+            permissions: {
+              administration: "write",
+              contents: "write",
+              metadata: "read",
+            },
+          },
           { status: 201 },
         );
       if (path === "/repos/withAutograph/vendor-portal")
