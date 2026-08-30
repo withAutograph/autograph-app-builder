@@ -202,6 +202,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Cursor");
     expect(view.textContent).toContain("Web Chat");
     expect(view.textContent).toContain("Coming soon");
+    expect(view.textContent).not.toContain("Zero Data Retention");
     expect(view.textContent).toContain("Connections");
     expect(view.textContent).not.toContain("Channels");
     expect(view.textContent).not.toContain("Agent Name");
@@ -244,6 +245,67 @@ describe("Vercel-faithful App Builder flow", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(accessibility.violations).toEqual([]);
+  });
+
+  it("places model controls directly after Build with for Web Chat only", async () => {
+    const resumeKey = "5f526ce7-04dc-47ff-a865-a89155d7d6bc";
+    sessionStorage.setItem(
+      `autograph-builder-draft:${resumeKey}`,
+      JSON.stringify({
+        version: 1,
+        form: {
+          appName: "Web Chat App",
+          repository: "web-chat-app",
+          brief: "Build this in Web Chat.",
+          privateRepository: true,
+          buildDestination: "web",
+          connections: [],
+          modelId: "openai/gpt-5.6-sol",
+        },
+        team: "",
+        gitScope: "",
+        model: "openai/gpt-5.6-sol",
+        zdrOnly: false,
+        showMoreConnections: false,
+        search: "",
+        connectedConnections: [],
+        focusOrigin: "vercel",
+        appNameEditedByUser: true,
+        repositoryEditedByUser: true,
+      }),
+    );
+    const view = await render(
+      <AppBuilderComponent
+        authenticated
+        providerResumeKey={resumeKey}
+        integrations={integrationState}
+      />,
+    );
+
+    const buildWith = [...view.querySelectorAll("legend")].find(
+      (legend) => legend.textContent === "Build with",
+    )!;
+    const model = [...view.querySelectorAll("legend")].find(
+      (legend) => legend.textContent === "Model",
+    )!;
+    expect(
+      buildWith.parentElement!.compareDocumentPosition(model.parentElement!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(view.querySelector('[aria-label="GPT 5.6 Sol"]')).not.toBeNull();
+    expect(
+      view.querySelector(
+        'button[aria-label="Only use providers that support Zero Data Retention."]',
+      ),
+    ).not.toBeNull();
+    expect(
+      view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked,
+    ).toBe(false);
+    expect(
+      view.querySelector<HTMLInputElement>(
+        'input[name="build-destination"][value="web"]',
+      )?.checked,
+    ).toBe(true);
   });
 
   it("explains unavailable providers and preserves callback outcomes", async () => {
@@ -586,17 +648,6 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(addScope.disabled).toBe(false);
     await press(gitScope, "Enter");
     expect(gitScope.value).toBe("withAutograph");
-
-    const model = view.querySelector<HTMLInputElement>(
-      '[aria-label="GPT 5.6 Sol"]',
-    )!;
-    expect(model.value).toBe("GPT 5.6 Sol");
-    await focus(model);
-    await fill(model, "openai/gpt-5.4-mini");
-    expect(view.textContent).toContain("GPT 5.4 Mini");
-    expect(view.textContent).not.toContain("Claude Opus 4.6");
-    await press(model, "Enter");
-    expect(model.value).toBe("GPT 5.4 Mini");
   });
 
   it("copies the canonical brief and advances through truthful handoff states", async () => {
@@ -830,14 +881,6 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector('[role="tooltip"]')?.textContent?.trim()).toBe(
       "This repository will be private.",
     );
-    expect(
-      view.querySelector(
-        'button[aria-label="Only use providers that support Zero Data Retention."]',
-      ),
-    ).not.toBeNull();
-    expect(
-      view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked,
-    ).toBe(false);
     await click(privacy);
     expect(privacy.checked).toBe(false);
     expect(view.textContent).toContain("Public Repository Name");
