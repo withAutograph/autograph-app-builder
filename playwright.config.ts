@@ -42,6 +42,8 @@ export default defineConfig({
     url: `${appOrigin}/auth/sign-in`,
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
-    timeout: 180_000,
+    // A cold Linux runner must download/start PostgreSQL, seed both emulators,
+    // generate the local certificate, and compile the first Next.js route.
+    timeout: 300_000,
   },
 });
