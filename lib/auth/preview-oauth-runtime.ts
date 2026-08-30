@@ -547,11 +547,8 @@ export function createPreviewOAuthServer(input: {
             const response = await providerEmulationFetch(
               `${localEmulation.vercelOrigin}/login/oauth/userinfo`,
               {
-                // Emulate currently does not expose OAuth-issued Vercel
-                // tokens to its UserInfo route. The seeded service token is
-                // the local emulator's verified identity transport.
                 headers: {
-                  Authorization: `Bearer ${localEmulation.token}`,
+                  Authorization: `Bearer ${tokens.accessToken}`,
                 },
                 cache: "no-store",
                 redirect: "error",
