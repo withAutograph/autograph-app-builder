@@ -12,6 +12,7 @@ import {
 } from "./builder-state";
 import { createPostgresVercelInstallationStore } from "./postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "./vercel-installation";
+import { providerEmulationEnvironment } from "./local-provider-emulation";
 
 type BuilderIntegrationRequest = {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
@@ -42,8 +43,9 @@ function databaseFor(databaseUrl: string) {
 export async function loadBuilderIntegrationState(
   input: BuilderIntegrationRequest,
 ): Promise<BuilderIntegrationState> {
+  const environment = providerEmulationEnvironment(input.environment);
   const modelsPromise = loadGatewayModels({
-    defaultModelId: input.environment.EVE_MODEL,
+    defaultModelId: environment.EVE_MODEL,
     force: input.forceModels,
   });
   if (!input.authenticated) {
@@ -63,7 +65,7 @@ export async function loadBuilderIntegrationState(
   let preview: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
   let database: ReturnType<typeof openHostedPostgresDatabase>;
   try {
-    preview = readPreviewOAuthRuntimeConfig(input.environment);
+    preview = readPreviewOAuthRuntimeConfig(environment);
     database = databaseFor(preview.databaseUrl);
   } catch {
     return builderIntegrationStateSchema.parse({
@@ -84,7 +86,7 @@ export async function loadBuilderIntegrationState(
     "configuration-unavailable",
   );
   try {
-    readGitHubAppInstallationEnvironment(input.environment);
+    readGitHubAppInstallationEnvironment(environment);
     const githubStore = createPostgresHostedGitHubInstallationStore(database);
     const githubBindings = (await githubStore.list?.(authority)) ?? [];
     const legacy = await githubStore.read(authority);
@@ -103,7 +105,7 @@ export async function loadBuilderIntegrationState(
     "configuration-unavailable",
   );
   try {
-    const config = readVercelIntegrationEnvironment(input.environment);
+    const config = readVercelIntegrationEnvironment(environment);
     const bindings = await createPostgresVercelInstallationStore({
       database,
       config,
