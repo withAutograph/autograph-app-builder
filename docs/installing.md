@@ -74,6 +74,21 @@ adapter from App Builder `main`. Publishing a product release does not create
 the shared listing: the separate marketplace import opens a reviewed catalog
 change.
 
+You can also ask Codex to do the installation:
+
+```text
+Install Autograph App Builder from withAutograph/marketplace. Add or upgrade the
+marketplace from main, install app-builder@autograph, and verify it is enabled.
+When it is ready, give me a short user-facing confirmation and tell me to open a
+fresh task to create my app. Put commands, versions, endpoints, and diagnostics
+under an optional Details section.
+```
+
+The expected handoff is:
+
+> Autograph App Builder is ready. Open a fresh Codex task and describe the app
+> you want to create.
+
 ## Other Agent Plugins clients
 
 If your client implements [Agent Plugins 1.0.0](https://agent-plugins.org/),

@@ -616,6 +616,16 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining("Use the Autograph App Builder plugin"),
     );
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "codex plugin marketplace add withAutograph/marketplace --ref main",
+      ),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Autograph App Builder is ready. Open a fresh Codex task",
+      ),
+    );
     expect(open).toHaveBeenCalledWith(
       expect.stringMatching(/^codex:\/\/new\?prompt=/u),
       "_blank",
@@ -632,6 +642,10 @@ describe("Vercel-faithful App Builder flow", () => {
     }
     expect(view.textContent).toContain("App Brief Ready!");
     expect(view.textContent).toContain("Open in ChatGPT / Codex");
+    expect(view.textContent).toContain(
+      "codex plugin add app-builder@autograph",
+    );
+    expect(view.textContent).not.toContain("npx plugins add");
     await click(
       [...view.querySelectorAll("button")].find(
         (button) => button.textContent === "Open in ChatGPT / Codex",

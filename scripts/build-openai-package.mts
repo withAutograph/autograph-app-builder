@@ -81,7 +81,7 @@ const manifest = {
     logo: "./assets/autograph-icon.png",
     websiteURL: portable.homepage,
     defaultPrompt: [
-      "Create a polished personal finance dashboard",
+      "Create an app for [who it is for, what they need to do, and the outcome you want]",
       "Build an event planning app for coordinating guests, schedules, and tasks",
       "Design a customer feedback app with a clear review workflow",
     ],

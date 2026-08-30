@@ -48,10 +48,12 @@ requested action before execution.
 Codex can be instructed to install a plugin, but installation cannot reliably
 happen invisibly through the deep link.
 
-A pre-filled task instructs the client:
+A pre-filled task instructs the client to use App Builder when it is available.
+When it is missing, the same prompt includes the official marketplace install
+commands and asks Codex to return a concise, product-facing handoff:
 
 ```text
-If the Autograph App Builder plugin is unavailable, stop and explain how to install it. Do not use another app builder or edit the target repository directly.
+Autograph App Builder is ready. Open a fresh Codex task and resend this app brief to begin.
 ```
 
 Installation may still require:
@@ -62,11 +64,17 @@ Installation may still require:
 
 There is no confirmed deep link that silently installs a plugin.
 
-For Autograph, the fallback installation command is:
+For Autograph, the fallback installation commands are:
 
 ```bash
-npx plugins add withAutograph/autograph-app-builder
+codex plugin marketplace add withAutograph/marketplace --ref main
+codex plugin marketplace upgrade autograph
+codex plugin add app-builder@autograph
 ```
+
+Command output, versions, endpoint details, and repository diagnostics belong
+under an optional **Details** section. They must not replace the concise success
+message above.
 
 OpenAI's plugin guidance also states that installation and any required
 authorization must be completed before the plugin can be used.
