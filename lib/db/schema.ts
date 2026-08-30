@@ -190,6 +190,48 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const passkey = pgTable(
+  "passkey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    credentialID: text("credential_id").notNull(),
+    counter: integer("counter").notNull(),
+    deviceType: text("device_type").notNull(),
+    backedUp: boolean("backed_up").notNull(),
+    transports: text("transports"),
+    createdAt: timestamp("created_at", { withTimezone: true }),
+    aaguid: text("aaguid"),
+  },
+  (table) => [
+    uniqueIndex("passkey_credential_id_uidx").on(table.credentialID),
+    index("passkey_user_id_idx").on(table.userId),
+  ],
+);
+
+export const passkeyOnboarding = pgTable(
+  "passkey_onboarding",
+  {
+    id: text("id").primaryKey(),
+    tokenDigest: text("token_digest").notNull(),
+    deploymentId: text("deployment_id").notNull(),
+    origin: text("origin").notNull(),
+    rpId: text("rp_id").notNull(),
+    userHandle: text("user_handle").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("passkey_onboarding_token_digest_uidx").on(table.tokenDigest),
+    uniqueIndex("passkey_onboarding_user_handle_uidx").on(table.userHandle),
+    index("passkey_onboarding_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
 export const jwks = pgTable("jwks", {
   id: text("id").primaryKey(),
   publicKey: text("public_key").notNull(),

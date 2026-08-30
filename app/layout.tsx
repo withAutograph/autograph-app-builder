@@ -16,7 +16,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${GeistSans.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <Providers>{children}</Providers>
+        <Providers
+          githubAuthEnabled={Boolean(
+            process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET,
+          )}
+          vercelAuthEnabled={Boolean(
+            process.env.VERCEL_AUTH_CLIENT_ID &&
+            process.env.VERCEL_AUTH_CLIENT_SECRET,
+          )}
+        >
+          {children}
+        </Providers>
       </body>
     </html>
   );

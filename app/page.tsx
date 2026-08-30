@@ -90,9 +90,7 @@ export default async function Home({ searchParams }: PageProps) {
   )
     return <WorkspaceOnboarding status={user.status} />;
 
-  const authenticated =
-    user.status === "ready" ||
-    (process.env.NODE_ENV !== "production" && mode === "authenticated");
+  const authenticated = user.status === "ready";
   const integrations = await loadBuilderIntegrationState({
     environment: process.env,
     ...(user.status === "ready"

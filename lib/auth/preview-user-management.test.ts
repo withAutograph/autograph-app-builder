@@ -92,6 +92,19 @@ describe("Preview Better Auth user management", () => {
     });
   });
 
+  it("defers first passkey workspace reconciliation until registration commits", async () => {
+    const authority = createAuthority();
+    const lifecycle = createPreviewUserManagementLifecycle(authority);
+
+    await expect(
+      lifecycle.beforeSessionCreate(
+        { userId: verifiedUser.id },
+        { path: "/passkey/verify-registration" },
+      ),
+    ).resolves.toBeUndefined();
+    expect(authority.ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
+  });
+
   it("registers workspace provisioning on Better Auth session creation", async () => {
     const authority = createAuthority();
     const database = new DatabaseSync(":memory:");

@@ -185,7 +185,7 @@ describe("Preview OAuth deployment handlers", () => {
     expect(runtime).toContain("overrideUserInfo: false");
     expect(runtime).not.toContain("trustedProviders");
     expect(providers).toContain('id: "vercel"');
-    expect(providers).toContain('"github",');
+    expect(providers).toContain('["github"] as const');
     expect(providers).toContain("emailAndPassword={{ enabled: false }}");
     expect(authClient).toContain("oauthProviderClient()");
     expect(signIn).toContain("<ProviderButtons");

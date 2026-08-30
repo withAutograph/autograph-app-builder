@@ -42,6 +42,7 @@
     "@better-auth/infra": "0.4.5",
     "@better-auth/mcp": "1.7.1",
     "@better-auth/oauth-provider": "1.7.1",
+    "@better-auth/passkey": "1.7.1",
     "@geist-ui/icons": "1.0.2",
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/server": "2.0.0",

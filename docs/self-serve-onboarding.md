@@ -9,8 +9,10 @@ disabled.
 
 - Production MUST use `https://new.autograph.so/api/auth` as issuer and
   `https://new.autograph.so/mcp` as resource and audience.
-- Email/password authentication MUST remain disabled. Only GitHub and Vercel
-  provider callbacks may create public users.
+- Email/password authentication MUST remain disabled. GitHub and Vercel
+  provider callbacks remain the only Production user-creation paths. The
+  separately gated passkey-first path may create non-email-verified users only
+  on loopback development or Deployment-Protected Preview origins.
 - The provider MUST assert a verified email. Stored emails are normalized to
   lowercase and protected by a case-insensitive unique index.
 - Implicit provider linking MUST require the same verified normalized email.

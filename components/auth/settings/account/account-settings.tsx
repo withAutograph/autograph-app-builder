@@ -1,11 +1,10 @@
 "use client";
 
-import { useAuth } from "@better-auth-ui/react";
 import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
-import { ChangeEmail } from "./change-email";
 import { UserProfile } from "./user-profile";
+import { PasskeySettings } from "./passkey-settings";
 
 export type AccountSettingsProps = {
   className?: string;
@@ -34,6 +33,7 @@ export function AccountSettings({
       {...props}
     >
       <UserProfile />
+      <PasskeySettings />
     </div>
   );
 }

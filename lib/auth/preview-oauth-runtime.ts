@@ -25,6 +25,12 @@ import {
   type BetterAuthInfrastructureEnvironment,
 } from "./better-auth-infrastructure";
 import {
+  createPasskeyOnboardingPlugin,
+  createPasskeyPlugin,
+  readPasskeyOnboardingConfig,
+  type PasskeyOnboardingConfig,
+} from "./passkey-onboarding";
+import {
   hostedDeploymentEnvironmentSchema,
   readHostedDeploymentEnvironment,
 } from "../hosted/deployment-environment";
@@ -187,13 +193,14 @@ export async function fetchVerifiedVercelUserInfo(
 
 const previewOAuthRuntimeConfigSchema = z
   .object({
-    hostedAdapter: z.literal("1"),
+    hostedAdapter: z.enum(["0", "1"]),
     environment: z.union([
       hostedDeploymentEnvironmentSchema,
       z.literal("local"),
+      z.literal("development"),
     ]),
-    issuer: z.string().url().startsWith("https://"),
-    resource: z.string().url().startsWith("https://"),
+    issuer: z.string().url(),
+    resource: z.string().url(),
     secret: z
       .string()
       .min(32)
@@ -204,23 +211,28 @@ const previewOAuthRuntimeConfigSchema = z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value)),
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .optional(),
     githubClientSecret: z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value)),
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .optional(),
     vercelClientId: z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value)),
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .optional(),
     vercelClientSecret: z
       .string()
       .min(1)
       .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value)),
+      .refine((value) => !/[\0\r\n]/u.test(value))
+      .optional(),
     selfServiceSignupEnabled: z.boolean(),
+    passkeyOnboarding: z.custom<PasskeyOnboardingConfig>().nullable(),
   })
   .strict()
   .superRefine((config, context) => {
@@ -251,6 +263,57 @@ const previewOAuthRuntimeConfigSchema = z
         code: "custom",
         path: ["resource"],
         message: "Preview OAuth resource must be same-origin exact /mcp.",
+      });
+    }
+    if (config.environment === "development") {
+      if (
+        config.hostedAdapter !== "0" ||
+        !["localhost", "127.0.0.1"].includes(issuer.hostname) ||
+        issuer.protocol !== "http:"
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["environment"],
+          message: "Development auth requires one loopback HTTP issuer.",
+        });
+      }
+      return;
+    }
+    for (const [provider, clientId, clientSecret] of [
+      ["GitHub", config.githubClientId, config.githubClientSecret],
+      ["Vercel", config.vercelClientId, config.vercelClientSecret],
+    ] as const) {
+      if ((clientId === undefined) !== (clientSecret === undefined)) {
+        context.addIssue({
+          code: "custom",
+          path: [provider === "GitHub" ? "githubClientId" : "vercelClientId"],
+          message: `${provider} auth requires both client ID and client secret.`,
+        });
+      }
+    }
+    if (
+      config.hostedAdapter !== "1" ||
+      issuer.protocol !== "https:" ||
+      resource.protocol !== "https:"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["hostedAdapter"],
+        message: "Hosted auth requires the hosted adapter and HTTPS.",
+      });
+    }
+    if (
+      config.passkeyOnboarding === null &&
+      (!config.githubClientId ||
+        !config.githubClientSecret ||
+        !config.vercelClientId ||
+        !config.vercelClientSecret)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["passkeyOnboarding"],
+        message:
+          "Hosted auth without passkey onboarding requires all GitHub and Vercel credentials.",
       });
     }
   });
@@ -297,14 +360,29 @@ export function readPreviewOAuthRuntimeConfig(
       selfServiceSignupEnabled: selfServiceSignupEnvironmentSchema.parse(
         environment.SELF_SERVICE_SIGNUP_ENABLED,
       ),
+      passkeyOnboarding: null,
     });
   }
-  const deploymentEnvironment = readHostedDeploymentEnvironment(environment);
+  const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
+  const localDevelopment =
+    passkeyOnboarding?.deploymentId === "local" &&
+    environment.VERCEL_ENV === undefined;
+  const deploymentEnvironment = localDevelopment
+    ? "development"
+    : readHostedDeploymentEnvironment(environment);
+  const issuer =
+    environment.BETTER_AUTH_URL ??
+    (environment.VERCEL_ENV === "preview" && environment.VERCEL_URL
+      ? `https://${environment.VERCEL_URL}/api/auth`
+      : undefined);
+  const resource =
+    environment.MCP_RESOURCE_URL ??
+    (issuer ? `${new URL(issuer).origin}/mcp` : undefined);
   return previewOAuthRuntimeConfigSchema.parse({
-    hostedAdapter: environment.EVE_HOSTED_ADAPTER,
+    hostedAdapter: localDevelopment ? "0" : environment.EVE_HOSTED_ADAPTER,
     environment: deploymentEnvironment,
-    issuer: environment.BETTER_AUTH_URL,
-    resource: environment.MCP_RESOURCE_URL,
+    issuer,
+    resource,
     secret: environment.BETTER_AUTH_SECRET,
     databaseUrl: environment.DATABASE_URL,
     githubClientId: environment.GITHUB_CLIENT_ID,
@@ -314,6 +392,7 @@ export function readPreviewOAuthRuntimeConfig(
     selfServiceSignupEnabled: selfServiceSignupEnvironmentSchema.parse(
       environment.SELF_SERVICE_SIGNUP_ENABLED,
     ),
+    passkeyOnboarding,
   });
 }
 
@@ -462,14 +541,16 @@ export function createPreviewOAuthServer(input: {
     trustedOrigins: [resourceOrigin],
     socialProviders: localEmulation
       ? {}
-      : {
-          github: {
-            clientId: config.githubClientId,
-            clientSecret: config.githubClientSecret,
-            disableSignUp: false,
-            overrideUserInfoOnSignIn: false,
-          },
-        },
+      : config.githubClientId && config.githubClientSecret
+        ? {
+            github: {
+              clientId: config.githubClientId,
+              clientSecret: config.githubClientSecret,
+              disableSignUp: false,
+              overrideUserInfoOnSignIn: false,
+            },
+          }
+        : {},
     user: {
       validateUserInfo({ user, source }) {
         const providerId = source.oauth?.providerId;
@@ -506,7 +587,7 @@ export function createPreviewOAuthServer(input: {
         config.environment === "preview"
           ? "autograph_preview"
           : "autograph_app_builder",
-      useSecureCookies: true,
+      useSecureCookies: config.environment !== "development",
     },
     plugins: [
       ...previewUserManagementPlugins(
@@ -517,53 +598,61 @@ export function createPreviewOAuthServer(input: {
         },
       ),
       ...infrastructure.plugins,
-      jwt({
-        jwks: {
-          keyPairConfig: { alg: "ES256" },
-          jwksPath: "/jwks",
-        },
-        jwt: {
-          issuer: config.issuer,
-          audience: config.resource,
-          expirationTime: "5m",
-        },
-        disableSettingJwtHeader: true,
-      }),
-      mcp(
-        buildPreviewMcpOAuthOptions({
-          config: { issuer: config.issuer, resource: config.resource },
-          membership: input.membership,
-        }),
-      ),
-      cimd(
-        buildPreviewCimdOptions({
-          fetchClientMetadataResource:
-            input.fetchClientMetadata ?? fetchPreviewClientMetadataResource,
-        }),
-      ),
-      genericOAuth({
-        config: [
-          ...localProviderConfigs,
-          ...(localEmulation
-            ? []
-            : [
-                {
-                  providerId: "vercel",
-                  name: "Vercel",
-                  discoveryUrl:
-                    "https://vercel.com/.well-known/openid-configuration",
-                  requireIdTokenVerification: true,
-                  clientId: config.vercelClientId,
-                  clientSecret: config.vercelClientSecret,
-                  tokenEndpointAuth: { method: "client_secret_post" as const },
-                  scopes: ["openid", "email", "profile"],
-                  getUserInfo: fetchVerifiedVercelUserInfo,
-                  disableSignUp: false,
-                  overrideUserInfo: false,
-                },
-              ]),
-        ],
-      }),
+      createPasskeyOnboardingPlugin({ config: config.passkeyOnboarding }),
+      createPasskeyPlugin({ config: config.passkeyOnboarding }),
+      ...(config.environment === "development"
+        ? []
+        : [
+            jwt({
+              jwks: {
+                keyPairConfig: { alg: "ES256" },
+                jwksPath: "/jwks",
+              },
+              jwt: {
+                issuer: config.issuer,
+                audience: config.resource,
+                expirationTime: "5m",
+              },
+              disableSettingJwtHeader: true,
+            }),
+            mcp(
+              buildPreviewMcpOAuthOptions({
+                config: { issuer: config.issuer, resource: config.resource },
+                membership: input.membership,
+              }),
+            ),
+             cimd(
+              buildPreviewCimdOptions({
+                fetchClientMetadataResource:
+                  input.fetchClientMetadata ??
+                  fetchPreviewClientMetadataResource,
+              }),
+             ),
+             ...(localEmulation
+               ? [genericOAuth({ config: localProviderConfigs })]
+               : config.vercelClientId && config.vercelClientSecret
+               ? [
+                  genericOAuth({
+                    config: [
+                      {
+                        providerId: "vercel",
+                        name: "Vercel",
+                        discoveryUrl:
+                          "https://vercel.com/.well-known/openid-configuration",
+                        requireIdTokenVerification: true,
+                        clientId: config.vercelClientId,
+                        clientSecret: config.vercelClientSecret,
+                        tokenEndpointAuth: { method: "client_secret_post" },
+                        scopes: ["openid", "email", "profile"],
+                        getUserInfo: fetchVerifiedVercelUserInfo,
+                        disableSignUp: false,
+                        overrideUserInfo: false,
+                      },
+                    ],
+                   }),
+                 ]
+               : []),
+           ]),
       nextCookies(),
     ],
   });
