@@ -11,40 +11,20 @@ without changing that source repository.
 
 ## Install
 
-Once the pre-release `v0.2.1` GitHub release is published, download and verify
-its complete asset set, extract the endpoint-bound Codex marketplace, and
-install it. These commands fail closed until that release exists:
+Register the Autograph marketplace once, then install App Builder:
 
 ```sh
 (
-  set -eu
-  release_version=0.2.1
-  release_dir="$PWD/autograph-app-builder-release-$release_version"
-  marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
-  mkdir "$release_dir" "$marketplace_dir"
-  gh release download "v$release_version" \
-    --repo withAutograph/autograph-app-builder \
-    --dir "$release_dir"
-  cd "$release_dir"
-  shasum -a 256 -c SHA256SUMS
-  gh release verify "v$release_version" \
-    --repo withAutograph/autograph-app-builder
-  gh release verify-asset "v$release_version" \
-    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
-    --repo withAutograph/autograph-app-builder
-  tar -xzf \
-    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
-    -C "$marketplace_dir"
-  codex plugin marketplace add "$marketplace_dir"
+  codex plugin marketplace add withAutograph/marketplace
   codex plugin add autograph-app-builder@autograph
 )
 ```
 
-Complete OAuth, open a new task, and mention `@Autograph App Builder`. A shared
-marketplace listing is a separate distribution action and is not implied by a
-GitHub release. See
-[the complete installation guide](docs/installing.md) for every supported
-option.
+Complete OAuth, open a new task, and mention `@Autograph App Builder`. The
+marketplace imports the immutable endpoint-bound package published by this
+repository; it does not rebuild or hand-edit the plugin. See the
+[complete installation guide](docs/installing.md) for verified release-archive
+installation and every supported client.
 
 ## Current implemented workflow
 

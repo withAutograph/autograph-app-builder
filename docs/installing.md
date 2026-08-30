@@ -57,22 +57,22 @@ published.
 
 ## Install from the shared marketplace after publication
 
-After the immutable marketplace tag is published, register that exact Git ref
-and install its `autograph` listing:
+After the release is imported into the organization marketplace, register the
+shared catalog and install its `autograph` listing:
 
 ```sh
 (
   set -eu
-  codex plugin marketplace add withAutograph/autograph-app-builder \
-    --ref codex-marketplace-v0.2.1
+  codex plugin marketplace add withAutograph/marketplace
   codex plugin add autograph-app-builder@autograph
 )
 ```
 
-Open a new Codex task after installation. The marketplace tag contains only the
-generated catalog and endpoint-bound plugin; it never installs the loopback
-development adapter from `main`. Publishing a release does not create the
-shared listing; marketplace publication is a separate distribution action.
+Open a new Codex task after installation. The marketplace contains only
+verified endpoint-bound packages; it never installs the loopback development
+adapter from App Builder `main`. Publishing a product release does not create
+the shared listing: the separate marketplace import opens a reviewed catalog
+change.
 
 ## Other Agent Plugins clients
 
@@ -198,5 +198,6 @@ requires GitHub's immutable-release attestation and separate build-provenance
 attestations to verify before completing.
 
 The archives are the immutable distribution payload behind marketplace and
-client installation. Publishing a shared marketplace or client catalog entry
-is a separate distribution action.
+client installation. The public `withAutograph/marketplace` repository imports
+those verified bytes through its **Import plugin release** workflow; it does not
+rebuild the package or maintain a hand-edited duplicate.

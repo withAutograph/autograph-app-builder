@@ -7,13 +7,10 @@ import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
 const readDocumentation = (path: string) => readFile(resolve(path), "utf8");
-const documents = [
-  { path: "README.md", heading: "## Install" },
-  {
-    path: "docs/installing.md",
-    heading: "## Install before shared marketplace publication",
-  },
-] as const;
+const verifiedReleaseInstall = {
+  path: "docs/installing.md",
+  heading: "## Install before shared marketplace publication",
+} as const;
 
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
@@ -74,33 +71,45 @@ async function runInstall(
 }
 
 describe("public plugin installation documentation", () => {
-  it.each(documents)(
-    "$path stops before extraction or installation when verification fails",
-    async ({ path, heading }) => {
-      const documentation = await readDocumentation(path);
-      const script = firstShellBlock(documentation, heading);
-      expect(script).toContain("set -eu");
+  it("stops before extraction or installation when release verification fails", async () => {
+    const { path, heading } = verifiedReleaseInstall;
+    const documentation = await readDocumentation(path);
+    const script = firstShellBlock(documentation, heading);
+    expect(script).toContain("set -eu");
 
-      for (const failure of ["checksum", "release-verifier"] as const) {
-        const auditLog = await runInstall(script, failure);
-        expect(auditLog).toBe("");
-        expect(auditLog).not.toContain("tar ");
-        expect(auditLog).not.toContain("codex plugin marketplace add");
-        expect(auditLog).not.toContain("codex plugin add");
-      }
+    for (const failure of ["checksum", "release-verifier"] as const) {
+      const auditLog = await runInstall(script, failure);
+      expect(auditLog).toBe("");
+      expect(auditLog).not.toContain("tar ");
+      expect(auditLog).not.toContain("codex plugin marketplace add");
+      expect(auditLog).not.toContain("codex plugin add");
+    }
 
-      const auditLog = await runInstall(script, "none");
-      expect(auditLog).toContain(
-        "tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
-      );
-      expect(auditLog).toMatch(
-        /codex plugin marketplace add .*autograph-app-builder-marketplace-0\.2\.1/u,
-      );
-      expect(auditLog).toContain(
-        "codex plugin add autograph-app-builder@autograph",
-      );
-    },
-  );
+    const auditLog = await runInstall(script, "none");
+    expect(auditLog).toContain(
+      "tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
+    );
+    expect(auditLog).toMatch(
+      /codex plugin marketplace add .*autograph-app-builder-marketplace-0\.2\.1/u,
+    );
+    expect(auditLog).toContain(
+      "codex plugin add autograph-app-builder@autograph",
+    );
+  });
+
+  it("uses the shared marketplace as the primary README installation path", async () => {
+    const documentation = await readDocumentation("README.md");
+    const script = firstShellBlock(documentation, "## Install");
+
+    expect(script).toContain(
+      "codex plugin marketplace add withAutograph/marketplace",
+    );
+    expect(script).toContain(
+      "codex plugin add autograph-app-builder@autograph",
+    );
+    expect(script).not.toContain("gh release download");
+    expect(script).not.toContain("tar -xzf");
+  });
 
   it("keeps exact pre-release assets and availability explicit", async () => {
     const documentation = await readDocumentation("docs/installing.md");
