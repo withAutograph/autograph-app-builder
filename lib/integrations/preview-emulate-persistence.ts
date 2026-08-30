@@ -26,6 +26,21 @@ function validateState(state: string) {
   return state;
 }
 
+function pendingVercelCodeCount(state: string | undefined) {
+  if (!state) return 0;
+  try {
+    const snapshot = JSON.parse(state) as {
+      store?: { data?: Record<string, { entries?: unknown[] }> };
+    };
+    return (
+      snapshot.store?.data?.["vercel:vercel.oauth.pendingCodes"]?.entries
+        ?.length ?? 0
+    );
+  } catch {
+    return 0;
+  }
+}
+
 export function createPreviewEmulatePersistence(input: {
   namespace: string;
   store: PreviewEmulateStateStore;
@@ -34,6 +49,13 @@ export function createPreviewEmulatePersistence(input: {
   return {
     async load() {
       const state = await input.store.read(input.namespace);
+      console.info(
+        JSON.stringify({
+          level: "info",
+          message: "preview_emulator_state_loaded",
+          pendingVercelCodes: pendingVercelCodeCount(state),
+        }),
+      );
       return state === undefined ? null : validateState(state);
     },
     async save(state) {
@@ -41,6 +63,13 @@ export function createPreviewEmulatePersistence(input: {
         input.namespace,
         validateState(state),
         input.now?.() ?? new Date(),
+      );
+      console.info(
+        JSON.stringify({
+          level: "info",
+          message: "preview_emulator_state_saved",
+          pendingVercelCodes: pendingVercelCodeCount(state),
+        }),
       );
     },
   };
