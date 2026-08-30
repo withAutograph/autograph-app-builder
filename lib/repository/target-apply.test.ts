@@ -640,6 +640,102 @@ describe("proposal-bound target apply", () => {
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
   });
 
+  it("applies an existing-app replacement only when its source preimage matches", async () => {
+    const beforeContent = "export default function Page() {}\n";
+    const afterContent =
+      "export default function Page() { return 'Finance'; }\n";
+    const path = "apps/vendor/app/page.tsx";
+    const iteration = {
+      ...proposal,
+      operation: "iterate-existing-app" as const,
+      contract: {
+        ...proposal.contract,
+        appId: "vendor",
+        appSpec: {
+          path: "prototype/vendor/app-spec.md",
+          sha256: acceptedAppSpecDigest,
+        },
+      },
+      futurePath: "apps/vendor/app.contract.json",
+      plan: {
+        ...proposal.plan,
+        source: {
+          ...proposal.plan.source,
+          workspacePath: "apps/vendor",
+          packageName: "@autograph/vendor",
+        },
+        product: {
+          ...proposal.plan.product,
+          appSpec: {
+            path: "prototype/vendor/app-spec.md",
+            sha256: acceptedAppSpecDigest,
+          },
+        },
+        topology: {
+          ...proposal.plan.topology,
+          projectName: "apps-vendor",
+          packageName: "@autograph/vendor",
+          routes: ["/vendor", "/vendor/:path*"],
+          proposedDigest: proposal.plan.topology.currentDigest,
+        },
+      },
+      iteration: {
+        changes: [
+          {
+            path,
+            before: {
+              mode: "644",
+              digest: createHash("sha256").update(beforeContent).digest("hex"),
+            },
+            after: {
+              mode: "644",
+              digest: createHash("sha256").update(afterContent).digest("hex"),
+              content: afterContent,
+            },
+          },
+        ],
+        digest: "f".repeat(64),
+      },
+    } satisfies TargetProposal;
+    const writeTextFile = vi.fn(async () => undefined);
+    const readBinaryFile = vi.fn(async () => Buffer.from(beforeContent));
+    const run = vi.fn();
+    const result = await sandboxApplyCommandExecutor()({
+      sandbox: {
+        id: "sandbox",
+        readBinaryFile,
+        writeTextFile,
+        run,
+      } as unknown as SandboxSession,
+      appId: "vendor",
+      applyRoot: "/workspace/overlay",
+      proposalPath: "/workspace/proposal.json",
+      proposal: iteration,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(writeTextFile).toHaveBeenCalledWith({
+      path: `overlay/${path}`,
+      content: afterContent,
+    });
+    expect(run).not.toHaveBeenCalled();
+
+    readBinaryFile.mockResolvedValueOnce(Buffer.from("stale\n"));
+    const stale = await sandboxApplyCommandExecutor()({
+      sandbox: {
+        id: "sandbox",
+        readBinaryFile,
+        writeTextFile,
+        run,
+      } as unknown as SandboxSession,
+      appId: "vendor",
+      applyRoot: "/workspace/overlay",
+      proposalPath: "/workspace/proposal.json",
+      proposal: iteration,
+    });
+    expect(stale).toMatchObject({ exitCode: 2 });
+    expect(writeTextFile).toHaveBeenCalledTimes(1);
+  });
+
   it("snapshots the overlay in one sandbox process without per-file commands", async () => {
     const firstDigest = createHash("sha256").update("first\n").digest("hex");
     const secondDigest = createHash("sha256").update("second\n").digest("hex");
