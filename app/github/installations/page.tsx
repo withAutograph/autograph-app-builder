@@ -3,6 +3,11 @@ import {
   providerConnectionFailureMessage,
 } from "@/lib/integrations/provider-connection-status";
 import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
+import {
+  ProviderConnection,
+  ProviderConnectionNotice,
+} from "@/app/ui/provider-connection";
+import { FaGithub } from "react-icons/fa";
 
 type Props = {
   searchParams: Promise<{
@@ -21,34 +26,25 @@ export default async function GitHubInstallationsPage({ searchParams }: Props) {
     resumeKey: resume,
   });
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <p className="eyebrow">Autograph App Builder</p>
-        <h1>Connect a GitHub App installation</h1>
-        <p>
-          Choose only the repositories this workspace may inspect or update.
-          GitHub will ask you to confirm the installation and return here.
-        </p>
-        {status === "connected" ? (
-          <p role="status">The GitHub App installation is connected.</p>
-        ) : null}
-        {status === "failed" ? (
-          <p role="alert">
-            {providerConnectionFailureMessage("GitHub", failureReason)}
-          </p>
-        ) : null}
-        <form method="post" action="/github/installations/start">
-          <input name="returnTo" type="hidden" value={returnState.returnTo} />
-          {returnState.resumeKey ? (
-            <input
-              name="resumeKey"
-              type="hidden"
-              value={returnState.resumeKey}
-            />
-          ) : null}
-          <button type="submit">Install or update GitHub access</button>
-        </form>
-      </section>
-    </main>
+    <ProviderConnection
+      action="/github/installations/start"
+      buttonLabel="Install or update GitHub access"
+      description="Choose only the repositories this workspace may inspect or update. GitHub will ask you to confirm the installation and return here."
+      icon={<FaGithub size={23} />}
+      returnTo={returnState.returnTo}
+      resumeKey={returnState.resumeKey}
+      title="Connect a GitHub App installation"
+    >
+      {status === "connected" ? (
+        <ProviderConnectionNotice status="success">
+          The GitHub App installation is connected.
+        </ProviderConnectionNotice>
+      ) : null}
+      {status === "failed" ? (
+        <ProviderConnectionNotice status="error">
+          {providerConnectionFailureMessage("GitHub", failureReason)}
+        </ProviderConnectionNotice>
+      ) : null}
+    </ProviderConnection>
   );
 }
