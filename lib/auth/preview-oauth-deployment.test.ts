@@ -225,7 +225,7 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("uses the Better Auth UI passkey registry surfaces", async () => {
-    const [providers, passkeyPlugin, signIn, accountSettings, onboarding] =
+    const [providers, passkeyPlugin, signIn, accountSettings, passkeyButton] =
       await Promise.all([
         readFile("components/providers.tsx", "utf8"),
         readFile("lib/auth/passkey-plugin.ts", "utf8"),
@@ -234,7 +234,7 @@ describe("Preview OAuth deployment handlers", () => {
           "components/auth/settings/account/account-settings.tsx",
           "utf8",
         ),
-        readFile("components/auth/passkey-sign-in-actions.tsx", "utf8"),
+        readFile("components/auth/passkey/passkey-button.tsx", "utf8"),
       ]);
 
     expect(providers).toContain(
@@ -244,7 +244,12 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyPlugin).toContain("securityCards: [Passkeys]");
     expect(signIn).toContain("plugin.authButtons");
     expect(accountSettings).toContain("plugin.securityCards");
-    expect(onboarding).toContain("useAddPasskey(authClient)");
-    expect(onboarding).not.toContain("authClient.signIn.passkey");
+    expect(passkeyButton).toContain("useSignInPasskey(authClient)");
+    expect(passkeyButton).toContain("useAddPasskey(authClient)");
+    expect(passkeyButton).toContain("await signInPasskey.mutateAsync");
+    expect(passkeyButton).toContain("await addPasskey.mutateAsync");
+    expect(passkeyButton).toContain(
+      'fetch("/api/auth/passkey/onboarding-context"',
+    );
   });
 });

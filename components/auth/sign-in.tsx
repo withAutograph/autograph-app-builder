@@ -37,14 +37,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 import { cn } from "@/lib/utils";
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
-import { PasskeyOnboardingAction } from "./passkey-sign-in-actions";
 import { ProviderButtons, type SocialLayout } from "./provider-buttons";
 
 export type SignInProps = {
   className?: string;
   socialLayout?: SocialLayout;
   socialPosition?: "top" | "bottom";
-  passkeyOnboarding?: boolean;
 };
 
 /**
@@ -59,7 +57,6 @@ export function SignIn({
   className,
   socialLayout,
   socialPosition = "bottom",
-  passkeyOnboarding = false,
 }: SignInProps) {
   const {
     authClient,
@@ -143,7 +140,6 @@ export function SignIn({
 
       <CardContent>
         <div className="flex flex-col gap-6">
-          {passkeyOnboarding && <PasskeyOnboardingAction />}
           {plugins.flatMap((plugin) =>
             (plugin.authButtons ?? []).map((AuthButton, index) => (
               <AuthButton
