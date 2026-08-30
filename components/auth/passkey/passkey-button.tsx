@@ -28,9 +28,9 @@ type OnboardingResponse = { context?: unknown };
 /**
  * "Continue with Passkey" button rendered alongside the password sign-in form.
  *
- * Hidden on the sign-up view where passkey sign-in isn't applicable.
+ * Signs returning users in and starts first-passkey registration on sign-up.
  *
- * @param view - Current auth view. Hides the button on `"signUp"`.
+ * @param view - Current auth view. Selects registration on `"signUp"`.
  */
 export function PasskeyButton({ view }: PasskeyButtonProps) {
   const { authClient, localization, redirectTo, navigate } =
@@ -103,9 +103,6 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     }
   };
 
-  // Passkey sign-in isn't relevant on the sign-up flow.
-  if (view === "signUp") return null;
-
   return (
     <div className="flex flex-col gap-3">
       <Button
@@ -118,15 +115,17 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
           failed &&
             "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive",
         )}
-        onClick={continueWithPasskey}
+        onClick={view === "signUp" ? createPasskey : continueWithPasskey}
       >
         {pending ? <Spinner /> : <Fingerprint />}
         {failed
           ? "Passkey failed (try again)"
-          : localization.auth.continueWith.replace(
-              "{{provider}}",
-              passkeyLocalization.passkey,
-            )}
+          : view === "signUp"
+            ? "Create a passkey"
+            : localization.auth.continueWith.replace(
+                "{{provider}}",
+                passkeyLocalization.passkey,
+              )}
       </Button>
     </div>
   );

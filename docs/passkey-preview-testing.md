@@ -26,6 +26,9 @@ returning-user flow. Browsers treat `localhost` as a
 WebAuthn secure context; use `localhost` consistently rather than switching
 between it and `127.0.0.1` because credentials are RP-ID scoped.
 
+The Sign Up view offers **Create a passkey** directly and never places a second
+passkey action beside it.
+
 To reset a local identity, remove its organization/member, session, passkey, and
 user records together in a transaction. Do not reuse that procedure against
 Preview or Production data.

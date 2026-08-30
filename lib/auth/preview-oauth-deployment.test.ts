@@ -225,17 +225,21 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("uses the Better Auth UI passkey registry surfaces", async () => {
-    const [providers, passkeyPlugin, signIn, accountSettings, passkeyButton] =
-      await Promise.all([
-        readFile("components/providers.tsx", "utf8"),
-        readFile("lib/auth/passkey-plugin.ts", "utf8"),
-        readFile("components/auth/sign-in.tsx", "utf8"),
-        readFile(
-          "components/auth/settings/account/account-settings.tsx",
-          "utf8",
-        ),
-        readFile("components/auth/passkey/passkey-button.tsx", "utf8"),
-      ]);
+    const [
+      providers,
+      passkeyPlugin,
+      signIn,
+      signUp,
+      accountSettings,
+      passkeyButton,
+    ] = await Promise.all([
+      readFile("components/providers.tsx", "utf8"),
+      readFile("lib/auth/passkey-plugin.ts", "utf8"),
+      readFile("components/auth/sign-in.tsx", "utf8"),
+      readFile("components/auth/sign-up.tsx", "utf8"),
+      readFile("components/auth/settings/account/account-settings.tsx", "utf8"),
+      readFile("components/auth/passkey/passkey-button.tsx", "utf8"),
+    ]);
 
     expect(providers).toContain(
       'import { passkeyPlugin } from "@/lib/auth/passkey-plugin"',
@@ -245,6 +249,9 @@ describe("Preview OAuth deployment handlers", () => {
     expect(signIn).toContain("plugin.authButtons");
     expect(signIn).toContain('className="flex flex-col gap-3"');
     expect(signIn).not.toContain('className="flex flex-col gap-6"');
+    expect(signUp).toContain("plugin.authButtons");
+    expect(signUp).toContain('view="signUp"');
+    expect(signUp).toContain('className="flex flex-col gap-3"');
     expect(accountSettings).toContain("plugin.securityCards");
     expect(passkeyButton).toContain("useSignInPasskey(authClient)");
     expect(passkeyButton).toContain("useAddPasskey(authClient)");
@@ -252,7 +259,10 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyButton).toContain("await addPasskey.mutateAsync");
     expect(passkeyButton).toContain("passkeyClientError(result)");
     expect(passkeyButton).toContain('"Passkey failed (try again)"');
+    expect(passkeyButton).toContain('view === "signUp"');
+    expect(passkeyButton).toContain('"Create a passkey"');
     expect(passkeyButton).not.toContain("setShowRegistration");
+    expect(passkeyButton).not.toContain('if (view === "signUp") return null');
     expect(passkeyButton).toContain(
       'fetch("/api/auth/passkey/onboarding-context"',
     );
