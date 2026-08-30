@@ -64,6 +64,7 @@ describe("hosted Vercel sandbox backend", () => {
         "github.com",
         "release-assets.githubusercontent.com",
         "nodejs.org",
+        "static.rust-lang.org",
       ],
     });
     expect(options!.resources).toEqual({ vcpus: 2 });

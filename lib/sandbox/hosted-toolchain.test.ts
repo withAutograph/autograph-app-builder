@@ -8,6 +8,7 @@ import {
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
   HOSTED_NODE_VERSION,
+  HOSTED_RUST_VERSION,
   HOSTED_TOOLCHAIN_CONTRACT_VERSION,
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedToolchainArtifacts,
@@ -35,11 +36,24 @@ describe("hosted Vercel Sandbox toolchain", () => {
       expect(artifact.miseSha256).toMatch(/^[0-9a-f]{64}$/u);
       expect(artifact.bunSha256).toMatch(/^[0-9a-f]{64}$/u);
       expect(artifact.nodeSha256).toMatch(/^[0-9a-f]{64}$/u);
+      for (const url of [
+        artifact.rust.cargoUrl,
+        artifact.rust.rustcUrl,
+        artifact.rust.stdUrl,
+      ])
+        expect(url).toContain(HOSTED_RUST_VERSION);
+      for (const checksum of [
+        artifact.rust.cargoSha256,
+        artifact.rust.rustcSha256,
+        artifact.rust.stdSha256,
+      ])
+        expect(checksum).toMatch(/^[0-9a-f]{64}$/u);
     }
     expect(HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS).toEqual([
       "github.com",
       "release-assets.githubusercontent.com",
       "nodejs.org",
+      "static.rust-lang.org",
     ]);
   });
 
@@ -55,6 +69,11 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).toContain("mise --version");
     expect(command).toContain("bun --version");
     expect(command).toContain("node --version");
+    expect(command).toContain("cargo --version");
+    expect(command).toContain("rustc --version");
+    expect(command).toContain(
+      "--prefix=/opt/app-builder/rust --disable-ldconfig",
+    );
     expect(command).toContain(
       'sudo install --owner=root --group=root --mode=0755 "$work/$node_directory/bin/node" /usr/local/bin/node',
     );
