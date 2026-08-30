@@ -42,6 +42,7 @@ export function createPreviewEmulateHandler(input: {
     store: createPostgresPreviewEmulateStateStore(input.databaseUrl),
   });
   let pendingPersistence = Promise.resolve();
+  let persistenceRevision = 0;
   const handler = createEmulateHandler({
     services: {
       github: {
@@ -56,6 +57,7 @@ export function createPreviewEmulateHandler(input: {
     persistence: {
       load: persistence.load,
       save(state) {
+        persistenceRevision += 1;
         pendingPersistence = persistence.save(state);
         return pendingPersistence;
       },
@@ -68,8 +70,12 @@ export function createPreviewEmulateHandler(input: {
       // adapter-next queues persistence after producing the response. Await its
       // save before returning so a serverless invocation cannot freeze with an
       // OAuth code only resident in memory.
-      await Promise.resolve();
-      await pendingPersistence;
+      for (;;) {
+        const revision = persistenceRevision;
+        await pendingPersistence;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (revision === persistenceRevision) break;
+      }
       return response;
     };
   }
