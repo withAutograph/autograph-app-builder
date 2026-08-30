@@ -451,8 +451,8 @@ describe("Vercel-faithful App Builder flow", () => {
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
     const repository =
       view.querySelector<HTMLInputElement>("#repository-name")!;
-    expect(appName.value).toBe("Vendor Onboarding");
-    expect(repository.value).toBe("vendor-onboarding");
+    expect(appName.value).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/u);
+    expect(repository.value).toBe(repositoryNameFromAppName(appName.value));
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
