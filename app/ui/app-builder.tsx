@@ -44,10 +44,10 @@ import {
 } from "../../lib/integrations/provider-connection-status";
 
 type Screen = "builder" | "handoff" | "ready";
-type BuildDestination = "web" | "codex" | "cursor";
-type ClipboardState = "idle" | "copied" | "failed";
-type HandoffAttempt = "attempted" | "blocked" | "too-long";
-type BuilderForm = {
+export type BuildDestination = "web" | "codex" | "cursor";
+export type ClipboardState = "idle" | "copied" | "failed";
+export type HandoffAttempt = "attempted" | "blocked" | "too-long";
+export type BuilderForm = {
   appName: string;
   repository: string;
   brief: string;
@@ -58,8 +58,8 @@ type BuilderForm = {
   githubInstallationId?: string;
   modelId: string;
 };
-type ProviderField = "vercel" | "github";
-type BuilderDraft = {
+export type ProviderField = "vercel" | "github";
+export type BuilderDraft = {
   version: 1;
   form: BuilderForm;
   team: string;
@@ -122,8 +122,8 @@ function readBuilderDraft(resumeKey: string) {
   builderDraftCache.set(resumeKey, { raw, draft });
   return draft;
 }
-type ConnectionStage = "connect" | "configure" | "customize";
-type ConnectionFlow = { name: string; stage: ConnectionStage };
+export type ConnectionStage = "connect" | "configure" | "customize";
+export type ConnectionFlow = { name: string; stage: ConnectionStage };
 
 function CursorMark() {
   return (
@@ -379,7 +379,7 @@ function randomAppName(seed?: string) {
   return `${adjective} ${noun}`;
 }
 
-function AutographMark({ compact = false }: { compact?: boolean }) {
+export function AutographMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={styles.brand} data-compact={compact || undefined}>
       <Image
@@ -394,7 +394,7 @@ function AutographMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function InfoTooltip({ children }: { children: string }) {
+export function InfoTooltip({ children }: { children: string }) {
   const tooltipId = useId();
 
   return (
@@ -409,7 +409,13 @@ function InfoTooltip({ children }: { children: string }) {
   );
 }
 
-function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
+export function ConnectionIcon({
+  kind,
+  name,
+}: {
+  kind?: string;
+  name: string;
+}) {
   const icons = {
     quickbooks: SiQuickbooks,
     xero: SiXero,
@@ -438,7 +444,7 @@ type ComboOption = {
 
 type ComboFooter = ComboOption & { disabled?: boolean };
 
-function SearchCombobox({
+export function SearchCombobox({
   label,
   value,
   options,
@@ -628,7 +634,7 @@ function SearchCombobox({
   );
 }
 
-function Header() {
+export function Header() {
   return (
     <header className={styles.header}>
       <a className={styles.skipLink} href="#main-content">
@@ -645,7 +651,7 @@ function Header() {
   );
 }
 
-function ConnectionDrawer({
+export function ConnectionDrawer({
   flow,
   onClose,
   onStageChange,
@@ -840,7 +846,7 @@ function ConnectionDrawer({
   );
 }
 
-function AnonymousBuilder({
+export function AnonymousBuilder({
   onContinue,
 }: {
   onContinue: (brief: string) => void;
@@ -904,7 +910,7 @@ function AnonymousBuilder({
   );
 }
 
-function Builder({
+export function Builder({
   initialBrief,
   onCreate,
   integrations,
@@ -1644,7 +1650,7 @@ function Builder({
   );
 }
 
-function Handoff({ onReady }: { onReady: () => void }) {
+export function Handoff({ onReady }: { onReady: () => void }) {
   const [step, setStep] = useState(0);
   const stages = [
     "Preparing App Brief",
@@ -1703,7 +1709,7 @@ function Handoff({ onReady }: { onReady: () => void }) {
   );
 }
 
-function Ready({
+export function Ready({
   form,
   initialAttempt,
   initialClipboardState,
