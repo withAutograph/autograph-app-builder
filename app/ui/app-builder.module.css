@@ -869,6 +869,9 @@
 .connectionsSection {
   order: 4;
 }
+.builderCard > .createButton {
+  order: 5;
+}
 .sectionField legend {
   font-size: 20px;
   font-weight: 650;
