@@ -8,8 +8,11 @@ import {
 import {
   assertProposalExecutionBindings,
   plannedProposalForExecution,
+  resolveTargetExecutionEnvironment,
   targetExecutionBlockers,
 } from "./target-execution";
+import type { ObservedDependencyCache } from "../repository/dependency-cache";
+import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
 const state = {
   version: APP_BUILDER_WORKFLOW_VERSION,
@@ -116,6 +119,68 @@ const state = {
 } satisfies AppBuilderWorkflowState;
 
 describe("target command readiness", () => {
+  const cache = {
+    manifest: { target: { sha: "f".repeat(40), tree: "0".repeat(40) } },
+    manifestDigest: "2".repeat(64),
+    contentDigest: "3".repeat(64),
+  } as ObservedDependencyCache;
+
+  it("uses the hosted execution artifact and inspected cache in Vercel Preview", () => {
+    const environment = {
+      VERCEL: "1",
+      VERCEL_ENV: "preview",
+      EVE_HOSTED_ADAPTER: "1",
+      EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+    };
+    expect(
+      resolveTargetExecutionEnvironment({ environment, fixture: false }),
+    ).toMatchObject({
+      backend: { kind: "vercel-preview", blockers: [] },
+      cacheInspectable: true,
+      imageDigest: undefined,
+    });
+    expect(
+      resolveTargetExecutionEnvironment({
+        environment,
+        fixture: false,
+        cache,
+      }),
+    ).toMatchObject({
+      backend: { kind: "vercel-preview", blockers: [] },
+      cacheInspectable: true,
+      imageDigest: hostedExecutionArtifactDigest(),
+    });
+  });
+
+  it("does not infer hosted readiness for an unsupported Vercel binding", () => {
+    expect(
+      resolveTargetExecutionEnvironment({
+        environment: { VERCEL: "1", VERCEL_ENV: "preview" },
+        fixture: false,
+        cache,
+      }),
+    ).toMatchObject({
+      backend: { kind: "unsupported-vercel" },
+      cacheInspectable: false,
+      imageDigest: undefined,
+    });
+  });
+
+  it("preserves the configured local microsandbox binding", () => {
+    const localImage = `ghcr.io/withautograph/app-builder@sha256:${"a".repeat(64)}`;
+    expect(
+      resolveTargetExecutionEnvironment({
+        environment: { APP_BUILDER_SANDBOX_IMAGE: localImage },
+        fixture: false,
+        cache,
+      }),
+    ).toMatchObject({
+      backend: { kind: "local-microsandbox", blockers: [] },
+      cacheInspectable: true,
+      imageDigest: localImage,
+    });
+  });
+
   it("requires the exact planned proposal receipt", () => {
     expect(plannedProposalForExecution(state, state.proposal.digest)).toBe(
       state.proposal,
