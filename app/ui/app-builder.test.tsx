@@ -379,9 +379,19 @@ describe("Vercel-faithful App Builder flow", () => {
     ).toBe(true);
     expect(
       view.querySelector<HTMLInputElement>(
+        'input[name="deployment-provider"][value="vercel"]',
+      )?.checked,
+    ).toBe(false);
+    expect(
+      view.querySelector<HTMLInputElement>(
         'input[name="storage-provider"][value="github"]',
       )?.disabled,
     ).toBe(true);
+    expect(
+      view.querySelector<HTMLInputElement>(
+        'input[name="storage-provider"][value="github"]',
+      )?.checked,
+    ).toBe(false);
     expect(view.querySelector('a[href="/vercel/installations"]')).toBeNull();
     expect(
       [...view.querySelectorAll('a[href="/github/installations"]')].some(

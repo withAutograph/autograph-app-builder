@@ -1329,7 +1329,9 @@ export function Builder({
                     name="deployment-provider"
                     value={option.provider}
                     disabled={unavailable}
-                    checked={deploymentProvider === option.provider}
+                    checked={
+                      !unavailable && deploymentProvider === option.provider
+                    }
                     onChange={() => {
                       hasUnsavedChanges.current = true;
                       setDeploymentProvider((current) =>
@@ -1423,7 +1425,9 @@ export function Builder({
                     name="storage-provider"
                     value={option.provider}
                     disabled={unavailable}
-                    checked={storageProvider === option.provider}
+                    checked={
+                      !unavailable && storageProvider === option.provider
+                    }
                     onChange={() => {
                       hasUnsavedChanges.current = true;
                       setStorageProvider((current) =>
