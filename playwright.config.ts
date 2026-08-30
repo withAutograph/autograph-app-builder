@@ -1,6 +1,12 @@
+import { existsSync } from "node:fs";
+
 import { defineConfig, devices } from "playwright/test";
 
-const mise = `${process.env.HOME}/.local/bin/mise`;
+const mise = [
+  `${process.env.HOME}/.local/share/mise/bin/mise`,
+  `${process.env.HOME}/.local/bin/mise`,
+].find(existsSync);
+if (!mise) throw new Error("The mise executable is unavailable.");
 
 export default defineConfig({
   testDir: "./e2e/auth",
