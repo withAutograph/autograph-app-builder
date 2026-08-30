@@ -34,13 +34,19 @@ export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 
 const REQUIRED_EXECUTION_PACKAGES = [
+  ".bin/next",
+  ".bin/turbo",
   ".bin/vp",
+  "@autograph/vite-config/package.json",
+  "@tailwindcss/vite/package.json",
   "@testing-library/react/package.json",
   "@vercel/microfrontends/package.json",
+  "@vitejs/plugin-react/package.json",
   "next/package.json",
   "react/package.json",
   "react-dom/package.json",
   "typescript/package.json",
+  "turbo/package.json",
   "vite-plus/package.json",
   "vitest/package.json",
 ] as const;
@@ -432,7 +438,7 @@ export async function materializeOfflineDependencies(input: {
       (path) => `test -e ${absoluteNodeModules}/${path}`,
     ).join(" && ");
     const extraction = await input.sandbox.run({
-      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/vp && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}"`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}" && cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });

@@ -77,7 +77,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).not.toContain("/opt/app-builder/dependency-cache");
     expect(command).not.toMatch(/sudo|token|password|authorization/iu);
     expect(command).toContain(
-      "releases/download/hosted-arrusted-ffa0c34a-execution-v1",
+      "releases/download/hosted-arrusted-ffa0c34a-execution-v3",
     );
   });
 
