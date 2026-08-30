@@ -49,14 +49,31 @@ export async function completeAuthorization(
     if (!location || response.status < 300 || response.status >= 400)
       throw new Error("Emulated OAuth approval failed.");
     const destination = new URL(location);
+    const callbackValidation = {
+      origin: destination.origin === appOrigin,
+      path:
+        destination.pathname === `/api/auth/callback/${parsed.provider}`,
+      codeCount: destination.searchParams.getAll("code").length,
+      stateCount: destination.searchParams.getAll("state").length,
+      stateMatches:
+        destination.searchParams.get("state") === parsed.authorization.state,
+    };
     if (
-      destination.origin !== appOrigin ||
-      destination.pathname !== `/api/auth/callback/${parsed.provider}` ||
-      destination.searchParams.getAll("code").length !== 1 ||
-      destination.searchParams.getAll("state").length !== 1 ||
-      destination.searchParams.get("state") !== parsed.authorization.state
-    )
+      !callbackValidation.origin ||
+      !callbackValidation.path ||
+      callbackValidation.codeCount !== 1 ||
+      callbackValidation.stateCount !== 1 ||
+      !callbackValidation.stateMatches
+    ) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "local_oauth_callback_validation_failed",
+          ...callbackValidation,
+        }),
+      );
       throw new Error("Emulated OAuth callback is invalid.");
+    }
     return NextResponse.redirect(destination, { status: 303 });
   } catch (error) {
     console.error(
