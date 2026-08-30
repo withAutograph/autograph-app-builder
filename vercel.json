@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node .config/mise/scripts/prepare-emulate-runtime.mjs && node node_modules/eve/bin/eve.js build && node node_modules/next/dist/bin/next build --webpack"
+}
