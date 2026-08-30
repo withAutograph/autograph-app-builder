@@ -205,6 +205,10 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Connections");
     expect(view.textContent).not.toContain("Channels");
     expect(view.textContent).not.toContain("Agent Name");
+    expect(view.querySelector('[aria-label="Settings"]')).toBeNull();
+    expect(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder,
+    ).toBe("Describe the app you want to build…");
 
     const destinations = [
       ...view.querySelectorAll<HTMLInputElement>(
@@ -212,15 +216,15 @@ describe("Vercel-faithful App Builder flow", () => {
       ),
     ];
     expect(destinations.map((input) => input.value)).toEqual([
+      "web",
       "codex",
       "cursor",
-      "web",
     ]);
-    expect(destinations[0]?.checked).toBe(true);
-    expect(destinations[0]?.required).toBe(true);
-    expect(destinations[1]?.checked).toBe(false);
+    expect(destinations[1]?.checked).toBe(true);
     expect(destinations[1]?.required).toBe(true);
-    expect(destinations[2]?.disabled).toBe(true);
+    expect(destinations[2]?.checked).toBe(false);
+    expect(destinations[2]?.required).toBe(true);
+    expect(destinations[0]?.disabled).toBe(true);
 
     const orderedControls = [
       view.querySelector("#app-name"),
@@ -288,6 +292,25 @@ describe("Vercel-faithful App Builder flow", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(accessibility.violations).toEqual([]);
+  });
+
+  it("waits to show repository controls until a GitHub scope is available", async () => {
+    const view = await render(
+      <AppBuilderComponent
+        authenticated
+        integrations={{
+          ...integrationState,
+          github: { status: "disconnected", scopes: [] },
+        }}
+      />,
+    );
+
+    expect(view.querySelector("#repository-name")).toBeNull();
+    expect(view.querySelector('[aria-label="Private repository"]')).toBeNull();
+    expect(view.textContent).not.toContain("Private Repository Name");
+    expect(view.textContent).toContain(
+      "Connect GitHub and Autograph can create and configure the repository for you.",
+    );
   });
 
   it("preserves a builder draft before a first-use provider connection", async () => {
@@ -369,9 +392,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector<HTMLInputElement>("#app-name")?.value).toBe(
       "Restored App",
     );
-    expect(
-      view.querySelector<HTMLInputElement>("#repository-name")?.value,
-    ).toBe("restored-app");
+    expect(view.querySelector("#repository-name")).toBeNull();
     expect(view.querySelector<HTMLInputElement>("#vercel-team")).toBe(
       document.activeElement,
     );

@@ -553,8 +553,15 @@
 }
 .repoRow {
   display: grid;
-  grid-template-columns: 1fr 18px 1fr;
+  grid-template-columns: 1fr;
   align-items: end;
+}
+.repoRowWithRepository {
+  grid-template-columns: 1fr 18px 1fr;
+}
+.repoScope {
+  display: grid;
+  gap: 9px;
 }
 .slash {
   text-align: center;
