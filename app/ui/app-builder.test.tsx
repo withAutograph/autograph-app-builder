@@ -433,6 +433,22 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(accessibility.violations).toEqual([]);
   });
 
+  it("keeps GitHub failures out of the shared provider notice area", async () => {
+    const view = await render(
+      <AppBuilderComponent
+        authenticated
+        connectionsEnabled
+        integrations={integrationState}
+        providerNotices={[
+          { provider: "github", status: "failed", reason: "callback-invalid" },
+        ]}
+      />,
+    );
+
+    expect(view.textContent).not.toContain("GitHub could not be connected");
+    expect(view.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("waits to show repository controls until a GitHub scope is available", async () => {
     const view = await render(
       <AppBuilderComponent

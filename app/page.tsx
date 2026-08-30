@@ -75,6 +75,7 @@ export default async function Home({ searchParams }: PageProps) {
   for (const provider of ["vercel", "github"] as const) {
     const status = query[provider];
     if (status !== "connected" && status !== "failed") continue;
+    if (provider === "github" && status === "failed") continue;
     notices.push({
       provider,
       status,
