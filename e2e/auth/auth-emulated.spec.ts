@@ -6,6 +6,23 @@ import { VirtualAuthenticator } from "./virtual-authenticator";
 const databaseUrl =
   "postgresql://postgres@127.0.0.1:54329/autograph_app_builder";
 
+function reportPasskeyFailures(page: Page) {
+  page.on("response", async (response) => {
+    if (
+      response.ok() ||
+      !new URL(response.url()).pathname.startsWith("/api/auth/passkey/")
+    ) {
+      return;
+    }
+    console.error(
+      "passkey request failed",
+      response.status(),
+      new URL(response.url()).pathname,
+      await response.text(),
+    );
+  });
+}
+
 async function resetAuthState() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -75,6 +92,7 @@ test("passkey registration provisions one account and returning login", async ({
   context,
   page,
 }) => {
+  reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.goto("/auth/sign-up");
@@ -108,6 +126,7 @@ test("missing credential and verification failure remain authentication-only", a
   context,
   page,
 }) => {
+  reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.goto("/auth/sign-in");
@@ -160,6 +179,7 @@ test("an authenticator credential missing from server storage is not recreated",
   context,
   page,
 }) => {
+  reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.goto("/auth/sign-up");
@@ -204,6 +224,7 @@ test("provider account supports multiple passkeys but retains its final passkey"
   context,
   page,
 }) => {
+  reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await finishOAuth(page, "GitHub");
@@ -213,6 +234,7 @@ test("provider account supports multiple passkeys but retains its final passkey"
     await dialog.getByLabel("Name").fill("OAuth recovery passkey");
     await dialog.getByRole("button", { name: "Add passkey" }).click();
     await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
+    await expect(dialog).toBeHidden();
 
     await page.getByRole("button", { name: "Add passkey" }).first().click();
     await dialog.getByLabel("Name").fill("Second passkey");
