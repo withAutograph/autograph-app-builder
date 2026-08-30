@@ -1,7 +1,7 @@
 import { verifyLocalOAuthApproval } from "@/lib/auth/local-oauth-approval";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
-import { completeAuthorization } from "../route";
+import { completeAuthorization } from "../completion";
 
 export async function GET(
   request: Request,
@@ -28,7 +28,6 @@ export async function GET(
     )
       throw new Error("Invalid approval binding.");
     return completeAuthorization(
-      request,
       { params: Promise.resolve({ provider }) },
       verified.authorization,
     );
