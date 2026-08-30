@@ -158,8 +158,34 @@ export function createPreviewOAuthRequestHandler(input: {
       const auth = (input.getAuth ?? getPreviewOAuthDeploymentAuth)(
         input.environment,
       );
-      return await auth.handler(request);
-    } catch {
+      const response = await auth.handler(request);
+      if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
+        let hasRedirect = false;
+        try {
+          const payload = (await response.clone().json()) as { url?: unknown };
+          hasRedirect = typeof payload.url === "string";
+        } catch {
+          // The response shape is diagnostic only; auth owns the response.
+        }
+        console.info(
+          JSON.stringify({
+            level: "info",
+            message: "preview_oauth_sign_in_response",
+            status: response.status,
+            hasRedirect,
+          }),
+        );
+      }
+      return response;
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "preview_oauth_unavailable",
+          reason:
+            error instanceof Error ? error.constructor.name : "UnknownError",
+        }),
+      );
       return Response.json(
         { error: "preview_oauth_unavailable" },
         {
