@@ -25,11 +25,6 @@ export type PasskeyButtonProps = {
 
 type OnboardingResponse = { context?: unknown };
 
-function errorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message;
-  return "Passkey authentication could not be completed.";
-}
-
 /**
  * "Continue with Passkey" button rendered alongside the password sign-in form.
  *
@@ -45,8 +40,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const signInPasskey = useSignInPasskey(authClient);
   const addPasskey = useAddPasskey(authClient);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string>();
-  const [showRegistration, setShowRegistration] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   // Surfaces passkeys in the browser's autofill dropdown while the sign-in
   // form is open. The button stays for anyone who dismisses it.
@@ -65,26 +59,25 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
 
   const continueWithPasskey = async () => {
     setPending(true);
-    setError(undefined);
-    setShowRegistration(false);
 
     try {
+      if (failed) {
+        await createPasskey();
+        return;
+      }
+
       const result = await signInPasskey.mutateAsync({ autoFill: false });
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
       navigate({ to: redirectTo });
-    } catch (signInError) {
-      setError(errorMessage(signInError));
-      setShowRegistration(true);
+    } catch {
+      setFailed(true);
     } finally {
       setPending(false);
     }
   };
 
   const createPasskey = async () => {
-    setPending(true);
-    setError(undefined);
-
     try {
       const response = await fetch("/api/auth/passkey/onboarding-context", {
         method: "POST",
@@ -105,10 +98,8 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
       navigate({ to: redirectTo });
-    } catch (onboardingError) {
-      setError(errorMessage(onboardingError));
-    } finally {
-      setPending(false);
+    } catch {
+      setFailed(true);
     }
   };
 
@@ -124,30 +115,19 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         className={cn(
           "w-full",
           (isPending || pending) && "pointer-events-none opacity-50",
+          failed &&
+            "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive",
         )}
         onClick={continueWithPasskey}
       >
         {pending ? <Spinner /> : <Fingerprint />}
-        {localization.auth.continueWith.replace(
-          "{{provider}}",
-          passkeyLocalization.passkey,
-        )}
+        {failed
+          ? "Passkey failed (try again)"
+          : localization.auth.continueWith.replace(
+              "{{provider}}",
+              passkeyLocalization.passkey,
+            )}
       </Button>
-      {error && (
-        <p role="alert" className="text-destructive text-sm">
-          {error}
-        </p>
-      )}
-      {showRegistration && (
-        <Button
-          type="button"
-          disabled={isPending || pending}
-          onClick={createPasskey}
-        >
-          <Fingerprint />
-          {passkeyLocalization.addPasskey}
-        </Button>
-      )}
     </div>
   );
 }

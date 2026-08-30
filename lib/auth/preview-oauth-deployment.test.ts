@@ -249,9 +249,21 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyButton).toContain("await signInPasskey.mutateAsync");
     expect(passkeyButton).toContain("await addPasskey.mutateAsync");
     expect(passkeyButton).toContain("passkeyClientError(result)");
-    expect(passkeyButton).toContain("setShowRegistration(true)");
+    expect(passkeyButton).toContain('"Passkey failed (try again)"');
+    expect(passkeyButton).not.toContain("setShowRegistration");
     expect(passkeyButton).toContain(
       'fetch("/api/auth/passkey/onboarding-context"',
     );
+  });
+
+  it("keeps the OAuth provider choices visible during local development", async () => {
+    const layout = await readFile("app/layout.tsx", "utf8");
+
+    expect(layout).toContain(
+      'const showLocalAuthProviders = process.env.NODE_ENV === "development"',
+    );
+    expect(layout.match(/showLocalAuthProviders \|\|/g)).toHaveLength(2);
+    expect(layout).toContain("process.env.GITHUB_CLIENT_ID");
+    expect(layout).toContain("process.env.VERCEL_AUTH_CLIENT_ID");
   });
 });

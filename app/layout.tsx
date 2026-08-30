@@ -13,16 +13,20 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const showLocalAuthProviders = process.env.NODE_ENV === "development";
+
   return (
     <html lang="en" className={`${GeistSans.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <Providers
           githubAuthEnabled={Boolean(
-            process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET,
+            showLocalAuthProviders ||
+            (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
           )}
           vercelAuthEnabled={Boolean(
-            process.env.VERCEL_AUTH_CLIENT_ID &&
-            process.env.VERCEL_AUTH_CLIENT_SECRET,
+            showLocalAuthProviders ||
+            (process.env.VERCEL_AUTH_CLIENT_ID &&
+              process.env.VERCEL_AUTH_CLIENT_SECRET),
           )}
         >
           {children}
