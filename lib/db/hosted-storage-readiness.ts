@@ -805,8 +805,14 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
     throw new Error("Hosted storage migration journal is not exact.");
   }
   for (const migration of migrationFiles) {
+    const isApprovedIndexReplacement =
+      migration.tag === "0014_tenant_github_installation_uniqueness" &&
+      /^DROP INDEX IF EXISTS "hosted_github_installation_id_uidx";\nDROP INDEX IF EXISTS "hosted_github_installation_binding_id_uidx";\nCREATE UNIQUE INDEX "hosted_github_installation_binding_id_tenant_uidx"[\s\S]*$/u.test(
+        migration.content,
+      );
     if (
-      /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/iu.test(migration.content) ||
+      (!isApprovedIndexReplacement &&
+        /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/iu.test(migration.content)) ||
       (![
         "0009_builder_provider_integrations",
         "0010_better_auth_organizations",
