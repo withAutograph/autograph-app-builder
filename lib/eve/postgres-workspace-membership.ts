@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as databaseSchema from "../db/schema";
-import { hostedWorkspaceMemberships } from "../db/schema";
+import { member, organization, user } from "../db/schema";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedPrincipalSchema } from "./hosted-auth";
 
@@ -21,18 +21,24 @@ export function createPostgresWorkspaceMembership(
       const principal = hostedPrincipalSchema.parse(principalInput);
       if (workspaceId !== principal.workspaceId) return false;
       const rows = await database
-        .select({ active: hostedWorkspaceMemberships.active })
-        .from(hostedWorkspaceMemberships)
+        .select({ role: member.role, banned: user.banned })
+        .from(member)
+        .innerJoin(organization, eq(member.organizationId, organization.id))
+        .innerJoin(user, eq(member.userId, user.id))
         .where(
           and(
-            eq(hostedWorkspaceMemberships.issuer, principal.issuer),
-            eq(hostedWorkspaceMemberships.audience, principal.audience),
-            eq(hostedWorkspaceMemberships.workspaceId, principal.workspaceId),
-            eq(hostedWorkspaceMemberships.ownerUserId, principal.ownerUserId),
+            eq(organization.issuer, principal.issuer),
+            eq(organization.audience, principal.audience),
+            eq(organization.workspaceId, principal.workspaceId),
+            eq(member.userId, principal.ownerUserId),
           ),
         )
-        .limit(1);
-      return rows.length === 1 && rows[0]?.active === true;
+        .limit(2);
+      return (
+        rows.length === 1 &&
+        rows[0]?.banned !== true &&
+        new Set(["owner", "admin", "member"]).has(rows[0]?.role ?? "")
+      );
     },
   };
 }
@@ -47,18 +53,27 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
       ownerUserId: string;
     }): Promise<string | undefined> {
       const rows = await database
-        .select({ workspaceId: hostedWorkspaceMemberships.workspaceId })
-        .from(hostedWorkspaceMemberships)
+        .select({
+          workspaceId: organization.workspaceId,
+          role: member.role,
+          banned: user.banned,
+        })
+        .from(member)
+        .innerJoin(organization, eq(member.organizationId, organization.id))
+        .innerJoin(user, eq(member.userId, user.id))
         .where(
           and(
-            eq(hostedWorkspaceMemberships.issuer, input.issuer),
-            eq(hostedWorkspaceMemberships.audience, input.audience),
-            eq(hostedWorkspaceMemberships.ownerUserId, input.ownerUserId),
-            eq(hostedWorkspaceMemberships.active, true),
+            eq(organization.issuer, input.issuer),
+            eq(organization.audience, input.audience),
+            eq(member.userId, input.ownerUserId),
           ),
         )
         .limit(2);
-      return rows.length === 1 ? rows[0]?.workspaceId : undefined;
+      return rows.length === 1 &&
+        rows[0]?.banned !== true &&
+        new Set(["owner", "admin", "member"]).has(rows[0]?.role ?? "")
+        ? rows[0]?.workspaceId
+        : undefined;
     },
     async isActiveMember(input: {
       issuer: string;
