@@ -14,7 +14,11 @@ const authSecretPath = path.join(stateDirectory, "better-auth-secret");
 const origin = process.argv[2];
 if (!origin) throw new Error("Expected the local application origin.");
 const appOrigin = new URL(origin);
-if (appOrigin.protocol !== "https:" || appOrigin.hostname !== "localhost") {
+const ciLoopback = process.env.CI === "true" && appOrigin.protocol === "http:";
+if (
+  appOrigin.hostname !== "localhost" ||
+  (appOrigin.protocol !== "https:" && !ciLoopback)
+) {
   throw new Error("The local application origin must be https://localhost.");
 }
 

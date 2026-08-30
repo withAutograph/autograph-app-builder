@@ -295,10 +295,15 @@ const previewOAuthRuntimeConfigSchema = z
         });
       }
     }
+    const localHttp =
+      config.environment === "local" &&
+      issuer.protocol === "http:" &&
+      resource.protocol === "http:" &&
+      issuer.hostname === "localhost";
     if (
       config.hostedAdapter !== "1" ||
-      issuer.protocol !== "https:" ||
-      resource.protocol !== "https:"
+      (!localHttp &&
+        (issuer.protocol !== "https:" || resource.protocol !== "https:"))
     ) {
       context.addIssue({
         code: "custom",

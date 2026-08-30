@@ -4,13 +4,23 @@ import { z } from "zod";
 
 const previewOAuthConfigSchema = z
   .object({
-    issuer: z.string().url().startsWith("https://"),
-    resource: z.string().url().startsWith("https://"),
+    issuer: z.string().url(),
+    resource: z.string().url(),
   })
   .strict()
   .superRefine((config, context) => {
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
+    if (
+      issuer.protocol !== "https:" &&
+      !(issuer.protocol === "http:" && issuer.hostname === "localhost")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["issuer"],
+        message: "Preview OAuth requires HTTPS or HTTP localhost.",
+      });
+    }
     if (
       issuer.username ||
       issuer.password ||

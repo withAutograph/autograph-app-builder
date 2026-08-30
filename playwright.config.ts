@@ -10,7 +10,8 @@ const mise = [
 if (!mise) throw new Error("The mise executable is unavailable.");
 const webServerPath = `${dirname(process.execPath)}:${dirname(mise)}:/usr/bin:/bin`;
 const appPort = process.env.APP_BUILDER_LOCAL_PORT ?? "3001";
-const appOrigin = `https://localhost:${appPort}`;
+const appProtocol = process.env.CI ? "http" : "https";
+const appOrigin = `${appProtocol}://localhost:${appPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -39,9 +40,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
-    // The dev server binds IPv4 explicitly so Linux and macOS probe the same
-    // listener while browser navigation retains the localhost WebAuthn origin.
-    url: `https://127.0.0.1:${appPort}/auth/sign-in`,
+    url: `${appProtocol}://127.0.0.1:${appPort}/auth/sign-in`,
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
     // A cold Linux runner must download/start PostgreSQL, seed both emulators,

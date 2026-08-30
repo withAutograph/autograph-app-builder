@@ -6,7 +6,11 @@ app_port=${APP_BUILDER_LOCAL_PORT:-3001}
 emulate_base_port=${EMULATE_BASE_PORT:-4000}
 github_emulate_port=$((emulate_base_port + 1))
 database_port=${APP_BUILDER_DATABASE_PORT:-54329}
-app_origin=https://localhost:$app_port
+app_protocol=https
+if [ "${CI:-}" = true ]; then
+  app_protocol=http
+fi
+app_origin=$app_protocol://localhost:$app_port
 pid_file=.emulate/dev-emulated.pids
 "$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
 emulate_pid=
@@ -96,19 +100,8 @@ export EMULATE_GITHUB_INSTALLATION_ID=1001
 export EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app
 export EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)"
 if [ "${CI:-}" = true ]; then
-  certificate_key=.emulate/localhost-key.pem
-  certificate=.emulate/localhost.pem
-  /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes \
-    -keyout "$certificate_key" \
-    -out "$certificate" \
-    -days 1 \
-    -subj /CN=localhost \
-    -addext subjectAltName=DNS:localhost,IP:127.0.0.1 >/dev/null 2>&1
   .config/mise/scripts/trusted-node-launcher \
     "$(mise which node)" node_modules/next/dist/bin/next dev \
-    --experimental-https \
-    --experimental-https-key "$certificate_key" \
-    --experimental-https-cert "$certificate" \
     --hostname 0.0.0.0 \
     --port "$app_port" "$@" &
 else
