@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Build the self-contained Autograph MCP App resource"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" --import tsx scripts/build-mcp-session-ui.ts

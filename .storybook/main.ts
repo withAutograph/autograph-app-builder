@@ -17,7 +17,11 @@ export async function resolveBuilderConnectionsForStorybook() {
 }
 
 const config: StorybookConfig = {
-  stories: ["../app/**/*.stories.@(ts|tsx)"],
+  stories: [
+    "../app/**/*.stories.@(ts|tsx)",
+    "../components/**/*.stories.@(ts|tsx)",
+    "../lib/mcp/session-app/**/*.stories.@(ts|tsx)",
+  ],
   addons: [
     "@storybook/addon-vitest",
     "@storybook/addon-a11y",

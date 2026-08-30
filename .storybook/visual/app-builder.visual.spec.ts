@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "playwright/test";
 
 const authenticatedStory =
-  "/iframe.html?id=pages-create-app-app-builder--authenticated&viewMode=story";
+  "/iframe.html?id=create-app-page--default&viewMode=story";
 const anonymousStory =
-  "/iframe.html?id=pages-create-app-app-builder--anonymous&viewMode=story";
+  "/iframe.html?id=create-app-flow-anonymous-entry--empty&viewMode=story";
 
 const screenshotOptions = {
   animations: "disabled" as const,

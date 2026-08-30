@@ -20,6 +20,28 @@ const eslintConfig = defineConfig([
     "storybook-static/**",
     "next-env.d.ts",
   ]),
+  {
+    files: [
+      "app/**/*.{js,jsx,ts,tsx}",
+      "components/**/*.{js,jsx,ts,tsx}",
+      "lib/**/*.{js,jsx,ts,tsx}",
+    ],
+    ignores: ["**/*.stories.{js,jsx,ts,tsx}", "**/*.test.{js,jsx,ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/.storybook/**", "**/.storybook/**"],
+              message:
+                "Production modules must not depend on Storybook infrastructure.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   ...storybook.configs["flat/recommended"],
 ]);
 
