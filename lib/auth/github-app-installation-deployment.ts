@@ -13,6 +13,7 @@ import {
   providerEmulationEnvironment,
   readProviderEmulation,
 } from "../integrations/local-provider-emulation";
+import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
 import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
@@ -228,6 +229,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
     issuer: previewConfig.issuer,
     audience: previewConfig.resource,
   });
+  const emulation = readProviderEmulation(resolvedEnvironment);
   const authorization = createGitHubAppInstallationAuthorization({
     config,
     stateStore:
@@ -237,7 +239,11 @@ export function getGitHubAppInstallationDeploymentHandlers(
     },
     installationStore: createPostgresHostedGitHubInstallationStore(database),
     credentialStore,
-    emulation: readProviderEmulation(resolvedEnvironment),
+    emulation,
+    fetch: emulation
+      ? (resource, init) =>
+          providerEmulationFetch(resource as string | URL, init, emulation)
+      : undefined,
   });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     origin: new URL(config.issuer).origin,

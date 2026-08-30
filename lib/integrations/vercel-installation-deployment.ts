@@ -24,6 +24,7 @@ import {
   providerEmulationEnvironment,
   readProviderEmulation,
 } from "./local-provider-emulation";
+import { providerEmulationFetch } from "./provider-emulation-fetch";
 import {
   signInForWorkspaceRedirect,
   workspaceOnboardingRedirect,
@@ -76,6 +77,10 @@ function deployment(
         isActiveMember: (authority) => membership.isActiveMember(authority),
       },
       emulation,
+      fetch: emulation
+        ? (resource, init) =>
+            providerEmulationFetch(resource as string | URL, init, emulation)
+        : undefined,
     }),
   };
 }
