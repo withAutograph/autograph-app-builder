@@ -8,7 +8,7 @@ status: active
 
 # App Builder consumption of the Arrusted template
 
-Every new App Builder application starts with a detached clone of
+Every new App Builder application starts with a detached clone of the private
 `https://github.com/withAutograph/arrusted-development.git` at
 `refs/heads/main`. The source transport resolves that ref once, records the
 observed commit/tree, verifies the successful Arrusted `Template readiness`
@@ -19,11 +19,29 @@ not reconstruct a starter project from a generic internal template.
 ## Clone boundary
 
 The canonical remote and ref are constants, never user input. The source
-transport uses an empty credential environment, disables prompts, inherited Git
-configuration, hooks, SSH/file protocols, and submodules, and refuses an origin,
-ref, tree, or clean-worktree mismatch. This is host protection before template
-bytes are trusted; the corresponding Arrusted readiness contract owns the
-template's submodule, LFS, lockfile, and application-command guarantees.
+transport mints one per-acquisition installation token through the existing
+Autograph GitHub App. Its only deployment configuration beyond the existing
+`GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` is
+`APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID`. That installation must be in
+selected-repositories mode and contain exactly the one private repository
+`withAutograph/arrusted-development`; it is never selected from a user’s
+publishing installation.
+
+This deliberately accepts the existing App private key’s shared-registration
+blast radius: the dedicated installation narrows routine reader tokens, but is
+not equivalent to a separate reader App.
+
+The token request is constrained to `Contents: read` and `Checks: read`.
+App Builder validates both the token permissions and the installation’s live
+repository inventory before cloning. It uses the token only to validate that
+inventory, make the one direct workspace clone, and read Check Runs for the
+resolved SHA. The source transport writes it only to a temporary owner-only
+askpass credential file, removes the file on every success or failure path,
+and restores `deny-all` networking after cloning. It disables prompts,
+inherited Git configuration, hooks, SSH/file protocols, and submodules, and
+refuses an origin, ref, tree, or clean-worktree mismatch. The token, reader
+installation ID, authorization header, and credential digest never appear in
+the receipt, Git remote/config, persisted sandbox files, or command output.
 
 An existing repository remains an explicit allowlisted local source. It never
 falls through to the fresh-template clone path.
@@ -44,9 +62,10 @@ for sessions that began before clone provenance existed.
 Arrusted CI runs `mise run repository:template-readiness -- --expected-sha <sha>`
 in its `Template readiness` job. It produces its own sanitized JSON attestation,
 while App Builder independently checks the completed successful Check Run through
-GitHub's commit Check Runs API and records the metadata digest above. The Check
-Run is admission evidence only; it is not a control file, provider credential,
-or authorization for any App Builder provider mutation.
+GitHub's commit Check Runs API using the reader token and records the metadata
+digest above. The Check Run is admission evidence only; it is not a control
+file, provider credential, or authorization for any App Builder provider
+mutation.
 
 A newly pushed Arrusted `main` commit is unavailable to new-app sessions until
 that exact commit's `Template readiness` job has completed successfully. The
@@ -71,7 +90,10 @@ generated workspace, not Arrusted history or an upstream remote.
 
 ## Validation
 
-The source boundary is tested for canonical origin/ref resolution, detached
-checkout state, immutable V4 receipt validation, clone drift rejection, and
-the unchanged behavior of explicit existing repositories. Local and hosted
-runtime paths use the same clone provenance contract for new apps.
+The source boundary is tested for exact requested reader permissions, rejection
+of unavailable, broad, or mismatched installations, canonical origin/ref
+resolution, detached checkout state, immutable V4 receipt validation, clone
+drift rejection, and token cleanup on success and failure. Explicit existing
+repository behavior remains unchanged. Local and hosted runtime paths use the
+same clone provenance contract and fail closed before bootstrap when reader
+configuration, token minting, cloning, or readiness evidence is unavailable.

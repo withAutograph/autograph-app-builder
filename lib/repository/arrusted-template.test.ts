@@ -9,6 +9,7 @@ import {
   inspectCanonicalArrustedSandboxWorkspace,
   templateReadinessAttestationDigest,
 } from "./arrusted-template";
+import type { ArrustedTemplateReader } from "./arrusted-template-reader";
 
 const contractPaths = [
   ".config/mise/config.toml",
@@ -81,7 +82,36 @@ function eligibleContents() {
 }
 
 describe("canonical Arrusted template readiness", () => {
+  it("fails before sandbox preparation when the deployment reader is unavailable", async () => {
+    const sandbox = {
+      writeTextFile: vi.fn(),
+      setNetworkPolicy: vi.fn(),
+      run: vi.fn(),
+    } as unknown as SandboxSession;
+    const reader: ArrustedTemplateReader = {
+      acquire: vi.fn(async () => {
+        throw new Error("The Arrusted template reader is unavailable.");
+      }),
+    };
+
+    await expect(
+      acquireCanonicalArrustedTemplate({
+        sandbox,
+        callId: "call-template-reader-unavailable",
+        reader,
+      }),
+    ).rejects.toThrow("template reader is unavailable");
+    expect(sandbox.writeTextFile).not.toHaveBeenCalled();
+    expect(sandbox.setNetworkPolicy).not.toHaveBeenCalled();
+    expect(sandbox.run).not.toHaveBeenCalled();
+  });
+
   it("uses one direct session clone for receipt inspection and workspace preparation", async () => {
+    const reader: ArrustedTemplateReader = {
+      acquire: vi.fn(async () => ({
+        token: "ghs_reader_token_that_is_only_for_this_acquisition",
+      })),
+    };
     const sourceSha = "a".repeat(40);
     const sourceTree = "b".repeat(40);
     const sourceBytes = Buffer.from("{}\n");
@@ -146,6 +176,9 @@ describe("canonical Arrusted template readiness", () => {
           files.set(path, content);
         },
       ),
+      removePath: vi.fn(async ({ path }: { path: string }) => {
+        files.delete(path);
+      }),
       setNetworkPolicy,
       run,
     } as unknown as SandboxSession;
@@ -168,6 +201,7 @@ describe("canonical Arrusted template readiness", () => {
     const receipt = await acquireCanonicalArrustedTemplate({
       sandbox,
       callId: "call-template-clone",
+      reader,
     });
 
     expect(receipt).toMatchObject({
@@ -175,6 +209,9 @@ describe("canonical Arrusted template readiness", () => {
       sourceSha,
       sourceTree,
     });
+    expect(JSON.stringify(receipt)).not.toContain(
+      "ghs_reader_token_that_is_only_for_this_acquisition",
+    );
     if (receipt.version !== 4) throw new Error("expected a V4 receipt");
     await inspectCanonicalArrustedSandboxWorkspace({ sandbox, receipt });
     expect(
@@ -189,6 +226,16 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).toContain(
       "core.hooksPath=/dev/null",
     );
+    expect(run.mock.calls[0]?.[0].command).not.toContain(
+      "ghs_reader_token_that_is_only_for_this_acquisition",
+    );
+    expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
+      false,
+    );
+    expect(files.has(".app-builder/arrusted-template-reader-askpass")).toBe(
+      false,
+    );
+    expect(reader.acquire).toHaveBeenCalledOnce();
     expect(setNetworkPolicy).toHaveBeenNthCalledWith(1, {
       allow: ["github.com"],
     });
@@ -213,17 +260,61 @@ describe("canonical Arrusted template readiness", () => {
     );
     vi.stubGlobal("fetch", fetch);
 
-    const digest = await templateReadinessAttestationDigest(
-      "a".repeat(40),
-      "b".repeat(40),
-    );
+    const digest = await templateReadinessAttestationDigest({
+      sha: "a".repeat(40),
+      tree: "b".repeat(40),
+      token: "ghs_reader_token_that_is_only_for_this_acquisition",
+    });
 
     expect(digest).toMatch(/^[0-9a-f]{64}$/u);
-    expect(fetch).toHaveBeenCalledWith(
+    expect(String(fetch.mock.calls[0]?.[0])).toBe(
       "https://api.github.com/repos/withAutograph/arrusted-development/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/check-runs?per_page=100",
-      expect.objectContaining({ redirect: "error" }),
     );
+    expect(
+      new Headers(fetch.mock.calls[0]?.[1]?.headers).get("authorization"),
+    ).toBe("token ghs_reader_token_that_is_only_for_this_acquisition");
     vi.unstubAllGlobals();
+  });
+
+  it("removes the clone credential and restores deny-all networking after a clone failure", async () => {
+    const files = new Map<string, string>();
+    const setNetworkPolicy = vi.fn(async () => undefined);
+    const removePath = vi.fn(async ({ path }: { path: string }) => {
+      files.delete(path);
+    });
+    const sandbox = {
+      id: "sandbox-template-clone-failure",
+      readTextFile: vi.fn(async () => null),
+      writeTextFile: vi.fn(
+        async ({ path, content }: { path: string; content: string }) => {
+          files.set(path, content);
+        },
+      ),
+      removePath,
+      setNetworkPolicy,
+      run: vi.fn(async () => ({ exitCode: 1, stdout: "", stderr: "failed" })),
+    } as unknown as SandboxSession;
+    const reader: ArrustedTemplateReader = {
+      acquire: vi.fn(async () => ({
+        token: "ghs_reader_token_that_is_only_for_this_acquisition",
+      })),
+    };
+
+    await expect(
+      acquireCanonicalArrustedTemplate({
+        sandbox,
+        callId: "call-template-clone-failure",
+        reader,
+      }),
+    ).rejects.toThrow("clone could not be prepared");
+    expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
+      false,
+    );
+    expect(files.has(".app-builder/arrusted-template-reader-askpass")).toBe(
+      false,
+    );
+    expect(removePath).toHaveBeenCalledTimes(2);
+    expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
 
   it("fails closed when the exact SHA has no successful readiness check", async () => {
@@ -246,7 +337,11 @@ describe("canonical Arrusted template readiness", () => {
     );
 
     await expect(
-      templateReadinessAttestationDigest("a".repeat(40), "b".repeat(40)),
+      templateReadinessAttestationDigest({
+        sha: "a".repeat(40),
+        tree: "b".repeat(40),
+        token: "ghs_reader_token_that_is_only_for_this_acquisition",
+      }),
     ).rejects.toThrow("no successful template-readiness evidence");
     vi.unstubAllGlobals();
   });

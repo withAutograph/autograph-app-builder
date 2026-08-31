@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -17,6 +17,10 @@ import {
   ARRUSTED_TEMPLATE_REPOSITORY,
   templateReadinessAttestationDigest,
 } from "../repository/arrusted-template";
+import {
+  deploymentArrustedTemplateReader,
+  type ArrustedTemplateReader,
+} from "../repository/arrusted-template-reader";
 import { safeSourcePath } from "../repository/source-path";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -92,7 +96,11 @@ const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 const MAX_STARTER_FILES = 10_000;
 const MAX_STARTER_FILE_BYTES = 10 * 1024 * 1024;
 
-function restrictedGit(args: string[], timeout = 30_000) {
+function restrictedGit(
+  args: string[],
+  timeout = 30_000,
+  askpass?: { credentialFile: string; askpassFile: string },
+) {
   return execFileAsync(
     git,
     [
@@ -121,7 +129,12 @@ function restrictedGit(args: string[], timeout = 30_000) {
         GIT_ATTR_NOSYSTEM: "1",
         GIT_NO_LAZY_FETCH: "1",
         GIT_TERMINAL_PROMPT: "0",
-        GIT_ASKPASS: "/usr/bin/false",
+        GIT_ASKPASS: askpass?.askpassFile ?? "/usr/bin/false",
+        ...(askpass === undefined
+          ? {}
+          : {
+              APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE: askpass.credentialFile,
+            }),
         SSH_ASKPASS: "/usr/bin/false",
         GIT_LFS_SKIP_SMUDGE: "1",
       },
@@ -148,15 +161,6 @@ const starterConfigSchema = z
   });
 
 export type StarterSourceConfig = z.infer<typeof starterConfigSchema>;
-
-export function readStarterSourceEnvironment(
-  environment: Readonly<Record<string, string | undefined>>,
-): StarterSourceConfig {
-  return starterConfigSchema.parse({
-    manifestUrl: environment.APP_BUILDER_STARTER_MANIFEST_URL,
-    manifestSha256: environment.APP_BUILDER_STARTER_MANIFEST_SHA256,
-  });
-}
 
 function sha256(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -303,10 +307,31 @@ export async function loadStarterSource(input: {
  * transport as fresh App Builder sessions.  The legacy archive loader above
  * remains readable solely for sessions that already recorded a V3 receipt.
  */
-export async function cloneStarterSource(): Promise<StarterSource> {
+export async function cloneStarterSource(input?: {
+  reader?: ArrustedTemplateReader;
+}): Promise<StarterSource> {
+  const access = await (
+    input?.reader ?? deploymentArrustedTemplateReader()
+  ).acquire();
   const root = await mkdtemp(join(tmpdir(), "autograph-app-builder-starter-"));
   const checkout = join(root, "repository");
+  const credentialFile = join(root, "git-credential");
+  const askpassFile = join(root, "git-askpass");
   try {
+    await writeFile(credentialFile, `${access.token}\n`, { mode: 0o600 });
+    await writeFile(
+      askpassFile,
+      [
+        "#!/bin/sh",
+        'case "$1" in',
+        '  Username*) printf "%s\\n" "x-access-token" ;;',
+        '  Password*) sed -n "1p" "$APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE" ;;',
+        "  *) exit 1 ;;",
+        "esac",
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    );
     const clone = await restrictedGit(
       [
         "clone",
@@ -319,9 +344,14 @@ export async function cloneStarterSource(): Promise<StarterSource> {
         checkout,
       ],
       60_000,
+      { credentialFile, askpassFile },
     );
     if (clone.stderr.length > 2 * 1024 * 1024)
       throw new Error("starter-source-clone-output-invalid");
+    await Promise.all([
+      rm(credentialFile, { force: true }),
+      rm(askpassFile, { force: true }),
+    ]);
     const origin = await restrictedGit([
       "-C",
       checkout,
@@ -354,7 +384,11 @@ export async function cloneStarterSource(): Promise<StarterSource> {
     ).stdout.trim();
     if (!/^[0-9a-f]{40}$/u.test(tree))
       throw new Error("starter-source-tree-invalid");
-    const readinessDigest = await templateReadinessAttestationDigest(sha, tree);
+    const readinessDigest = await templateReadinessAttestationDigest({
+      sha,
+      tree,
+      token: access.token,
+    });
     const listing = await restrictedGit(["-C", checkout, "ls-files", "-z"]);
     const paths = listing.stdout.split("\0").filter(Boolean);
     if (paths.length === 0 || paths.length > MAX_STARTER_FILES)
