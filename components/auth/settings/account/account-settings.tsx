@@ -38,7 +38,13 @@ export function AccountSettings({
       {plugins.flatMap(
         (plugin) =>
           plugin.securityCards?.map((SecurityCard, index) => (
-            <SecurityCard key={`${plugin.id}-${index.toString()}`} />
+            <SecurityCard key={`${plugin.id}-security-${index.toString()}`} />
+          )) ?? [],
+      )}
+      {plugins.flatMap(
+        (plugin) =>
+          plugin.accountCards?.map((AccountCard, index) => (
+            <AccountCard key={`${plugin.id}-account-${index.toString()}`} />
           )) ?? [],
       )}
     </div>

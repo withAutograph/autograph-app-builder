@@ -19,7 +19,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === "1";
 
   return (
-    <html lang="en" className={`${GeistSans.className} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${GeistSans.className} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <body className="min-h-full flex flex-col">
         <AppShell
           githubAuthEnabled={Boolean(

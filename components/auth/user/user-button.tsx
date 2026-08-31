@@ -104,7 +104,7 @@ export function UserButton({
   links,
   hideSettings = false,
 }: UserButtonProps) {
-  const { authClient, basePaths, viewPaths, localization } =
+  const { authClient, basePaths, viewPaths, localization, plugins } =
     useAuth<MultiSessionAuthClient>();
 
   const { isPending: settingActiveSession } = useSetActiveSession(authClient);
@@ -122,7 +122,14 @@ export function UserButton({
   // Whether anything renders between the user info label and the
   // sign-out item, so the leading separator isn't shown with nothing
   // to separate (see #439).
-  const hasSessionMenuItems = (userLinks?.length ?? 0) > 0 || !hideSettings;
+  const pluginMenuItems = plugins.flatMap(
+    (plugin) =>
+      plugin.userMenuItems?.map((Item, index) => (
+        <Item key={`${plugin.id}-${index.toString()}`} />
+      )) ?? [],
+  );
+  const hasSessionMenuItems =
+    (userLinks?.length ?? 0) > 0 || pluginMenuItems.length > 0 || !hideSettings;
 
   return (
     <DropdownMenu>
@@ -194,6 +201,8 @@ export function UserButton({
               </DropdownMenuItem>
             )}
 
+            {pluginMenuItems}
+
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
@@ -238,6 +247,8 @@ export function UserButton({
 
               {localization.auth.signUp}
             </DropdownMenuItem>
+
+            {pluginMenuItems}
           </>
         )}
       </DropdownMenuContent>
