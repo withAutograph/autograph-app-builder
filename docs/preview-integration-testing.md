@@ -65,15 +65,16 @@ result claims to cover.
 
 Authentication methods that bind credentials or signed state to an origin must
 explicitly support the stable host before they are exercised through the
-alias. In particular, the current passkey onboarding contract requires the RP
-hostname to equal the generated `VERCEL_URL` and binds registration to
-`VERCEL_DEPLOYMENT_ID`. Continue passkey QA on each generated deployment
-hostname as described in [Passkey testing](passkey-preview-testing.md).
+alias. Embedded Preview provider emulation does so by deriving the WebAuthn RP
+ID and auth issuer from the exact validated `VERCEL_BRANCH_URL`, while every
+onboarding authority remains signed and bound to the current
+`VERCEL_DEPLOYMENT_ID`. Auth pages entered through the generated deployment URL
+are redirected to that branch host before a ceremony begins.
 
-Supporting passkeys on a stable alias requires a separate reviewed runtime
-change for alias verification, deployment binding, trusted origins, cookies,
-and RP migration. Documentation or an environment override alone is not
-sufficient.
+Outside this exact provider-emulation gate, Preview passkey onboarding retains
+the generated `VERCEL_URL` as its origin and RP ID. An environment override
+alone cannot opt another alias into the stable-host topology. See
+[Passkey testing](passkey-preview-testing.md).
 
 ## Embedded Preview provider emulation
 

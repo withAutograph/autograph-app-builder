@@ -17,7 +17,7 @@ export default function SettingUpPage() {
     }
   }, [router, session.data?.user]);
 
-  if (session.error) {
+  if (session.error || (!session.isPending && !session.data?.user)) {
     return (
       <WorkspaceSetupStatus
         status="error"

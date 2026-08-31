@@ -13,6 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
 import { oauthProviderPlugin } from "@/lib/auth/oauth-provider-plugin";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
+import { DEFAULT_AUTH_REDIRECT_TO } from "@/lib/auth/preview-auth-ui";
 import { themePlugin } from "@/lib/auth/theme-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
@@ -50,7 +51,7 @@ export function Providers({
             themePlugin({ useTheme }),
           ]}
           emailAndPassword={{ enabled: false }}
-          redirectTo="/auth/setting-up?callbackURL=%2F"
+          redirectTo={DEFAULT_AUTH_REDIRECT_TO}
           socialProviders={[
             ...(vercelAuthEnabled
               ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }]

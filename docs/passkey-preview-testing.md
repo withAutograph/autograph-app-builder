@@ -18,17 +18,28 @@ PASSKEY_ONBOARDING=local-preview-v1
 ```
 
 Run `mise run app:dev`, open `http://localhost:3000/auth/sign-in`, and choose
-**Continue with Passkey**. If the browser cannot authenticate, the page remains
-on sign-in and changes the action to **Passkey failed (try again)**. Retrying
-repeats authentication and never creates an account. New users must follow the
-explicit **Create an account with a passkey** link to Sign Up. After
-registration, sign out and use **Continue with Passkey** to exercise the
-returning-user flow. Browsers treat `localhost` as a
-WebAuthn secure context; use `localhost` consistently rather than switching
-between it and `127.0.0.1` because credentials are RP-ID scoped.
+**Continue with Passkey**. Sign In always shows the stock-style **Need to create
+an account? Sign Up** prompt below the card. The link preserves the requested
+callback and moves to Sign Up, but registration does not begin until **Continue
+with Passkey** is clicked there. Any cancelled, unavailable, rejected, or
+transport-failed authentication remains on Sign In and changes the passkey
+button to **Passkey failed (try again)** without creating a replacement
+identity. After registration, sign out and use **Continue with Passkey** to
+exercise the returning-user flow. Browsers treat `localhost` as a WebAuthn
+secure context; use `localhost` consistently rather than switching between it
+and `127.0.0.1` because credentials are RP-ID scoped.
 
-The Sign Up view offers **Create a passkey** directly and never places a second
-passkey action beside it.
+The Sign Up view offers one **Continue with Passkey** action that creates the
+passkey, account, workspace, and session together. An already authenticated
+visitor is redirected through the preserved setup callback instead of being
+offered first-account enrollment; adding another passkey remains an Account
+settings action. The onboarding endpoint enforces the same distinction if a
+session appears after the page renders.
+
+Cancelled and failed registration can leave one short-lived onboarding-context
+row, but no user, passkey, workspace, membership, or session. Expired contexts
+are deleted with the existing expiry index before the next context is issued,
+including contexts left by retired Preview deployments.
 
 To reset a local identity, remove its organization/member, session, passkey, and
 user records together in a transaction. Do not reuse that procedure against
@@ -58,10 +69,17 @@ PASSKEY_PREVIEW_PROTECTION=vercel-authentication
 ```
 
 The runtime also requires Vercel's exact `VERCEL_ENV=preview`, `VERCEL_URL`, and
-`VERCEL_DEPLOYMENT_ID` metadata. It derives the auth origin from `VERCEL_URL`
-when `BETTER_AUTH_URL` is not set, or requires an explicitly configured URL to
-agree exactly. Every generated Preview hostname is a different WebAuthn RP and
-therefore has independent passkeys and workspace data. Removing Deployment
+`VERCEL_DEPLOYMENT_ID` metadata. Normally it derives the auth origin from
+`VERCEL_URL` when `BETTER_AUTH_URL` is not set, or requires an explicitly
+configured URL to agree exactly. Every generated Preview hostname is then a
+different WebAuthn RP and has independent passkeys.
+
+The exact `APP_BUILDER_PREVIEW_PROVIDER_EMULATION=1` gate instead uses the
+validated stable `VERCEL_BRANCH_URL` as the auth origin and RP ID. Passkeys can
+survive redeployments of that branch, while each new-account onboarding token
+is still signed and bound to the current `VERCEL_DEPLOYMENT_ID`; a branch alias
+moving during a ceremony makes that one ceremony fail closed. Auth pages are
+redirected to the branch hostname before WebAuthn begins. Removing Deployment
 Protection requires removing the passkey flags first.
 
 Stable Preview endpoints and provider callback configuration are documented in
@@ -78,3 +96,9 @@ missing from server storage is intentionally treated as unrecognized; sign-in
 fails generically and does not recreate the user or workspace. If every passkey
 for an unlinked passkey-only account is lost, the account cannot be recovered.
 OAuth linking remains separate from passkey recovery.
+
+If an authenticator creates a credential and server verification or the final
+database transaction fails, WebAuthn provides no browser API for deleting that
+device-local credential. Autograph rolls back all server-side account state and
+leaves the user on Sign Up, but the authenticator may retain that unusable local
+credential until the user removes it through their device settings.

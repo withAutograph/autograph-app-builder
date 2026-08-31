@@ -3,12 +3,17 @@ type PasskeyClientError = {
   message?: unknown;
 };
 
-export function passkeyClientError(result: unknown): Error | null {
+function passkeyResultError(result: unknown): PasskeyClientError | null {
   if (!result || typeof result !== "object" || !("error" in result)) {
     return null;
   }
 
   const error = (result as { error?: PasskeyClientError | null }).error;
+  return error && typeof error === "object" ? error : null;
+}
+
+export function passkeyClientError(result: unknown): Error | null {
+  const error = passkeyResultError(result);
   if (!error) return null;
 
   const message =

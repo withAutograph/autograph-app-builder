@@ -1,5 +1,6 @@
 import { expect, test } from "playwright/test";
 
+import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 import {
   applicationCounts,
   finishOAuth,
@@ -42,10 +43,17 @@ test("anonymous brief continues through passkey signup into the builder", async 
   await expect(
     page.getByRole("button", { name: "Continue with Vercel" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: /Create an account/u }).click();
 
-  const authenticator = await registerPasskey(context, page);
+  const authenticator = await VirtualAuthenticator.create(context, page);
   try {
+    await page.getByRole("link", { name: "Sign Up" }).click();
+    await expect(page).toHaveURL(/\/auth\/sign-up/u);
+    await expect(
+      page.getByText(
+        "We couldn’t use an existing passkey. Continue to create a new one.",
+      ),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL("/");
     await expect(page.locator("#app-brief")).toHaveValue(
       "Build a customer renewal dashboard.",
@@ -81,7 +89,7 @@ for (const provider of ["GitHub", "Vercel"] as const) {
   });
 }
 
-test("failed passkey authentication never enters workspace setup", async ({
+test("missing passkey keeps the permanent Sign Up link without entering setup", async ({
   context,
   page,
 }) => {
@@ -90,12 +98,20 @@ test("failed passkey authentication never enters workspace setup", async ({
   await authenticator.removeCredential(
     (await authenticator.credentials())[0]!.credentialId,
   );
+  const signUpLink = page.getByRole("link", { name: "Sign Up" });
+  await expect(signUpLink).toBeVisible();
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
-  await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
-  ).toBeVisible();
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
+  await expect(signUpLink).toBeVisible();
+  await signUpLink.click();
+  await expect(page).toHaveURL(/\/auth\/sign-up/u);
+  await expect(
+    page.getByText(
+      "We couldn’t use an existing passkey. Continue to create a new one.",
+    ),
+  ).toHaveCount(0);
   await expect(page.getByText("Setting up your workspace")).toHaveCount(0);
+  expect(await applicationCounts()).toMatchObject({ users: 1, passkeys: 1 });
   await authenticator.dispose();
 });
 
@@ -104,4 +120,23 @@ test("anonymous account settings redirects through a safe local callback", async
 }) => {
   await page.goto("/settings/account");
   await expect(page).toHaveURL(/\/auth\/sign-in\?callbackURL=%2F/u);
+});
+
+test("anonymous setup fails closed with a callback-preserving sign-in link", async ({
+  page,
+}) => {
+  const callbackURL = "/?source=expired-session#complete";
+  await page.goto(
+    `/auth/setting-up?callbackURL=${encodeURIComponent(callbackURL)}`,
+  );
+
+  await expect(
+    page.getByRole("heading", { name: "Workspace setup failed" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Return to sign in" }),
+  ).toHaveAttribute(
+    "href",
+    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
+  );
 });

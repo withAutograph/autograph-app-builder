@@ -2,8 +2,11 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_AUTH_REDIRECT_TO,
   resolveAuthCallbackURL,
+  resolvePasskeyRedirectTo,
   resolveProviderCallbackURL,
+  serializeAuthPageSearchParams,
 } from "./preview-auth-ui";
 
 const originalWindow = globalThis.window;
@@ -16,6 +19,70 @@ afterEach(() => {
 });
 
 describe("Preview Better Auth UI", () => {
+  it("serializes complete and repeated auth-page search parameters", () => {
+    const search = serializeAuthPageSearchParams({
+      callbackURL: [
+        "/workspace?source=one#first",
+        "/workspace?source=two#second",
+      ],
+      redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
+      passkey: "unavailable",
+      omitted: undefined,
+    });
+    const parsed = new URLSearchParams(search);
+
+    expect(parsed.getAll("callbackURL")).toEqual([
+      "/workspace?source=one#first",
+      "/workspace?source=two#second",
+    ]);
+    expect(parsed.get("redirectTo")).toBe(
+      "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
+    );
+    expect(parsed.get("passkey")).toBe("unavailable");
+    expect(parsed.has("omitted")).toBe(false);
+  });
+
+  it("resolves a serialized Sign Up callback through the shared setup route", () => {
+    const search = serializeAuthPageSearchParams({
+      callbackURL: "/workspace?source=signed-in#complete",
+    });
+
+    expect(
+      resolvePasskeyRedirectTo(
+        DEFAULT_AUTH_REDIRECT_TO,
+        search,
+        "https://builder.example.test",
+      ),
+    ).toBe(
+      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dsigned-in%23complete",
+    );
+  });
+
+  it("uses the first repeated redirect and rejects it when it is external", () => {
+    const safeRedirect =
+      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dfirst";
+    const externalRedirect = "https://external.example/steal";
+
+    expect(
+      resolvePasskeyRedirectTo(
+        DEFAULT_AUTH_REDIRECT_TO,
+        serializeAuthPageSearchParams({
+          redirectTo: [safeRedirect, externalRedirect],
+        }),
+        "https://builder.example.test",
+      ),
+    ).toBe(safeRedirect);
+    expect(
+      resolvePasskeyRedirectTo(
+        DEFAULT_AUTH_REDIRECT_TO,
+        serializeAuthPageSearchParams({
+          redirectTo: [externalRedirect, safeRedirect],
+        }),
+        "https://builder.example.test",
+      ),
+    ).toBe(DEFAULT_AUTH_REDIRECT_TO);
+  });
+
   it("keeps the product callback override and defaults ordinary sign-in", () => {
     expect(resolveAuthCallbackURL("https://builder.example.test/", "")).toBe(
       "https://builder.example.test/",
@@ -70,6 +137,38 @@ describe("Preview Better Auth UI", () => {
     ).toBe(
       "https://builder.example.test/auth/setting-up?callbackURL=%2F%3Fsource%3Doauth",
     );
+  });
+
+  it("builds the passkey redirect from a safe callback override", () => {
+    expect(
+      resolvePasskeyRedirectTo(
+        "/auth/setting-up?callbackURL=%2F",
+        "?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
+        "https://builder.example.test",
+      ),
+    ).toBe(
+      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
+    );
+  });
+
+  it("preserves an inherited redirect when no callback override is present", () => {
+    expect(
+      resolvePasskeyRedirectTo(
+        "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief",
+        "?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252Fworkspace%253Fsource%253Dbrief",
+        "https://builder.example.test",
+      ),
+    ).toBe("/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief");
+  });
+
+  it("rejects an inherited cross-origin passkey redirect", () => {
+    expect(
+      resolvePasskeyRedirectTo(
+        "/auth/setting-up?callbackURL=%2F",
+        "?redirectTo=https%3A%2F%2Fexternal.example%2Fsteal",
+        "https://builder.example.test",
+      ),
+    ).toBe("/auth/setting-up?callbackURL=%2F");
   });
 
   it("forwards the complete signed OAuth query through social sign-in", async () => {

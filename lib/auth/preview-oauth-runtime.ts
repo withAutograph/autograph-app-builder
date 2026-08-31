@@ -379,6 +379,10 @@ export function readPreviewOAuthRuntimeConfig(
     if (localEmulation.mode === "preview") {
       const deploymentEnvironment =
         readHostedDeploymentEnvironment(resolvedEnvironment);
+      const passkeyOnboarding = readPasskeyOnboardingConfig(
+        resolvedEnvironment,
+        { previewCanonicalOrigin: localEmulation.canonicalOrigin },
+      );
       return previewOAuthRuntimeConfigSchema.parse({
         hostedAdapter: resolvedEnvironment.EVE_HOSTED_ADAPTER,
         environment: deploymentEnvironment,
@@ -398,11 +402,7 @@ export function readPreviewOAuthRuntimeConfig(
         githubClientSecret: resolvedEnvironment.GITHUB_CLIENT_SECRET,
         vercelClientId: resolvedEnvironment.VERCEL_AUTH_CLIENT_ID,
         vercelClientSecret: resolvedEnvironment.VERCEL_AUTH_CLIENT_SECRET,
-        // Emulated Preview OAuth uses the stable branch hostname while WebAuthn
-        // is bound to Vercel's ephemeral deployment hostname. Keep passkey
-        // onboarding out of this provider-emulation mode instead of making the
-        // two origin authorities disagree.
-        passkeyOnboarding: null,
+        passkeyOnboarding,
       });
     }
     const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
@@ -677,7 +677,15 @@ export function createPreviewOAuthServer(input: {
         },
       ),
       ...infrastructure.plugins,
-      createPasskeyOnboardingPlugin({ config: config.passkeyOnboarding }),
+      createPasskeyOnboardingPlugin({
+        config: config.passkeyOnboarding,
+        // The serial emulated browser suite exercises more than ten distinct
+        // enrollment ceremonies from one loopback client. Keep the hosted
+        // limit intact while preventing deterministic test traffic from
+        // exhausting the plugin-specific bucket.
+        onboardingContextRateLimitMax:
+          localEmulation === undefined ? undefined : 600,
+      }),
       createPasskeyPlugin({ config: config.passkeyOnboarding }),
       ...(config.environment === "development"
         ? []

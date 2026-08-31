@@ -282,7 +282,9 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyButton).toContain("passkeyClientError(result)");
     expect(passkeyButton).toContain('"Passkey failed (try again)"');
     expect(passkeyButton).toContain('view === "signUp"');
-    expect(passkeyButton).toContain('"Create a passkey"');
+    expect(passkeyButton).toContain("returnWebAuthnResponse: true");
+    expect(passkeyButton).not.toContain('"Create a passkey"');
+    expect(passkeyButton).not.toContain("New to Autograph?");
     expect(passkeyButton).not.toContain("setShowRegistration");
     expect(passkeyButton).not.toContain('if (view === "signUp") return null');
     expect(passkeyButton).toContain(

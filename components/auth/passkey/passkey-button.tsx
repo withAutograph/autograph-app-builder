@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type AuthView,
-  authMutationKeys,
-  getAuthLinkURL,
-} from "@better-auth-ui/core";
+import { type AuthView, authMutationKeys } from "@better-auth-ui/core";
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import {
@@ -19,7 +15,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { passkeyClientError } from "@/lib/auth/passkey-client-result";
+import { isPasskeyOnboardingAlreadyAuthenticated } from "@/lib/auth/passkey-contract";
+import { preferredPasskeyAuthenticatorAttachment } from "@/lib/auth/passkey-platform";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
+import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 
 export type PasskeyButtonProps = {
@@ -37,15 +36,8 @@ type OnboardingResponse = { context?: unknown };
  * @param view - Current auth view. Selects registration on `"signUp"`.
  */
 export function PasskeyButton({ view }: PasskeyButtonProps) {
-  const {
-    authClient,
-    basePaths,
-    Link,
-    localization,
-    redirectTo,
-    navigate,
-    viewPaths,
-  } = useAuth<PasskeyAuthClient>();
+  const { authClient, localization, redirectTo, navigate } =
+    useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
   const signInPasskey = useSignInPasskey(authClient);
@@ -57,7 +49,14 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   // form is open. The button stays for anyone who dismisses it.
   usePasskeyAutoFill(authClient, {
     enabled: view !== "signUp",
-    onSuccess: () => navigate({ to: redirectTo }),
+    onSuccess: () =>
+      navigate({
+        to: resolvePasskeyRedirectTo(
+          redirectTo,
+          window.location.search,
+          window.location.origin,
+        ),
+      }),
   });
 
   const signInMutating = useIsMutating({
@@ -70,12 +69,21 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
 
   const continueWithPasskey = async () => {
     setPending(true);
+    setFailed(false);
+    const resolvedRedirectTo = resolvePasskeyRedirectTo(
+      redirectTo,
+      window.location.search,
+      window.location.origin,
+    );
 
     try {
-      const result = await signInPasskey.mutateAsync({ autoFill: false });
+      const result = await signInPasskey.mutateAsync({
+        autoFill: false,
+        returnWebAuthnResponse: true,
+      });
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
-      navigate({ to: redirectTo });
+      navigate({ to: resolvedRedirectTo });
     } catch {
       setFailed(true);
     } finally {
@@ -84,14 +92,31 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   };
 
   const createPasskey = async () => {
+    setPending(true);
+    setFailed(false);
+    let authenticatedRedirectTo: string | undefined;
+
     try {
-      const response = await fetch("/api/auth/passkey/onboarding-context", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-        cache: "no-store",
-      });
+      const resolvedRedirectTo = resolvePasskeyRedirectTo(
+        redirectTo,
+        window.location.search,
+        window.location.origin,
+      );
+      authenticatedRedirectTo = resolvedRedirectTo;
+      const [response, authenticatorAttachment] = await Promise.all([
+        fetch("/api/auth/passkey/onboarding-context", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+          cache: "no-store",
+        }),
+        preferredPasskeyAuthenticatorAttachment(),
+      ]);
       const body = (await response.json()) as OnboardingResponse;
+      if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
+        navigate({ to: resolvedRedirectTo, replace: true });
+        return;
+      }
       if (!response.ok || typeof body.context !== "string") {
         throw new Error("Passkey registration is unavailable.");
       }
@@ -100,12 +125,26 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         context: body.context,
         createSession: true,
         name: "Primary passkey",
+        ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
       });
+      if (isPasskeyOnboardingAlreadyAuthenticated(result)) {
+        navigate({ to: resolvedRedirectTo, replace: true });
+        return;
+      }
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
-      navigate({ to: redirectTo });
-    } catch {
+      navigate({ to: resolvedRedirectTo });
+    } catch (error) {
+      if (
+        authenticatedRedirectTo &&
+        isPasskeyOnboardingAlreadyAuthenticated(error)
+      ) {
+        navigate({ to: authenticatedRedirectTo, replace: true });
+        return;
+      }
       setFailed(true);
+    } finally {
+      setPending(false);
     }
   };
 
@@ -126,27 +165,11 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         {pending ? <Spinner /> : <Fingerprint />}
         {failed
           ? "Passkey failed (try again)"
-          : view === "signUp"
-            ? "Create a passkey"
-            : localization.auth.continueWith.replace(
-                "{{provider}}",
-                passkeyLocalization.passkey,
-              )}
-      </Button>
-      {view !== "signUp" && (
-        <p className="text-muted-foreground text-center text-xs">
-          New to Autograph?{" "}
-          <Link
-            href={getAuthLinkURL(
-              `${basePaths.auth}/${viewPaths.auth.signUp}`,
-              redirectTo,
+          : localization.auth.continueWith.replace(
+              "{{provider}}",
+              passkeyLocalization.passkey,
             )}
-            className="underline underline-offset-4"
-          >
-            Create an account with a passkey
-          </Link>
-        </p>
-      )}
+      </Button>
     </div>
   );
 }
