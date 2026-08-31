@@ -108,5 +108,7 @@ describe("two-mode development workflow contract", () => {
 
     const eslint = readFileSync("eslint.config.mjs", "utf8");
     expect(eslint).toContain('".artifacts/**"');
+    const vitest = readFileSync("vitest.config.mts", "utf8");
+    expect(vitest.match(/"\*\*\/\.artifacts\/\*\*"/gu)).toHaveLength(2);
   });
 });
