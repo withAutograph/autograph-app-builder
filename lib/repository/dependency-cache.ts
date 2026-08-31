@@ -35,6 +35,10 @@ export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 export const LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT =
   ".app-builder/template-dependency-cache";
 const LIVE_TEMPLATE_NODE_MODULES_PATH = "/workspace/repository/node_modules";
+const DEVELOPMENT_TOOLCHAIN_PATH =
+  "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin";
+const DEVELOPMENT_CARGO_HOME = "/workspace/.app-builder/toolchain/cargo-home";
+const DEVELOPMENT_CARGO_CONFIG = "/opt/app-builder/cargo/config.toml";
 
 const REQUIRED_EXECUTION_PACKAGES = [
   ".bin/next",
@@ -688,6 +692,8 @@ export async function materializeOfflineDependencies(input: {
     sourceReceipt: input.target,
     cache: observed,
   });
+  const developmentExecution =
+    observed.manifest.scope === "development-execution";
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
     const liveTemplate = observed.manifest.scope === "live-template-execution";
@@ -761,7 +767,9 @@ export async function materializeOfflineDependencies(input: {
       throw new Error("The required offline dependency closure is incomplete.");
     if (!hostedSeedDependencyCacheEnabled(environment)) {
       const rustToolchain = await input.sandbox.run({
-        command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
+        command: developmentExecution
+          ? `PATH=${DEVELOPMENT_TOOLCHAIN_PATH} CARGO_HOME=${DEVELOPMENT_CARGO_HOME} CARGO_NET_OFFLINE=true sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test -r ${DEVELOPMENT_CARGO_CONFIG} && cargo metadata --config ${DEVELOPMENT_CARGO_CONFIG} --offline --format-version 1 --locked --all-features >/dev/null'`
+          : `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
         workingDirectory: `/workspace/${root}`,
         abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
       });

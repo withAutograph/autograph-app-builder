@@ -98,6 +98,25 @@ const manifest = {
     cargoArchiveBytes: 456,
   },
 } as const;
+const developmentManifest = {
+  version: 2,
+  scope: "development-execution",
+  platform: "linux/amd64",
+  dependencyKey: "d".repeat(64),
+  lockfiles: {
+    ".config/mise/config.toml": "1".repeat(64),
+    ".config/mise/mise.lock": "2".repeat(64),
+    "bun.lock": "3".repeat(64),
+    "Cargo.lock": "4".repeat(64),
+  },
+  runtime: {
+    node: "24.18.0",
+    bun: "1.3.14",
+    mise: "2026.8.12",
+    rust: "1.97.1",
+  },
+  closure: manifest.closure,
+} as const;
 
 function sandboxFixture(inputManifest: unknown = manifest) {
   const run = vi
@@ -516,6 +535,38 @@ describe("offline dependency cache", () => {
     expect(rustCommand).toContain(
       "cargo metadata --format-version 1 --locked --all-features",
     );
+  });
+
+  it("uses the pinned Vercel Development toolchain and offline Cargo closure", async () => {
+    const { run, sandbox } = sandboxFixture(developmentManifest);
+    await materializeOfflineDependencies({
+      sandbox,
+      artifactRevision: "b".repeat(64),
+      target: {
+        sourceSha: "7".repeat(40),
+        sourceTree: "8".repeat(40),
+      },
+      environment: { APP_BUILDER_EXECUTION_MODE: "development" },
+    });
+
+    expect(run.mock.calls[1]?.[0].command).toContain(
+      DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
+    );
+    expect(run.mock.calls[3]?.[0].command).toContain(
+      `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
+    );
+    const rustCommand = run.mock.calls[5]?.[0].command as string;
+    expect(rustCommand).toContain(
+      "PATH=/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",
+    );
+    expect(rustCommand).toContain(
+      "CARGO_HOME=/workspace/.app-builder/toolchain/cargo-home",
+    );
+    expect(rustCommand).toContain("CARGO_NET_OFFLINE=true");
+    expect(rustCommand).toContain(
+      "cargo metadata --config /opt/app-builder/cargo/config.toml --offline",
+    );
+    expect(rustCommand).not.toContain("mise --env app-builder exec");
   });
 
   it("rejects target drift and does not extract", async () => {
