@@ -155,14 +155,36 @@ describe("canonical Arrusted template readiness", () => {
       ],
     ]);
     const setNetworkPolicy = vi.fn(async () => undefined);
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: JSON.stringify({ sourceSha, sourceTree, workspaceDigest }),
-        stderr: "",
-      })
-      .mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    let reinspectionRemote =
+      "https://github.com/withAutograph/arrusted-development.git";
+    const run = vi.fn(
+      async ({ command }: { command: string }) =>
+        command.includes(" clone ")
+          ? {
+              exitCode: 0,
+              stdout: JSON.stringify({
+                sourceSha,
+                sourceTree,
+                workspaceDigest,
+              }),
+              stderr: "",
+            }
+          : command.includes("symbolic-ref")
+            ? {
+                exitCode: 0,
+                stdout: JSON.stringify({
+                  remote: reinspectionRemote,
+                  resolvedRef: sourceSha,
+                  detached: true,
+                  hasGitmodules: false,
+                  gitlinks: [],
+                  workspaceDigest,
+                  snapshot: inspection,
+                }),
+                stderr: "",
+              }
+            : { exitCode: 0, stdout: "", stderr: "" },
+    );
     const sandbox = {
       id: "sandbox-template-clone",
       readTextFile: vi.fn(
@@ -192,6 +214,7 @@ describe("canonical Arrusted template readiness", () => {
               name: "Template readiness",
               status: "completed",
               conclusion: "success",
+              head_sha: sourceSha,
               completed_at: "2026-08-31T16:01:00Z",
             },
           ],
@@ -229,6 +252,13 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
+    const reinspection = run.mock.calls.find(([call]) =>
+      call.command.includes("symbolic-ref"),
+    )?.[0].command;
+    expect(reinspection).toContain("symbolic-ref");
+    expect(reinspection).not.toContain(
+      "ghs_reader_token_that_is_only_for_this_acquisition",
+    );
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
       false,
     );
@@ -240,6 +270,11 @@ describe("canonical Arrusted template readiness", () => {
       allow: ["github.com"],
     });
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
+    reinspectionRemote =
+      "https://github.com/withAutograph/another-private-template.git";
+    await expect(
+      inspectCanonicalArrustedSandboxWorkspace({ sandbox, receipt }),
+    ).rejects.toThrow("workspace drifted");
     vi.unstubAllGlobals();
   });
 
@@ -252,6 +287,7 @@ describe("canonical Arrusted template readiness", () => {
             name: "Template readiness",
             status: "completed",
             conclusion: "success",
+            head_sha: "a".repeat(40),
             started_at: "2026-08-31T16:00:00Z",
             completed_at: "2026-08-31T16:01:00Z",
           },
@@ -317,6 +353,59 @@ describe("canonical Arrusted template readiness", () => {
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
 
+  it.each(["askpass-write", "network-enable"] as const)(
+    "removes staged credentials and restores deny-all when %s fails",
+    async (failure) => {
+      const files = new Map<string, string>();
+      const removePath = vi.fn(async ({ path }: { path: string }) => {
+        files.delete(path);
+      });
+      const setNetworkPolicy = vi.fn(async (policy: unknown) => {
+        if (failure === "network-enable" && policy !== "deny-all")
+          throw new Error("network unavailable");
+      });
+      const sandbox = {
+        id: `sandbox-template-${failure}`,
+        readTextFile: vi.fn(async () => null),
+        writeTextFile: vi.fn(
+          async ({ path, content }: { path: string; content: string }) => {
+            if (
+              failure === "askpass-write" &&
+              path === ".app-builder/arrusted-template-reader-askpass"
+            )
+              throw new Error("askpass unavailable");
+            files.set(path, content);
+          },
+        ),
+        removePath,
+        setNetworkPolicy,
+        run: vi.fn(),
+      } as unknown as SandboxSession;
+      const reader: ArrustedTemplateReader = {
+        acquire: vi.fn(async () => ({
+          token: "ghs_reader_token_that_is_only_for_this_acquisition",
+        })),
+      };
+
+      await expect(
+        acquireCanonicalArrustedTemplate({
+          sandbox,
+          callId: `call-template-${failure}`,
+          reader,
+        }),
+      ).rejects.toThrow();
+      expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
+        false,
+      );
+      expect(files.has(".app-builder/arrusted-template-reader-askpass")).toBe(
+        false,
+      );
+      expect(removePath).toHaveBeenCalledTimes(2);
+      expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
+      expect(sandbox.run).not.toHaveBeenCalled();
+    },
+  );
+
   it("fails closed when the exact SHA has no successful readiness check", async () => {
     vi.stubGlobal(
       "fetch",
@@ -328,6 +417,37 @@ describe("canonical Arrusted template readiness", () => {
               name: "Template readiness",
               status: "completed",
               conclusion: "failure",
+              head_sha: "a".repeat(40),
+              started_at: "2026-08-31T16:00:00Z",
+              completed_at: "2026-08-31T16:01:00Z",
+            },
+          ],
+        }),
+      ),
+    );
+
+    await expect(
+      templateReadinessAttestationDigest({
+        sha: "a".repeat(40),
+        tree: "b".repeat(40),
+        token: "ghs_reader_token_that_is_only_for_this_acquisition",
+      }),
+    ).rejects.toThrow("no successful template-readiness evidence");
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects readiness evidence bound to another commit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof globalThis.fetch>(async () =>
+        Response.json({
+          check_runs: [
+            {
+              id: 123,
+              name: "Template readiness",
+              status: "completed",
+              conclusion: "success",
+              head_sha: "c".repeat(40),
               started_at: "2026-08-31T16:00:00Z",
               completed_at: "2026-08-31T16:01:00Z",
             },
