@@ -17,6 +17,7 @@ import {
   DEPENDENCY_CACHE_ARCHIVE_PATH,
   DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
   assertExactDependencyTargetBinding,
+  dependencyTargetForWorkspace,
   inspectDependencyCache,
   materializedDependencyNodeModulesRoot,
   materializeOfflineDependencies,
@@ -252,7 +253,7 @@ describe("offline dependency cache", () => {
       target,
     );
 
-    expect(cache.manifest.target).toEqual(
+    expect(dependencyTargetForWorkspace(cache, target)).toEqual(
       expect.objectContaining({
         sha: target.sourceSha,
         tree: target.sourceTree,
@@ -297,6 +298,44 @@ describe("offline dependency cache", () => {
         },
       }),
     ).toThrow("prepared source does not match");
+  });
+
+  it("binds reusable development dependencies to the per-run source without making source bytes part of the cache key", () => {
+    const workspace = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
+    const cache = {
+      manifest: {
+        version: 2,
+        scope: "development-execution",
+        platform: "linux/arm64",
+        dependencyKey: "9".repeat(64),
+        lockfiles: {
+          ".config/mise/config.toml": "1".repeat(64),
+          ".config/mise/mise.lock": "2".repeat(64),
+          "bun.lock": "3".repeat(64),
+          "Cargo.lock": "4".repeat(64),
+        },
+        runtime: {
+          node: "24.18.0",
+          bun: "1.3.14",
+          mise: "2026.8.12",
+          rust: "1.97.1",
+        },
+        closure: manifest.closure,
+      },
+      manifestDigest: "a".repeat(64),
+      contentDigest: archiveDigest,
+    } as const;
+    expect(dependencyTargetForWorkspace(cache, workspace)).toEqual({
+      sha: workspace.sourceSha,
+      tree: workspace.sourceTree,
+    });
+    expect(() =>
+      assertExactDependencyTargetBinding({
+        workspace,
+        sourceReceipt: workspace,
+        cache,
+      }),
+    ).not.toThrow();
   });
 
   it("verifies target-bound manifest and archive bytes before extraction", async () => {

@@ -30,6 +30,25 @@ describe("sandbox toolchain contract", () => {
     ).toBeUndefined();
   });
 
+  it("accepts a content-keyed local image only in explicit development mode", () => {
+    const developmentImage = `app-builder-autograph-dev:${"b".repeat(64)}-linux-arm64`;
+    expect(
+      configuredToolchainImage({
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_SANDBOX_IMAGE: developmentImage,
+      }),
+    ).toBe(developmentImage);
+    expect(() =>
+      configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: developmentImage }),
+    ).toThrow("pinned");
+    expect(() =>
+      configuredToolchainImage({
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_SANDBOX_IMAGE: "app-builder-autograph-dev:latest",
+      }),
+    ).toThrow("content-keyed");
+  });
+
   it("requires the pinned mise and Bun versions", () => {
     expect(toolVersionMatches("git", "git version 2.50.1")).toBe(true);
     expect(toolVersionMatches("mise", "2026.8.12 macos-arm64")).toBe(true);

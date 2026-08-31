@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Preload the exact remotely verified digest into Microsandbox"
 set -eu
 

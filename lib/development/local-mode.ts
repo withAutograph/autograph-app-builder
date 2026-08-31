@@ -31,6 +31,7 @@ export type DevelopmentTools = Readonly<{
   node: string;
   bun: string;
   mise: string;
+  rust: string;
 }>;
 
 export type DevelopmentArguments = Readonly<{
@@ -98,7 +99,9 @@ export function parseDevelopmentArguments(
     }
   }
   if (parsed.arrustedRoot === undefined)
-    throw new Error("Usage: mise run dev -- --arrusted-root /absolute/path/to/arrusted");
+    throw new Error(
+      "Usage: mise run dev -- --arrusted-root /absolute/path/to/arrusted",
+    );
   if (!isAbsolute(parsed.arrustedRoot))
     throw new Error("--arrusted-root must be absolute.");
   if (parsed.stateRoot !== undefined && !isAbsolute(parsed.stateRoot))
@@ -113,6 +116,7 @@ export function parseDevelopmentArguments(
 
 function gitEnvironment(): NodeJS.ProcessEnv {
   return {
+    NODE_ENV: "production",
     PATH: "/usr/bin:/bin",
     HOME: "/dev/null",
     XDG_CONFIG_HOME: "/dev/null",
@@ -129,7 +133,11 @@ function gitEnvironment(): NodeJS.ProcessEnv {
 
 async function canonicalOwnedDirectory(path: string, label: string) {
   const requested = resolve(path);
-  if (!isAbsolute(path) || requested !== path || (await realpath(path)) !== path)
+  if (
+    !isAbsolute(path) ||
+    requested !== path ||
+    (await realpath(path)) !== path
+  )
     throw new Error(`${label} must be an absolute canonical directory.`);
   const info = await lstat(path);
   if (
@@ -138,7 +146,9 @@ async function canonicalOwnedDirectory(path: string, label: string) {
     info.uid !== process.getuid?.() ||
     (info.mode & 0o022) !== 0
   )
-    throw new Error(`${label} must be owned by the current account and not writable by another account.`);
+    throw new Error(
+      `${label} must be owned by the current account and not writable by another account.`,
+    );
   return path;
 }
 
@@ -147,7 +157,9 @@ function safeRelativePath(path: string) {
     path !== "" &&
     !isAbsolute(path) &&
     !path.includes("\\") &&
-    path.split("/").every((part) => part !== "" && part !== "." && part !== "..")
+    path
+      .split("/")
+      .every((part) => part !== "" && part !== "." && part !== "..")
   );
 }
 
@@ -196,8 +208,14 @@ async function sourceEntry(sourceRoot: string, path: string) {
         throw new Error(`Development source link must be relative: ${path}`);
       const resolved = resolve(dirname(absolute), target);
       const escaped = relative(sourceRoot, resolved);
-      if (escaped === ".." || escaped.startsWith(`..${sep}`) || isAbsolute(escaped))
-        throw new Error(`Development source link escapes the checkout: ${path}`);
+      if (
+        escaped === ".." ||
+        escaped.startsWith(`..${sep}`) ||
+        isAbsolute(escaped)
+      )
+        throw new Error(
+          `Development source link escapes the checkout: ${path}`,
+        );
       return {
         path,
         kind: "link" as const,
@@ -205,7 +223,9 @@ async function sourceEntry(sourceRoot: string, path: string) {
         content: Buffer.from(target),
       };
     }
-    throw new Error(`Development source supports only regular files and safe symbolic links: ${path}`);
+    throw new Error(
+      `Development source supports only regular files and safe symbolic links: ${path}`,
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
@@ -214,7 +234,9 @@ async function sourceEntry(sourceRoot: string, path: string) {
 
 async function developmentEntries(sourceRoot: string) {
   const entries = await Promise.all(
-    (await sourcePaths(sourceRoot)).map((path) => sourceEntry(sourceRoot, path)),
+    (await sourcePaths(sourceRoot)).map((path) =>
+      sourceEntry(sourceRoot, path),
+    ),
   );
   return entries.filter((entry) => entry !== undefined);
 }
@@ -226,7 +248,11 @@ function fingerprintEntries(
   for (const entry of entries) {
     if (entry === undefined) continue;
     const path = Buffer.from(entry.path);
-    hash.update(Buffer.from(`${path.byteLength}\0${entry.kind}\0${entry.mode}\0${entry.content.byteLength}\0`));
+    hash.update(
+      Buffer.from(
+        `${path.byteLength}\0${entry.kind}\0${entry.mode}\0${entry.content.byteLength}\0`,
+      ),
+    );
     hash.update(path);
     hash.update(entry.content);
   }
@@ -264,24 +290,38 @@ export async function createDevelopmentSnapshot(input: {
     input.sourceRoot,
     "Arrusted checkout",
   );
-  const runRoot = await canonicalOwnedDirectory(input.runRoot, "Development run root");
+  const runRoot = await canonicalOwnedDirectory(
+    input.runRoot,
+    "Development run root",
+  );
   const root = join(runRoot, "source");
   await mkdir(root, { mode: 0o700 });
   try {
     const entries = await developmentEntries(sourceRoot);
     const fingerprint = fingerprintEntries(entries);
     for (const entry of entries) {
-      await mkdir(dirname(join(root, entry.path)), { recursive: true, mode: 0o700 });
+      await mkdir(dirname(join(root, entry.path)), {
+        recursive: true,
+        mode: 0o700,
+      });
       if (entry.kind === "link")
         await symlink(entry.content.toString("utf8"), join(root, entry.path));
       else {
         await copyFile(join(sourceRoot, entry.path), join(root, entry.path));
-        await chmod(join(root, entry.path), entry.mode === "100755" ? 0o700 : 0o600);
+        await chmod(
+          join(root, entry.path),
+          entry.mode === "100755" ? 0o700 : 0o600,
+        );
       }
     }
     if ((await fingerprintDevelopmentSource(sourceRoot)) !== fingerprint)
-      throw new Error("Arrusted source changed while its development snapshot was created.");
-    execFileSync("/usr/bin/git", ["init", "-q"], { cwd: root, env: gitEnvironment() });
+      throw new Error(
+        "Arrusted source changed while its development snapshot was created.",
+      );
+    execFileSync("/usr/bin/git", ["init", "-q"], {
+      cwd: root,
+      env: gitEnvironment(),
+    });
     execFileSync("/usr/bin/git", ["add", "--all", "--", "."], {
       cwd: root,
       env: gitEnvironment(),
@@ -326,6 +366,24 @@ export async function createDevelopmentSnapshot(input: {
   }
 }
 
+export async function removeDevelopmentSnapshot(root: string) {
+  async function makeWritable(path: string) {
+    const info = await lstat(path);
+    if (info.isSymbolicLink()) return;
+    if (info.isDirectory()) {
+      await chmod(path, 0o700);
+      for (const entry of await readdir(path))
+        await makeWritable(join(path, entry));
+    } else await chmod(path, 0o600);
+  }
+  try {
+    await makeWritable(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  await rm(root, { recursive: true, force: true });
+}
+
 async function digestFileOrAbsent(path: string) {
   try {
     const info = await lstat(path);
@@ -343,15 +401,26 @@ export async function developmentDependencyKey(input: {
   platform: string;
   tools: DevelopmentTools;
 }) {
-  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
+  const sourceRoot = await canonicalOwnedDirectory(
+    input.sourceRoot,
+    "Arrusted checkout",
+  );
   if (!/^linux\/(?:arm64|amd64)$/u.test(input.platform))
     throw new Error("Development dependency platform is unsupported.");
   const lockfiles = Object.fromEntries(
     await Promise.all(
-      dependencyInputs.map(async (path) => [path, await digestFileOrAbsent(join(sourceRoot, path))]),
+      dependencyInputs.map(async (path) => [
+        path,
+        await digestFileOrAbsent(join(sourceRoot, path)),
+      ]),
     ),
   );
   return sha256(
-    JSON.stringify({ version: 1, platform: input.platform, tools: input.tools, lockfiles }),
+    JSON.stringify({
+      version: 1,
+      platform: input.platform,
+      tools: input.tools,
+      lockfiles,
+    }),
   );
 }

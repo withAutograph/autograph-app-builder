@@ -53,6 +53,7 @@ const REQUIRED_EXECUTION_PACKAGES = [
 
 const sha256Digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
+const dependencyDigest = z.union([sha256Digest, z.literal("absent")]);
 
 const dependencyCacheManifestShapeSchema = z.strictObject({
   version: z.literal(1),
@@ -148,6 +149,26 @@ export const hostedExecutionDependencyCacheManifestSchema = z.strictObject({
   }),
 });
 
+export const developmentDependencyCacheManifestSchema = z.strictObject({
+  version: z.literal(2),
+  scope: z.literal("development-execution"),
+  platform: z.union([z.literal("linux/arm64"), z.literal("linux/amd64")]),
+  dependencyKey: sha256Digest,
+  lockfiles: z.strictObject({
+    ".config/mise/config.toml": dependencyDigest,
+    ".config/mise/mise.lock": dependencyDigest,
+    "bun.lock": dependencyDigest,
+    "Cargo.lock": dependencyDigest,
+  }),
+  runtime: z.strictObject({
+    node: z.literal("24.18.0"),
+    bun: z.literal(ARRUSTED_BUN_VERSION),
+    mise: z.literal("2026.8.12"),
+    rust: z.literal(ARRUSTED_RUST_VERSION),
+  }),
+  closure: dependencyCacheManifestShapeSchema.shape.closure,
+});
+
 export const dependencyCacheManifestSchema =
   dependencyCacheManifestShapeSchema.refine(
     ({ target }) =>
@@ -158,7 +179,8 @@ export const dependencyCacheManifestSchema =
 
 export type DependencyCacheManifest =
   | z.infer<typeof dependencyCacheManifestShapeSchema>
-  | z.infer<typeof hostedExecutionDependencyCacheManifestSchema>;
+  | z.infer<typeof hostedExecutionDependencyCacheManifestSchema>
+  | z.infer<typeof developmentDependencyCacheManifestSchema>;
 
 export type ObservedDependencyCache = {
   manifest: DependencyCacheManifest;
@@ -182,7 +204,7 @@ export function assertExactDependencyTargetBinding(input: {
   cache: ObservedDependencyCache;
   dependencyReceipt?: ExactDependencyReceiptBinding;
 }): void {
-  const target = input.cache.manifest.target;
+  const target = dependencyTargetForWorkspace(input.cache, input.workspace);
   if (
     input.workspace.sourceSha !== input.sourceReceipt.sourceSha ||
     input.workspace.sourceTree !== input.sourceReceipt.sourceTree ||
@@ -197,6 +219,15 @@ export function assertExactDependencyTargetBinding(input: {
     throw new Error(
       "The prepared source does not match the immutable dependency target.",
     );
+}
+
+export function dependencyTargetForWorkspace(
+  cache: ObservedDependencyCache,
+  workspace: ExactSourceBinding,
+): { sha: string; tree: string } {
+  return cache.manifest.scope === "development-execution"
+    ? { sha: workspace.sourceSha, tree: workspace.sourceTree }
+    : { sha: cache.manifest.target.sha, tree: cache.manifest.target.tree };
 }
 
 const sha256 = (value: string) =>
@@ -347,10 +378,14 @@ export async function inspectDependencyCache(
     throw new Error("The fixed offline dependency cache manifest is invalid.");
   }
   const hostedExecution = hostedSeedDependencyCacheEnabled(environment);
+  const developmentExecution =
+    environment.APP_BUILDER_EXECUTION_MODE === "development";
   const validated = (
     hostedExecution
       ? hostedExecutionDependencyCacheManifestSchema
-      : dependencyCacheManifestSchema
+      : developmentExecution
+        ? developmentDependencyCacheManifestSchema
+        : dependencyCacheManifestSchema
   ).safeParse(parsed);
   if (!validated.success)
     throw new Error("The fixed offline dependency cache manifest drifted.");
@@ -377,7 +412,9 @@ export async function inspectDependencyCache(
   const observedCargoBytes = Number(cargoSizeLine);
   const fullClosure = hostedExecution
     ? undefined
-    : dependencyCacheManifestSchema.parse(validated.data).closure;
+    : developmentExecution
+      ? developmentDependencyCacheManifestSchema.parse(validated.data).closure
+      : dependencyCacheManifestSchema.parse(validated.data).closure;
   if (
     observedDigest === undefined ||
     !sha256Digest.safeParse(observedDigest).success ||

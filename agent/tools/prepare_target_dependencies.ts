@@ -13,6 +13,7 @@ import {
   assertExactDependencyTargetBinding,
   inspectDependencyCache,
   materializeOfflineDependencies,
+  dependencyTargetForWorkspace,
 } from "@/lib/repository/dependency-cache";
 import {
   materializePlanningOverlay,
@@ -92,6 +93,10 @@ export default defineTool({
       return { ...receipt, reused: true };
     }
 
+    const dependencyTarget = dependencyTargetForWorkspace(
+      cache,
+      current.workspace,
+    );
     const unsigned = {
       version: 2 as const,
       sourceSha: current.workspace.sourceSha,
@@ -102,8 +107,8 @@ export default defineTool({
       dependencyCacheDigest: execution.dependencyCacheDigest,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
-      targetSha: cache.manifest.target.sha,
-      targetTree: cache.manifest.target.tree,
+      targetSha: dependencyTarget.sha,
+      targetTree: dependencyTarget.tree,
       cacheManifestDigest: cache.manifestDigest,
       cacheContentDigest: cache.contentDigest,
       preparedByCallId: ctx.callId,

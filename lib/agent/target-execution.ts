@@ -8,6 +8,7 @@ import { hasTestCapability } from "../testing/test-capability";
 import {
   assertExactDependencyTargetBinding,
   dependencyCacheReceiptDigest,
+  dependencyTargetForWorkspace,
   inspectDependencyCache,
   type ObservedDependencyCache,
 } from "../repository/dependency-cache";
@@ -259,6 +260,10 @@ export async function inspectTargetExecutionReadiness(input: {
     toolchainReady,
     capabilityBlockers: backend.blockers,
   });
+  const dependencyTarget =
+    cache === undefined
+      ? undefined
+      : dependencyTargetForWorkspace(cache, input.state.workspace);
   const readiness = {
     sourceSha: input.state.workspace.sourceSha,
     sourceTree: input.state.workspace.sourceTree,
@@ -273,8 +278,8 @@ export async function inspectTargetExecutionReadiness(input: {
     imageDigest: image ?? "unconfigured",
     dependencyCacheDigest:
       cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
-    targetSha: cache?.manifest.target.sha ?? "unverified",
-    targetTree: cache?.manifest.target.tree ?? "unverified",
+    targetSha: dependencyTarget?.sha ?? "unverified",
+    targetTree: dependencyTarget?.tree ?? "unverified",
     required,
   };
   return {

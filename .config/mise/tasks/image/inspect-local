@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Inspect exact local sandbox image identity and OCI provenance"
 set -eu
 

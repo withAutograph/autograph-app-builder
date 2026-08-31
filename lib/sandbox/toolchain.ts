@@ -11,6 +11,8 @@ export const requiredToolVersions = {
 export type RequiredTool = keyof typeof requiredToolVersions;
 
 const digestPinnedImage = /@sha256:[0-9a-f]{64}$/u;
+const contentKeyedDevelopmentImage =
+  /^app-builder-autograph-dev:[0-9a-f]{64}-linux-(?:arm64|amd64)$/u;
 
 /**
  * A registry reference is accepted only when an external image build has
@@ -22,7 +24,12 @@ export function configuredToolchainImage(
 ): string | undefined {
   const image = environment[TOOLCHAIN_IMAGE_ENV]?.trim();
   if (image === undefined || image === "") return undefined;
-  if (!digestPinnedImage.test(image))
+  const development = environment.APP_BUILDER_EXECUTION_MODE === "development";
+  if (development && !contentKeyedDevelopmentImage.test(image))
+    throw new Error(
+      `${TOOLCHAIN_IMAGE_ENV} must use the content-keyed local development image name.`,
+    );
+  if (!development && !digestPinnedImage.test(image))
     throw new Error(
       `${TOOLCHAIN_IMAGE_ENV} must be an OCI image reference pinned with @sha256:<64 lowercase hex characters>.`,
     );

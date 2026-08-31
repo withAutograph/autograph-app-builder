@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Verify exact clean standalone Builder and Arrusted image sources"
 set -eu
 

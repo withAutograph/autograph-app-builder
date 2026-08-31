@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Supervise Eve and Next with one exact fresh-bootstrap capability"
 set -eu
 

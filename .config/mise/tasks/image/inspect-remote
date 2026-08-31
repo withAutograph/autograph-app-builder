@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Read back GHCR digest, platform, layers, and OCI provenance"
 set -eu
 
