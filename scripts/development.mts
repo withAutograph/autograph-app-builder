@@ -18,14 +18,20 @@ import { promisify } from "node:util";
 import {
   createDevelopmentSnapshot,
   developmentDependencyKey,
-  fingerprintDevelopmentSource,
   parseDevelopmentArguments,
   removeDevelopmentSnapshot,
+  waitForDevelopmentSourceChange,
 } from "../lib/development/local-mode";
 import {
   createDevelopmentPackage,
   developmentLaunchEnvironment,
 } from "../lib/development/dev-package";
+import {
+  HOSTED_BUN_VERSION,
+  HOSTED_MISE_VERSION,
+  HOSTED_NODE_VERSION,
+  HOSTED_RUST_VERSION,
+} from "../lib/sandbox/hosted-toolchain";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = resolve(".");
@@ -94,7 +100,8 @@ async function runInherited(program: string, args: string[]) {
 }
 
 async function prepareDevelopmentImage(input: {
-  snapshotRoot: string;
+  sourceRoot: string;
+  runRoot: string;
   stateRoot: string;
   dependencyKey: string;
   ociPlatform: string;
@@ -112,6 +119,9 @@ async function prepareDevelopmentImage(input: {
     "containers/eve-sandbox/dev-dependencies.Dockerfile",
   );
   const toolchainDigest = sha256(await readFile(toolchainDockerfile));
+  const dependencyDockerfileDigest = sha256(
+    await readFile(dependencyDockerfile),
+  );
   const toolchainTag = `app-builder-autograph-dev-toolchain:${toolchainDigest}-${input.tagPlatform}`;
   if (!(await commandSucceeded(docker, ["image", "inspect", toolchainTag]))) {
     await runInherited(buildx, [
@@ -126,7 +136,7 @@ async function prepareDevelopmentImage(input: {
       repositoryRoot,
     ]);
   }
-  const image = `app-builder-autograph-dev:${input.dependencyKey}-${input.tagPlatform}`;
+  const image = `app-builder-autograph-dev:${input.dependencyKey}-${dependencyDockerfileDigest.slice(0, 16)}-${input.tagPlatform}`;
   const cacheRoot = await privateRoot(
     join(input.stateRoot, "dependencies", input.dependencyKey),
   );
@@ -137,9 +147,13 @@ async function prepareDevelopmentImage(input: {
     const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as {
       image?: string;
       archiveSha256?: string;
+      toolchainDockerfileSha256?: string;
+      dependencyDockerfileSha256?: string;
     };
     reusable =
       receipt.image === image &&
+      receipt.toolchainDockerfileSha256 === toolchainDigest &&
+      receipt.dependencyDockerfileSha256 === dependencyDockerfileDigest &&
       receipt.archiveSha256 === sha256(await readFile(archive));
   } catch {
     reusable = false;
@@ -151,21 +165,32 @@ async function prepareDevelopmentImage(input: {
       cacheRoot,
       `.image-${process.pid}-${randomUUID()}.oci.tar`,
     );
-    const lockfiles = {
-      MISE_CONFIG_SHA256: await digestOrAbsent(
-        join(input.snapshotRoot, ".config/mise/config.toml"),
-      ),
-      MISE_LOCK_SHA256: await digestOrAbsent(
-        join(input.snapshotRoot, ".config/mise/mise.lock"),
-      ),
-      BUN_LOCK_SHA256: await digestOrAbsent(
-        join(input.snapshotRoot, "bun.lock"),
-      ),
-      CARGO_LOCK_SHA256: await digestOrAbsent(
-        join(input.snapshotRoot, "Cargo.lock"),
-      ),
-    };
+    const snapshot = await createDevelopmentSnapshot({
+      sourceRoot: input.sourceRoot,
+      runRoot: input.runRoot,
+    });
     try {
+      const snapshotDependencyKey = await developmentDependencyKey({
+        sourceRoot: snapshot.root,
+        platform: input.ociPlatform,
+        tools: developmentTools,
+      });
+      if (snapshotDependencyKey !== input.dependencyKey)
+        throw new Error(
+          "Arrusted dependency inputs changed while the development image was prepared.",
+        );
+      const lockfiles = {
+        MISE_CONFIG_SHA256: await digestOrAbsent(
+          join(snapshot.root, ".config/mise/config.toml"),
+        ),
+        MISE_LOCK_SHA256: await digestOrAbsent(
+          join(snapshot.root, ".config/mise/mise.lock"),
+        ),
+        BUN_LOCK_SHA256: await digestOrAbsent(join(snapshot.root, "bun.lock")),
+        CARGO_LOCK_SHA256: await digestOrAbsent(
+          join(snapshot.root, "Cargo.lock"),
+        ),
+      };
       const buildArgs = Object.entries(lockfiles).flatMap(([name, value]) => [
         "--build-arg",
         `${name}=${value}`,
@@ -175,7 +200,7 @@ async function prepareDevelopmentImage(input: {
         "--platform",
         input.ociPlatform,
         "--build-context",
-        `arrusted-source=${input.snapshotRoot}`,
+        `arrusted-source=${snapshot.root}`,
         "--build-arg",
         `TOOLCHAIN_IMAGE=${toolchainTag}`,
         "--build-arg",
@@ -199,9 +224,7 @@ async function prepareDevelopmentImage(input: {
         platform: input.ociPlatform,
         dependencyKey: input.dependencyKey,
         toolchainDockerfileSha256: toolchainDigest,
-        dependencyDockerfileSha256: sha256(
-          await readFile(dependencyDockerfile),
-        ),
+        dependencyDockerfileSha256: dependencyDockerfileDigest,
         archiveSha256: sha256(await readFile(archive)),
         lockfiles,
       };
@@ -211,6 +234,7 @@ async function prepareDevelopmentImage(input: {
       });
     } finally {
       await rm(temporary, { force: true });
+      await removeDevelopmentSnapshot(input.runRoot);
     }
   }
   await runInherited(msb, [
@@ -241,17 +265,12 @@ async function stop(child: ChildProcess) {
   if (child.exitCode === null) child.kill("SIGKILL");
 }
 
-async function sourceChanged(sourceRoot: string, expected: string) {
-  while (true) {
-    await new Promise((resolveWait) => setTimeout(resolveWait, 750));
-    try {
-      if ((await fingerprintDevelopmentSource(sourceRoot)) !== expected)
-        return true;
-    } catch {
-      return true;
-    }
-  }
-}
+const developmentTools = {
+  node: HOSTED_NODE_VERSION,
+  bun: HOSTED_BUN_VERSION,
+  mise: HOSTED_MISE_VERSION,
+  rust: HOSTED_RUST_VERSION,
+} as const;
 
 async function supervise(input: {
   sourceRoot: string;
@@ -271,12 +290,7 @@ async function supervise(input: {
     const snapshotDependencyKey = await developmentDependencyKey({
       sourceRoot: snapshot.root,
       platform: input.ociPlatform,
-      tools: {
-        node: "24.18.0",
-        bun: "1.3.14",
-        mise: "2026.8.12",
-        rust: "1.97.1",
-      },
+      tools: developmentTools,
     });
     if (snapshotDependencyKey !== input.dependencyKey)
       return { kind: "changed" as const, code: 0 };
@@ -347,14 +361,17 @@ async function supervise(input: {
       `Autograph development is ready at http://127.0.0.1:${input.nextPort}.`,
     );
     console.log(`Codex development package: ${packageResult.pluginRoot}`);
+    const sourceAudit = new AbortController();
     const outcome = await Promise.race([
-      sourceChanged(input.sourceRoot, snapshot.fingerprint).then(() => ({
-        kind: "changed" as const,
-        code: 0,
-      })),
+      waitForDevelopmentSourceChange({
+        sourceRoot: input.sourceRoot,
+        expectedFingerprint: snapshot.fingerprint,
+        signal: sourceAudit.signal,
+      }).then(() => ({ kind: "changed" as const, code: 0 })),
       childExit(eve).then((code) => ({ kind: "exit" as const, code })),
       childExit(next).then((code) => ({ kind: "exit" as const, code })),
     ]);
+    sourceAudit.abort();
     await Promise.all([stop(eve), stop(next)]);
     return outcome;
   } finally {
@@ -372,34 +389,27 @@ const destinationRoot = await privateRoot(
   args.destinationRoot ?? join(artifactRoot, "destination"),
 );
 const selectedPlatform = hostPlatform();
-const tools = {
-  node: "24.18.0",
-  bun: "1.3.14",
-  mise: "2026.8.12",
-  rust: "1.97.1",
-} as const;
-
 while (true) {
   const dependencyKey = await developmentDependencyKey({
     sourceRoot,
     platform: selectedPlatform.oci,
-    tools,
+    tools: developmentTools,
   });
   const runParent = await privateRoot(join(stateRoot, "runs"));
-  const runRoot = await realpath(await mkdtemp(join(runParent, "run-")));
-  await chmod(runRoot, 0o700);
-  const snapshot = await createDevelopmentSnapshot({ sourceRoot, runRoot });
+  const buildRun = await realpath(await mkdtemp(join(runParent, "run-")));
+  await chmod(buildRun, 0o700);
   let image: string;
   try {
     image = await prepareDevelopmentImage({
-      snapshotRoot: snapshot.root,
+      sourceRoot,
+      runRoot: buildRun,
       stateRoot,
       dependencyKey,
       ociPlatform: selectedPlatform.oci,
       tagPlatform: selectedPlatform.tag,
     });
   } finally {
-    await removeDevelopmentSnapshot(runRoot);
+    await removeDevelopmentSnapshot(buildRun);
   }
   const activeRun = await realpath(await mkdtemp(join(runParent, "run-")));
   await chmod(activeRun, 0o700);

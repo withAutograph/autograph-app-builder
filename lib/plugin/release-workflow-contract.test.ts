@@ -2,30 +2,37 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-describe("pre-release publication workflow", () => {
-  it("publishes v0.2.3 as a prerelease without marking it latest", async () => {
+describe("release publication workflow", () => {
+  it("verifies already-promoted bytes without rebuilding them", async () => {
     const workflow = await readFile(
       resolve(".github/workflows/release.yml"),
       "utf8",
     );
 
-    expect(workflow).toMatch(
-      /gh release create "\$GITHUB_REF_NAME"[\s\S]*?--draft \\\n\s+--prerelease \\/u,
-    );
-    expect(workflow).toContain(
-      'gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false',
-    );
-    expect(workflow.match(/--prerelease/gu)).toHaveLength(2);
-    expect(workflow).not.toMatch(/--latest(?:\s|$)/u);
-    expect(workflow).toContain(
-      "--json isDraft,isPrerelease --jq '.isDraft and .isPrerelease'",
-    );
+    expect(workflow).toContain("types: [published]");
+    expect(workflow).toContain("Download already-promoted bytes");
+    expect(workflow).toContain("promotion-receipt.json");
+    expect(workflow).toContain("autograph-release-promotion-v1");
     expect(workflow).toContain(
       "--json isDraft,isPrerelease --jq '(.isDraft | not) and .isPrerelease'",
     );
-    expect(workflow).toContain(".artifacts/release/app-builder-*.tar.gz");
-    expect(workflow).not.toContain(
-      ".artifacts/release/autograph-app-builder-*.tar.gz",
+    expect(workflow).toContain("gh release verify-asset");
+    expect(workflow).not.toContain("mise run package:build-portable-release");
+    expect(workflow).not.toContain("docker build");
+    expect(workflow).not.toContain("vercel build");
+    expect(workflow).not.toContain("actions/attest-build-provenance");
+  });
+
+  it("binds deployment and tool readbacks before recoverable package publication", async () => {
+    const publish = await readFile(
+      resolve("scripts/release-publish.mts"),
+      "utf8",
     );
+    expect(publish).toContain("deployment.id !== endpointDeployment.id");
+    expect(publish).toContain("hostedClient.listTools()");
+    expect(publish).toContain("exactGithubReleaseExists()");
+    expect(publish).toMatch(/"release",\s*"download"/u);
+    expect(publish).not.toMatch(/buildx[\s\S]{0,80}"build"/u);
+    expect(publish).not.toContain('vercel, ["build"');
   });
 });

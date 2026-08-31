@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Build a deterministic endpoint-bound Agent Plugins release"
 set -eu
 

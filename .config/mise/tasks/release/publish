@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Publish and deploy only the bytes from an exact release:prove receipt"
+set -eu
+
+export APP_BUILDER_RELEASE_NODE_BIN="$(mise which node)"
+export APP_BUILDER_RELEASE_GH_BIN="$(mise which gh)"
+export APP_BUILDER_RELEASE_DOCKER_BIN="$(mise which docker)"
+export APP_BUILDER_RELEASE_BUILDX_BIN="$(mise which docker-cli-plugin-docker-buildx)"
+export APP_BUILDER_RELEASE_VERCEL_BIN="$(mise which vercel)"
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$APP_BUILDER_RELEASE_NODE_BIN" --import tsx scripts/release-publish.mts "$@"

@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Configure derived client manifests for an approved origin"
 set -eu
 

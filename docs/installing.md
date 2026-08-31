@@ -9,10 +9,11 @@ until the shared marketplace is available. The release contains:
 - `app-builder-0.2.3.tar.gz`
 - `app-builder-codex-marketplace-0.2.3.tar.gz`
 - `release-receipt.json`
+- `promotion-receipt.json`
 - `SHA256SUMS`
 
 Download the complete asset set, verify both archive checksums and GitHub's
-immutable release attestations, install, and open a new Codex task. These
+immutable release state, install, and open a new Codex task. These
 commands fail closed until `v0.2.3` exists:
 
 ```sh
@@ -118,10 +119,12 @@ Every release contains:
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
   origin, archive digests, and exact five Autograph tools
+- `promotion-receipt.json`, which binds those package bytes to the proven image,
+  deployment output, platform closure, release endpoint, and local proofs
 
 ### Portable archive
 
-Download the complete release, verify its checksums and immutable attestations,
+Download the complete release, verify its checksums and immutable release state,
 then extract the portable archive:
 
 ```sh
@@ -184,33 +187,29 @@ project:
 
 ```sh
 mise run dependencies:install
-mise run package:validate
-mise run local:dev
+mise run dev -- --arrusted-root /absolute/path/to/arrusted
 ```
 
-The source `mcp.json` intentionally uses a loopback development endpoint. Do not
-publish or redistribute source-checkout bytes as an endpoint-bound release.
+The task snapshots that checkout, starts the loopback endpoint, and prints the
+ephemeral `app-builder@autograph-dev` Codex package path. Do not publish or
+redistribute development package bytes as an endpoint-bound release.
 
 ## Maintainer release flow
 
-Publish `v0.2.3` only through the existing tag-triggered
-`.github/workflows/release.yml` workflow. Do not create or upload the release
-manually. The tag may be created only after the exact release SHA has passed
-the hosted proof and `AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to
-that same accepted SHA.
+From clean exact Builder and Arrusted commits, run `mise run release:prove`
+with the approved deployed origin and an owner-controlled output root. Review
+its `promotion-receipt.json`. After separate publication authorization, run
+`mise run release:publish -- --candidate-root <same-root> --token-file
+<owner-only-hosted-oauth-token>`. The publish command
+creates the versioned prerelease from the proven package and marketplace
+archives, pushes the proven OCI image, and deploys the proven Vercel prebuilt
+output. It never invokes a build command and accepts no replacement bytes or
+bindings.
 
-Maintainers set `AUTOGRAPH_APP_BUILDER_RELEASE_ORIGIN` to the exact deployed
-HTTPS origin. A `vMAJOR.MINOR.PATCH` tag whose version matches `plugin.json`
-runs the release workflow through the protected `release` environment. Before
-creating the tag, an administrator must enable and read back GitHub immutable
-releases, accept the exact-SHA hosted proof, and set
-`AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` to that SHA. The workflow requires the
-exact current `main`, successful exact-SHA CI, and the accepted proof SHA. It
-uses pinned Actions, validates the actual deterministic portable and Codex
-marketplace archives, creates a draft, verifies every uploaded digest, and only
-then publishes the version as a prerelease without marking it latest. It
-requires GitHub's immutable-release attestation and separate build-provenance
-attestations to verify before completing.
+Protected-environment policy, exact-current-main CI, immutable GitHub release
+verification, and marketplace import readback remain required release
+gates. They verify the local promotion receipt and uploaded digests rather than
+rebuilding the candidate.
 
 The archives are the immutable distribution payload behind marketplace and
 client installation. The public `withAutograph/marketplace` repository imports

@@ -1,5 +1,12 @@
 # Implementation gates
 
+The public execution contract has exactly two modes: non-release
+`mise run dev`, and immutable promotion through `mise run release:prove`
+followed by separately authorized `mise run release:publish`. All task names
+below describe internal gates within one of those modes; none is an additional
+supported development or proof entrypoint. The complete boundary is defined in
+[App Builder execution modes](execution-modes.md).
+
 The loopback local adapter and isolated workflow through target
 validation are usable for local development and testing. Apply remains confined
 to a fresh builder-owned overlay; validation uses independent copies of that

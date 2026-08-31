@@ -26,10 +26,29 @@ repository; it does not rebuild or hand-edit the plugin. See the
 [complete installation guide](docs/installing.md) for verified release-archive
 installation and every supported client.
 
-## Current implemented workflow
+## Supported execution modes
 
-The current local slice supports an existing eligible checkout or an explicitly
-allowlisted fresh-template checkout:
+There are exactly two user-facing modes:
+
+- `mise run dev -- --arrusted-root /absolute/path/to/arrusted` is the fast,
+  non-release loop. It accepts dirty Arrusted source through an immutable
+  per-run snapshot, reuses platform-specific dependency state, exposes the
+  exact five public `autograph_*` tools on loopback `/mcp`, and cannot publish,
+  deploy, select hosted bindings, or mutate a provider.
+- `mise run release:prove` builds and locally proves one clean, immutable
+  package/image/deployment candidate. After separate authorization,
+  `mise run release:publish` uploads and deploys only those proven bytes and
+  never rebuilds them.
+
+Eve and the local, image, package, and eval tasks are internal helpers, not
+additional development or proof modes. See the authoritative
+[execution-mode contract](docs/execution-modes.md) for arguments, safety
+boundaries, cache identity, and promotion flow.
+
+## Internal workflow engine
+
+Inside the supported modes, the workflow engine can model an existing eligible
+checkout or an explicitly allowlisted fresh-template checkout:
 
 1. inspect the source with the versioned, non-executing V0 adapter;
 2. emit a canonical receipt binding source kind, exact SHA, eligibility,
@@ -77,6 +96,11 @@ allowlisted fresh-template checkout:
     there without committing or mutating the original checkout; or, for a
     fresh-template source only, atomically install a fully built one-commit
     repository at an approved absent or exact-empty local destination.
+
+The publication operations in this engine are retained as typed internal gates
+and structural test fixtures. The public `dev` mode hard-disables all of them;
+they are not a third supported local workflow. Release promotion accepts only
+the sealed candidate-byte path described above.
 
 Prototype artifacts are durable, session-scoped receipts under
 `prototype/<app-id>/`; only `app-spec.md`, `decisions.md`, and `index.html`
@@ -140,18 +164,12 @@ replayed automatically; a separate recovery approval must name the
 exact durable journal digest and fails closed on any conflicting bytes or Git
 identity. The original checkout's HEAD, index, and worktree state remain exact.
 
-Fresh local bootstrap is exposed only through the supported mise lifecycle
-entrypoint. Pre-create two disjoint canonical directories owned by the current
-user with mode `0700`, then start the local builder with:
-
-```bash
-mise run local:start -- /absolute/builder-state /absolute/destination-root /absolute/source-repository
-```
-
-The task owns the runtime configuration boundary; do not export bootstrap
-environment variables directly. Every status, publish, and recovery tool
-re-reads the configured roots and fixed executable identities. Without this
-entrypoint—or after either root or helper changes—the capability is unavailable.
+Local execution is exposed only as `mise run dev`; the `local:*` tasks are
+private mechanics. Development always uses an immutable source snapshot and a
+separate builder-owned destination. Release proof and promotion are exposed
+only as `mise run release:prove` and `mise run release:publish`. Every status,
+publish, and recovery tool re-reads configured roots and fixed executable
+identities rather than accepting ambient authority.
 Publication remains separately approval-bound. Restart recovery uses the same
 mise-owned host gate and exact journal digest. An abnormal ACTIVE lease cannot
 be taken over; only a still-running coordinator may mark it QUIESCED after all
@@ -318,51 +336,16 @@ does not replace the hosted and cross-client proofs above.
 
 ## Run Autograph App Builder locally
 
-Use Node.js 24 and pnpm 11.7.0:
+Use the repository-pinned toolchain and provide the Arrusted checkout
+explicitly:
 
 ```bash
 mise run dependencies:install
-mise run check
-mise run test:agent
-mise run local:dev
+mise run dev -- --arrusted-root /absolute/path/to/arrusted
 ```
 
-For provider OAuth and Connect development, `mise run app:dev-emulated`
-starts HTTPS Next.js, PostgreSQL, and Emulate's seeded GitHub and Vercel
-services. Local emulator state and generated credentials live only under the
-gitignored `.emulate/` directory. Reset them with
-`mise run app:reset-emulated`.
-
-Vercel Preview deployments use the same typed seed through the embedded
-same-origin routes at `/api/emulate/github` and `/api/emulate/vercel`.
-Activation requires `APP_BUILDER_PREVIEW_PROVIDER_EMULATION=1`, exact
-`VERCEL_ENV=preview`, and the server-only `EMULATE_PREVIEW_*` credentials
-listed in `.env.example`. The canonical callback origin is the branch URL,
-with the immutable deployment URL as fallback; only HTTPS `*.vercel.app`
-origins are accepted. Emulator state is stored in PostgreSQL under a normalized
-repository/project/branch namespace, so it survives redeployments of the same
-branch and is isolated from other branches.
-
-After supplying the Preview database URL only to the task process, reset one
-exact branch with:
-
-```bash
-DATABASE_URL=... mise run app:reset-preview-emulated -- \
-  --repository autograph-app-builder \
-  --project prj_example \
-  --branch feature/example
-```
-
-The next request reseeds that branch. There is no HTTP reset endpoint. Vercel
-Deployment Protection remains the outer access boundary. Preview credentials
-must never use a `NEXT_PUBLIC_*` name or be copied to Production; Production
-always retains the fixed live GitHub and Vercel origins.
-
-For a non-interactive smoke test through App Builder itself:
-
-```bash
-mise run local:smoke
-```
+Provider-emulation and Preview-reset commands remain internal validation lanes.
+They are not supported execution modes and are never selected by `mise run dev`.
 
 To inspect the fixed tool allowlist through App Builder's real sandbox backend:
 
@@ -370,8 +353,9 @@ To inspect the fixed tool allowlist through App Builder's real sandbox backend:
 mise run test:sandbox-toolchain
 ```
 
-Use the named mise tasks for these eval lanes. The internal preload and eval
-wrapper are not supported entrypoints and do not create a second runtime mode.
+The sandbox and eval tasks are internal validation lanes. Their preload and
+eval wrappers are not supported entrypoints and do not create a second runtime
+mode.
 The same rule applies to local, build, package, and unit-test operations: the
 named task is the supported boundary because its non-Node launcher rejects
 ambient Node options before the pinned runtime starts.
@@ -433,43 +417,27 @@ operation fails closed when no OS-managed advisory-lock helper exists.
 
 ## Use the local MCP façade
 
-After linking the repository to the intended Vercel project, refresh the
-Development environment with `vercel env pull .env.local --environment
-development --yes`, then run `mise run local:install-oidc`. The install task
-emits only a transient sanitized status record; do not persist it as a public
-receipt. It validates the linked Development project without requiring an
-unrelated user identity claim and atomically owner-binds `.env.local` at mode
-`0600`. This is claim validation; AI Gateway remains responsible for
-cryptographic signature verification. `local:start` rejects a missing,
-symlinked, expired, mismatched, or permissive credential file.
+Run `mise run dev -- --arrusted-root <absolute-local-checkout>`. Development
+does not use hosted OAuth, Vercel project selection, or `.env.local`. It starts
+Eve on loopback port 2000 and Next.js plus `/mcp` on loopback port 3000, then
+prints the ephemeral `app-builder@autograph-dev` Codex package path. Install
+that ignored package in a fresh local Codex client and open returned prototype
+links in the integrated ChatGPT Browser. The package intentionally has no MCP
+App preview registration.
 
-For the fresh-bootstrap-capable local lifecycle, pre-create the two owner-only
-roots described above, then run `mise run local:start -- <state-root>
-<destination-root> <local-source-root>`. The third argument is one exact,
-canonical, owner-bound existing repository root; it becomes Eve's only local
-source allowlist and is never read from ambient environment. The task
-supervises Eve on loopback port 2000 and Next.js
-on loopback port 3000, and injects the exact same capability and local adapter
-configuration into both children. Run `mise run local:smoke` in another shell
-to verify the real Next health route and invoke the running Eve service. The
-adapter rejects non-loopback hosts and is never enabled implicitly.
+The source manifest is intentionally a non-releasable endpoint template.
+Derived-manifest and release-package tasks are private release helpers, not
+additional supported modes.
 
-The source manifest is intentionally a non-releasable endpoint template. The
-existing derived-manifest workflow remains available for an approved deployed
-origin:
+A sealed portable release is produced only inside `mise run release:prove`,
+which injects the separately approved literal HTTPS origin without mutating the
+source manifest. Package construction is a private helper of that command:
 
 ```bash
-mise run package:configure -- --origin https://your-approved-deployment.example
-mise run package:validate-release
-```
-
-A sealed portable release can instead inject its separately approved, literal
-HTTPS endpoint without mutating the source manifest. The command neither
-deploys nor registers a connection:
-
-```bash
-mise run package:build-portable-release -- \
-  --endpoint https://mcp.autograph.dev
+mise run release:prove -- \
+  --arrusted-root /absolute/path/to/clean/arrusted \
+  --endpoint https://mcp.autograph.dev \
+  --output /absolute/path/to/release-candidate
 ```
 
 The resulting archive, SHA-256 digest receipt, and offline client harness

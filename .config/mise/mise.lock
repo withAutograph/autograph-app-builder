@@ -131,6 +131,10 @@ url = "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-arm64.tar.gz"
 version = "0.6.14"
 backend = "npm:microsandbox"
 
+[[tools."npm:vercel"]]
+version = "59.10.0"
+backend = "npm:vercel"
+
 [[tools.pnpm]]
 version = "11.7.0"
 backend = "aqua:pnpm/pnpm"

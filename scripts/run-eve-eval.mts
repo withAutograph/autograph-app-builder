@@ -98,6 +98,7 @@ const sandboxEvaluations = new Set([
   "sandbox-toolchain",
   "sandbox-identity-planning",
   "sandbox-reviewed-change-set",
+  "sandbox-existing-iteration",
 ]);
 if (
   (gateAEvalProfile.profile === "sandbox" ||

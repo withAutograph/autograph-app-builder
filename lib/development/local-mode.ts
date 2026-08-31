@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
+import { constants, watch, type FSWatcher } from "node:fs";
 import {
   chmod,
-  copyFile,
   lstat,
   mkdir,
+  open,
   readFile,
   readlink,
   realpath,
@@ -12,6 +13,7 @@ import {
   rm,
   stat,
   symlink,
+  writeFile,
 } from "node:fs/promises";
 import { promisify } from "node:util";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -191,17 +193,59 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
     .toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right)));
 }
 
+async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
+  let ancestor = dirname(absolute);
+  for (;;) {
+    const info = await lstat(ancestor);
+    if (!info.isDirectory() || info.isSymbolicLink())
+      throw new Error(
+        `Development source ancestor was unsafe: ${relative(sourceRoot, absolute)}`,
+      );
+    if (ancestor === sourceRoot) break;
+    const parent = dirname(ancestor);
+    if (parent === ancestor)
+      throw new Error("Development source path escaped its checkout.");
+    ancestor = parent;
+  }
+}
+
 async function sourceEntry(sourceRoot: string, path: string) {
   const absolute = join(sourceRoot, path);
   try {
+    await assertSafeSourceAncestors(sourceRoot, absolute);
     const info = await lstat(absolute);
-    if (info.isFile())
-      return {
-        path,
-        kind: "file" as const,
-        mode: info.mode & 0o111 ? "100755" : "100644",
-        content: await readFile(absolute),
-      };
+    if (info.isFile()) {
+      const descriptor = await open(
+        absolute,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
+      try {
+        const opened = await descriptor.stat();
+        if (
+          !opened.isFile() ||
+          opened.dev !== info.dev ||
+          opened.ino !== info.ino
+        )
+          throw new Error(
+            `Development source file changed during read: ${path}`,
+          );
+        const content = await descriptor.readFile();
+        await assertSafeSourceAncestors(sourceRoot, absolute);
+        const final = await descriptor.stat();
+        if (final.dev !== opened.dev || final.ino !== opened.ino)
+          throw new Error(
+            `Development source file changed during read: ${path}`,
+          );
+        return {
+          path,
+          kind: "file" as const,
+          mode: opened.mode & 0o111 ? "100755" : "100644",
+          content,
+        };
+      } finally {
+        await descriptor.close();
+      }
+    }
     if (info.isSymbolicLink()) {
       const target = await readlink(absolute);
       if (isAbsolute(target))
@@ -233,11 +277,16 @@ async function sourceEntry(sourceRoot: string, path: string) {
 }
 
 async function developmentEntries(sourceRoot: string) {
-  const entries = await Promise.all(
-    (await sourcePaths(sourceRoot)).map((path) =>
-      sourceEntry(sourceRoot, path),
-    ),
-  );
+  const paths = await sourcePaths(sourceRoot);
+  const entries: Awaited<ReturnType<typeof sourceEntry>>[] = [];
+  for (let offset = 0; offset < paths.length; offset += 32)
+    entries.push(
+      ...(await Promise.all(
+        paths
+          .slice(offset, offset + 32)
+          .map((path) => sourceEntry(sourceRoot, path)),
+      )),
+    );
   return entries.filter((entry) => entry !== undefined);
 }
 
@@ -262,6 +311,79 @@ function fingerprintEntries(
 export async function fingerprintDevelopmentSource(sourceRoot: string) {
   await canonicalOwnedDirectory(sourceRoot, "Arrusted checkout");
   return fingerprintEntries(await developmentEntries(sourceRoot));
+}
+
+export function waitForDevelopmentSourceChange(input: {
+  sourceRoot: string;
+  expectedFingerprint: string;
+  signal?: AbortSignal;
+  debounceMs?: number;
+  auditMs?: number;
+}) {
+  return new Promise<boolean>((resolveChanged) => {
+    let checking = false;
+    let pending = false;
+    let settled = false;
+    let debounce: NodeJS.Timeout | undefined;
+    const timers: { audit?: NodeJS.Timeout } = {};
+    let watcher: FSWatcher | undefined;
+    const finish = (changed: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (debounce !== undefined) clearTimeout(debounce);
+      if (timers.audit !== undefined) clearInterval(timers.audit);
+      watcher?.close();
+      input.signal?.removeEventListener("abort", aborted);
+      resolveChanged(changed);
+    };
+    const aborted = () => finish(false);
+    const check = async () => {
+      if (checking) {
+        pending = true;
+        return;
+      }
+      checking = true;
+      try {
+        if (
+          (await fingerprintDevelopmentSource(input.sourceRoot)) !==
+          input.expectedFingerprint
+        ) {
+          finish(true);
+          return;
+        }
+      } catch {
+        finish(true);
+        return;
+      } finally {
+        checking = false;
+      }
+      if (pending) {
+        pending = false;
+        await check();
+      }
+    };
+    function schedule(delay = 0) {
+      if (settled) return;
+      if (debounce !== undefined) clearTimeout(debounce);
+      debounce = setTimeout(() => void check(), delay);
+    }
+    if (input.signal?.aborted) {
+      finish(false);
+      return;
+    }
+    input.signal?.addEventListener("abort", aborted, { once: true });
+    try {
+      watcher = watch(input.sourceRoot, { recursive: true }, () =>
+        schedule(input.debounceMs ?? 150),
+      );
+    } catch {
+      finish(true);
+      return;
+    }
+    watcher.once("error", () => finish(true));
+    timers.audit = setInterval(schedule, input.auditMs ?? 30_000);
+    schedule();
+  });
 }
 
 async function makeReadOnly(root: string) {
@@ -307,7 +429,7 @@ export async function createDevelopmentSnapshot(input: {
       if (entry.kind === "link")
         await symlink(entry.content.toString("utf8"), join(root, entry.path));
       else {
-        await copyFile(join(sourceRoot, entry.path), join(root, entry.path));
+        await writeFile(join(root, entry.path), entry.content, { mode: 0o600 });
         await chmod(
           join(root, entry.path),
           entry.mode === "100755" ? 0o700 : 0o600,

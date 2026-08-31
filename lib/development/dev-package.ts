@@ -1,13 +1,12 @@
-import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import { registeredAutographToolNames } from "../../scripts/portable-release";
+import {
+  registeredAutographToolNames,
+  sha256,
+} from "../../scripts/portable-release";
 
 export const DEVELOPMENT_PLUGIN_NAME = "app-builder@autograph-dev";
-
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
 
 export async function createDevelopmentPackage(input: {
   repositoryRoot: string;

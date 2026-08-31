@@ -15,7 +15,7 @@ describe("two-mode development workflow contract", () => {
 
     const runner = readFileSync("scripts/development.mts", "utf8");
     expect(runner).toContain("createDevelopmentSnapshot");
-    expect(runner).toContain("fingerprintDevelopmentSource");
+    expect(runner).toContain("waitForDevelopmentSourceChange");
     expect(runner).toContain("Arrusted source changed");
     expect(runner).toContain("createDevelopmentPackage");
     expect(runner).not.toContain('APP_BUILDER_LOCAL_PUBLICATION: "1"');
@@ -44,5 +44,30 @@ describe("two-mode development workflow contract", () => {
     expect(dependencies).toContain('"scope": "development-execution"');
     expect(dependencies).toContain("DEPENDENCY_KEY");
     expect(dependencies).toContain("PLATFORM");
+  });
+
+  it("exposes only prove and publish for release promotion and hides legacy helpers", () => {
+    const prove = readFileSync(".config/mise/tasks/release/prove", "utf8");
+    const publish = readFileSync(".config/mise/tasks/release/publish", "utf8");
+    expect(prove).toContain("scripts/release-prove.mts");
+    expect(publish).toContain("scripts/release-publish.mts");
+    expect(
+      statSync(".config/mise/tasks/release/prove").mode & constants.S_IXUSR,
+    ).not.toBe(0);
+    expect(
+      statSync(".config/mise/tasks/release/publish").mode & constants.S_IXUSR,
+    ).not.toBe(0);
+
+    for (const helper of [
+      ".config/mise/tasks/app/dev",
+      ".config/mise/tasks/app/dev-emulated",
+      ".config/mise/tasks/local/start",
+      ".config/mise/tasks/image/build",
+      ".config/mise/tasks/image/prove",
+      ".config/mise/tasks/image/push",
+      ".config/mise/tasks/package/build-portable-release",
+      ".config/mise/tasks/package/prove-hosted",
+    ])
+      expect(readFileSync(helper, "utf8")).toContain("#MISE hide=true");
   });
 });

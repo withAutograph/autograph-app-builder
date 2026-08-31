@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Reset only ignored local Emulate state"
 set -eu
 

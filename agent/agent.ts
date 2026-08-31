@@ -509,6 +509,51 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The artifact workflow status could not be verified."
       : `Artifact workflow status: ${JSON.stringify(result.output)}`;
   }
+  if (message.includes("inspect existing vendor application")) {
+    const inspections = toolResults.filter(
+      ({ name }) => name === "inspect_existing_app",
+    );
+    const latest = inspections.at(-1);
+    if (latest === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "inspect_existing_app",
+            input: { appId: "vendor", paths: [] },
+          },
+        ],
+      };
+    if (latest.isError)
+      return "The existing Vendor application could not be inspected safely.";
+    const result = latest.output as
+      | {
+          availablePaths?: readonly string[];
+          files?: readonly { path: string; content: string }[];
+        }
+      | undefined;
+    if ((result?.files?.length ?? 0) === 0) {
+      const candidates = result?.availablePaths?.filter((candidate) =>
+        /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate),
+      );
+      const path =
+        candidates?.find((candidate) =>
+          /(?:^|\/)page[.]tsx$/u.test(candidate),
+        ) ??
+        candidates?.find((candidate) => /[.]tsx$/u.test(candidate)) ??
+        candidates?.at(0);
+      if (path === undefined)
+        return "The existing Vendor application has no bounded source file suitable for iteration.";
+      return {
+        toolCalls: [
+          {
+            name: "inspect_existing_app",
+            input: { appId: "vendor", paths: [path] },
+          },
+        ],
+      };
+    }
+    return "The existing Vendor application is ready for a bounded product iteration.";
+  }
   if (message.includes("retry target planning")) {
     const stale = message.includes("stale");
     const planResults = toolResults.filter(
@@ -626,18 +671,39 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const latestResult = toolResults.at(-1);
     const planResult =
       latestResult?.name === "plan_app_creation" ? latestResult : undefined;
-    if (planResult === undefined)
+    if (planResult === undefined) {
+      const existing = [...toolResults]
+        .reverse()
+        .find(({ name }) => name === "inspect_existing_app")?.output as
+        { files?: readonly { path: string; content: string }[] } | undefined;
+      const existingAppChanges = existing?.files?.flatMap(
+        ({ path, content }) => {
+          const changed = content.replace(
+            /(return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
+            (opening) =>
+              `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
+          );
+          return changed === content ? [] : [{ path, content: changed }];
+        },
+      );
       return {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: { expectedAppSpecDigest: status.appSpec.digest },
+            input: {
+              expectedAppSpecDigest: status.appSpec.digest,
+              ...(existingAppChanges === undefined ||
+              existingAppChanges.length === 0
+                ? {}
+                : { existingAppChanges }),
+            },
           },
         ],
       };
+    }
     return planResult.isError
       ? "Target identity and planning were canceled or rejected; no target mutation occurred."
-      : "The approved fixed target identity and planning commands produced a digest-bound canonical proposal; no apply, validation, or target mutation ran.";
+      : "The Vendor review now shows when tax verification is required, and the update is ready for the private preview.";
   }
   if (
     message.includes("apply the current creation proposal") ||

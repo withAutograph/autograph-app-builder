@@ -1,18 +1,15 @@
-name: Release Agent Plugin
+name: Verify promoted Agent Plugin release
 
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+  release:
+    types: [published]
 
 permissions:
   actions: read
-  attestations: write
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
-  release:
+  verify:
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -20,102 +17,75 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.18.0
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          ref: ${{ github.event.release.tag_name }}
       - name: Require exact-main release authority
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_PROOF_SHA: ${{ vars.AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA }}
         run: |
-          tag_commit="$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")"
-          event_commit="$(git rev-parse "$GITHUB_SHA^{commit}")"
+          tag_commit="$(git rev-parse 'HEAD^{commit}')"
           main_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
-          test "$tag_commit" = "$event_commit"
-          test "$main_commit" = "$event_commit"
-          test "$RELEASE_PROOF_SHA" = "$event_commit"
-          ci_sha="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$event_commit" --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
-          test "$ci_sha" = "$event_commit"
-      - run: mise run dependencies:install
-      - name: Require tag and manifest version agreement
-        run: |
-          version="$(node -e 'const packageManifest=require("./package.json"); const portable=require("./plugin.json"); const codex=require("./.codex-plugin/plugin.json"); if (packageManifest.version !== portable.version || portable.version !== codex.version) process.exit(1); process.stdout.write(portable.version)')"
-          test "${GITHUB_REF_NAME}" = "v${version}"
-      - name: Build deterministic endpoint-bound release
-        env:
-          RELEASE_ORIGIN: ${{ vars.AUTOGRAPH_APP_BUILDER_RELEASE_ORIGIN }}
-        run: |
-          test -n "$RELEASE_ORIGIN"
-          mise run package:test-portable
-          mise run package:build-portable-release -- \
-            --endpoint "$RELEASE_ORIGIN" \
-            --output .artifacts/release
-          for client in vscode cursor codex; do
-            mise run package:install-portable -- \
-              --client "$client" \
-              --source .artifacts/release \
-              --destination .artifacts/release-install
-          done
-          mise run package:smoke-portable -- \
-            --release .artifacts/release \
-            --install-root .artifacts/release-install
-      - name: Attest release build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: |
-            .artifacts/release/app-builder-*.tar.gz
-            .artifacts/release/release-receipt.json
-            .artifacts/release/SHA256SUMS
-      - name: Publish immutable release assets
+          test "$main_commit" = "$tag_commit"
+          test "${{ github.event.release.draft }}" = false
+          test "${{ github.event.release.prerelease }}" = true
+          ci_sha="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$tag_commit" --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
+          test "$ci_sha" = "$tag_commit"
+      - name: Download already-promoted bytes
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_PROOF_SHA: ${{ vars.AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir .artifacts/promoted-release
+      - name: Verify promoted package bytes and bindings
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --draft \
-            --prerelease \
-            --verify-tag \
-            --title "Autograph App Builder $GITHUB_REF_NAME" \
-            --generate-notes \
-            .artifacts/release/app-builder-*.tar.gz \
-            .artifacts/release/release-receipt.json \
-            .artifacts/release/SHA256SUMS
+          node <<'NODE'
+          const { execFileSync } = require("node:child_process");
+          const { createHash } = require("node:crypto");
+          const { readdirSync, readFileSync } = require("node:fs");
+          const { basename, join } = require("node:path");
 
-          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '.isDraft and .isPrerelease')" = true
-          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')" -eq 4
-          for asset in \
-            .artifacts/release/app-builder-*.tar.gz \
-            .artifacts/release/release-receipt.json \
-            .artifacts/release/SHA256SUMS; do
-            asset_name="$(basename "$asset")"
-            local_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
-            remote_digest="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq ".assets[] | select(.name == \"$asset_name\") | .digest")"
-            test "$remote_digest" = "$local_digest"
-          done
+          const root = ".artifacts/promoted-release";
+          const digest = (path) => `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+          const promotion = JSON.parse(readFileSync(join(root, "promotion-receipt.json"), "utf8"));
+          const packageReceipt = JSON.parse(readFileSync(join(root, "release-receipt.json"), "utf8"));
+          const tagCommit = execFileSync("git", ["rev-parse", "HEAD^{commit}"], { encoding: "utf8" }).trim();
 
-          tag_commit="$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")"
-          main_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
-          ci_sha="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$tag_commit" --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
-          test "$main_commit" = "$tag_commit"
-          test "$ci_sha" = "$tag_commit"
-          test "$RELEASE_PROOF_SHA" = "$tag_commit"
+          if (promotion.format !== "autograph-release-promotion-v1") throw new Error("unexpected promotion receipt format");
+          if (promotion.builder.commit !== tagCommit) throw new Error("promotion is not bound to the release commit");
+          if (promotion.bindings.execution !== "release" || promotion.bindings.oauth !== "hosted" || promotion.bindings.endpoint !== "deployed" || promotion.bindings.marketplace !== "release" || promotion.bindings.deployment !== "production") {
+            throw new Error("non-release bindings are forbidden");
+          }
+          if (packageReceipt.source.sha !== promotion.builder.commit || packageReceipt.source.tree !== promotion.builder.tree) {
+            throw new Error("package receipt source does not match the promotion receipt");
+          }
+          if (packageReceipt.endpoint !== promotion.endpoint) throw new Error("package endpoint does not match deployment binding");
+          if (packageReceipt.version !== promotion.package.version) throw new Error("package version does not match promotion binding");
 
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          const expectedTools = ["autograph_start", "autograph_get", "autograph_send", "autograph_respond", "autograph_cancel"];
+          if (JSON.stringify(packageReceipt.tools) !== JSON.stringify(expectedTools)) throw new Error("public tool contract is not exact");
+
+          const expected = [
+            promotion.package.archive,
+            promotion.package.marketplaceArchive,
+            promotion.package.checksums,
+            promotion.package.receipt,
+            "promotion-receipt.json",
+          ].map(basename).sort();
+          const actual = readdirSync(root).sort();
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`unexpected release assets: ${actual.join(", ")}`);
+
+          for (const [file, expectedDigest] of [
+            [promotion.package.archive, promotion.package.archiveSha256],
+            [promotion.package.marketplaceArchive, promotion.package.marketplaceArchiveSha256],
+            [promotion.package.checksums, promotion.package.checksumsSha256],
+            [promotion.package.receipt, promotion.package.receiptSha256],
+          ]) {
+            if (digest(join(root, basename(file))) !== `sha256:${expectedDigest}`) throw new Error(`digest mismatch for ${file}`);
+          }
+          NODE
+      - name: Verify immutable release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '(.isDraft | not) and .isPrerelease')" = true
-          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq .isImmutable)" = true
           gh release verify "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
-          for asset in \
-            .artifacts/release/app-builder-*.tar.gz \
-            .artifacts/release/release-receipt.json \
-            .artifacts/release/SHA256SUMS; do
+          for asset in .artifacts/promoted-release/*; do
             gh release verify-asset "$GITHUB_REF_NAME" "$asset" --repo "$GITHUB_REPOSITORY"
-            gh attestation verify "$asset" \
-              --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-              --source-digest "$tag_commit" \
-              --source-ref "$GITHUB_REF"
           done

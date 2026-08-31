@@ -7,16 +7,16 @@ import { isProductFacing } from "./support/public-conversation";
 const staysProductFacing = satisfies(
   (reply) =>
     isProductFacing(reply) &&
-    !/(?:builder-owned|overlay|fixed check|normalized change set|approval receipt|publication did not run|nothing (?:has been|was) published)/iu.test(
+    !/(?:sandbox|image|receipt|dependency cache|publication did not run)/iu.test(
       String(reply),
     ),
-  "assistant reply stays product-facing and omits internal review mechanics",
+  "assistant reply stays product-facing during existing-app iteration",
 );
 
 export default defineEval({
   description:
-    "The exact digest sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
-  tags: ["sandbox-image-proof", "reviewed-change-set"],
+    "The exact candidate image inspects and iterates the existing Vendor application through review without publication.",
+  tags: ["sandbox-image-proof", "existing-app-iteration"],
   timeoutMs: 360_000,
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
@@ -25,44 +25,36 @@ export default defineEval({
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
-
     await t.send(
-      `Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`,
+      `Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`,
     );
     t.succeeded();
-
+    await t.send("Inspect existing Vendor application.");
+    t.succeeded();
+    t.calledTool("inspect_existing_app", { count: 2 });
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
-
+    await t.send(
+      "Update the Vendor review so operations can see when tax verification is required.",
+    );
+    t.succeeded();
     await t.send("Run target identity and planning.");
     t.succeeded();
-
+    t.check(t.reply, includes("tax verification is required"));
     await t.send("Apply the current creation proposal.");
     t.succeeded();
-    t.notEvent("input.requested");
     t.check(t.reply, includes("private preview"));
     t.check(t.reply, staysProductFacing);
-
     await t.send("Validate the applied creation.");
     t.succeeded();
-    t.notEvent("input.requested");
     t.check(t.reply, includes("quality checks"));
-    t.check(t.reply, staysProductFacing);
-
     await t.send("Inspect the validated change set.");
     t.succeeded();
-    t.calledTool("change_set_status", { count: 1 });
-
     await t.send("Accept the displayed change set.");
     t.succeeded();
-    t.notEvent("input.requested");
     t.check(t.reply, includes("ready for review"));
-    t.check(t.reply, includes("draft pull request"));
-    t.check(t.reply, staysProductFacing);
-
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 1 });
     t.check(t.reply, includes('"phase":"reviewed"'));
 
     for (const tool of [
@@ -80,21 +72,10 @@ export default defineEval({
         version: 1,
         terminalPhase: "reviewed",
         browserPreview: true,
-        sourceKind: "supported-existing-repository",
+        operation: "iterate-existing-app",
+        productOutcome: "tax-verification status is visible to operations",
+        appId: "vendor",
         publicationAttempted: false,
-        requiredTools: [
-          "inspect_source",
-          "prepare_workspace",
-          "record_prototype_artifact",
-          "accept_app_spec",
-          "prepare_target_dependencies",
-          "plan_app_creation",
-          "apply_app_creation",
-          "validate_app_creation",
-          "change_set_status",
-          "accept_change_set",
-          "artifact_workflow_status",
-        ],
       })}\n`,
     );
   },

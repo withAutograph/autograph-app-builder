@@ -5,7 +5,9 @@ import {
   readFile,
   realpath,
   readdir,
+  rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,6 +20,7 @@ import {
   developmentDependencyKey,
   fingerprintDevelopmentSource,
   parseDevelopmentArguments,
+  waitForDevelopmentSourceChange,
 } from "./local-mode";
 
 const roots: string[] = [];
@@ -121,6 +124,50 @@ describe("development source snapshots", () => {
     const before = await fingerprintDevelopmentSource(source);
     await writeFile(join(source, "README.md"), "changed\n");
     expect(await fingerprintDevelopmentSource(source)).not.toBe(before);
+  });
+
+  it("rejects a tracked file whose parent was replaced by an escaping symlink", async () => {
+    const source = await fixture();
+    const outside = await realpath(
+      await mkdtemp(join(tmpdir(), "app-builder-dev-outside-")),
+    );
+    roots.push(outside);
+    await mkdir(join(source, "tracked"));
+    await writeFile(join(source, "tracked/secret.txt"), "inside\n");
+    const { execFileSync } = await import("node:child_process");
+    execFileSync("/usr/bin/git", ["add", "tracked/secret.txt"], {
+      cwd: source,
+    });
+    await rm(join(source, "tracked"), { recursive: true });
+    await writeFile(join(outside, "secret.txt"), "outside\n");
+    await symlink(outside, join(source, "tracked"));
+    await expect(fingerprintDevelopmentSource(source)).rejects.toThrow(
+      "ancestor was unsafe",
+    );
+  });
+
+  it("invalidates an active run after a source change and closes on abort", async () => {
+    const source = await fixture();
+    const expectedFingerprint = await fingerprintDevelopmentSource(source);
+    const changed = waitForDevelopmentSourceChange({
+      sourceRoot: source,
+      expectedFingerprint,
+      debounceMs: 5,
+      auditMs: 50,
+    });
+    await writeFile(join(source, "README.md"), "changed during run\n");
+    await expect(changed).resolves.toBe(true);
+
+    const controller = new AbortController();
+    const stopped = waitForDevelopmentSourceChange({
+      sourceRoot: source,
+      expectedFingerprint: await fingerprintDevelopmentSource(source),
+      signal: controller.signal,
+      debounceMs: 5,
+      auditMs: 50,
+    });
+    controller.abort();
+    await expect(stopped).resolves.toBe(false);
   });
 });
 
