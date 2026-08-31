@@ -62,11 +62,7 @@ export function ProviderConnection({
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           {children}
-          <form
-            className="flex flex-col gap-4"
-            method="post"
-            action={action}
-          >
+          <form className="flex flex-col gap-4" method="post" action={action}>
             <input name="returnTo" type="hidden" value={returnTo} />
             {resumeKey ? (
               <input name="resumeKey" type="hidden" value={resumeKey} />
