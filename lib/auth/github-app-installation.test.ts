@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
+import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import {
   createGitHubAppInstallationAuthorization,
   githubInstallationAuthorizationDiagnostic,
@@ -25,7 +26,11 @@ const config = {
   resource: authority.audience,
 };
 
-function harness(input?: { membership?: () => boolean; fetch?: typeof fetch }) {
+function harness(input?: {
+  membership?: () => boolean;
+  fetch?: typeof fetch;
+  emulation?: ProviderEmulation;
+}) {
   const states = new Map<
     string,
     { consumed: boolean; authorityDigest: string }
@@ -73,6 +78,7 @@ function harness(input?: { membership?: () => boolean; fetch?: typeof fetch }) {
     membership: { isActiveMember: membership },
     installationStore,
     fetch: input?.fetch,
+    emulation: input?.emulation,
     now: () => Date.parse("2026-08-28T12:00:00.000Z"),
     nonce: () => "n".repeat(43),
   });
@@ -99,8 +105,9 @@ function authorizationCallbackUrl(state: string) {
 
 async function prepareAuthorization(
   authorization: ReturnType<typeof createGitHubAppInstallationAuthorization>,
+  returnState: { returnTo: "/"; resumeKey?: string } = { returnTo: "/" },
 ) {
-  const begun = await authorization.begin(authority);
+  const begun = await authorization.begin(authority, returnState);
   const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
   const authorize = await authorization.complete(
     setupCallbackUrl(installState),
@@ -255,6 +262,82 @@ describe("public GitHub App installation authorization", () => {
     );
   });
 
+  it("preserves the embedded Preview emulator route for authorization and API requests", async () => {
+    const emulation: ProviderEmulation = {
+      mode: "preview",
+      canonicalOrigin: "https://builder.example",
+      vercelOrigin: "https://builder.example/api/emulate/vercel",
+      githubOrigin: "https://builder.example/api/emulate/github",
+      token: "preview-provider-token-sentinel",
+      githubRepository: "autograph-local/demo-app",
+      relaySecret: "preview-relay-secret-sentinel-value-32",
+      githubClientId: config.clientId,
+      githubClientSecret: config.clientSecret,
+      vercelClientId: "preview-vercel-client",
+      vercelClientSecret: "preview-vercel-secret-sentinel-value",
+      namespace: "repository:project:branch:seed-v2",
+      branch: "branch",
+    };
+    const requests: string[] = [];
+    const request = vi.fn<typeof fetch>(async (resource) => {
+      const url = String(resource);
+      requests.push(url);
+      if (url.endsWith("/login/oauth/access_token"))
+        return Response.json({
+          access_token: "github-user-token-sentinel-value",
+          token_type: "bearer",
+          scope: "",
+        });
+      if (url.endsWith("/user"))
+        return Response.json({ id: 321, login: "installer" });
+      return Response.json({
+        id: 98765,
+        app_id: 12345,
+        app_slug: "autograph-app-builder",
+        target_type: "Organization",
+        repository_selection: "selected",
+        suspended_at: null,
+        account: {
+          id: 149546148,
+          login: "withAutograph",
+          type: "Organization",
+        },
+      });
+    });
+    const { authorization, bind } = harness({
+      emulation,
+      fetch: request,
+    });
+    const begun = await authorization.begin(authority);
+    expect(new URL(begun.redirectUrl).pathname).toBe(
+      "/local-connections/github",
+    );
+    const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
+    const authorize = await authorization.complete(
+      setupCallbackUrl(installState),
+      authority,
+    );
+    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    const authorizeUrl = new URL(authorize.redirectUrl);
+    expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
+      "https://builder.example/local-connections/github",
+    );
+    expect(authorizeUrl.searchParams.get("phase")).toBe("authorize");
+
+    await expect(
+      authorization.complete(
+        authorizationCallbackUrl(authorizeUrl.searchParams.get("state")!),
+        authority,
+      ),
+    ).resolves.toMatchObject({ status: "bound" });
+    expect(requests).toEqual([
+      "https://builder.example/api/emulate/github/login/oauth/access_token",
+      "https://builder.example/api/emulate/github/user",
+      "https://builder.example/api/emulate/github/repos/autograph-local/demo-app/installation",
+    ]);
+    expect(bind).toHaveBeenCalledOnce();
+  });
+
   it("returns an allowlisted OAuth denial to the signed destination without leaking details", async () => {
     const { authorization } = harness();
     const begun = await authorization.begin(authority, { returnTo: "/" });
@@ -282,7 +365,14 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
-    const { authorizeState } = await prepareAuthorization(authorization);
+    const returnState = {
+      returnTo: "/" as const,
+      resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+    };
+    const { authorizeState } = await prepareAuthorization(
+      authorization,
+      returnState,
+    );
     await authorization.complete(
       authorizationCallbackUrl(authorizeState),
       authority,
@@ -292,7 +382,10 @@ describe("public GitHub App installation authorization", () => {
         authorizationCallbackUrl(authorizeState),
         authority,
       ),
-    ).rejects.toThrow("GitHub App installation authorization failed.");
+    ).rejects.toMatchObject({
+      message: "GitHub App installation authorization failed.",
+      returnState,
+    });
     expect(requests).toHaveLength(3);
     expect(bind).toHaveBeenCalledOnce();
   });

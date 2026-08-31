@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import {
   providerEmulationEnvironment,
   readLocalProviderEmulation,
@@ -84,10 +85,32 @@ describe("local provider emulation", () => {
       BETTER_AUTH_URL: "https://app-commit-team.vercel.app/api/auth",
       MCP_RESOURCE_URL: "https://app-commit-team.vercel.app/mcp",
       GITHUB_APP_ID: "12345",
+      GITHUB_APP_SLUG: "autograph-app-builder",
       GITHUB_APP_INSTALL_STATE_SECRET:
         previewSecrets.EMULATE_PREVIEW_RELAY_SECRET,
       VERCEL_INTEGRATION_SLUG: "autograph-app-builder",
       VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "preview-emulation-v1",
+    });
+
+    expect(
+      readGitHubAppInstallationEnvironment(
+        providerEmulationEnvironment({
+          NODE_ENV: "production",
+          VERCEL_ENV: "preview",
+          APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+          VERCEL_URL: "app-commit-team.vercel.app",
+          VERCEL_GIT_COMMIT_REF: "feature",
+          VERCEL_GIT_REPO_SLUG: "autograph-app-builder",
+          VERCEL_PROJECT_ID: "prj_preview",
+          DATABASE_URL: "postgresql://preview:secret@db.example.test/app",
+          BETTER_AUTH_SECRET: "b".repeat(32),
+          ...previewSecrets,
+        }),
+      ),
+    ).toMatchObject({
+      appId: "12345",
+      appSlug: "autograph-app-builder",
+      clientId: "preview-github-client",
     });
   });
 

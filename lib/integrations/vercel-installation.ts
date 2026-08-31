@@ -65,7 +65,21 @@ export type VercelAuthorizationStateStore = {
     authorityDigest: string;
     now: Date;
   }): Promise<ProviderConnectionReturn | undefined>;
+  recover(input: {
+    stateDigest: string;
+    authority: Authority;
+    authorityDigest: string;
+  }): Promise<ProviderConnectionReturn | undefined>;
 };
+
+export class VercelInstallationAuthorizationError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly returnState?: ProviderConnectionReturn,
+  ) {
+    super(reason);
+  }
+}
 
 export type VercelInstallationBinding = {
   installationId: string;
@@ -203,6 +217,8 @@ export function createVercelInstallationAuthorization(input: {
         ? new URL("/local-connections/vercel", config.issuer)
         : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
+      if (input.emulation && returnState.resumeKey)
+        url.searchParams.set("resume", returnState.resumeKey);
       return url.toString();
     },
 
@@ -233,7 +249,15 @@ export function createVercelInstallationAuthorization(input: {
         authorityDigest: authorityDigest(authority),
         now: new Date(now()),
       });
-      if (!returnState) throw new Error("state-invalid");
+      if (!returnState)
+        throw new VercelInstallationAuthorizationError(
+          "state-invalid",
+          await input.states.recover({
+            stateDigest: digest(state),
+            authority,
+            authorityDigest: authorityDigest(authority),
+          }),
+        );
 
       const token = await (async () => {
         const tokenResponse = await request(

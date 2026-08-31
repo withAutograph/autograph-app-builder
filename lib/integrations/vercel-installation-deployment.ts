@@ -18,6 +18,7 @@ import {
 import {
   createVercelInstallationAuthorization,
   readVercelIntegrationEnvironment,
+  VercelInstallationAuthorizationError,
   verifyVercelWebhook,
 } from "./vercel-installation";
 import {
@@ -206,6 +207,9 @@ export function createVercelInstallationDeploymentHandler(
       }
       return fail(
         kind === "callback" ? "callback-invalid" : "authorization-failed",
+        error instanceof VercelInstallationAuthorizationError
+          ? error.returnState
+          : undefined,
       );
     }
   };

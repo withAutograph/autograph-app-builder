@@ -135,6 +135,48 @@ export function createPostgresVercelAuthorizationStateStore(
         ...(rows[0]?.resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
       };
     },
+    async recover(input) {
+      const rows = await database
+        .select({
+          returnTo: vercelInstallationAuthorizationStates.returnTo,
+          resumeKey: vercelInstallationAuthorizationStates.resumeKey,
+        })
+        .from(vercelInstallationAuthorizationStates)
+        .where(
+          and(
+            eq(
+              vercelInstallationAuthorizationStates.stateDigest,
+              input.stateDigest,
+            ),
+            eq(
+              vercelInstallationAuthorizationStates.authorityDigest,
+              input.authorityDigest,
+            ),
+            eq(
+              vercelInstallationAuthorizationStates.issuer,
+              input.authority.issuer,
+            ),
+            eq(
+              vercelInstallationAuthorizationStates.audience,
+              input.authority.audience,
+            ),
+            eq(
+              vercelInstallationAuthorizationStates.workspaceId,
+              input.authority.workspaceId,
+            ),
+            eq(
+              vercelInstallationAuthorizationStates.ownerUserId,
+              input.authority.ownerUserId,
+            ),
+          ),
+        )
+        .limit(1);
+      if (rows[0]?.returnTo !== "/") return undefined;
+      return {
+        returnTo: "/",
+        ...(rows[0].resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
+      };
+    },
   };
 }
 
