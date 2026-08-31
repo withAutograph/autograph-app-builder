@@ -19,7 +19,11 @@ through a generic shell.
 1. If the user explicitly requests only a bare/local Next.js workspace, hand off
    to `$scaffold-app-workspace` and stop this route-owned flow. Do not interpret
    a generic “create an app” request as bare scaffolding.
-2. Read [the AppContractV1 reference](references/app-contract-v1.md) completely.
+2. References are bundled files, not skills. Never pass a reference path to
+   `load_skill`; that tool accepts only the top-level `plan-app-creation` name.
+   After this skill is loaded, use `read_skill_reference` with
+   `plan-app-creation` and `references/app-contract-v1.md`, then read the result
+   completely.
 3. Read only the known product and design references needed from the exact
    prepared `workspacePath`. The typed planning operation owns target identity,
    collision, package, route, and topology inspection; do not run generic Git

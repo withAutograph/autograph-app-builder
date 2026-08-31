@@ -24,11 +24,16 @@ validator/blocker text. Translate only the visible product meaning or effect.
 
 ## Load references
 
-- Read [questions.md](references/questions.md) before asking discovery questions.
-- Read [app-spec.md](references/app-spec.md) when creating or updating the
-  decision ledger, checking build readiness, or handing off to implementation.
-- Read [target-repository-routing.md](references/target-repository-routing.md) before grounding the
-  prototype or planning the production app.
+References are bundled files, not skills. Never pass a reference path to
+`load_skill`; that tool accepts only the top-level `design-app` name. After this
+skill is loaded, use `read_skill_reference` with the exact pairs below:
+
+- `design-app` and `references/questions.md` before asking discovery questions;
+- `design-app` and `references/app-spec.md` when creating or updating the
+  decision ledger, checking build readiness, or handing off to implementation;
+  and
+- `design-app` and `references/target-repository-routing.md` before grounding
+  the prototype or planning the production app.
 
 ## Artifacts
 
