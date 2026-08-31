@@ -12,7 +12,7 @@ export type RequiredTool = keyof typeof requiredToolVersions;
 
 const digestPinnedImage = /@sha256:[0-9a-f]{64}$/u;
 const contentKeyedDevelopmentImage =
-  /^app-builder-autograph-dev:[0-9a-f]{64}-linux-(?:arm64|amd64)$/u;
+  /^app-builder-autograph-dev:[0-9a-f]{64}-[0-9a-f]{16}-linux-(?:arm64|amd64)$/u;
 
 /**
  * A registry reference is accepted only when an external image build has

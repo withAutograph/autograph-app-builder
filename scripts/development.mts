@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { createReadStream } from "node:fs";
 import {
   chmod,
   lstat,
@@ -25,7 +26,9 @@ import {
 import {
   createDevelopmentPackage,
   developmentLaunchEnvironment,
+  registerDevelopmentPackage,
 } from "../lib/development/dev-package";
+import { waitForDevelopmentMcp } from "../lib/development/mcp-readiness";
 import {
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
@@ -38,10 +41,16 @@ const repositoryRoot = resolve(".");
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
-function requiredEnvironment(name: string) {
+async function sha256File(path: string) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];
   if (value === undefined || !value.startsWith("/"))
-    throw new Error(`mise must supply the absolute ${name} executable.`);
+    throw new Error(`mise must supply the absolute ${name} ${description}.`);
   return value;
 }
 
@@ -88,10 +97,14 @@ async function commandSucceeded(program: string, args: string[]) {
   }
 }
 
-async function runInherited(program: string, args: string[]) {
+async function runInherited(
+  program: string,
+  args: string[],
+  environment: NodeJS.ProcessEnv = process.env,
+) {
   const child = spawn(program, args, {
     cwd: repositoryRoot,
-    env: process.env,
+    env: environment,
     stdio: "inherit",
   });
   const code = await childExit(child);
@@ -103,6 +116,7 @@ async function prepareDevelopmentImage(input: {
   sourceRoot: string;
   runRoot: string;
   stateRoot: string;
+  runtimeHome: string;
   dependencyKey: string;
   ociPlatform: string;
   tagPlatform: string;
@@ -154,7 +168,7 @@ async function prepareDevelopmentImage(input: {
       receipt.image === image &&
       receipt.toolchainDockerfileSha256 === toolchainDigest &&
       receipt.dependencyDockerfileSha256 === dependencyDockerfileDigest &&
-      receipt.archiveSha256 === sha256(await readFile(archive));
+      receipt.archiveSha256 === (await sha256File(archive));
   } catch {
     reusable = false;
   }
@@ -225,7 +239,7 @@ async function prepareDevelopmentImage(input: {
         dependencyKey: input.dependencyKey,
         toolchainDockerfileSha256: toolchainDigest,
         dependencyDockerfileSha256: dependencyDockerfileDigest,
-        archiveSha256: sha256(await readFile(archive)),
+        archiveSha256: await sha256File(archive),
         lockfiles,
       };
       await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, {
@@ -237,14 +251,11 @@ async function prepareDevelopmentImage(input: {
       await removeDevelopmentSnapshot(input.runRoot);
     }
   }
-  await runInherited(msb, [
-    "load",
-    "--input",
-    archive,
-    "--tag",
-    image,
-    "--quiet",
-  ]);
+  await runInherited(
+    msb,
+    ["load", "--input", archive, "--tag", image, "--quiet"],
+    { ...process.env, HOME: input.runtimeHome },
+  );
   return image;
 }
 
@@ -275,6 +286,8 @@ const developmentTools = {
 async function supervise(input: {
   sourceRoot: string;
   runRoot: string;
+  codexRoot: string;
+  runtimeHome: string;
   destinationRoot: string;
   image: string;
   dependencyKey: string;
@@ -296,7 +309,7 @@ async function supervise(input: {
       return { kind: "changed" as const, code: 0 };
     const packageResult = await createDevelopmentPackage({
       repositoryRoot,
-      outputRoot: join(input.runRoot, "codex"),
+      outputRoot: input.codexRoot,
       port: input.nextPort,
     });
     const closed = developmentLaunchEnvironment({
@@ -310,11 +323,12 @@ async function supervise(input: {
     const baseEnvironment = {
       NODE_ENV: "production" as const,
       PATH: "/usr/bin:/bin",
-      HOME: process.env.HOME,
+      HOME: input.runtimeHome,
       TMPDIR: process.env.TMPDIR ?? tmpdir(),
       LANG: process.env.LANG ?? "C",
       LC_ALL: process.env.LC_ALL ?? "C",
       ...closed,
+      APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
       APP_BUILDER_EVE_PORT: String(input.evePort),
     };
     const node = requiredEnvironment("APP_BUILDER_DEV_NODE_BIN");
@@ -357,23 +371,49 @@ async function supervise(input: {
         stdio: "inherit",
       },
     );
-    console.log(
-      `Autograph development is ready at http://127.0.0.1:${input.nextPort}.`,
-    );
-    console.log(`Codex development package: ${packageResult.pluginRoot}`);
     const sourceAudit = new AbortController();
-    const outcome = await Promise.race([
-      waitForDevelopmentSourceChange({
-        sourceRoot: input.sourceRoot,
-        expectedFingerprint: snapshot.fingerprint,
-        signal: sourceAudit.signal,
-      }).then(() => ({ kind: "changed" as const, code: 0 })),
-      childExit(eve).then((code) => ({ kind: "exit" as const, code })),
-      childExit(next).then((code) => ({ kind: "exit" as const, code })),
-    ]);
-    sourceAudit.abort();
-    await Promise.all([stop(eve), stop(next)]);
-    return outcome;
+    const sourceChanged = waitForDevelopmentSourceChange({
+      sourceRoot: input.sourceRoot,
+      expectedFingerprint: snapshot.fingerprint,
+      signal: sourceAudit.signal,
+    }).then(() => ({ kind: "changed" as const, code: 0 }));
+    const eveExited = childExit(eve).then((code) => ({
+      kind: "exit" as const,
+      code,
+    }));
+    const nextExited = childExit(next).then((code) => ({
+      kind: "exit" as const,
+      code,
+    }));
+    try {
+      const startup = await Promise.race([
+        waitForDevelopmentMcp({
+          endpoint: packageResult.receipt.endpoint,
+          signal: sourceAudit.signal,
+        }).then(() => ({ kind: "ready" as const, code: 0 })),
+        sourceChanged,
+        eveExited,
+        nextExited,
+      ]);
+      if (startup.kind !== "ready") return startup;
+      await registerDevelopmentPackage({
+        codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
+        codexHome: requiredEnvironment(
+          "APP_BUILDER_DEV_CODEX_HOME",
+          "profile root",
+        ),
+        marketplaceRoot: packageResult.marketplaceRoot,
+      });
+      console.log("Autograph App Builder development is ready.");
+      console.log(
+        "Open a fresh Codex task and select Autograph App Builder (Development).",
+      );
+      console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
+      return await Promise.race([sourceChanged, eveExited, nextExited]);
+    } finally {
+      sourceAudit.abort();
+      await Promise.all([stop(eve), stop(next)]);
+    }
   } finally {
     await removeDevelopmentSnapshot(input.runRoot);
   }
@@ -385,6 +425,7 @@ const artifactRoot = await privateRoot(
   args.stateRoot ?? join(repositoryRoot, ".artifacts/development"),
 );
 const stateRoot = await privateRoot(join(artifactRoot, "state"));
+const runtimeHome = await privateRoot(join(stateRoot, "microsandbox-home"));
 const destinationRoot = await privateRoot(
   args.destinationRoot ?? join(artifactRoot, "destination"),
 );
@@ -404,6 +445,7 @@ while (true) {
       sourceRoot,
       runRoot: buildRun,
       stateRoot,
+      runtimeHome,
       dependencyKey,
       ociPlatform: selectedPlatform.oci,
       tagPlatform: selectedPlatform.tag,
@@ -416,6 +458,8 @@ while (true) {
   const outcome = await supervise({
     sourceRoot,
     runRoot: activeRun,
+    codexRoot: await privateRoot(join(stateRoot, "codex")),
+    runtimeHome,
     destinationRoot,
     image,
     dependencyKey,

@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   statSync,
   writeFileSync,
@@ -239,6 +240,57 @@ describe("trusted Node launcher", () => {
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ gh, token: null });
+  });
+
+  it("passes the scoped development Codex profile without exposing ambient CODEX_HOME", () => {
+    const cleanEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      CODEX_HOME: "/hostile/ambient/codex",
+      APP_BUILDER_DEV_CODEX_HOME: "/private/dev/codex-home",
+      APP_BUILDER_DEV_CODEX_BIN: "/mise/bin/codex",
+    };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({home:process.env.CODEX_HOME ?? null, scopedHome:process.env.APP_BUILDER_DEV_CODEX_HOME, bin:process.env.APP_BUILDER_DEV_CODEX_BIN}))",
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      home: null,
+      scopedHome: "/private/dev/codex-home",
+      bin: "/mise/bin/codex",
+    });
+  });
+
+  it("uses only an owner-only development runtime home when explicitly scoped", () => {
+    const runtimeHome = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-runtime-")),
+    );
+    chmodSync(runtimeHome, 0o700);
+    const cleanEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      APP_BUILDER_DEV_RUNTIME_HOME: runtimeHome,
+    };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({home:process.env.HOME, scoped:process.env.APP_BUILDER_DEV_RUNTIME_HOME}))",
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      home: runtimeHome,
+      scoped: runtimeHome,
+    });
   });
 
   it("keeps OIDC out of generic tasks and exposes only a closed Eve launcher", () => {

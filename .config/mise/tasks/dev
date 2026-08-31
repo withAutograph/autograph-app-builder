@@ -3,9 +3,23 @@
 set -eu
 
 export APP_BUILDER_DEV_NODE_BIN="$(mise which node)"
+export APP_BUILDER_DEV_CODEX_BIN="$(mise which codex)"
 export APP_BUILDER_DEV_DOCKER_BIN="$(mise which docker)"
 export APP_BUILDER_DEV_BUILDX_BIN="$(mise which docker-cli-plugin-docker-buildx)"
 export APP_BUILDER_DEV_MSB_BIN="$(mise which msb)"
+
+if [ -z "${CODEX_HOME:-}" ]; then
+  echo "dev: CODEX_HOME must identify the active Codex profile" >&2
+  exit 78
+fi
+case "$CODEX_HOME" in
+  /*) ;;
+  *)
+    echo "dev: CODEX_HOME must be absolute" >&2
+    exit 78
+    ;;
+esac
+export APP_BUILDER_DEV_CODEX_HOME="$CODEX_HOME"
 
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
   "$APP_BUILDER_DEV_NODE_BIN" --import tsx scripts/development.mts "$@"

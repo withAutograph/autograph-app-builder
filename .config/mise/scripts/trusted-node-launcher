@@ -30,6 +30,34 @@ if [ -z "$account_home" ] || [ ! -d "$account_home" ]; then
   echo "trusted-node-launcher: OS account home was unavailable" >&2
   exit 78
 fi
+child_home=$account_home
+if [ -n "${APP_BUILDER_DEV_RUNTIME_HOME:-}" ]; then
+  runtime_home=$APP_BUILDER_DEV_RUNTIME_HOME
+  if [ -L "$runtime_home" ] || [ ! -d "$runtime_home" ]; then
+    echo "trusted-node-launcher: development runtime home is not a directory" >&2
+    exit 78
+  fi
+  canonical_runtime_home=$(CDPATH= cd -P -- "$runtime_home" && pwd -P)
+  if [ "$canonical_runtime_home" != "$runtime_home" ]; then
+    echo "trusted-node-launcher: development runtime home is not canonical" >&2
+    exit 78
+  fi
+  case "$host_name" in
+    Darwin)
+      runtime_home_owner=$(/usr/bin/stat -f '%u' -- "$runtime_home")
+      runtime_home_mode=$(/usr/bin/stat -f '%Lp' -- "$runtime_home")
+      ;;
+    Linux)
+      runtime_home_owner=$(/usr/bin/stat -c '%u' -- "$runtime_home")
+      runtime_home_mode=$(/usr/bin/stat -c '%a' -- "$runtime_home")
+      ;;
+  esac
+  if [ "$runtime_home_owner" != "$(/usr/bin/id -u)" ] || [ "$runtime_home_mode" != 700 ]; then
+    echo "trusted-node-launcher: development runtime home must be owner-only" >&2
+    exit 78
+  fi
+  child_home=$runtime_home
+fi
 pinned_node="$account_home/.local/share/mise/installs/node/24.18.0/bin/node"
 pinned_pnpm="$account_home/.local/share/mise/installs/pnpm/11.7.0/pnpm"
 case "$executable" in
@@ -91,7 +119,7 @@ case "$kind" in
     /usr/bin/env -i \
       PATH="$child_path" \
       PWD="$working_directory" \
-      HOME="$account_home" \
+      HOME="$child_home" \
       TMPDIR="${TMPDIR:-/tmp}" \
       LANG="${LANG:-C}" \
       LC_ALL="${LC_ALL:-C}" \
@@ -115,9 +143,12 @@ case "$kind" in
       APP_BUILDER_IMAGE_MSB_BIN="${APP_BUILDER_IMAGE_MSB_BIN:-}" \
       APP_BUILDER_IMAGE_GH_BIN="${APP_BUILDER_IMAGE_GH_BIN:-}" \
       APP_BUILDER_DEV_NODE_BIN="${APP_BUILDER_DEV_NODE_BIN:-}" \
+      APP_BUILDER_DEV_CODEX_BIN="${APP_BUILDER_DEV_CODEX_BIN:-}" \
+      APP_BUILDER_DEV_CODEX_HOME="${APP_BUILDER_DEV_CODEX_HOME:-}" \
       APP_BUILDER_DEV_DOCKER_BIN="${APP_BUILDER_DEV_DOCKER_BIN:-}" \
       APP_BUILDER_DEV_BUILDX_BIN="${APP_BUILDER_DEV_BUILDX_BIN:-}" \
       APP_BUILDER_DEV_MSB_BIN="${APP_BUILDER_DEV_MSB_BIN:-}" \
+      APP_BUILDER_DEV_RUNTIME_HOME="${APP_BUILDER_DEV_RUNTIME_HOME:-}" \
       APP_BUILDER_EXECUTION_MODE="${APP_BUILDER_EXECUTION_MODE:-}" \
       APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT="${APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT:-}" \
       APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY="${APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY:-}" \

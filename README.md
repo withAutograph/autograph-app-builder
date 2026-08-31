@@ -419,11 +419,13 @@ operation fails closed when no OS-managed advisory-lock helper exists.
 
 Run `mise run dev -- --arrusted-root <absolute-local-checkout>`. Development
 does not use hosted OAuth, Vercel project selection, or `.env.local`. It starts
-Eve on loopback port 2000 and Next.js plus `/mcp` on loopback port 3000, then
-prints the ephemeral `app-builder@autograph-dev` Codex package path. Install
-that ignored package in a fresh local Codex client and open returned prototype
-links in the integrated ChatGPT Browser. The package intentionally has no MCP
-App preview registration.
+Eve on loopback port 2000 and Next.js plus `/mcp` on loopback port 3000. After
+the endpoint proves the exact five-tool contract, the task replaces its stable,
+ignored `autograph-dev` local marketplace registration and installs
+`app-builder@autograph-dev` into the active `CODEX_HOME`. Keep the task running,
+then open a fresh Codex task and select Autograph App Builder (Development).
+Open returned prototype links in the integrated ChatGPT Browser. The package
+intentionally has no MCP App preview registration.
 
 The source manifest is intentionally a non-releasable endpoint template.
 Derived-manifest and release-package tasks are private release helpers, not

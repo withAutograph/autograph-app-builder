@@ -31,7 +31,7 @@ describe("sandbox toolchain contract", () => {
   });
 
   it("accepts a content-keyed local image only in explicit development mode", () => {
-    const developmentImage = `app-builder-autograph-dev:${"b".repeat(64)}-linux-arm64`;
+    const developmentImage = `app-builder-autograph-dev:${"b".repeat(64)}-${"c".repeat(16)}-linux-arm64`;
     expect(
       configuredToolchainImage({
         APP_BUILDER_EXECUTION_MODE: "development",

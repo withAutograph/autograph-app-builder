@@ -84,7 +84,7 @@ importers:
         version: 5.102.8(react@19.2.8)
       '@vercel/connect':
         specifier: 1.0.0
-        version: 1.0.0(ai@7.0.79(zod@4.4.3))(better-auth@1.7.1(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10))(eve@0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.6.14)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 1.0.0(ai@7.0.79(zod@4.4.3))(better-auth@1.7.1(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10))(eve@0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.5.10)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@vercel/oidc':
         specifier: 3.8.5
         version: 3.8.5
@@ -108,7 +108,7 @@ importers:
         version: 0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2)
       eve:
         specifier: 0.44.4
-        version: 0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.6.14)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+        version: 0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.5.10)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       flags:
         specifier: 4.3.0
         version: 4.3.0(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -222,8 +222,8 @@ importers:
         specifier: 3.4.2
         version: 3.4.2
       microsandbox:
-        specifier: 0.6.14
-        version: 0.6.14
+        specifier: 0.5.10
+        version: 0.5.10
       playwright:
         specifier: latest
         version: 1.62.1
@@ -2003,37 +2003,25 @@ packages:
       typescript:
         optional: true
 
-  '@superradcompany/microsandbox-darwin-arm64@0.6.14':
-    resolution: {integrity: sha512-ztsTsPkGBEmm8rkuUhI+OQp6Fx4pycBCuliM3ZRIbt2BRGdqgtuTKS5d+BWBM+JbBrCPfrkpnEgHDW3NTZUwGg==}
+  '@superradcompany/microsandbox-darwin-arm64@0.5.10':
+    resolution: {integrity: sha512-MGEV2SuLzSg3SiQJy2TXRE9SoWnmIUEhCAQno5y0hJ6dsMe7FbaRDFZtHpKiK4XExAstL5WhT1XF+JJWTEfSqg==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [darwin]
 
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.14':
-    resolution: {integrity: sha512-Bd2Qwmb5pxT2PVidg0RYCJi4qcatOunuuWQNHABRTNBARCXWuO3/IAeIvNCVIrRHThS+HJF/ROi/x92hO9QOkg==}
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.5.10':
+    resolution: {integrity: sha512-4FYoAURc1qbNxIbBFK9shMQ9MxklgPRGEsY7tQog8beqvc3U91W34aZyOu90OTRJm0TNsdoLIg3lxKP4LKIJYQ==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@superradcompany/microsandbox-linux-x64-gnu@0.6.14':
-    resolution: {integrity: sha512-+quFumrZVSYlm3oESivKJR3gDKh16ZXAEHrFFvTD+vlXTgF7xnuacGgDxoMKduWtRyvmwdn+v/oqb9PJg59l9w==}
+  '@superradcompany/microsandbox-linux-x64-gnu@0.5.10':
+    resolution: {integrity: sha512-M9FjBAQ36dxhfs5S62uVxCTNAZzxjUgprNh41dIG6H6eF+tAEHYMY1lUEf/w1rkQw8SUsVRrtS+wfVyIM4z9fA==}
     engines: {node: '>= 22'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
-
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.14':
-    resolution: {integrity: sha512-vA/9MbS4PJVuJ0JJDEcD2P5JU2ZtTLsx04Up/vhr8u5TP1VCRBrLqu7QjjvmVta9xsc5A+Qz32IORgsFjrIEHQ==}
-    engines: {node: '>= 22'}
-    cpu: [arm64]
-    os: [win32]
-
-  '@superradcompany/microsandbox-win32-x64-msvc@0.6.14':
-    resolution: {integrity: sha512-NRv7wfqLhrAZTNqQwiwL8aJSbP6RCHTfv2OXDGMLFIm5u0McZRxlWi5GaMsVJUUfmAsgFGtxIlO/ZVu6RozKNw==}
-    engines: {node: '>= 22'}
-    cpu: [x64]
-    os: [win32]
 
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
@@ -4480,9 +4468,10 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
-  microsandbox@0.6.14:
-    resolution: {integrity: sha512-HEYwC7Ej0IK+KRVXIDuJUBadCIXnIKEcq0J3KTTCj0+CCm2cvzWyGjpxNZEM/8UB9lo1AOsoK4ILz39F3zzj3A==}
+  microsandbox@0.5.10:
+    resolution: {integrity: sha512-0NVFu8DohPq/hrG76CJ5x2x8wckNQq8KSN/VXxyVLns8WfDyBzfSSYXHUSV2evjdRB3dkA9FUJjnGujb2XRD1Q==}
     engines: {node: '>= 22'}
+    hasBin: true
 
   mime-db@1.54.0:
     resolution: {integrity: sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==}
@@ -7570,19 +7559,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@superradcompany/microsandbox-darwin-arm64@0.6.14':
+  '@superradcompany/microsandbox-darwin-arm64@0.5.10':
     optional: true
 
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.14':
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.5.10':
     optional: true
 
-  '@superradcompany/microsandbox-linux-x64-gnu@0.6.14':
-    optional: true
-
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.14':
-    optional: true
-
-  '@superradcompany/microsandbox-win32-x64-msvc@0.6.14':
+  '@superradcompany/microsandbox-linux-x64-gnu@0.5.10':
     optional: true
 
   '@swc/helpers@0.5.23':
@@ -7937,13 +7920,13 @@ snapshots:
     dependencies:
       execa: 5.1.1
 
-  '@vercel/connect@1.0.0(ai@7.0.79(zod@4.4.3))(better-auth@1.7.1(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10))(eve@0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.6.14)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)))':
+  '@vercel/connect@1.0.0(ai@7.0.79(zod@4.4.3))(better-auth@1.7.1(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10))(eve@0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.5.10)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)))':
     dependencies:
       '@vercel/oidc': 3.8.5
     optionalDependencies:
       ai: 7.0.79(zod@4.4.3)
       better-auth: 1.7.1(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
-      eve: 0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.6.14)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+      eve: 0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.5.10)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   '@vercel/flags-core@1.8.0(next@16.3.3(@babel/core@7.29.7)(@types/node@26.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(ws@8.21.3)':
     dependencies:
@@ -9059,14 +9042,14 @@ snapshots:
 
   etag@1.8.1: {}
 
-  eve@0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.6.14)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)):
+  eve@0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.79(zod@4.4.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.5.10)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)):
     dependencies:
       ai: 7.0.79(zod@4.4.3)
       nitro: 3.0.260610-beta(@vercel/functions@3.9.5(ws@8.21.3))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.2)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       undici: 8.9.0
     optionalDependencies:
       just-bash: 3.4.2
-      microsandbox: 0.6.14
+      microsandbox: 0.5.10
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -10022,13 +10005,11 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.2
 
-  microsandbox@0.6.14:
+  microsandbox@0.5.10:
     optionalDependencies:
-      '@superradcompany/microsandbox-darwin-arm64': 0.6.14
-      '@superradcompany/microsandbox-linux-arm64-gnu': 0.6.14
-      '@superradcompany/microsandbox-linux-x64-gnu': 0.6.14
-      '@superradcompany/microsandbox-win32-arm64-msvc': 0.6.14
-      '@superradcompany/microsandbox-win32-x64-msvc': 0.6.14
+      '@superradcompany/microsandbox-darwin-arm64': 0.5.10
+      '@superradcompany/microsandbox-linux-arm64-gnu': 0.5.10
+      '@superradcompany/microsandbox-linux-x64-gnu': 0.5.10
 
   mime-db@1.54.0: {}
 

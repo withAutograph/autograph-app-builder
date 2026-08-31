@@ -8,6 +8,8 @@ describe("two-mode development workflow contract", () => {
     expect(task).toContain("scripts/development.mts");
     expect(task).toContain("mise which docker");
     expect(task).toContain("mise which msb");
+    expect(task).toContain("mise which codex");
+    expect(task).toContain("CODEX_HOME");
     expect(
       statSync(".config/mise/tasks/dev").mode & constants.S_IXUSR,
     ).not.toBe(0);
@@ -18,6 +20,16 @@ describe("two-mode development workflow contract", () => {
     expect(runner).toContain("waitForDevelopmentSourceChange");
     expect(runner).toContain("Arrusted source changed");
     expect(runner).toContain("createDevelopmentPackage");
+    expect(runner).toContain("waitForDevelopmentMcp");
+    expect(runner).toContain("registerDevelopmentPackage");
+    expect(runner).toContain('join(stateRoot, "microsandbox-home")');
+    expect(runner).toContain("APP_BUILDER_DEV_RUNTIME_HOME");
+    expect(runner.indexOf("waitForDevelopmentMcp")).toBeLessThan(
+      runner.indexOf("registerDevelopmentPackage({"),
+    );
+    expect(runner.indexOf("registerDevelopmentPackage({")).toBeLessThan(
+      runner.indexOf("development is ready"),
+    );
     expect(runner).not.toContain('APP_BUILDER_LOCAL_PUBLICATION: "1"');
     expect(runner).not.toMatch(/vercel\s+(?:deploy|promote)/u);
     expect(runner).not.toMatch(/gh\s+(?:pr|repo|release)/u);
@@ -40,6 +52,12 @@ describe("two-mode development workflow contract", () => {
     expect(dependencies).toContain("COPY --from=arrusted-source");
     expect(dependencies).toContain(
       "bun install --frozen-lockfile --ignore-scripts",
+    );
+    expect(dependencies).toContain(
+      'if ! dependency_target="$(readlink -f -- "${dependency_link}")"',
+    );
+    expect(dependencies).toContain(
+      "COPY --from=dependency-builder /opt/app-builder/cargo /opt/app-builder/cargo",
     );
     expect(dependencies).toContain('"scope": "development-execution"');
     expect(dependencies).toContain("DEPENDENCY_KEY");

@@ -32,15 +32,17 @@ Ordinary source edits reuse dependencies; a lockfile, relevant tool, or
 platform change creates a new closure. Architecture-specific native closures
 remain distinct.
 
-The task starts loopback Eve and `/mcp`, then creates an ignored, ephemeral
-`app-builder@autograph-dev` Codex package. The package has no MCP App and
-discovers exactly `autograph_start`, `autograph_get`, `autograph_send`,
-`autograph_respond`, and `autograph_cancel`. Open prototype links returned by
-the loopback workflow in the integrated ChatGPT Browser. No MCP App preview
-surface is part of this mode.
+The task starts loopback Eve and `/mcp`, then proves that endpoint exposes
+exactly `autograph_start`, `autograph_get`, `autograph_send`,
+`autograph_respond`, and `autograph_cancel`. Only after that proof does it
+replace its stable, ignored `autograph-dev` local Codex marketplace registration
+and install `app-builder@autograph-dev` in the active Codex profile. Keep the
+task running and open a fresh Codex task after the ready message. The package
+has no MCP App. Open prototype links returned by the loopback workflow in the
+integrated ChatGPT Browser; no MCP App preview surface is part of this mode.
 
 Development runs fail closed for checkout or branch publication, GitHub
-mutation, registry upload, deployment, marketplace mutation, provider
+mutation, registry upload, deployment, hosted marketplace mutation, provider
 emulation or mutation, hosted binding selection, and hosted OAuth. Product
 conversation still reports product outcomes and effect-based approvals;
 snapshot, image, cache, and receipt mechanics stay internal.

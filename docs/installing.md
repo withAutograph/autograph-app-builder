@@ -190,8 +190,11 @@ mise run dependencies:install
 mise run dev -- --arrusted-root /absolute/path/to/arrusted
 ```
 
-The task snapshots that checkout, starts the loopback endpoint, and prints the
-ephemeral `app-builder@autograph-dev` Codex package path. Do not publish or
+The task snapshots that checkout, starts the loopback endpoint, proves that it
+exposes exactly the five public `autograph_*` tools, and then replaces and
+installs the ignored `app-builder@autograph-dev` package in the active Codex
+profile. Wait for the ready message, keep the task running, and open a fresh
+Codex task. No separate plugin command is required. Do not publish or
 redistribute development package bytes as an endpoint-bound release.
 
 ## Maintainer release flow

@@ -25,7 +25,9 @@ RUN set -eux; \
     cd /tmp/arrusted-source; \
     bun install --frozen-lockfile --ignore-scripts --linker=hoisted; \
     find node_modules -type l -print0 | while IFS= read -r -d '' dependency_link; do \
-      dependency_target="$(readlink -f -- "${dependency_link}")"; \
+      if ! dependency_target="$(readlink -f -- "${dependency_link}")"; then \
+        continue; \
+      fi; \
       case "${dependency_target}" in \
         /tmp/arrusted-source/*) \
           dependency_relative="${dependency_target#/tmp/arrusted-source/}"; \
@@ -86,13 +88,14 @@ ENV CARGO_HOME=/opt/app-builder/cargo \
 
 COPY --from=dependency-builder /opt/app-builder/dependency-cache /opt/app-builder/dependency-cache
 COPY --from=dependency-builder /opt/app-builder/cargo-closure /opt/app-builder/cargo-closure
+COPY --from=dependency-builder /opt/app-builder/cargo /opt/app-builder/cargo
 COPY --from=dependency-builder /opt/app-builder/rustup /opt/app-builder/rustup
 COPY --from=dependency-builder /opt/app-builder/mise/installs/rust /opt/app-builder/mise/installs/rust
 
 RUN set -eux; \
     archive_sha="$(bun -e 'console.log(require("/opt/app-builder/dependency-cache/manifest.json").closure.archiveSha256)')"; \
     dependency_root="/opt/app-builder/dependencies/${archive_sha}"; \
-    install -d "${dependency_root}" /opt/app-builder/cargo; \
+    install -d "${dependency_root}"; \
     tar --extract --gzip --file /opt/app-builder/dependency-cache/node-modules.tar.gz \
       --directory "${dependency_root}" --no-same-owner --no-same-permissions; \
     install --mode=0444 /opt/app-builder/cargo-closure/config.toml /opt/app-builder/cargo/config.toml; \
