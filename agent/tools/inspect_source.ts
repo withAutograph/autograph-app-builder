@@ -8,6 +8,7 @@ import {
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { cloneArrustedTemplate } from "@/lib/repository/arrusted-template";
 import { hostedSourceReceipt } from "@/lib/repository/hosted-source";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
@@ -27,7 +28,11 @@ export default defineTool({
           path: ["path"],
           message: "Existing repositories require an allowlisted local path.",
         });
-      if (value.sourceKind === "fresh-template" && value.path !== undefined)
+      if (
+        value.sourceKind === "fresh-template" &&
+        value.path !== undefined &&
+        !hasTestCapability("simulated-target")
+      )
         context.addIssue({
           code: "custom",
           path: ["path"],
@@ -37,7 +42,8 @@ export default defineTool({
     }),
   async execute({ sourceKind, path }) {
     const clone =
-      sourceKind === "fresh-template"
+      sourceKind === "fresh-template" &&
+      !(hasTestCapability("simulated-target") && path !== undefined)
         ? await cloneArrustedTemplate()
         : undefined;
     const receipt =

@@ -88,7 +88,7 @@ Before enabling GitHub or hosted repository publication:
    to match every pinned version before any target-owned command can run. With
    no configured image, the agent selects just-bash and is deliberately not
    toolchain-ready.
-   A supported Vercel hosted deployment instead selects Eve 0.43's native
+   A supported Vercel hosted deployment instead selects Eve 0.44.4's native
    Vercel Sandbox backend only when its exact Preview or Production binding
    agrees with `VERCEL_ENV`.
    That backend fixes its sandbox to Eve's Vercel Container Registry image and
@@ -327,7 +327,7 @@ Before enabling real MCP mutations:
    subject/workspace on every MCP request before store or Eve access.
 3. Bind each hosted environment to one origin: `/api/auth` is the issuer,
    `/api/auth/jwks` is its key source, `/mcp` is audience/resource, and the
-   canonical Eve 0.43 routes remain under `/eve/v1/*` on that origin. The
+   canonical Eve 0.44.4 routes remain under `/eve/v1/*` on that origin. The
    trusted-forwarder environment must be exactly `preview` or `production`,
    and must exactly equal `VERCEL_ENV`. Missing, Development, wildcard, and
    mismatched values fail closed. This source support is not Production
@@ -354,12 +354,12 @@ Before enabling real MCP mutations:
    ceilings. Every observed session result refreshes the durable status used by
    those checks.
 6. Keep continuation credentials outside the current MCP/store contract. The
-   canonical installed Eve 0.43 session routes require only durable session IDs.
+   canonical installed Eve 0.44.4 session routes require only durable session IDs.
 7. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
 8. Prove the checked-in request-context Vercel project OIDC call to the same
    origin's canonical Eve routes, including the exact trusted-forwarder subject,
    forwarded principal, and manual redirect denial.
-9. Map only installed Eve `0.43.0` events through the public allowlist and prove cursor behavior.
+9. Map only installed Eve `0.44.4` events through the public allowlist and prove cursor behavior.
 10. Keep the MCP Apps host bridge limited to progress and input controls. It
     must never display or embed generated app previews. Open previews in the
     integrated ChatGPT/Codex Browser using a hosted HTTPS URL or a loopback URL

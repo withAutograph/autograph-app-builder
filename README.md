@@ -47,6 +47,8 @@ additional development or proof modes. See the authoritative
 [execution-mode contract](docs/execution-modes.md) for arguments, safety
 boundaries, cache identity, and promotion flow.
 
+New contributors should start with [How to develop App Builder locally](CONTRIBUTING.md). It lists prerequisites, the first-run command, expected ready output, daily edit behavior, and troubleshooting steps.
+
 ## Internal workflow engine
 
 Inside the supported modes, the workflow engine can model an existing eligible
@@ -200,7 +202,7 @@ template manifest.
 
 ## Included surfaces
 
-- Eve `0.43.0` with durable sessions and human approval for outward effects.
+- Eve `0.44.4` with durable sessions and human approval for outward effects.
 - The four app-creation skills: `create-app`, `design-app`,
   `plan-app-creation`, and `scaffold-app-workspace`.
 - A purpose-built supported-template eligibility adapter and canonical V3
@@ -379,7 +381,7 @@ source and its digest-resolution procedure are documented in
 [`containers/eve-sandbox`](containers/eve-sandbox/README.md).
 
 On an exact matching Vercel Preview or Production deployment the agent selects
-Eve 0.43's supported Vercel Sandbox backend instead of attempting to start
+Eve 0.44.4's supported Vercel Sandbox backend instead of attempting to start
 local microsandbox. Eve's
 Vercel backend fixes the runtime to its Vercel Container Registry
 `vercel/eve:latest` image and removes author-supplied image/runtime fields. It
@@ -422,7 +424,8 @@ operation fails closed when no OS-managed advisory-lock helper exists.
 
 ## Use the local MCP façade
 
-Run `mise run dev -- --arrusted-root <absolute-local-checkout>`. Development
+Start with [How to develop App Builder locally](CONTRIBUTING.md), then run
+`mise run dev -- --arrusted-root <absolute-local-checkout>`. Development
 does not use hosted OAuth, Vercel project selection, or `.env.local`. It starts
 Eve on loopback port 2000 and Next.js plus `/mcp` on loopback port 3000. After
 the endpoint proves the exact five-tool contract, the task replaces its stable,
@@ -459,7 +462,7 @@ Never put bearer tokens or secrets in `mcp.json` or `.app.json`.
 Hosted request handling is enabled only with `EVE_HOSTED_ADAPTER=1` and a
 complete deployment configuration. The route lazily opens its bounded
 PostgreSQL pool on the first hosted request. `withEve(nextConfig)` deploys the
-canonical Eve 0.43 session routes in the same Vercel project and origin as
+canonical Eve 0.44.4 session routes in the same Vercel project and origin as
 `/mcp`; each request-context hop presents a fresh project OIDC token directly
 to those routes. The verified MCP user crosses that hop only through Eve's
 closed forwarded-principal field, accepted from the configured exact Vercel

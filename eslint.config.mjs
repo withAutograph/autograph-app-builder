@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".artifacts/**",
     ".eve/**",
     ".output/**",
     "lib/sandbox/hosted-artifact.generated.ts",

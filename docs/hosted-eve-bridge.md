@@ -34,7 +34,7 @@ boundaries:
    read. It is intentionally outside tenant retention: pending or terminal
    provider mutation authority must not disappear and permit redispatch.
 4. The same-origin HTTPS adapter implements `HostedEveTransport` against the
-   canonical API emitted by installed Eve 0.43 and `withEve(nextConfig)`. It
+   canonical API emitted by installed Eve 0.44.4 and `withEve(nextConfig)`. It
    obtains a fresh Vercel project OIDC token for every hop, uses only the
    canonical create, continuation/input-response, stream, and cancel routes,
    and never forwards the user's Bearer token. The verified OAuth principal
@@ -42,7 +42,7 @@ boundaries:
    accepted from one exact Vercel team/project/environment subject. Every MCP
    request must also match the exact configured resource URL before the
    adapter can open storage or send project identity, and stream reads require
-   the pinned Eve 0.43 session, format, and protocol-version headers. The
+   the pinned Eve 0.44.4 session, format, and protocol-version headers. The
    service exposes only `start`, `get`, `send`, `respond`, and `cancel`, and
    projects only public allowlisted events. Reasoning, tool results, system
    instructions, malformed events, continuation credentials, and adapter
@@ -96,7 +96,7 @@ reservation serializes and enforces the rate/session fields before Eve
 dispatch, and every observed public session result refreshes active status.
 
 The MCP-side contract accepts no continuation credential and the durable store
-schema has no field for one. Canonical Eve 0.43 routes use durable session IDs
+schema has no field for one. Canonical Eve 0.44.4 routes use durable session IDs
 and likewise require no continuation credential. Adding any new credential
 field requires a new closed contract and migration rather than reusing `record`
 as an opaque secret container.
@@ -188,7 +188,7 @@ Hosted activation still requires separately authorized work:
   read-only drift and honestly leaves the provider restore point `not-proven`;
 - configure the exact Vercel team slug, project name, and environment used by
   the authored Eve channel's trusted-forwarder predicate, then prove project
-  OIDC and installed Eve 0.43 event projection in Preview;
+  OIDC and installed Eve 0.44.4 event projection in Preview;
 - deploy and prove hosted authentication, persistence, cancellation, and
   lost-response behavior; and
 - publish an immutable Agent Plugins package pointing at that proven endpoint, and run

@@ -15,6 +15,7 @@ export default defineConfig({
         test: {
           exclude: [
             ...configDefaults.exclude,
+            "**/.artifacts/**",
             "**/.eve/**",
             "**/.storybook/visual/**",
             "**/e2e/**",
@@ -31,6 +32,7 @@ export default defineConfig({
         ],
         test: {
           name: "storybook",
+          exclude: [...configDefaults.exclude, "**/.artifacts/**"],
           fileParallelism: false,
           maxWorkers: 1,
           browser: {
