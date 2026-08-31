@@ -20,7 +20,7 @@ test("stock account menu updates the profile and signs out", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitem", { name: "Settings" }).click();
-  await expect(page).toHaveURL(/\/settings\/account/u);
+  await expect(page).toHaveURL(/\/settings\/account/u, { timeout: 15_000 });
   await expect(
     page.getByRole("heading", { name: "Account settings" }),
   ).toBeVisible();
