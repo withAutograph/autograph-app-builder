@@ -18,8 +18,13 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { passkeyClientError } from "@/lib/auth/passkey-client-result";
+import {
+  passkeyAuthenticationFailure,
+  passkeyClientError,
+  withPasskeyUnavailable,
+} from "@/lib/auth/passkey-client-result";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
+import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 
 export type PasskeyButtonProps = {
@@ -40,7 +45,6 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const {
     authClient,
     basePaths,
-    Link,
     localization,
     redirectTo,
     navigate,
@@ -57,7 +61,14 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   // form is open. The button stays for anyone who dismisses it.
   usePasskeyAutoFill(authClient, {
     enabled: view !== "signUp",
-    onSuccess: () => navigate({ to: redirectTo }),
+    onSuccess: () =>
+      navigate({
+        to: resolvePasskeyRedirectTo(
+          redirectTo,
+          window.location.search,
+          window.location.origin,
+        ),
+      }),
   });
 
   const signInMutating = useIsMutating({
@@ -70,12 +81,32 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
 
   const continueWithPasskey = async () => {
     setPending(true);
+    setFailed(false);
 
     try {
-      const result = await signInPasskey.mutateAsync({ autoFill: false });
-      const resultError = passkeyClientError(result);
-      if (resultError) throw resultError;
-      navigate({ to: redirectTo });
+      const resolvedRedirectTo = resolvePasskeyRedirectTo(
+        redirectTo,
+        window.location.search,
+        window.location.origin,
+      );
+      const result = await signInPasskey.mutateAsync({
+        autoFill: false,
+        returnWebAuthnResponse: true,
+      });
+      const failure = passkeyAuthenticationFailure(result);
+      if (failure?.redirectToSignUp) {
+        navigate({
+          to: withPasskeyUnavailable(
+            getAuthLinkURL(
+              `${basePaths.auth}/${viewPaths.auth.signUp}`,
+              resolvedRedirectTo,
+            ),
+          ),
+        });
+        return;
+      }
+      if (failure) throw failure.error;
+      navigate({ to: resolvedRedirectTo });
     } catch {
       setFailed(true);
     } finally {
@@ -84,7 +115,15 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   };
 
   const createPasskey = async () => {
+    setPending(true);
+    setFailed(false);
+
     try {
+      const resolvedRedirectTo = resolvePasskeyRedirectTo(
+        redirectTo,
+        window.location.search,
+        window.location.origin,
+      );
       const response = await fetch("/api/auth/passkey/onboarding-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,9 +142,11 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       });
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
-      navigate({ to: redirectTo });
+      navigate({ to: resolvedRedirectTo });
     } catch {
       setFailed(true);
+    } finally {
+      setPending(false);
     }
   };
 
@@ -126,27 +167,11 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         {pending ? <Spinner /> : <Fingerprint />}
         {failed
           ? "Passkey failed (try again)"
-          : view === "signUp"
-            ? "Create a passkey"
-            : localization.auth.continueWith.replace(
-                "{{provider}}",
-                passkeyLocalization.passkey,
-              )}
-      </Button>
-      {view !== "signUp" && (
-        <p className="text-muted-foreground text-center text-xs">
-          New to Autograph?{" "}
-          <Link
-            href={getAuthLinkURL(
-              `${basePaths.auth}/${viewPaths.auth.signUp}`,
-              redirectTo,
+          : localization.auth.continueWith.replace(
+              "{{provider}}",
+              passkeyLocalization.passkey,
             )}
-            className="underline underline-offset-4"
-          >
-            Create an account with a passkey
-          </Link>
-        </p>
-      )}
+      </Button>
     </div>
   );
 }

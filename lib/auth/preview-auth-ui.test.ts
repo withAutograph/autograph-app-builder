@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   resolveAuthCallbackURL,
+  resolvePasskeyRedirectTo,
   resolveProviderCallbackURL,
 } from "./preview-auth-ui";
 
@@ -70,6 +71,38 @@ describe("Preview Better Auth UI", () => {
     ).toBe(
       "https://builder.example.test/auth/setting-up?callbackURL=%2F%3Fsource%3Doauth",
     );
+  });
+
+  it("builds the passkey redirect from a safe callback override", () => {
+    expect(
+      resolvePasskeyRedirectTo(
+        "/auth/setting-up?callbackURL=%2F",
+        "?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
+        "https://builder.example.test",
+      ),
+    ).toBe(
+      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
+    );
+  });
+
+  it("preserves an inherited redirect when no callback override is present", () => {
+    expect(
+      resolvePasskeyRedirectTo(
+        "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief",
+        "?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252Fworkspace%253Fsource%253Dbrief",
+        "https://builder.example.test",
+      ),
+    ).toBe("/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief");
+  });
+
+  it("rejects an inherited cross-origin passkey redirect", () => {
+    expect(
+      resolvePasskeyRedirectTo(
+        "/auth/setting-up?callbackURL=%2F",
+        "?redirectTo=https%3A%2F%2Fexternal.example%2Fsteal",
+        "https://builder.example.test",
+      ),
+    ).toBe("/auth/setting-up?callbackURL=%2F");
   });
 
   it("forwards the complete signed OAuth query through social sign-in", async () => {

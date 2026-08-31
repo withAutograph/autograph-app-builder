@@ -18,17 +18,19 @@ PASSKEY_ONBOARDING=local-preview-v1
 ```
 
 Run `mise run app:dev`, open `http://localhost:3000/auth/sign-in`, and choose
-**Continue with Passkey**. If the browser cannot authenticate, the page remains
-on sign-in and changes the action to **Passkey failed (try again)**. Retrying
-repeats authentication and never creates an account. New users must follow the
-explicit **Create an account with a passkey** link to Sign Up. After
+**Continue with Passkey**. If the browser returns no assertion because the
+ceremony was cancelled or no usable credential was available, Autograph moves
+to Sign Up and explains that continuing will create a new passkey. Registration
+does not begin until **Continue with Passkey** is clicked again on Sign Up. If
+the browser returns an assertion that the server rejects, Sign In instead shows
+**Passkey failed (try again)** and never creates a replacement identity. After
 registration, sign out and use **Continue with Passkey** to exercise the
 returning-user flow. Browsers treat `localhost` as a
 WebAuthn secure context; use `localhost` consistently rather than switching
 between it and `127.0.0.1` because credentials are RP-ID scoped.
 
-The Sign Up view offers **Create a passkey** directly and never places a second
-passkey action beside it.
+The Sign Up view offers one **Continue with Passkey** action that creates the
+passkey, account, workspace, and session together.
 
 To reset a local identity, remove its organization/member, session, passkey, and
 user records together in a transaction. Do not reuse that procedure against

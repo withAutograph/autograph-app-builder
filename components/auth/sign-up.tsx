@@ -41,6 +41,7 @@ import { ProviderButtons, type SocialLayout } from "./provider-buttons";
 
 export type SignUpProps = {
   className?: string;
+  passkeyUnavailable?: boolean;
   socialLayout?: SocialLayout;
   socialPosition?: "top" | "bottom";
   /**
@@ -68,6 +69,7 @@ export type SignUpProps = {
  */
 export function SignUp({
   className,
+  passkeyUnavailable = false,
   socialLayout,
   socialPosition = "bottom",
   onSignUpSuccess,
@@ -205,6 +207,11 @@ export function SignUp({
       </CardHeader>
 
       <CardContent>
+        {passkeyUnavailable && (
+          <FieldDescription className="mb-3 text-center">
+            We couldn’t use an existing passkey. Continue to create a new one.
+          </FieldDescription>
+        )}
         <div className="flex flex-col gap-3">
           {plugins.flatMap((plugin) =>
             (plugin.authButtons ?? []).map((AuthButton, index) => (

@@ -28,3 +28,24 @@ export function resolveProviderCallbackURL(
   providerCallbackURL.searchParams.set("callbackURL", callbackURL);
   return providerCallbackURL;
 }
+
+export function resolvePasskeyRedirectTo(
+  redirectTo: string,
+  search: string,
+  origin: string,
+) {
+  const searchParams = new URLSearchParams(search);
+  const inheritedRedirect = searchParams.get("redirectTo");
+  if (inheritedRedirect) {
+    return resolveAuthCallbackURL(
+      redirectTo,
+      `?callbackURL=${encodeURIComponent(inheritedRedirect)}`,
+      origin,
+    );
+  }
+  if (!searchParams.has("callbackURL")) return redirectTo;
+
+  const callbackURL = resolveAuthCallbackURL("/", search, origin);
+  const resolved = resolveProviderCallbackURL(redirectTo, callbackURL, origin);
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+}

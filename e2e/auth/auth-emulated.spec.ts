@@ -18,11 +18,13 @@ function reportPasskeyFailures(page: Page) {
     ) {
       return;
     }
+    const body = await response.text().catch(() => undefined);
+    if (body === undefined) return;
     console.error(
       "passkey request failed",
       response.status(),
       new URL(response.url()).pathname,
-      await response.text(),
+      body,
     );
   });
 }
@@ -37,7 +39,7 @@ test("passkey registration provisions one account and returning login", async ({
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.goto("/auth/sign-up");
-    await page.getByRole("button", { name: "Create a passkey" }).click();
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect
       .poll(() => authCounts(), { timeout: 30_000 })
       .toEqual({
@@ -65,25 +67,30 @@ test("passkey registration provisions one account and returning login", async ({
   }
 });
 
-test("missing credential and verification failure remain authentication-only", async ({
+test("missing credential redirects to explicit enrollment and preserves the callback", async ({
   context,
   page,
 }) => {
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
-    await page.goto("/auth/sign-in");
+    const callbackURL = "/?source=brief#complete";
+    await page.goto(
+      `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
+    );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
-    const retry = page.getByRole("button", {
-      name: "Passkey failed (try again)",
-    });
-    await expect(retry).toBeVisible();
-    await expect(page).toHaveURL(/\/auth\/sign-in/u);
-    await retry.click();
-    await expect(retry).toBeVisible();
+
+    await expect(page).toHaveURL(/\/auth\/sign-up/u);
     await expect(
-      page.getByRole("link", { name: /Create an account/u }),
-    ).toHaveAttribute("href", /\/auth\/sign-up/u);
+      page.getByText(
+        "We couldn’t use an existing passkey. Continue to create a new one.",
+      ),
+    ).toBeVisible();
+    const signUpURL = new URL(page.url());
+    expect(signUpURL.searchParams.get("passkey")).toBe("unavailable");
+    expect(signUpURL.searchParams.get("redirectTo")).toBe(
+      "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete",
+    );
     expect(await authCounts()).toEqual({
       users: 0,
       passkeys: 0,
@@ -95,16 +102,23 @@ test("missing credential and verification failure remain authentication-only", a
       vercelInstallations: 0,
     });
 
-    await authenticator.setUserVerified(false);
-    await retry.click();
-    await expect(retry).toBeVisible();
-    expect((await authCounts()).users).toBe(0);
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
+    await expect(page).toHaveURL(/\?source=brief#complete$/u);
+    expect(await authCounts()).toMatchObject({
+      users: 1,
+      passkeys: 1,
+      organizations: 1,
+      members: 1,
+      activeSessions: 1,
+    });
   } finally {
     await authenticator.dispose();
   }
 });
 
-test("an interrupted passkey ceremony remains on Sign In", async ({ page }) => {
+test("an interrupted passkey ceremony redirects without registering", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     const credentials = navigator.credentials;
     Object.defineProperty(navigator, "credentials", {
@@ -123,10 +137,45 @@ test("an interrupted passkey ceremony remains on Sign In", async ({ page }) => {
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect(
+    page.getByText(
+      "We couldn’t use an existing passkey. Continue to create a new one.",
+    ),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sign-up/u);
+  expect((await authCounts()).users).toBe(0);
+});
+
+test("cancelled passkey registration stays on Sign Up without partial state", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const credentials = navigator.credentials;
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: {
+        ...credentials,
+        create: async () => {
+          throw new DOMException(
+            "The operation was cancelled.",
+            "NotAllowedError",
+          );
+        },
+      },
+    });
+  });
+  await page.goto("/auth/sign-up");
+  await page.getByRole("button", { name: "Continue with Passkey" }).click();
+  await expect(
     page.getByRole("button", { name: "Passkey failed (try again)" }),
   ).toBeVisible();
-  await expect(page).toHaveURL(/\/auth\/sign-in/u);
-  expect((await authCounts()).users).toBe(0);
+  await expect(page).toHaveURL(/\/auth\/sign-up/u);
+  expect(await authCounts()).toMatchObject({
+    users: 0,
+    passkeys: 0,
+    organizations: 0,
+    members: 0,
+    activeSessions: 0,
+  });
 });
 
 test("an authenticator credential missing from server storage is not recreated", async ({
@@ -137,7 +186,7 @@ test("an authenticator credential missing from server storage is not recreated",
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.goto("/auth/sign-up");
-    await page.getByRole("button", { name: "Create a passkey" }).click();
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect
       .poll(async () => (await authCounts()).passkeys, { timeout: 30_000 })
       .toBe(1);

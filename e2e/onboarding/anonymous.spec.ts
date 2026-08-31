@@ -1,5 +1,6 @@
 import { expect, test } from "playwright/test";
 
+import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 import {
   applicationCounts,
   finishOAuth,
@@ -42,10 +43,17 @@ test("anonymous brief continues through passkey signup into the builder", async 
   await expect(
     page.getByRole("button", { name: "Continue with Vercel" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: /Create an account/u }).click();
 
-  const authenticator = await registerPasskey(context, page);
+  const authenticator = await VirtualAuthenticator.create(context, page);
   try {
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
+    await expect(page).toHaveURL(/\/auth\/sign-up/u);
+    await expect(
+      page.getByText(
+        "We couldn’t use an existing passkey. Continue to create a new one.",
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL("/");
     await expect(page.locator("#app-brief")).toHaveValue(
       "Build a customer renewal dashboard.",
@@ -81,7 +89,7 @@ for (const provider of ["GitHub", "Vercel"] as const) {
   });
 }
 
-test("failed passkey authentication never enters workspace setup", async ({
+test("missing passkey offers explicit enrollment without entering setup", async ({
   context,
   page,
 }) => {
@@ -92,10 +100,13 @@ test("failed passkey authentication never enters workspace setup", async ({
   );
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
+    page.getByText(
+      "We couldn’t use an existing passkey. Continue to create a new one.",
+    ),
   ).toBeVisible();
-  await expect(page).toHaveURL(/\/auth\/sign-in/u);
+  await expect(page).toHaveURL(/\/auth\/sign-up/u);
   await expect(page.getByText("Setting up your workspace")).toHaveCount(0);
+  expect(await applicationCounts()).toMatchObject({ users: 1, passkeys: 1 });
   await authenticator.dispose();
 });
 

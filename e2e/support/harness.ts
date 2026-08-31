@@ -145,7 +145,7 @@ export async function registerPasskey(
   await page.goto(
     `/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`,
   );
-  await page.getByRole("button", { name: "Create a passkey" }).click();
+  await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect
     .poll(() => currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { emailVerified: false } });
