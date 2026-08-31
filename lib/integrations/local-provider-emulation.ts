@@ -213,6 +213,7 @@ export function providerEmulationEnvironment(
     GITHUB_CLIENT_ID: emulation.githubClientId,
     GITHUB_CLIENT_SECRET: emulation.githubClientSecret,
     GITHUB_APP_ID: "12345",
+    GITHUB_APP_SLUG: "autograph-app-builder",
     GITHUB_APP_CLIENT_ID: emulation.githubClientId,
     GITHUB_APP_CLIENT_SECRET: emulation.githubClientSecret,
     GITHUB_APP_INSTALL_STATE_SECRET: emulation.relaySecret,

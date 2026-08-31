@@ -142,6 +142,12 @@ export async function installProvider(
   await expect(page).toHaveURL(
     new RegExp(`/local-connections/${providerSlug}`),
   );
+  await expect(
+    page.getByText(
+      provider === "GitHub" ? "autograph-local/demo-app" : "icfg_local_1",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await page
     .getByRole("button", {
       name: localApprovalButtonName(provider),
