@@ -55,10 +55,13 @@ is missing, pending, failed, malformed, or bound to another SHA/tree. This
 makes the Arrusted push and its CI proof an ordered deployment boundary rather
 than treating a default-branch update as readiness by itself.
 
-The reviewed clone is copied into the session-owned workspace and all fixed
-repository planning, generation, apply, and validation commands operate from
-that workspace. The original clone is never mutated by user work or published
-directly.
+After admission, App Builder independently performs the same fixed HTTPS,
+detached-clone procedure directly into the session-owned
+`/workspace/repository`. It verifies the remote, ref, SHA, tree, clean status,
+and submodule absence again before recording the prepared-workspace manifest.
+All fixed repository planning, generation, apply, and validation commands run
+from that detached workspace clone. The source-resolution clone is never
+mutated by user work or published directly.
 
 Fresh-repository publication still requires its own approval and provider
 read-back. Its result is a new parentless `main` commit containing the reviewed

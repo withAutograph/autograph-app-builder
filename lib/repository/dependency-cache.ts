@@ -57,6 +57,10 @@ const REQUIRED_EXECUTION_PACKAGES = [
 const sha256Digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
 const dependencyDigest = z.union([sha256Digest, z.literal("absent")]);
+const liveTemplatePlatformSchema = z.union([
+  z.literal("linux/arm64"),
+  z.literal("linux/x86_64"),
+]);
 
 const dependencyCacheManifestShapeSchema = z.strictObject({
   version: z.literal(1),
@@ -255,8 +259,11 @@ export function dependencyTargetForWorkspace(
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
-function liveTemplateManifestPath(target: ExactSourceBinding) {
-  return `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${target.sourceSha}/manifest.json`;
+function liveTemplateManifestPath(
+  target: ExactSourceBinding,
+  platform: z.infer<typeof liveTemplatePlatformSchema>,
+) {
+  return `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${target.sourceSha}/${platform}/manifest.json`;
 }
 
 export function dependencyCacheNodeModulesRoot(contentDigest: string): string {
@@ -369,7 +376,7 @@ function fixtureManifest(
 }
 
 const liveTemplateBootstrapObservationSchema = z.strictObject({
-  platform: z.union([z.literal("linux/arm64"), z.literal("linux/x86_64")]),
+  platform: liveTemplatePlatformSchema,
   locks: liveTemplateDependencyCacheManifestSchema.shape.locks,
   microfrontendsVersion: z.string().min(1),
 });
@@ -397,12 +404,31 @@ done
 chmod -R a-w,a+rX node_modules
 node -e 'const c=require("node:crypto"),f=require("node:fs");const sha=(p)=>c.createHash("sha256").update(f.readFileSync(p)).digest("hex");const arch=process.arch==="x64"?"linux/x86_64":process.arch==="arm64"?"linux/arm64":"unsupported";console.log(JSON.stringify({platform:arch,locks:{miseConfigSha256:sha(".config/mise/config.toml"),miseLockSha256:sha(".config/mise/mise.lock"),bunLockSha256:sha("bun.lock"),cargoLockSha256:sha("Cargo.lock")},microfrontendsVersion:JSON.parse(f.readFileSync("node_modules/@vercel/microfrontends/package.json","utf8")).version}))'`;
 
+async function liveTemplatePlatform(
+  sandbox: SandboxSession,
+): Promise<z.infer<typeof liveTemplatePlatformSchema>> {
+  const result = await sandbox.run({
+    command:
+      'set -eu; test "$(uname -s)" = Linux; case "$(uname -m)" in x86_64) printf "%s\\n" linux/x86_64 ;; aarch64|arm64) printf "%s\\n" linux/arm64 ;; *) exit 1 ;; esac',
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+  });
+  boundedOutput(result.stdout, result.stderr, "Template dependency platform");
+  if (result.exitCode !== 0)
+    throw new Error("The template dependency platform is unsupported.");
+  const platform = liveTemplatePlatformSchema.safeParse(result.stdout.trim());
+  if (!platform.success)
+    throw new Error("The template dependency platform is invalid.");
+  return platform.data;
+}
+
 export async function bootstrapLiveTemplateDependencies(input: {
   sandbox: SandboxSession;
   target: ExactSourceBinding;
 }): Promise<ObservedDependencyCache> {
+  const platform = await liveTemplatePlatform(input.sandbox);
   const prior = await input.sandbox.readTextFile({
-    path: liveTemplateManifestPath(input.target),
+    path: liveTemplateManifestPath(input.target, platform),
   });
   if (prior !== null) {
     let manifest: ReturnType<
@@ -462,6 +488,8 @@ export async function bootstrapLiveTemplateDependencies(input: {
       "The canonical template dependency bootstrap receipt is invalid.",
     );
   }
+  if (observation.platform !== platform)
+    throw new Error("The canonical template dependency platform drifted.");
   const manifest = {
     version: 1 as const,
     scope: "live-template-execution" as const,
@@ -476,10 +504,10 @@ export async function bootstrapLiveTemplateDependencies(input: {
   const parsed = liveTemplateDependencyCacheManifestSchema.parse(manifest);
   const serialized = `${JSON.stringify(parsed, null, 2)}\n`;
   await ensureSandboxDirectories(input.sandbox, [
-    `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${input.target.sourceSha}`,
+    `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${input.target.sourceSha}/${platform}`,
   ]);
   await input.sandbox.writeTextFile({
-    path: liveTemplateManifestPath(input.target),
+    path: liveTemplateManifestPath(input.target, platform),
     content: serialized,
   });
   return {
@@ -511,8 +539,9 @@ export async function inspectDependencyCache(
     };
   }
   if (preferLiveTemplate && fixtureTarget !== undefined) {
+    const platform = await liveTemplatePlatform(sandbox);
     const liveManifest = await sandbox.readTextFile({
-      path: liveTemplateManifestPath(fixtureTarget),
+      path: liveTemplateManifestPath(fixtureTarget, platform),
     });
     if (liveManifest !== null) {
       let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
@@ -527,7 +556,8 @@ export async function inspectDependencyCache(
       }
       if (
         manifest.target.sha !== fixtureTarget.sourceSha ||
-        manifest.target.tree !== fixtureTarget.sourceTree
+        manifest.target.tree !== fixtureTarget.sourceTree ||
+        manifest.platform !== platform
       )
         throw new Error("The live template dependency cache source drifted.");
       return {

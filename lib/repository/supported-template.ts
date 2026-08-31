@@ -658,6 +658,68 @@ export async function inspectPreparedSandboxWorkspace(
 }
 
 /**
+ * Seal an already materialized workspace after the producer has written the
+ * exact source manifest and checksum receipt.  Canonical remote clones use
+ * this instead of serializing a host checkout into an archive.
+ */
+export async function recordPreparedSandboxWorkspace(input: {
+  sandbox: SandboxSession;
+  callId: string;
+  sourcePath: string;
+  sourceSha: string;
+  sourceTree: string;
+  eligibilityDigest: string;
+  workspaceDigest: string;
+}): Promise<PreparedSandboxWorkspace> {
+  const expected: Omit<PreparedSandboxWorkspace, "workspaceId"> = {
+    workspacePath: "/workspace/repository",
+    sourcePath: input.sourcePath,
+    sourceSha: input.sourceSha,
+    sourceTree: input.sourceTree,
+    workspaceDigest: input.workspaceDigest,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER,
+    eligibilityDigest: input.eligibilityDigest,
+  };
+  const existing = await readSandboxRecord(input.sandbox);
+  if (existing !== undefined) {
+    const { workspaceId, ...observed } = existing;
+    if (
+      workspaceId !== input.sandbox.id ||
+      JSON.stringify(observed) !== JSON.stringify(expected)
+    )
+      throw new Error("This app build already owns a different workspace.");
+    await verifyPreparedSandboxWorkspace(input.sandbox, existing);
+    return existing;
+  }
+
+  await ensureSandboxDirectories(input.sandbox, [".app-builder"]);
+  await input.sandbox.writeTextFile({
+    path: ".app-builder/prepare-intent.json",
+    content: `${JSON.stringify(
+      {
+        callId: input.callId,
+        sourcePath: input.sourcePath,
+        sourceSha: input.sourceSha,
+        sourceTree: input.sourceTree,
+        eligibilityDigest: input.eligibilityDigest,
+      },
+      null,
+      2,
+    )}\n`,
+  });
+  const record: PreparedSandboxWorkspace = {
+    workspaceId: input.sandbox.id,
+    ...expected,
+  };
+  await input.sandbox.writeTextFile({
+    path: sandboxRecordPath,
+    content: `${JSON.stringify(record, null, 2)}\n`,
+  });
+  await verifyPreparedSandboxWorkspace(input.sandbox, record);
+  return record;
+}
+
+/**
  * Materialize the reviewed Git tree inside Eve's per-session sandbox.
  *
  * The fixed path is intentional: one Eve session owns one target workspace.

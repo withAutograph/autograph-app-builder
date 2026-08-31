@@ -346,6 +346,11 @@ describe("offline dependency cache", () => {
       .fn()
       .mockResolvedValueOnce({
         exitCode: 0,
+        stdout: "linux/x86_64\n",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
         stdout: JSON.stringify({
           platform: "linux/x86_64",
           locks: {
@@ -374,10 +379,10 @@ describe("offline dependency cache", () => {
       target: { sha: target.sourceSha, tree: target.sourceTree },
       closure: { nodeModulesPath: "/workspace/repository/node_modules" },
     });
-    expect(run.mock.calls[0]?.[0].command).toContain(
+    expect(run.mock.calls[1]?.[0].command).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
-    expect(run.mock.calls[0]?.[0].command).toContain("cargo fetch --locked");
+    expect(run.mock.calls[1]?.[0].command).toContain("cargo fetch --locked");
     expect(setNetworkPolicy).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -387,7 +392,7 @@ describe("offline dependency cache", () => {
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
     expect(writeTextFile).toHaveBeenCalledWith(
       expect.objectContaining({
-        path: `.app-builder/template-dependency-cache/${target.sourceSha}/manifest.json`,
+        path: `.app-builder/template-dependency-cache/${target.sourceSha}/linux/x86_64/manifest.json`,
       }),
     );
   });

@@ -15,10 +15,8 @@ import {
   inspectSourceReceipt,
 } from "@/lib/repository/source-receipt";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
-import {
-  prepareBuilderOwnedSupportedSandboxWorkspace,
-  prepareSupportedSandboxWorkspace,
-} from "@/lib/repository/supported-template";
+import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
+import { prepareCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import {
   hostedSourceReceipt,
   prepareHostedSourceWorkspace,
@@ -100,13 +98,11 @@ export default defineTool({
     const workspace =
       hostedReceipt === undefined
         ? await (currentReceipt.version === SOURCE_RECEIPT_VERSION
-            ? prepareBuilderOwnedSupportedSandboxWorkspace(
-                path,
-                expectedSha,
-                expectedEligibilityDigest,
+            ? prepareCanonicalArrustedSandboxWorkspace({
                 sandbox,
-                ctx.callId,
-              )
+                receipt: currentReceipt,
+                callId: ctx.callId,
+              })
             : prepareSupportedSandboxWorkspace(
                 path,
                 expectedSha,
