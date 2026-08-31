@@ -55,6 +55,7 @@ url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.4.0.tgz
 url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.4.0.tgz"
 
 [tools.docker-cli."platforms.linux-x64"]
+checksum = "blake3:4c110e96ebd09add53c21012c4474b66ebb83c12d292171dbbf65a17cdf15909"
 url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.4.0.tgz"
 
 [tools.docker-cli."platforms.linux-x64-musl"]
