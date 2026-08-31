@@ -288,6 +288,7 @@ export function authenticatedPasskeyRegistration(
 export function createPasskeyOnboardingPlugin(input: {
   config: PasskeyOnboardingConfig | null;
   now?: () => Date;
+  onboardingContextRateLimitMax?: number;
 }): BetterAuthPlugin {
   const now = input.now ?? (() => new Date());
   return {
@@ -409,7 +410,7 @@ export function createPasskeyOnboardingPlugin(input: {
       {
         pathMatcher: (path) => path === "/passkey/onboarding-context",
         window: 60,
-        max: 10,
+        max: input.onboardingContextRateLimitMax ?? 10,
       },
     ],
   };

@@ -33,6 +33,19 @@ const integrationConfig = {
 };
 const fixedNow = new Date("2026-08-30T12:00:00.000Z");
 
+it("allows the emulated browser suite to raise only the onboarding-context limit", () => {
+  const hostedPlugin = createPasskeyOnboardingPlugin({
+    config: integrationConfig,
+  });
+  const emulatedPlugin = createPasskeyOnboardingPlugin({
+    config: integrationConfig,
+    onboardingContextRateLimitMax: 600,
+  });
+
+  expect(hostedPlugin.rateLimit?.[0]).toMatchObject({ window: 60, max: 10 });
+  expect(emulatedPlugin.rateLimit?.[0]).toMatchObject({ window: 60, max: 600 });
+});
+
 async function setupOnboarding(now: () => Date = () => fixedNow) {
   return getTestInstance(
     {

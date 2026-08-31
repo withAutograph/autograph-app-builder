@@ -677,7 +677,15 @@ export function createPreviewOAuthServer(input: {
         },
       ),
       ...infrastructure.plugins,
-      createPasskeyOnboardingPlugin({ config: config.passkeyOnboarding }),
+      createPasskeyOnboardingPlugin({
+        config: config.passkeyOnboarding,
+        // The serial emulated browser suite exercises more than ten distinct
+        // enrollment ceremonies from one loopback client. Keep the hosted
+        // limit intact while preventing deterministic test traffic from
+        // exhausting the plugin-specific bucket.
+        onboardingContextRateLimitMax:
+          localEmulation === undefined ? undefined : 600,
+      }),
       createPasskeyPlugin({ config: config.passkeyOnboarding }),
       ...(config.environment === "development"
         ? []
