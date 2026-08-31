@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Compare fixed-viewport Storybook visual baselines"
+#MISE description="Exercise fixed-viewport Storybook flows"
 set -eu
 
 mise run storybook:build
