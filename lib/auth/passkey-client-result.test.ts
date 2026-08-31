@@ -160,6 +160,34 @@ describe("passkeyAuthenticationFailure", () => {
     expect(credentials.get).toBe(originalGet);
   });
 
+  it("offers Sign Up when Better Auth rejects after a structural NotAllowedError", async () => {
+    const boundary = createPasskeyAuthenticationBoundary();
+    const credentials = {
+      get: async () => {
+        throw new DOMException(
+          "The operation was cancelled.",
+          "NotAllowedError",
+        );
+      },
+    } as unknown as CredentialsContainer;
+    const restore = boundary.observeCredentialGet(credentials);
+
+    let rejection: unknown;
+    try {
+      await credentials.get({});
+    } catch (error) {
+      rejection = error;
+    } finally {
+      restore();
+    }
+
+    expect(boundary.failure(rejection)).toMatchObject({
+      assertionStatus: "not-returned",
+      code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
+      offerSignUp: true,
+    });
+  });
+
   it("offers Sign Up when the credential API resolves without an assertion", async () => {
     const boundary = createPasskeyAuthenticationBoundary();
     const credentials = {

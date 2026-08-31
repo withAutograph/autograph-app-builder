@@ -147,7 +147,22 @@ export function createPasskeyAuthenticationBoundary() {
       };
     },
     failure(result: unknown) {
-      return passkeyAuthenticationFailure(result, evidence);
+      const failure = passkeyAuthenticationFailure(result, evidence);
+      if (failure) return failure;
+
+      const thrown = structuralCredentialError(result);
+      if (!thrown.name && !thrown.message) return null;
+      return passkeyAuthenticationFailure(
+        {
+          error: {
+            ...(thrown.name ? { code: thrown.name } : {}),
+            message:
+              thrown.message ||
+              "Passkey authentication could not be completed.",
+          },
+        },
+        evidence,
+      );
     },
   };
 }

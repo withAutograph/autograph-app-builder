@@ -85,14 +85,21 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     setPending(true);
     setFailed(false);
     setSignUpURL(undefined);
+    const resolvedRedirectTo = resolvePasskeyRedirectTo(
+      redirectTo,
+      window.location.search,
+      window.location.origin,
+    );
+    const authenticationBoundary = createPasskeyAuthenticationBoundary();
+    const offerEnrollment = () =>
+      setSignUpURL(
+        getAuthLinkURL(
+          `${basePaths.auth}/${viewPaths.auth.signUp}`,
+          resolvedRedirectTo,
+        ),
+      );
 
     try {
-      const resolvedRedirectTo = resolvePasskeyRedirectTo(
-        redirectTo,
-        window.location.search,
-        window.location.origin,
-      );
-      const authenticationBoundary = createPasskeyAuthenticationBoundary();
       const restoreCredentialGet = authenticationBoundary.observeCredentialGet(
         navigator.credentials,
       );
@@ -107,17 +114,13 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         }
       })();
       const failure = authenticationBoundary.failure(result);
-      if (failure?.offerSignUp) {
-        setSignUpURL(
-          getAuthLinkURL(
-            `${basePaths.auth}/${viewPaths.auth.signUp}`,
-            resolvedRedirectTo,
-          ),
-        );
-      }
+      if (failure?.offerSignUp) offerEnrollment();
       if (failure) throw failure.error;
       navigate({ to: resolvedRedirectTo });
-    } catch {
+    } catch (error) {
+      if (authenticationBoundary.failure(error)?.offerSignUp) {
+        offerEnrollment();
+      }
       setFailed(true);
     } finally {
       setPending(false);
