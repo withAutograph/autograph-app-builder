@@ -1708,16 +1708,31 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const path = lastUserMessage?.match(
       /prepare (?:supported repository|fresh template) at (\/\S+)/iu,
     )?.[1];
-    if (path === undefined) return "The configured test repository is missing.";
     const sourceKind = message.includes("prepare fresh template at ")
       ? "fresh-template"
       : "existing-repository";
+    if (sourceKind === "existing-repository" && path === undefined)
+      return "The configured test repository is missing.";
     const inspectionResult = toolResults.find(
       ({ name }) => name === "inspect_source",
     );
     if (inspectionResult === undefined) {
       return {
-        toolCalls: [{ name: "inspect_source", input: { path, sourceKind } }],
+        toolCalls: [
+          {
+            name: "inspect_source",
+            input:
+              sourceKind === "fresh-template"
+                ? {
+                    sourceKind,
+                    ...(hasTestCapability("simulated-target") &&
+                    path !== undefined
+                      ? { path }
+                      : {}),
+                  }
+                : { path: path!, sourceKind },
+          },
+        ],
       };
     }
     const inspected = inspectionResult.output as

@@ -1,7 +1,7 @@
 import type { SandboxSession } from "eve/sandbox";
 
 import {
-  SOURCE_RECEIPT_VERSION,
+  LEGACY_SOURCE_RECEIPT_VERSION,
   parseSourceReceipt,
   type SourceKind,
   type SourceReceipt,
@@ -27,7 +27,7 @@ export const HOSTED_SOURCE_RECEIPT_DIGEST =
 
 function exactHostedReceipt(): SourceReceipt {
   return parseSourceReceipt({
-    version: SOURCE_RECEIPT_VERSION,
+    version: LEGACY_SOURCE_RECEIPT_VERSION,
     sourceKind: "existing-repository",
     sourcePath: HOSTED_SOURCE_PATH,
     sourceSha: ARRUSTED_TARGET_SHA,

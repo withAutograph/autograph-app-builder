@@ -21,6 +21,7 @@ import {
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
 } from "../repository/dependency-cache";
+import { LEGACY_SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 
 describe("hosted Arrusted artifact", () => {
   it("pins an immutable release asset without embedding its bytes", () => {
@@ -52,6 +53,7 @@ describe("hosted Arrusted artifact", () => {
           EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
         },
       );
+      expect(receipt?.version).toBe(LEGACY_SOURCE_RECEIPT_VERSION);
       expect(receipt?.digest).toBe(HOSTED_SOURCE_RECEIPT_DIGEST);
       expect(receipt?.releaseEnabled).toBe(false);
       expect(() =>
