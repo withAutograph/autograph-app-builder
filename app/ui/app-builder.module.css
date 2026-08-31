@@ -1479,6 +1479,7 @@
   color: #171717;
   text-decoration: none;
   font-size: 14px;
+  white-space: nowrap;
 }
 .publicHeader .darkButton {
   background: #171717;
@@ -1532,23 +1533,24 @@
 }
 .promptField button:disabled {
   background: #f2f2f2;
-  color: #888;
+  color: #666;
   border-color: #e5e5e5;
 }
 .suggestions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   margin-top: 11px;
   color: #555;
   font-size: 13px;
 }
 .suggestions button {
+  min-height: 44px;
   border: 1px solid #e4e4e4;
   border-radius: 999px;
   background: #fff;
-  padding: 4px 10px;
+  padding: 0 12px;
 }
 .promptCard > p {
   text-align: center;
@@ -1856,7 +1858,7 @@
 .appShell input::placeholder,
 .appShell textarea::placeholder,
 .anonymousPage textarea::placeholder {
-  color: #8a8a8a;
+  color: #6b6b6b;
 }
 @keyframes spin {
   to {
@@ -1913,8 +1915,25 @@
   .modelId {
     display: none;
   }
-  .publicHeader .brand > span:last-child {
-    display: none;
+  .publicHeader {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .publicHeader > span {
+    text-align: center;
+  }
+  .publicHeader > div {
+    gap: 6px;
+  }
+  .publicHeader a {
+    padding-inline: 10px;
+  }
+  .publicHeader .brand {
+    gap: 5px;
+    font-size: 18px;
+  }
+  .publicHeader .brandMark {
+    width: 20px;
+    height: 20px;
   }
   .promptCard {
     margin-top: 20px;

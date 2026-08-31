@@ -200,6 +200,21 @@ describe("Vercel-faithful App Builder flow", () => {
         ?.textContent,
     ).toBe("Sign Up");
     expect(view.querySelector("button")?.hasAttribute("disabled")).toBe(true);
+    expect(view.querySelector("header")?.textContent).toContain("Autograph");
+
+    const suggestion = [...view.querySelectorAll("button")].find(
+      (button) => button.textContent === "Build a customer feedback portal",
+    );
+    expect(suggestion).toBeDefined();
+    await click(suggestion!);
+    expect(
+      view.querySelector<HTMLTextAreaElement>("#anonymous-brief")?.value,
+    ).toBe("Build a customer feedback portal");
+    expect(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Continue",
+      )?.disabled,
+    ).toBe(false);
   });
 
   it("hides Connections when the server feature flag is disabled", async () => {
