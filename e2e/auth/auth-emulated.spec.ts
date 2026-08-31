@@ -15,6 +15,18 @@ import {
 const onboardingAlreadyAuthenticatedCode =
   "PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED";
 
+const emptyAuthCounts = {
+  users: 0,
+  passkeys: 0,
+  organizations: 0,
+  members: 0,
+  sessions: 0,
+  activeSessions: 0,
+  passkeyOnboardingContexts: 0,
+  githubInstallations: 0,
+  vercelInstallations: 0,
+};
+
 async function onboardingContextIds() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -61,6 +73,144 @@ function reportPasskeyFailures(page: Page) {
 }
 
 test.beforeEach(async () => resetApplicationState());
+
+test("Sign In and Sign Up are passive, reciprocal, and geometrically identical", async ({
+  page,
+}) => {
+  const callbackURL = "/dashboard?tab=recent&tab=saved#complete";
+  let passkeyRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/auth/passkey/")) {
+      passkeyRequests += 1;
+    }
+  });
+
+  await page.goto(
+    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
+  );
+  const signInCard = page.locator('[data-slot="card"]');
+  const signInCardBox = await signInCard.boundingBox();
+  const signUpLink = page.getByRole("link", { name: "Sign Up" });
+  await expect(page.getByText("Need to create an account?")).toBeVisible();
+  await expect(signUpLink).toBeVisible();
+  const signUpHref = await signUpLink.getAttribute("href");
+
+  expect(passkeyRequests).toBe(0);
+  expect(await authCounts()).toEqual(emptyAuthCounts);
+
+  await signUpLink.click();
+  await expect(page).toHaveURL(/\/auth\/sign-up/u);
+  const signUpCard = page.locator('[data-slot="card"]');
+  const signUpCardBox = await signUpCard.boundingBox();
+  const signInLink = page.getByRole("link", { name: "Sign In" });
+  await expect(page.getByText("Already have an account?")).toBeVisible();
+  await expect(signInLink).toBeVisible();
+  expect(signUpCardBox).toEqual(signInCardBox);
+  expect(passkeyRequests).toBe(0);
+  expect(await authCounts()).toEqual(emptyAuthCounts);
+
+  const signUpURL = new URL(signUpHref!, page.url());
+  expect(signUpURL.searchParams.get("redirectTo")).toBe(
+    "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
+  );
+  const signInURL = new URL(
+    (await signInLink.getAttribute("href"))!,
+    page.url(),
+  );
+  expect(signInURL.searchParams.get("redirectTo")).toBe(
+    signUpURL.searchParams.get("redirectTo"),
+  );
+});
+
+test("a sign-in challenge failure stays local without invoking WebAuthn", async ({
+  page,
+}) => {
+  let credentialRequests = 0;
+  await page.addInitScript(() => {
+    const credentials = navigator.credentials;
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: {
+        ...credentials,
+        get: async () => {
+          window.dispatchEvent(new Event("e2e-credential-request"));
+          return null;
+        },
+      },
+    });
+  });
+  await page.exposeFunction("recordCredentialRequest", () => {
+    credentialRequests += 1;
+  });
+  await page.addInitScript(() => {
+    window.addEventListener("e2e-credential-request", () => {
+      void (
+        window as typeof window & {
+          recordCredentialRequest: () => Promise<void>;
+        }
+      ).recordCredentialRequest();
+    });
+  });
+  await page.route(
+    "**/api/auth/passkey/generate-authenticate-options*",
+    (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
+      }),
+  );
+
+  await page.goto("/auth/sign-in");
+  await page.getByRole("button", { name: "Continue with Passkey" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Passkey failed (try again)" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sign-in/u);
+  expect(credentialRequests).toBe(0);
+  expect(await authCounts()).toEqual(emptyAuthCounts);
+});
+
+for (const exceptionName of ["NotSupportedError", "SecurityError"] as const) {
+  test(`a pre-assertion ${exceptionName} stays on Sign In without writes`, async ({
+    page,
+  }) => {
+    let verificationRequests = 0;
+    await page.addInitScript((name) => {
+      const credentials = navigator.credentials;
+      Object.defineProperty(navigator, "credentials", {
+        configurable: true,
+        value: {
+          ...credentials,
+          get: async () => {
+            throw new DOMException("WebAuthn unavailable", name);
+          },
+        },
+      });
+    }, exceptionName);
+    page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname ===
+        "/api/auth/passkey/verify-authentication"
+      ) {
+        verificationRequests += 1;
+      }
+    });
+
+    await page.goto("/auth/sign-in");
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Passkey failed (try again)" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/sign-in/u);
+    await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
+    expect(verificationRequests).toBe(0);
+    expect(await authCounts()).toEqual(emptyAuthCounts);
+  });
+}
 
 test("passkey registration guards Sign Up and supports returning login", async ({
   context,
@@ -372,6 +522,77 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
   });
 });
 
+for (const contextFailure of [
+  { name: "forbidden", status: 403 },
+  { name: "unavailable", status: 503 },
+] as const) {
+  test(`a ${contextFailure.name} onboarding-context response stays on Sign Up without partial state`, async ({
+    page,
+  }) => {
+    let registrationOptionsRequests = 0;
+    await page.route("**/api/auth/passkey/onboarding-context", (route) =>
+      route.fulfill({
+        status: contextFailure.status,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "ONBOARDING_CONTEXT_UNAVAILABLE" }),
+      }),
+    );
+    page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname ===
+        "/api/auth/passkey/generate-register-options"
+      ) {
+        registrationOptionsRequests += 1;
+      }
+    });
+
+    await page.goto("/auth/sign-up");
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Passkey failed (try again)" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/sign-up/u);
+    await expect(page.getByRole("link", { name: "Sign In" })).toBeVisible();
+    expect(registrationOptionsRequests).toBe(0);
+    expect(await authCounts()).toEqual(emptyAuthCounts);
+  });
+}
+
+test("a registration-options failure retains only its bounded onboarding context", async ({
+  context,
+  page,
+}) => {
+  reportPasskeyFailures(page);
+  const authenticator = await VirtualAuthenticator.create(context, page);
+  try {
+    await page.route(
+      "**/api/auth/passkey/generate-register-options*",
+      (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
+        }),
+    );
+
+    await page.goto("/auth/sign-up");
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Passkey failed (try again)" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/sign-up/u);
+    expect(await authenticator.credentials()).toHaveLength(0);
+    expect(await authCounts()).toEqual({
+      ...emptyAuthCounts,
+      passkeyOnboardingContexts: 1,
+    });
+  } finally {
+    await authenticator.dispose();
+  }
+});
+
 test("verification transport loss stays on Sign In after an assertion", async ({
   context,
   page,
@@ -396,6 +617,40 @@ test("verification transport loss stays on Sign In after an assertion", async ({
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect(authenticationVerificationRequests).toBe(1);
     expect(await authCounts()).toEqual(baseline);
+  } finally {
+    await authenticator.dispose();
+  }
+});
+
+test("server rejection after an assertion stays on Sign In without changing identity state", async ({
+  context,
+  page,
+}) => {
+  reportPasskeyFailures(page);
+  const authenticator = await registerPasskey(context, page);
+  try {
+    await signOut(page);
+    const baseline = await authCounts();
+    let verificationRequests = 0;
+    await page.route("**/api/auth/passkey/verify-authentication", (route) => {
+      verificationRequests += 1;
+      return route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "INVALID_PASSKEY" }),
+      });
+    });
+
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Passkey failed (try again)" }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/sign-in/u);
+    await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
+    expect(verificationRequests).toBe(1);
+    expect(await authCounts()).toEqual(baseline);
+    expect(await currentSession(page)).toBeNull();
   } finally {
     await authenticator.dispose();
   }
