@@ -6,6 +6,7 @@ const schema = z
     state: z.string().min(32).max(512),
     configurationId: z.string().min(1),
     teamId: z.string().min(1),
+    origin: z.string().url(),
     expiresAt: z.number().int().positive(),
   })
   .strict();
@@ -22,6 +23,7 @@ export function verifyLocalVercelRelay(
   value: string,
   secret: string,
   now = Date.now(),
+  expectedOrigin?: string,
 ) {
   const [payload, signature, extra] = value.split(".");
   if (!payload || !signature || extra) throw new Error("invalid-relay");
@@ -36,5 +38,7 @@ export function verifyLocalVercelRelay(
     JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
   );
   if (result.expiresAt <= now) throw new Error("expired-relay");
+  if (expectedOrigin !== undefined && result.origin !== expectedOrigin)
+    throw new Error("invalid-relay-origin");
   return result;
 }

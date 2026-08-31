@@ -23,6 +23,7 @@ export const hostedStorageMigrationTags = [
   "0013_passkey_onboarding",
   "0014_tenant_github_installation_uniqueness",
   "0015_builder_resource_provisioning",
+  "0016_emulate_preview_state",
 ] as const;
 
 const contractSourcePaths = [
@@ -41,6 +42,7 @@ const contractSourcePaths = [
   "lib/auth/passkey-onboarding.ts",
   "lib/provisioning/postgres-journal.ts",
   "lib/provisioning/postgres-github-user-credential.ts",
+  "lib/integrations/preview-emulate-persistence.ts",
 ] as const;
 
 export const hostedStorageExpectedColumns = [
@@ -101,6 +103,10 @@ export const hostedStorageExpectedColumns = [
     true,
   ],
   ["builder_provisioning_journal", "workspace_id", "text", true],
+  ["emulate_preview_state", "created_at", "timestamp with time zone", true],
+  ["emulate_preview_state", "namespace", "text", true],
+  ["emulate_preview_state", "state", "text", true],
+  ["emulate_preview_state", "updated_at", "timestamp with time zone", true],
   ["github_installation_authorization_state", "audience", "text", true],
   ["github_installation_authorization_state", "authority_digest", "text", true],
   [
@@ -490,6 +496,7 @@ export const hostedStorageExpectedIndexes = [
     "builder_provisioning_journal",
     "builder_provisioning_journal_retention_idx",
   ],
+  ["emulate_preview_state", "emulate_preview_state_pkey"],
   [
     "github_installation_authorization_state",
     "github_installation_authorization_state_expiry_idx",
@@ -615,6 +622,10 @@ export const hostedStorageExpectedConstraints = [
     "builder_provisioning_journal_revision_check",
   ],
   ["builder_provisioning_journal", "builder_provisioning_journal_state_check"],
+  ["emulate_preview_state", "emulate_preview_state_namespace_check"],
+  ["emulate_preview_state", "emulate_preview_state_pkey"],
+  ["emulate_preview_state", "emulate_preview_state_state_check"],
+  ["emulate_preview_state", "emulate_preview_state_timestamp_check"],
   [
     "github_installation_authorization_state",
     "github_installation_authorization_authority_digest_check",
@@ -890,6 +901,7 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
         "0010_better_auth_organizations",
         "0011_self_service_onboarding",
         "0012_provider_connection_return_state",
+        "0016_emulate_preview_state",
       ].includes(migration.tag) &&
         /\b(?:UPDATE|INSERT\s+INTO)\b/iu.test(migration.content)) ||
       /\bALTER\b[\s\S]*\bDROP\b/iu.test(migration.content)

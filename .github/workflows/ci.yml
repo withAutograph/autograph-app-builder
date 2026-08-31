@@ -77,6 +77,22 @@ jobs:
 
   auth-e2e-emulated:
     runs-on: ubuntu-latest
+    env:
+      APP_BUILDER_DATABASE_PORT: "54329"
+      APP_BUILDER_EXTERNAL_DATABASE: "1"
+    services:
+      postgres:
+        image: postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: autograph_app_builder
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d autograph_app_builder"
+          --health-interval 1s
+          --health-timeout 2s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3

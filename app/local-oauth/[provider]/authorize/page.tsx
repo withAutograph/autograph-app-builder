@@ -2,7 +2,7 @@ import { ArrowRight, Check, LockKeyhole } from "lucide-react";
 import { notFound } from "next/navigation";
 import { FaGithub } from "react-icons/fa";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,8 +14,12 @@ import {
 import {
   localOAuthProviderDetails,
   parseLocalOAuthAuthorization,
+  signFreshLocalOAuthApproval,
 } from "@/lib/auth/local-oauth-approval";
-import { readLocalProviderEmulation } from "@/lib/integrations/local-provider-emulation";
+import {
+  readProviderEmulation,
+  type ProviderEmulation,
+} from "@/lib/integrations/local-provider-emulation";
 
 type Props = {
   params: Promise<{ provider: string }>;
@@ -45,19 +49,20 @@ export default async function LocalOAuthApprovalPage({
   searchParams,
 }: Props) {
   let parsed;
+  let emulation: ProviderEmulation;
   try {
     const [{ provider }, query] = await Promise.all([params, searchParams]);
-    const emulation = readLocalProviderEmulation(process.env);
-    if (!emulation || process.env.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1")
-      notFound();
-    const appOrigin = new URL(process.env.BETTER_AUTH_URL!).origin;
+    const configured = readProviderEmulation(process.env);
+    if (!configured) notFound();
+    emulation = configured;
+    const appOrigin = emulation.canonicalOrigin;
     parsed = parseLocalOAuthAuthorization({
       provider,
       values: scalarValues(query),
       appOrigin,
       emulation,
-      githubClientId: process.env.GITHUB_CLIENT_ID!,
-      vercelClientId: process.env.VERCEL_AUTH_CLIENT_ID!,
+      githubClientId: emulation.githubClientId,
+      vercelClientId: emulation.vercelClientId,
     });
   } catch {
     notFound();
@@ -65,6 +70,14 @@ export default async function LocalOAuthApprovalPage({
 
   const details = localOAuthProviderDetails(parsed.provider);
   const ProviderMark = parsed.provider === "github" ? FaGithub : VercelMark;
+  const approval = signFreshLocalOAuthApproval(
+    {
+      provider: parsed.provider,
+      origin: emulation.canonicalOrigin,
+      authorization: parsed.authorization,
+    },
+    emulation.relaySecret,
+  );
 
   return (
     <main className="flex min-h-svh flex-col bg-background text-foreground">
@@ -126,23 +139,35 @@ export default async function LocalOAuthApprovalPage({
               </div>
             </div>
 
-            <form
-              method="post"
-              action={`/local-oauth/${parsed.provider}/authorize/complete`}
-            >
-              {Object.entries(parsed.authorization).map(([name, value]) =>
-                value ? (
-                  <input key={name} type="hidden" name={name} value={value} />
-                ) : null,
-              )}
-              <Button className="h-10 w-full" type="submit">
+            {emulation.mode === "preview" ? (
+              <a
+                className={buttonVariants({ className: "h-10 w-full" })}
+                href={`/local-oauth/${parsed.provider}/approve/${approval}`}
+              >
                 Continue with {details.name}
-              </Button>
-            </form>
+              </a>
+            ) : (
+              <form
+                method="post"
+                action={`/local-oauth/${parsed.provider}/approve`}
+              >
+                {Object.entries(parsed.authorization).map(([name, value]) =>
+                  value ? (
+                    <input key={name} type="hidden" name={name} value={value} />
+                  ) : null,
+                )}
+                <Button className="h-10 w-full" type="submit">
+                  Continue with {details.name}
+                </Button>
+              </form>
+            )}
           </CardContent>
 
           <CardFooter className="justify-center px-6 py-3 text-xs text-muted-foreground">
-            Local development only · Powered by Emulate
+            {emulation.mode === "preview"
+              ? "Preview only"
+              : "Local development only"}{" "}
+            · Powered by Emulate
           </CardFooter>
         </Card>
       </div>

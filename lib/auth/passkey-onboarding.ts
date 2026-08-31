@@ -116,11 +116,13 @@ export function readPasskeyOnboardingConfig(
     environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === "1";
   const localAuthEmulation =
     environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1";
+  const localPort = environment.APP_BUILDER_LOCAL_PORT ?? "3001";
   const isHttps = origin.startsWith("https://");
   if (
     (!origin.startsWith("http://") && !isHttps) ||
     (isHttps &&
-      (origin !== "https://localhost:3001" ||
+      (!/^\d{2,5}$/u.test(localPort) ||
+        origin !== `https://localhost:${localPort}` ||
         !localProviderEmulation ||
         !localAuthEmulation))
   ) {

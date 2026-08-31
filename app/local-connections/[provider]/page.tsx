@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
 type Props = {
   params: Promise<{ provider: string }>;
@@ -11,12 +12,13 @@ export default async function LocalConnectionBridge({
   searchParams,
 }: Props) {
   const [{ provider }, query] = await Promise.all([params, searchParams]);
-  if (
-    process.env.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "1" ||
-    process.env.NODE_ENV === "production" ||
-    !["vercel", "github"].includes(provider) ||
-    !query.state
-  )
+  let emulation;
+  try {
+    emulation = readProviderEmulation(process.env);
+  } catch {
+    notFound();
+  }
+  if (!emulation || !["vercel", "github"].includes(provider) || !query.state)
     notFound();
   const authorizing = provider === "github" && query.phase === "authorize";
   const title =
@@ -24,18 +26,22 @@ export default async function LocalConnectionBridge({
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        <p className="eyebrow">Local development</p>
+        <p className="eyebrow">
+          {emulation.mode === "preview"
+            ? "Preview deployment"
+            : "Local development"}
+        </p>
         <h1>Connect {title}</h1>
         <p>
-          This approval uses only the seeded local Emulate account. It never
-          contacts {provider === "vercel" ? "Vercel" : "GitHub"}.
+          This approval uses only the seeded Emulate account. It never contacts{" "}
+          {provider === "vercel" ? "Vercel" : "GitHub"}.
         </p>
         <form method="post" action={`/local-connections/${provider}/complete`}>
           <input type="hidden" name="state" value={query.state} />
           {authorizing ? (
             <input type="hidden" name="phase" value="authorize" />
           ) : null}
-          <button type="submit">Connect local {title}</button>
+          <button type="submit">Connect emulated {title}</button>
         </form>
       </section>
     </main>

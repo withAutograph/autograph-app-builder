@@ -9,7 +9,7 @@ import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
-import type { LocalProviderEmulation } from "../integrations/local-provider-emulation";
+import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import type { GitHubUserCredentialStore } from "../provisioning/github-user-credential";
 import {
@@ -709,7 +709,7 @@ export function createGitHubAppInstallationAuthorization(input: {
   fetch?: Fetch;
   now?: () => number;
   nonce?: () => string;
-  emulation?: LocalProviderEmulation;
+  emulation?: ProviderEmulation;
 }) {
   const config = configSchema.parse(input.config);
   const request = input.fetch ?? fetch;

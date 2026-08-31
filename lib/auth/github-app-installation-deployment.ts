@@ -9,7 +9,11 @@ import {
 } from "./github-app-installation";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
-import { readLocalProviderEmulation } from "../integrations/local-provider-emulation";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+} from "../integrations/local-provider-emulation";
+import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
 import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
@@ -209,8 +213,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   if (deploymentHandlers !== undefined) return deploymentHandlers;
-  const config = readGitHubAppInstallationEnvironment(environment);
-  const previewConfig = readPreviewOAuthRuntimeConfig(environment);
+  const resolvedEnvironment = providerEmulationEnvironment(environment);
+  const config = readGitHubAppInstallationEnvironment(resolvedEnvironment);
+  const previewConfig = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
   const database = openHostedPostgresDatabase(previewConfig.databaseUrl);
   let credentialStore:
     ReturnType<typeof createPostgresGitHubUserCredentialStore> | undefined;
@@ -224,6 +229,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
     issuer: previewConfig.issuer,
     audience: previewConfig.resource,
   });
+  const emulation = readProviderEmulation(resolvedEnvironment);
   const authorization = createGitHubAppInstallationAuthorization({
     config,
     stateStore:
@@ -233,14 +239,18 @@ export function getGitHubAppInstallationDeploymentHandlers(
     },
     installationStore: createPostgresHostedGitHubInstallationStore(database),
     credentialStore,
-    emulation: readLocalProviderEmulation(environment),
+    emulation,
+    fetch: emulation
+      ? (resource, init) =>
+          providerEmulationFetch(resource as string | URL, init, emulation)
+      : undefined,
   });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     origin: new URL(config.issuer).origin,
     authorization,
     async authorityForRequest(request) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
-        environment,
+        environment: resolvedEnvironment,
         headers: request.headers,
       });
       if (session === undefined) return undefined;

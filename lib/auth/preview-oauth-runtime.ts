@@ -34,7 +34,13 @@ import {
   hostedDeploymentEnvironmentSchema,
   readHostedDeploymentEnvironment,
 } from "../hosted/deployment-environment";
-import { readLocalProviderEmulation } from "../integrations/local-provider-emulation";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+  readVercelPreviewOrigin,
+  type ProviderEmulation,
+} from "../integrations/local-provider-emulation";
+import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 
 const databaseUrlSchema = z
   .string()
@@ -74,23 +80,28 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   code: string;
   redirectURI: string;
   codeVerifier?: string;
+  emulation: ProviderEmulation;
 }) {
-  const response = await fetch(input.tokenUrl, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
+  const response = await providerEmulationFetch(
+    input.tokenUrl,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: input.clientId,
+        client_secret: input.clientSecret,
+        code: input.code,
+        ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
+        redirect_uri: input.redirectURI,
+      }),
+      cache: "no-store",
+      redirect: "error",
     },
-    body: new URLSearchParams({
-      client_id: input.clientId,
-      client_secret: input.clientSecret,
-      code: input.code,
-      ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
-      redirect_uri: input.redirectURI,
-    }),
-    cache: "no-store",
-    redirect: "error",
-  });
+    input.emulation,
+  );
   if (!response.ok) throw new Error("Emulated OAuth token exchange failed.");
   const body = (await response.json()) as {
     access_token?: unknown;
@@ -196,6 +207,7 @@ const previewOAuthRuntimeConfigSchema = z
     ]),
     issuer: z.string().url(),
     resource: z.string().url(),
+    trustedOrigins: z.array(z.string().url()).min(1).max(3).optional(),
     secret: z
       .string()
       .min(32)
@@ -285,10 +297,15 @@ const previewOAuthRuntimeConfigSchema = z
         });
       }
     }
+    const localHttp =
+      config.environment === "local" &&
+      issuer.protocol === "http:" &&
+      resource.protocol === "http:" &&
+      issuer.hostname === "localhost";
     if (
       config.hostedAdapter !== "1" ||
-      issuer.protocol !== "https:" ||
-      resource.protocol !== "https:"
+      (!localHttp &&
+        (issuer.protocol !== "https:" || resource.protocol !== "https:"))
     ) {
       context.addIssue({
         code: "custom",
@@ -350,20 +367,57 @@ export function authRateLimitForLocalEmulation(localEmulation: boolean) {
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
-  const localEmulation = readLocalProviderEmulation(environment);
+  const resolvedEnvironment = providerEmulationEnvironment(environment);
+  const localEmulation = readProviderEmulation(resolvedEnvironment);
   if (localEmulation) {
-    if (environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1") {
+    if (
+      localEmulation.mode === "local" &&
+      environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1"
+    ) {
       throw new Error("Local authentication emulation is unavailable.");
     }
+    if (localEmulation.mode === "preview") {
+      const deploymentEnvironment =
+        readHostedDeploymentEnvironment(resolvedEnvironment);
+      return previewOAuthRuntimeConfigSchema.parse({
+        hostedAdapter: resolvedEnvironment.EVE_HOSTED_ADAPTER,
+        environment: deploymentEnvironment,
+        issuer: resolvedEnvironment.BETTER_AUTH_URL,
+        resource: resolvedEnvironment.MCP_RESOURCE_URL,
+        trustedOrigins: Array.from(
+          new Set(
+            [
+              localEmulation.canonicalOrigin,
+              readVercelPreviewOrigin(environment.VERCEL_URL),
+            ].filter((origin): origin is string => origin !== undefined),
+          ),
+        ),
+        secret: resolvedEnvironment.BETTER_AUTH_SECRET,
+        databaseUrl: resolvedEnvironment.DATABASE_URL,
+        githubClientId: resolvedEnvironment.GITHUB_CLIENT_ID,
+        githubClientSecret: resolvedEnvironment.GITHUB_CLIENT_SECRET,
+        vercelClientId: resolvedEnvironment.VERCEL_AUTH_CLIENT_ID,
+        vercelClientSecret: resolvedEnvironment.VERCEL_AUTH_CLIENT_SECRET,
+        // Emulated Preview OAuth uses the stable branch hostname while WebAuthn
+        // is bound to Vercel's ephemeral deployment hostname. Keep passkey
+        // onboarding out of this provider-emulation mode instead of making the
+        // two origin authorities disagree.
+        passkeyOnboarding: null,
+      });
+    }
     const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
+    const localDatabasePort = environment.APP_BUILDER_DATABASE_PORT ?? "54329";
+    if (!/^\d{2,5}$/u.test(localDatabasePort)) {
+      throw new Error("Local authentication database port is invalid.");
+    }
     return previewOAuthRuntimeConfigSchema.parse({
       hostedAdapter: environment.EVE_HOSTED_ADAPTER,
       environment: "local",
       issuer: environment.BETTER_AUTH_URL,
       resource: environment.MCP_RESOURCE_URL,
+      trustedOrigins: [localEmulation.canonicalOrigin],
       secret: environment.BETTER_AUTH_SECRET,
-      databaseUrl:
-        "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+      databaseUrl: `postgresql://postgres@127.0.0.1:${localDatabasePort}/autograph_app_builder`,
       githubClientId: environment.GITHUB_CLIENT_ID,
       githubClientSecret: environment.GITHUB_CLIENT_SECRET,
       vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
@@ -391,6 +445,7 @@ export function readPreviewOAuthRuntimeConfig(
     environment: deploymentEnvironment,
     issuer,
     resource,
+    trustedOrigins: resource ? [new URL(resource).origin] : [],
     secret: environment.BETTER_AUTH_SECRET,
     databaseUrl: environment.DATABASE_URL,
     githubClientId: environment.GITHUB_CLIENT_ID,
@@ -414,10 +469,7 @@ export function createPreviewOAuthServer(input: {
 }) {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
   const resourceOrigin = new URL(config.resource).origin;
-  const localEmulation =
-    config.environment === "local"
-      ? readLocalProviderEmulation(process.env)
-      : undefined;
+  const localEmulation = readProviderEmulation(process.env);
   const {
     githubClientId,
     githubClientSecret,
@@ -459,15 +511,17 @@ export function createPreviewOAuthServer(input: {
               code: data.code,
               redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
+              emulation: localEmulation,
             }),
           getUserInfo: async (tokens) => {
-            const response = await fetch(
+            const response = await providerEmulationFetch(
               `${localEmulation.githubOrigin}/user`,
               {
                 headers: { Authorization: `Bearer ${tokens.accessToken}` },
                 cache: "no-store",
                 redirect: "error",
               },
+              localEmulation,
             );
             if (!response.ok) return null;
             const profile = (await response.json()) as {
@@ -511,20 +565,19 @@ export function createPreviewOAuthServer(input: {
               code: data.code,
               redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
+              emulation: localEmulation,
             }),
           getUserInfo: async (tokens) => {
-            const response = await fetch(
+            const response = await providerEmulationFetch(
               `${localEmulation.vercelOrigin}/login/oauth/userinfo`,
               {
-                // Emulate currently does not expose OAuth-issued Vercel
-                // tokens to its UserInfo route. The seeded service token is
-                // the local emulator's verified identity transport.
                 headers: {
-                  Authorization: `Bearer ${localEmulation.token}`,
+                  Authorization: `Bearer ${tokens.accessToken}`,
                 },
                 cache: "no-store",
                 redirect: "error",
               },
+              localEmulation,
             );
             if (!response.ok) return null;
             const profile = vercelUserInfoSchema.safeParse(
@@ -564,7 +617,7 @@ export function createPreviewOAuthServer(input: {
     basePath: "/api/auth",
     secret: config.secret,
     database: input.database,
-    trustedOrigins: [resourceOrigin],
+    trustedOrigins: config.trustedOrigins ?? [resourceOrigin],
     socialProviders: localEmulation
       ? {}
       : config.githubClientId && config.githubClientSecret

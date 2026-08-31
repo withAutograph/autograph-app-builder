@@ -8,6 +8,7 @@ import {
   type PreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
 import { selfServiceSignupFlag } from "../feature-flags";
+import { readProviderEmulation } from "../integrations/local-provider-emulation";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
 
@@ -25,15 +26,44 @@ let deploymentRuntime: PreviewOAuthDeploymentRuntime | undefined;
 export function selfServiceSignupAuthority(
   environment: PreviewOAuthRuntimeConfig["environment"],
   managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
+  emulated = false,
 ) {
-  return environment === "local" ? async () => true : managedAuthority;
+  return environment === "local" || emulated
+    ? async () => true
+    : managedAuthority;
 }
 
 function getPreviewOAuthDeploymentRuntime(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthDeploymentRuntime {
   if (deploymentRuntime !== undefined) return deploymentRuntime;
-  const config = readPreviewOAuthRuntimeConfig(environment);
+  let providerEmulation: ReturnType<typeof readProviderEmulation>;
+  try {
+    providerEmulation = readProviderEmulation(environment);
+  } catch (cause) {
+    const invalidFields =
+      cause &&
+      typeof cause === "object" &&
+      "issues" in cause &&
+      Array.isArray(cause.issues)
+        ? cause.issues
+            .map((issue) =>
+              issue && typeof issue === "object" && "path" in issue
+                ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
+                : "unknown",
+            )
+            .join(",")
+        : "unknown";
+    throw new Error(`preview-oauth-emulation-config:${invalidFields}`, {
+      cause,
+    });
+  }
+  let config: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
+  try {
+    config = readPreviewOAuthRuntimeConfig(environment);
+  } catch (cause) {
+    throw new Error("preview-oauth-config", { cause });
+  }
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
     database,
@@ -44,12 +74,14 @@ function getPreviewOAuthDeploymentRuntime(
     {
       isSelfServiceSignupEnabled: selfServiceSignupAuthority(
         config.environment,
+        selfServiceSignupFlag,
+        Boolean(providerEmulation),
       ),
     },
   );
-  deploymentRuntime = {
-    organizationAuthority,
-    auth: createPreviewOAuthServer({
+  let auth: PreviewOAuthServer;
+  try {
+    auth = createPreviewOAuthServer({
       config,
       database: drizzleAdapter(database, {
         provider: "pg",
@@ -67,8 +99,11 @@ function getPreviewOAuthDeploymentRuntime(
           environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY ===
           "verified-v1",
       },
-    }),
-  };
+    });
+  } catch (cause) {
+    throw new Error("preview-oauth-server", { cause });
+  }
+  deploymentRuntime = { organizationAuthority, auth };
   return deploymentRuntime;
 }
 
@@ -151,8 +186,36 @@ export function createPreviewOAuthRequestHandler(input: {
       const auth = (input.getAuth ?? getPreviewOAuthDeploymentAuth)(
         input.environment,
       );
-      return await auth.handler(request);
-    } catch {
+      const response = await auth.handler(request);
+      if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
+        let hasRedirect = false;
+        try {
+          const payload = (await response.clone().json()) as { url?: unknown };
+          hasRedirect = typeof payload.url === "string";
+        } catch {
+          // The response shape is diagnostic only; auth owns the response.
+        }
+        console.info(
+          JSON.stringify({
+            level: "info",
+            message: "preview_oauth_sign_in_response",
+            status: response.status,
+            hasRedirect,
+          }),
+        );
+      }
+      return response;
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "preview_oauth_unavailable",
+          reason:
+            error instanceof Error && error.message.startsWith("preview-oauth-")
+              ? error.message
+              : "preview-oauth-request",
+        }),
+      );
       return Response.json(
         { error: "preview_oauth_unavailable" },
         {

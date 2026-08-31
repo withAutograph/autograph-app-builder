@@ -184,14 +184,15 @@ describe("Preview OAuth runtime configuration", () => {
         EVE_HOSTED_ADAPTER: "1",
         APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        APP_BUILDER_DATABASE_PORT: "54339",
         PASSKEY_ONBOARDING: "local-preview-v1",
         BETTER_AUTH_URL: "https://localhost:3001/api/auth",
         MCP_RESOURCE_URL: "https://localhost:3001/mcp",
         BETTER_AUTH_SECRET: "a".repeat(32),
         GITHUB_CLIENT_ID: "local-github-client",
-        GITHUB_CLIENT_SECRET: "local-github-secret",
+        GITHUB_CLIENT_SECRET: "local-github-secret".repeat(2),
         VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
-        VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret",
+        VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret".repeat(2),
         VERCEL_EMULATOR_URL: "http://localhost:4000",
         GITHUB_EMULATOR_URL: "http://localhost:4001",
         EMULATE_PROVIDER_TOKEN: "a".repeat(20),
@@ -201,7 +202,7 @@ describe("Preview OAuth runtime configuration", () => {
     ).toMatchObject({
       environment: "local",
       databaseUrl:
-        "postgresql://postgres@127.0.0.1:54329/autograph_app_builder",
+        "postgresql://postgres@127.0.0.1:54339/autograph_app_builder",
       passkeyOnboarding: {
         origin: "https://localhost:3001",
         rpId: "localhost",
@@ -221,6 +222,28 @@ describe("Preview OAuth runtime configuration", () => {
         EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
       }),
     ).toThrow("Local provider emulation is unavailable");
+
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        EVE_HOSTED_ADAPTER: "1",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        APP_BUILDER_DATABASE_PORT: "not-a-port",
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        GITHUB_CLIENT_ID: "local-github-client",
+        GITHUB_CLIENT_SECRET: "local-github-secret".repeat(2),
+        VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
+        VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret".repeat(2),
+        VERCEL_EMULATOR_URL: "http://localhost:4000",
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+      }),
+    ).toThrow("Local authentication database port is invalid");
   });
 
   it("starts an enabled Preview with passkeys and no OAuth credentials", () => {
@@ -277,6 +300,60 @@ describe("Preview OAuth runtime configuration", () => {
       vercelClientId: undefined,
       passkeyOnboarding: { deploymentId: "local" },
     });
+  });
+
+  it("uses same-origin seeded providers only through the exact Preview gate", () => {
+    expect(
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+        NODE_ENV: "production",
+        VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
+        VERCEL_GIT_COMMIT_REF: "feature/provider-emulation",
+        VERCEL_GIT_REPO_SLUG: "autograph-app-builder",
+        VERCEL_PROJECT_ID: "prj_preview",
+        EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
+        EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
+        EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
+        EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
+        EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
+        VERCEL_URL: "app-deployment-team.vercel.app",
+      }),
+    ).toMatchObject({
+      environment: "preview",
+      issuer: "https://app-git-feature-team.vercel.app/api/auth",
+      resource: "https://app-git-feature-team.vercel.app/mcp",
+      trustedOrigins: [
+        "https://app-git-feature-team.vercel.app",
+        "https://app-deployment-team.vercel.app",
+      ],
+      githubClientId: "preview-github-client",
+      vercelClientId: "preview-vercel-client",
+      passkeyOnboarding: null,
+    });
+  });
+
+  it("rejects a malformed deployment origin in emulated Preview auth", () => {
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+        NODE_ENV: "production",
+        VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
+        VERCEL_GIT_COMMIT_REF: "feature/provider-emulation",
+        VERCEL_GIT_REPO_SLUG: "autograph-app-builder",
+        VERCEL_PROJECT_ID: "prj_preview",
+        EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
+        EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
+        EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
+        EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
+        EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
+        VERCEL_URL: "attacker.example.com",
+      }),
+    ).toThrow();
   });
 
   it("accepts Production only when Vercel and the configured environment agree", () => {

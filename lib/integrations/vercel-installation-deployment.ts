@@ -20,7 +20,11 @@ import {
   readVercelIntegrationEnvironment,
   verifyVercelWebhook,
 } from "./vercel-installation";
-import { readLocalProviderEmulation } from "./local-provider-emulation";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+} from "./local-provider-emulation";
+import { providerEmulationFetch } from "./provider-emulation-fetch";
 import {
   signInForWorkspaceRedirect,
   workspaceOnboardingRedirect,
@@ -34,9 +38,10 @@ const noStoreHeaders = {
 function deployment(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  const preview = readPreviewOAuthRuntimeConfig(environment);
-  const config = readVercelIntegrationEnvironment(environment);
-  const emulation = readLocalProviderEmulation(environment);
+  const resolvedEnvironment = providerEmulationEnvironment(environment);
+  const preview = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
+  const config = readVercelIntegrationEnvironment(resolvedEnvironment);
+  const emulation = readProviderEmulation(resolvedEnvironment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const membership = createPostgresPreviewOrganizationAuthority(database, {
     issuer: preview.issuer,
@@ -48,7 +53,7 @@ function deployment(
   });
   const authorityForRequest = async (request: Request) => {
     const session = await ensurePreviewOAuthDeploymentSessionOrganization({
-      environment,
+      environment: resolvedEnvironment,
       headers: request.headers,
     });
     return session
@@ -72,6 +77,10 @@ function deployment(
         isActiveMember: (authority) => membership.isActiveMember(authority),
       },
       emulation,
+      fetch: emulation
+        ? (resource, init) =>
+            providerEmulationFetch(resource as string | URL, init, emulation)
+        : undefined,
     }),
   };
 }
@@ -82,7 +91,9 @@ export function createVercelInstallationDeploymentHandler(
 ) {
   return async (request: Request) => {
     const startedAt = Date.now();
-    const origin = new URL(environment.APP_ORIGIN ?? request.url).origin;
+    const resolvedEnvironment = providerEmulationEnvironment(environment);
+    const origin = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url)
+      .origin;
     const redirect = (
       status: "connected" | "failed",
       reason?: ProviderConnectionFailureReason,
@@ -175,7 +186,24 @@ export function createVercelInstallationDeploymentHandler(
         authority,
       );
       return redirect("connected", undefined, result.returnState);
-    } catch {
+    } catch (error) {
+      if (kind === "callback") {
+        const detail =
+          error instanceof Error &&
+          /^(?:token-exchange-failed:[0-9]{3}:[a-z0-9_-]+|scope-read-failed|state-invalid|membership-inactive)$/u.test(
+            error.message,
+          )
+            ? error.message
+            : "invalid-response";
+        console.error(
+          JSON.stringify({
+            level: "error",
+            message: "provider_connection_callback_detail",
+            provider: "vercel",
+            detail,
+          }),
+        );
+      }
       return fail(
         kind === "callback" ? "callback-invalid" : "authorization-failed",
       );

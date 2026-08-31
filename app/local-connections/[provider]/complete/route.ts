@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { signLocalVercelRelay } from "@/lib/integrations/local-oauth-relay";
+import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
+import {
+  EMULATED_GITHUB_INSTALLATION_ID,
+  EMULATED_VERCEL_CONFIGURATION_ID,
+  EMULATED_VERCEL_TEAM_ID,
+} from "@/lib/integrations/provider-emulation-seed";
 
 const allowed = new Set(["vercel", "github"]);
 
@@ -8,43 +14,40 @@ export async function POST(
   context: { params: Promise<{ provider: string }> },
 ) {
   const { provider } = await context.params;
-  const origin = new URL(process.env.APP_ORIGIN ?? request.url).origin;
+  let emulation;
+  try {
+    emulation = readProviderEmulation(process.env);
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
+  const origin = emulation?.canonicalOrigin;
   if (
-    process.env.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "1" ||
-    process.env.NODE_ENV === "production" ||
+    !emulation ||
     !allowed.has(provider) ||
     request.headers.get("origin") !== origin
   )
     return new Response("Not found", { status: 404 });
   const form = await request.formData();
   const state = form.get("state");
-  const phase = form.get("phase");
   if (typeof state !== "string" || state.length > 2048)
     return new Response("Invalid request", { status: 400 });
   const callback = new URL(`/${provider}/installations/callback`, origin);
   callback.searchParams.set("state", state);
   if (provider === "vercel") {
-    const secret = process.env.EMULATE_LOCAL_RELAY_SECRET;
-    if (!secret)
-      return new Response("Local relay unavailable", { status: 503 });
     const relay = signLocalVercelRelay(
       {
         state,
         configurationId:
-          process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? "icfg_local_1",
-        teamId: process.env.EMULATE_VERCEL_TEAM_ID ?? "autograph-local",
+          process.env.EMULATE_VERCEL_CONFIGURATION_ID ??
+          EMULATED_VERCEL_CONFIGURATION_ID,
+        teamId: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
+        origin,
         expiresAt: Date.now() + 600_000,
       },
-      secret,
+      emulation.relaySecret,
     );
-    const authorize = new URL(
-      "/oauth/authorize",
-      process.env.VERCEL_EMULATOR_URL,
-    );
-    authorize.searchParams.set(
-      "client_id",
-      process.env.VERCEL_INTEGRATION_CLIENT_ID ?? "local-vercel-client",
-    );
+    const authorize = new URL(`${emulation.vercelOrigin}/oauth/authorize`);
+    authorize.searchParams.set("client_id", emulation.vercelClientId);
     authorize.searchParams.set(
       "redirect_uri",
       `${origin}/local-connections/vercel/oauth-callback`,
@@ -54,7 +57,8 @@ export async function POST(
   } else {
     callback.searchParams.set(
       "installation_id",
-      process.env.EMULATE_GITHUB_INSTALLATION_ID ?? "1001",
+      process.env.EMULATE_GITHUB_INSTALLATION_ID ??
+        String(EMULATED_GITHUB_INSTALLATION_ID),
     );
     callback.searchParams.set("setup_action", "install");
   }

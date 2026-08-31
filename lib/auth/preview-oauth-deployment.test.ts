@@ -173,6 +173,7 @@ describe("Preview OAuth deployment handlers", () => {
   it("binds every browser interaction surface to no-store anti-clickjacking headers", async () => {
     const [
       config,
+      deployment,
       runtime,
       providers,
       authClient,
@@ -181,6 +182,7 @@ describe("Preview OAuth deployment handlers", () => {
       settingUp,
     ] = await Promise.all([
       readFile("next.config.ts", "utf8"),
+      readFile("lib/auth/preview-oauth-deployment.ts", "utf8"),
       readFile("lib/auth/preview-oauth-runtime.ts", "utf8"),
       readFile("components/providers.tsx", "utf8"),
       readFile("lib/auth-client.ts", "utf8"),
@@ -200,6 +202,9 @@ describe("Preview OAuth deployment handlers", () => {
     expect(runtime).toContain("overrideUserInfoOnSignIn: false");
     expect(runtime).toContain("overrideUserInfo: false");
     expect(runtime).not.toContain("trustedProviders");
+    expect(deployment).toContain("readProviderEmulation(environment)");
+    expect(deployment).toContain("providerEmulation");
+    expect(deployment).toContain("async () => true");
     expect(providers).toContain('id: "vercel"');
     expect(providers).toContain('["github"] as const');
     expect(providers).toContain("emailAndPassword={{ enabled: false }}");
@@ -291,6 +296,12 @@ describe("Preview OAuth deployment handlers", () => {
       'const showLocalAuthProviders = process.env.NODE_ENV === "development"',
     );
     expect(layout.match(/showLocalAuthProviders \|\|/g)).toHaveLength(2);
+    expect(layout.match(/showPreviewEmulatedAuthProviders \|\|/g)).toHaveLength(
+      2,
+    );
+    expect(layout).toContain(
+      'process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === "1"',
+    );
     expect(layout).toContain("process.env.GITHUB_CLIENT_ID");
     expect(layout).toContain("process.env.VERCEL_AUTH_CLIENT_ID");
   });

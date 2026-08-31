@@ -14,7 +14,7 @@ import {
   type HostedAdminPlanRequest,
 } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "./provider-connection-return";
-import type { LocalProviderEmulation } from "./local-provider-emulation";
+import type { ProviderEmulation } from "./local-provider-emulation";
 
 type Authority = HostedAdminPlanRequest["authority"];
 
@@ -150,6 +150,10 @@ const teamSchema = z
       .optional(),
   })
   .passthrough();
+const teamResponseSchema = z.union([
+  teamSchema,
+  z.object({ team: teamSchema }).transform(({ team }) => team),
+]);
 const userSchema = z
   .object({
     user: z
@@ -170,7 +174,7 @@ export function createVercelInstallationAuthorization(input: {
   fetch?: typeof fetch;
   now?: () => number;
   nonce?: () => string;
-  emulation?: LocalProviderEmulation;
+  emulation?: ProviderEmulation;
 }) {
   const config = configSchema.parse(input.config);
   const request = input.fetch ?? fetch;
@@ -256,7 +260,17 @@ export function createVercelInstallationAuthorization(input: {
             signal: AbortSignal.timeout(8_000),
           },
         );
-        if (!tokenResponse.ok) throw new Error("token-exchange-failed");
+        if (!tokenResponse.ok) {
+          const errorPayload = z
+            .object({ error: z.string().max(64).optional() })
+            .safeParse(await tokenResponse.json().catch(() => ({})));
+          const errorCode = errorPayload.success
+            ? errorPayload.data.error
+            : undefined;
+          throw new Error(
+            `token-exchange-failed:${tokenResponse.status}:${errorCode ?? "unknown"}`,
+          );
+        }
         return tokenResponseSchema.parse(await tokenResponse.json())
           .access_token;
       })();
@@ -274,15 +288,7 @@ export function createVercelInstallationAuthorization(input: {
           },
         );
         if (!response.ok) throw new Error("scope-read-failed");
-        const payload: unknown = await response.json();
-        const team = teamSchema.parse(
-          input.emulation &&
-            typeof payload === "object" &&
-            payload !== null &&
-            "team" in payload
-            ? payload.team
-            : payload,
-        );
+        const team = teamResponseSchema.parse(await response.json());
         binding = {
           installationId,
           scopeId: team.id,

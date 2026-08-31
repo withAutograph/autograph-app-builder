@@ -1112,3 +1112,27 @@ export const hostedGitHubPublicationJournals = pgTable(
     ),
   ],
 );
+
+export const emulatePreviewState = pgTable(
+  "emulate_preview_state",
+  {
+    namespace: text("namespace").primaryKey(),
+    state: text("state").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "emulate_preview_state_namespace_check",
+      sql`length(${table.namespace}) BETWEEN 3 AND 1024`,
+    ),
+    check(
+      "emulate_preview_state_state_check",
+      sql`octet_length(${table.state}) BETWEEN 2 AND 8388608`,
+    ),
+    check(
+      "emulate_preview_state_timestamp_check",
+      sql`${table.createdAt} <= ${table.updatedAt}`,
+    ),
+  ],
+);

@@ -2,10 +2,13 @@ import postgres from "postgres";
 import { expect, test } from "playwright/test";
 
 import {
+  appOrigin,
   applicationCounts,
   databaseUrl,
   finishOAuth,
+  githubEmulatorOrigin,
   installProvider,
+  localApprovalButtonName,
   resetApplicationState,
 } from "../support/harness";
 
@@ -24,7 +27,7 @@ async function setGitHubCallbackFixture(
     {
       name: "autograph-e2e-github-callback",
       value: fixture,
-      url: "https://localhost:3001",
+      url: appOrigin,
       secure: true,
       sameSite: "Lax",
     },
@@ -37,8 +40,10 @@ async function completeGitHubConnection(page: import("playwright/test").Page) {
     .getByRole("button", { name: "Install or update GitHub access" })
     .click();
   await expect(page).toHaveURL(/\/local-connections\/github/u);
-  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
-  await expect(page).toHaveURL(/localhost:4001/u);
+  await page
+    .getByRole("button", { name: localApprovalButtonName("GitHub") })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`^${githubEmulatorOrigin}/`, "u"));
   await page.getByRole("button", { name: /autograph-dev/u }).click();
 }
 
@@ -111,9 +116,11 @@ test("reconnecting a provider updates the existing binding without duplication",
   await page
     .getByRole("button", { name: "Install or update GitHub access" })
     .click();
-  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await page
+    .getByRole("button", { name: localApprovalButtonName("GitHub") })
+    .click();
   await page.getByRole("button", { name: /autograph-dev/u }).click();
-  await expect(page).toHaveURL(/https:\/\/localhost:3001\//u);
+  await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"));
   expect((await applicationCounts()).githubInstallations).toBe(1);
 });
 
@@ -140,7 +147,7 @@ test("GitHub installation update accepts OAuth provider extensions and retains t
   expect((await applicationCounts()).githubInstallations).toBe(1);
 
   await page.goto("/");
-  await expect(page).toHaveURL(/https:\/\/localhost:3001\/$/u);
+  await expect(page).toHaveURL(`${appOrigin}/`);
   await expect(page.getByLabel("Git Scope")).toHaveValue("autograph-local");
   await assertNoLeak();
 });
@@ -243,7 +250,9 @@ test("an expired provider authorization returns to a recoverable draft", async (
   } finally {
     await sql.end();
   }
-  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await page
+    .getByRole("button", { name: localApprovalButtonName("GitHub") })
+    .click();
   await expect(page).toHaveURL(/github=failed/u);
   expect(
     await page.evaluate(

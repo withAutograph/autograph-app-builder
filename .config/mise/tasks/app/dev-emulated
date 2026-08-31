@@ -2,44 +2,64 @@
 #MISE description="Run Next with local Vercel and GitHub Emulate connections"
 set -eu
 
-app_origin=https://localhost:3001
+app_port=${APP_BUILDER_LOCAL_PORT:-3001}
+emulate_base_port=${EMULATE_BASE_PORT:-4000}
+github_emulate_port=$((emulate_base_port + 1))
+database_port=${APP_BUILDER_DATABASE_PORT:-54329}
+app_protocol=https
+app_origin=$app_protocol://localhost:$app_port
 pid_file=.emulate/dev-emulated.pids
 "$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
 emulate_pid=
 app_pid=
-if ! lsof -nP -iTCP:4000 -sTCP:LISTEN >/dev/null 2>&1; then
+if ! lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
   "$(mise which node)" node_modules/emulate/dist/index.js \
-    start --service vercel,github --seed .emulate/config.yaml &
+    start --port "$emulate_base_port" --service vercel,github \
+    --seed .emulate/config.yaml &
   emulate_pid=$!
 fi
 docker=$(mise which docker)
 worktree_id=$(basename "$(dirname "$(pwd -P)")")
-database_container="autograph-app-builder-web-product-e2e-postgres-$worktree_id"
-if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
-  "$docker" run --detach --name "$database_container" \
-    --env POSTGRES_HOST_AUTH_METHOD=trust \
-    --env POSTGRES_DB=autograph_app_builder \
-    --publish 127.0.0.1:54329:5432 \
-    --volume "$PWD/.emulate/postgres:/var/lib/postgresql/data" \
-    postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 \
-    -c max_connections=500 >/dev/null
-fi
-"$docker" start "$database_container" >/dev/null 2>&1 || true
-attempt=0
-until "$docker" exec "$database_container" \
-  psql -U postgres -d autograph_app_builder -c 'SELECT 1' >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 300 ]; then
-    echo "local emulated PostgreSQL did not become ready" >&2
-    exit 1
+database_container=${APP_BUILDER_DATABASE_CONTAINER:-autograph-app-builder-web-product-e2e-postgres-$worktree_id}
+external_database=${APP_BUILDER_EXTERNAL_DATABASE:-0}
+if [ "$external_database" != 1 ]; then
+  if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
+    "$docker" run --detach --name "$database_container" \
+      --env POSTGRES_HOST_AUTH_METHOD=trust \
+      --env POSTGRES_DB=autograph_app_builder \
+      --publish "127.0.0.1:$database_port:5432" \
+      --volume "$PWD/.emulate/postgres:/var/lib/postgresql" \
+      postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 \
+      -c max_connections=500 >/dev/null
   fi
-  sleep 0.1
-done
-# Docker can report the database ready just before the published host port is
-# accepting connections.
-sleep 1
-DATABASE_URL=postgresql://postgres@127.0.0.1:54329/autograph_app_builder \
-  mise run database:migrate
+  "$docker" start "$database_container" >/dev/null 2>&1 || true
+  attempt=0
+  until \
+    "$docker" exec "$database_container" \
+      psql -U postgres -d autograph_app_builder -c "SELECT 1" >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 300 ]; then
+      echo "local emulated PostgreSQL did not become ready" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+fi
+migration_url="postgresql://postgres@127.0.0.1:$database_port/autograph_app_builder?connect_timeout=2"
+if [ "$external_database" = 1 ]; then
+  printf '%s' "$migration_url" | \
+    "$(mise which node)" --import tsx lib/db/migrate.mts --database-url-fd 0
+else
+  attempt=0
+  until DATABASE_URL="$migration_url" mise run database:migrate; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 30 ]; then
+      echo "local emulated PostgreSQL migrations did not become ready" >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
+fi
 cleanup() {
   if [ -n "$app_pid" ]; then
     pkill -TERM -P "$app_pid" 2>/dev/null || true
@@ -55,37 +75,39 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-APP_BUILDER_LOCAL_PROVIDER_EMULATION=1 \
-APP_BUILDER_LOCAL_AUTH_EMULATION=1 \
-PASSKEY_ONBOARDING=local-preview-v1 \
-EVE_HOSTED_ADAPTER=1 \
-BETTER_AUTH_URL="$app_origin/api/auth" \
-MCP_RESOURCE_URL="$app_origin/mcp" \
-BETTER_AUTH_SECRET="$(tr -d '\n' < .emulate/better-auth-secret)" \
-GITHUB_CLIENT_ID=Iv1_local_app_client \
-GITHUB_CLIENT_SECRET=local-github-client-secret-value \
-GITHUB_APP_ID=12345 \
-GITHUB_APP_SLUG=autograph-app-builder-local \
-GITHUB_APP_CLIENT_ID=Iv1_local_app_client \
-GITHUB_APP_CLIENT_SECRET=local-github-client-secret-value \
-GITHUB_APP_INSTALL_STATE_SECRET=local-github-install-state-secret-value \
-VERCEL_AUTH_CLIENT_ID=local-vercel-client \
-VERCEL_AUTH_CLIENT_SECRET=local-vercel-client-secret \
-VERCEL_INTEGRATION_SLUG=autograph-app-builder-local \
-VERCEL_INTEGRATION_CLIENT_ID=local-vercel-client \
-VERCEL_INTEGRATION_CLIENT_SECRET=local-vercel-client-secret \
-VERCEL_INTEGRATION_TOKEN_KEY=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE= \
-VERCEL_INTEGRATION_TOKEN_KEY_VERSION=local-v1 \
-VERCEL_EMULATOR_URL=http://localhost:4000 \
-GITHUB_EMULATOR_URL=http://localhost:4001 \
-EMULATE_PROVIDER_TOKEN=emulate_local_provider_token \
-EMULATE_VERCEL_CONFIGURATION_ID=icfg_local_1 \
-EMULATE_VERCEL_TEAM_ID=autograph-local \
-EMULATE_GITHUB_INSTALLATION_ID=1001 \
-EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app \
-EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)" \
+export APP_BUILDER_LOCAL_PROVIDER_EMULATION=1
+export APP_BUILDER_LOCAL_AUTH_EMULATION=1
+export APP_BUILDER_LOCAL_PORT="$app_port"
+export PASSKEY_ONBOARDING=local-preview-v1
+export EVE_HOSTED_ADAPTER=1
+export BETTER_AUTH_URL="$app_origin/api/auth"
+export MCP_RESOURCE_URL="$app_origin/mcp"
+export BETTER_AUTH_SECRET="$(tr -d '\n' < .emulate/better-auth-secret)"
+export GITHUB_CLIENT_ID=Iv1_local_app_client
+export GITHUB_CLIENT_SECRET=local-github-client-secret-value
+export GITHUB_APP_ID=12345
+export GITHUB_APP_SLUG=autograph-app-builder-local
+export GITHUB_APP_CLIENT_ID=Iv1_local_app_client
+export GITHUB_APP_CLIENT_SECRET=local-github-client-secret-value
+export GITHUB_APP_INSTALL_STATE_SECRET=local-github-install-state-secret-value
+export VERCEL_AUTH_CLIENT_ID=local-vercel-client
+export VERCEL_AUTH_CLIENT_SECRET=local-vercel-client-secret
+export VERCEL_INTEGRATION_SLUG=autograph-app-builder-local
+export VERCEL_INTEGRATION_CLIENT_ID=local-vercel-client
+export VERCEL_INTEGRATION_CLIENT_SECRET=local-vercel-client-secret
+export VERCEL_INTEGRATION_TOKEN_KEY=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
+export VERCEL_INTEGRATION_TOKEN_KEY_VERSION=local-v1
+export VERCEL_EMULATOR_URL="http://localhost:$emulate_base_port"
+export GITHUB_EMULATOR_URL="http://localhost:$github_emulate_port"
+export EMULATE_PROVIDER_TOKEN=emulate_local_provider_token
+export EMULATE_VERCEL_CONFIGURATION_ID=icfg_local_1
+export EMULATE_VERCEL_TEAM_ID=autograph-local
+export EMULATE_GITHUB_INSTALLATION_ID=1001
+export EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app
+export EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)"
 .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/next/dist/bin/next dev --experimental-https --port 3001 "$@" &
+  "$(mise which node)" node_modules/next/dist/bin/next dev \
+  --experimental-https --hostname 0.0.0.0 --port "$app_port" "$@" &
 app_pid=$!
 printf 'app_pid=%s\nemulate_pid=%s\n' "$app_pid" "$emulate_pid" >"$pid_file"
 wait "$app_pid"
