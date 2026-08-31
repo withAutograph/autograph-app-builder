@@ -58,6 +58,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const addPasskey = useAddPasskey(authClient);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [signUpURL, setSignUpURL] = useState<string>();
 
   // Surfaces passkeys in the browser's autofill dropdown while the sign-in
   // form is open. The button stays for anyone who dismisses it.
@@ -84,6 +85,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const continueWithPasskey = async () => {
     setPending(true);
     setFailed(false);
+    setSignUpURL(undefined);
 
     try {
       const resolvedRedirectTo = resolvePasskeyRedirectTo(
@@ -106,16 +108,15 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         }
       })();
       const failure = authenticationBoundary.failure(result);
-      if (failure?.redirectToSignUp) {
-        navigate({
-          to: withPasskeyUnavailable(
+      if (failure?.offerSignUp) {
+        setSignUpURL(
+          withPasskeyUnavailable(
             getAuthLinkURL(
               `${basePaths.auth}/${viewPaths.auth.signUp}`,
               resolvedRedirectTo,
             ),
           ),
-        });
-        return;
+        );
       }
       if (failure) throw failure.error;
       navigate({ to: resolvedRedirectTo });
@@ -205,6 +206,16 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
               passkeyLocalization.passkey,
             )}
       </Button>
+      {view !== "signUp" && signUpURL && (
+        <Button
+          type="button"
+          variant="link"
+          className="h-auto self-center px-0"
+          onClick={() => navigate({ to: signUpURL })}
+        >
+          Create an account with a passkey
+        </Button>
+      )}
     </div>
   );
 }

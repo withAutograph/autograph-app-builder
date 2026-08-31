@@ -14,7 +14,7 @@ export type PasskeyAuthenticationFailure = {
   assertionStatus: PasskeyAssertionStatus;
   code?: string;
   error: Error;
-  redirectToSignUp: boolean;
+  offerSignUp: boolean;
 };
 
 export type PasskeyAuthenticationEvidence = {
@@ -106,7 +106,7 @@ export function passkeyAuthenticationFailure(
     assertionStatus,
     ...(code ? { code } : {}),
     error: failureError,
-    redirectToSignUp: userMediatedNoAssertion,
+    offerSignUp: userMediatedNoAssertion,
   };
 }
 

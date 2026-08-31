@@ -186,7 +186,7 @@ test("passkey registration keeps the alternate authenticator flow when platform 
   }
 });
 
-test("missing credential redirects to explicit enrollment and preserves the callback", async ({
+test("missing credential offers explicit enrollment and preserves the callback", async ({
   context,
   page,
 }) => {
@@ -208,17 +208,14 @@ test("missing credential redirects to explicit enrollment and preserves the call
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    await expect(page).toHaveURL(/\/auth\/sign-up/u);
+    await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await expect(
-      page.getByText(
-        "We couldn’t use an existing passkey. Continue to create a new one.",
-      ),
+      page.getByRole("button", { name: "Passkey failed (try again)" }),
     ).toBeVisible();
-    const signUpURL = new URL(page.url());
-    expect(signUpURL.searchParams.get("passkey")).toBe("unavailable");
-    expect(signUpURL.searchParams.get("redirectTo")).toBe(
-      "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete",
-    );
+    const createAccount = page.getByRole("button", {
+      name: "Create an account with a passkey",
+    });
+    await expect(createAccount).toBeVisible();
     expect(authenticationVerificationRequests).toBe(0);
     expect(await authCounts()).toEqual({
       users: 0,
@@ -232,6 +229,18 @@ test("missing credential redirects to explicit enrollment and preserves the call
       vercelInstallations: 0,
     });
 
+    await createAccount.click();
+    await expect(page).toHaveURL(/\/auth\/sign-up/u);
+    await expect(
+      page.getByText(
+        "We couldn’t use an existing passkey. Continue to create a new one.",
+      ),
+    ).toBeVisible();
+    const signUpURL = new URL(page.url());
+    expect(signUpURL.searchParams.get("passkey")).toBe("unavailable");
+    expect(signUpURL.searchParams.get("redirectTo")).toBe(
+      "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete",
+    );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL(/\?source=brief#complete$/u);
     expect(await authCounts()).toMatchObject({
@@ -246,7 +255,7 @@ test("missing credential redirects to explicit enrollment and preserves the call
   }
 });
 
-test("an interrupted passkey ceremony redirects without registering", async ({
+test("an interrupted passkey ceremony stays on Sign In and offers enrollment", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -267,11 +276,12 @@ test("an interrupted passkey ceremony redirects without registering", async ({
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect(
-    page.getByText(
-      "We couldn’t use an existing passkey. Continue to create a new one.",
-    ),
+    page.getByRole("button", { name: "Passkey failed (try again)" }),
   ).toBeVisible();
-  await expect(page).toHaveURL(/\/auth\/sign-up/u);
+  await expect(
+    page.getByRole("button", { name: "Create an account with a passkey" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sign-in/u);
   expect(await authCounts()).toMatchObject({
     users: 0,
     passkeys: 0,
@@ -360,9 +370,7 @@ test("verification transport loss stays on Sign In after an assertion", async ({
     ).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await expect(
-      page.getByText(
-        "We couldn’t use an existing passkey. Continue to create a new one.",
-      ),
+      page.getByRole("button", { name: "Create an account with a passkey" }),
     ).toHaveCount(0);
     expect(authenticationVerificationRequests).toBe(1);
     expect(await authCounts()).toEqual(baseline);
@@ -563,6 +571,9 @@ test("an authenticator credential missing from server storage is not recreated",
     await expect(
       page.getByRole("button", { name: "Passkey failed (try again)" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Create an account with a passkey" }),
+    ).toHaveCount(0);
     expect((await authCounts()).passkeys).toBe(0);
     expect((await authCounts()).users).toBe(1);
   } finally {

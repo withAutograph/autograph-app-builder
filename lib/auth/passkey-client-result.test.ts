@@ -45,7 +45,7 @@ describe("passkeyClientError", () => {
 });
 
 describe("passkeyAuthenticationFailure", () => {
-  it("redirects a user-mediated failure that returned no assertion", () => {
+  it("offers Sign Up for a user-mediated failure that returned no assertion", () => {
     expect(
       passkeyAuthenticationFailure({
         data: null,
@@ -58,7 +58,7 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "not-returned",
       code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
-      redirectToSignUp: true,
+      offerSignUp: true,
     });
   });
 
@@ -76,7 +76,7 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "returned",
       code,
-      redirectToSignUp: false,
+      offerSignUp: false,
     });
   });
 
@@ -92,7 +92,7 @@ describe("passkeyAuthenticationFailure", () => {
       }),
     ).toMatchObject({
       assertionStatus: "returned",
-      redirectToSignUp: false,
+      offerSignUp: false,
     });
   });
 
@@ -112,7 +112,7 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "not-returned",
       code,
-      redirectToSignUp: false,
+      offerSignUp: false,
     });
   });
 
@@ -128,11 +128,11 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "unknown",
       code: "AUTH_CANCELLED",
-      redirectToSignUp: false,
+      offerSignUp: false,
     });
   });
 
-  it("redirects a structural NotAllowedError even when Better Auth loses its code", async () => {
+  it("offers Sign Up for a structural NotAllowedError even when Better Auth loses its code", async () => {
     const boundary = createPasskeyAuthenticationBoundary();
     const originalGet = async () => {
       throw { name: "NotAllowedError", message: "No credential available." };
@@ -156,12 +156,12 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "not-returned",
       code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
-      redirectToSignUp: true,
+      offerSignUp: true,
     });
     expect(credentials.get).toBe(originalGet);
   });
 
-  it("redirects when the credential API resolves without an assertion", async () => {
+  it("offers Sign Up when the credential API resolves without an assertion", async () => {
     const boundary = createPasskeyAuthenticationBoundary();
     const credentials = {
       get: async () => null,
@@ -181,7 +181,7 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "not-returned",
       code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
-      redirectToSignUp: true,
+      offerSignUp: true,
     });
   });
 
@@ -210,7 +210,7 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "returned",
       code: "AUTH_CANCELLED",
-      redirectToSignUp: false,
+      offerSignUp: false,
     });
   });
 
@@ -238,7 +238,7 @@ describe("passkeyAuthenticationFailure", () => {
     ).toMatchObject({
       assertionStatus: "not-returned",
       code: "AUTH_CANCELLED",
-      redirectToSignUp: false,
+      offerSignUp: false,
     });
   });
 
@@ -250,7 +250,7 @@ describe("passkeyAuthenticationFailure", () => {
       }),
     ).toMatchObject({
       assertionStatus: "not-returned",
-      redirectToSignUp: false,
+      offerSignUp: false,
     });
   });
 });
