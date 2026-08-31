@@ -22,14 +22,19 @@ The canonical remote and ref are constants, never user input. The source
 transport mints one per-acquisition installation token through the existing
 Autograph GitHub App. Its only deployment configuration beyond the existing
 `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` is
-`APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID`. That installation must be in
-selected-repositories mode and contain exactly the one private repository
-`withAutograph/arrusted-development`; it is never selected from a user’s
-publishing installation.
+`APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID`. It is never selected from a
+user’s publishing installation. The current deployment-owned installation may
+retain all-repositories access while the existing App supports publication;
+each reader token is explicitly minted for only the fixed
+`withAutograph/arrusted-development` repository ID and cannot access another
+repository through this reader path.
 
 This deliberately accepts the existing App private key’s shared-registration
-blast radius: the dedicated installation narrows routine reader tokens, but is
-not equivalent to a separate reader App.
+blast radius. An all-repositories installation is weaker than the planned
+dedicated selected-repositories installation: possession of the App private key
+could mint a broader installation token outside this code path. The runtime
+reader token restriction is defense in depth, not a replacement for a dedicated
+reader App.
 
 The token request is constrained to `Contents: read` and `Checks: read`.
 App Builder validates both the token permissions and the installation’s live
@@ -90,10 +95,11 @@ generated workspace, not Arrusted history or an upstream remote.
 
 ## Validation
 
-The source boundary is tested for exact requested reader permissions, rejection
-of unavailable, broad, or mismatched installations, canonical origin/ref
-resolution, detached checkout state, immutable V4 receipt validation, clone
-drift rejection, and token cleanup on success and failure. Explicit existing
-repository behavior remains unchanged. Local and hosted runtime paths use the
-same clone provenance contract and fail closed before bootstrap when reader
-configuration, token minting, cloning, or readiness evidence is unavailable.
+The source boundary is tested for exact requested reader permissions and
+repository scope, rejection of unavailable, broader, or mismatched reader
+tokens, canonical origin/ref resolution, detached checkout state, immutable V4
+receipt validation, clone drift rejection, and token cleanup on success and
+failure. Explicit existing repository behavior remains unchanged. Local and
+hosted runtime paths use the same clone provenance contract and fail closed
+before bootstrap when reader configuration, token minting, cloning, or readiness
+evidence is unavailable.

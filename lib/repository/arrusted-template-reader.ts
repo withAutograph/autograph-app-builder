@@ -6,6 +6,7 @@ import { parseGitHubAppHttpProviderCredentials } from "./github-app-http-provide
 export const ARRUSTED_TEMPLATE_OWNER = "withAutograph";
 export const ARRUSTED_TEMPLATE_NAME = "arrusted-development";
 export const ARRUSTED_TEMPLATE_FULL_NAME = `${ARRUSTED_TEMPLATE_OWNER}/${ARRUSTED_TEMPLATE_NAME}`;
+export const ARRUSTED_TEMPLATE_REPOSITORY_ID = 1221250267;
 
 const installationIdSchema = z.string().regex(/^[1-9]\d*$/u);
 const tokenSchema = z.string().min(20).max(1024);
@@ -52,6 +53,14 @@ function exactReaderPermissions(value: unknown) {
     ([key, permission]) =>
       (key === "metadata" || key === "contents" || key === "checks") &&
       permission === "read",
+  );
+}
+
+function exactTemplateRepositoryIds(value: unknown) {
+  return (
+    Array.isArray(value) &&
+    value.length === 1 &&
+    value[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID
   );
 }
 
@@ -106,6 +115,7 @@ export function createArrustedTemplateReader(input: {
           type: "installation",
           installationId: installation.data,
           permissions: requestedPermissions,
+          repositoryIds: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
           refresh: true,
         });
         const parsedToken = record(authentication)
@@ -116,7 +126,9 @@ export function createArrustedTemplateReader(input: {
           authentication.type !== "token" ||
           parsedToken === undefined ||
           !parsedToken.success ||
-          authentication.repositorySelection !== "selected" ||
+          (authentication.repositorySelection !== "all" &&
+            authentication.repositorySelection !== "selected") ||
+          !exactTemplateRepositoryIds(authentication.repositoryIds) ||
           !exactReaderPermissions(authentication.permissions)
         )
           unavailable();

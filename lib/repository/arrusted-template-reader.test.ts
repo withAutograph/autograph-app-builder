@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  ARRUSTED_TEMPLATE_REPOSITORY_ID,
   createArrustedTemplateReader,
   readDeploymentArrustedTemplateReaderConfig,
 } from "./arrusted-template-reader";
@@ -19,6 +20,7 @@ function json(value: unknown, status = 200) {
 function readerFetch(input?: {
   permissions?: Record<string, string>;
   repositorySelection?: "all" | "selected";
+  tokenRepositoryIds?: number[];
   repository?: Record<string, unknown>;
   totalCount?: number;
   status?: number;
@@ -37,7 +39,10 @@ function readerFetch(input?: {
             contents: "read",
             checks: "read",
           },
-          repository_selection: input?.repositorySelection ?? "selected",
+          repository_selection: input?.repositorySelection ?? "all",
+          repositories: (
+            input?.tokenRepositoryIds ?? [ARRUSTED_TEMPLATE_REPOSITORY_ID]
+          ).map((id) => ({ id })),
         },
         input?.status ?? 201,
       );
@@ -69,7 +74,7 @@ function reader(fetch: typeof globalThis.fetch) {
 }
 
 describe("Arrusted private template reader", () => {
-  it("mints exactly the fixed read-only token and accepts only its one private repository", async () => {
+  it("mints an exact read-only, one-repository token from the fixed installation", async () => {
     const mock = readerFetch();
     await expect(reader(mock.implementation).acquire()).resolves.toEqual({
       token: "ghs_reader_token_that_is_only_for_this_acquisition",
@@ -80,6 +85,7 @@ describe("Arrusted private template reader", () => {
     );
     expect(JSON.parse(String(tokenCall?.init.body))).toEqual({
       permissions: { contents: "read", checks: "read" },
+      repository_ids: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
     });
     expect(
       mock.calls.filter(({ url }) =>
@@ -97,7 +103,7 @@ describe("Arrusted private template reader", () => {
         issues: "read",
       },
     },
-    { repositorySelection: "all" as const },
+    { tokenRepositoryIds: [101] },
     {
       repository: {
         id: 101,
@@ -106,7 +112,7 @@ describe("Arrusted private template reader", () => {
       },
     },
     { totalCount: 2 },
-  ])("rejects a broader or mismatched installation %#", async (input) => {
+  ])("rejects a broader token or mismatched repository %#", async (input) => {
     const mock = readerFetch(input);
     await expect(reader(mock.implementation).acquire()).rejects.toThrow(
       "template reader is unavailable",
