@@ -398,6 +398,7 @@
   color: #0672ce;
   background: #e2f2ff;
   font-size: 12px;
+  text-transform: capitalize;
 }
 .combobox[data-label="Select a Vercel Team"] > input {
   padding-right: 96px;
@@ -485,6 +486,7 @@
   small[data-pill]:not(:empty) {
   background: #eaeaea;
   color: #444;
+  text-transform: capitalize;
 }
 .combobox[data-label="Select a Vercel Team"]
   .comboMenu
