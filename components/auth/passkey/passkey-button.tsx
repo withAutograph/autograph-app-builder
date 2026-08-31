@@ -19,11 +19,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
-  passkeyAuthenticationFailure,
+  createPasskeyAuthenticationBoundary,
   passkeyClientError,
   withPasskeyUnavailable,
 } from "@/lib/auth/passkey-client-result";
 import { isPasskeyOnboardingAlreadyAuthenticated } from "@/lib/auth/passkey-contract";
+import { preferredPasskeyAuthenticatorAttachment } from "@/lib/auth/passkey-platform";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
@@ -90,11 +91,21 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         window.location.search,
         window.location.origin,
       );
-      const result = await signInPasskey.mutateAsync({
-        autoFill: false,
-        returnWebAuthnResponse: true,
-      });
-      const failure = passkeyAuthenticationFailure(result);
+      const authenticationBoundary = createPasskeyAuthenticationBoundary();
+      const restoreCredentialGet = authenticationBoundary.observeCredentialGet(
+        navigator.credentials,
+      );
+      const result = await (async () => {
+        try {
+          return await signInPasskey.mutateAsync({
+            autoFill: false,
+            returnWebAuthnResponse: true,
+          });
+        } finally {
+          restoreCredentialGet();
+        }
+      })();
+      const failure = authenticationBoundary.failure(result);
       if (failure?.redirectToSignUp) {
         navigate({
           to: withPasskeyUnavailable(
@@ -127,12 +138,15 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         window.location.origin,
       );
       authenticatedRedirectTo = resolvedRedirectTo;
-      const response = await fetch("/api/auth/passkey/onboarding-context", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-        cache: "no-store",
-      });
+      const [response, authenticatorAttachment] = await Promise.all([
+        fetch("/api/auth/passkey/onboarding-context", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+          cache: "no-store",
+        }),
+        preferredPasskeyAuthenticatorAttachment(),
+      ]);
       const body = (await response.json()) as OnboardingResponse;
       if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
         navigate({ to: resolvedRedirectTo, replace: true });
@@ -146,6 +160,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         context: body.context,
         createSession: true,
         name: "Primary passkey",
+        ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
       });
       if (isPasskeyOnboardingAlreadyAuthenticated(result)) {
         navigate({ to: resolvedRedirectTo, replace: true });

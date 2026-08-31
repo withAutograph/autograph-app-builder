@@ -173,6 +173,46 @@ describe("passkey-first onboarding authority", () => {
     ).toMatchObject({ origin: "https://preview.example.test" });
   });
 
+  it("binds provider-emulated Preview passkeys to its validated stable branch origin", () => {
+    const branchEnvironment = {
+      ...previewEnvironment,
+      APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+      VERCEL_URL: "app-deployment-team.vercel.app",
+      VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
+      BETTER_AUTH_URL: "https://app-git-feature-team.vercel.app/api/auth",
+    } as const;
+
+    expect(
+      readPasskeyOnboardingConfig(branchEnvironment, {
+        previewCanonicalOrigin: "https://app-git-feature-team.vercel.app",
+      }),
+    ).toMatchObject({
+      origin: "https://app-git-feature-team.vercel.app",
+      rpId: "app-git-feature-team.vercel.app",
+      deploymentId: "deployment_123",
+      secureCookies: true,
+    });
+    expect(() => readPasskeyOnboardingConfig(branchEnvironment)).toThrow(
+      "exact Vercel deployment metadata",
+    );
+    expect(() =>
+      readPasskeyOnboardingConfig(branchEnvironment, {
+        previewCanonicalOrigin: "https://other-git-feature-team.vercel.app",
+      }),
+    ).toThrow("exact validated branch origin");
+    expect(() =>
+      readPasskeyOnboardingConfig(
+        {
+          ...branchEnvironment,
+          APP_BUILDER_PREVIEW_PROVIDER_EMULATION: undefined,
+        },
+        {
+          previewCanonicalOrigin: "https://app-git-feature-team.vercel.app",
+        },
+      ),
+    ).toThrow("exact validated branch origin");
+  });
+
   it("rejects HTTPS loopback without both local emulation gates", () => {
     const localHttps = {
       NODE_ENV: "development",

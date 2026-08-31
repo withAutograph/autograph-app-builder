@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createPasskeyAuthenticationBoundary,
   passkeyAuthenticationFailure,
   passkeyClientError,
   withPasskeyUnavailable,
@@ -126,6 +127,116 @@ describe("passkeyAuthenticationFailure", () => {
       }),
     ).toMatchObject({
       assertionStatus: "unknown",
+      code: "AUTH_CANCELLED",
+      redirectToSignUp: false,
+    });
+  });
+
+  it("redirects a structural NotAllowedError even when Better Auth loses its code", async () => {
+    const boundary = createPasskeyAuthenticationBoundary();
+    const originalGet = async () => {
+      throw { name: "NotAllowedError", message: "No credential available." };
+    };
+    const credentials = { get: originalGet } as unknown as CredentialsContainer;
+    const restore = boundary.observeCredentialGet(credentials);
+
+    await expect(credentials.get({})).rejects.toMatchObject({
+      name: "NotAllowedError",
+    });
+    restore();
+
+    expect(
+      boundary.failure({
+        data: null,
+        error: {
+          code: "AUTH_CANCELLED",
+          message: "Passkey authentication was cancelled.",
+        },
+      }),
+    ).toMatchObject({
+      assertionStatus: "not-returned",
+      code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
+      redirectToSignUp: true,
+    });
+    expect(credentials.get).toBe(originalGet);
+  });
+
+  it("redirects when the credential API resolves without an assertion", async () => {
+    const boundary = createPasskeyAuthenticationBoundary();
+    const credentials = {
+      get: async () => null,
+    } as unknown as CredentialsContainer;
+    const restore = boundary.observeCredentialGet(credentials);
+    await expect(credentials.get({})).resolves.toBeNull();
+    restore();
+
+    expect(
+      boundary.failure({
+        data: null,
+        error: {
+          code: "AUTH_CANCELLED",
+          message: "Passkey authentication was cancelled.",
+        },
+      }),
+    ).toMatchObject({
+      assertionStatus: "not-returned",
+      code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
+      redirectToSignUp: true,
+    });
+  });
+
+  it("preserves assertion evidence when Better Auth drops it after transport loss", async () => {
+    const boundary = createPasskeyAuthenticationBoundary();
+    const credential = {
+      id: "credential-id",
+      type: "public-key",
+    } as Credential;
+    const credentials = {
+      get: async () => credential,
+    } as unknown as CredentialsContainer;
+    const restore = boundary.observeCredentialGet(credentials);
+
+    await expect(credentials.get({})).resolves.toBe(credential);
+    restore();
+
+    expect(
+      boundary.failure({
+        data: null,
+        error: {
+          code: "AUTH_CANCELLED",
+          message: "Passkey authentication was cancelled.",
+        },
+      }),
+    ).toMatchObject({
+      assertionStatus: "returned",
+      code: "AUTH_CANCELLED",
+      redirectToSignUp: false,
+    });
+  });
+
+  it("keeps a structural SecurityError on Sign In", async () => {
+    const boundary = createPasskeyAuthenticationBoundary();
+    const credentials = {
+      get: async () => {
+        throw { name: "SecurityError", message: "RP ID mismatch." };
+      },
+    } as unknown as CredentialsContainer;
+    const restore = boundary.observeCredentialGet(credentials);
+    await expect(credentials.get({})).rejects.toMatchObject({
+      name: "SecurityError",
+    });
+    restore();
+
+    expect(
+      boundary.failure({
+        data: null,
+        error: {
+          code: "AUTH_CANCELLED",
+          message: "Passkey authentication was cancelled.",
+        },
+      }),
+    ).toMatchObject({
+      assertionStatus: "not-returned",
       code: "AUTH_CANCELLED",
       redirectToSignUp: false,
     });

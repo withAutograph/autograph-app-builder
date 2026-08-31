@@ -43,6 +43,11 @@ export interface PasskeyOnboardingConfig {
   secureCookies: boolean;
 }
 
+interface PasskeyOnboardingReadOptions {
+  /** A stable Preview origin already validated by the provider-emulation gate. */
+  previewCanonicalOrigin?: string;
+}
+
 function exactOrigin(value: string | undefined) {
   const url = new URL(value ?? "");
   if (url.pathname !== "/api/auth" || url.search || url.hash) {
@@ -57,6 +62,7 @@ function isLoopback(hostname: string) {
 
 export function readPasskeyOnboardingConfig(
   environment: Readonly<Record<string, string | undefined>>,
+  options: PasskeyOnboardingReadOptions = {},
 ): PasskeyOnboardingConfig | null {
   if (environment.PASSKEY_ONBOARDING !== ENABLED_VALUE) return null;
 
@@ -89,12 +95,35 @@ export function readPasskeyOnboardingConfig(
       !deploymentId ||
       deploymentId.length > 256 ||
       !deploymentHostname ||
-      deploymentHostname !== hostname ||
       !origin.startsWith("https://")
     ) {
       throw new Error(
         "Preview passkey onboarding requires exact Vercel deployment metadata.",
       );
+    }
+    if (options.previewCanonicalOrigin === undefined) {
+      if (deploymentHostname !== hostname) {
+        throw new Error(
+          "Preview passkey onboarding requires exact Vercel deployment metadata.",
+        );
+      }
+    } else {
+      const canonical = new URL(options.previewCanonicalOrigin);
+      if (
+        environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||
+        canonical.protocol !== "https:" ||
+        canonical.pathname !== "/" ||
+        canonical.search ||
+        canonical.hash ||
+        canonical.username ||
+        canonical.password ||
+        canonical.origin !== origin ||
+        environment.VERCEL_BRANCH_URL?.trim() !== canonical.hostname
+      ) {
+        throw new Error(
+          "Preview passkey onboarding requires the exact validated branch origin.",
+        );
+      }
     }
     return {
       origin,

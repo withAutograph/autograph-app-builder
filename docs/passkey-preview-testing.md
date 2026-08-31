@@ -71,10 +71,17 @@ PASSKEY_PREVIEW_PROTECTION=vercel-authentication
 ```
 
 The runtime also requires Vercel's exact `VERCEL_ENV=preview`, `VERCEL_URL`, and
-`VERCEL_DEPLOYMENT_ID` metadata. It derives the auth origin from `VERCEL_URL`
-when `BETTER_AUTH_URL` is not set, or requires an explicitly configured URL to
-agree exactly. Every generated Preview hostname is a different WebAuthn RP and
-therefore has independent passkeys and workspace data. Removing Deployment
+`VERCEL_DEPLOYMENT_ID` metadata. Normally it derives the auth origin from
+`VERCEL_URL` when `BETTER_AUTH_URL` is not set, or requires an explicitly
+configured URL to agree exactly. Every generated Preview hostname is then a
+different WebAuthn RP and has independent passkeys.
+
+The exact `APP_BUILDER_PREVIEW_PROVIDER_EMULATION=1` gate instead uses the
+validated stable `VERCEL_BRANCH_URL` as the auth origin and RP ID. Passkeys can
+survive redeployments of that branch, while each new-account onboarding token
+is still signed and bound to the current `VERCEL_DEPLOYMENT_ID`; a branch alias
+moving during a ceremony makes that one ceremony fail closed. Auth pages are
+redirected to the branch hostname before WebAuthn begins. Removing Deployment
 Protection requires removing the passkey flags first.
 
 Stable Preview endpoints and provider callback configuration are documented in

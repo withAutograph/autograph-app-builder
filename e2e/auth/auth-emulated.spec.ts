@@ -69,8 +69,24 @@ test("passkey registration guards Sign Up and supports returning login", async (
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
+    await page.addInitScript(() => {
+      if (!window.PublicKeyCredential) return;
+      Object.defineProperty(
+        window.PublicKeyCredential,
+        "isUserVerifyingPlatformAuthenticatorAvailable",
+        { configurable: true, value: async () => true },
+      );
+    });
     await page.goto("/auth/sign-up");
+    const registrationOptionsRequest = page.waitForRequest(
+      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
+    );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
+    expect(
+      new URL((await registrationOptionsRequest).url()).searchParams.get(
+        "authenticatorAttachment",
+      ),
+    ).toBe("platform");
     await expect
       .poll(() => authCounts(), { timeout: 30_000 })
       .toEqual({
@@ -130,6 +146,46 @@ test("passkey registration guards Sign Up and supports returning login", async (
   }
 });
 
+test("passkey registration keeps the alternate authenticator flow when platform detection fails", async ({
+  context,
+  page,
+}) => {
+  reportPasskeyFailures(page);
+  await page.addInitScript(() => {
+    if (!window.PublicKeyCredential) return;
+    Object.defineProperty(
+      window.PublicKeyCredential,
+      "isUserVerifyingPlatformAuthenticatorAvailable",
+      {
+        configurable: true,
+        value: async () => {
+          throw new DOMException("Unavailable", "NotSupportedError");
+        },
+      },
+    );
+  });
+  const authenticator = await VirtualAuthenticator.create(context, page);
+  try {
+    await page.goto("/auth/sign-up");
+    const registrationOptionsRequest = page.waitForRequest(
+      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
+    );
+    await page.getByRole("button", { name: "Continue with Passkey" }).click();
+
+    expect(
+      new URL((await registrationOptionsRequest).url()).searchParams.has(
+        "authenticatorAttachment",
+      ),
+    ).toBe(false);
+    await expect
+      .poll(async () => (await authCounts()).passkeys, { timeout: 30_000 })
+      .toBe(1);
+    expect(await authenticator.credentials()).toHaveLength(1);
+  } finally {
+    await authenticator.dispose();
+  }
+});
+
 test("missing credential redirects to explicit enrollment and preserves the callback", async ({
   context,
   page,
@@ -137,6 +193,15 @@ test("missing credential redirects to explicit enrollment and preserves the call
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
+    let authenticationVerificationRequests = 0;
+    page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname ===
+        "/api/auth/passkey/verify-authentication"
+      ) {
+        authenticationVerificationRequests += 1;
+      }
+    });
     const callbackURL = "/?source=brief#complete";
     await page.goto(
       `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
@@ -154,6 +219,7 @@ test("missing credential redirects to explicit enrollment and preserves the call
     expect(signUpURL.searchParams.get("redirectTo")).toBe(
       "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete",
     );
+    expect(authenticationVerificationRequests).toBe(0);
     expect(await authCounts()).toEqual({
       users: 0,
       passkeys: 0,
@@ -281,9 +347,11 @@ test("verification transport loss stays on Sign In after an assertion", async ({
   try {
     await signOut(page);
     const baseline = await authCounts();
-    await page.route("**/api/auth/passkey/verify-authentication", (route) =>
-      route.abort("failed"),
-    );
+    let authenticationVerificationRequests = 0;
+    await page.route("**/api/auth/passkey/verify-authentication", (route) => {
+      authenticationVerificationRequests += 1;
+      return route.abort("failed");
+    });
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
@@ -296,6 +364,7 @@ test("verification transport loss stays on Sign In after an assertion", async ({
         "We couldn’t use an existing passkey. Continue to create a new one.",
       ),
     ).toHaveCount(0);
+    expect(authenticationVerificationRequests).toBe(1);
     expect(await authCounts()).toEqual(baseline);
   } finally {
     await authenticator.dispose();
@@ -531,7 +600,15 @@ test("provider account supports multiple passkeys but retains its final passkey"
     await page.getByRole("button", { name: "Add passkey" }).first().click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Name").fill("OAuth recovery passkey");
+    const settingsRegistrationOptionsRequest = page.waitForRequest(
+      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
+    );
     await dialog.getByRole("button", { name: "Add passkey" }).click();
+    expect(
+      new URL(
+        (await settingsRegistrationOptionsRequest).url(),
+      ).searchParams.has("authenticatorAttachment"),
+    ).toBe(false);
     await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
     await expect(dialog).toBeHidden();
 
