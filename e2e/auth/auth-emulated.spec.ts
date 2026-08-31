@@ -256,6 +256,11 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
     expect(signUpURL.searchParams.get("redirectTo")).toBe(
       "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete",
     );
+    await expect(page.getByText("Already have an account?")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign In" })).toHaveAttribute(
+      "href",
+      "/auth/sign-in?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252F%253Fsource%253Dbrief%2523complete",
+    );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL(/\?source=brief#complete$/u);
     expect(await authCounts()).toMatchObject({

@@ -19,22 +19,25 @@ export default async function SignUpPage({
   searchParams: Promise<AuthPageSearchParams>;
 }) {
   const [query, requestHeaders] = await Promise.all([searchParams, headers()]);
+  const origin = getPreviewOAuthDeploymentOrigin(process.env);
+  const search = serializeAuthPageSearchParams(query);
+  const signInRedirectTo = resolvePasskeyRedirectTo(
+    DEFAULT_AUTH_REDIRECT_TO,
+    search,
+    origin,
+  );
   const session = await getPreviewOAuthDeploymentSession({
     environment: process.env,
     headers: requestHeaders,
   });
 
   if (session?.user) {
-    const origin = getPreviewOAuthDeploymentOrigin(process.env);
-    const search = serializeAuthPageSearchParams(query);
-    redirect(
-      resolvePasskeyRedirectTo(DEFAULT_AUTH_REDIRECT_TO, search, origin),
-    );
+    redirect(signInRedirectTo);
   }
 
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
-      <SignUp socialPosition="top" />
+      <SignUp socialPosition="top" signInRedirectTo={signInRedirectTo} />
     </main>
   );
 }
