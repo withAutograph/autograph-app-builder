@@ -9,6 +9,8 @@
   --focus-border: #666;
   --focus-ring: rgb(0 0 0 / 16%);
   --danger: #bd3535;
+  --disabled-bg: #737373;
+  --disabled-text: #666;
   box-sizing: border-box;
   width: min(650px, calc(100% - 48px));
   min-height: 100%;
@@ -97,7 +99,7 @@
 
 .mcpApp .choices label {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 18px;
+  grid-template-columns: minmax(0, 1fr) 18px;
   align-items: center;
   gap: 10px;
   min-height: 46px;
@@ -107,6 +109,10 @@
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
+}
+
+.mcpApp .choices label:has(.choice-icon) {
+  grid-template-columns: 22px minmax(0, 1fr) 18px;
 }
 
 .mcpApp .choices label:has(input:checked) {
@@ -250,12 +256,19 @@
 
 .mcpApp button:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  background: var(--soft);
+  color: var(--disabled-text);
 }
 
 .mcpApp button.primary {
   border-color: var(--text);
   background: var(--text);
+  color: var(--bg);
+}
+
+.mcpApp button.primary:disabled {
+  border-color: var(--disabled-bg);
+  background: var(--disabled-bg);
   color: var(--bg);
 }
 
@@ -270,6 +283,13 @@
 
 .mcpApp > footer .primary {
   margin-left: auto;
+}
+
+.mcpApp .continue-guidance {
+  order: -1;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
 }
 
 .mcpApp .fallback {
@@ -314,6 +334,8 @@ html[data-theme="dark"] .mcpApp {
   --hover: #1a1a1a;
   --focus-border: #888;
   --focus-ring: rgb(255 255 255 / 24%);
+  --disabled-bg: #6b6b6b;
+  --disabled-text: #aaa;
 }
 
 @media (max-width: 460px) {

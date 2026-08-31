@@ -22,6 +22,23 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Generic: Story = {};
+export const UnselectedIndicators: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText("✓")).not.toBeInTheDocument();
+    await expect(canvas.getAllByRole("radio")[0]).not.toBeChecked();
+  },
+};
+export const Selected: Story = {
+  args: {
+    answer: { kind: "answer", optionId: "cursor", value: "Cursor" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("✓")).toBeVisible();
+    await expect(canvas.getByRole("radio", { name: "Cursor" })).toBeChecked();
+  },
+};
 export const SemanticCreateAppChoice: Story = {
   args: { request: semanticChoiceRequest },
 };

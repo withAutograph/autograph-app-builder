@@ -973,6 +973,9 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(events).toEqual(["github", "vercel", "clipboard"]);
     expect(view.textContent).toContain("jasonmorganson/provider-app");
     expect(view.textContent).toContain("Vercel: the provider rejected");
+    expect(view.textContent).toContain("App created with an issue");
+    expect(view.textContent).toContain("Setup needs attention");
+    expect(view.textContent).toContain("Retry to finish setting up Vercel");
     expect(open).toHaveBeenCalledTimes(1);
 
     await click(
@@ -982,6 +985,8 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(request).toHaveBeenCalledTimes(3);
     expect(view.textContent).toContain("apps-provider-app");
+    expect(view.textContent).toContain("App Brief Ready!");
+    expect(view.textContent).not.toContain("Setup needs attention");
     expect(open).toHaveBeenCalledTimes(1);
     await click(
       [...view.querySelectorAll("button")].find(
@@ -1039,7 +1044,7 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
     await act(async () => new Promise(requestAnimationFrame));
-    expect(view.textContent).toContain("App Brief Ready!");
+    expect(view.textContent).toContain("App created with an issue");
     expect(view.textContent).toContain("Restored App");
     expect(view.textContent).toContain(
       "GitHub: the provider could not be reached",

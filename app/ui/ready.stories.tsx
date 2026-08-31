@@ -96,6 +96,17 @@ export const PartialFailure: Story = {
       },
     },
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("heading", { name: "App created with an issue" }),
+    ).toBeInTheDocument();
+    await expect(canvas.getByText("Setup needs attention")).toBeInTheDocument();
+    await expect(
+      canvas.getByText(/Retry to finish setting up Vercel/u),
+    ).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Retry" })).toBeVisible();
+  },
 };
 export const DismissInstallInstructions: Story = {
   play: async ({ canvasElement }) => {

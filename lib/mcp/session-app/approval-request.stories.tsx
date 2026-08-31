@@ -18,7 +18,13 @@ const meta = {
 } satisfies Meta<typeof InputControl>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Unanswered: Story = {};
+export const Unanswered: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText("✓")).not.toBeInTheDocument();
+    await expect(canvas.queryByText("×")).not.toBeInTheDocument();
+  },
+};
 export const Approved: Story = { args: { answer: { kind: "approve" } } };
 export const Denied: Story = { args: { answer: { kind: "deny" } } };
 export const ApproveAction: Story = {
