@@ -7,6 +7,7 @@ import {
 } from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
+import { developmentFreshTemplateSourceReceipt } from "@/lib/repository/development-source";
 import { hostedSourceReceipt } from "@/lib/repository/hosted-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
@@ -42,6 +43,9 @@ export default defineTool({
     }),
   async execute({ sourceKind, path }, ctx) {
     const receipt =
+      (sourceKind === "fresh-template"
+        ? await developmentFreshTemplateSourceReceipt()
+        : undefined) ??
       (sourceKind === "fresh-template" &&
       !(hasTestCapability("simulated-target") && path !== undefined)
         ? await acquireCanonicalArrustedTemplate({
