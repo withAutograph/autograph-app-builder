@@ -32,6 +32,12 @@ const nextConfig: NextConfig = {
 // and prevents the sign-in UI from coming up.
 const tracedConfig = withEmulate(nextConfig, { routePrefix: "/api/emulate" });
 
-export default process.env.APP_BUILDER_LOCAL_AUTH_EMULATION === "1"
+const externalDevelopmentEve =
+  process.env.APP_BUILDER_EXECUTION_MODE === "development" &&
+  process.env.APP_BUILDER_LOCAL_ADAPTER === "1" &&
+  process.env.EVE_AGENT_HOST?.startsWith("http://127.0.0.1:") === true;
+
+export default process.env.APP_BUILDER_LOCAL_AUTH_EMULATION === "1" ||
+externalDevelopmentEve
   ? tracedConfig
   : withEve(tracedConfig);

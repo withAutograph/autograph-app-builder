@@ -42,6 +42,59 @@ describe("sandbox backend selection", () => {
     expect(plan.blockers).toEqual([]);
   });
 
+  it("uses Vercel Sandbox for the exact Development binding even when an old image is present", () => {
+    expect(
+      sandboxBackendPlan({
+        environment: {
+          APP_BUILDER_EXECUTION_MODE: "development",
+          APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+          APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+          APP_BUILDER_SANDBOX_IMAGE: "retired-image",
+        },
+        fixture: false,
+        localImageConfigured: true,
+      }),
+    ).toEqual({ kind: "vercel-development", blockers: [] });
+  });
+
+  it("rejects partial Development bindings instead of falling back", () => {
+    expect(
+      sandboxBackendPlan({
+        environment: { APP_BUILDER_EXECUTION_MODE: "development" },
+        fixture: false,
+        localImageConfigured: false,
+      }),
+    ).toEqual({
+      kind: "unsupported-development",
+      blockers: [
+        "Development execution requires the exact local Vercel Sandbox binding.",
+      ],
+    });
+    expect(() =>
+      selectSandboxDefinition("unsupported-development", {
+        localMicrosandbox: () => "microsandbox",
+        nonExecuting: () => "just-bash",
+        vercelHosted: () => "vercel",
+      }),
+    ).toThrow("unsupported");
+  });
+
+  it("constructs only Vercel Sandbox for Development", () => {
+    const localMicrosandbox = vi.fn(() => "microsandbox");
+    const nonExecuting = vi.fn(() => "just-bash");
+    const vercelHosted = vi.fn(() => "vercel");
+    expect(
+      selectSandboxDefinition("vercel-development", {
+        localMicrosandbox,
+        nonExecuting,
+        vercelHosted,
+      }),
+    ).toBe("vercel");
+    expect(vercelHosted).toHaveBeenCalledOnce();
+    expect(localMicrosandbox).not.toHaveBeenCalled();
+    expect(nonExecuting).not.toHaveBeenCalled();
+  });
+
   it("preserves local microsandbox and fixture paths", () => {
     expect(
       sandboxBackendPlan({

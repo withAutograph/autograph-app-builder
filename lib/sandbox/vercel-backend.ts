@@ -11,6 +11,7 @@ import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 import { createBoundedSandboxBackend } from "./sandbox-command-adapter";
 
 export interface HostedVercelBackendOptions {
+  readonly env?: Readonly<Record<string, string>>;
   readonly networkPolicy: {
     readonly allow: readonly string[];
   };
@@ -33,24 +34,42 @@ type RuntimeRecoveryPrewarmInput<BO = Record<string, never>> = Readonly<{
 
 export interface HostedVercelBackendInput {
   readonly factory?: HostedVercelBackendFactory;
+  readonly bootstrapNetworkHosts?: readonly string[];
+  readonly sandboxEnvironment?: Readonly<Record<string, string>>;
+  /** Maps Eve's authored key to a provider cache key when reuse has a narrower identity. */
+  readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
   readonly runtimeRecoveryPrewarmInput: () => RuntimeRecoveryPrewarmInput;
 }
 
 function createRuntimeRecoveringBackend<BO, SO>(input: {
   readonly backend: SandboxBackend<BO, SO>;
+  readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
   readonly resolvePrewarmInput: () => RuntimeRecoveryPrewarmInput<BO>;
 }): SandboxBackend<BO, SO> {
+  const providerTemplateKey = (authoredTemplateKey: string | null) =>
+    authoredTemplateKey === null
+      ? null
+      : (input.providerTemplateKey?.(authoredTemplateKey) ??
+        authoredTemplateKey);
   return {
     name: input.backend.name,
-    prewarm: (prewarmInput) => input.backend.prewarm(prewarmInput),
+    prewarm: (prewarmInput) =>
+      input.backend.prewarm({
+        ...prewarmInput,
+        templateKey: providerTemplateKey(prewarmInput.templateKey)!,
+      }),
     async create(createInput) {
+      const providerCreateInput = {
+        ...createInput,
+        templateKey: providerTemplateKey(createInput.templateKey),
+      };
       try {
-        return await input.backend.create(createInput);
+        return await input.backend.create(providerCreateInput);
       } catch (error) {
         if (
-          createInput.templateKey === null ||
+          providerCreateInput.templateKey === null ||
           !SandboxTemplateNotProvisionedError.is(error) ||
-          error.templateKey !== createInput.templateKey
+          error.templateKey !== providerCreateInput.templateKey
         )
           throw error;
 
@@ -59,9 +78,9 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
           bootstrap: recovery.bootstrap,
           runtimeContext: createInput.runtimeContext,
           seedFiles: recovery.seedFiles,
-          templateKey: createInput.templateKey,
+          templateKey: providerCreateInput.templateKey,
         });
-        return await input.backend.create(createInput);
+        return await input.backend.create(providerCreateInput);
       }
     },
   };
@@ -80,7 +99,14 @@ export function createHostedVercelBackend(
   const factory =
     input.factory ?? (vercel as unknown as HostedVercelBackendFactory);
   const backend = factory({
-    networkPolicy: { allow: [...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS] },
+    ...(input.sandboxEnvironment === undefined
+      ? {}
+      : { env: { ...input.sandboxEnvironment } }),
+    networkPolicy: {
+      allow: [
+        ...(input.bootstrapNetworkHosts ?? HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS),
+      ],
+    },
     resources: { vcpus: SANDBOX_EXECUTION_POLICY.provider.vcpus },
     timeout: SANDBOX_EXECUTION_POLICY.provider.timeoutMs,
     ports: SANDBOX_EXECUTION_POLICY.provider.ports,
@@ -97,6 +123,7 @@ export function createHostedVercelBackend(
   });
   return createRuntimeRecoveringBackend({
     backend: bounded,
+    providerTemplateKey: input.providerTemplateKey,
     resolvePrewarmInput: input.runtimeRecoveryPrewarmInput,
   }) as ReturnType<typeof vercel>;
 }

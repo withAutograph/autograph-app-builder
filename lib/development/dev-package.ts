@@ -252,16 +252,20 @@ export async function registerDevelopmentPackage(input: {
 export function developmentLaunchEnvironment(input: {
   snapshotRoot: string;
   destinationRoot: string;
-  image: string;
+  sourceSha: string;
+  sourceTree: string;
   fingerprint: string;
   dependencyKey: string;
   evePort: number;
 }): Readonly<Record<string, string>> {
   return {
     APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    APP_BUILDER_DEVELOPMENT_SOURCE_SHA: input.sourceSha,
+    APP_BUILDER_DEVELOPMENT_SOURCE_TREE: input.sourceTree,
     APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: input.fingerprint,
     APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,
-    APP_BUILDER_SANDBOX_IMAGE: input.image,
     APP_BUILDER_LOCAL_ADAPTER: "1",
     APP_BUILDER_LOCAL_PUBLICATION: "0",
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
@@ -270,6 +274,7 @@ export function developmentLaunchEnvironment(input: {
     APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
     EVE_HOSTED_ADAPTER: "0",
+    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
     REPOSITORY_LOCAL_ROOTS: input.snapshotRoot,
     REPOSITORY_WORKSPACE_ROOT: input.destinationRoot,

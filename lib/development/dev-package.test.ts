@@ -153,21 +153,38 @@ describe("development Codex package", () => {
       developmentLaunchEnvironment({
         snapshotRoot: "/private/dev/source",
         destinationRoot: "/private/dev/destination",
-        image: `app-builder-autograph-dev:${"a".repeat(64)}-${"b".repeat(16)}-linux-arm64`,
+        sourceSha: "b".repeat(40),
+        sourceTree: "c".repeat(40),
         fingerprint: "f".repeat(64),
         dependencyKey: "a".repeat(64),
         evePort: 2000,
       }),
     ).toMatchObject({
       APP_BUILDER_EXECUTION_MODE: "development",
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "b".repeat(40),
+      APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "c".repeat(40),
       APP_BUILDER_LOCAL_PUBLICATION: "0",
       APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
       APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
       APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
       EVE_HOSTED_ADAPTER: "0",
+      WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
       REPOSITORY_LOCAL_ROOTS: "/private/dev/source",
       REPOSITORY_WORKSPACE_ROOT: "/private/dev/destination",
     });
+    expect(
+      developmentLaunchEnvironment({
+        snapshotRoot: "/private/dev/source",
+        destinationRoot: "/private/dev/destination",
+        sourceSha: "b".repeat(40),
+        sourceTree: "c".repeat(40),
+        fingerprint: "f".repeat(64),
+        dependencyKey: "a".repeat(64),
+        evePort: 2000,
+      }),
+    ).not.toHaveProperty("APP_BUILDER_SANDBOX_IMAGE");
   });
 });
