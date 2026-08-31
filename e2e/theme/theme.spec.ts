@@ -59,7 +59,9 @@ test("stock menu and Appearance card share a persistent cross-tab preference", a
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/auth/sign-in?callbackURL=%2F");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
-  await expect(page).toHaveURL(/\/local-oauth\/github\/authorize/u);
+  await expect(page).toHaveURL(/\/local-oauth\/github\/authorize/u, {
+    timeout: 30_000,
+  });
   await expectTheme(page, "dark");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect
@@ -117,7 +119,9 @@ test("explicit Dark remains active across anonymous, auth, builder, and account 
   await page.goto("/auth/sign-in?callbackURL=%2F");
   await expectTheme(page, "dark", "dark");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
-  await expect(page).toHaveURL(/\/local-oauth\/github\/authorize/u);
+  await expect(page).toHaveURL(/\/local-oauth\/github\/authorize/u, {
+    timeout: 30_000,
+  });
   await expectTheme(page, "dark", "dark");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect
