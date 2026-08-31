@@ -26,6 +26,7 @@ import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -1792,7 +1793,7 @@ export function Builder({
     (form.buildDestination !== "web" ||
       (integrations.models.status === "ready" && model)),
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (initialDraft || hasGeneratedInitialAppName.current) return;
     hasGeneratedInitialAppName.current = true;
     setForm((current) => {
