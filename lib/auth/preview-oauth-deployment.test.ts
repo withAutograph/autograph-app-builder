@@ -273,6 +273,7 @@ describe("Preview OAuth deployment handlers", () => {
     expect(signUp).toContain("plugin.authButtons");
     expect(signUp).toContain('view="signUp"');
     expect(signUp).toContain('className="flex flex-col gap-3"');
+    expect(accountSettings).toContain("plugin.securityCards");
     expect(accountSettings).toContain("plugin.accountCards");
     expect(passkeyButton).toContain("useSignInPasskey(authClient)");
     expect(passkeyButton).toContain("useAddPasskey(authClient)");
