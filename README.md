@@ -49,6 +49,8 @@ boundaries, cache identity, and promotion flow.
 
 New contributors should start with [How to develop App Builder locally](CONTRIBUTING.md). It lists prerequisites, the first-run command, expected ready output, daily edit behavior, and troubleshooting steps.
 
+The normative daily loop is the [local-development lifecycle](docs/local-development-lifecycle.md); CI/CD remains in its separate [plan](docs/plans/2026-08-31-local-first-ci-cd.md).
+
 ## Internal workflow engine
 
 Inside the supported modes, the workflow engine can model an existing eligible

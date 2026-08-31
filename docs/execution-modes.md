@@ -6,6 +6,8 @@ private implementation details and are not additional modes.
 
 ## Non-release development
 
+The detailed iteration contract is [Local-development lifecycle](local-development-lifecycle.md).
+
 Run the only non-release workflow with an explicit local Arrusted checkout:
 
 ```sh
