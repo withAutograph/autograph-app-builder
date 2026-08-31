@@ -9,18 +9,43 @@ import {
   resetApplicationState,
 } from "../support/harness";
 
-async function extendGitHubOAuthCallback(
+type GitHubCallbackFixture =
+  | "extensions"
+  | "duplicate-code"
+  | "duplicate-state"
+  | "duplicate-installation-id"
+  | "duplicate-setup-action";
+
+async function setGitHubCallbackFixture(
   page: import("playwright/test").Page,
-  extensions: ReadonlyArray<readonly [string, string]>,
+  fixture: GitHubCallbackFixture,
 ) {
-  await page.route("**/login/oauth/authorize**", async (route) => {
-    const authorize = new URL(route.request().url());
-    const callback = new URL(authorize.searchParams.get("redirect_uri")!);
-    for (const [key, value] of extensions)
-      callback.searchParams.append(key, value);
-    authorize.searchParams.set("redirect_uri", callback.toString());
-    await route.continue({ url: authorize.toString() });
-  });
+  await page.context().addCookies([
+    {
+      name: "autograph-e2e-github-callback",
+      value: fixture,
+      url: "https://localhost:3001",
+      secure: true,
+      sameSite: "Lax",
+    },
+  ]);
+}
+
+async function completeGitHubConnection(page: import("playwright/test").Page) {
+  await expect(page).toHaveURL(/\/github\/installations/u);
+  await page
+    .getByRole("button", { name: "Install or update GitHub access" })
+    .click();
+  await expect(page).toHaveURL(/\/local-connections\/github/u);
+  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await expect(page).toHaveURL(/localhost:4001/u);
+  await page.getByRole("button", { name: /autograph-dev/u }).click();
+}
+
+async function startGitHubConnection(page: import("playwright/test").Page) {
+  await page.getByRole("checkbox", { name: /GitHub/u }).check();
+  await page.getByRole("button", { name: "Connect to GitHub" }).click();
+  await completeGitHubConnection(page);
 }
 
 function expectGitHubControlAndNoOAuthLeak(
@@ -106,13 +131,8 @@ test("GitHub installation update accepts OAuth provider extensions and retains t
 
   await page.getByLabel("Git Scope").click();
   await page.getByText("Add GitHub Scope").click();
-  await extendGitHubOAuthCallback(page, [
-    ["iss", "https://provider-extension.invalid"],
-    ["iss", "https://provider-extension.invalid/again"],
-    ["future_provider_extension", "opaque-provider-value"],
-    ["future_provider_extension", "opaque-provider-value-2"],
-  ]);
-  await installProvider(page, "GitHub");
+  await setGitHubCallbackFixture(page, "extensions");
+  await completeGitHubConnection(page);
 
   await expect(page).toHaveURL(/\?github=connected&resume=/u);
   await expect(page.getByText("GitHub connected successfully.")).toBeVisible();
@@ -140,21 +160,11 @@ for (const key of [
       "duplicate-app-owned-value",
     ]);
 
-    await extendGitHubOAuthCallback(
+    await setGitHubCallbackFixture(
       page,
-      key === "installation_id" || key === "setup_action"
-        ? [
-            ["installation_id", "1001"],
-            ["installation_id", "1001"],
-            ["setup_action", "install"],
-            ["setup_action", "install"],
-          ]
-        : [
-            [key, "duplicate-app-owned-value"],
-            [key, "duplicate-app-owned-value"],
-          ],
+      `duplicate-${key.replaceAll("_", "-")}` as GitHubCallbackFixture,
     );
-    await installProvider(page, "GitHub");
+    await startGitHubConnection(page);
     await expect(page).toHaveURL(
       /github=failed&githubReason=callback-invalid/u,
     );
