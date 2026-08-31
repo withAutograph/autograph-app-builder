@@ -1,14 +1,12 @@
 # How to develop App Builder locally
 
-This guide takes you from a source checkout to a running local App Builder plugin. Use `mise run dev` for daily development. Use the release commands only when you intend to promote clean, reviewed commits.
+This guide takes you from a source checkout to a running local App Builder plugin. The [local-development lifecycle](docs/local-development-lifecycle.md) is the normative contract for daily work: read it before changing the development workflow. Use `mise run dev` for daily development. Use the release commands only when you intend to promote clean, reviewed commits.
 
 ## Check the prerequisites
 
 Local development supports macOS and Linux on ARM64 or AMD64. Before you start, install or configure:
 
 - Git and [mise](https://mise.jdx.dev/)
-- Docker Desktop or Docker Engine with a running daemon
-- A host that supports Microsandbox virtualization
 - Codex with an active absolute `CODEX_HOME`
 - A local `withAutograph/arrusted-development` checkout
 
@@ -30,7 +28,7 @@ Start the non-release workflow with an absolute Arrusted path:
 mise run dev -- --arrusted-root /absolute/path/to/arrusted-development
 ```
 
-The first run builds the reusable development toolchain and the dependency closure for your platform. Later runs reuse both unless their inputs change.
+The first run may populate reusable caches, but dependency preparation is not part of each edit/retry cycle. Later runs reuse those caches unless their inputs change. Ordinary development does not build release artifacts, OCI/Microsandbox images, or publish anything.
 
 Wait for this output:
 
@@ -48,7 +46,7 @@ Keep `mise run dev` running. Open a new Codex task, then select **Autograph App 
 - `autograph_respond`
 - `autograph_cancel`
 
-Open prototype URLs in the integrated Browser. Development mode doesn't register an MCP App preview.
+Open prototype URLs in the integrated Browser over loopback. Development mode doesn't register an MCP App preview.
 
 ## Work on App Builder and Arrusted
 
@@ -126,7 +124,7 @@ Release proof requires clean committed Builder and Arrusted checkouts. Check bot
 
 ## Run focused validation
 
-Run the checks closest to local development changes:
+Run the checks closest to local development changes. Before the first push, complete the lifecycle exit gate once: one new-app create walkthrough and one existing-repository iterate walkthrough. Do not turn this into a broad regression run for every edit.
 
 ```sh
 mise run test:unit -- \

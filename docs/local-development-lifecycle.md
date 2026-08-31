@@ -22,8 +22,9 @@ MUST NOT leak into this loop.
 - App or agent code changes MUST NOT invalidate dependency caches. Per-run Eve
   state MUST be fresh and separate from reusable dependency caches.
 - Broad regression suites MUST NOT run on every iteration. Run the focused test
-  for the concrete fix. Before push, run both complete create/iterate
-  walkthroughs once as the local exit gate.
+  for the concrete fix. Before the first push, the single local exit gate MUST
+  be exactly two complete walkthroughs: one new-app create walkthrough and one
+  existing-repository iterate walkthrough.
 - Dirty App Builder and Arrusted working-tree code MAY be used only through the
   explicit local-development binding. Hosted and release modes MUST reject it.
 - Browser previews MUST use loopback URLs in the integrated Browser. An MCP App
@@ -36,7 +37,7 @@ MUST NOT leak into this loop.
 | --------------- | ----------------------- | -------------------------------------------------- | ------------------------------------- |
 | Per-edit        | A live-code change      | HMR or targeted restart; retry affected behavior   | Rebuilds, broad suites, publication   |
 | Focused-fix     | A concrete behavior fix | Run the smallest relevant focused test             | Treating it as full regression proof  |
-| Local-exit-gate | Before push             | Run both complete create/iterate walkthroughs once | Deploying or publishing               |
+| Local-exit-gate | Before first push      | Run one complete create and one existing-repository iterate walkthrough     | Deploying or publishing               |
 | PR CI           | A pushed PR             | Follow the separate CI plan and its gates          | Folding CI work into `mise run dev`   |
 | Main CD         | An approved main change | Follow the separate CD/release plan                | Using the local loop as release proof |
 
