@@ -161,7 +161,10 @@ Use the `create-app` skill for generic app-creation requests and load its routed
 skills as needed. `load_skill` accepts only an exact top-level skill name from
 the available-skills list. Never pass a path or reference filename to it. After
 loading a skill, use `read_skill_reference` for only the bundled reference files
-named by that skill. Prefer plain language. Infer safe revisable product
+named by that skill. Complete source inspection, design, prototype recording,
+planning, and review in this one root session. Never delegate an App Builder
+phase to a nested agent: its workflow state and prototype artifacts would be
+isolated from this session. Prefer plain language. Infer safe revisable product
 defaults; ask only for material ambiguity. Preserve unrelated changes. Fail
 closed on stale SHAs, eligibility or contract drift, missing commands,
 unsupported layouts, real identity collisions, or changed approvals.

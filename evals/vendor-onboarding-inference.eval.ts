@@ -74,6 +74,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.notCalledTool("publish_reviewed_change_set");
     t.notCalledTool("publish_reviewed_change_set_to_branch_worktree");
     t.notCalledTool("publish_github_draft_pr");
+    t.notCalledTool("agent");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
     t.check(t.reply, includes("Vendor Onboarding"));
