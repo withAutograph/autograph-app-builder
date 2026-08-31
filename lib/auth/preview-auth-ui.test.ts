@@ -23,9 +23,9 @@ describe("Preview Better Auth UI", () => {
     expect(
       resolveAuthCallbackURL(
         "https://builder.example.test/",
-        "?callbackURL=%2Fworkspace",
+        "?callbackURL=%2F",
       ),
-    ).toBe("/workspace");
+    ).toBe("/");
   });
 
   it.each([
@@ -45,30 +45,30 @@ describe("Preview Better Auth UI", () => {
     expect(
       resolveAuthCallbackURL(
         "/",
-        "?callbackURL=%2Fworkspace%3Fsource%3Doauth%23complete",
+        "?callbackURL=%2F%3Fsource%3Doauth%23complete",
       ),
-    ).toBe("/workspace?source=oauth#complete");
+    ).toBe("/?source=oauth#complete");
   });
 
   it("preserves absolute callbacks for the current origin", () => {
     expect(
       resolveAuthCallbackURL(
         "/",
-        `?callbackURL=${encodeURIComponent("https://builder.example.test/workspace?source=oauth")}`,
+        `?callbackURL=${encodeURIComponent("https://builder.example.test/?source=oauth")}`,
         "https://builder.example.test",
       ),
-    ).toBe("/workspace?source=oauth");
+    ).toBe("/?source=oauth");
   });
 
   it("builds the provider callback from the site origin", () => {
     expect(
       resolveProviderCallbackURL(
         "/auth/setting-up?callbackURL=%2F",
-        "/workspace?source=oauth",
+        "/?source=oauth",
         "https://builder.example.test",
       ).toString(),
     ).toBe(
-      "https://builder.example.test/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Doauth",
+      "https://builder.example.test/auth/setting-up?callbackURL=%2F%3Fsource%3Doauth",
     );
   });
 
