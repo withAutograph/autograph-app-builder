@@ -9,7 +9,13 @@ import autographIcon from "@/assets/autograph-icon.png";
 
 const anonymousBriefStorageKey = "autograph-app-brief";
 
-export function AuthContinuity({ children }: { children: ReactNode }) {
+export function AuthContinuity({
+  children,
+  action = "sign-in",
+}: {
+  children: ReactNode;
+  action?: "sign-in" | "sign-up";
+}) {
   const hasSavedBrief = useSyncExternalStore(
     () => () => undefined,
     () =>
@@ -39,7 +45,8 @@ export function AuthContinuity({ children }: { children: ReactNode }) {
           className="mt-4 text-center text-sm text-muted-foreground"
           role="status"
         >
-          Your brief is saved. Sign in to continue building.
+          Your brief is saved. {action === "sign-in" ? "Sign in" : "Sign up"} to
+          continue building.
         </p>
       ) : null}
 
