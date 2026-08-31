@@ -889,7 +889,12 @@ export function AppDetailsSection({
   onCycleBrief: () => void;
 }) {
   return (
-    <>
+    <SectionShell
+      className={`${styles.sectionField} ${styles.appDetailsSection}`}
+      section="app-details"
+      title="Describe your app"
+      description="Start with the outcome. The name can be generated from your brief."
+    >
       <label htmlFor="app-name">
         App Name
         <input
@@ -933,7 +938,7 @@ export function AppDetailsSection({
         </a>
         .
       </p>
-    </>
+    </SectionShell>
   );
 }
 

@@ -274,7 +274,25 @@ describe("Vercel-faithful App Builder flow", () => {
         view.querySelectorAll<HTMLElement>("[data-create-app-section]"),
         (section) => section.dataset.createAppSection,
       ),
-    ).toEqual(["build-with", "store-in", "deploy-to", "connections"]);
+    ).toEqual([
+      "app-details",
+      "build-with",
+      "store-in",
+      "deploy-to",
+      "connections",
+    ]);
+    expect(
+      Array.from(
+        view.querySelectorAll<HTMLElement>('[role="heading"][aria-level="2"]'),
+        (heading) => heading.textContent,
+      ),
+    ).toEqual([
+      "Describe your app",
+      "Build with",
+      "Store in",
+      "Deploy to",
+      "Connections",
+    ]);
     expect(view.querySelector('[aria-label="Settings"]')).toBeNull();
     expect(
       view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder,

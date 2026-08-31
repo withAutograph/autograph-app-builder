@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export type CreateAppSectionId =
-  "build-with" | "store-in" | "deploy-to" | "connections";
+  "app-details" | "build-with" | "store-in" | "deploy-to" | "connections";
 
 export function ChoiceCard({
   badge,
@@ -66,7 +66,11 @@ export function SectionShell({
 }) {
   return (
     <fieldset className={className} data-create-app-section={section}>
-      <legend>{title}</legend>
+      <legend>
+        <span role="heading" aria-level={2}>
+          {title}
+        </span>
+      </legend>
       <p>{description}</p>
       {children}
     </fieldset>
