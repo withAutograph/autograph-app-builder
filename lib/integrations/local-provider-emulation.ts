@@ -41,6 +41,12 @@ const vercelHost = z
     return `https://${normalized}`;
   });
 
+export function readVercelPreviewOrigin(
+  hostname: string | undefined,
+): string | undefined {
+  return hostname === undefined ? undefined : vercelHost.parse(hostname);
+}
+
 const branchSchema = z
   .string()
   .min(1)

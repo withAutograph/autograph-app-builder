@@ -326,10 +326,34 @@ describe("Preview OAuth runtime configuration", () => {
       environment: "preview",
       issuer: "https://app-git-feature-team.vercel.app/api/auth",
       resource: "https://app-git-feature-team.vercel.app/mcp",
+      trustedOrigins: [
+        "https://app-git-feature-team.vercel.app",
+        "https://app-deployment-team.vercel.app",
+      ],
       githubClientId: "preview-github-client",
       vercelClientId: "preview-vercel-client",
       passkeyOnboarding: null,
     });
+  });
+
+  it("rejects a malformed deployment origin in emulated Preview auth", () => {
+    expect(() =>
+      readPreviewOAuthRuntimeConfig({
+        ...environment,
+        APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+        NODE_ENV: "production",
+        VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
+        VERCEL_GIT_COMMIT_REF: "feature/provider-emulation",
+        VERCEL_GIT_REPO_SLUG: "autograph-app-builder",
+        VERCEL_PROJECT_ID: "prj_preview",
+        EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
+        EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
+        EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
+        EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
+        EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
+        VERCEL_URL: "attacker.example.com",
+      }),
+    ).toThrow();
   });
 
   it("accepts Production only when Vercel and the configured environment agree", () => {

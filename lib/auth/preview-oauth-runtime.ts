@@ -37,6 +37,7 @@ import {
 import {
   providerEmulationEnvironment,
   readProviderEmulation,
+  readVercelPreviewOrigin,
   type ProviderEmulation,
 } from "../integrations/local-provider-emulation";
 import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
@@ -206,6 +207,7 @@ const previewOAuthRuntimeConfigSchema = z
     ]),
     issuer: z.string().url(),
     resource: z.string().url(),
+    trustedOrigins: z.array(z.string().url()).min(1).max(3).optional(),
     secret: z
       .string()
       .min(32)
@@ -382,6 +384,14 @@ export function readPreviewOAuthRuntimeConfig(
         environment: deploymentEnvironment,
         issuer: resolvedEnvironment.BETTER_AUTH_URL,
         resource: resolvedEnvironment.MCP_RESOURCE_URL,
+        trustedOrigins: Array.from(
+          new Set(
+            [
+              localEmulation.canonicalOrigin,
+              readVercelPreviewOrigin(environment.VERCEL_URL),
+            ].filter((origin): origin is string => origin !== undefined),
+          ),
+        ),
         secret: resolvedEnvironment.BETTER_AUTH_SECRET,
         databaseUrl: resolvedEnvironment.DATABASE_URL,
         githubClientId: resolvedEnvironment.GITHUB_CLIENT_ID,
@@ -405,6 +415,7 @@ export function readPreviewOAuthRuntimeConfig(
       environment: "local",
       issuer: environment.BETTER_AUTH_URL,
       resource: environment.MCP_RESOURCE_URL,
+      trustedOrigins: [localEmulation.canonicalOrigin],
       secret: environment.BETTER_AUTH_SECRET,
       databaseUrl: `postgresql://postgres@127.0.0.1:${localDatabasePort}/autograph_app_builder`,
       githubClientId: environment.GITHUB_CLIENT_ID,
@@ -434,6 +445,7 @@ export function readPreviewOAuthRuntimeConfig(
     environment: deploymentEnvironment,
     issuer,
     resource,
+    trustedOrigins: resource ? [new URL(resource).origin] : [],
     secret: environment.BETTER_AUTH_SECRET,
     databaseUrl: environment.DATABASE_URL,
     githubClientId: environment.GITHUB_CLIENT_ID,
@@ -605,7 +617,7 @@ export function createPreviewOAuthServer(input: {
     basePath: "/api/auth",
     secret: config.secret,
     database: input.database,
-    trustedOrigins: [resourceOrigin],
+    trustedOrigins: config.trustedOrigins ?? [resourceOrigin],
     socialProviders: localEmulation
       ? {}
       : config.githubClientId && config.githubClientSecret
