@@ -15,22 +15,30 @@ async function extendGitHubOAuthCallback(
   page: import("playwright/test").Page,
   extensions: ReadonlyArray<readonly [string, string]>,
 ) {
-  let redirected = false;
+  let callbackUrl: string | undefined;
   await page.route(`**${githubCallbackPath}**`, async (route) => {
     const url = new URL(route.request().url());
-    // The installation callback has no OAuth code. Preserve it so the server
-    // creates its one-time authorization state before altering only the
-    // provider's final OAuth return.
-    if (redirected || !url.searchParams.has("code")) return route.fallback();
-    for (const [key, value] of extensions) url.searchParams.append(key, value);
-    // A redirect exercises the real callback route while ensuring Playwright
-    // does not discard the rewritten navigation URL.
-    redirected = true;
-    await route.fulfill({
-      status: 302,
-      headers: { location: url.toString() },
-    });
+    // Let the installation callback create the signed authorization state;
+    // capture and replace only the provider's final OAuth callback.
+    if (!url.searchParams.has("code")) return route.fallback();
+    callbackUrl = url.toString();
+    await route.abort();
   });
+
+  await page.getByRole("checkbox", { name: /GitHub/u }).check();
+  await page.getByRole("button", { name: "Connect to GitHub" }).click();
+  await page
+    .getByRole("button", { name: "Install or update GitHub access" })
+    .click();
+  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await expect(page).toHaveURL(/localhost:4001/u);
+  await page.getByRole("button", { name: /autograph-dev/u }).click();
+  await expect.poll(() => callbackUrl).toBeTruthy();
+
+  const callback = new URL(callbackUrl!);
+  for (const [key, value] of extensions)
+    callback.searchParams.append(key, value);
+  await page.goto(callback.toString());
 }
 
 function expectGitHubControlAndNoOAuthLeak(
@@ -109,12 +117,6 @@ test("GitHub installation update accepts OAuth provider extensions and retains t
   await page.goto("/");
   await installProvider(page, "GitHub");
 
-  await extendGitHubOAuthCallback(page, [
-    ["iss", "https://provider-extension.invalid"],
-    ["iss", "https://provider-extension.invalid/again"],
-    ["future_provider_extension", "opaque-provider-value"],
-    ["future_provider_extension", "opaque-provider-value-2"],
-  ]);
   const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, [
     "opaque-provider-value",
     "opaque-provider-value-2",
@@ -122,21 +124,21 @@ test("GitHub installation update accepts OAuth provider extensions and retains t
 
   await page.getByLabel("Git Scope").click();
   await page.getByText("Add GitHub Scope").click();
-  await expect(page).toHaveURL(/\/github\/installations/u);
-  await page
-    .getByRole("button", { name: "Install or update GitHub access" })
-    .click();
-  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
-  await page.getByRole("button", { name: /autograph-dev/u }).click();
+  await extendGitHubOAuthCallback(page, [
+    ["iss", "https://provider-extension.invalid"],
+    ["iss", "https://provider-extension.invalid/again"],
+    ["future_provider_extension", "opaque-provider-value"],
+    ["future_provider_extension", "opaque-provider-value-2"],
+  ]);
 
   await expect(page).toHaveURL(/\?github=connected&resume=/u);
   await expect(page.getByText("GitHub connected successfully.")).toBeVisible();
-  await expect(page.getByLabel("Git Scope")).toHaveValue("withAutograph");
+  await expect(page.getByLabel("Git Scope")).toHaveValue("autograph-local");
   expect((await applicationCounts()).githubInstallations).toBe(1);
 
   await page.goto("/");
   await expect(page).toHaveURL(/https:\/\/localhost:3001\/$/u);
-  await expect(page.getByLabel("Git Scope")).toHaveValue("withAutograph");
+  await expect(page.getByLabel("Git Scope")).toHaveValue("autograph-local");
   await assertNoLeak();
 });
 
@@ -151,6 +153,10 @@ for (const key of [
   }) => {
     await finishOAuth(page, "GitHub");
     await page.goto("/");
+    const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, [
+      "duplicate-app-owned-value",
+    ]);
+
     await extendGitHubOAuthCallback(
       page,
       key === "installation_id" || key === "setup_action"
@@ -165,11 +171,6 @@ for (const key of [
             [key, "duplicate-app-owned-value"],
           ],
     );
-    const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, [
-      "duplicate-app-owned-value",
-    ]);
-
-    await installProvider(page, "GitHub");
     await expect(page).toHaveURL(
       /github=failed&githubReason=callback-invalid/u,
     );
