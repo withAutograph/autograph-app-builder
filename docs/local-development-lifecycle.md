@@ -32,14 +32,13 @@ MUST NOT leak into this loop.
 
 ## Decision table
 
-| Stage | Trigger | Required action | Prohibited scope |
-| --- | --- | --- | --- |
-| Per-edit | A live-code change | HMR or targeted restart; retry affected behavior | Rebuilds, broad suites, publication |
-| Focused-fix | A concrete behavior fix | Run the smallest relevant focused test | Treating it as full regression proof |
-| Local-exit-gate | Before push | Run both complete create/iterate walkthroughs once | Deploying or publishing |
-| PR CI | A pushed PR | Follow the separate CI plan and its gates | Folding CI work into `mise run dev` |
-| Main CD | An approved main change | Follow the separate CD/release plan | Using the local loop as release proof |
+| Stage           | Trigger                 | Required action                                    | Prohibited scope                      |
+| --------------- | ----------------------- | -------------------------------------------------- | ------------------------------------- |
+| Per-edit        | A live-code change      | HMR or targeted restart; retry affected behavior   | Rebuilds, broad suites, publication   |
+| Focused-fix     | A concrete behavior fix | Run the smallest relevant focused test             | Treating it as full regression proof  |
+| Local-exit-gate | Before push             | Run both complete create/iterate walkthroughs once | Deploying or publishing               |
+| PR CI           | A pushed PR             | Follow the separate CI plan and its gates          | Folding CI work into `mise run dev`   |
+| Main CD         | An approved main change | Follow the separate CD/release plan                | Using the local loop as release proof |
 
 The PR CI and main CD rows describe later stages only; they are not additional
 local-development commands or permissions.
-
