@@ -55,8 +55,18 @@ export default defineEval({
     t.succeeded();
     t.calledTool("accept_app_spec", { count: 1 });
     t.calledTool("plan_app_creation", { count: 2 });
-    t.check(t.reply, includes("target identity and planning commands"));
-    t.check(t.reply, includes("no apply, validation, or target mutation"));
+    t.check(t.reply, includes("private preview"));
+    t.check(
+      t.reply,
+      satisfies(
+        (reply) =>
+          typeof reply === "string" &&
+          !/target identity|canonical proposal|digest-bound|target mutation/iu.test(
+            reply,
+          ),
+        "planning result stays product-facing",
+      ),
+    );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

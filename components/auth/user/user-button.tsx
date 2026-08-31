@@ -10,6 +10,7 @@ import {
   Settings,
   UserPlus2,
 } from "lucide-react";
+import Link from "next/link";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -62,7 +63,6 @@ export type UserButtonProps = {
 
 function renderUserLink(
   link: UserButtonLink | ReactElement,
-  navigate: (options: { to: string; replace?: boolean }) => void,
   fallbackKey: string,
 ): ReactNode {
   if (isValidElement(link)) return link;
@@ -72,7 +72,7 @@ function renderUserLink(
     <DropdownMenuItem
       key={fallbackKey}
       variant={variant}
-      onClick={() => navigate({ to: href })}
+      render={<Link href={href} />}
     >
       {icon}
       {label}
@@ -104,7 +104,7 @@ export function UserButton({
   links,
   hideSettings = false,
 }: UserButtonProps) {
-  const { authClient, basePaths, viewPaths, localization, navigate } =
+  const { authClient, basePaths, viewPaths, localization } =
     useAuth<MultiSessionAuthClient>();
 
   const { isPending: settingActiveSession } = useSetActiveSession(authClient);
@@ -116,9 +116,7 @@ export function UserButton({
       if (visibility === "authenticated" && !session) return [];
       if (visibility === "unauthenticated" && session) return [];
     }
-    return [
-      renderUserLink(link, navigate, `user-button-link-${index.toString()}`),
-    ];
+    return [renderUserLink(link, `user-button-link-${index.toString()}`)];
   });
 
   // Whether anything renders between the user info label and the
@@ -184,10 +182,10 @@ export function UserButton({
 
             {!hideSettings && (
               <DropdownMenuItem
-                onClick={() =>
-                  navigate({
-                    to: `${basePaths.settings}/${viewPaths.settings.account}`,
-                  })
+                render={
+                  <Link
+                    href={`${basePaths.settings}/${viewPaths.settings.account}`}
+                  />
                 }
               >
                 <Settings className="text-muted-foreground" />
@@ -199,10 +197,11 @@ export function UserButton({
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              onClick={() =>
-                navigate({
-                  to: `${basePaths.auth}/${viewPaths.auth.signOut}`,
-                })
+              render={
+                <Link
+                  href={`${basePaths.auth}/${viewPaths.auth.signOut}`}
+                  prefetch={false}
+                />
               }
             >
               <LogOut className="text-muted-foreground" />
@@ -215,10 +214,11 @@ export function UserButton({
             {userLinks}
 
             <DropdownMenuItem
-              onClick={() =>
-                navigate({
-                  to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
-                })
+              render={
+                <Link
+                  href={`${basePaths.auth}/${viewPaths.auth.signIn}`}
+                  prefetch={false}
+                />
               }
             >
               <LogIn className="text-muted-foreground" />
@@ -227,10 +227,11 @@ export function UserButton({
             </DropdownMenuItem>
 
             <DropdownMenuItem
-              onClick={() =>
-                navigate({
-                  to: `${basePaths.auth}/${viewPaths.auth.signUp}`,
-                })
+              render={
+                <Link
+                  href={`${basePaths.auth}/${viewPaths.auth.signUp}`}
+                  prefetch={false}
+                />
               }
             >
               <UserPlus2 className="text-muted-foreground" />

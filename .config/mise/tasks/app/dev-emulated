@@ -79,6 +79,7 @@ trap cleanup EXIT INT TERM
 export APP_BUILDER_LOCAL_PROVIDER_EMULATION=1
 export APP_BUILDER_LOCAL_AUTH_EMULATION=1
 export APP_BUILDER_LOCAL_PORT="$app_port"
+export APP_BUILDER_DATABASE_PORT="$database_port"
 export PASSKEY_ONBOARDING=local-preview-v1
 export EVE_HOSTED_ADAPTER=1
 export BETTER_AUTH_URL="$app_origin/api/auth"

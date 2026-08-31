@@ -1,5 +1,5 @@
 import { defineEval } from "eve/evals";
-import { includes } from "eve/evals/expect";
+import { includes, satisfies } from "eve/evals/expect";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
@@ -20,7 +20,18 @@ export default defineEval({
     t.succeeded();
     t.notEvent("input.requested");
     t.calledTool("plan_app_creation", { count: 1 });
-    t.check(t.reply, includes("digest-bound canonical proposal"));
+    t.check(t.reply, includes("private preview"));
+    t.check(
+      t.reply,
+      satisfies(
+        (reply) =>
+          typeof reply === "string" &&
+          !/canonical proposal|digest-bound|target identity|target mutation/iu.test(
+            reply,
+          ),
+        "automatic planning stays product-facing",
+      ),
+    );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
     await t.send("Report artifact workflow status.");
