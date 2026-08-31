@@ -709,6 +709,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilder
         authenticated
+        generatedNameSeed="request-stable-seed"
         user={{ name: "Taylor", email: "taylor@example.com" }}
       />,
     );
@@ -718,6 +719,22 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(
       view.querySelector<HTMLInputElement>("#repository-name")?.value,
     ).toBe(repositoryNameFromAppName(appName ?? ""));
+  });
+
+  it("does not replace an edited generated name after the builder mounts", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        generatedNameSeed="request-stable-seed"
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    const appName = view.querySelector<HTMLInputElement>("#app-name")!;
+
+    await fill(appName, "Replay Draft");
+    await act(async () => new Promise(requestAnimationFrame));
+
+    expect(appName.value).toBe("Replay Draft");
   });
 
   it("selects and searches seeded teams, GitHub scopes, and models", async () => {

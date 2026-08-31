@@ -26,7 +26,6 @@ import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -1663,6 +1662,7 @@ export function AnonymousBuilder({
 
 export function Builder({
   initialBrief,
+  generatedNameSeed,
   onCreate,
   connectionsEnabled,
   comingSoonEnabled,
@@ -1672,6 +1672,7 @@ export function Builder({
   resumeKey,
 }: {
   initialBrief: string;
+  generatedNameSeed: string;
   onCreate: (form: BuilderForm, resumeKey?: string) => void;
   connectionsEnabled: boolean;
   comingSoonEnabled: boolean;
@@ -1681,7 +1682,6 @@ export function Builder({
   resumeKey?: string;
 }) {
   const router = useRouter();
-  const generatedNameSeed = useId();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
     value: scope.installationId,
     label: scope.displayName,
@@ -1725,7 +1725,6 @@ export function Builder({
   const repositoryEditedByUser = useRef(
     initialDraft?.repositoryEditedByUser ?? false,
   );
-  const hasGeneratedInitialAppName = useRef(false);
   const hasUnsavedChanges = useRef(false);
   const suppressUnsavedWarning = useRef(false);
   const resumedVercelConnection = providerNotices.some(
@@ -1793,21 +1792,6 @@ export function Builder({
     (form.buildDestination !== "web" ||
       (integrations.models.status === "ready" && model)),
   );
-  useLayoutEffect(() => {
-    if (initialDraft || hasGeneratedInitialAppName.current) return;
-    hasGeneratedInitialAppName.current = true;
-    setForm((current) => {
-      if (appNameEditedByUser.current || repositoryEditedByUser.current) {
-        return current;
-      }
-      const appName = randomAppName();
-      return {
-        ...current,
-        appName,
-        repository: repositoryNameFromAppName(appName),
-      };
-    });
-  }, [initialDraft]);
   const updateBrief = (brief: string) => {
     if (brief !== form.brief) hasUnsavedChanges.current = true;
     setForm((current) => {
@@ -2550,6 +2534,7 @@ codex plugin add app-builder@autograph`;
 
 export function AppBuilder({
   authenticated,
+  generatedNameSeed = "app-builder",
   connectionsEnabled = false,
   comingSoonEnabled = false,
   provisioningEnabled = false,
@@ -2558,6 +2543,7 @@ export function AppBuilder({
   providerResumeKey,
 }: {
   authenticated: boolean;
+  generatedNameSeed?: string;
   connectionsEnabled?: boolean;
   comingSoonEnabled?: boolean;
   provisioningEnabled?: boolean;
@@ -2638,6 +2624,7 @@ export function AppBuilder({
         <Builder
           key={builderKey}
           initialBrief={savedBrief}
+          generatedNameSeed={generatedNameSeed}
           initialDraft={resumedDraft}
           resumeKey={providerResumeKey}
           connectionsEnabled={connectionsEnabled}

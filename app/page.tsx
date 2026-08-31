@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { headers } from "next/headers";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
@@ -124,6 +126,7 @@ export default async function Home({ searchParams }: PageProps) {
   return (
     <AppBuilder
       authenticated={authenticated && mode !== "anonymous"}
+      generatedNameSeed={randomUUID()}
       connectionsEnabled={connectionsEnabled}
       comingSoonEnabled={comingSoonEnabled}
       provisioningEnabled={provisioningEnabled}
