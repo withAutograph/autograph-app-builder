@@ -6,8 +6,10 @@ import { isAbsolute } from "node:path";
 import {
   inspectBuilderOwnedSupportedRepository,
   inspectSupportedRepository,
+  inspectSupportedTemplateSnapshot,
   SUPPORTED_TEMPLATE_ADAPTER,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
+  type SupportedTemplateSnapshot,
 } from "./supported-template";
 
 export type SourceKind = "existing-repository" | "fresh-template";
@@ -151,6 +153,92 @@ export type SourceReceipt = SourceReceiptEvidence & {
   /** Local runtime locator only. It is deliberately excluded from `digest`. */
   sourcePath: string;
 };
+
+export type CanonicalTemplateSnapshot = Omit<
+  SupportedTemplateSnapshot,
+  "sourceSha"
+> & {
+  sourceSha: string;
+  sourceTree: string;
+  contract: Array<{
+    path: string;
+    mode: string;
+    objectId: string;
+    sha256: string;
+  }>;
+};
+
+export function parseCanonicalTemplateSnapshot(
+  value: unknown,
+): CanonicalTemplateSnapshot {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "contents",
+      "contract",
+      "dirtyPaths",
+      "sourcePath",
+      "sourceSha",
+      "sourceTree",
+    ])
+  )
+    throw new Error("Canonical template clone inspection is invalid.");
+  if (
+    value.sourcePath !== "/workspace/repository" ||
+    !isGitObjectId(value.sourceSha) ||
+    !isGitObjectId(value.sourceTree) ||
+    !Array.isArray(value.dirtyPaths) ||
+    value.dirtyPaths.some((path) => typeof path !== "string") ||
+    !isRecord(value.contents) ||
+    !Array.isArray(value.contract)
+  )
+    throw new Error("Canonical template clone inspection is invalid.");
+  const allowedContents = new Set([
+    ...SUPPORTED_TEMPLATE_INPUT_PATHS,
+    ".config/repository-template.json",
+  ]);
+  if (
+    Object.entries(value.contents).some(
+      ([path, content]) =>
+        !allowedContents.has(path) || typeof content !== "string",
+    )
+  )
+    throw new Error("Canonical template clone inspection is invalid.");
+  const contents = value.contents as Partial<Record<string, string>>;
+  const contract = value.contract.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      !hasExactKeys(entry, ["mode", "objectId", "path", "sha256"])
+    )
+      throw new Error("Canonical template clone inspection is invalid.");
+    if (
+      typeof entry.path !== "string" ||
+      typeof entry.mode !== "string" ||
+      typeof entry.objectId !== "string" ||
+      typeof entry.sha256 !== "string"
+    )
+      throw new Error("Canonical template clone inspection is invalid.");
+    return {
+      path: entry.path,
+      mode: entry.mode,
+      objectId: entry.objectId,
+      sha256: entry.sha256,
+    };
+  });
+  for (const entry of contract) {
+    const content = contents[entry.path];
+    if (content !== undefined && sha256(content) !== entry.sha256)
+      throw new Error("Canonical template clone inspection is invalid.");
+  }
+  return {
+    sourcePath: value.sourcePath,
+    sourceSha: value.sourceSha,
+    sourceTree: value.sourceTree,
+    dirtyPaths: [...value.dirtyPaths],
+    contents,
+    contract,
+  };
+}
 
 type UnsignedSourceReceiptEvidence =
   | Omit<LegacySourceReceiptEvidence, "digest">
@@ -382,5 +470,71 @@ export async function inspectClonedTemplateSourceReceipt(input: {
     ...evidence,
     digest: sourceReceiptDigest(evidence),
     sourcePath: eligibility.sourcePath,
+  });
+}
+
+function contractDigestFromSnapshot(
+  contract: CanonicalTemplateSnapshot["contract"],
+): string {
+  if (contract.length !== SUPPORTED_TEMPLATE_INPUT_PATHS.length)
+    throw new Error("Canonical template contract receipt is invalid.");
+  const paths = new Set<string>();
+  const normalized = contract.map((entry, index) => {
+    const expectedPath = SUPPORTED_TEMPLATE_INPUT_PATHS[index];
+    if (
+      expectedPath === undefined ||
+      entry.path !== expectedPath ||
+      paths.has(entry.path) ||
+      !["100644", "100755"].includes(entry.mode) ||
+      !isGitObjectId(entry.objectId) ||
+      !isDigest(entry.sha256)
+    )
+      throw new Error("Canonical template contract receipt is invalid.");
+    paths.add(entry.path);
+    return {
+      path: entry.path,
+      mode: entry.mode,
+      objectId: entry.objectId,
+      sha256: entry.sha256,
+    };
+  });
+  return sha256(JSON.stringify(normalized));
+}
+
+/**
+ * Construct the V4 receipt from observations gathered inside the one
+ * canonical sandbox clone. The host receives no second checkout; it only
+ * evaluates the closed adapter snapshot and contract entries emitted by that
+ * detached clone.
+ */
+export function inspectCanonicalTemplateSnapshotReceipt(input: {
+  snapshot: CanonicalTemplateSnapshot;
+  readinessDigest: string;
+}): SourceReceipt {
+  const eligibility = inspectSupportedTemplateSnapshot(input.snapshot);
+  if (!eligibility.eligible || eligibility.sourceSha === undefined)
+    throw new Error(
+      `Cloned template is not eligible: ${eligibility.failures.join("; ")}`,
+    );
+  const evidence = {
+    version: SOURCE_RECEIPT_VERSION,
+    sourceKind: "fresh-template" as const,
+    sourceSha: eligibility.sourceSha,
+    sourceTree: input.snapshot.sourceTree,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
+    eligibilityDigest: eligibility.digest,
+    contractDigest: contractDigestFromSnapshot(input.snapshot.contract),
+    releaseEnabled: false as const,
+    provenance: {
+      repository: ARRUSTED_TEMPLATE_REPOSITORY,
+      ref: ARRUSTED_TEMPLATE_REF,
+      method: "git-clone-v1" as const,
+      readinessDigest: input.readinessDigest,
+    },
+  };
+  return parseSourceReceipt({
+    ...evidence,
+    digest: sourceReceiptDigest(evidence),
+    sourcePath: input.snapshot.sourcePath,
   });
 }

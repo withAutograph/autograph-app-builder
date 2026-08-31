@@ -111,6 +111,19 @@ export type EligibilityResult = {
   digest: string;
 };
 
+/**
+ * Git metadata and the small, closed set of source files the V0 adapter
+ * needs to determine eligibility.  It lets a canonical sandbox clone be
+ * inspected without creating a second host-side checkout.
+ */
+export type SupportedTemplateSnapshot = {
+  sourcePath: string;
+  sourceSha?: string;
+  dirtyPaths: string[];
+  failures?: string[];
+  contents: Partial<Record<string, string>>;
+};
+
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -351,42 +364,59 @@ async function inspectSupportedRepositoryAtPath(
     failures.push("source is not a readable Git worktree");
   }
 
+  const contents = Object.fromEntries(
+    [...SUPPORTED_TEMPLATE_INPUT_PATHS, ".config/repository-template.json"].map(
+      (path) => {
+        const file = resolve(sourcePath, path);
+        return [
+          path,
+          existsSync(file) ? readFileSync(file, "utf8") : undefined,
+        ];
+      },
+    ),
+  );
+  return inspectSupportedTemplateSnapshot({
+    sourcePath,
+    sourceSha,
+    dirtyPaths,
+    failures,
+    contents,
+  });
+}
+
+/**
+ * Evaluate the repository-owned adapter contract from an already captured
+ * snapshot.  The same function is used for ordinary local repositories and
+ * for the fixed canonical clone inside an Eve session.
+ */
+export function inspectSupportedTemplateSnapshot(
+  input: SupportedTemplateSnapshot,
+): EligibilityResult {
+  const failures = [...(input.failures ?? [])];
+  const contents = input.contents;
   for (const path of SUPPORTED_TEMPLATE_INPUT_PATHS) {
-    if (!existsSync(resolve(sourcePath, path)))
+    if (contents[path] === undefined)
       failures.push(`missing required path ${path}`);
   }
-  if (existsSync(resolve(sourcePath, ".config/repository-template.json"))) {
+  if (contents[".config/repository-template.json"] !== undefined)
     failures.push("V0 does not accept a repository-template manifest");
-  }
 
-  const appContractPath = resolve(
-    sourcePath,
-    ".config/mise/scripts/repository/app-contract.ts",
-  );
-  const appContract = existsSync(appContractPath)
-    ? readFileSync(appContractPath, "utf8")
-    : "";
+  const appContract =
+    contents[".config/mise/scripts/repository/app-contract.ts"] ?? "";
   const runtime = /runtime:\s*"nextjs"/u.test(appContract)
     ? "nextjs"
     : "unsupported";
   if (runtime === "unsupported")
     failures.push("app planner does not declare the Next.js runtime");
 
-  const generatorPath = resolve(
-    sourcePath,
-    ".config/turbo/generators/config.ts",
-  );
-  const generator = existsSync(generatorPath)
-    ? readFileSync(generatorPath, "utf8")
-    : "";
+  const generator = contents[".config/turbo/generators/config.ts"] ?? "";
   const packageScope = generator.includes("autograph")
     ? "@autograph"
     : "unsupported";
   if (packageScope === "unsupported")
     failures.push("workspace package scope is not @autograph");
 
-  const misePath = resolve(sourcePath, ".config/mise/config.toml");
-  const mise = existsSync(misePath) ? readFileSync(misePath, "utf8") : "";
+  const mise = contents[".config/mise/config.toml"] ?? "";
   if (!mise.includes('[tasks."create:app"]'))
     failures.push("create:app command is missing");
   if (!mise.includes('[tasks."repository:preflight"]'))
@@ -409,13 +439,8 @@ async function inspectSupportedRepositoryAtPath(
   )
     failures.push("generate:app command drifted");
 
-  const preflightPath = resolve(
-    sourcePath,
-    ".config/mise/scripts/repository/repository-preflight.ts",
-  );
-  const preflight = existsSync(preflightPath)
-    ? readFileSync(preflightPath, "utf8")
-    : "";
+  const preflight =
+    contents[".config/mise/scripts/repository/repository-preflight.ts"] ?? "";
   if (!preflight.includes('runtime: "nextjs"'))
     failures.push("repository preflight does not declare the Next.js runtime");
   for (const [name, command] of Object.entries({
@@ -431,8 +456,7 @@ async function inspectSupportedRepositoryAtPath(
   )
     failures.push("repository preflight validation commands drifted");
 
-  const cdPath = resolve(sourcePath, ".github/workflows/cd.yml");
-  const cd = existsSync(cdPath) ? readFileSync(cdPath, "utf8") : "";
+  const cd = contents[".github/workflows/cd.yml"] ?? "";
   if (!supportsReleaseGate(cd))
     failures.push(
       "REPOSITORY_RELEASE_ENABLED gate is not the supported CD gate",
@@ -440,8 +464,8 @@ async function inspectSupportedRepositoryAtPath(
 
   const normalized = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
-    sourceSha,
-    dirtyPaths: dirtyPaths.toSorted(),
+    sourceSha: input.sourceSha,
+    dirtyPaths: input.dirtyPaths.toSorted(),
     failures: failures.toSorted(),
     observed: {
       runtime,
@@ -459,7 +483,7 @@ async function inspectSupportedRepositoryAtPath(
   return {
     ...normalized,
     eligible: failures.length === 0,
-    sourcePath,
+    sourcePath: input.sourcePath,
     digest: sha256(JSON.stringify(normalized)),
   };
 }

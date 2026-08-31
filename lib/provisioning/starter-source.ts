@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
@@ -12,6 +13,10 @@ import {
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
 } from "../repository/dependency-cache";
+import {
+  ARRUSTED_TEMPLATE_REPOSITORY,
+  templateReadinessAttestationDigest,
+} from "../repository/arrusted-template";
 import { safeSourcePath } from "../repository/source-path";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -86,6 +91,45 @@ const execFileAsync = promisify(execFile);
 const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 const MAX_STARTER_FILES = 10_000;
 const MAX_STARTER_FILE_BYTES = 10 * 1024 * 1024;
+
+function restrictedGit(args: string[], timeout = 30_000) {
+  return execFileAsync(
+    git,
+    [
+      "-c",
+      "protocol.allow=never",
+      "-c",
+      "protocol.https.allow=always",
+      "-c",
+      "credential.helper=",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "core.fsmonitor=false",
+      ...args,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        NODE_ENV: process.env.NODE_ENV ?? "production",
+        PATH: "/usr/bin:/bin",
+        HOME: "/dev/null",
+        XDG_CONFIG_HOME: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_NO_LAZY_FETCH: "1",
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_ASKPASS: "/usr/bin/false",
+        SSH_ASKPASS: "/usr/bin/false",
+        GIT_LFS_SKIP_SMUDGE: "1",
+      },
+      maxBuffer: 2 * 1024 * 1024,
+      timeout,
+    },
+  );
+}
 
 const starterConfigSchema = z
   .object({
@@ -260,44 +304,58 @@ export async function loadStarterSource(input: {
  * remains readable solely for sessions that already recorded a V3 receipt.
  */
 export async function cloneStarterSource(): Promise<StarterSource> {
-  const { cloneArrustedTemplate } =
-    await import("../repository/arrusted-template");
-  const clone = await cloneArrustedTemplate();
+  const root = await mkdtemp(join(tmpdir(), "autograph-app-builder-starter-"));
+  const checkout = join(root, "repository");
   try {
-    if (clone.receipt.version !== 4)
-      throw new Error("starter-source-receipt-version-invalid");
-    const listing = await execFileAsync(
-      git,
+    const clone = await restrictedGit(
       [
-        "-c",
-        "protocol.allow=never",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "core.fsmonitor=false",
-        "-C",
-        clone.receipt.sourcePath,
-        "ls-files",
-        "-z",
+        "clone",
+        "--no-checkout",
+        "--no-recurse-submodules",
+        "--single-branch",
+        "--branch",
+        "main",
+        ARRUSTED_TEMPLATE_REPOSITORY,
+        checkout,
       ],
-      {
-        encoding: "utf8",
-        env: {
-          NODE_ENV: process.env.NODE_ENV ?? "production",
-          PATH: "/usr/bin:/bin",
-          HOME: "/dev/null",
-          XDG_CONFIG_HOME: "/dev/null",
-          GIT_CONFIG_NOSYSTEM: "1",
-          GIT_CONFIG_SYSTEM: "/dev/null",
-          GIT_CONFIG_GLOBAL: "/dev/null",
-          GIT_ATTR_NOSYSTEM: "1",
-          GIT_NO_LAZY_FETCH: "1",
-          GIT_TERMINAL_PROMPT: "0",
-        },
-        maxBuffer: 2 * 1024 * 1024,
-        timeout: 30_000,
-      },
+      60_000,
     );
+    if (clone.stderr.length > 2 * 1024 * 1024)
+      throw new Error("starter-source-clone-output-invalid");
+    const origin = await restrictedGit([
+      "-C",
+      checkout,
+      "config",
+      "--get",
+      "remote.origin.url",
+    ]);
+    if (origin.stdout.trim() !== ARRUSTED_TEMPLATE_REPOSITORY)
+      throw new Error("starter-source-origin-drifted");
+    const sha = (
+      await restrictedGit([
+        "-C",
+        checkout,
+        "rev-parse",
+        "refs/remotes/origin/main",
+      ])
+    ).stdout.trim();
+    if (!/^[0-9a-f]{40}$/u.test(sha))
+      throw new Error("starter-source-ref-invalid");
+    await restrictedGit([
+      "-C",
+      checkout,
+      "checkout",
+      "--detach",
+      "--quiet",
+      sha,
+    ]);
+    const tree = (
+      await restrictedGit(["-C", checkout, "rev-parse", `${sha}^{tree}`])
+    ).stdout.trim();
+    if (!/^[0-9a-f]{40}$/u.test(tree))
+      throw new Error("starter-source-tree-invalid");
+    const readinessDigest = await templateReadinessAttestationDigest(sha, tree);
+    const listing = await restrictedGit(["-C", checkout, "ls-files", "-z"]);
     const paths = listing.stdout.split("\0").filter(Boolean);
     if (paths.length === 0 || paths.length > MAX_STARTER_FILES)
       throw new Error("starter-source-file-count-invalid");
@@ -305,7 +363,7 @@ export async function cloneStarterSource(): Promise<StarterSource> {
       paths.map(async (path): Promise<StarterSourceFile> => {
         if (!safeSourcePath(path))
           throw new Error("starter-source-path-invalid");
-        const filePath = join(clone.receipt.sourcePath, path);
+        const filePath = join(checkout, path);
         const stat = await lstat(filePath);
         if (!stat.isFile() || stat.size > MAX_STARTER_FILE_BYTES)
           throw new Error("starter-source-file-invalid");
@@ -318,16 +376,16 @@ export async function cloneStarterSource(): Promise<StarterSource> {
     );
     return {
       provenance: {
-        sourceSha: clone.receipt.sourceSha,
-        sourceTree: clone.receipt.sourceTree,
-        repository: clone.receipt.provenance.repository,
-        ref: clone.receipt.provenance.ref,
-        method: clone.receipt.provenance.method,
-        readinessDigest: clone.receipt.provenance.readinessDigest,
+        sourceSha: sha,
+        sourceTree: tree,
+        repository: ARRUSTED_TEMPLATE_REPOSITORY,
+        ref: "refs/heads/main",
+        method: "git-clone-v1",
+        readinessDigest,
       },
       files,
     };
   } finally {
-    await clone.dispose();
+    await rm(root, { recursive: true, force: true });
   }
 }

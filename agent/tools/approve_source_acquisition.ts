@@ -8,13 +8,13 @@ import {
 import { existingRepositoryAcquisitionReceipt } from "@/lib/agent/existing-app-sequencing";
 import {
   SOURCE_RECEIPT_VERSION,
-  inspectClonedTemplateSourceReceipt,
   inspectSourceReceipt,
 } from "@/lib/repository/source-receipt";
+import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
-    "Automatically bind the exact eligible canonical Arrusted clone as the internal fresh-template source. This does not materialize the workspace.",
+    "Automatically bind the exact eligible canonical Arrusted workspace clone as the internal fresh-template source. This does not clone, fetch, or materialize another workspace.",
   inputSchema: z.object({
     expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
@@ -26,16 +26,18 @@ export default defineTool({
     );
     if (existing !== undefined) return existing;
     if (current.phase === "empty") throw new Error("No source was reviewed.");
-    const currentReceipt =
-      current.receipt.version === SOURCE_RECEIPT_VERSION
-        ? await inspectClonedTemplateSourceReceipt({
-            path: current.receipt.sourcePath,
-            readinessDigest: current.receipt.provenance.readinessDigest,
-          })
-        : await inspectSourceReceipt(
-            current.receipt.sourceKind,
-            current.receipt.sourcePath,
-          );
+    let currentReceipt = current.receipt;
+    if (current.receipt.version === SOURCE_RECEIPT_VERSION) {
+      await inspectCanonicalArrustedSandboxWorkspace({
+        sandbox: await ctx.getSandbox(),
+        receipt: current.receipt,
+      });
+    } else {
+      currentReceipt = await inspectSourceReceipt(
+        current.receipt.sourceKind,
+        current.receipt.sourcePath,
+      );
+    }
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review.");
     sourceWorkflowState.update(() => ({

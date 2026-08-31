@@ -6,13 +6,13 @@ import {
   sourceWorkflowState,
 } from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
-import { cloneArrustedTemplate } from "@/lib/repository/arrusted-template";
+import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
 import { hostedSourceReceipt } from "@/lib/repository/hosted-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
-    "Inspect an existing allowlisted checkout, or acquire the canonical Arrusted template for a new app and record its exact release-disabled receipt. Acquisition never uses a caller-provided remote or ref.",
+    "Inspect an existing allowlisted checkout, or clone the canonical Arrusted template once into this app build's workspace and record its exact release-disabled receipt. Acquisition never uses a caller-provided remote or ref.",
   inputSchema: z
     .object({
       sourceKind: z.enum(["existing-repository", "fresh-template"]),
@@ -40,14 +40,15 @@ export default defineTool({
             "Fresh templates are acquired from the canonical Arrusted remote.",
         });
     }),
-  async execute({ sourceKind, path }) {
-    const clone =
-      sourceKind === "fresh-template" &&
-      !(hasTestCapability("simulated-target") && path !== undefined)
-        ? await cloneArrustedTemplate()
-        : undefined;
+  async execute({ sourceKind, path }, ctx) {
     const receipt =
-      clone?.receipt ??
+      (sourceKind === "fresh-template" &&
+      !(hasTestCapability("simulated-target") && path !== undefined)
+        ? await acquireCanonicalArrustedTemplate({
+            sandbox: await ctx.getSandbox(),
+            callId: ctx.callId,
+          })
+        : undefined) ??
       hostedSourceReceipt(sourceKind, path!) ??
       (await inspectSourceReceipt(sourceKind, path!));
     sourceWorkflowState.update(() => ({

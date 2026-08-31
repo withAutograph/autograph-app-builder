@@ -11,12 +11,11 @@ import {
 import { sourceWorkflowState } from "@/lib/agent/source-state";
 import {
   SOURCE_RECEIPT_VERSION,
-  inspectClonedTemplateSourceReceipt,
   inspectSourceReceipt,
 } from "@/lib/repository/source-receipt";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
-import { prepareCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import {
   hostedSourceReceipt,
   prepareHostedSourceWorkspace,
@@ -60,13 +59,18 @@ export default defineTool({
             source.receipt.sourceKind,
             source.receipt.sourcePath,
           );
+    const sandbox = await ctx.getSandbox();
+    const canonicalWorkspace =
+      source.receipt.version === SOURCE_RECEIPT_VERSION
+        ? await inspectCanonicalArrustedSandboxWorkspace({
+            sandbox,
+            receipt: source.receipt,
+          })
+        : undefined;
     const currentReceipt =
       hostedReceipt ??
       (source.receipt.version === SOURCE_RECEIPT_VERSION
-        ? await inspectClonedTemplateSourceReceipt({
-            path: source.receipt.sourcePath,
-            readinessDigest: source.receipt.provenance.readinessDigest,
-          })
+        ? source.receipt
         : await inspectSourceReceipt(
             source.receipt.sourceKind,
             source.receipt.sourcePath,
@@ -94,27 +98,26 @@ export default defineTool({
         currentWorkspace.eligibilityDigest !== expectedEligibilityDigest)
     )
       throw new Error("This app build already owns a different workspace.");
-    const sandbox = await ctx.getSandbox();
-    const workspace =
-      hostedReceipt === undefined
-        ? await (currentReceipt.version === SOURCE_RECEIPT_VERSION
-            ? prepareCanonicalArrustedSandboxWorkspace({
-                sandbox,
-                receipt: currentReceipt,
-                callId: ctx.callId,
-              })
-            : prepareSupportedSandboxWorkspace(
-                path,
-                expectedSha,
-                expectedEligibilityDigest,
-                sandbox,
-                ctx.callId,
-              ))
-        : await prepareHostedSourceWorkspace({
-            receipt: currentReceipt,
-            sandbox,
-            callId: ctx.callId,
-          });
+    let workspace;
+    if (currentReceipt.version === SOURCE_RECEIPT_VERSION) {
+      if (canonicalWorkspace === undefined)
+        throw new Error("The canonical Arrusted workspace is missing.");
+      workspace = canonicalWorkspace;
+    } else if (hostedReceipt === undefined) {
+      workspace = await prepareSupportedSandboxWorkspace(
+        path,
+        expectedSha,
+        expectedEligibilityDigest,
+        sandbox,
+        ctx.callId,
+      );
+    } else {
+      workspace = await prepareHostedSourceWorkspace({
+        receipt: currentReceipt,
+        sandbox,
+        callId: ctx.callId,
+      });
+    }
     if (workspace.sourceTree !== expectedTree)
       throw new Error("The prepared source tree changed after review.");
     appBuilderWorkflowState.update((latest) => {
