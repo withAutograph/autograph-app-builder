@@ -37,8 +37,8 @@ export function AccountSettings({
       <UserProfile />
       {plugins.flatMap(
         (plugin) =>
-          plugin.securityCards?.map((SecurityCard, index) => (
-            <SecurityCard key={`${plugin.id}-${index.toString()}`} />
+          plugin.accountCards?.map((AccountCard, index) => (
+            <AccountCard key={`${plugin.id}-${index.toString()}`} />
           )) ?? [],
       )}
     </div>
