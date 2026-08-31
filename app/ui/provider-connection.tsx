@@ -28,7 +28,14 @@ export function ProviderConnection({
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <Link className={styles.back} href={returnTo}>
+        <Link
+          className={styles.back}
+          href={
+            resumeKey
+              ? { pathname: returnTo, query: { resume: resumeKey } }
+              : returnTo
+          }
+        >
           <ArrowLeft size={17} aria-hidden="true" /> Back
         </Link>
         <span>New App</span>

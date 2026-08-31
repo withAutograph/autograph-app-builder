@@ -48,6 +48,10 @@ describe("Vercel integration security", () => {
       ownerUserId: "user_one",
     };
     let consumed = false;
+    const recoveredReturnState = {
+      returnTo: "/" as const,
+      resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+    };
     const binds: unknown[] = [];
     const authorization = createVercelInstallationAuthorization({
       config: {
@@ -65,6 +69,9 @@ describe("Vercel integration security", () => {
           if (consumed) return undefined;
           consumed = true;
           return { returnTo: "/" };
+        },
+        async recover() {
+          return recoveredReturnState;
         },
       },
       installations: {
@@ -115,6 +122,9 @@ describe("Vercel integration security", () => {
     expect(JSON.stringify(binds)).toContain("provider-token-sentinel");
     await expect(
       authorization.complete(callback.toString(), authority),
-    ).rejects.toThrow("state-invalid");
+    ).rejects.toMatchObject({
+      message: "state-invalid",
+      returnState: recoveredReturnState,
+    });
   });
 });

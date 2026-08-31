@@ -75,25 +75,39 @@ change for alias verification, deployment binding, trusted origins, cookies,
 and RP migration. Documentation or an environment override alone is not
 sufficient.
 
-## Deferred hosted auth E2E
+## Embedded Preview provider emulation
 
-Hosted authentication automation is intentionally not part of the local
-Emulate test lane. A future implementation should use two protected targets:
+Preview deployments may run the embedded GitHub and Vercel services when both
+`VERCEL_ENV=preview` and `APP_BUILDER_PREVIEW_PROVIDER_EMULATION=1` are exact.
+Those services stay under the deployment's own `/api/emulate/github` and
+`/api/emulate/vercel` routes. Their state is stored in Postgres under the
+repository, project, and Git branch namespace, so redeployments of one branch
+reuse that branch's document while another branch begins from its own seed.
 
-- a generated Preview deployment for full passkey E2E, preserving the exact
-  deployment hostname as the WebAuthn RP ID; and
-- a second protected Vercel project with a stable hostname, deployed from the
-  same immutable source SHA, for GitHub and Vercel callback smoke tests.
+This mode is separate from the `APP_BUILDER_LOCAL_*_EMULATION` settings, which
+remain loopback-only. Production does not enable either emulation mode.
 
-That hosted design must create an isolated disposable Neon branch, apply the
-real migrations, keep any Vercel Protection Bypass secret only in the CI secret
-store, record the deployment IDs, generated URLs, source SHA, database branch,
-and test result, and clean up both deployments and data after the run. The
-stable target must use integration-only provider applications whose registered
-callbacks exactly match its hostname.
+## Deferred Preview browser E2E
 
-The Emulate services and every `APP_BUILDER_LOCAL_*_EMULATION` setting are
-local-only and must never be exposed or enabled in a Vercel deployment. Hosted
-automation, the second Vercel project, real provider test accounts, disposable
-Neon orchestration, and Preview merge gates are deferred in their entirety;
-this repository does not partially configure any of them.
+The current automated Emulate browser lane is intentionally local. Running the
+same user journeys against protected Vercel Preview deployments is deferred and
+is not a merge gate in this change.
+
+A future Preview suite should use generated deployment URLs and prove:
+
+- GitHub and Vercel sign-in through the same-origin embedded emulator;
+- GitHub and Vercel Connect through the app approval bridge;
+- the selected Git scope and Vercel team after a normal reload;
+- state persistence after redeploying the same branch; and
+- an independent initial seed and state document on another branch.
+
+Each run must record the deployment ID, generated URL, source commit SHA,
+database branch, and result. Deployment Protection automation, disposable Neon
+orchestration, Preview secrets, cleanup, and merge-gate wiring remain deferred.
+The future suite is a user-journey proof; it does not add an unbound-network
+traffic assertion.
+
+Real-provider hosted authentication and passkey automation remain separate
+future work. If added, they must keep integration-only credentials and Vercel
+Protection Bypass secrets in the CI secret store and preserve the exact
+host-bound callback and WebAuthn contracts described above.

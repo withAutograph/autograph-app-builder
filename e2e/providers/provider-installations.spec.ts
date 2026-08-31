@@ -2,14 +2,22 @@ import postgres from "postgres";
 import { expect, test } from "playwright/test";
 
 import {
+  advanceProviderConnectionToApproval,
   appOrigin,
   applicationCounts,
+  approveProviderConnection,
   databaseUrl,
+  emulatedProviders,
+  expectProviderSelection,
   finishOAuth,
-  githubEmulatorOrigin,
   installProvider,
   localApprovalButtonName,
+  openProviderConnection,
+  providerDescriptor,
+  reopenProviderConnection,
   resetApplicationState,
+  selectProviderIdentity,
+  signOut,
 } from "../support/harness";
 
 type GitHubCallbackFixture =
@@ -36,20 +44,12 @@ async function setGitHubCallbackFixture(
 
 async function completeGitHubConnection(page: import("playwright/test").Page) {
   await expect(page).toHaveURL(/\/github\/installations/u);
-  await page
-    .getByRole("button", { name: "Install or update GitHub access" })
-    .click();
-  await expect(page).toHaveURL(/\/local-connections\/github/u);
-  await page
-    .getByRole("button", { name: localApprovalButtonName("GitHub") })
-    .click();
-  await expect(page).toHaveURL(new RegExp(`^${githubEmulatorOrigin}/`, "u"));
-  await page.getByRole("button", { name: /autograph-dev/u }).click();
+  await advanceProviderConnectionToApproval(page, "GitHub");
+  await selectProviderIdentity(page, "GitHub");
 }
 
 async function startGitHubConnection(page: import("playwright/test").Page) {
-  await page.getByRole("checkbox", { name: /GitHub/u }).check();
-  await page.getByRole("button", { name: "Connect to GitHub" }).click();
+  await openProviderConnection(page, "GitHub");
   await completeGitHubConnection(page);
 }
 
@@ -68,10 +68,11 @@ function expectGitHubControlAndNoOAuthLeak(
 
 test.beforeEach(async () => resetApplicationState());
 
-for (const provider of ["GitHub", "Vercel"] as const) {
+for (const provider of emulatedProviders) {
   test(`${provider} installation restores the draft and persists one binding`, async ({
     page,
   }) => {
+    const descriptor = providerDescriptor(provider);
     await finishOAuth(page, "GitHub");
     await page.goto("/");
     await page
@@ -92,37 +93,80 @@ for (const provider of ["GitHub", "Vercel"] as const) {
     await expect
       .poll(async () => {
         const counts = await applicationCounts();
-        return provider === "GitHub"
-          ? counts.githubInstallations
-          : counts.vercelInstallations;
+        return counts[descriptor.bindingCount];
       })
       .toBe(1);
 
-    const expectedFocus =
-      provider === "GitHub" ? "Git Scope" : "Select a Vercel Team";
-    await expect(page.getByLabel(expectedFocus)).toBeFocused();
+    await expect(page.getByLabel(descriptor.selectedControl)).toBeFocused();
+    await expectProviderSelection(page, provider);
+
+    await page.goto("/");
+    await expect(page).toHaveURL(`${appOrigin}/`);
+    await expectProviderSelection(page, provider);
+    expect((await applicationCounts())[descriptor.bindingCount]).toBe(1);
   });
 }
 
-test("reconnecting a provider updates the existing binding without duplication", async ({
+for (const provider of emulatedProviders) {
+  test(`reconnecting ${provider} updates the existing binding without duplication`, async ({
+    page,
+  }) => {
+    const descriptor = providerDescriptor(provider);
+    await finishOAuth(page, "GitHub");
+    await page.goto("/");
+    await installProvider(page, provider);
+    await reopenProviderConnection(page, provider);
+    await advanceProviderConnectionToApproval(page, provider);
+    await approveProviderConnection(page, provider);
+    expect((await applicationCounts())[descriptor.bindingCount]).toBe(1);
+    await expectProviderSelection(page, provider);
+  });
+}
+
+test("connections remain available when the user returns through the other OAuth provider", async ({
   page,
 }) => {
   await finishOAuth(page, "GitHub");
   await page.goto("/");
   await installProvider(page, "GitHub");
-  await page.getByLabel("Git Scope").click();
-  await page.getByText("Add GitHub Scope").click();
-  await expect(page).toHaveURL(/\/github\/installations/u);
-  await page
-    .getByRole("button", { name: "Install or update GitHub access" })
-    .click();
-  await page
-    .getByRole("button", { name: localApprovalButtonName("GitHub") })
-    .click();
-  await page.getByRole("button", { name: /autograph-dev/u }).click();
-  await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"));
-  expect((await applicationCounts()).githubInstallations).toBe(1);
+  await installProvider(page, "Vercel");
+
+  await signOut(page);
+  await finishOAuth(page, "Vercel");
+  await page.goto("/");
+  await expectProviderSelection(page, "GitHub");
+  await expectProviderSelection(page, "Vercel");
+  expect(await applicationCounts()).toMatchObject({
+    users: 1,
+    githubInstallations: 1,
+    vercelInstallations: 1,
+  });
 });
+
+for (const provider of emulatedProviders) {
+  test(`leaving the ${provider} installation page restores the draft without connecting`, async ({
+    page,
+  }) => {
+    const descriptor = providerDescriptor(provider);
+    await finishOAuth(page, "GitHub");
+    await page.goto("/");
+    await page.getByLabel("App Name").fill(`${provider} Back Draft`);
+    await page
+      .locator("#app-brief")
+      .fill(`Keep this ${provider} draft when leaving connections.`);
+
+    await openProviderConnection(page, provider);
+    await page.getByRole("link", { name: "Back" }).click();
+    await expect(page).toHaveURL(/\/?resume=/u);
+    await expect(page.getByLabel("App Name")).toHaveValue(
+      `${provider} Back Draft`,
+    );
+    await expect(page.locator("#app-brief")).toHaveValue(
+      `Keep this ${provider} draft when leaving connections.`,
+    );
+    expect((await applicationCounts())[descriptor.bindingCount]).toBe(0);
+  });
+}
 
 test("GitHub installation update accepts OAuth provider extensions and retains the organization scope", async ({
   page,
@@ -204,61 +248,65 @@ test("provider substitution and malformed callback fail without a binding", asyn
   expect((await applicationCounts()).githubInstallations).toBe(0);
 });
 
-test("a consumed provider callback cannot be replayed", async ({ page }) => {
-  await finishOAuth(page, "GitHub");
-  await page.goto("/");
-  let callbackUrl = "";
-  page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/github/installations/callback") {
-      callbackUrl = request.url();
+for (const provider of emulatedProviders) {
+  test(`a consumed ${provider} callback cannot be replayed`, async ({
+    page,
+  }) => {
+    const descriptor = providerDescriptor(provider);
+    const appName = `${provider} Replay Draft`;
+    const brief = `Preserve this ${provider} draft after replay.`;
+    await finishOAuth(page, "GitHub");
+    await page.goto("/");
+    await page.getByLabel("App Name").fill(appName);
+    await page.locator("#app-brief").fill(brief);
+    let callbackUrl = "";
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === descriptor.callbackPath)
+        callbackUrl = request.url();
+    });
+    await installProvider(page, provider);
+    expect(callbackUrl).toContain("state=");
+    await page.goto(callbackUrl);
+    await expect(page).toHaveURL(new RegExp(`${descriptor.slug}=failed`, "u"));
+    await expect(page.getByLabel("App Name")).toHaveValue(appName);
+    await expect(page.locator("#app-brief")).toHaveValue(brief);
+    expect((await applicationCounts())[descriptor.bindingCount]).toBe(1);
+  });
+}
+
+for (const provider of emulatedProviders) {
+  test(`an expired ${provider} authorization returns to a recoverable draft`, async ({
+    page,
+  }) => {
+    const descriptor = providerDescriptor(provider);
+    const appName = `${provider} Expired State Draft`;
+    const brief = `Preserve this ${provider} draft after expiry.`;
+    await finishOAuth(page, "GitHub");
+    await page.goto("/");
+    await page.getByLabel("App Name").fill(appName);
+    await page.locator("#app-brief").fill(brief);
+    await openProviderConnection(page, provider);
+    await advanceProviderConnectionToApproval(page, provider);
+
+    const sql = postgres(databaseUrl, { max: 1 });
+    try {
+      await sql.unsafe(
+        `UPDATE ${descriptor.authorizationStateTable}
+         SET created_at = now() - interval '2 seconds',
+             expires_at = now() - interval '1 second'`,
+      );
+    } finally {
+      await sql.end();
     }
-  });
-  await installProvider(page, "GitHub");
-  expect(callbackUrl).toContain("state=");
-  await page.goto(callbackUrl);
-  await expect(page).toHaveURL(/github=failed/u);
-  expect((await applicationCounts()).githubInstallations).toBe(1);
-});
+    await page
+      .getByRole("button", { name: localApprovalButtonName(provider) })
+      .click();
+    if (new URL(page.url()).origin === descriptor.emulatorOrigin)
+      await page.getByRole("button", { name: /autograph-dev/u }).click();
 
-test("an expired provider authorization returns to a recoverable draft", async ({
-  page,
-}) => {
-  await finishOAuth(page, "GitHub");
-  await page.goto("/");
-  await page.getByLabel("App Name").fill("Expired State Draft");
-  await page.locator("#app-brief").fill("Preserve this draft after expiry.");
-  await page.getByRole("checkbox", { name: /GitHub/u }).check();
-  await page.getByRole("button", { name: "Connect to GitHub" }).click();
-  await page
-    .getByRole("button", { name: "Install or update GitHub access" })
-    .click();
-  const storedDraft = await page.evaluate(() => {
-    const key = Object.keys(sessionStorage).find((candidate) =>
-      candidate.startsWith("autograph-builder-draft:"),
-    );
-    return key ? sessionStorage.getItem(key) : null;
+    await expect(page).toHaveURL(new RegExp(`${descriptor.slug}=failed`, "u"));
+    await expect(page.getByLabel("App Name")).toHaveValue(appName);
+    await expect(page.locator("#app-brief")).toHaveValue(brief);
+    expect((await applicationCounts())[descriptor.bindingCount]).toBe(0);
   });
-  expect(storedDraft).toContain("Expired State Draft");
-  expect(storedDraft).toContain("Preserve this draft after expiry.");
-
-  const sql = postgres(databaseUrl, { max: 1 });
-  try {
-    await sql`
-      UPDATE github_installation_authorization_state
-         SET expires_at = created_at + interval '1 millisecond'
-    `;
-  } finally {
-    await sql.end();
-  }
-  await page
-    .getByRole("button", { name: localApprovalButtonName("GitHub") })
-    .click();
-  await expect(page).toHaveURL(/github=failed/u);
-  expect(
-    await page.evaluate(
-      (draft) => Object.values(sessionStorage).some((value) => value === draft),
-      storedDraft,
-    ),
-  ).toBe(true);
-  expect((await applicationCounts()).githubInstallations).toBe(0);
-});
+}

@@ -105,8 +105,9 @@ function authorizationCallbackUrl(state: string) {
 
 async function prepareAuthorization(
   authorization: ReturnType<typeof createGitHubAppInstallationAuthorization>,
+  returnState: { returnTo: "/"; resumeKey?: string } = { returnTo: "/" },
 ) {
-  const begun = await authorization.begin(authority);
+  const begun = await authorization.begin(authority, returnState);
   const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
   const authorize = await authorization.complete(
     setupCallbackUrl(installState),
@@ -363,7 +364,14 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
-    const { authorizeState } = await prepareAuthorization(authorization);
+    const returnState = {
+      returnTo: "/" as const,
+      resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+    };
+    const { authorizeState } = await prepareAuthorization(
+      authorization,
+      returnState,
+    );
     await authorization.complete(
       authorizationCallbackUrl(authorizeState),
       authority,
@@ -373,7 +381,10 @@ describe("public GitHub App installation authorization", () => {
         authorizationCallbackUrl(authorizeState),
         authority,
       ),
-    ).rejects.toThrow("GitHub App installation authorization failed.");
+    ).rejects.toMatchObject({
+      message: "GitHub App installation authorization failed.",
+      returnState,
+    });
     expect(requests).toHaveLength(3);
     expect(bind).toHaveBeenCalledOnce();
   });

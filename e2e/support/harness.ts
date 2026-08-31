@@ -8,13 +8,48 @@ const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
 const appProtocol = "https";
 const emulateBasePort = Number(process.env.EMULATE_BASE_PORT || "4000");
 export const appOrigin = `${appProtocol}://localhost:${appPort}`;
+export const vercelEmulatorOrigin = `http://localhost:${emulateBasePort}`;
 export const githubEmulatorOrigin = `http://localhost:${emulateBasePort + 1}`;
 export const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/autograph_app_builder`;
 
-export function localApprovalButtonName(provider: "GitHub" | "Vercel") {
-  return provider === "GitHub"
-    ? "Connect emulated GitHub App installation"
-    : "Connect emulated Vercel team";
+export const emulatedProviders = ["GitHub", "Vercel"] as const;
+export type EmulatedProvider = (typeof emulatedProviders)[number];
+
+const providerDescriptors = {
+  GitHub: {
+    slug: "github",
+    installationButton: "Install or update GitHub access",
+    approvalButton: "Connect emulated GitHub App installation",
+    seededScopes: ["autograph-local/demo-app"],
+    selectedControl: "Git Scope",
+    selectedValue: "autograph-local",
+    reconnectButton: "Add GitHub Scope",
+    emulatorOrigin: githubEmulatorOrigin,
+    callbackPath: "/github/installations/callback",
+    authorizationStateTable: "github_installation_authorization_state",
+    bindingCount: "githubInstallations",
+  },
+  Vercel: {
+    slug: "vercel",
+    installationButton: "Connect to Vercel",
+    approvalButton: "Connect emulated Vercel team",
+    seededScopes: ["autograph-local", "icfg_local_1"],
+    selectedControl: "Select a Vercel Team",
+    selectedValue: "Autograph Local",
+    reconnectButton: "Connect another Vercel team",
+    emulatorOrigin: vercelEmulatorOrigin,
+    callbackPath: "/vercel/installations/callback",
+    authorizationStateTable: "vercel_installation_authorization_state",
+    bindingCount: "vercelInstallations",
+  },
+} as const;
+
+export function providerDescriptor(provider: EmulatedProvider) {
+  return providerDescriptors[provider];
+}
+
+export function localApprovalButtonName(provider: EmulatedProvider) {
+  return providerDescriptor(provider).approvalButton;
 }
 
 export async function resetApplicationState() {
@@ -84,7 +119,7 @@ export async function signOut(page: Page) {
 
 export async function finishOAuth(
   page: Page,
-  provider: "GitHub" | "Vercel",
+  provider: EmulatedProvider,
   callbackURL = "/",
 ) {
   await page.goto(
@@ -117,64 +152,92 @@ export async function registerPasskey(
   return authenticator;
 }
 
-export async function installProvider(
+export async function openProviderConnection(
   page: Page,
-  provider: "GitHub" | "Vercel",
+  provider: EmulatedProvider,
 ) {
-  const providerSlug = provider.toLowerCase();
-  await page
-    .getByRole("checkbox", {
-      name: provider === "GitHub" ? /GitHub/u : /Vercel/u,
-    })
-    .check();
+  const descriptor = providerDescriptor(provider);
+  await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
   await page.getByRole("button", { name: `Connect to ${provider}` }).click();
-  await expect(page).toHaveURL(new RegExp(`/${providerSlug}/installations`), {
-    timeout: 30_000,
-  });
+  await expect(page).toHaveURL(
+    new RegExp(`/${descriptor.slug}/installations`, "u"),
+    { timeout: 30_000 },
+  );
+}
+
+export async function advanceProviderConnectionToApproval(
+  page: Page,
+  provider: EmulatedProvider,
+) {
+  const descriptor = providerDescriptor(provider);
   await page
-    .getByRole("button", {
-      name:
-        provider === "GitHub"
-          ? "Install or update GitHub access"
-          : "Connect to Vercel",
-    })
+    .getByRole("button", { name: descriptor.installationButton })
     .click();
   await expect(page).toHaveURL(
-    new RegExp(`/local-connections/${providerSlug}`),
+    new RegExp(`/local-connections/${descriptor.slug}`, "u"),
   );
-  await expect(
-    page.getByText(
-      provider === "GitHub" ? "autograph-local/demo-app" : "icfg_local_1",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await page
-    .getByRole("button", {
-      name: localApprovalButtonName(provider),
-    })
-    .click();
-  if (provider === "GitHub") {
-    await expect(page).toHaveURL(
-      new RegExp(`^http://localhost:${emulateBasePort + 1}/`, "u"),
-    );
-    await page.getByRole("button", { name: /autograph-dev/u }).click();
-  } else {
-    await expect(page).toHaveURL(
-      new RegExp(`^http://localhost:${emulateBasePort}/`, "u"),
-    );
-    await page.getByRole("button", { name: /autograph-dev/u }).click();
-  }
+  for (const scope of descriptor.seededScopes)
+    await expect(page.getByText(scope, { exact: true })).toBeVisible();
+}
+
+export async function selectProviderIdentity(
+  page: Page,
+  provider: EmulatedProvider,
+) {
+  const descriptor = providerDescriptor(provider);
+  await page.getByRole("button", { name: descriptor.approvalButton }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`^${descriptor.emulatorOrigin}/`, "u"),
+  );
+  await page.getByRole("button", { name: /autograph-dev/u }).click();
   await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"), {
     timeout: 30_000,
   });
+}
+
+export async function approveProviderConnection(
+  page: Page,
+  provider: EmulatedProvider,
+) {
+  const descriptor = providerDescriptor(provider);
+  await selectProviderIdentity(page, provider);
   await expect(
     page.getByText(`${provider} connected successfully.`),
   ).toBeVisible();
-  await expect(
-    page.getByLabel(
-      provider === "GitHub" ? "Git Scope" : "Select a Vercel Team",
-    ),
-  ).toBeFocused();
+  await expect(page.getByLabel(descriptor.selectedControl)).toBeFocused();
+}
+
+export async function installProvider(page: Page, provider: EmulatedProvider) {
+  await openProviderConnection(page, provider);
+  await advanceProviderConnectionToApproval(page, provider);
+  await approveProviderConnection(page, provider);
+}
+
+export async function reopenProviderConnection(
+  page: Page,
+  provider: EmulatedProvider,
+) {
+  const descriptor = providerDescriptor(provider);
+  const reconnect = page.getByRole("button", {
+    name: descriptor.reconnectButton,
+  });
+  if (!(await reconnect.isVisible()))
+    await page.getByLabel(descriptor.selectedControl).click();
+  await reconnect.click();
+  await expect(page).toHaveURL(
+    new RegExp(`/${descriptor.slug}/installations`, "u"),
+  );
+}
+
+export async function expectProviderSelection(
+  page: Page,
+  provider: EmulatedProvider,
+) {
+  const descriptor = providerDescriptor(provider);
+  await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
+  await expect(page.getByLabel(descriptor.selectedControl)).toHaveValue(
+    descriptor.selectedValue,
+  );
 }
 
 export async function installBrowserBoundaries(

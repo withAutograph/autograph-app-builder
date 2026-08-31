@@ -858,23 +858,37 @@ export function createGitHubAppInstallationAuthorization(input: {
           );
         }
         const current = now();
+        let activeMember: boolean;
         try {
-          if (!(await input.membership.isActiveMember(authority)))
-            throw new Error("membership-inactive");
-          if (
-            !(await input.stateStore.consume({
-              stateDigest: state.stateDigest,
-              authority,
-              authorityDigest: state.authorityDigest,
-              now: new Date(current),
-            }))
-          )
-            throw new Error("state-replayed");
+          activeMember = await input.membership.isActiveMember(authority);
         } catch {
           throw new GitHubInstallationAuthorizationError(
             "membership-state-consumption",
           );
         }
+        if (!activeMember)
+          throw new GitHubInstallationAuthorizationError(
+            "membership-state-consumption",
+          );
+        let consumed: boolean;
+        try {
+          consumed = await input.stateStore.consume({
+            stateDigest: state.stateDigest,
+            authority,
+            authorityDigest: state.authorityDigest,
+            now: new Date(current),
+          });
+        } catch {
+          throw new GitHubInstallationAuthorizationError(
+            "membership-state-consumption",
+          );
+        }
+        if (!consumed)
+          throw new GitHubInstallationAuthorizationError(
+            "membership-state-consumption",
+            undefined,
+            state.returnState,
+          );
 
         if (callback.kind === "oauth-error")
           throw new GitHubInstallationAuthorizationError(
