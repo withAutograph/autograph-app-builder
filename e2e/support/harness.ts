@@ -8,6 +8,7 @@ const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
 const appProtocol = "https";
 const emulateBasePort = Number(process.env.EMULATE_BASE_PORT || "4000");
 export const appOrigin = `${appProtocol}://localhost:${appPort}`;
+export const githubEmulatorOrigin = `http://localhost:${emulateBasePort + 1}`;
 export const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/autograph_app_builder`;
 
 export function localApprovalButtonName(provider: "GitHub" | "Vercel") {
