@@ -9,36 +9,18 @@ import {
   resetApplicationState,
 } from "../support/harness";
 
-const githubCallbackPath = "/github/installations/callback";
-
 async function extendGitHubOAuthCallback(
   page: import("playwright/test").Page,
   extensions: ReadonlyArray<readonly [string, string]>,
 ) {
-  let callbackUrl: string | undefined;
-  await page.route(`**${githubCallbackPath}**`, async (route) => {
-    const url = new URL(route.request().url());
-    // Let the installation callback create the signed authorization state;
-    // capture and replace only the provider's final OAuth callback.
-    if (!url.searchParams.has("code")) return route.fallback();
-    callbackUrl = url.toString();
-    await route.abort();
+  await page.route("**/login/oauth/authorize**", async (route) => {
+    const authorize = new URL(route.request().url());
+    const callback = new URL(authorize.searchParams.get("redirect_uri")!);
+    for (const [key, value] of extensions)
+      callback.searchParams.append(key, value);
+    authorize.searchParams.set("redirect_uri", callback.toString());
+    await route.continue({ url: authorize.toString() });
   });
-
-  await page.getByRole("checkbox", { name: /GitHub/u }).check();
-  await page.getByRole("button", { name: "Connect to GitHub" }).click();
-  await page
-    .getByRole("button", { name: "Install or update GitHub access" })
-    .click();
-  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
-  await expect(page).toHaveURL(/localhost:4001/u);
-  await page.getByRole("button", { name: /autograph-dev/u }).click();
-  await expect.poll(() => callbackUrl).toBeTruthy();
-
-  const callback = new URL(callbackUrl!);
-  for (const [key, value] of extensions)
-    callback.searchParams.append(key, value);
-  await page.goto(callback.toString());
 }
 
 function expectGitHubControlAndNoOAuthLeak(
@@ -130,6 +112,7 @@ test("GitHub installation update accepts OAuth provider extensions and retains t
     ["future_provider_extension", "opaque-provider-value"],
     ["future_provider_extension", "opaque-provider-value-2"],
   ]);
+  await installProvider(page, "GitHub");
 
   await expect(page).toHaveURL(/\?github=connected&resume=/u);
   await expect(page.getByText("GitHub connected successfully.")).toBeVisible();
@@ -171,6 +154,7 @@ for (const key of [
             [key, "duplicate-app-owned-value"],
           ],
     );
+    await installProvider(page, "GitHub");
     await expect(page).toHaveURL(
       /github=failed&githubReason=callback-invalid/u,
     );
