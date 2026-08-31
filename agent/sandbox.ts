@@ -19,7 +19,6 @@ import {
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
 import { readHostedManagedSeedFiles } from "@/lib/sandbox/hosted-managed-seeds";
 import { hasTestCapability } from "@/lib/testing/test-capability";
-import { ensureSandboxDirectories } from "@/lib/repository/sandbox-filesystem";
 
 const image = configuredToolchainImage();
 const useFixtureSandbox = hasTestCapability("simulated-target");
