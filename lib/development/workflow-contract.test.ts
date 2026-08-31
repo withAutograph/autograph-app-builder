@@ -88,4 +88,22 @@ describe("two-mode development workflow contract", () => {
     ])
       expect(readFileSync(helper, "utf8")).toContain("#MISE hide=true");
   });
+
+  it("keeps contributor onboarding on the two public modes", () => {
+    const readme = readFileSync("README.md", "utf8");
+    const contributing = readFileSync("CONTRIBUTING.md", "utf8");
+
+    expect(readme).toContain(
+      "[How to develop App Builder locally](CONTRIBUTING.md)",
+    );
+    for (const command of [
+      "mise run dev -- --help",
+      "mise run release:prove -- --help",
+      "mise run release:publish -- --help",
+    ])
+      expect(contributing).toContain(command);
+    expect(contributing).toContain("app-builder@autograph-dev");
+    expect(contributing).toContain("Ctrl+C");
+    expect(contributing).not.toContain("dev:prove");
+  });
 });

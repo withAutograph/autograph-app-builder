@@ -2,6 +2,37 @@
 #MISE description="Run the only non-release App Builder workflow against an immutable local Arrusted snapshot"
 set -eu
 
+case "${1:-}" in
+  -h|--help)
+    cat <<'EOF'
+Usage:
+  mise run dev -- --arrusted-root /absolute/path/to/arrusted [options]
+
+Run the non-release App Builder workflow from a read-only snapshot of a local
+Arrusted checkout. Keep this command running while you use the development
+plugin from a fresh Codex task.
+
+Required:
+  --arrusted-root PATH     Absolute path to a local Arrusted checkout. The
+                           checkout may contain uncommitted changes.
+
+Options:
+  --state-root PATH        Owner-only state and cache root. Defaults to
+                           .artifacts/development.
+  --destination-root PATH  Builder-owned generated-work root. Defaults to
+                           .artifacts/development/destination.
+  --next-port PORT         Loopback App Builder and /mcp port. Default: 3000.
+  --eve-port PORT          Loopback Eve port. Default: 2000.
+  -h, --help               Show this help.
+
+The command snapshots Arrusted, starts loopback /mcp, verifies exactly five
+autograph_* tools, and installs app-builder@autograph-dev in the active
+CODEX_HOME. Development mode cannot publish, deploy, or mutate providers.
+EOF
+    exit 0
+    ;;
+esac
+
 export APP_BUILDER_DEV_NODE_BIN="$(mise which node)"
 export APP_BUILDER_DEV_CODEX_BIN="$(mise which codex)"
 export APP_BUILDER_DEV_DOCKER_BIN="$(mise which docker)"

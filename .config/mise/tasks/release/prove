@@ -2,6 +2,33 @@
 #MISE description="Build and locally prove one immutable release candidate without publication"
 set -eu
 
+case "${1:-}" in
+  -h|--help)
+    cat <<'EOF'
+Usage:
+  mise run release:prove -- \
+    --arrusted-root /absolute/path/to/clean/arrusted \
+    --endpoint https://approved-release-origin.example \
+    --output /absolute/path/to/new-candidate
+
+Build and locally prove one immutable release candidate. This command requires
+clean committed Builder and Arrusted checkouts and does not publish anything.
+
+Required:
+  --arrusted-root PATH  Absolute path to the clean source-bound Arrusted
+                        checkout.
+  --endpoint URL        Literal HTTPS release endpoint. Local and loopback
+                        endpoints are rejected.
+  --output PATH         Absolute path for a new owner-controlled candidate
+                        directory. The path must not already exist.
+  -h, --help            Show this help.
+
+Review promotion-receipt.json before separately authorizing release:publish.
+EOF
+    exit 0
+    ;;
+esac
+
 export APP_BUILDER_RELEASE_NODE_BIN="$(mise which node)"
 export APP_BUILDER_RELEASE_BUILDX_BIN="$(mise which docker-cli-plugin-docker-buildx)"
 export APP_BUILDER_RELEASE_MSB_BIN="$(mise which msb)"
