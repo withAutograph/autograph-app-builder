@@ -105,9 +105,12 @@ describe("mise-owned repository operations", () => {
   it("keeps public package and local lifecycle commands on named tasks", async () => {
     const readme = await read("README.md");
     expect(readme).toContain(
-      "mise run package:configure -- --origin https://your-approved-deployment.example",
+      "mise run dev -- --arrusted-root /absolute/path/to/arrusted",
     );
+    expect(readme).toContain("mise run release:prove --");
+    expect(readme).toContain("mise run release:publish");
     expect(readme).toContain("mise run package:validate-release");
+    expect(readme).not.toContain("mise run package:configure --");
     expect(readme).not.toContain("pnpm configure");
 
     const start = await read(".config/mise/tasks/local/start");

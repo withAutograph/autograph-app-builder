@@ -32,9 +32,12 @@ describe("Autograph App Builder public branding", () => {
     expect(readme).toContain("Autograph App Builder is a durable, portable");
     expect(readme).toContain("for designing, planning, creating,");
     expect(readme).toContain("## Run Autograph App Builder locally");
+    expect(readme).toContain("There are exactly two user-facing modes:");
     expect(readme).toContain(
-      "For a non-interactive smoke test through App Builder itself:",
+      "mise run dev -- --arrusted-root /absolute/path/to/arrusted",
     );
+    expect(readme).toContain("mise run release:prove");
+    expect(readme).toContain("mise run release:publish");
     expect(installing).toContain(
       "The bundled App Builder skill is fail-closed",
     );

@@ -120,14 +120,14 @@ describe("public plugin installation documentation", () => {
     expect(documentation).toContain(
       "app-builder-codex-marketplace-0.2.3.tar.gz",
     );
-    expect(documentation).toContain(
-      "Publish `v0.2.3` only through the existing tag-triggered",
-    );
-    expect(documentation).toContain(
-      "`AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to",
+    expect(documentation).toMatch(
+      /`mise run release:publish -- --candidate-root <same-root> --token-file\s+<owner-only-hosted-oauth-token>`/u,
     );
     expect(documentation).toMatch(
-      /Do not create or upload the release\s+manually\./u,
+      /The publish command\s+creates the versioned prerelease from the proven package and marketplace\s+archives/u,
+    );
+    expect(documentation).toMatch(
+      /It never invokes a build command and accepts no replacement bytes or\s+bindings\./u,
     );
   });
 });
