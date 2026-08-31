@@ -2,7 +2,15 @@ import { ArrowLeft } from "@geist-ui/icons";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import styles from "./provider-connection.module.css";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type ProviderConnectionProps = {
   action: string;
@@ -26,10 +34,10 @@ export function ProviderConnection({
   title,
 }: ProviderConnectionProps) {
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
+    <main className="min-h-svh bg-background text-foreground">
+      <header className="flex h-14 items-center border-b bg-background px-4 text-sm sm:px-8">
         <Link
-          className={styles.back}
+          className="inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           href={
             resumeKey
               ? { pathname: returnTo, query: { resume: resumeKey } }
@@ -38,25 +46,37 @@ export function ProviderConnection({
         >
           <ArrowLeft size={17} aria-hidden="true" /> Back
         </Link>
-        <span>New App</span>
+        <span className="mx-auto font-medium">New App</span>
+        <span aria-hidden="true" className="w-12" />
       </header>
-      <section className={styles.content}>
-        <span className={styles.providerIcon} aria-hidden="true">
-          {icon}
-        </span>
-        <h1>{title}</h1>
-        <p className={styles.description}>{description}</p>
-        {children}
-        <form className={styles.form} method="post" action={action}>
-          <input name="returnTo" type="hidden" value={returnTo} />
-          {resumeKey ? (
-            <input name="resumeKey" type="hidden" value={resumeKey} />
-          ) : null}
-          <button className={styles.button} type="submit">
-            {buttonLabel}
-          </button>
-        </form>
-      </section>
+      <Card className="mx-auto mt-8 w-[calc(100%-2rem)] max-w-md sm:mt-12">
+        <CardHeader className="gap-4">
+          <span
+            className="grid size-10 place-items-center rounded-lg border bg-background text-foreground shadow-sm"
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+          <CardTitle className="text-xl">{title}</CardTitle>
+          <CardDescription className="leading-6">{description}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          {children}
+          <form
+            className="flex flex-col gap-4"
+            method="post"
+            action={action}
+          >
+            <input name="returnTo" type="hidden" value={returnTo} />
+            {resumeKey ? (
+              <input name="resumeKey" type="hidden" value={resumeKey} />
+            ) : null}
+            <Button className="w-full" type="submit">
+              {buttonLabel}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   );
 }
@@ -69,7 +89,15 @@ export function ProviderConnectionNotice({
   status: "error" | "success";
 }) {
   return (
-    <p className={styles.notice} role={status === "error" ? "alert" : "status"}>
+    <p
+      className={cn(
+        "rounded-lg border px-3 py-2.5 text-sm leading-5",
+        status === "error"
+          ? "border-destructive/30 bg-destructive/10 text-destructive"
+          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+      )}
+      role={status === "error" ? "alert" : "status"}
+    >
       {children}
     </p>
   );
