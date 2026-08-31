@@ -169,10 +169,10 @@ for (const provider of emulatedProviders) {
     const descriptor = providerDescriptor(provider);
     await finishOAuth(page, "GitHub");
     await page.goto("/");
-    await page.getByLabel("App Name").fill(`${provider} Back Draft`);
     await page
       .locator("#app-brief")
       .fill(`Keep this ${provider} draft when leaving connections.`);
+    await page.getByLabel("App Name").fill(`${provider} Back Draft`);
 
     await openProviderConnection(page, provider);
     await page.getByRole("link", { name: "Back" }).click();
