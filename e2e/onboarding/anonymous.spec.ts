@@ -35,6 +35,15 @@ test("anonymous brief continues through passkey signup into the builder", async 
   await continueButton.click();
   await expect(page).toHaveURL(/\/auth\/sign-in\?callbackURL=%2F/u);
   await expect(
+    page.getByRole("link", { name: "Autograph App Builder home" }),
+  ).toHaveAttribute("href", "/");
+  await expect(
+    page.getByText("Your brief is saved. Sign in to continue building."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Back to edit your brief" }),
+  ).toHaveAttribute("href", "/");
+  await expect(
     page.getByRole("button", { name: "Continue with Passkey" }),
   ).toBeVisible();
   await expect(
@@ -73,6 +82,20 @@ test("anonymous brief continues through passkey signup into the builder", async 
   } finally {
     await authenticator.dispose();
   }
+});
+
+test("ordinary sign-in keeps product context without claiming a saved brief", async ({
+  page,
+}) => {
+  await page.goto("/auth/sign-in?callbackURL=%2F");
+
+  await expect(
+    page.getByRole("link", { name: "Autograph App Builder home" }),
+  ).toBeVisible();
+  await expect(page.getByText("Your brief is saved.")).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Back to App Builder" }),
+  ).toHaveAttribute("href", "/");
 });
 
 for (const provider of ["GitHub", "Vercel"] as const) {
