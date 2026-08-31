@@ -33,6 +33,7 @@ import {
   HOSTED_RUST_VERSION,
 } from "../lib/sandbox/hosted-toolchain";
 import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
+import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
 
 const repositoryRoot = resolve(".");
 const developmentTools = {
@@ -67,6 +68,7 @@ async function privateRoot(path: string) {
 }
 
 function nextEnvironment(input: {
+  cycleFile: string;
   evePort: number;
   nextPort: number;
   runtimeHome: string;
@@ -85,6 +87,7 @@ function nextEnvironment(input: {
     APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     APP_BUILDER_LOCAL_ADAPTER: "1",
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
     APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(input.nextPort),
     EVE_HOSTED_ADAPTER: "0",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
@@ -122,6 +125,7 @@ function eveWrapperEnvironment(input: {
 }
 
 async function runEveCycle(input: {
+  cycleFile: string;
   sourceRoot: string;
   runsRoot: string;
   codexRoot: string;
@@ -133,6 +137,7 @@ async function runEveCycle(input: {
   nextExited: Promise<{ kind: "next-exit"; code: number }>;
 }) {
   input.signal.throwIfAborted();
+  await rotateLocalEveCycleBinding(input.cycleFile);
   const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
   const runtimeHome = await privateRoot(join(activeRun, "home"));
   const workflowData = await privateRoot(join(activeRun, "workflow-data"));
@@ -258,6 +263,8 @@ try {
     args.stateRoot ?? join(repositoryRoot, ".artifacts/development"),
   );
   const stateRoot = await privateRoot(join(artifactRoot, "state"));
+  const cycleFile = join(stateRoot, "eve-cycle");
+  await rotateLocalEveCycleBinding(cycleFile);
   const cacheRoot = await privateRoot(join(artifactRoot, "cache"));
   const runsRoot = await privateRoot(join(stateRoot, "runs"));
   const nextHome = await privateRoot(join(stateRoot, "next-home"));
@@ -277,6 +284,7 @@ try {
     {
       cwd: repositoryRoot,
       env: nextEnvironment({
+        cycleFile,
         evePort: args.evePort,
         nextPort: args.nextPort,
         runtimeHome: nextHome,
@@ -290,6 +298,7 @@ try {
   }));
   while (!shutdown.signal.aborted) {
     const outcome = await runEveCycle({
+      cycleFile,
       sourceRoot,
       runsRoot,
       codexRoot: await privateRoot(join(cacheRoot, "codex")),
