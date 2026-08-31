@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { GeistSans } from "geist/font/sans";
 
 import { AppShell } from "@/components/app-shell";
+import { passkeysFlag } from "@/lib/feature-flags";
 
 import "./globals.css";
 
@@ -12,7 +13,12 @@ export const metadata: Metadata = {
     "Design, plan, create, and validate supported apps with Autograph App Builder.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const passkeysEnabled = await passkeysFlag();
   const showLocalAuthProviders = process.env.NODE_ENV === "development";
   const showPreviewEmulatedAuthProviders =
     process.env.VERCEL_ENV === "preview" &&
@@ -37,6 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             (process.env.VERCEL_AUTH_CLIENT_ID &&
               process.env.VERCEL_AUTH_CLIENT_SECRET),
           )}
+          passkeysEnabled={passkeysEnabled}
         >
           {children}
         </AppShell>

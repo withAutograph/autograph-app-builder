@@ -12,6 +12,7 @@ const webServerPath = `${dirname(process.execPath)}:${dirname(mise)}:/usr/bin:/b
 const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
 const appProtocol = "https";
 const appOrigin = `${appProtocol}://localhost:${appPort}`;
+const flagsStorageState = "test-results/passkey-flags-storage-state.json";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -20,11 +21,13 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 90_000,
+  globalSetup: "./e2e/support/global-setup.ts",
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     ...devices["Desktop Chrome"],
     baseURL: appOrigin,
     ignoreHTTPSErrors: true,
+    storageState: flagsStorageState,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "off",
