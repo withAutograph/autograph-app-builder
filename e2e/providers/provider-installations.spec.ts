@@ -9,6 +9,58 @@ import {
   resetApplicationState,
 } from "../support/harness";
 
+type GitHubCallbackFixture =
+  | "extensions"
+  | "duplicate-code"
+  | "duplicate-state"
+  | "duplicate-installation-id"
+  | "duplicate-setup-action";
+
+async function setGitHubCallbackFixture(
+  page: import("playwright/test").Page,
+  fixture: GitHubCallbackFixture,
+) {
+  await page.context().addCookies([
+    {
+      name: "autograph-e2e-github-callback",
+      value: fixture,
+      url: "https://localhost:3001",
+      secure: true,
+      sameSite: "Lax",
+    },
+  ]);
+}
+
+async function completeGitHubConnection(page: import("playwright/test").Page) {
+  await expect(page).toHaveURL(/\/github\/installations/u);
+  await page
+    .getByRole("button", { name: "Install or update GitHub access" })
+    .click();
+  await expect(page).toHaveURL(/\/local-connections\/github/u);
+  await page.getByRole("button", { name: /Connect local GitHub/u }).click();
+  await expect(page).toHaveURL(/localhost:4001/u);
+  await page.getByRole("button", { name: /autograph-dev/u }).click();
+}
+
+async function startGitHubConnection(page: import("playwright/test").Page) {
+  await page.getByRole("checkbox", { name: /GitHub/u }).check();
+  await page.getByRole("button", { name: "Connect to GitHub" }).click();
+  await completeGitHubConnection(page);
+}
+
+function expectGitHubControlAndNoOAuthLeak(
+  page: import("playwright/test").Page,
+  rawValues: ReadonlyArray<string>,
+) {
+  const messages: string[] = [];
+  page.on("console", (message) => messages.push(message.text()));
+  return async () => {
+    await expect(page.getByRole("checkbox", { name: /GitHub/u })).toBeVisible();
+    for (const rawValue of rawValues)
+      expect(messages.join("\n")).not.toContain(rawValue);
+  };
+}
+
 test.beforeEach(async () => resetApplicationState());
 
 for (const provider of ["GitHub", "Vercel"] as const) {
@@ -64,6 +116,62 @@ test("reconnecting a provider updates the existing binding without duplication",
   await expect(page).toHaveURL(/https:\/\/localhost:3001\//u);
   expect((await applicationCounts()).githubInstallations).toBe(1);
 });
+
+test("GitHub installation update accepts OAuth provider extensions and retains the organization scope", async ({
+  page,
+}) => {
+  await finishOAuth(page, "GitHub");
+  await page.goto("/");
+  await installProvider(page, "GitHub");
+
+  const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, [
+    "opaque-provider-value",
+    "opaque-provider-value-2",
+  ]);
+
+  await page.getByLabel("Git Scope").click();
+  await page.getByText("Add GitHub Scope").click();
+  await setGitHubCallbackFixture(page, "extensions");
+  await completeGitHubConnection(page);
+
+  await expect(page).toHaveURL(/\?github=connected&resume=/u);
+  await expect(page.getByText("GitHub connected successfully.")).toBeVisible();
+  await expect(page.getByLabel("Git Scope")).toHaveValue("autograph-local");
+  expect((await applicationCounts()).githubInstallations).toBe(1);
+
+  await page.goto("/");
+  await expect(page).toHaveURL(/https:\/\/localhost:3001\/$/u);
+  await expect(page.getByLabel("Git Scope")).toHaveValue("autograph-local");
+  await assertNoLeak();
+});
+
+for (const key of [
+  "code",
+  "state",
+  "installation_id",
+  "setup_action",
+] as const) {
+  test(`GitHub OAuth callback rejects duplicate app-owned ${key}`, async ({
+    page,
+  }) => {
+    await finishOAuth(page, "GitHub");
+    await page.goto("/");
+    const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, [
+      "duplicate-app-owned-value",
+    ]);
+
+    await setGitHubCallbackFixture(
+      page,
+      `duplicate-${key.replaceAll("_", "-")}` as GitHubCallbackFixture,
+    );
+    await startGitHubConnection(page);
+    await expect(page).toHaveURL(
+      /github=failed&githubReason=callback-invalid/u,
+    );
+    expect((await applicationCounts()).githubInstallations).toBe(0);
+    await assertNoLeak();
+  });
+}
 
 test("provider substitution and malformed callback fail without a binding", async ({
   page,
