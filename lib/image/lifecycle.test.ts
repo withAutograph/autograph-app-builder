@@ -224,7 +224,7 @@ const { createHash } = require("node:crypto");
 const { appendFileSync } = require("node:fs");
 const { join } = require("node:path");
 if (process.argv.length === 3 && process.argv[2] === "--version") {
-  process.stdout.write("msb 0.6.14\\n");
+  process.stdout.write("msb 0.5.10\\n");
   process.exit(0);
 }
 const helper = spawnSync(
@@ -1270,7 +1270,7 @@ wait
     for (const expected of [
       '"aqua:docker/buildx" = "0.33.0"',
       'docker-cli = "29.4.0"',
-      '"npm:microsandbox" = "0.6.14"',
+      '"npm:microsandbox" = "0.5.10"',
     ])
       expect(miseConfig).toContain(expected);
     for (const expected of [
@@ -1314,7 +1314,7 @@ wait
         },
       });
       expect(invoked.status).toBe(0);
-      expect(invoked.stdout).toBe("msb 0.6.14\n");
+      expect(invoked.stdout).toBe("msb 0.5.10\n");
       expect(imageToolInvocation("docker", ["version"])).toEqual({
         program: realpathSync(join(fixture.bin, "docker")),
         args: ["version"],
@@ -1335,7 +1335,7 @@ wait
       assertExactImageToolVersion("docker", "Docker version 29.3.0, build old"),
     ).toThrow("does not match");
     expect(() =>
-      assertExactImageToolVersion("msb", "Microsandbox CLI v0.6.14"),
+      assertExactImageToolVersion("msb", "Microsandbox CLI v0.5.10"),
     ).not.toThrow();
     expect(() => assertExactImageToolVersion("pnpm", "11.7.0")).not.toThrow();
   });

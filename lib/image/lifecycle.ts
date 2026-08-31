@@ -29,7 +29,7 @@ export type CommandSpec = Readonly<{
 export const IMAGE_TOOL_VERSIONS = {
   docker: "29.4.0",
   "docker-buildx": "0.33.0",
-  msb: "0.6.14",
+  msb: "0.5.10",
   node: "24.18.0",
   pnpm: "11.7.0",
 } as const;
