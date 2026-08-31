@@ -1,8 +1,12 @@
 import { createHash, createPrivateKey, randomBytes } from "node:crypto";
 
-import { SignJWT } from "jose";
 import { z } from "zod";
 
+import {
+  createGitHubApp,
+  createGitHubOAuthApp,
+  createGitHubTokenOctokit,
+} from "../github/octokit";
 import type { HostedGitHubInstallationBinding } from "../repository/postgres-github-installation-store";
 import type { GitHubProvisionResult } from "./contracts";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
@@ -10,10 +14,6 @@ import type { BuilderProvisionAuthority } from "./journal";
 import { suffixedProviderName } from "./names";
 import type { StarterSource } from "./starter-source";
 
-const API = "https://api.github.com";
-const ORIGIN = "https://github.com";
-const API_VERSION = "2026-03-10";
-const USER_AGENT = "autograph-app-builder-provisioning";
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 
@@ -101,17 +101,11 @@ export async function provisionGitHubRepository(input: {
   const config = configSchema.parse(input.config);
   const request = input.fetch ?? fetch;
   const now = input.now ?? Date.now;
-  const privateKey = createPrivateKey(config.privateKey);
-
-  async function appJwt() {
-    const issuedAt = Math.floor(now() / 1_000) - 30;
-    return new SignJWT({})
-      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-      .setIssuer(config.appId)
-      .setIssuedAt(issuedAt)
-      .setExpirationTime(issuedAt + 540)
-      .sign(privateKey);
-  }
+  const app = createGitHubApp({
+    appId: config.appId,
+    privateKey: config.privateKey,
+    fetch: request,
+  });
 
   async function github(args: {
     method?: "GET" | "POST";
@@ -120,77 +114,71 @@ export async function provisionGitHubRepository(input: {
     body?: unknown;
     expected: readonly number[];
   }): Promise<JsonResponse> {
-    let response: Response;
     try {
-      response = await request(`${API}${args.path}`, {
-        method: args.method ?? "GET",
-        redirect: "error",
-        signal: AbortSignal.timeout(20_000),
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${args.token}`,
-          "Content-Type": "application/json",
-          "User-Agent": USER_AGENT,
-          "X-GitHub-Api-Version": API_VERSION,
-        },
-        ...(args.body === undefined ? {} : { body: JSON.stringify(args.body) }),
+      const response = await createGitHubTokenOctokit({
+        token: args.token,
+        fetch: request,
+      }).request(`${args.method ?? "GET"} ${args.path}`, {
+        ...(record(args.body) ? args.body : {}),
       });
-    } catch {
+      if (!args.expected.includes(response.status))
+        throw new Error(`github-status-${response.status}`);
+      return { status: response.status, body: response.data };
+    } catch (error) {
+      const status = record(error) ? error.status : undefined;
+      const response = record(error) ? error.response : undefined;
+      if (status === 401) throw new Error("credential-rejected");
+      if (typeof status === "number" && args.expected.includes(status))
+        return {
+          status,
+          body: record(response) ? response.data : undefined,
+        };
       throw new Error("provider-unavailable");
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > 2 * 1024 * 1024) throw new Error("invalid-response");
-    let body: unknown;
-    try {
-      body = bytes.byteLength
-        ? JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes))
-        : undefined;
-    } catch {
-      throw new Error("invalid-response");
-    }
-    if (response.status === 401) throw new Error("credential-rejected");
-    if (!args.expected.includes(response.status))
-      throw new Error(`github-status-${response.status}`);
-    return { status: response.status, body };
   }
 
   async function installationToken() {
-    const response = await github({
-      method: "POST",
-      path: `/app/installations/${input.installation.installationId}/access_tokens`,
-      token: await appJwt(),
-      body: {
-        permissions: {
-          administration: "write",
-          contents: "write",
-          metadata: "read",
-        },
+    const authentication = await app.octokit.auth({
+      type: "installation",
+      installationId: input.installation.installationId,
+      permissions: {
+        administration: "write",
+        contents: "write",
+        metadata: "read",
       },
-      expected: [201],
+      refresh: true,
     });
-    const token = stringProperty(response.body, "token");
+    const token = stringProperty(authentication, "token");
+    const permissions = property(authentication, "permissions");
     if (token.length < 20 || token.length > 512)
+      throw new Error("invalid-response");
+    if (
+      !record(permissions) ||
+      Object.keys(permissions).toSorted().join(",") !==
+        "administration,contents,metadata" ||
+      permissions.administration !== "write" ||
+      permissions.contents !== "write" ||
+      permissions.metadata !== "read"
+    )
       throw new Error("invalid-response");
     return token;
   }
 
   async function verifyInstallation() {
-    const response = await github({
-      path: `/app/installations/${input.installation.installationId}`,
-      token: await appJwt(),
-      expected: [200],
-    });
-    const account = property(response.body, "account");
+    const { data } = await app.octokit.request(
+      "GET /app/installations/{installation_id}",
+      { installation_id: Number(input.installation.installationId) },
+    );
+    const account = property(data, "account");
     if (
-      decimalProperty(response.body, "id") !==
-        input.installation.installationId ||
+      decimalProperty(data, "id") !== input.installation.installationId ||
       decimalProperty(account, "id") !== input.installation.accountId ||
       stringProperty(account, "login") !== input.installation.accountLogin ||
       stringProperty(account, "type") !== input.installation.accountType ||
       !["all", "selected"].includes(
-        stringProperty(response.body, "repository_selection"),
+        stringProperty(data, "repository_selection"),
       ) ||
-      property(response.body, "suspended_at") !== null
+      property(data, "suspended_at") !== null
     )
       throw new Error("installation-inactive");
   }
@@ -213,43 +201,35 @@ export async function provisionGitHubRepository(input: {
         Date.parse(credential.tokens.refreshTokenExpiresAt) <= now()
       )
         throw new Error("credential-unavailable");
-      const response = await request(`${ORIGIN}/login/oauth/access_token`, {
-        method: "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(15_000),
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": USER_AGENT,
-        },
-        body: new URLSearchParams({
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          grant_type: "refresh_token",
-          refresh_token: credential.tokens.refreshToken,
-        }),
-      });
-      if (response.status === 401) {
-        await input.credentialStore.deactivate({
-          authority: input.authority,
-          providerUserId: input.installation.accountId,
-          now: new Date(now()),
-        });
-        throw new Error("credential-unavailable");
+      let authentication: unknown;
+      try {
+        ({ authentication } = await createGitHubOAuthApp({
+          clientId: config.clientId,
+          clientSecret: config.clientSecret,
+          redirectUrl: "https://github.com/login/oauth/access_token",
+          fetch: request,
+        }).refreshToken({ refreshToken: credential.tokens.refreshToken }));
+      } catch (error) {
+        if (record(error) && error.status === 401) {
+          await input.credentialStore.deactivate({
+            authority: input.authority,
+            providerUserId: input.installation.accountId,
+            now: new Date(now()),
+          });
+          throw new Error("credential-unavailable");
+        }
+        throw new Error("provider-unavailable");
       }
-      if (!response.ok) throw new Error("provider-unavailable");
-      const body = (await response.json()) as unknown;
-      const accessToken = stringProperty(body, "access_token");
-      const refreshToken = stringProperty(body, "refresh_token");
-      const expiresIn = property(body, "expires_in");
-      const refreshExpiresIn = property(body, "refresh_token_expires_in");
+      const accessToken = stringProperty(authentication, "token");
+      const refreshToken = stringProperty(authentication, "refreshToken");
+      const accessTokenExpiresAt = stringProperty(authentication, "expiresAt");
+      const refreshTokenExpiresAt = stringProperty(
+        authentication,
+        "refreshTokenExpiresAt",
+      );
       if (
-        typeof expiresIn !== "number" ||
-        typeof refreshExpiresIn !== "number" ||
-        !Number.isSafeInteger(expiresIn) ||
-        !Number.isSafeInteger(refreshExpiresIn) ||
-        expiresIn <= 0 ||
-        refreshExpiresIn <= 0
+        Date.parse(accessTokenExpiresAt) <= now() ||
+        Date.parse(refreshTokenExpiresAt) <= now()
       )
         throw new Error("invalid-response");
       const refreshedAt = now();
@@ -259,13 +239,9 @@ export async function provisionGitHubRepository(input: {
         expectedRevision: credential.revision,
         tokens: {
           accessToken,
-          accessTokenExpiresAt: new Date(
-            refreshedAt + expiresIn * 1_000,
-          ).toISOString(),
+          accessTokenExpiresAt,
           refreshToken,
-          refreshTokenExpiresAt: new Date(
-            refreshedAt + refreshExpiresIn * 1_000,
-          ).toISOString(),
+          refreshTokenExpiresAt,
         },
         now: new Date(refreshedAt),
       });

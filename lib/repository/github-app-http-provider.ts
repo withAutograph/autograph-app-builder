@@ -1,8 +1,8 @@
 import { createHash, createPrivateKey } from "node:crypto";
 
-import { SignJWT } from "jose";
 import { z } from "zod";
 
+import { createGitHubApp, createGitHubTokenOctokit } from "../github/octokit";
 import type { GitHubAppInstallationProvider } from "./github-app-adapter";
 import {
   assertExactGitHubFreshRepositoryContent,
@@ -14,11 +14,6 @@ import {
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 
-const API_ORIGIN = "https://api.github.com";
-const API_VERSION = "2026-03-10";
-const USER_AGENT = "autograph-app-builder-github-app";
-const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_FILES = 10_000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_MATERIAL_BYTES = 100 * 1024 * 1024;
@@ -237,37 +232,6 @@ function requestId(value: string): string {
     : sha256(value).slice(0, 32);
 }
 
-async function boundedResponseBytes(response: Response): Promise<Uint8Array> {
-  const declaredLength = response.headers.get("content-length");
-  if (
-    declaredLength !== null &&
-    (!/^\d+$/u.test(declaredLength) ||
-      Number(declaredLength) > MAX_RESPONSE_BYTES)
-  )
-    throw new Error("github-response-too-large");
-  if (response.body === null) return new Uint8Array();
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new Error("github-response-too-large");
-    }
-    chunks.push(value);
-  }
-  const result = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return result;
-}
-
 export function createGitHubAppHttpProvider(input: {
   config: GitHubAppHttpProviderConfig;
   fetch?: Fetch;
@@ -275,18 +239,11 @@ export function createGitHubAppHttpProvider(input: {
 }): GitHubAppInstallationProvider {
   const config = parseGitHubAppHttpProviderConfig(input.config);
   const request = input.fetch ?? fetch;
-  const now = input.now ?? Date.now;
-  const privateKey = createPrivateKey(config.privateKey);
-
-  async function appJwt(): Promise<string> {
-    const issuedAt = Math.floor(now() / 1000) - 30;
-    return new SignJWT({})
-      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-      .setIssuedAt(issuedAt)
-      .setExpirationTime(issuedAt + 540)
-      .setIssuer(config.appId)
-      .sign(privateKey);
-  }
+  const app = createGitHubApp({
+    appId: config.appId,
+    privateKey: config.privateKey,
+    fetch: request,
+  });
 
   async function github(input: {
     method?: "GET" | "POST";
@@ -295,61 +252,49 @@ export function createGitHubAppHttpProvider(input: {
     body?: unknown;
     expected: readonly number[];
   }): Promise<{ status: number; body: unknown; requestId: string }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    let response: Response;
     try {
-      response = await request(`${API_ORIGIN}${input.path}`, {
-        method: input.method ?? "GET",
-        redirect: "error",
-        signal: controller.signal,
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${input.authorization}`,
-          "Content-Type": "application/json",
-          "User-Agent": USER_AGENT,
-          "X-GitHub-Api-Version": API_VERSION,
-        },
-        ...(input.body === undefined
-          ? {}
-          : { body: JSON.stringify(input.body) }),
+      const response = await createGitHubTokenOctokit({
+        token: input.authorization,
+        fetch: request,
+      }).request(`${input.method ?? "GET"} ${input.path}`, {
+        ...(record(input.body) ? input.body : {}),
       });
-    } catch {
+      if (!input.expected.includes(response.status))
+        throw new Error(`github-status-${response.status}`);
+      return {
+        status: response.status,
+        body: response.data,
+        requestId: requestId(
+          String(response.headers["x-github-request-id"] ?? "github"),
+        ),
+      };
+    } catch (error) {
+      const status = record(error) ? error.status : undefined;
+      const response = record(error) ? error.response : undefined;
+      if (typeof status === "number" && input.expected.includes(status))
+        return {
+          status,
+          body: record(response) ? response.data : undefined,
+          requestId: requestId(
+            record(response) && record(response.headers)
+              ? String(response.headers["x-github-request-id"] ?? "github")
+              : "github",
+          ),
+        };
       throw new Error("github-request-failed");
-    } finally {
-      clearTimeout(timeout);
     }
-    const bytes = await boundedResponseBytes(response);
-    let body: unknown = undefined;
-    if (bytes.byteLength > 0) {
-      try {
-        body = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-      } catch {
-        throw new Error("invalid-response");
-      }
-    }
-    if (!input.expected.includes(response.status))
-      throw new Error(`github-status-${response.status}`);
-    return {
-      status: response.status,
-      body,
-      requestId: requestId(
-        response.headers.get("x-github-request-id") ?? "github",
-      ),
-    };
   }
 
   async function installation() {
-    const response = await github({
-      path: `/app/installations/${config.installationId}`,
-      authorization: await appJwt(),
-      expected: [200],
-    });
-    const account = property(response.body, "account");
-    const selection = stringProperty(response.body, "repository_selection");
+    const { data } = await app.octokit.request(
+      "GET /app/installations/{installation_id}",
+      { installation_id: Number(config.installationId) },
+    );
+    const account = property(data, "account");
+    const selection = stringProperty(data, "repository_selection");
     const accountType = stringProperty(account, "type");
     if (
-      decimalProperty(response.body, "id") !== config.installationId ||
+      decimalProperty(data, "id") !== config.installationId ||
       (selection !== "all" && selection !== "selected") ||
       (accountType !== "Organization" && accountType !== "User")
     )
@@ -367,23 +312,20 @@ export function createGitHubAppHttpProvider(input: {
     permissions: PermissionSnapshot,
     repositoryIds?: readonly string[],
   ) {
-    const response = await github({
-      method: "POST",
-      path: `/app/installations/${config.installationId}/access_tokens`,
-      authorization: await appJwt(),
-      body: {
-        permissions: permissionRequest(permissions),
-        ...(repositoryIds === undefined
-          ? {}
-          : { repository_ids: repositoryIds.map(safeRepositoryIdNumber) }),
-      },
-      expected: [201],
+    const authentication = await app.octokit.auth({
+      type: "installation",
+      installationId: config.installationId,
+      permissions: permissionRequest(permissions),
+      ...(repositoryIds === undefined
+        ? {}
+        : { repositoryIds: repositoryIds.map(safeRepositoryIdNumber) }),
+      refresh: true,
     });
-    const value = stringProperty(response.body, "token");
+    const value = stringProperty(authentication, "token");
     if (value.length < 20 || value.length > 512)
       throw new Error("invalid-response");
     const granted = normalizedPermissions(
-      property(response.body, "permissions"),
+      property(authentication, "permissions"),
     );
     if (JSON.stringify(granted) !== JSON.stringify(permissions))
       throw new Error("invalid-response");

@@ -155,7 +155,7 @@ exact idempotency read-back. Only an explicit provider rejection becomes a
 bounded sanitized failure receipt and requires explicit recovery.
 
 The repository now supplies the PostgreSQL CAS store, its additive schema, and
-a fixed-`api.github.com` HTTP provider. Hosted deployment composition is
+an Octokit-backed fixed-`api.github.com` provider. Hosted deployment composition is
 enabled only by exact `APP_BUILDER_GITHUB_PUBLICATION_ENABLED=1` together with
 an exact matching `VERCEL_ENV` and `EVE_HOSTED_VERCEL_ENVIRONMENT` of either
 `preview` or `production`, bounded `DATABASE_URL`, `GITHUB_APP_ID`, and
@@ -164,12 +164,13 @@ an exact matching `VERCEL_ENV` and `EVE_HOSTED_VERCEL_ENVIRONMENT` of either
 issuer/audience/workspace/owner database binding after current and initiating
 forwarded authority plus membership are revalidated for the session. Local,
 unconfigured, unsupported, service, mismatched, inactive, or ambient authority
-remains fail-closed. The provider creates short-lived App JWTs and mints a
-fresh installation token with the exact permissions for each operation. The runtime
+remains fail-closed. The provider delegates short-lived App JWT creation and
+installation-token minting with the exact permissions for each operation to
+`@octokit/app` and `@octokit/auth-app`. The runtime
 passes a closed, discriminated, ephemeral content value directly into the
 provider mutation: fresh creation receives the complete immutable prepared
 source manifest and bytes at `sourceTree`, while draft publication receives
-only the reviewed validated-overlay changes. The HTTP provider has no second
+only the reviewed validated-overlay changes. The Octokit provider has no second
 material source and verifies modes, blob identities, byte digests, and the
 exact Git tree before mutation. Tokens, endpoints, raw responses, raw content,
 and raw errors never enter a proposal or receipt. Composition makes the typed
