@@ -217,6 +217,8 @@ export function createVercelInstallationAuthorization(input: {
         ? new URL("/local-connections/vercel", config.issuer)
         : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
+      if (input.emulation && returnState.resumeKey)
+        url.searchParams.set("resume", returnState.resumeKey);
       return url.toString();
     },
 

@@ -792,6 +792,8 @@ export function createGitHubAppInstallationAuthorization(input: {
           ? new URL("/local-connections/github", config.issuer)
           : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
         redirect.searchParams.set("state", state.state);
+        if (input.emulation && returnState.resumeKey)
+          redirect.searchParams.set("resume", returnState.resumeKey);
         return {
           version: 1 as const,
           action: "github-app.installation.begin" as const,
@@ -950,11 +952,27 @@ export function createGitHubAppInstallationAuthorization(input: {
             codeChallenge(verifier),
           );
           authorizeUrl.searchParams.set("code_challenge_method", "S256");
+          const approvalUrl = input.emulation
+            ? new URL(
+                "/local-connections/github",
+                input.emulation.canonicalOrigin,
+              )
+            : authorizeUrl;
+          if (input.emulation) {
+            for (const [key, value] of authorizeUrl.searchParams)
+              approvalUrl.searchParams.append(key, value);
+            approvalUrl.searchParams.set("phase", "authorize");
+            if (state.returnState.resumeKey)
+              approvalUrl.searchParams.set(
+                "resume",
+                state.returnState.resumeKey,
+              );
+          }
           return {
             version: 1 as const,
             action: "github-app.installation.authorize" as const,
             status: "redirect" as const,
-            redirectUrl: authorizeUrl.toString(),
+            redirectUrl: approvalUrl.toString(),
             stateDigest: authorizationState.stateDigest,
             authorityDigest: authorizationState.authorityDigest,
             expiresAt: authorizationState.expiresAt.toISOString(),

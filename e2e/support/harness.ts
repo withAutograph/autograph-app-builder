@@ -19,7 +19,7 @@ const providerDescriptors = {
   GitHub: {
     slug: "github",
     installationButton: "Install or update GitHub access",
-    approvalButton: "Connect emulated GitHub App installation",
+    approvalButton: "Connect emulated GitHub",
     seededScopes: ["autograph-local/demo-app"],
     selectedControl: "Git Scope",
     selectedValue: "autograph-local",
@@ -32,7 +32,7 @@ const providerDescriptors = {
   Vercel: {
     slug: "vercel",
     installationButton: "Connect to Vercel",
-    approvalButton: "Connect emulated Vercel team",
+    approvalButton: "Connect emulated Vercel",
     seededScopes: ["autograph-local", "icfg_local_1"],
     selectedControl: "Select a Vercel Team",
     selectedValue: "Autograph Local",
@@ -185,11 +185,19 @@ export async function selectProviderIdentity(
   provider: EmulatedProvider,
 ) {
   const descriptor = providerDescriptor(provider);
+  await expect(page.getByText("Autograph Developer")).toBeVisible();
+  for (const scope of descriptor.seededScopes)
+    await expect(page.getByText(scope, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: descriptor.approvalButton }).click();
-  await expect(page).toHaveURL(
-    new RegExp(`^${descriptor.emulatorOrigin}/`, "u"),
-  );
-  await page.getByRole("button", { name: /autograph-dev/u }).click();
+  if (provider === "GitHub") {
+    await expect(page).toHaveURL(
+      /\/local-connections\/github\?.*phase=authorize/u,
+    );
+    await expect(page.getByText("Authorize GitHub connection")).toBeVisible();
+    await page
+      .getByRole("button", { name: "Authorize emulated GitHub" })
+      .click();
+  }
   await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"), {
     timeout: 30_000,
   });

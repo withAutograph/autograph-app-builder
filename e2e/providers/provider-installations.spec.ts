@@ -143,6 +143,25 @@ test("connections remain available when the user returns through the other OAuth
   });
 });
 
+test("the emulated approval Back action restores the unchanged builder draft", async ({
+  page,
+}) => {
+  await finishOAuth(page, "GitHub");
+  await page.goto("/");
+  await page.getByLabel("App Name").fill("Back Action Draft");
+  await page.locator("#app-brief").fill("Keep this draft without connecting.");
+  await openProviderConnection(page, "GitHub");
+  await advanceProviderConnectionToApproval(page, "GitHub");
+  await page.getByRole("link", { name: "Back" }).click();
+
+  await expect(page).toHaveURL(/\/?resume=/u);
+  await expect(page.getByLabel("App Name")).toHaveValue("Back Action Draft");
+  await expect(page.locator("#app-brief")).toHaveValue(
+    "Keep this draft without connecting.",
+  );
+  expect((await applicationCounts()).githubInstallations).toBe(0);
+});
+
 for (const provider of emulatedProviders) {
   test(`leaving the ${provider} installation page restores the draft without connecting`, async ({
     page,

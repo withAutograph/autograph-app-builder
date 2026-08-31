@@ -320,8 +320,9 @@ describe("public GitHub App installation authorization", () => {
     if (authorize.status !== "redirect") throw new Error("expected redirect");
     const authorizeUrl = new URL(authorize.redirectUrl);
     expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
-      "https://builder.example/api/emulate/github/login/oauth/authorize",
+      "https://builder.example/local-connections/github",
     );
+    expect(authorizeUrl.searchParams.get("phase")).toBe("authorize");
 
     await expect(
       authorization.complete(
