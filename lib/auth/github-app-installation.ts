@@ -713,6 +713,15 @@ export function createGitHubAppInstallationAuthorization(input: {
 }) {
   const config = configSchema.parse(input.config);
   const request = input.fetch ?? fetch;
+  const emulatedGitHubUrl = (resource: string | URL) => {
+    const providerUrl = new URL(resource);
+    const emulatorBase = new URL(input.emulation!.githubOrigin);
+    const basePath = emulatorBase.pathname.replace(/\/$/u, "");
+    emulatorBase.pathname = `${basePath}${providerUrl.pathname}`;
+    emulatorBase.search = providerUrl.search;
+    emulatorBase.hash = "";
+    return emulatorBase;
+  };
   const providerFetch: Fetch = input.emulation
     ? (resource, init) => {
         const githubUrl = new URL(
@@ -722,13 +731,7 @@ export function createGitHubAppInstallationAuthorization(input: {
               ? resource.href
               : resource.url,
         );
-        return request(
-          new URL(
-            `${githubUrl.pathname}${githubUrl.search}`,
-            input.emulation!.githubOrigin,
-          ),
-          init,
-        );
+        return request(emulatedGitHubUrl(githubUrl), init);
       }
     : request;
   const now = input.now ?? Date.now;
@@ -925,13 +928,9 @@ export function createGitHubAppInstallationAuthorization(input: {
             state: authorizationState.state,
             redirectUrl: callbackUrl,
           });
-          const authorizeUrl = new URL(authorization.url);
-          if (input.emulation)
-            authorizeUrl.host = new URL(input.emulation.githubOrigin).host;
-          if (input.emulation)
-            authorizeUrl.protocol = new URL(
-              input.emulation.githubOrigin,
-            ).protocol;
+          const authorizeUrl = input.emulation
+            ? emulatedGitHubUrl(authorization.url)
+            : new URL(authorization.url);
           authorizeUrl.searchParams.set(
             "code_challenge",
             codeChallenge(verifier),
