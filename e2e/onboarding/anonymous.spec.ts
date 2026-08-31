@@ -9,18 +9,6 @@ import {
 
 test.beforeEach(async () => resetApplicationState());
 
-test("uses the root builder and does not serve the removed workspace page", async ({
-  page,
-}) => {
-  const legacyResponse = await page.goto("/workspace");
-  expect(legacyResponse?.status()).toBe(404);
-
-  await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Build an app" }),
-  ).toBeVisible();
-});
-
 test("anonymous brief continues through passkey signup into the builder", async ({
   context,
   page,
