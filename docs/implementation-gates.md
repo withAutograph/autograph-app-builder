@@ -420,12 +420,13 @@ following are true in the target environment:
    permissions, and the selected Vercel installation can link repositories
    through its own GitHub integration. Prove organization, personal, team, and
    personal-scope read-back without exposing either provider token.
-4. The pinned Arrusted starter archive and manifest are published at immutable,
-   content-addressed HTTPS URLs. Rebuild the artifact independently and prove
-   its exact source SHA, source tree, byte count, file manifest, archive
-   SHA-256, and manifest SHA-256 before configuring those URLs.
+4. The resolved canonical Arrusted `refs/heads/main` commit has a successful
+   `Template readiness` CI check. Prove the detached clone's canonical HTTPS
+   origin/ref, exact source SHA/tree, V4 readiness attestation digest, locked
+   bootstrap receipt, and deny-all target-command network policy before
+   enabling provisioning.
 5. A Preview proof creates and reads back an exact parentless GitHub `main`
    commit and a linked or intentionally standalone Vercel project, while the
    provider audit log proves that no deployments API was called. Keep the flag
-   disabled if any migration, secret, permission, immutable-artifact, or
+   disabled if any migration, secret, permission, template-readiness, or
    provider read-back evidence is absent.

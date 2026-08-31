@@ -13,6 +13,7 @@ import {
   type ObservedDependencyCache,
 } from "../repository/dependency-cache";
 import { inspectPreparedSandboxWorkspace } from "../repository/supported-template";
+import { SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import {
   targetExecutionBinding,
   targetProposalSchema,
@@ -213,6 +214,7 @@ export async function inspectTargetExecutionReadiness(input: {
         input.sandbox,
         environment,
         input.state.workspace,
+        input.state.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
       ).catch(() => undefined)
     : undefined;
   const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({

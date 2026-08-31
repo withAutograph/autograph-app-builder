@@ -321,6 +321,23 @@ export async function inspectSupportedRepository(
   input: string,
 ): Promise<EligibilityResult> {
   const sourcePath = await resolveAllowedRepository(input);
+  return inspectSupportedRepositoryAtPath(sourcePath);
+}
+
+/**
+ * Inspects a path that was created by the builder's canonical template-clone
+ * transport. It is deliberately not exported through a tool boundary: callers
+ * must first prove the fixed remote/ref/SHA transport contract.
+ */
+export async function inspectBuilderOwnedSupportedRepository(
+  input: string,
+): Promise<EligibilityResult> {
+  return inspectSupportedRepositoryAtPath(await realpath(resolve(input)));
+}
+
+async function inspectSupportedRepositoryAtPath(
+  sourcePath: string,
+): Promise<EligibilityResult> {
   const failures: string[] = [];
   let sourceSha: string | undefined;
   let dirtyPaths: string[] = [];
@@ -653,8 +670,11 @@ export async function prepareSupportedSandboxWorkspace(
   expectedEligibilityDigest: string,
   sandbox: SandboxSession,
   callId: string,
+  builderOwned = false,
 ): Promise<PreparedSandboxWorkspace> {
-  const eligibility = await inspectSupportedRepository(sourcePathInput);
+  const eligibility = builderOwned
+    ? await inspectBuilderOwnedSupportedRepository(sourcePathInput)
+    : await inspectSupportedRepository(sourcePathInput);
   if (!eligibility.eligible || eligibility.sourceSha === undefined) {
     throw new Error(
       `Repository is not eligible: ${eligibility.failures.join("; ")}`,
@@ -809,6 +829,24 @@ export async function prepareSupportedSandboxWorkspace(
   });
   await verifyPreparedSandboxWorkspace(sandbox, record);
   return record;
+}
+
+/** Materializes a source only after the canonical clone transport has proven it. */
+export async function prepareBuilderOwnedSupportedSandboxWorkspace(
+  sourcePathInput: string,
+  expectedSha: string,
+  expectedEligibilityDigest: string,
+  sandbox: SandboxSession,
+  callId: string,
+): Promise<PreparedSandboxWorkspace> {
+  return prepareSupportedSandboxWorkspace(
+    sourcePathInput,
+    expectedSha,
+    expectedEligibilityDigest,
+    sandbox,
+    callId,
+    true,
+  );
 }
 
 /** Materializes the fixed server-bundled source that seeded a Vercel template. */

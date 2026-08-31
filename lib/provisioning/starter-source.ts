@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { lstat, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 
 import { z } from "zod";
@@ -61,11 +66,26 @@ export type StarterSourceFile = {
   mode: "100644" | "100755";
   bytes: Uint8Array;
 };
+export type StarterSourceProvenance = {
+  sourceSha: string;
+  sourceTree: string;
+  repository: string;
+  ref: "refs/heads/main";
+  method: "git-clone-v1" | "starter-archive-v3";
+  readinessDigest?: string;
+};
 export type StarterSource = {
-  manifest: StarterSourceManifest;
-  manifestSha256: string;
+  /** Present only while recovering a legacy V3 starter acquisition. */
+  manifest?: StarterSourceManifest;
+  manifestSha256?: string;
+  provenance?: StarterSourceProvenance;
   files: readonly StarterSourceFile[];
 };
+
+const execFileAsync = promisify(execFile);
+const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+const MAX_STARTER_FILES = 10_000;
+const MAX_STARTER_FILE_BYTES = 10 * 1024 * 1024;
 
 const starterConfigSchema = z
   .object({
@@ -159,7 +179,13 @@ function tarFiles(archive: Uint8Array) {
 export async function loadStarterSource(input: {
   config: StarterSourceConfig;
   fetch?: typeof fetch;
-}): Promise<StarterSource> {
+}): Promise<
+  StarterSource & {
+    manifest: StarterSourceManifest;
+    manifestSha256: string;
+    provenance: StarterSourceProvenance;
+  }
+> {
   const config = starterConfigSchema.parse(input.config);
   const request = input.fetch ?? fetch;
   const manifestResponse = await request(config.manifestUrl, {
@@ -217,6 +243,91 @@ export async function loadStarterSource(input: {
   return {
     manifest,
     manifestSha256: config.manifestSha256,
+    provenance: {
+      sourceSha: manifest.source.sha,
+      sourceTree: manifest.source.tree,
+      repository: manifest.source.repository,
+      ref: "refs/heads/main",
+      method: "starter-archive-v3",
+    },
     files: result,
   };
+}
+
+/**
+ * Resolves the canonical Arrusted template through the same clone-and-pin
+ * transport as fresh App Builder sessions.  The legacy archive loader above
+ * remains readable solely for sessions that already recorded a V3 receipt.
+ */
+export async function cloneStarterSource(): Promise<StarterSource> {
+  const { cloneArrustedTemplate } =
+    await import("../repository/arrusted-template");
+  const clone = await cloneArrustedTemplate();
+  try {
+    if (clone.receipt.version !== 4)
+      throw new Error("starter-source-receipt-version-invalid");
+    const listing = await execFileAsync(
+      git,
+      [
+        "-c",
+        "protocol.allow=never",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.fsmonitor=false",
+        "-C",
+        clone.receipt.sourcePath,
+        "ls-files",
+        "-z",
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          NODE_ENV: process.env.NODE_ENV ?? "production",
+          PATH: "/usr/bin:/bin",
+          HOME: "/dev/null",
+          XDG_CONFIG_HOME: "/dev/null",
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_SYSTEM: "/dev/null",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_ATTR_NOSYSTEM: "1",
+          GIT_NO_LAZY_FETCH: "1",
+          GIT_TERMINAL_PROMPT: "0",
+        },
+        maxBuffer: 2 * 1024 * 1024,
+        timeout: 30_000,
+      },
+    );
+    const paths = listing.stdout.split("\0").filter(Boolean);
+    if (paths.length === 0 || paths.length > MAX_STARTER_FILES)
+      throw new Error("starter-source-file-count-invalid");
+    const files = await Promise.all(
+      paths.map(async (path): Promise<StarterSourceFile> => {
+        if (!safeSourcePath(path))
+          throw new Error("starter-source-path-invalid");
+        const filePath = join(clone.receipt.sourcePath, path);
+        const stat = await lstat(filePath);
+        if (!stat.isFile() || stat.size > MAX_STARTER_FILE_BYTES)
+          throw new Error("starter-source-file-invalid");
+        return {
+          path,
+          mode: stat.mode & 0o111 ? "100755" : "100644",
+          bytes: await readFile(filePath),
+        };
+      }),
+    );
+    return {
+      provenance: {
+        sourceSha: clone.receipt.sourceSha,
+        sourceTree: clone.receipt.sourceTree,
+        repository: clone.receipt.provenance.repository,
+        ref: clone.receipt.provenance.ref,
+        method: clone.receipt.provenance.method,
+        readinessDigest: clone.receipt.provenance.readinessDigest,
+      },
+      files,
+    };
+  } finally {
+    await clone.dispose();
+  }
 }

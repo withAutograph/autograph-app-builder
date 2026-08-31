@@ -17,6 +17,7 @@ import {
   DEPENDENCY_CACHE_ARCHIVE_PATH,
   DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
   assertExactDependencyTargetBinding,
+  bootstrapLiveTemplateDependencies,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
   materializedDependencyNodeModulesRoot,
@@ -336,6 +337,59 @@ describe("offline dependency cache", () => {
         cache,
       }),
     ).not.toThrow();
+  });
+
+  it("bootstraps a SHA-scoped locked template closure, then restores deny-all networking", async () => {
+    const target = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
+    const setNetworkPolicy = vi.fn(async () => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          platform: "linux/x86_64",
+          locks: {
+            miseConfigSha256: "1".repeat(64),
+            miseLockSha256: "2".repeat(64),
+            bunLockSha256: "3".repeat(64),
+            cargoLockSha256: "4".repeat(64),
+          },
+          microfrontendsVersion: "2.4.0",
+        }),
+        stderr: "",
+      })
+      .mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    const writeTextFile = vi.fn(async () => undefined);
+    const sandbox = {
+      readTextFile: vi.fn(async () => null),
+      setNetworkPolicy,
+      run,
+      writeTextFile,
+    } as unknown as SandboxSession;
+
+    const cache = await bootstrapLiveTemplateDependencies({ sandbox, target });
+
+    expect(cache.manifest).toMatchObject({
+      scope: "live-template-execution",
+      target: { sha: target.sourceSha, tree: target.sourceTree },
+      closure: { nodeModulesPath: "/workspace/repository/node_modules" },
+    });
+    expect(run.mock.calls[0]?.[0].command).toContain(
+      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
+    );
+    expect(run.mock.calls[0]?.[0].command).toContain("cargo fetch --locked");
+    expect(setNetworkPolicy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        allow: expect.arrayContaining(["registry.npmjs.org"]),
+      }),
+    );
+    expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
+    expect(writeTextFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: `.app-builder/template-dependency-cache/${target.sourceSha}/manifest.json`,
+      }),
+    );
   });
 
   it("verifies target-bound manifest and archive bytes before extraction", async () => {

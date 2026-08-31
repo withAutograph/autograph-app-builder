@@ -81,6 +81,41 @@ function gitBlobSha(bytes: Uint8Array) {
     .digest("hex");
 }
 
+function sourceBinding(source: StarterSource) {
+  if (source.provenance !== undefined) {
+    return {
+      sourceSha: objectId.parse(source.provenance.sourceSha),
+      sourceTree: objectId.parse(source.provenance.sourceTree),
+      starter: {
+        sourceSha: objectId.parse(source.provenance.sourceSha),
+        sourceTree: objectId.parse(source.provenance.sourceTree),
+        repository: source.provenance.repository,
+        ref: source.provenance.ref,
+        method: source.provenance.method,
+        ...(source.provenance.readinessDigest === undefined
+          ? {}
+          : { readinessDigest: source.provenance.readinessDigest }),
+      },
+    };
+  }
+  if (source.manifest === undefined || source.manifestSha256 === undefined)
+    throw new Error("starter-source-provenance-missing");
+  return {
+    sourceSha: source.manifest.source.sha,
+    sourceTree: source.manifest.source.tree,
+    starter: {
+      sourceSha: source.manifest.source.sha,
+      sourceTree: source.manifest.source.tree,
+      repository: source.manifest.source.repository,
+      ref: "refs/heads/main" as const,
+      method: "starter-archive-v3" as const,
+      archiveSha256: source.manifest.archive.sha256,
+      archiveBytes: source.manifest.archive.bytes,
+      manifestSha256: source.manifestSha256,
+    },
+  };
+}
+
 export async function provisionGitHubRepository(input: {
   config: GitHubProvisioningConfig;
   authority: BuilderProvisionAuthority;
@@ -99,6 +134,7 @@ export async function provisionGitHubRepository(input: {
   generateSuffix?: () => string;
 }): Promise<GitHubProvisionResult> {
   const config = configSchema.parse(input.config);
+  const source = sourceBinding(input.source);
   const request = input.fetch ?? fetch;
   const now = input.now ?? Date.now;
   const app = createGitHubApp({
@@ -339,8 +375,7 @@ export async function provisionGitHubRepository(input: {
       expected: [201],
     });
     const treeSha = objectId.parse(stringProperty(tree.body, "sha"));
-    if (treeSha !== input.source.manifest.source.tree)
-      throw new Error("source-tree-mismatch");
+    if (treeSha !== source.sourceTree) throw new Error("source-tree-mismatch");
     const commit = await github({
       method: "POST",
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/commits`,
@@ -379,8 +414,7 @@ export async function provisionGitHubRepository(input: {
       throw new Error("commit-not-parentless");
     const headSha = objectId.parse(stringProperty(commit.body, "sha"));
     const headTree = objectId.parse(stringProperty(treeData, "sha"));
-    if (headTree !== input.source.manifest.source.tree)
-      throw new Error("source-tree-mismatch");
+    if (headTree !== source.sourceTree) throw new Error("source-tree-mismatch");
     const tree = await github({
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees/${headTree}?recursive=1`,
       token,
@@ -439,11 +473,7 @@ export async function provisionGitHubRepository(input: {
       headSha,
       headTree,
       starter: {
-        sourceSha: input.source.manifest.source.sha,
-        sourceTree: input.source.manifest.source.tree,
-        archiveSha256: input.source.manifest.archive.sha256,
-        archiveBytes: input.source.manifest.archive.bytes,
-        manifestSha256: input.source.manifestSha256,
+        ...source.starter,
       },
     };
   }

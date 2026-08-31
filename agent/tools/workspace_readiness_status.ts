@@ -7,6 +7,7 @@ import {
   assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import {
   assertExactDependencyTargetBinding,
   dependencyCacheReceiptDigest,
@@ -70,6 +71,7 @@ export default defineTool({
             sandbox,
             process.env,
             current.workspace,
+            current.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
           ).catch(() => undefined)
         : undefined;
     let sourceTargetReady = false;

@@ -111,9 +111,17 @@ export const githubProvisionSuccessSchema = z
       .object({
         sourceSha: objectId,
         sourceTree: objectId,
-        archiveSha256: sha256,
-        archiveBytes: z.number().int().positive(),
-        manifestSha256: sha256,
+        repository: z
+          .string()
+          .url()
+          .startsWith("https://github.com/")
+          .optional(),
+        ref: z.literal("refs/heads/main").optional(),
+        method: z.enum(["git-clone-v1", "starter-archive-v3"]).optional(),
+        readinessDigest: sha256.optional(),
+        archiveSha256: sha256.optional(),
+        archiveBytes: z.number().int().positive().optional(),
+        manifestSha256: sha256.optional(),
       })
       .strict(),
   })

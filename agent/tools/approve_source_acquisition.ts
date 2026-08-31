@@ -6,11 +6,15 @@ import {
   sourceWorkflowState,
 } from "@/lib/agent/source-state";
 import { existingRepositoryAcquisitionReceipt } from "@/lib/agent/existing-app-sequencing";
-import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
+import {
+  SOURCE_RECEIPT_VERSION,
+  inspectClonedTemplateSourceReceipt,
+  inspectSourceReceipt,
+} from "@/lib/repository/source-receipt";
 
 export default defineTool({
   description:
-    "Automatically bind an exact eligible fresh-template local checkout as the internal acquisition source. This does not clone, copy, or materialize anything.",
+    "Automatically bind the exact eligible canonical Arrusted clone as the internal fresh-template source. This does not materialize the workspace.",
   inputSchema: z.object({
     expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
@@ -22,10 +26,16 @@ export default defineTool({
     );
     if (existing !== undefined) return existing;
     if (current.phase === "empty") throw new Error("No source was reviewed.");
-    const currentReceipt = await inspectSourceReceipt(
-      current.receipt.sourceKind,
-      current.receipt.sourcePath,
-    );
+    const currentReceipt =
+      current.receipt.version === SOURCE_RECEIPT_VERSION
+        ? await inspectClonedTemplateSourceReceipt({
+            path: current.receipt.sourcePath,
+            readinessDigest: current.receipt.provenance.readinessDigest,
+          })
+        : await inspectSourceReceipt(
+            current.receipt.sourceKind,
+            current.receipt.sourcePath,
+          );
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review.");
     sourceWorkflowState.update(() => ({

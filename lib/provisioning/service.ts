@@ -19,8 +19,7 @@ import {
   type BuilderProvisionAuthority,
   type BuilderProvisionJournalStore,
 } from "./journal";
-import type { StarterSourceConfig } from "./starter-source";
-import { loadStarterSource } from "./starter-source";
+import { cloneStarterSource, type StarterSource } from "./starter-source";
 import { provisionVercelProject } from "./vercel-provider";
 
 type VercelCredential = {
@@ -42,7 +41,8 @@ export interface BuilderProvisioningDependencies {
   githubInstallations: HostedGitHubInstallationStore;
   githubCredentials: GitHubUserCredentialStore;
   githubConfig: GitHubProvisioningConfig;
-  starterConfig: StarterSourceConfig;
+  /** Test-only seam; production always resolves the canonical clone. */
+  loadStarterSource?: () => Promise<StarterSource>;
   vercelConfig: VercelIntegrationConfig;
   readVercelCredential(input: {
     authority: BuilderProvisionAuthority;
@@ -143,10 +143,9 @@ export async function executeBuilderProvisioning(input: {
       };
     } else {
       try {
-        const source = await loadStarterSource({
-          config: input.dependencies.starterConfig,
-          fetch: input.dependencies.fetch,
-        });
+        const source = await (
+          input.dependencies.loadStarterSource ?? cloneStarterSource
+        )();
         const current = await input.dependencies.journal.read({
           authority: input.authority,
           requestId: request.requestId,

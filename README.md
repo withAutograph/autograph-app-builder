@@ -31,8 +31,10 @@ installation and every supported client.
 There are exactly two user-facing modes:
 
 - `mise run dev -- --arrusted-root /absolute/path/to/arrusted` is the fast,
-  non-release loop. It accepts dirty Arrusted source through an immutable
-  per-run snapshot, reuses platform-specific dependency state, exposes the
+  non-release loop. It uses that explicit checkout only for local development;
+  every new App Builder application acquires the canonical Arrusted `main`
+  template through the clone-and-pin source boundary, reuses platform-specific
+  dependency state, exposes the
   exact five public `autograph_*` tools on loopback `/mcp`, and cannot publish,
   deploy, select hosted bindings, or mutate a provider.
 - `mise run release:prove` builds and locally proves one clean, immutable
@@ -50,7 +52,8 @@ boundaries, cache identity, and promotion flow.
 Inside the supported modes, the workflow engine can model an existing eligible
 checkout or an explicitly allowlisted fresh-template checkout:
 
-1. inspect the source with the versioned, non-executing V0 adapter;
+1. for a new app, clone the canonical Arrusted HTTPS `main` ref, resolve its
+   exact commit/tree, then inspect that source with the versioned V0 adapter;
 2. emit a canonical receipt binding source kind, exact SHA, eligibility,
    supported-template contract, and release-disabled state;
 3. for a fresh-template source, automatically verify one exact acquisition
@@ -336,8 +339,9 @@ does not replace the hosted and cross-client proofs above.
 
 ## Run Autograph App Builder locally
 
-Use the repository-pinned toolchain and provide the Arrusted checkout
-explicitly:
+Use the repository-pinned toolchain. An explicit Arrusted checkout is only for
+the existing-repository development workflow; a new app acquires the canonical
+Arrusted `main` clone automatically:
 
 ```bash
 mise run dependencies:install
@@ -365,9 +369,11 @@ built, preloaded OCI image is configured through
 `APP_BUILDER_SANDBOX_IMAGE=<image>@sha256:<digest>`. The agent never pulls,
 builds, or publishes that image: its pinned microsandbox backend uses
 `pullPolicy: "never"` and deny-all network policy. The image must contain Git,
-`mise 2026.8.12`, `bun 1.3.14`, and the target-bound external dependency
-closure; the receipt verifies the exact versions and cache bytes
-before any future typed target command can be enabled. See [the implementation
+`mise 2026.8.12` and `bun 1.3.14`. A fresh-template session bootstraps the
+resolved clone's locked dependency closure under a fixed bootstrap allowlist,
+seals it to its SHA/platform receipt, and restores deny-all networking before
+any typed target command can be enabled. Existing V3 sessions retain their
+fixed offline cache while they complete. See [the implementation
 gates](docs/implementation-gates.md). The reproducible `linux/arm64` image
 source and its digest-resolution procedure are documented in
 [`containers/eve-sandbox`](containers/eve-sandbox/README.md).
@@ -378,34 +384,33 @@ local microsandbox. Eve's
 Vercel backend fixes the runtime to its Vercel Container Registry
 `vercel/eve:latest` image and removes author-supplied image/runtime fields. It
 therefore cannot consume `APP_BUILDER_SANDBOX_IMAGE`, which is the private GHCR
-artifact carrying the exact mise/Bun versions and Arrusted dependency cache.
+artifact carrying the exact mise/Bun versions.
 The Vercel template bootstrap instead installs checksum-pinned mise `2026.8.12`
 and Bun `1.3.14` for either supported Linux architecture, allowing only the two
 GitHub release hosts while building the reusable snapshot. It also receives a
-server-only, digest-bound seed containing the exact supported Arrusted Git tree
-and a platform-portable planning-only dependency closure. The seed is included
-in the server function trace, is never placed under `public/`, and is copied
-into the reusable template before every live session switches to deny-all
-networking. The hosted runtime can therefore run the fixed read-only identity and planning
-commands against `/opt/app-builder/hosted-source/arrusted-development` without
-claiming the private GHCR image as hosted authority. Missing, Development, and
-mismatched environment bindings use the non-executing fallback. Production
-support here is source capability, not activation evidence.
+server-only managed tooling seed. For a fresh app, the same server-side
+canonical clone resolver verifies the SHA's Arrusted readiness check, records
+a V4 receipt, and materializes that reviewed tree into the session workspace.
+Its one locked bootstrap is followed by deny-all networking, so planning,
+generation, application, and validation never inherit network authority.
+Legacy V3 sessions may still read their pre-existing source seed while they
+complete. Missing, Development, and mismatched environment bindings use the
+non-executing fallback. Production support here is source capability, not
+activation evidence.
 
-Rebuild the seed with `mise run hosted:artifact-build -- --arrusted-root
-<exact-clean-checkout> --output artifacts/hosted/arrusted-d378904a-preview.tar.gz`.
-Validate its server-only placement, exact bytes, and real offline target
-commands with `mise run test:hosted-sandbox`.
+Validate the hosted toolchain placement and the canonical clone provenance
+with `mise run test:hosted-sandbox`.
 Run `mise run hosted:artifact-prove-typed -- --image <exact-local-digest-ref>
 --source-root <exact-clean-checkout>` to combine that artifact proof with the
 silent Eve workflow proof. It must terminate at `planned` and emits the
 asserted called-tool and forbidden-tool trace.
 
-For local source access, set `REPOSITORY_LOCAL_ROOTS` to a platform-delimited
-allowlist of absolute roots. Fresh-template acquisition resolves one exact local
-checkout receipt; it never means cloning or creating a destination repository.
-Automatic preparation copies the reviewed tree into the
-durable App Builder workspace; the source checkout is not mutated.
+For an explicit existing repository, set `REPOSITORY_LOCAL_ROOTS` to a
+platform-delimited allowlist of absolute roots. Fresh-template acquisition
+never uses that allowlist: it resolves the one canonical HTTPS Arrusted ref,
+records its detached clone receipt, and materializes the reviewed tree into
+the durable App Builder workspace. Neither source workflow mutates its source
+checkout.
 
 To enable the branch/worktree publication outcome, pre-create a canonical
 builder-owned directory, set its absolute path in

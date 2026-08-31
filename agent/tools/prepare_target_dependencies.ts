@@ -11,6 +11,7 @@ import {
 } from "@/lib/agent/workflow-state";
 import {
   assertExactDependencyTargetBinding,
+  bootstrapLiveTemplateDependencies,
   inspectDependencyCache,
   materializeOfflineDependencies,
   dependencyTargetForWorkspace,
@@ -19,10 +20,12 @@ import {
   materializePlanningOverlay,
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
+import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
-    "Automatically materialize the fixed verified offline dependency closure into the builder-owned planning overlay after a complete AppSpec is recorded. No target mutation, network, apply, validation, or prepared-source mutation is available.",
+    "After a complete AppSpec is recorded, bootstrap a fresh canonical template from its locked dependencies once, seal that closure, and materialize it into the builder-owned planning overlay. Target commands run only after the sandbox network policy is restored to deny-all; no provider or target-repository mutation is available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
@@ -44,10 +47,19 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     const sandbox = await ctx.getSandbox();
+    if (
+      current.sourceReceipt.version === SOURCE_RECEIPT_VERSION &&
+      !hasTestCapability("simulated-target")
+    )
+      await bootstrapLiveTemplateDependencies({
+        sandbox,
+        target: current.workspace,
+      });
     const observedCache = await inspectDependencyCache(
       sandbox,
       process.env,
       current.workspace,
+      current.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
     );
     assertExactDependencyTargetBinding({
       workspace: current.workspace,
@@ -68,6 +80,8 @@ export default defineTool({
       sandbox,
       artifactRevision: current.appSpec.artifactRevision,
       target: current.workspace,
+      preferLiveTemplate:
+        current.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
     });
     assertExactDependencyTargetBinding({
       workspace: current.workspace,

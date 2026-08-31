@@ -9,9 +9,16 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
-import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
+import {
+  SOURCE_RECEIPT_VERSION,
+  inspectClonedTemplateSourceReceipt,
+  inspectSourceReceipt,
+} from "@/lib/repository/source-receipt";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
-import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
+import {
+  prepareBuilderOwnedSupportedSandboxWorkspace,
+  prepareSupportedSandboxWorkspace,
+} from "@/lib/repository/supported-template";
 import {
   hostedSourceReceipt,
   prepareHostedSourceWorkspace,
@@ -46,16 +53,26 @@ export default defineTool({
       source.phase !== "acquisition_approved"
     )
       throw new Error("Fresh-template acquisition was not approved.");
-    const hostedReceipt = hostedSourceReceipt(
-      source.receipt.sourceKind,
-      source.receipt.sourcePath,
-    );
+    // A V4 fresh-template receipt is a builder-owned, canonical Git checkout;
+    // it is deliberately not routed through the legacy hosted source bundle.
+    const hostedReceipt =
+      source.receipt.version === SOURCE_RECEIPT_VERSION
+        ? undefined
+        : hostedSourceReceipt(
+            source.receipt.sourceKind,
+            source.receipt.sourcePath,
+          );
     const currentReceipt =
       hostedReceipt ??
-      (await inspectSourceReceipt(
-        source.receipt.sourceKind,
-        source.receipt.sourcePath,
-      ));
+      (source.receipt.version === SOURCE_RECEIPT_VERSION
+        ? await inspectClonedTemplateSourceReceipt({
+            path: source.receipt.sourcePath,
+            readinessDigest: source.receipt.provenance.readinessDigest,
+          })
+        : await inspectSourceReceipt(
+            source.receipt.sourceKind,
+            source.receipt.sourcePath,
+          ));
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review or approval.");
     const {
@@ -82,13 +99,21 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const workspace =
       hostedReceipt === undefined
-        ? await prepareSupportedSandboxWorkspace(
-            path,
-            expectedSha,
-            expectedEligibilityDigest,
-            sandbox,
-            ctx.callId,
-          )
+        ? await (currentReceipt.version === SOURCE_RECEIPT_VERSION
+            ? prepareBuilderOwnedSupportedSandboxWorkspace(
+                path,
+                expectedSha,
+                expectedEligibilityDigest,
+                sandbox,
+                ctx.callId,
+              )
+            : prepareSupportedSandboxWorkspace(
+                path,
+                expectedSha,
+                expectedEligibilityDigest,
+                sandbox,
+                ctx.callId,
+              ))
         : await prepareHostedSourceWorkspace({
             receipt: currentReceipt,
             sandbox,

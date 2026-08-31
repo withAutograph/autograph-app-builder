@@ -247,7 +247,7 @@ export async function materializePlanningOverlay(input: {
     }
   } else {
     const copy = await input.sandbox.run({
-      command: `cp -R repository/. ${root}/`,
+      command: `tar --create --file - --exclude=node_modules -C repository . | tar --extract --file - --directory ${root}`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
     });

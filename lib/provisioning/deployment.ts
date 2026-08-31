@@ -16,7 +16,6 @@ import { readGitHubUserCredentialEnvironment } from "./github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "./postgres-github-user-credential";
 import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
 import { executeBuilderProvisioning, readBuilderProvisioning } from "./service";
-import { readStarterSourceEnvironment } from "./starter-source";
 
 const noStore = { "Cache-Control": "no-store" } as const;
 
@@ -134,7 +133,6 @@ export function getBuilderProvisioningDeploymentHandler(
       config: readGitHubUserCredentialEnvironment(environment),
     }),
     githubConfig: readGitHubProvisioningEnvironment(environment),
-    starterConfig: readStarterSourceEnvironment(environment),
     vercelConfig,
     readVercelCredential: ({ authority, installationId }) =>
       readActiveVercelInstallationToken({

@@ -14,6 +14,7 @@ import {
   assertExactDependencyTargetBinding,
   inspectDependencyCache,
 } from "@/lib/repository/dependency-cache";
+import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -61,6 +62,7 @@ export default defineTool({
       sandbox,
       process.env,
       current.workspace,
+      current.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
     );
     assertExactDependencyTargetBinding({
       workspace: current.workspace,

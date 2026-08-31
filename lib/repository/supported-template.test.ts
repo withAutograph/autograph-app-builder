@@ -21,7 +21,10 @@ import {
   SUPPORTED_TEMPLATE_DEPENDENCY_PATHS,
 } from "./supported-template";
 import {
+  ARRUSTED_TEMPLATE_REF,
+  ARRUSTED_TEMPLATE_REPOSITORY,
   inspectSourceReceipt,
+  inspectClonedTemplateSourceReceipt,
   parseSourceReceipt,
   parseSourceReceiptEvidence,
   sourceReceiptEvidence,
@@ -243,6 +246,30 @@ function fakeSandbox({
 }
 
 describe("supported-template adapter", () => {
+  it("binds canonical clone provenance in a V4 fresh-template receipt", async () => {
+    const root = fixture();
+    const receipt = await inspectClonedTemplateSourceReceipt({
+      path: root,
+      readinessDigest: "a".repeat(64),
+    });
+
+    expect(receipt.version).toBe(4);
+    expect(receipt.sourceKind).toBe("fresh-template");
+    if (receipt.version !== 4) throw new Error("expected V4 clone receipt");
+    expect(receipt.provenance).toEqual({
+      repository: ARRUSTED_TEMPLATE_REPOSITORY,
+      ref: ARRUSTED_TEMPLATE_REF,
+      method: "git-clone-v1",
+      readinessDigest: "a".repeat(64),
+    });
+    expect(() =>
+      parseSourceReceipt({
+        ...receipt,
+        provenance: { ...receipt.provenance, ref: "refs/heads/other" },
+      }),
+    ).toThrow("Source receipt evidence is invalid");
+  });
+
   it("declares a complete immutable inspection entrypoint closure", () => {
     expect(SUPPORTED_TEMPLATE_DEPENDENCY_PATHS).toEqual([
       ".config/mise/config.toml",

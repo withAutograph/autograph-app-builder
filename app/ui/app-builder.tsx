@@ -305,9 +305,19 @@ Head SHA: ${github.headSha}
 Head tree: ${github.headTree}
 Starter source SHA: ${github.starter.sourceSha}
 Starter source tree: ${github.starter.sourceTree}
-Starter archive SHA-256: ${github.starter.archiveSha256}
-Starter archive bytes: ${github.starter.archiveBytes}
-Starter manifest SHA-256: ${github.starter.manifestSha256}`
+Starter origin: ${github.starter.repository ?? "legacy unavailable"}
+Starter ref: ${github.starter.ref ?? "legacy unavailable"}
+Starter transport: ${github.starter.method ?? "starter-archive-v3"}${
+          github.starter.readinessDigest
+            ? `\nTemplate-readiness attestation: ${github.starter.readinessDigest}`
+            : ""
+        }${
+          github.starter.archiveSha256 &&
+          github.starter.archiveBytes !== undefined &&
+          github.starter.manifestSha256
+            ? `\nLegacy starter archive SHA-256: ${github.starter.archiveSha256}\nLegacy starter archive bytes: ${github.starter.archiveBytes}\nLegacy starter manifest SHA-256: ${github.starter.manifestSha256}`
+            : ""
+        }`
       : ""
   }${
     vercel?.status === "succeeded"
