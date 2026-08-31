@@ -25,12 +25,23 @@ does not begin until **Continue with Passkey** is clicked again on Sign Up. If
 the browser returns an assertion that the server rejects, Sign In instead shows
 **Passkey failed (try again)** and never creates a replacement identity. After
 registration, sign out and use **Continue with Passkey** to exercise the
-returning-user flow. Browsers treat `localhost` as a
+returning-user flow. A transport failure after the authenticator returns an
+assertion is intentionally treated as ambiguous and also remains on Sign In.
+Browsers treat `localhost` as a
 WebAuthn secure context; use `localhost` consistently rather than switching
 between it and `127.0.0.1` because credentials are RP-ID scoped.
 
 The Sign Up view offers one **Continue with Passkey** action that creates the
-passkey, account, workspace, and session together.
+passkey, account, workspace, and session together. An already authenticated
+visitor is redirected through the preserved setup callback instead of being
+offered first-account enrollment; adding another passkey remains an Account
+settings action. The onboarding endpoint enforces the same distinction if a
+session appears after the page renders.
+
+Cancelled and failed registration can leave one short-lived onboarding-context
+row, but no user, passkey, workspace, membership, or session. Expired contexts
+are deleted with the existing expiry index before the next context is issued,
+including contexts left by retired Preview deployments.
 
 To reset a local identity, remove its organization/member, session, passkey, and
 user records together in a transaction. Do not reuse that procedure against
@@ -80,3 +91,9 @@ missing from server storage is intentionally treated as unrecognized; sign-in
 fails generically and does not recreate the user or workspace. If every passkey
 for an unlinked passkey-only account is lost, the account cannot be recovered.
 OAuth linking remains separate from passkey recovery.
+
+If an authenticator creates a credential and server verification or the final
+database transaction fails, WebAuthn provides no browser API for deleting that
+device-local credential. Autograph rolls back all server-side account state and
+leaves the user on Sign Up, but the authenticator may retain that unusable local
+credential until the user removes it through their device settings.

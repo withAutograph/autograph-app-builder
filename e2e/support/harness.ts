@@ -55,6 +55,12 @@ export function localApprovalButtonName(provider: EmulatedProvider) {
 export async function resetApplicationState() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
+    // Recover cleanly if the rollback E2E was interrupted after installing its
+    // task-owned failure trigger but before its local finally block ran.
+    await sql.unsafe(
+      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"',
+    );
+    await sql.unsafe("DROP FUNCTION IF EXISTS fail_passkey_session_insert()");
     await sql.unsafe(`
       TRUNCATE TABLE
         "vercel_installation_authorization_state",
@@ -83,6 +89,7 @@ export async function applicationCounts() {
         members: number;
         sessions: number;
         activeSessions: number;
+        passkeyOnboardingContexts: number;
         githubInstallations: number;
         vercelInstallations: number;
       }>
@@ -94,6 +101,7 @@ export async function applicationCounts() {
         (SELECT count(*)::int FROM member) AS members,
         (SELECT count(*)::int FROM session) AS sessions,
         (SELECT count(*)::int FROM session WHERE active_organization_id IS NOT NULL) AS "activeSessions",
+        (SELECT count(*)::int FROM passkey_onboarding) AS "passkeyOnboardingContexts",
         (SELECT count(*)::int FROM hosted_github_installation_binding) AS "githubInstallations",
         (SELECT count(*)::int FROM hosted_vercel_installation) AS "vercelInstallations"
     `;
@@ -105,7 +113,9 @@ export async function applicationCounts() {
 
 export async function currentSession(page: Page) {
   try {
-    return (await page.request.get("/api/auth/get-session")).json();
+    const response = await page.request.get("/api/auth/get-session");
+    if (!response.ok()) return null;
+    return response.json();
   } catch {
     return null;
   }

@@ -16,6 +16,7 @@ type PreviewOAuthServer = ReturnType<typeof createPreviewOAuthServer>;
 
 interface PreviewOAuthDeploymentRuntime {
   auth: PreviewOAuthServer;
+  origin: string;
   organizationAuthority: ReturnType<
     typeof createPostgresPreviewOrganizationAuthority
   >;
@@ -103,7 +104,11 @@ function getPreviewOAuthDeploymentRuntime(
   } catch (cause) {
     throw new Error("preview-oauth-server", { cause });
   }
-  deploymentRuntime = { organizationAuthority, auth };
+  deploymentRuntime = {
+    organizationAuthority,
+    auth,
+    origin: new URL(config.resource).origin,
+  };
   return deploymentRuntime;
 }
 
@@ -117,6 +122,21 @@ export function getPreviewOAuthDeploymentAuth(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   return getPreviewOAuthDeploymentRuntime(environment).auth;
+}
+
+export function getPreviewOAuthDeploymentOrigin(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+) {
+  return getPreviewOAuthDeploymentRuntime(environment).origin;
+}
+
+export function getPreviewOAuthDeploymentSession(input: {
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  headers: Headers;
+}) {
+  return getPreviewOAuthDeploymentRuntime(
+    input.environment,
+  ).auth.api.getSession({ headers: input.headers });
 }
 
 interface PreviewSessionOrganizationAuth {

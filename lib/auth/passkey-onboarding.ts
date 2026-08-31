@@ -15,6 +15,8 @@ import { passkey } from "@better-auth/passkey";
 import { APIError, getSessionFromCtx } from "better-auth/api";
 import { z } from "zod";
 
+import { PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED } from "./passkey-contract";
+
 const ENABLED_VALUE = "local-preview-v1";
 const PROTECTION_VALUE = "vercel-authentication";
 const TOKEN_VERSION = 1;
@@ -227,6 +229,62 @@ function invalidOnboardingAuthority() {
   });
 }
 
+function onboardingAlreadyAuthenticated() {
+  return APIError.from("CONFLICT", {
+    code: PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
+    message: "Passkey onboarding is unavailable for an authenticated session.",
+  });
+}
+
+type PasskeyOnboardingContextAdapter = Pick<
+  Awaited<ReturnType<typeof getCurrentAdapter>>,
+  "create" | "deleteMany"
+>;
+
+/** @internal */
+export async function issuePasskeyOnboardingContext(
+  adapter: PasskeyOnboardingContextAdapter,
+  config: PasskeyOnboardingConfig,
+  issuedAt: Date,
+) {
+  await adapter.deleteMany({
+    model: "passkeyOnboarding",
+    where: [
+      {
+        field: "expiresAt",
+        operator: "lte",
+        value: issuedAt,
+      },
+    ],
+  });
+  const issued = createPasskeyOnboardingToken(config, issuedAt);
+  await adapter.create({
+    model: "passkeyOnboarding",
+    data: {
+      id: issued.payload.nonce,
+      tokenDigest: issued.digest,
+      deploymentId: issued.payload.deploymentId,
+      origin: issued.payload.origin,
+      rpId: issued.payload.rpId,
+      userHandle: issued.payload.userHandle,
+      expiresAt: new Date(issued.payload.expiresAt * 1000),
+      createdAt: issuedAt,
+    },
+    forceAllowId: true,
+  });
+  return issued;
+}
+
+/** @internal */
+export function authenticatedPasskeyRegistration(
+  userId: string | null | undefined,
+  context: string | null | undefined,
+) {
+  if (!userId) return null;
+  if (context) throw onboardingAlreadyAuthenticated();
+  return { userId, name: "Additional passkey" };
+}
+
 export function createPasskeyOnboardingPlugin(input: {
   config: PasskeyOnboardingConfig | null;
   now?: () => Date;
@@ -290,27 +348,31 @@ export function createPasskeyOnboardingPlugin(input: {
           if (ctx.headers?.get("origin") !== config.origin) {
             throw invalidOnboardingAuthority();
           }
-          const issued = createPasskeyOnboardingToken(config, now());
-          await ctx.context.adapter.create({
-            model: "passkeyOnboarding",
-            data: {
-              id: issued.payload.nonce,
-              tokenDigest: issued.digest,
-              deploymentId: issued.payload.deploymentId,
-              origin: issued.payload.origin,
-              rpId: issued.payload.rpId,
-              userHandle: issued.payload.userHandle,
-              expiresAt: new Date(issued.payload.expiresAt * 1000),
-              createdAt: now(),
-            },
-            forceAllowId: true,
-          });
+          const existingSession = await getSessionFromCtx(ctx);
+          if (existingSession?.user.id) throw onboardingAlreadyAuthenticated();
+          const requestedAt = now();
+          const issued = await issuePasskeyOnboardingContext(
+            ctx.context.adapter,
+            config,
+            requestedAt,
+          );
           return ctx.json({ context: issued.token });
         },
       ),
     },
     hooks: {
       before: [
+        {
+          matcher: (ctx) => ctx.path === "/passkey/verify-registration",
+          handler: createAuthMiddleware(async (ctx) => {
+            // Better Auth keeps registration context in its challenge record;
+            // createSession is the parsed verification-body marker that
+            // distinguishes first-account onboarding from Settings enrollment.
+            if (ctx.body?.createSession !== true) return;
+            const session = await getSessionFromCtx(ctx);
+            if (session?.user.id) throw onboardingAlreadyAuthenticated();
+          }),
+        },
         {
           matcher: (ctx) => ctx.path === "/passkey/delete-passkey",
           handler: createAuthMiddleware(async (ctx) => {
@@ -377,12 +439,11 @@ export function createPasskeyPlugin(input: {
       },
       async afterVerification({ ctx, context }) {
         const existingSession = await getSessionFromCtx(ctx);
-        if (existingSession?.user.id) {
-          return {
-            userId: existingSession.user.id,
-            name: "Additional passkey",
-          };
-        }
+        const authenticatedRegistration = authenticatedPasskeyRegistration(
+          existingSession?.user.id,
+          context,
+        );
+        if (authenticatedRegistration) return authenticatedRegistration;
         const config = input.config;
         if (!config) throw onboardingUnavailable();
         const verified = verifyPasskeyOnboardingToken(context, config, now());

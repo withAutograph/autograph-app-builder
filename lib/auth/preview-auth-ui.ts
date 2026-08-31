@@ -1,3 +1,25 @@
+export const DEFAULT_AUTH_REDIRECT_TO = "/auth/setting-up?callbackURL=%2F";
+
+export type AuthPageSearchParams = Record<
+  string,
+  string | string[] | undefined
+>;
+
+export function serializeAuthPageSearchParams(
+  searchParams: AuthPageSearchParams,
+) {
+  const serialized = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (Array.isArray(value)) {
+      for (const item of value) serialized.append(key, item);
+    } else if (value !== undefined) {
+      serialized.append(key, value);
+    }
+  }
+  const search = serialized.toString();
+  return search ? `?${search}` : "";
+}
+
 export function resolveAuthCallbackURL(
   defaultURL: string,
   search: string,

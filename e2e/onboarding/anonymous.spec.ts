@@ -116,3 +116,22 @@ test("anonymous account settings redirects through a safe local callback", async
   await page.goto("/settings/account");
   await expect(page).toHaveURL(/\/auth\/sign-in\?callbackURL=%2F/u);
 });
+
+test("anonymous setup fails closed with a callback-preserving sign-in link", async ({
+  page,
+}) => {
+  const callbackURL = "/?source=expired-session#complete";
+  await page.goto(
+    `/auth/setting-up?callbackURL=${encodeURIComponent(callbackURL)}`,
+  );
+
+  await expect(
+    page.getByRole("heading", { name: "Workspace setup failed" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Return to sign in" }),
+  ).toHaveAttribute(
+    "href",
+    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
+  );
+});

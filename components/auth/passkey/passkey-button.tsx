@@ -23,6 +23,7 @@ import {
   passkeyClientError,
   withPasskeyUnavailable,
 } from "@/lib/auth/passkey-client-result";
+import { isPasskeyOnboardingAlreadyAuthenticated } from "@/lib/auth/passkey-contract";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
@@ -117,6 +118,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const createPasskey = async () => {
     setPending(true);
     setFailed(false);
+    let authenticatedRedirectTo: string | undefined;
 
     try {
       const resolvedRedirectTo = resolvePasskeyRedirectTo(
@@ -124,6 +126,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         window.location.search,
         window.location.origin,
       );
+      authenticatedRedirectTo = resolvedRedirectTo;
       const response = await fetch("/api/auth/passkey/onboarding-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,6 +134,10 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         cache: "no-store",
       });
       const body = (await response.json()) as OnboardingResponse;
+      if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
+        navigate({ to: resolvedRedirectTo, replace: true });
+        return;
+      }
       if (!response.ok || typeof body.context !== "string") {
         throw new Error("Passkey registration is unavailable.");
       }
@@ -140,10 +147,21 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         createSession: true,
         name: "Primary passkey",
       });
+      if (isPasskeyOnboardingAlreadyAuthenticated(result)) {
+        navigate({ to: resolvedRedirectTo, replace: true });
+        return;
+      }
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
       navigate({ to: resolvedRedirectTo });
-    } catch {
+    } catch (error) {
+      if (
+        authenticatedRedirectTo &&
+        isPasskeyOnboardingAlreadyAuthenticated(error)
+      ) {
+        navigate({ to: authenticatedRedirectTo, replace: true });
+        return;
+      }
       setFailed(true);
     } finally {
       setPending(false);
