@@ -105,5 +105,8 @@ describe("two-mode development workflow contract", () => {
     expect(contributing).toContain("app-builder@autograph-dev");
     expect(contributing).toContain("Ctrl+C");
     expect(contributing).not.toContain("dev:prove");
+
+    const eslint = readFileSync("eslint.config.mjs", "utf8");
+    expect(eslint).toContain('".artifacts/**"');
   });
 });
