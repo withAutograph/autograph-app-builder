@@ -18,20 +18,16 @@ PASSKEY_ONBOARDING=local-preview-v1
 ```
 
 Run `mise run app:dev`, open `http://localhost:3000/auth/sign-in`, and choose
-**Continue with Passkey**. If the browser returns no assertion because the
-ceremony was cancelled or no usable credential was available, Sign In shows
-**Passkey failed (try again)** and offers **Create an account with a passkey**.
-WebAuthn reports both cases as the same user-mediated failure, so Autograph does
-not redirect automatically. Choosing the enrollment action moves to Sign Up;
-registration does not begin until **Continue with Passkey** is clicked again
-there. If the browser returns an assertion that the server rejects, Sign In
-shows the retry state without an enrollment action and never creates a
-replacement identity. After registration, sign out and use **Continue with
-Passkey** to exercise the returning-user flow.
-A transport failure after the authenticator returns an assertion is
-intentionally treated as ambiguous and also remains on Sign In. Browsers treat `localhost` as a
-WebAuthn secure context; use `localhost` consistently rather than switching
-between it and `127.0.0.1` because credentials are RP-ID scoped.
+**Continue with Passkey**. Sign In always shows the stock-style **Need to create
+an account? Sign Up** prompt below the card. The link preserves the requested
+callback and moves to Sign Up, but registration does not begin until **Continue
+with Passkey** is clicked there. Any cancelled, unavailable, rejected, or
+transport-failed authentication remains on Sign In and changes the passkey
+button to **Passkey failed (try again)** without creating a replacement
+identity. After registration, sign out and use **Continue with Passkey** to
+exercise the returning-user flow. Browsers treat `localhost` as a WebAuthn
+secure context; use `localhost` consistently rather than switching between it
+and `127.0.0.1` because credentials are RP-ID scoped.
 
 The Sign Up view offers one **Continue with Passkey** action that creates the
 passkey, account, workspace, and session together. An already authenticated

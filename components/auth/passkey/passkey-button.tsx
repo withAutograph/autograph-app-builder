@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type AuthView,
-  authMutationKeys,
-  getAuthLinkURL,
-} from "@better-auth-ui/core";
+import { type AuthView, authMutationKeys } from "@better-auth-ui/core";
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import {
@@ -18,10 +14,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  createPasskeyAuthenticationBoundary,
-  passkeyClientError,
-} from "@/lib/auth/passkey-client-result";
+import { passkeyClientError } from "@/lib/auth/passkey-client-result";
 import { isPasskeyOnboardingAlreadyAuthenticated } from "@/lib/auth/passkey-contract";
 import { preferredPasskeyAuthenticatorAttachment } from "@/lib/auth/passkey-platform";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
@@ -43,21 +36,14 @@ type OnboardingResponse = { context?: unknown };
  * @param view - Current auth view. Selects registration on `"signUp"`.
  */
 export function PasskeyButton({ view }: PasskeyButtonProps) {
-  const {
-    authClient,
-    basePaths,
-    localization,
-    redirectTo,
-    navigate,
-    viewPaths,
-  } = useAuth<PasskeyAuthClient>();
+  const { authClient, localization, redirectTo, navigate } =
+    useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
   const signInPasskey = useSignInPasskey(authClient);
   const addPasskey = useAddPasskey(authClient);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [signUpURL, setSignUpURL] = useState<string>();
 
   // Surfaces passkeys in the browser's autofill dropdown while the sign-in
   // form is open. The button stays for anyone who dismisses it.
@@ -84,43 +70,21 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const continueWithPasskey = async () => {
     setPending(true);
     setFailed(false);
-    setSignUpURL(undefined);
     const resolvedRedirectTo = resolvePasskeyRedirectTo(
       redirectTo,
       window.location.search,
       window.location.origin,
     );
-    const authenticationBoundary = createPasskeyAuthenticationBoundary();
-    const offerEnrollment = () =>
-      setSignUpURL(
-        getAuthLinkURL(
-          `${basePaths.auth}/${viewPaths.auth.signUp}`,
-          resolvedRedirectTo,
-        ),
-      );
 
     try {
-      const restoreCredentialGet = authenticationBoundary.observeCredentialGet(
-        navigator.credentials,
-      );
-      const result = await (async () => {
-        try {
-          return await signInPasskey.mutateAsync({
-            autoFill: false,
-            returnWebAuthnResponse: true,
-          });
-        } finally {
-          restoreCredentialGet();
-        }
-      })();
-      const failure = authenticationBoundary.failure(result);
-      if (failure?.offerSignUp) offerEnrollment();
-      if (failure) throw failure.error;
+      const result = await signInPasskey.mutateAsync({
+        autoFill: false,
+        returnWebAuthnResponse: true,
+      });
+      const resultError = passkeyClientError(result);
+      if (resultError) throw resultError;
       navigate({ to: resolvedRedirectTo });
-    } catch (error) {
-      if (authenticationBoundary.failure(error)?.offerSignUp) {
-        offerEnrollment();
-      }
+    } catch {
       setFailed(true);
     } finally {
       setPending(false);
@@ -206,16 +170,6 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
               passkeyLocalization.passkey,
             )}
       </Button>
-      {view !== "signUp" && signUpURL && (
-        <Button
-          type="button"
-          variant="link"
-          className="absolute top-full left-0 mt-3 h-auto w-full p-0 text-sm underline underline-offset-4"
-          onClick={() => navigate({ to: signUpURL })}
-        >
-          Create an account with a passkey
-        </Button>
-      )}
     </div>
   );
 }

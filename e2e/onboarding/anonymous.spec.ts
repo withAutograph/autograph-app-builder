@@ -46,11 +46,7 @@ test("anonymous brief continues through passkey signup into the builder", async 
 
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
-    await page.getByRole("button", { name: "Continue with Passkey" }).click();
-    await expect(page).toHaveURL(/\/auth\/sign-in/u);
-    await page
-      .getByRole("button", { name: "Create an account with a passkey" })
-      .click();
+    await page.getByRole("link", { name: "Sign Up" }).click();
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
     await expect(
       page.getByText(
@@ -93,7 +89,7 @@ for (const provider of ["GitHub", "Vercel"] as const) {
   });
 }
 
-test("missing passkey offers explicit enrollment without entering setup", async ({
+test("missing passkey keeps the permanent Sign Up link without entering setup", async ({
   context,
   page,
 }) => {
@@ -102,14 +98,12 @@ test("missing passkey offers explicit enrollment without entering setup", async 
   await authenticator.removeCredential(
     (await authenticator.credentials())[0]!.credentialId,
   );
+  const signUpLink = page.getByRole("link", { name: "Sign Up" });
+  await expect(signUpLink).toBeVisible();
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
-  await expect(
-    page.getByRole("button", { name: "Create an account with a passkey" }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Create an account with a passkey" })
-    .click();
+  await expect(signUpLink).toBeVisible();
+  await signUpLink.click();
   await expect(page).toHaveURL(/\/auth\/sign-up/u);
   await expect(
     page.getByText(

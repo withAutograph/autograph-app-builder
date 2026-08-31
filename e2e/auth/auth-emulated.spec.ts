@@ -186,7 +186,7 @@ test("passkey registration keeps the alternate authenticator flow when platform 
   }
 });
 
-test("missing credential offers explicit enrollment and preserves the callback", async ({
+test("permanent Sign Up link preserves the callback after missing credentials", async ({
   context,
   page,
 }) => {
@@ -207,28 +207,30 @@ test("missing credential offers explicit enrollment and preserves the callback",
       `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
     );
     const signInCard = page.locator('[data-slot="card"]');
-    const cardBeforeFailure = await signInCard.boundingBox();
+    const signUpLink = page.getByRole("link", { name: "Sign Up" });
+    await expect(page.getByText("Need to create an account?")).toBeVisible();
+    await expect(signUpLink).toBeVisible();
+    const [cardBeforeFailure, signUpBeforeFailure] = await Promise.all([
+      signInCard.boundingBox(),
+      signUpLink.boundingBox(),
+    ]);
+    expect(signUpBeforeFailure?.y).toBeGreaterThanOrEqual(
+      (cardBeforeFailure?.y ?? 0) + (cardBeforeFailure?.height ?? 0),
+    );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await expect(
       page.getByRole("button", { name: "Passkey failed (try again)" }),
     ).toBeVisible();
-    const createAccount = page.getByRole("button", {
-      name: "Create an account with a passkey",
-    });
-    await expect(createAccount).toBeVisible();
-    const [cardAfterFailure, createAccountBox] = await Promise.all([
+    await expect(signUpLink).toBeVisible();
+    const [cardAfterFailure, signUpAfterFailure] = await Promise.all([
       signInCard.boundingBox(),
-      createAccount.boundingBox(),
+      signUpLink.boundingBox(),
     ]);
     expect(cardBeforeFailure).not.toBeNull();
     expect(cardAfterFailure).toEqual(cardBeforeFailure);
-    await expect(signInCard).toHaveCSS("overflow", "visible");
-    expect(createAccountBox).not.toBeNull();
-    expect(createAccountBox?.y).toBeGreaterThanOrEqual(
-      (cardAfterFailure?.y ?? 0) + (cardAfterFailure?.height ?? 0),
-    );
+    expect(signUpAfterFailure).toEqual(signUpBeforeFailure);
     expect(authenticationVerificationRequests).toBe(0);
     expect(await authCounts()).toEqual({
       users: 0,
@@ -242,7 +244,7 @@ test("missing credential offers explicit enrollment and preserves the callback",
       vercelInstallations: 0,
     });
 
-    await createAccount.click();
+    await signUpLink.click();
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
     await expect(
       page.getByText(
@@ -268,7 +270,7 @@ test("missing credential offers explicit enrollment and preserves the callback",
   }
 });
 
-test("an interrupted passkey ceremony stays on Sign In and offers enrollment", async ({
+test("an interrupted passkey ceremony keeps the permanent Sign Up link", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -287,13 +289,13 @@ test("an interrupted passkey ceremony stays on Sign In and offers enrollment", a
     });
   });
   await page.goto("/auth/sign-in");
+  const signUpLink = page.getByRole("link", { name: "Sign Up" });
+  await expect(signUpLink).toBeVisible();
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect(
     page.getByRole("button", { name: "Passkey failed (try again)" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Create an account with a passkey" }),
-  ).toBeVisible();
+  await expect(signUpLink).toBeVisible();
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
   expect(await authCounts()).toMatchObject({
     users: 0,
@@ -382,9 +384,7 @@ test("verification transport loss stays on Sign In after an assertion", async ({
       page.getByRole("button", { name: "Passkey failed (try again)" }),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
-    await expect(
-      page.getByRole("button", { name: "Create an account with a passkey" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect(authenticationVerificationRequests).toBe(1);
     expect(await authCounts()).toEqual(baseline);
   } finally {
@@ -584,9 +584,7 @@ test("an authenticator credential missing from server storage is not recreated",
     await expect(
       page.getByRole("button", { name: "Passkey failed (try again)" }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Create an account with a passkey" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect((await authCounts()).passkeys).toBe(0);
     expect((await authCounts()).users).toBe(1);
   } finally {
