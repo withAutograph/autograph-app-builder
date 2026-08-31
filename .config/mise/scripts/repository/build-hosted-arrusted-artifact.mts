@@ -25,7 +25,7 @@ import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts
 
 const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
-const OUTPUT_NAME = "arrusted-d378904a-preview.tar.gz";
+const OUTPUT_NAME = "arrusted-d378904a-dependencies.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
 const EXECUTION_ROOT_PACKAGES = [
@@ -46,7 +46,6 @@ const EXECUTION_ROOT_PACKAGES = [
   "vite-plus",
   "vitest",
 ] as const;
-const SOURCE_FILE = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u;
 
 const targetDigests = {
   miseConfigSha256:
@@ -91,12 +90,7 @@ function parseArguments(args: readonly string[]) {
 }
 
 function git(root: string, args: readonly string[], encoding: "utf8"): string;
-function git(root: string, args: readonly string[], encoding: "buffer"): Buffer;
-function git(
-  root: string,
-  args: readonly string[],
-  encoding: "utf8" | "buffer",
-): string | Buffer {
+function git(root: string, args: readonly string[], encoding: "utf8"): string {
   return execFileSync(
     "/usr/bin/git",
     [
@@ -295,44 +289,6 @@ try {
   const dependencyRoot = join(seed, "dependency-cache");
   mkdirSync(dependencyRoot, { recursive: true });
 
-  const entries = git(
-    arrustedRoot,
-    ["ls-tree", "-rz", "--full-tree", TARGET_SHA],
-    "utf8",
-  )
-    .split("\0")
-    .filter(Boolean)
-    .map((line) => {
-      const match = SOURCE_FILE.exec(line);
-      if (match === null) throw new Error("Unsupported Arrusted Git entry.");
-      const content = git(
-        arrustedRoot,
-        ["cat-file", "blob", match[2]!],
-        "buffer",
-      );
-      return {
-        mode: match[1] as "100644" | "100755",
-        objectId: match[2]!,
-        path: match[3]!,
-        sha256: sha256(content),
-      };
-    });
-  const sourceArchive = join(seed, "source-tree.tar.gz");
-  const sourceTar = git(
-    arrustedRoot,
-    ["archive", "--format=tar", TARGET_SHA],
-    "buffer",
-  );
-  writeFileSync(sourceArchive, deterministicGzip(sourceTar));
-  writeFileSync(
-    join(seed, "source-files.json"),
-    `${JSON.stringify(entries, null, 2)}\n`,
-  );
-  writeFileSync(
-    join(seed, "source-checksums.sha256"),
-    `${entries.map((entry) => `${entry.sha256}  repository/${entry.path}`).join("\n")}\n`,
-  );
-
   const dependencyStage = join(scratch, "dependency-stage", "node_modules");
   mkdirSync(dependencyStage, { recursive: true });
   const packages = dependencyClosure(arrustedRoot);
@@ -401,20 +357,10 @@ try {
     `${JSON.stringify(dependencyManifest, null, 2)}\n`,
   );
   const artifactManifest = {
-    version: 1,
+    version: 2,
     target: {
       sha: TARGET_SHA,
       tree: TARGET_TREE,
-      eligibilityDigest:
-        "c7e00f034e0c36452b7c43a5544f5b5486240cc45f5d624f4e9134924af0e735",
-      contractDigest:
-        "be880ed1dcd6c450457a888b78fea704e3ffe62e121e6be118c83c2800a67d03",
-      workspaceDigest: sha256(JSON.stringify(entries)),
-    },
-    source: {
-      archiveSha256: sha256(readFileSync(sourceArchive)),
-      archiveBytes: statSync(sourceArchive).size,
-      entryCount: entries.length,
     },
     dependency: {
       manifestSha256: sha256(

@@ -21,6 +21,7 @@ import {
   sandboxTargetCommandExecutor,
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
@@ -58,6 +59,11 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     const sandbox = await ctx.getSandbox();
+    await inspectSourceBoundSandboxWorkspace({
+      sandbox,
+      receipt: current.sourceReceipt,
+      expectedWorkspace: current.workspace,
+    });
     const cache = await inspectDependencyCache(
       sandbox,
       process.env,
@@ -95,6 +101,7 @@ export default defineTool({
     const binding = {
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
+      sourceReceiptDigest: current.sourceReceipt.digest,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: execution.imageDigest,

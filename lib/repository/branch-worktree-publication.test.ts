@@ -109,6 +109,7 @@ async function fixture() {
     repositoryContractDigest: source.contractDigest,
     sourceSha: source.sourceSha,
     sourceTree: source.sourceTree,
+    sourceReceiptDigest: source.digest,
     eligibilityDigest: source.eligibilityDigest,
     workspaceDigest: "d".repeat(64),
     appSpecDigest: hash(acceptedAppSpec),

@@ -6,7 +6,7 @@ import {
   appBuilderWorkflowState,
   assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
-import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import {
   assertExactDependencyTargetBinding,
@@ -37,14 +37,11 @@ export default defineTool({
         "Prepare an eligible repository before checking workspace readiness.",
       );
     const sandbox = await ctx.getSandbox();
-    const observed = await inspectPreparedSandboxWorkspace(sandbox);
-    if (
-      observed.state !== "prepared" ||
-      JSON.stringify(observed.workspace) !== JSON.stringify(current.workspace)
-    )
-      throw new Error(
-        "The prepared workspace receipt changed before readiness.",
-      );
+    await inspectSourceBoundSandboxWorkspace({
+      sandbox,
+      receipt: current.sourceReceipt,
+      expectedWorkspace: current.workspace,
+    });
     const observedTools = await Promise.all(
       commands.map(async (command) => {
         const location = await sandbox.run({
@@ -144,6 +141,7 @@ export default defineTool({
     const receipt = {
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
+      sourceReceiptDigest: current.sourceReceipt.digest,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: execution?.imageDigest ?? image ?? "unconfigured",

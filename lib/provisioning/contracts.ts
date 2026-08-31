@@ -87,6 +87,35 @@ const skippedSchema = z
   })
   .strict();
 
+const githubStarterBaseSchema = z.object({
+  sourceSha: objectId,
+  sourceTree: objectId,
+});
+
+const githubClonedStarterSchema = githubStarterBaseSchema
+  .extend({
+    repository: z.string().url().startsWith("https://github.com/"),
+    ref: z.literal("refs/heads/main"),
+    method: z.literal("git-clone-v1"),
+    readinessDigest: sha256,
+    receiptVersion: z.literal(4),
+    sourceReceiptDigest: sha256,
+    eligibilityDigest: sha256,
+    contractDigest: sha256,
+  })
+  .strict();
+
+const githubLegacyStarterSchema = githubStarterBaseSchema
+  .extend({
+    repository: z.string().url().startsWith("https://github.com/").optional(),
+    ref: z.literal("refs/heads/main").optional(),
+    method: z.literal("starter-archive-v3").optional(),
+    archiveSha256: sha256.optional(),
+    archiveBytes: z.number().int().positive().optional(),
+    manifestSha256: sha256.optional(),
+  })
+  .strict();
+
 export const githubProvisionSuccessSchema = z
   .object({
     status: z.literal("succeeded"),
@@ -107,23 +136,7 @@ export const githubProvisionSuccessSchema = z
     defaultBranch: z.literal("main"),
     headSha: objectId,
     headTree: objectId,
-    starter: z
-      .object({
-        sourceSha: objectId,
-        sourceTree: objectId,
-        repository: z
-          .string()
-          .url()
-          .startsWith("https://github.com/")
-          .optional(),
-        ref: z.literal("refs/heads/main").optional(),
-        method: z.enum(["git-clone-v1", "starter-archive-v3"]).optional(),
-        readinessDigest: sha256.optional(),
-        archiveSha256: sha256.optional(),
-        archiveBytes: z.number().int().positive().optional(),
-        manifestSha256: sha256.optional(),
-      })
-      .strict(),
+    starter: z.union([githubClonedStarterSchema, githubLegacyStarterSchema]),
   })
   .strict();
 

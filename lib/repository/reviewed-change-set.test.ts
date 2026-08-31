@@ -53,6 +53,7 @@ const apply = {
   version: 2,
   sourceSha: "1".repeat(40),
   sourceTree: "0".repeat(40),
+  sourceReceiptDigest: digest("1"),
   eligibilityDigest: digest("2"),
   workspaceDigest: digest("3"),
   appSpecDigest: acceptedAppSpecDigest,
@@ -92,6 +93,7 @@ const validation = {
   appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
   sourceSha: apply.sourceSha,
   sourceTree: apply.sourceTree,
+  sourceReceiptDigest: apply.sourceReceiptDigest,
   eligibilityDigest: apply.eligibilityDigest,
   workspaceDigest: apply.workspaceDigest,
   appSpecDigest: apply.appSpecDigest,
@@ -144,6 +146,16 @@ describe("reviewed change-set receipts", () => {
         digest("2"),
       ),
     ).toThrow(/bindings differ/u);
+    expect(() =>
+      deriveNormalizedChangeSet(
+        apply,
+        {
+          ...validation,
+          sourceReceiptDigest: digest("9"),
+        } as never,
+        digest("2"),
+      ),
+    ).toThrow(/bindings differ/u);
   });
   it("normalizes the exact validated apply changes and its approved paths", () => {
     const proposal = deriveNormalizedChangeSet(apply, validation, digest("2"));
@@ -158,6 +170,7 @@ describe("reviewed change-set receipts", () => {
       "prototype/example/app-spec.md",
     ]);
     expect(proposal).toMatchObject({
+      sourceReceiptDigest: apply.sourceReceiptDigest,
       eligibilityDigest: apply.eligibilityDigest,
       appSpecDigest: apply.appSpecDigest,
       appSpecPath: apply.appSpecPath,

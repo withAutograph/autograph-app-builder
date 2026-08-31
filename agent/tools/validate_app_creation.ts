@@ -26,6 +26,7 @@ import {
   verifyTargetValidationProtectedTrees,
 } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
@@ -48,6 +49,12 @@ export default defineTool({
     if (current.applyReceipt.digest !== expectedApplyDigest)
       throw new Error("The target apply receipt changed before validation.");
     assertCurrentTargetApplyReceipt(current.applyReceipt);
+    if (
+      current.applyReceipt.sourceReceiptDigest !== current.sourceReceipt.digest
+    )
+      throw new Error(
+        "The target apply receipt no longer matches its durable source receipt.",
+      );
     if (current.applyReceipt.appSpecPath !== current.appSpec.artifactPath)
       throw new Error(
         "The accepted AppSpec path changed before target validation.",
@@ -57,6 +64,12 @@ export default defineTool({
       digest: current.appSpec.digest,
       revision: current.appSpec.artifactRevision,
       sessionId: ctx.session.id,
+    });
+    const sandbox = await ctx.getSandbox();
+    await inspectSourceBoundSandboxWorkspace({
+      sandbox,
+      receipt: current.sourceReceipt,
+      expectedWorkspace: current.workspace,
     });
     const fixture = hasTestCapability("simulated-target");
     const attempt =
@@ -100,7 +113,6 @@ export default defineTool({
           validationAttempt: attempt,
         };
       });
-    const sandbox = await ctx.getSandbox();
     if (current.phase === "validation_pending")
       throw new Error(
         `Target validation has an incomplete pending attempt ${current.validationAttempt.digest}; it is recovery-required and will not be redispatched automatically.`,

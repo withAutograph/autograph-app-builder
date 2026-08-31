@@ -10,11 +10,15 @@ import {
   inspectCanonicalTemplateSnapshotReceipt,
   parseCanonicalTemplateSnapshot,
   parseSourceReceipt,
+  SOURCE_RECEIPT_VERSION,
   type SourceReceipt,
 } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
+  readPreparedSandboxWorkspaceRecord,
   recordPreparedSandboxWorkspace,
+  SUPPORTED_TEMPLATE_INPUT_PATHS,
+  type PreparedSandboxWorkspace,
 } from "./supported-template";
 import {
   deploymentArrustedTemplateReader,
@@ -48,7 +52,7 @@ function shellQuote(value: string) {
 const sandboxCloneInspectionProgram = String.raw`
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { isAbsolute, resolve } = require("node:path");
 
 const root = "/workspace/repository";
@@ -106,32 +110,25 @@ writeFileSync(
   appBuilder + "/source-checksums.sha256",
   files.map((file) => file.sha256 + "  repository/" + file.path).join("\n") + "\n",
 );
-const inputPaths = [
-  ".config/mise/config.toml",
-  ".github/workflows/cd.yml",
-  "microfrontends.json",
-  ".config/mise/scripts/repository/app-contract.ts",
-  ".config/mise/scripts/repository/app-identity.ts",
-  ".config/mise/scripts/repository/app-validation.ts",
-  ".config/mise/scripts/repository/repository-preflight.ts",
-  ".config/turbo/generators/config.ts",
-  ".config/turbo/generators/create-app.ts",
-  ".config/turbo/generators/templates/app/next.config.ts.hbs",
-];
+const inputPaths = ${JSON.stringify(SUPPORTED_TEMPLATE_INPUT_PATHS)};
 const contents = {};
 for (const path of [...inputPaths, ".config/repository-template.json"]) {
   const file = resolve(root, path);
-  if (existsSync(file)) contents[path] = readFileSync(file, "utf8");
+  try {
+    contents[path] = readFileSync(file, "utf8");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
 }
+const filesByPath = new Map(files.map((file) => [file.path, file]));
 const contract = inputPaths.map((path) => {
-  const entry = git(["ls-tree", sourceSha, "--", path]);
-  const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/.exec(entry.trim());
-  if (match === null || match[3] !== path)
+  const file = filesByPath.get(path);
+  if (file === undefined)
     throw new Error("canonical template contract path is not a regular blob");
   return {
     path,
-    mode: match[1],
-    objectId: match[2],
+    mode: file.mode,
+    objectId: file.objectId,
     sha256: sha256(git(["show", sourceSha + ":" + path], "buffer")),
   };
 });
@@ -222,32 +219,30 @@ const files = output
     }];
   });
 if (files.length === 0) throw new Error("cloned source tree is empty");
-const inputPaths = [
-  ".config/mise/config.toml",
-  ".github/workflows/cd.yml",
-  "microfrontends.json",
-  ".config/mise/scripts/repository/app-contract.ts",
-  ".config/mise/scripts/repository/app-identity.ts",
-  ".config/mise/scripts/repository/app-validation.ts",
-  ".config/mise/scripts/repository/repository-preflight.ts",
-  ".config/turbo/generators/config.ts",
-  ".config/turbo/generators/create-app.ts",
-  ".config/turbo/generators/templates/app/next.config.ts.hbs",
-];
+const appBuilder = "/workspace/.app-builder";
+const manifestMatches = readFileSync(appBuilder + "/source-files.json", "utf8") ===
+  JSON.stringify(files, null, 2) + "\n";
+const checksumsMatch = readFileSync(appBuilder + "/source-checksums.sha256", "utf8") ===
+  files.map((file) => file.sha256 + "  repository/" + file.path).join("\n") + "\n";
+const inputPaths = ${JSON.stringify(SUPPORTED_TEMPLATE_INPUT_PATHS)};
 const contents = {};
 for (const path of [...inputPaths, ".config/repository-template.json"]) {
   const file = resolve(root, path);
-  if (existsSync(file)) contents[path] = readFileSync(file, "utf8");
+  try {
+    contents[path] = readFileSync(file, "utf8");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
 }
+const filesByPath = new Map(files.map((file) => [file.path, file]));
 const contract = inputPaths.map((path) => {
-  const entry = git(["ls-tree", sourceSha, "--", path]);
-  const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/.exec(entry.trim());
-  if (match === null || match[3] !== path)
+  const file = filesByPath.get(path);
+  if (file === undefined)
     throw new Error("canonical template contract path is not a regular blob");
   return {
     path,
-    mode: match[1],
-    objectId: match[2],
+    mode: file.mode,
+    objectId: file.objectId,
     sha256: sha256(git(["show", sourceSha + ":" + path], "buffer")),
   };
 });
@@ -261,6 +256,8 @@ console.log(JSON.stringify({
   detached,
   hasGitmodules: existsSync(root + "/.gitmodules"),
   gitlinks,
+  manifestMatches,
+  checksumsMatch,
   workspaceDigest: sha256(JSON.stringify(files)),
   snapshot: {
     sourcePath: root,
@@ -478,10 +475,9 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     !DIGEST.test(receipt.provenance.readinessDigest)
   )
     throw new Error("Canonical Arrusted clone receipt is invalid.");
-  const prepared = await inspectPreparedSandboxWorkspace(input.sandbox);
-  if (prepared.state !== "prepared")
+  const observed = await readPreparedSandboxWorkspaceRecord(input.sandbox);
+  if (observed === undefined)
     throw new Error("The canonical Arrusted workspace is missing.");
-  const observed = prepared.workspace;
   if (
     observed.workspaceId !== input.sandbox.id ||
     observed.sourcePath !== SANDBOX_WORKSPACE ||
@@ -507,6 +503,8 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     detached?: unknown;
     hasGitmodules?: unknown;
     gitlinks?: unknown;
+    manifestMatches?: unknown;
+    checksumsMatch?: unknown;
     workspaceDigest?: unknown;
     snapshot?: unknown;
   };
@@ -525,6 +523,8 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     inspection.hasGitmodules !== false ||
     !Array.isArray(inspection.gitlinks) ||
     inspection.gitlinks.length !== 0 ||
+    inspection.manifestMatches !== true ||
+    inspection.checksumsMatch !== true ||
     inspection.workspaceDigest !== observed.workspaceDigest ||
     snapshot.sourceSha !== receipt.sourceSha ||
     snapshot.sourceTree !== receipt.sourceTree ||
@@ -537,6 +537,44 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
   });
   if (currentReceipt.digest !== receipt.digest)
     throw new Error("The canonical Arrusted source changed after review.");
+  return observed;
+}
+
+/**
+ * Re-inspect the exact source workspace represented by a durable receipt.
+ * Fresh-template V4 receipts additionally prove the live detached clone and
+ * its canonical origin/ref; legacy V3 existing repositories retain their
+ * prepared-workspace verification path.
+ */
+export async function inspectSourceBoundSandboxWorkspace(input: {
+  sandbox: SandboxSession;
+  receipt: SourceReceipt;
+  expectedWorkspace?: PreparedSandboxWorkspace;
+}): Promise<PreparedSandboxWorkspace> {
+  const receipt = parseSourceReceipt(input.receipt);
+  const observed =
+    receipt.version === SOURCE_RECEIPT_VERSION
+      ? await inspectCanonicalArrustedSandboxWorkspace({
+          sandbox: input.sandbox,
+          receipt,
+        })
+      : await inspectPreparedSandboxWorkspace(input.sandbox).then((status) => {
+          if (status.state !== "prepared")
+            throw new Error("The prepared source workspace is missing.");
+          return status.workspace;
+        });
+  if (
+    observed.workspaceId !== input.sandbox.id ||
+    observed.sourcePath !== receipt.sourcePath ||
+    observed.sourceSha !== receipt.sourceSha ||
+    observed.sourceTree !== receipt.sourceTree ||
+    observed.eligibilityDigest !== receipt.eligibilityDigest ||
+    (input.expectedWorkspace !== undefined &&
+      JSON.stringify(observed) !== JSON.stringify(input.expectedWorkspace))
+  )
+    throw new Error(
+      "The prepared workspace no longer matches its durable source receipt.",
+    );
   return observed;
 }
 

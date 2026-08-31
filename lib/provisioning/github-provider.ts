@@ -15,6 +15,7 @@ import { suffixedProviderName } from "./names";
 import type { StarterSource } from "./starter-source";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
+const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 
 const configSchema = z
@@ -81,8 +82,38 @@ function gitBlobSha(bytes: Uint8Array) {
     .digest("hex");
 }
 
-function sourceBinding(source: StarterSource) {
+export function starterSourceBinding(source: StarterSource) {
   if (source.provenance !== undefined) {
+    if (source.provenance.method === "git-clone-v1") {
+      if (
+        source.provenance.receiptVersion !== 4 ||
+        [
+          source.provenance.readinessDigest,
+          source.provenance.sourceReceiptDigest,
+          source.provenance.eligibilityDigest,
+          source.provenance.contractDigest,
+        ].some((value) => value === undefined)
+      )
+        throw new Error("starter-source-provenance-missing");
+      return {
+        sourceSha: objectId.parse(source.provenance.sourceSha),
+        sourceTree: objectId.parse(source.provenance.sourceTree),
+        starter: {
+          sourceSha: objectId.parse(source.provenance.sourceSha),
+          sourceTree: objectId.parse(source.provenance.sourceTree),
+          repository: source.provenance.repository,
+          ref: source.provenance.ref,
+          method: source.provenance.method,
+          readinessDigest: digest.parse(source.provenance.readinessDigest),
+          receiptVersion: source.provenance.receiptVersion,
+          sourceReceiptDigest: digest.parse(
+            source.provenance.sourceReceiptDigest,
+          ),
+          eligibilityDigest: digest.parse(source.provenance.eligibilityDigest),
+          contractDigest: digest.parse(source.provenance.contractDigest),
+        },
+      };
+    }
     return {
       sourceSha: objectId.parse(source.provenance.sourceSha),
       sourceTree: objectId.parse(source.provenance.sourceTree),
@@ -92,9 +123,6 @@ function sourceBinding(source: StarterSource) {
         repository: source.provenance.repository,
         ref: source.provenance.ref,
         method: source.provenance.method,
-        ...(source.provenance.readinessDigest === undefined
-          ? {}
-          : { readinessDigest: source.provenance.readinessDigest }),
       },
     };
   }
@@ -134,7 +162,7 @@ export async function provisionGitHubRepository(input: {
   generateSuffix?: () => string;
 }): Promise<GitHubProvisionResult> {
   const config = configSchema.parse(input.config);
-  const source = sourceBinding(input.source);
+  const source = starterSourceBinding(input.source);
   const request = input.fetch ?? fetch;
   const now = input.now ?? Date.now;
   const app = createGitHubApp({

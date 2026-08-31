@@ -126,6 +126,7 @@ function review() {
     repositoryContractDigest: "5".repeat(64),
     sourceSha,
     sourceTree,
+    sourceReceiptDigest: source().digest,
     eligibilityDigest: "4".repeat(64),
     workspaceDigest: "a".repeat(64),
     appSpecDigest: "b".repeat(64),

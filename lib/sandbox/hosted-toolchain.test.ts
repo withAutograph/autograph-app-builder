@@ -1,5 +1,16 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { create as createTar } from "tar";
 import { describe, expect, it } from "vitest";
 
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
@@ -11,6 +22,7 @@ import {
   HOSTED_RUST_VERSION,
   HOSTED_TOOLCHAIN_CONTRACT_VERSION,
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
+  hostedArchiveExtractorShellFunction,
   hostedToolchainArtifacts,
   hostedArtifactWorkspaceInstallCommand,
   hostedToolchainBootstrapCommand,
@@ -73,16 +85,17 @@ describe("hosted Vercel Sandbox toolchain", () => {
       "rust-std-download-verification",
       "toolchain-extraction",
       "toolchain-installation",
-      "workspace-source-installation",
       "toolchain-readback",
     ])
       expect(command).toContain(`stage='${stage}'`);
     expect(command).toContain('case "$(uname -m)"');
     expect(command).toContain("command -v python3 >/dev/null");
-    expect(command).toContain('archive.extractall(destination, filter="data")');
-    expect(command).toContain('extract_verified_archive "$seed" "$work"');
     expect(command).toContain(
-      'extract_verified_archive "$artifact/source-tree.tar.gz" /workspace/repository',
+      'archive.extractall(destination, members=selected, filter="data")',
+    );
+    expect(command).toContain('python3 - "$1" "$2" "${3-}"');
+    expect(command).toContain(
+      `extract_verified_archive "$seed" "$work" '.app-builder-hosted-seed/dependency-cache'`,
     );
     expect(command).not.toContain(
       'tar --extract --gzip --file "$seed" --directory "$work"',
@@ -103,27 +116,85 @@ describe("hosted Vercel Sandbox toolchain", () => {
     );
     expect(command).not.toMatch(/curl[^\n]*\|/u);
     expect(command).not.toMatch(/token|password|authorization/iu);
+    expect(command).not.toMatch(
+      /source-tree[.]tar[.]gz|hosted-source|source-files[.]json|source-checksums[.]sha256/u,
+    );
+    expect(command).not.toContain("rm -rf /workspace/repository");
   });
 
-  it("seeds the model-facing workspace with the exact hosted source tree", () => {
+  it("extracts only the requested archive subtree and preserves unfiltered calls", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hosted-archive-extractor-"));
+    const source = join(root, "source");
+    const archive = join(root, "mixed.tar.gz");
+    const filteredDestination = join(root, "filtered");
+    const unfilteredDestination = join(root, "unfiltered");
+    const dependencyPath = join(
+      ".app-builder-hosted-seed",
+      "dependency-cache",
+      "manifest.json",
+    );
+    const sentinelPath = join(
+      ".app-builder-hosted-seed",
+      "source-tree",
+      "sentinel.txt",
+    );
+
+    try {
+      mkdirSync(join(source, dependencyPath, ".."), { recursive: true });
+      mkdirSync(join(source, sentinelPath, ".."), { recursive: true });
+      writeFileSync(join(source, dependencyPath), '{"sealed":true}\n');
+      writeFileSync(join(source, sentinelPath), "private source sentinel\n");
+      await createTar({ cwd: source, file: archive, gzip: true }, [
+        ".app-builder-hosted-seed",
+      ]);
+
+      const extractor = hostedArchiveExtractorShellFunction();
+      execFileSync(
+        "bash",
+        [
+          "-c",
+          `${extractor}\nextract_verified_archive "$1" "$2" "$3"`,
+          "hosted-archive-extractor",
+          archive,
+          filteredDestination,
+          ".app-builder-hosted-seed/dependency-cache",
+        ],
+        { encoding: "utf8" },
+      );
+      expect(
+        readFileSync(join(filteredDestination, dependencyPath), "utf8"),
+      ).toBe('{"sealed":true}\n');
+      expect(existsSync(join(filteredDestination, sentinelPath))).toBe(false);
+
+      execFileSync(
+        "bash",
+        [
+          "-c",
+          `${extractor}\nextract_verified_archive "$1" "$2"`,
+          "hosted-archive-extractor",
+          archive,
+          unfilteredDestination,
+        ],
+        { encoding: "utf8" },
+      );
+      expect(
+        readFileSync(join(unfilteredDestination, sentinelPath), "utf8"),
+      ).toBe("private source sentinel\n");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("leaves the model-facing workspace source to the canonical clone", () => {
     const command = hostedToolchainBootstrapCommand();
-    expect(command).toContain("rm -rf /workspace/repository");
-    expect(command).toContain(
-      'extract_verified_archive "$artifact/source-tree.tar.gz" /workspace/repository',
-    );
-    expect(command).toContain("/workspace/.app-builder/source-files.json");
-    expect(command).toContain(
-      "/workspace/.app-builder/source-checksums.sha256",
-    );
-    expect(command).toContain(
-      "(cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)",
-    );
+    expect(command).not.toContain("/workspace/repository");
+    expect(command).toContain("/opt/app-builder/dependency-cache");
   });
 
   it("binds snapshot revalidation to the contract, inputs, and exact command bytes", () => {
-    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(4);
+    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(5);
     expect(hostedToolchainRevalidationKey()).toMatch(
-      /^autograph-app-builder-vercel-toolchain-v4:[0-9a-f]{64}$/u,
+      /^autograph-app-builder-vercel-toolchain-v5:[0-9a-f]{64}$/u,
     );
     expect(hostedToolchainRevalidationKey()).toBe(
       hostedToolchainRevalidationKey(),
@@ -144,7 +215,11 @@ describe("hosted Vercel Sandbox toolchain", () => {
     );
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("node-modules.tar.gz");
+    expect(command).toContain(".app-builder-hosted-seed/dependency-cache");
     expect(command).not.toContain("/opt/app-builder/dependency-cache");
+    expect(command).not.toMatch(
+      /source-tree[.]tar[.]gz|source-files[.]json|source-checksums[.]sha256/u,
+    );
     expect(command).not.toMatch(/sudo|token|password|authorization/iu);
     expect(command).toContain(
       "releases/download/hosted-arrusted-d378904a-execution-v4",

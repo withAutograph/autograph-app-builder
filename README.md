@@ -401,11 +401,13 @@ non-executing fallback. Production support here is source capability, not
 activation evidence.
 
 Validate the hosted toolchain placement and the canonical clone provenance
-with `mise run test:hosted-sandbox`.
+with `mise run test:hosted-sandbox -- --arrusted-root <exact-clean-checkout>
+--artifact <dependency-artifact> --artifact-sha256 <sha256>`.
 Run `mise run hosted:artifact-prove-typed -- --image <exact-local-digest-ref>
---source-root <exact-clean-checkout>` to combine that artifact proof with the
-silent Eve workflow proof. It must terminate at `planned` and emits the
-asserted called-tool and forbidden-tool trace.
+--source-root <exact-clean-checkout> --artifact <dependency-artifact>
+--artifact-sha256 <sha256>` to combine that artifact proof with the silent Eve
+workflow proof. It must terminate at `planned` and emits the asserted
+called-tool and forbidden-tool trace.
 
 For an explicit existing repository, set `REPOSITORY_LOCAL_ROOTS` to a
 platform-delimited allowlist of absolute roots. Fresh-template acquisition

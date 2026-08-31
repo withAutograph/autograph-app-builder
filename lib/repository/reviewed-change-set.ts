@@ -24,6 +24,7 @@ export type NormalizedChangeSet = {
   repositoryContractDigest: string;
   sourceSha: string;
   sourceTree: string;
+  sourceReceiptDigest: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;
@@ -134,6 +135,7 @@ export function deriveNormalizedChangeSet(
   const exactValidationBinding = {
     sourceSha: apply.sourceSha,
     sourceTree: apply.sourceTree,
+    sourceReceiptDigest: apply.sourceReceiptDigest,
     eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,
@@ -190,6 +192,7 @@ export function deriveNormalizedChangeSet(
     repositoryContractDigest,
     sourceSha: apply.sourceSha,
     sourceTree: apply.sourceTree,
+    sourceReceiptDigest: apply.sourceReceiptDigest,
     eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,

@@ -8,10 +8,6 @@ import {
   HOSTED_DEPENDENCY_ARCHIVE_BYTES,
   HOSTED_DEPENDENCY_ARCHIVE_SHA256,
   HOSTED_DEPENDENCY_MANIFEST_SHA256,
-  HOSTED_SOURCE_ARCHIVE_BYTES,
-  HOSTED_SOURCE_ARCHIVE_SHA256,
-  HOSTED_SOURCE_ENTRY_COUNT,
-  HOSTED_SOURCE_WORKSPACE_DIGEST,
 } from "./hosted-artifact";
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 
@@ -19,7 +15,7 @@ export const HOSTED_MISE_VERSION = "2026.8.12";
 export const HOSTED_BUN_VERSION = "1.3.14";
 export const HOSTED_NODE_VERSION = "24.18.0";
 export const HOSTED_RUST_VERSION = "1.97.1";
-export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 4;
+export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 5;
 
 export const hostedToolchainArtifacts = {
   aarch64: {
@@ -102,7 +98,6 @@ export const HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT =
 export const HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES = Math.max(
   HOSTED_ARTIFACT_BYTES,
   HOSTED_DEPENDENCY_ARCHIVE_BYTES,
-  HOSTED_SOURCE_ARCHIVE_BYTES,
 );
 
 const artifactCase = (
@@ -130,6 +125,36 @@ const artifactCase = (
     ;;`;
 };
 
+export const HOSTED_ARCHIVE_EXTRACTION_PROGRAM = `import pathlib
+import sys
+import tarfile
+
+archive_path = sys.argv[1]
+destination = pathlib.Path(sys.argv[2]).resolve()
+prefix = sys.argv[3] or None
+destination.mkdir(parents=True, exist_ok=True)
+with tarfile.open(archive_path, "r:*") as archive:
+    selected = []
+    for member in archive.getmembers():
+        member_path = pathlib.PurePosixPath(member.name)
+        if member_path.is_absolute() or ".." in member_path.parts:
+            raise SystemExit("unsafe archive path")
+        if not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
+            raise SystemExit("unsupported archive entry")
+        if prefix is None or member.name == prefix or member.name.startswith(prefix + "/"):
+            selected.append(member)
+    if prefix is not None and not selected:
+        raise SystemExit("required archive subtree is missing")
+    archive.extractall(destination, members=selected, filter="data")`;
+
+export function hostedArchiveExtractorShellFunction(): string {
+  return `extract_verified_archive() {
+  python3 - "$1" "$2" "\${3-}" <<'PY'
+${HOSTED_ARCHIVE_EXTRACTION_PROGRAM}
+PY
+}`;
+}
+
 export function hostedToolchainBootstrapCommand(
   maximumFileBytes: number = SANDBOX_EXECUTION_POLICY.command.maximumFileBytes,
 ): string {
@@ -149,25 +174,7 @@ command -v git >/dev/null
 command -v python3 >/dev/null
 command -v sha256sum >/dev/null
 command -v unzip >/dev/null
-extract_verified_archive() {
-  python3 - "$1" "$2" <<'PY'
-import pathlib
-import sys
-import tarfile
-
-archive_path = sys.argv[1]
-destination = pathlib.Path(sys.argv[2]).resolve()
-destination.mkdir(parents=True, exist_ok=True)
-with tarfile.open(archive_path, "r:*") as archive:
-    for member in archive.getmembers():
-        member_path = pathlib.PurePosixPath(member.name)
-        if member_path.is_absolute() or ".." in member_path.parts:
-            raise SystemExit("unsafe archive path")
-        if not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
-            raise SystemExit("unsupported archive entry")
-    archive.extractall(destination, filter="data")
-PY
-}
+${hostedArchiveExtractorShellFunction()}
 work="$(mktemp -d /tmp/app-builder-toolchain.XXXXXX)"
 seed='/workspace/.app-builder/hosted-seed.tar.gz'
 stage='prepare-workspace'
@@ -185,10 +192,8 @@ curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "
 stage='artifact-verification'
 test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
 echo '${HOSTED_ARTIFACT_SHA256}  /workspace/.app-builder/hosted-seed.tar.gz' | sha256sum --check --strict
-extract_verified_archive "$seed" "$work"
+extract_verified_archive "$seed" "$work" '.app-builder-hosted-seed/dependency-cache'
 artifact="$work/.app-builder-hosted-seed"
-test "$(stat --format='%s' "$artifact/source-tree.tar.gz")" = '${HOSTED_SOURCE_ARCHIVE_BYTES}'
-printf '%s  %s\n' '${HOSTED_SOURCE_ARCHIVE_SHA256}' "$artifact/source-tree.tar.gz" | sha256sum --check --strict
 test "$(stat --format='%s' "$artifact/dependency-cache/node-modules.tar.gz")" = '${HOSTED_DEPENDENCY_ARCHIVE_BYTES}'
 printf '%s  %s\n' '${HOSTED_DEPENDENCY_ARCHIVE_SHA256}' "$artifact/dependency-cache/node-modules.tar.gz" | sha256sum --check --strict
 printf '%s  %s\n' '${HOSTED_DEPENDENCY_MANIFEST_SHA256}' "$artifact/dependency-cache/manifest.json" | sha256sum --check --strict
@@ -225,18 +230,9 @@ sudo "$work/$rustc_directory/install.sh" --prefix=/opt/app-builder/rust --disabl
 sudo "$work/$rust_std_directory/install.sh" --prefix=/opt/app-builder/rust --disable-ldconfig
 sudo ln --symbolic --force /opt/app-builder/rust/bin/cargo /usr/local/bin/cargo
 sudo ln --symbolic --force /opt/app-builder/rust/bin/rustc /usr/local/bin/rustc
-sudo install --owner=root --group=root --mode=0755 -d /opt/app-builder/hosted-source/arrusted-development /opt/app-builder/dependency-cache
-sudo install --owner=root --group=root --mode=0444 "$artifact/source-tree.tar.gz" /opt/app-builder/hosted-source/arrusted-development/source-tree.tar.gz
-sudo install --owner=root --group=root --mode=0444 "$artifact/source-files.json" /opt/app-builder/hosted-source/arrusted-development/source-files.json
-sudo install --owner=root --group=root --mode=0444 "$artifact/source-checksums.sha256" /opt/app-builder/hosted-source/arrusted-development/source-checksums.sha256
+sudo install --owner=root --group=root --mode=0755 -d /opt/app-builder/dependency-cache
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/manifest.json" /opt/app-builder/dependency-cache/manifest.json
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
-stage='workspace-source-installation'
-rm -rf /workspace/repository
-install -d -m 0755 /workspace/repository /workspace/.app-builder
-extract_verified_archive "$artifact/source-tree.tar.gz" /workspace/repository
-install -m 0644 "$artifact/source-files.json" /workspace/.app-builder/source-files.json
-install -m 0644 "$artifact/source-checksums.sha256" /workspace/.app-builder/source-checksums.sha256
 stage='toolchain-readback'
 git --version
 mise --version | grep -E '^2026[.]8[.]12($| )'
@@ -244,8 +240,7 @@ bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '
 rustc --version | grep -E '^rustc 1[.]97[.]1 '
-node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const files=JSON.parse(fs.readFileSync("/workspace/.app-builder/source-files.json","utf8")); if(files.length!==${HOSTED_SOURCE_ENTRY_COUNT}) process.exit(1); if(crypto.createHash("sha256").update(JSON.stringify(files)).digest("hex")!=="${HOSTED_SOURCE_WORKSPACE_DIGEST}") process.exit(1); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="d378904a05e1bc2c0896886e6fbd3b816babaee2"||cache.target.tree!=="6735f4b45cc2b29a139531a41dac990c925e0d39") process.exit(1)' \
-  && (cd /workspace && sha256sum -c .app-builder/source-checksums.sha256 >/dev/null)`;
+node -e 'const fs=require("node:fs"); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="d378904a05e1bc2c0896886e6fbd3b816babaee2"||cache.target.tree!=="6735f4b45cc2b29a139531a41dac990c925e0d39") process.exit(1)'`;
 }
 
 export function hostedArtifactWorkspaceInstallCommand(): string {
@@ -258,7 +253,7 @@ install -d -m 0755 /workspace/.app-builder
 curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "$seed"
 test "$(stat --format='%s' "$seed")" = '${HOSTED_ARTIFACT_BYTES}'
 printf '%s  %s\n' '${HOSTED_ARTIFACT_SHA256}' "$seed" | sha256sum --check --strict
-tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions
+tar --extract --gzip --file "$seed" --directory "$work" --no-same-owner --no-same-permissions .app-builder-hosted-seed/dependency-cache
 artifact="$work/.app-builder-hosted-seed/dependency-cache"
 test "$(stat --format='%s' "$artifact/node-modules.tar.gz")" = '${HOSTED_DEPENDENCY_ARCHIVE_BYTES}'
 printf '%s  %s\n' '${HOSTED_DEPENDENCY_ARCHIVE_SHA256}' "$artifact/node-modules.tar.gz" | sha256sum --check --strict
@@ -283,7 +278,6 @@ export function hostedToolchainRevalidationKey(
       contractVersion: HOSTED_ARTIFACT_CONTRACT_VERSION,
       sha256: HOSTED_ARTIFACT_SHA256,
       bytes: HOSTED_ARTIFACT_BYTES,
-      sourceArchiveSha256: HOSTED_SOURCE_ARCHIVE_SHA256,
       dependencyManifestSha256: HOSTED_DEPENDENCY_MANIFEST_SHA256,
       dependencyArchiveSha256: HOSTED_DEPENDENCY_ARCHIVE_SHA256,
     },

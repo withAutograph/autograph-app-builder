@@ -16,10 +16,6 @@ import {
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
 import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
-import {
-  hostedSourceReceipt,
-  prepareHostedSourceWorkspace,
-} from "@/lib/repository/hosted-source";
 
 export default defineTool({
   description:
@@ -50,15 +46,6 @@ export default defineTool({
       source.phase !== "acquisition_approved"
     )
       throw new Error("Fresh-template acquisition was not approved.");
-    // A V4 fresh-template receipt is a builder-owned, canonical Git checkout;
-    // it is deliberately not routed through the legacy hosted source bundle.
-    const hostedReceipt =
-      source.receipt.version === SOURCE_RECEIPT_VERSION
-        ? undefined
-        : hostedSourceReceipt(
-            source.receipt.sourceKind,
-            source.receipt.sourcePath,
-          );
     const sandbox = await ctx.getSandbox();
     const canonicalWorkspace =
       source.receipt.version === SOURCE_RECEIPT_VERSION
@@ -68,13 +55,12 @@ export default defineTool({
           })
         : undefined;
     const currentReceipt =
-      hostedReceipt ??
-      (source.receipt.version === SOURCE_RECEIPT_VERSION
+      source.receipt.version === SOURCE_RECEIPT_VERSION
         ? source.receipt
         : await inspectSourceReceipt(
             source.receipt.sourceKind,
             source.receipt.sourcePath,
-          ));
+          );
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review or approval.");
     const {
@@ -103,7 +89,7 @@ export default defineTool({
       if (canonicalWorkspace === undefined)
         throw new Error("The canonical Arrusted workspace is missing.");
       workspace = canonicalWorkspace;
-    } else if (hostedReceipt === undefined) {
+    } else {
       workspace = await prepareSupportedSandboxWorkspace(
         path,
         expectedSha,
@@ -111,12 +97,6 @@ export default defineTool({
         sandbox,
         ctx.callId,
       );
-    } else {
-      workspace = await prepareHostedSourceWorkspace({
-        receipt: currentReceipt,
-        sandbox,
-        callId: ctx.callId,
-      });
     }
     if (workspace.sourceTree !== expectedTree)
       throw new Error("The prepared source tree changed after review.");

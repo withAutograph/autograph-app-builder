@@ -41,6 +41,7 @@ type TargetValidationBinding = {
   appValidationSha256: string;
   sourceSha: string;
   sourceTree: string;
+  sourceReceiptDigest: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;
@@ -257,6 +258,7 @@ export function validationBinding(
     appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
     sourceSha: apply.sourceSha,
     sourceTree: apply.sourceTree,
+    sourceReceiptDigest: apply.sourceReceiptDigest,
     eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,
@@ -326,6 +328,7 @@ function attemptBinding(
     appValidationSha256: attempt.appValidationSha256,
     sourceSha: attempt.sourceSha,
     sourceTree: attempt.sourceTree,
+    sourceReceiptDigest: attempt.sourceReceiptDigest,
     eligibilityDigest: attempt.eligibilityDigest,
     workspaceDigest: attempt.workspaceDigest,
     appSpecDigest: attempt.appSpecDigest,

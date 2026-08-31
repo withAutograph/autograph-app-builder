@@ -2,14 +2,19 @@
 #MISE description="Prove exact artifact commands and typed planning-only Eve workflow"
 set -eu
 
-if [ "$#" -ne 4 ] || [ "$1" != "--image" ] || [ "$3" != "--source-root" ]; then
-  echo "usage: mise run hosted:artifact-prove-typed -- --image <digest-ref> --source-root <exact-checkout>" >&2
+if [ "$#" -ne 8 ] || [ "$1" != "--image" ] || [ "$3" != "--source-root" ] || [ "$5" != "--artifact" ] || [ "$7" != "--artifact-sha256" ]; then
+  echo "usage: mise run hosted:artifact-prove-typed -- --image <digest-ref> --source-root <exact-checkout> --artifact <dependency-artifact> --artifact-sha256 <sha256>" >&2
   exit 64
 fi
 
 image=$2
 source_root=$4
-mise run hosted:artifact-prove
+artifact=$6
+artifact_sha256=$8
+mise run hosted:artifact-prove -- \
+  --arrusted-root "$source_root" \
+  --artifact "$artifact" \
+  --artifact-sha256 "$artifact_sha256"
 
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
   "$(mise which node)" --import tsx scripts/run-eve-eval.mts \

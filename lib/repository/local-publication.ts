@@ -218,6 +218,7 @@ export function assertExactReviewedChangeSet(
     repositoryContractDigest: review.repositoryContractDigest,
     sourceSha: review.sourceSha,
     sourceTree: review.sourceTree,
+    sourceReceiptDigest: review.sourceReceiptDigest,
     eligibilityDigest: review.eligibilityDigest,
     workspaceDigest: review.workspaceDigest,
     appSpecDigest: review.appSpecDigest,

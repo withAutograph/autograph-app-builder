@@ -2,7 +2,10 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { provisionGitHubRepository } from "./github-provider";
+import {
+  provisionGitHubRepository,
+  starterSourceBinding,
+} from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
 import type { StarterSource } from "./starter-source";
 import {
@@ -73,6 +76,41 @@ function credentialStore(): GitHubUserCredentialStore {
 }
 
 describe("GitHub starter repository provisioning", () => {
+  it("binds cloned starter creation to complete V4 source provenance", () => {
+    const canonical: StarterSource = {
+      files: source.files,
+      provenance: {
+        sourceSha: ARRUSTED_TARGET_SHA,
+        sourceTree: ARRUSTED_TARGET_TREE,
+        repository: "https://github.com/withAutograph/arrusted-development.git",
+        ref: "refs/heads/main",
+        method: "git-clone-v1",
+        readinessDigest: "1".repeat(64),
+        receiptVersion: 4,
+        sourceReceiptDigest: "2".repeat(64),
+        eligibilityDigest: "3".repeat(64),
+        contractDigest: "4".repeat(64),
+      },
+    };
+    expect(starterSourceBinding(canonical)).toMatchObject({
+      starter: {
+        method: "git-clone-v1",
+        receiptVersion: 4,
+        sourceReceiptDigest: "2".repeat(64),
+        readinessDigest: "1".repeat(64),
+      },
+    });
+    expect(() =>
+      starterSourceBinding({
+        ...canonical,
+        provenance: {
+          ...canonical.provenance!,
+          sourceReceiptDigest: undefined,
+        } as unknown as NonNullable<StarterSource["provenance"]>,
+      }),
+    ).toThrow("provenance-missing");
+  });
+
   it.each([
     ["Organization", true, "/orgs/withAutograph/repos"],
     ["User", false, "/user/repos"],

@@ -20,6 +20,7 @@ import {
   readFreshBootstrapJournal,
   verifyFreshBootstrap,
 } from "@/lib/repository/node-fresh-bootstrap";
+import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 function freshWorkflow() {
   const workflow = appBuilderWorkflowState.get();
@@ -59,12 +60,14 @@ export default defineTool({
       /^\/workspace\//u,
       "",
     );
-    const readOverlayFile = (path: string) =>
-      ctx
-        .getSandbox()
-        .then((sandbox) =>
-          sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
-        );
+    const sandbox = await ctx.getSandbox();
+    const readOverlayFile = async (path: string) =>
+      await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
+    const sourceWorkspace = await freshBootstrapSourceWorkspace({
+      sandbox,
+      receipt: workflow.sourceReceipt,
+      workspace: workflow.workspace,
+    });
     const proposal =
       workflow.phase === "reviewed"
         ? await deriveFreshBootstrapProposal({
@@ -76,6 +79,7 @@ export default defineTool({
             review: workflow.reviewReceipt,
             protectedPaths: [process.cwd()],
             readOverlayFile,
+            sourceWorkspace,
           })
         : workflow.phase === "fresh_bootstrap_pending"
           ? workflow.freshBootstrapProposal
@@ -113,6 +117,7 @@ export default defineTool({
         sourceReceipt: workflow.sourceReceipt,
         review: workflow.reviewReceipt,
         readOverlayFile,
+        sourceWorkspace,
       });
       if (workflow.phase !== "published_fresh_bootstrap")
         appBuilderWorkflowState.update((current) => {

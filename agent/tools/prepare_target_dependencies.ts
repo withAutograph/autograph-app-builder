@@ -22,6 +22,7 @@ import {
 } from "@/lib/repository/target-planning";
 import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
@@ -47,6 +48,11 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     const sandbox = await ctx.getSandbox();
+    await inspectSourceBoundSandboxWorkspace({
+      sandbox,
+      receipt: current.sourceReceipt,
+      expectedWorkspace: current.workspace,
+    });
     if (
       current.sourceReceipt.version === SOURCE_RECEIPT_VERSION &&
       !hasTestCapability("simulated-target")
@@ -115,6 +121,7 @@ export default defineTool({
       version: 2 as const,
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
+      sourceReceiptDigest: current.sourceReceipt.digest,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: execution.imageDigest,

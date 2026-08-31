@@ -308,10 +308,11 @@ Starter source tree: ${github.starter.sourceTree}
 Starter origin: ${github.starter.repository ?? "legacy unavailable"}
 Starter ref: ${github.starter.ref ?? "legacy unavailable"}
 Starter transport: ${github.starter.method ?? "starter-archive-v3"}${
-          github.starter.readinessDigest
+          github.starter.method === "git-clone-v1"
             ? `\nTemplate-readiness attestation: ${github.starter.readinessDigest}`
             : ""
         }${
+          github.starter.method !== "git-clone-v1" &&
           github.starter.archiveSha256 &&
           github.starter.archiveBytes !== undefined &&
           github.starter.manifestSha256

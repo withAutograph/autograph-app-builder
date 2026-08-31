@@ -14,9 +14,10 @@ import {
   ARRUSTED_TARGET_TREE,
 } from "../repository/dependency-cache";
 import {
+  inspectClonedTemplateSourceReceipt,
   ARRUSTED_TEMPLATE_REPOSITORY,
-  templateReadinessAttestationDigest,
-} from "../repository/arrusted-template";
+} from "../repository/source-receipt";
+import { templateReadinessAttestationDigest } from "../repository/arrusted-template";
 import {
   deploymentArrustedTemplateReader,
   type ArrustedTemplateReader,
@@ -75,14 +76,24 @@ export type StarterSourceFile = {
   mode: "100644" | "100755";
   bytes: Uint8Array;
 };
-export type StarterSourceProvenance = {
+type StarterSourceProvenanceBase = {
   sourceSha: string;
   sourceTree: string;
   repository: string;
   ref: "refs/heads/main";
-  method: "git-clone-v1" | "starter-archive-v3";
-  readinessDigest?: string;
 };
+export type StarterSourceProvenance = StarterSourceProvenanceBase &
+  (
+    | {
+        method: "git-clone-v1";
+        readinessDigest: string;
+        receiptVersion: 4;
+        sourceReceiptDigest: string;
+        eligibilityDigest: string;
+        contractDigest: string;
+      }
+    | { method: "starter-archive-v3" }
+  );
 export type StarterSource = {
   /** Present only while recovering a legacy V3 starter acquisition. */
   manifest?: StarterSourceManifest;
@@ -389,6 +400,16 @@ export async function cloneStarterSource(input?: {
       tree,
       token: access.token,
     });
+    const sourceReceipt = await inspectClonedTemplateSourceReceipt({
+      path: checkout,
+      readinessDigest,
+    });
+    if (
+      sourceReceipt.version !== 4 ||
+      sourceReceipt.sourceSha !== sha ||
+      sourceReceipt.sourceTree !== tree
+    )
+      throw new Error("starter-source-receipt-mismatch");
     const listing = await restrictedGit(["-C", checkout, "ls-files", "-z"]);
     const paths = listing.stdout.split("\0").filter(Boolean);
     if (paths.length === 0 || paths.length > MAX_STARTER_FILES)
@@ -416,6 +437,10 @@ export async function cloneStarterSource(input?: {
         ref: "refs/heads/main",
         method: "git-clone-v1",
         readinessDigest,
+        receiptVersion: sourceReceipt.version,
+        sourceReceiptDigest: sourceReceipt.digest,
+        eligibilityDigest: sourceReceipt.eligibilityDigest,
+        contractDigest: sourceReceipt.contractDigest,
       },
       files,
     };

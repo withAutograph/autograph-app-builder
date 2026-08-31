@@ -49,8 +49,14 @@ import {
   stableDigest,
 } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { inspectSourceReceipt, type SourceReceipt } from "./source-receipt";
+import {
+  inspectSourceReceipt,
+  parseSourceReceipt,
+  SOURCE_RECEIPT_VERSION,
+  type SourceReceipt,
+} from "./source-receipt";
 import { safeSourcePath } from "./source-path";
+import type { PreparedSourceFile } from "./supported-template";
 
 export type FreshBootstrapFaultHooks = {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -72,6 +78,12 @@ export type FreshBootstrapFaultHooks = {
 };
 
 type ExactFile = FreshBootstrapFile & { bytes: Buffer };
+
+export type FreshBootstrapSourceWorkspace = {
+  files: readonly PreparedSourceFile[];
+  readSourceFile(path: string): Promise<Uint8Array | null>;
+  reverify(): Promise<void>;
+};
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
 mode, stage, destination, stage_dev, stage_ino, stage_uid, stage_mode, stage_nlink, empty_dev, empty_ino, empty_uid, empty_mode, empty_nlink, parent_dev, parent_ino, parent_uid, parent_mode, parent_nlink = sys.argv[1:]
@@ -909,24 +921,86 @@ function exactSourceTree(
   );
 }
 
+async function exactPreparedSourceTree(
+  sourceWorkspace: FreshBootstrapSourceWorkspace,
+): Promise<ExactFile[]> {
+  await sourceWorkspace.reverify();
+  const paths = new Set<string>();
+  const files: ExactFile[] = [];
+  for (const file of sourceWorkspace.files) {
+    if (
+      !["100644", "100755"].includes(file.mode) ||
+      !/^[0-9a-f]{40}$/u.test(file.objectId) ||
+      !/^[0-9a-f]{64}$/u.test(file.sha256) ||
+      !safeSourcePath(file.path) ||
+      paths.has(file.path) ||
+      file.path
+        .split("/")
+        .some((part) =>
+          [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()),
+        )
+    )
+      throw new Error("The prepared fresh-template manifest is invalid.");
+    paths.add(file.path);
+    const bytes = await sourceWorkspace.readSourceFile(file.path);
+    if (
+      bytes === null ||
+      contentDigest(bytes) !== file.sha256 ||
+      blobId(bytes) !== file.objectId
+    )
+      throw new Error(
+        `The prepared fresh-template source drifted at ${file.path}.`,
+      );
+    files.push({
+      path: file.path,
+      mode: file.mode,
+      blob: file.objectId,
+      bytes: Buffer.from(bytes),
+    });
+  }
+  if (files.length === 0)
+    throw new Error("The prepared fresh-template source is empty.");
+  await sourceWorkspace.reverify();
+  return files.toSorted((left, right) =>
+    Buffer.from(left.path).compare(Buffer.from(right.path)),
+  );
+}
+
 async function exactResultTree(input: {
   capability: FreshBootstrapCapability;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile(path: string): Promise<Uint8Array | null>;
+  sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> {
   assertExactReviewedChangeSet(input.review);
-  const current = await inspectSourceReceipt(
-    input.sourceReceipt.sourceKind,
-    input.sourceReceipt.sourcePath,
-  );
-  if (current.digest !== input.sourceReceipt.digest)
-    throw new Error("The fresh-template source changed after review.");
+  const receipt = parseSourceReceipt(input.sourceReceipt);
+  if (
+    input.review.sourceReceiptDigest !== receipt.digest ||
+    input.review.sourceSha !== receipt.sourceSha ||
+    input.review.sourceTree !== receipt.sourceTree ||
+    input.review.eligibilityDigest !== receipt.eligibilityDigest ||
+    input.review.repositoryContractDigest !== receipt.contractDigest
+  )
+    throw new Error(
+      "The reviewed change set no longer matches its source receipt.",
+    );
+  if (receipt.version !== SOURCE_RECEIPT_VERSION) {
+    const current = await inspectSourceReceipt(
+      receipt.sourceKind,
+      receipt.sourcePath,
+    );
+    if (current.digest !== receipt.digest)
+      throw new Error("The fresh-template source changed after review.");
+  } else if (input.sourceWorkspace === undefined) {
+    throw new Error(
+      "The canonical fresh-template workspace is required for bootstrap.",
+    );
+  }
   const files = new Map(
-    exactSourceTree(
-      input.capability,
-      input.sourceReceipt.sourcePath,
-      input.sourceReceipt.sourceSha,
+    (receipt.version === SOURCE_RECEIPT_VERSION
+      ? await exactPreparedSourceTree(input.sourceWorkspace!)
+      : exactSourceTree(input.capability, receipt.sourcePath, receipt.sourceSha)
     ).map((file) => [file.path, file]),
   );
   for (const change of input.review.changes) {
@@ -1051,19 +1125,24 @@ export async function deriveFreshBootstrapProposal(input: {
   review: ReviewedChangeSetReceipt;
   protectedPaths: readonly string[];
   readOverlayFile(path: string): Promise<Uint8Array | null>;
+  sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<FreshBootstrapProposal> {
   const capability = await assertCapability(input.capability);
-  const sourceGit = await realpath(
-    git(capability, input.sourceReceipt.sourcePath, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-    ]).trim(),
-  );
+  const sourceReceipt = parseSourceReceipt(input.sourceReceipt);
+  const sourceGit =
+    sourceReceipt.version === SOURCE_RECEIPT_VERSION
+      ? undefined
+      : await realpath(
+          git(capability, sourceReceipt.sourcePath, [
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ]).trim(),
+        );
   const protectedPaths = [
     ...input.protectedPaths,
-    input.sourceReceipt.sourcePath,
-    sourceGit,
+    sourceReceipt.sourcePath,
+    ...(sourceGit === undefined ? [] : [sourceGit]),
     process.cwd(),
   ].map((path) => resolve(path));
   if (
@@ -1087,6 +1166,7 @@ export async function deriveFreshBootstrapProposal(input: {
     sourceReceipt: input.sourceReceipt,
     review: input.review,
     readOverlayFile: input.readOverlayFile,
+    sourceWorkspace: input.sourceWorkspace,
   });
   const placeholder = resolve(capability.stateRoot.path, "pending");
   const destinationLockDigest = stableDigest({
@@ -1147,6 +1227,7 @@ async function assertExactInputs(input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile(path: string): Promise<Uint8Array | null>;
+  sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> {
   assertExactFreshBootstrapProposal(input.proposal);
   if (
@@ -1184,6 +1265,7 @@ async function assertExactInputs(input: {
     sourceReceipt: input.sourceReceipt,
     review: input.review,
     readOverlayFile: input.readOverlayFile,
+    sourceWorkspace: input.sourceWorkspace,
   });
   if (stableDigest(manifest(files)) !== input.proposal.exactTreeDigest)
     throw new Error("The exact bootstrap tree changed after approval.");
@@ -1192,12 +1274,22 @@ async function assertExactInputs(input: {
 
 async function assertSourceUnchanged(
   sourceReceipt: SourceReceipt,
+  sourceWorkspace?: FreshBootstrapSourceWorkspace,
 ): Promise<void> {
+  const receipt = parseSourceReceipt(sourceReceipt);
+  if (receipt.version === SOURCE_RECEIPT_VERSION) {
+    if (sourceWorkspace === undefined)
+      throw new Error(
+        "The canonical fresh-template workspace is required for bootstrap.",
+      );
+    await sourceWorkspace.reverify();
+    return;
+  }
   const current = await inspectSourceReceipt(
-    sourceReceipt.sourceKind,
-    sourceReceipt.sourcePath,
+    receipt.sourceKind,
+    receipt.sourcePath,
   );
-  if (current.digest !== sourceReceipt.digest)
+  if (current.digest !== receipt.digest)
     throw new Error(
       "The fresh-template source changed across bootstrap mutation.",
     );
@@ -2038,6 +2130,7 @@ async function executeBootstrap(input: {
   publishedByCallId: string;
   recoveryOfDigest?: string;
   readOverlayFile(path: string): Promise<Uint8Array | null>;
+  sourceWorkspace?: FreshBootstrapSourceWorkspace;
   hooks?: FreshBootstrapFaultHooks;
 }): Promise<
   | { ok: true; receipt: FreshBootstrapSuccessReceipt }
@@ -2216,7 +2309,7 @@ async function executeBootstrap(input: {
     }
     if (!stageCreated) {
       await assertPrestate(capability, input.proposal);
-      await assertSourceUnchanged(input.sourceReceipt);
+      await assertSourceUnchanged(input.sourceReceipt, input.sourceWorkspace);
       await createStage(capability, input.proposal);
       stageCreated = true;
       await input.hooks?.afterStageCreation?.();
@@ -2325,7 +2418,7 @@ async function executeBootstrap(input: {
     );
     lease.assertHeld();
     await input.hooks?.beforeAtomicPublication?.();
-    await assertSourceUnchanged(input.sourceReceipt);
+    await assertSourceUnchanged(input.sourceReceipt, input.sourceWorkspace);
     if (stageReadyIdentity === undefined)
       throw new Error("Fresh bootstrap lacks durable stage-ready identity.");
     await atomicPublish(
@@ -2342,7 +2435,7 @@ async function executeBootstrap(input: {
       input.proposal,
       input.proposal.destinationPath,
     );
-    await assertSourceUnchanged(input.sourceReceipt);
+    await assertSourceUnchanged(input.sourceReceipt, input.sourceWorkspace);
     await input.hooks?.beforeTerminalJournal?.();
     lease.assertHeld();
     const success = successReceipt({
@@ -2492,6 +2585,7 @@ export async function verifyFreshBootstrap(input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile(path: string): Promise<Uint8Array | null>;
+  sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<void> {
   const capability = await assertCapability(input.capability);
   assertCanonicalFreshBootstrapJournal(input.receipt);
@@ -2501,6 +2595,7 @@ export async function verifyFreshBootstrap(input: {
     sourceReceipt: input.sourceReceipt,
     review: input.review,
     readOverlayFile: input.readOverlayFile,
+    sourceWorkspace: input.sourceWorkspace,
   });
   const verification = await assertExactRepository(
     capability,
