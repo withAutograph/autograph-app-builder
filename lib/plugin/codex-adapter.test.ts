@@ -60,6 +60,16 @@ describe("Codex adapter", () => {
     expect(skill).toContain("Before starting an app build");
     expect(skill).toContain("Start every new app build with `autograph_start`");
     expect(skill).toContain("Never split one App Builder batch across calls");
+    expect(skill).toContain("Treat tool-only progress as silent");
+    expect(skill).toContain(
+      "continue without a user-facing progress message",
+    );
+    expect(skill).toMatch(
+      /The\s+prototype and implementation plan are ready to review/u,
+    );
+    expect(skill).toMatch(
+      /never that prototype or\s+plan receipts are pending or complete/u,
+    );
     expect(skill).not.toContain("Before doing any app-building work");
     expect(skill).not.toContain("new app-building objective");
     expect(skill).not.toContain("# Eve agent orchestration");

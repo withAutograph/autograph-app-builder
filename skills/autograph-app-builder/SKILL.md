@@ -32,4 +32,17 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
    status, evidence, and input handling—not for rendering prototype HTML.
 10. Never state that a side effect succeeded until a public event proves it.
 
+## Public conversation
+
+Treat tool-only progress as silent. Do not tell the user that you are waiting
+for or received internal receipts, digests, workspace preparation, validation,
+retries, protocol operations, or setup mechanics. If polling yields no new
+visible product outcome, continue without a user-facing progress message.
+
+Describe only the product: concise inferred design choices, what is ready to
+explore in the prototype, and what the implementation plan will deliver. For
+example, say “I’m shaping the exception queue and detail workflow” or “The
+prototype and implementation plan are ready to review,” never that prototype or
+plan receipts are pending or complete.
+
 Read [session semantics](references/session-semantics.md) for cursor and status rules.
