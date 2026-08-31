@@ -7,6 +7,8 @@ import {
   attachPrototypePreviewUrl,
   createPrototypePreviewRequestHandler,
   createServicePrototypePreviewResolver,
+  loopbackDevelopmentOrigin,
+  prototypePreviewRequestUrl,
   prototypePreviewContentSecurityPolicy,
 } from "./browser-preview";
 
@@ -29,6 +31,39 @@ const result = {
 };
 
 describe("Browser prototype preview", () => {
+  it("uses the supervisor-owned non-default loopback origin only in exact development mode", () => {
+    const developmentRequestUrl = prototypePreviewRequestUrl({
+      environment: {
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+        APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+        APP_BUILDER_LOCAL_ADAPTER: "1",
+        APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(3_100),
+        EVE_HOSTED_ADAPTER: "0",
+      },
+      requestUrl: "http://localhost:3000/mcp",
+    });
+    expect(
+      attachPrototypePreviewUrl(result, developmentRequestUrl).prototype,
+    ).toMatchObject({
+      previewUrl: `http://127.0.0.1:3100/preview/session-one/${prototype.digest}`,
+    });
+
+    expect(
+      prototypePreviewRequestUrl({
+        environment: {
+          APP_BUILDER_EXECUTION_MODE: "development",
+          APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+          APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+          APP_BUILDER_LOCAL_ADAPTER: "0",
+          APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(3_100),
+          EVE_HOSTED_ADAPTER: "1",
+        },
+        requestUrl: "https://builder.example.test/mcp",
+      }),
+    ).toBe("https://builder.example.test/mcp");
+  });
+
   it("attaches only hosted HTTPS or loopback URLs", () => {
     expect(
       attachPrototypePreviewUrl(result, "https://builder.example.test/mcp")

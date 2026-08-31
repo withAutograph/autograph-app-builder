@@ -18,12 +18,54 @@ const previewSessionIdSchema = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u);
 const previewDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
+const unprivilegedPortSchema = z.coerce.number().int().min(1_024).max(65_535);
+
 const previewRouteInputSchema = z
   .object({
     sessionId: previewSessionIdSchema,
     digest: previewDigestSchema,
   })
   .strict();
+
+type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
+
+export function loopbackDevelopmentOrigin(port: number): string {
+  return `http://127.0.0.1:${unprivilegedPortSchema.parse(port)}`;
+}
+
+export function prototypePreviewRequestUrl(input: {
+  environment: Environment;
+  requestUrl: string;
+}): string {
+  const environment = input.environment;
+  const exactDevelopmentAdapter =
+    environment.APP_BUILDER_EXECUTION_MODE === "development" &&
+    environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
+    environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel" &&
+    environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
+    environment.EVE_HOSTED_ADAPTER === "0";
+  if (!exactDevelopmentAdapter) return input.requestUrl;
+
+  const configured = environment.APP_BUILDER_DEVELOPMENT_ORIGIN;
+  if (configured === undefined)
+    throw new Error("The local development preview origin is unavailable.");
+  const origin = new URL(configured);
+  const port = unprivilegedPortSchema.safeParse(origin.port);
+  if (
+    origin.protocol !== "http:" ||
+    origin.hostname !== "127.0.0.1" ||
+    !port.success ||
+    origin.username !== "" ||
+    origin.password !== "" ||
+    origin.pathname !== "/" ||
+    origin.search !== "" ||
+    origin.hash !== ""
+  )
+    throw new Error(
+      "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP origin.",
+    );
+  return new URL("/mcp", origin).href;
+}
 
 export const prototypePreviewContentSecurityPolicy = [
   "sandbox allow-scripts",

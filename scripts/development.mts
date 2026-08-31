@@ -32,6 +32,7 @@ import {
   HOSTED_NODE_VERSION,
   HOSTED_RUST_VERSION,
 } from "../lib/sandbox/hosted-toolchain";
+import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
 
 const repositoryRoot = resolve(".");
 const developmentTools = {
@@ -65,7 +66,11 @@ async function privateRoot(path: string) {
   return canonical;
 }
 
-function nextEnvironment(input: { evePort: number; runtimeHome: string }) {
+function nextEnvironment(input: {
+  evePort: number;
+  nextPort: number;
+  runtimeHome: string;
+}) {
   return {
     PATH: `${dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
     HOME: input.runtimeHome,
@@ -80,6 +85,7 @@ function nextEnvironment(input: { evePort: number; runtimeHome: string }) {
     APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     APP_BUILDER_LOCAL_ADAPTER: "1",
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+    APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(input.nextPort),
     EVE_HOSTED_ADAPTER: "0",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
     // Next's env loader preserves explicitly supplied values. Empty values
@@ -270,7 +276,11 @@ try {
     ],
     {
       cwd: repositoryRoot,
-      env: nextEnvironment({ evePort: args.evePort, runtimeHome: nextHome }),
+      env: nextEnvironment({
+        evePort: args.evePort,
+        nextPort: args.nextPort,
+        runtimeHome: nextHome,
+      }),
       stdio: "inherit",
     },
   );
