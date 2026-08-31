@@ -338,16 +338,16 @@ export function SignIn({
             )}
           </div>
 
-          <div className="flex flex-col gap-3 items-center w-full mt-4">
-            {emailAndPassword?.enabled && emailAndPassword?.forgotPassword && (
+          {emailAndPassword?.enabled && emailAndPassword?.forgotPassword && (
+            <div className="flex flex-col gap-3 items-center w-full mt-4">
               <Link
                 href={`${basePaths.auth}/${viewPaths.auth.forgotPassword}`}
                 className="self-center text-sm underline-offset-4 hover:underline"
               >
                 {localization.auth.forgotPasswordLink}
               </Link>
-            )}
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
