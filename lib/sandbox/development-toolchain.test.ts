@@ -77,6 +77,13 @@ describe("Development Vercel Sandbox dependency template", () => {
   it("installs pinned tools only inside the disposable Vercel workspace", () => {
     const command = developmentPinnedToolchainCommand();
     expect(command).toContain("root='/workspace/.app-builder/toolchain'");
+    expect(command).toContain("command -v python3 >/dev/null");
+    expect(command).toContain("extract_verified_archive() {");
+    expect(command).toContain(
+      'extract_verified_archive "$work/cargo.tar.xz" "$work"',
+    );
+    expect(command).toContain('archive.extractall(destination, filter="data")');
+    expect(command).not.toContain("tar -xJf");
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("node --version");
     expect(command).toContain("bun --version");

@@ -166,9 +166,29 @@ case "$(uname -m)" in
   *) echo 'unsupported Vercel Sandbox architecture' >&2; exit 1 ;;
 esac
 command -v curl >/dev/null
+command -v python3 >/dev/null
 command -v sha256sum >/dev/null
 command -v tar >/dev/null
 command -v unzip >/dev/null
+extract_verified_archive() {
+  python3 - "$1" "$2" <<'PY'
+import pathlib
+import sys
+import tarfile
+
+archive_path = sys.argv[1]
+destination = pathlib.Path(sys.argv[2]).resolve()
+destination.mkdir(parents=True, exist_ok=True)
+with tarfile.open(archive_path, "r:*") as archive:
+    for member in archive.getmembers():
+        member_path = pathlib.PurePosixPath(member.name)
+        if member_path.is_absolute() or ".." in member_path.parts:
+            raise SystemExit("unsafe archive path")
+        if not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
+            raise SystemExit("unsupported archive entry")
+    archive.extractall(destination, filter="data")
+PY
+}
 work="$(mktemp -d /tmp/app-builder-development-toolchain.XXXXXX)"
 root='/workspace/.app-builder/toolchain'
 stage='download'
@@ -196,11 +216,11 @@ stage='installation'
 install -m 0755 "$work/mise" "$root/bin/mise"
 unzip -q "$work/bun.zip" -d "$work"
 install -m 0755 "$work/$bun_directory/bun" "$root/bin/bun"
-tar -xzf "$work/node.tar.gz" -C "$work"
+extract_verified_archive "$work/node.tar.gz" "$work"
 install -m 0755 "$work/$node_directory/bin/node" "$root/bin/node"
-tar -xJf "$work/cargo.tar.xz" -C "$work"
-tar -xJf "$work/rustc.tar.xz" -C "$work"
-tar -xJf "$work/rust-std.tar.xz" -C "$work"
+extract_verified_archive "$work/cargo.tar.xz" "$work"
+extract_verified_archive "$work/rustc.tar.xz" "$work"
+extract_verified_archive "$work/rust-std.tar.xz" "$work"
 "$work/$cargo_directory/install.sh" --prefix="$root/rust" --disable-ldconfig
 "$work/$rustc_directory/install.sh" --prefix="$root/rust" --disable-ldconfig
 "$work/$rust_std_directory/install.sh" --prefix="$root/rust" --disable-ldconfig
