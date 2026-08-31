@@ -328,20 +328,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       { digest?: string } | undefined;
     if (accepted?.digest === undefined)
       return "The product direction is not complete enough to plan reliably yet.";
-    const dependencies = toolResults.find(
-      ({ name }) => name === "prepare_target_dependencies",
-    );
-    if (dependencies === undefined)
-      return {
-        toolCalls: [
-          {
-            name: "prepare_target_dependencies",
-            input: { expectedAppSpecDigest: accepted.digest },
-          },
-        ],
-      };
-    if (dependencies.isError)
-      return "This product direction cannot yet be planned with the available project capabilities.";
     const plan = toolResults.find(({ name }) => name === "plan_app_creation");
     if (plan === undefined)
       return {

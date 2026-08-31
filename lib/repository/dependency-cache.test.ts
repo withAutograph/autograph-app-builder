@@ -16,6 +16,7 @@ import {
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
   DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
+  DependencyCacheMissingError,
   assertExactDependencyTargetBinding,
   bootstrapLiveTemplateDependencies,
   dependencyTargetForWorkspace,
@@ -337,6 +338,24 @@ describe("offline dependency cache", () => {
         cache,
       }),
     ).not.toThrow();
+  });
+
+  it("reports a typed live-template miss without falling through to another cache", async () => {
+    const target = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: "linux/x86_64\n",
+      stderr: "",
+    }));
+    const sandbox = {
+      run,
+      readTextFile: vi.fn(async () => null),
+    } as unknown as SandboxSession;
+
+    await expect(
+      inspectDependencyCache(sandbox, {}, target, true),
+    ).rejects.toBeInstanceOf(DependencyCacheMissingError);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it("bootstraps a SHA-scoped locked template closure, then restores deny-all networking", async () => {

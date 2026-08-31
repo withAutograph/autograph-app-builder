@@ -213,6 +213,15 @@ export type ObservedDependencyCache = {
   contentDigest: string;
 };
 
+export class DependencyCacheMissingError extends Error {
+  readonly code = "dependency_cache_missing" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "DependencyCacheMissingError";
+  }
+}
+
 type ExactSourceBinding = {
   sourceSha: string;
   sourceTree: string;
@@ -543,35 +552,37 @@ export async function inspectDependencyCache(
     const liveManifest = await sandbox.readTextFile({
       path: liveTemplateManifestPath(fixtureTarget, platform),
     });
-    if (liveManifest !== null) {
-      let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
-      try {
-        manifest = liveTemplateDependencyCacheManifestSchema.parse(
-          JSON.parse(liveManifest) as unknown,
-        );
-      } catch {
-        throw new Error(
-          "The live template dependency cache manifest is invalid.",
-        );
-      }
-      if (
-        manifest.target.sha !== fixtureTarget.sourceSha ||
-        manifest.target.tree !== fixtureTarget.sourceTree ||
-        manifest.platform !== platform
-      )
-        throw new Error("The live template dependency cache source drifted.");
-      return {
-        manifest,
-        manifestDigest: sha256(liveManifest),
-        contentDigest: sha256(
-          JSON.stringify({
-            locks: manifest.locks,
-            closure: manifest.closure,
-            platform: manifest.platform,
-          }),
-        ),
-      };
+    if (liveManifest === null)
+      throw new DependencyCacheMissingError(
+        "The live template dependency cache is missing.",
+      );
+    let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
+    try {
+      manifest = liveTemplateDependencyCacheManifestSchema.parse(
+        JSON.parse(liveManifest) as unknown,
+      );
+    } catch {
+      throw new Error(
+        "The live template dependency cache manifest is invalid.",
+      );
     }
+    if (
+      manifest.target.sha !== fixtureTarget.sourceSha ||
+      manifest.target.tree !== fixtureTarget.sourceTree ||
+      manifest.platform !== platform
+    )
+      throw new Error("The live template dependency cache source drifted.");
+    return {
+      manifest,
+      manifestDigest: sha256(liveManifest),
+      contentDigest: sha256(
+        JSON.stringify({
+          locks: manifest.locks,
+          closure: manifest.closure,
+          platform: manifest.platform,
+        }),
+      ),
+    };
   }
 
   const cachePaths = dependencyCachePaths(environment);

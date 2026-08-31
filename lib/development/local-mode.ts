@@ -29,6 +29,8 @@ const dependencyInputs = [
   "Cargo.lock",
 ] as const;
 
+export const DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION = 1 as const;
+
 export type DevelopmentTools = Readonly<{
   node: string;
   bun: string;
@@ -539,7 +541,7 @@ export async function developmentDependencyKey(input: {
   );
   return sha256(
     JSON.stringify({
-      version: 1,
+      version: DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION,
       platform: input.platform,
       tools: input.tools,
       lockfiles,

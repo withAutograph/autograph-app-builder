@@ -57,12 +57,11 @@ isolated workspace.
    the missing choice materially changes the product; if validation remains
    impossible, surface one plain-language product question or actionable
    product limitation.
-   Continue automatically with `prepare_target_dependencies` to bootstrap the
-   fresh clone's locked dependencies once under its fixed bootstrap allowlist,
-   seal the SHA/platform closure, restore deny-all networking, and materialize
-   it in builder-owned planning metadata. Existing in-progress V3 sessions
-   retain their verified offline closure. Then use only the fixed identity and planning operation to
-   derive the exact target-produced proposal. Present the reviewable prototype
+   Continue automatically with only the fixed identity and planning operation.
+   It reuses the verified dependency closure when its dependency inputs and
+   toolchain are unchanged, or prepares it once when needed, before deriving the
+   exact target-produced proposal. Existing in-progress V3 sessions retain
+   their verified offline closure. Present the reviewable prototype
    and validated product plan before requesting any target mutation.
    A prose implementation outline is not a completed plan. For every app-creation
    turn, do not finish the turn or present the plan as complete until
