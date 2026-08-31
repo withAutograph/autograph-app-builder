@@ -81,13 +81,32 @@ export function toEveInputResponses(
   );
 }
 
-const localRequests = new Map<string, string>();
-const localSessionEvents = new Map<string, MessageStreamEvent[]>();
-const localSessionHandles = new Map<string, ClientSession>();
 type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
   cancel(): Promise<unknown>;
 };
-const localActiveResponses = new Map<string, CancellableResponse>();
+
+type LocalEveRuntimeState = {
+  requests: Map<string, string>;
+  sessionEvents: Map<string, MessageStreamEvent[]>;
+  sessionHandles: Map<string, ClientSession>;
+  activeResponses: Map<string, CancellableResponse>;
+};
+
+const localEveRuntimeStateKey =
+  "__AUTOGRAPH_APP_BUILDER_LOCAL_EVE_RUNTIME_STATE_V1__" as const;
+const localRuntimeGlobal = globalThis as typeof globalThis & {
+  [localEveRuntimeStateKey]?: LocalEveRuntimeState;
+};
+const localRuntimeState = (localRuntimeGlobal[localEveRuntimeStateKey] ??= {
+  requests: new Map(),
+  sessionEvents: new Map(),
+  sessionHandles: new Map(),
+  activeResponses: new Map(),
+});
+const localRequests = localRuntimeState.requests;
+const localSessionEvents = localRuntimeState.sessionEvents;
+const localSessionHandles = localRuntimeState.sessionHandles;
+const localActiveResponses = localRuntimeState.activeResponses;
 
 function resultForEvents(
   sessionId: string,

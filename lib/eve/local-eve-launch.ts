@@ -22,6 +22,13 @@ export type LocalEveInvocation = Readonly<{
   environment: NodeJS.ProcessEnv;
 }>;
 
+type ForwardedSignal = "SIGINT" | "SIGTERM";
+
+type SignalTarget = Readonly<{
+  once(signal: ForwardedSignal, listener: () => void): unknown;
+  off(signal: ForwardedSignal, listener: () => void): unknown;
+}>;
+
 function required(environment: Environment, name: string) {
   const value = environment[name];
   if (value === undefined || value.length === 0)
@@ -236,6 +243,36 @@ export function localEveLaunchReceipt(invocation: LocalEveInvocation) {
   } as const;
 }
 
+/**
+ * Keeps the wrapper alive until its Eve child has stopped. Without explicit
+ * forwarding, SIGTERM exits the wrapper first and lets the development
+ * supervisor remove the per-run application root while Eve is still watching
+ * and writing beneath it.
+ */
+export function waitForForwardedEveChild(
+  child: ChildProcess,
+  signalTarget: SignalTarget = process,
+) {
+  return new Promise<number>((resolveExit, reject) => {
+    const forwardInterrupt = () => child.kill("SIGINT");
+    const forwardTerminate = () => child.kill("SIGTERM");
+    const dispose = () => {
+      signalTarget.off("SIGINT", forwardInterrupt);
+      signalTarget.off("SIGTERM", forwardTerminate);
+    };
+    child.once("error", (error) => {
+      dispose();
+      reject(error);
+    });
+    child.once("exit", (code, signal) => {
+      dispose();
+      resolveExit(code ?? (signal ? 1 : 0));
+    });
+    signalTarget.once("SIGINT", forwardInterrupt);
+    signalTarget.once("SIGTERM", forwardTerminate);
+  });
+}
+
 export async function runLocalEve(input: {
   repositoryRoot: string;
   environment?: Environment;
@@ -274,8 +311,5 @@ export async function runLocalEve(input: {
     env: { ...invocation.environment },
     stdio: "inherit",
   });
-  return await new Promise<number>((resolveExit, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolveExit(code ?? (signal ? 1 : 0)));
-  });
+  return await waitForForwardedEveChild(child);
 }

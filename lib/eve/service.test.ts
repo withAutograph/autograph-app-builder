@@ -35,6 +35,74 @@ describe("Eve input response mapping", () => {
 });
 
 describe("local Eve acceptance", () => {
+  it("preserves buffered settlement across a Next development module reload", async () => {
+    const settledEvents = [
+      {
+        type: "message.completed",
+        data: { turnId: "turn-reload", message: "Your plan is ready." },
+      },
+      { type: "session.waiting", data: {} },
+    ] as unknown as MessageStreamEvent[];
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        for (const event of settledEvents) yield event;
+      },
+    };
+    const session = {
+      state: { sessionId: "wrun_module_reload" },
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const firstService = createLocalEveSessionService({
+      sessions: {
+        create: vi.fn(async () => ({ session, response })),
+        attach: vi.fn(() => session),
+      } as never,
+    });
+    const started = await firstService.start({
+      prompt: "Build",
+      clientRequestId: "module-reload-start",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        firstService.get({
+          sessionId: started.sessionId,
+          cursor: 0,
+          limit: 100,
+        }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+    });
+
+    vi.resetModules();
+    const reloaded = await import("./service");
+    const reloadedService = reloaded.createLocalEveSessionService({
+      sessions: {
+        create: vi.fn(),
+        attach: vi.fn(() => session),
+      } as never,
+    });
+
+    await expect(
+      reloadedService.get({
+        sessionId: started.sessionId,
+        cursor: 0,
+        limit: 100,
+      }),
+    ).resolves.toMatchObject({
+      status: "waiting",
+      cursor: 2,
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "assistant_message",
+          text: "Your plan is ready.",
+        }),
+        expect.objectContaining({ type: "status", status: "waiting" }),
+      ]),
+    });
+  });
+
   it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
     const content = "<!doctype html><html><body>Vendor queue</body></html>";
     const path = "prototype/vendor-onboarding/index.html";

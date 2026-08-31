@@ -1,12 +1,16 @@
+import { EventEmitter } from "node:events";
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import type { ChildProcess } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
 import {
   createLocalEveInvocation,
   localEveLaunchReceipt,
+  waitForForwardedEveChild,
 } from "./local-eve-launch";
 
 function fixture() {
@@ -63,6 +67,36 @@ function fixture() {
 }
 
 describe("closed local Eve launch", () => {
+  it("forwards supervisor termination and waits for Eve to exit", async () => {
+    const signals = new EventEmitter();
+    const child = new EventEmitter() as ChildProcess;
+    const forwarded: NodeJS.Signals[] = [];
+    Object.defineProperties(child, {
+      exitCode: { value: null, writable: true },
+      signalCode: { value: null, writable: true },
+    });
+    child.kill = ((signal?: NodeJS.Signals | number) => {
+      if (typeof signal === "string") forwarded.push(signal);
+      return true;
+    }) as ChildProcess["kill"];
+
+    const stopped = waitForForwardedEveChild(child, signals);
+    signals.emit("SIGTERM");
+    expect(forwarded).toEqual(["SIGTERM"]);
+
+    let settled = false;
+    void stopped.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    child.emit("exit", 0, null);
+    await expect(stopped).resolves.toBe(0);
+    expect(signals.listenerCount("SIGINT")).toBe(0);
+    expect(signals.listenerCount("SIGTERM")).toBe(0);
+  });
+
   it("projects project OIDC only into the fresh Eve application", () => {
     const input = fixture();
     const sentinel = "oidc-sentinel-must-not-leak";
