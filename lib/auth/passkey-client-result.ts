@@ -151,13 +151,3 @@ export function createPasskeyAuthenticationBoundary() {
     },
   };
 }
-
-export function withPasskeyUnavailable(url: string) {
-  const internalOrigin = "https://autograph.invalid";
-  const parsed = new URL(url, internalOrigin);
-  parsed.searchParams.set("passkey", "unavailable");
-
-  return parsed.origin === internalOrigin
-    ? `${parsed.pathname}${parsed.search}${parsed.hash}`
-    : parsed.toString();
-}

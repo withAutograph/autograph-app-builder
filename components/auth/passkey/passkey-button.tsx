@@ -21,7 +21,6 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   createPasskeyAuthenticationBoundary,
   passkeyClientError,
-  withPasskeyUnavailable,
 } from "@/lib/auth/passkey-client-result";
 import { isPasskeyOnboardingAlreadyAuthenticated } from "@/lib/auth/passkey-contract";
 import { preferredPasskeyAuthenticatorAttachment } from "@/lib/auth/passkey-platform";
@@ -110,11 +109,9 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       const failure = authenticationBoundary.failure(result);
       if (failure?.offerSignUp) {
         setSignUpURL(
-          withPasskeyUnavailable(
-            getAuthLinkURL(
-              `${basePaths.auth}/${viewPaths.auth.signUp}`,
-              resolvedRedirectTo,
-            ),
+          getAuthLinkURL(
+            `${basePaths.auth}/${viewPaths.auth.signUp}`,
+            resolvedRedirectTo,
           ),
         );
       }

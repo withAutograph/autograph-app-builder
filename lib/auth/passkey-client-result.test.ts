@@ -4,7 +4,6 @@ import {
   createPasskeyAuthenticationBoundary,
   passkeyAuthenticationFailure,
   passkeyClientError,
-  withPasskeyUnavailable,
 } from "./passkey-client-result";
 import {
   isPasskeyOnboardingAlreadyAuthenticated,
@@ -312,17 +311,5 @@ describe("passkey onboarding conflict detection", () => {
       }),
     ).toBe(false);
     expect(passkeyErrorCode(null)).toBeUndefined();
-  });
-});
-
-describe("withPasskeyUnavailable", () => {
-  it("preserves the complete redirect and marks the Sign Up context", () => {
-    expect(
-      withPasskeyUnavailable(
-        "/auth/sign-up?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252Fworkspace%253Fsource%253Dbrief",
-      ),
-    ).toBe(
-      "/auth/sign-up?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252Fworkspace%253Fsource%253Dbrief&passkey=unavailable",
-    );
   });
 });

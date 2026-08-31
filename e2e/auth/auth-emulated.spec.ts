@@ -247,9 +247,9 @@ test("missing credential offers explicit enrollment and preserves the callback",
       page.getByText(
         "We couldn’t use an existing passkey. Continue to create a new one.",
       ),
-    ).toBeVisible();
+    ).toHaveCount(0);
     const signUpURL = new URL(page.url());
-    expect(signUpURL.searchParams.get("passkey")).toBe("unavailable");
+    expect(signUpURL.searchParams.has("passkey")).toBe(false);
     expect(signUpURL.searchParams.get("redirectTo")).toBe(
       "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete",
     );

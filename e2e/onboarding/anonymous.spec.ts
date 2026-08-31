@@ -47,12 +47,16 @@ test("anonymous brief continues through passkey signup into the builder", async 
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
+    await expect(page).toHaveURL(/\/auth\/sign-in/u);
+    await page
+      .getByRole("button", { name: "Create an account with a passkey" })
+      .click();
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
     await expect(
       page.getByText(
         "We couldn’t use an existing passkey. Continue to create a new one.",
       ),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL("/");
     await expect(page.locator("#app-brief")).toHaveValue(
@@ -99,12 +103,19 @@ test("missing passkey offers explicit enrollment without entering setup", async 
     (await authenticator.credentials())[0]!.credentialId,
   );
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
+  await expect(page).toHaveURL(/\/auth\/sign-in/u);
+  await expect(
+    page.getByRole("button", { name: "Create an account with a passkey" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Create an account with a passkey" })
+    .click();
+  await expect(page).toHaveURL(/\/auth\/sign-up/u);
   await expect(
     page.getByText(
       "We couldn’t use an existing passkey. Continue to create a new one.",
     ),
-  ).toBeVisible();
-  await expect(page).toHaveURL(/\/auth\/sign-up/u);
+  ).toHaveCount(0);
   await expect(page.getByText("Setting up your workspace")).toHaveCount(0);
   expect(await applicationCounts()).toMatchObject({ users: 1, passkeys: 1 });
   await authenticator.dispose();

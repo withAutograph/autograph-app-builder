@@ -32,11 +32,9 @@ export default async function SignUpPage({
     );
   }
 
-  const passkeyUnavailable = query.passkey === "unavailable";
-
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
-      <SignUp passkeyUnavailable={passkeyUnavailable} socialPosition="top" />
+      <SignUp socialPosition="top" />
     </main>
   );
 }
