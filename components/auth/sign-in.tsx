@@ -130,7 +130,7 @@ export function SignIn({
     emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
 
   return (
-    <Card className={cn("w-full max-w-sm", className)}>
+    <Card className={cn("relative w-full max-w-sm", className)}>
       <AuthPrompts view="signIn" />
       <CardHeader>
         <CardTitle className="text-xl font-semibold">

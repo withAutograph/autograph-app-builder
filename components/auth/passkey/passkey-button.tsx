@@ -210,7 +210,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         <Button
           type="button"
           variant="link"
-          className="h-auto self-center px-0"
+          className="absolute top-full left-0 mt-3 h-auto w-full p-0 text-sm underline underline-offset-4"
           onClick={() => navigate({ to: signUpURL })}
         >
           Create an account with a passkey

@@ -206,6 +206,8 @@ test("missing credential offers explicit enrollment and preserves the callback",
     await page.goto(
       `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
     );
+    const signInCard = page.locator('[data-slot="card"]');
+    const cardBeforeFailure = await signInCard.boundingBox();
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
@@ -216,6 +218,16 @@ test("missing credential offers explicit enrollment and preserves the callback",
       name: "Create an account with a passkey",
     });
     await expect(createAccount).toBeVisible();
+    const [cardAfterFailure, createAccountBox] = await Promise.all([
+      signInCard.boundingBox(),
+      createAccount.boundingBox(),
+    ]);
+    expect(cardBeforeFailure).not.toBeNull();
+    expect(cardAfterFailure).toEqual(cardBeforeFailure);
+    expect(createAccountBox).not.toBeNull();
+    expect(createAccountBox?.y).toBeGreaterThanOrEqual(
+      (cardAfterFailure?.y ?? 0) + (cardAfterFailure?.height ?? 0),
+    );
     expect(authenticationVerificationRequests).toBe(0);
     expect(await authCounts()).toEqual({
       users: 0,
