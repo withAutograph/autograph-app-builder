@@ -224,6 +224,7 @@ test("missing credential offers explicit enrollment and preserves the callback",
     ]);
     expect(cardBeforeFailure).not.toBeNull();
     expect(cardAfterFailure).toEqual(cardBeforeFailure);
+    await expect(signInCard).toHaveCSS("overflow", "visible");
     expect(createAccountBox).not.toBeNull();
     expect(createAccountBox?.y).toBeGreaterThanOrEqual(
       (cardAfterFailure?.y ?? 0) + (cardAfterFailure?.height ?? 0),
