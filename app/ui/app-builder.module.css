@@ -1955,7 +1955,7 @@
   .readyCard {
     padding: 22px 16px;
   }
-  .repoRow {
+  .repoRow.repoRowWithRepository {
     grid-template-columns: 1fr;
     gap: 12px;
   }

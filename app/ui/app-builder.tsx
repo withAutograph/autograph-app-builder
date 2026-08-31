@@ -1704,7 +1704,11 @@ export function Builder({
   )
     ? preferredModelId
     : (integrations.models.defaultModelId ?? allModelOptions[0]?.value ?? "");
-  const initialAppName = randomAppName(generatedNameSeed);
+  const effectiveInitialBrief = initialBrief.trim()
+    ? initialBrief
+    : defaultBrief;
+  const initialAppName =
+    appNameFromBrief(effectiveInitialBrief) || randomAppName(generatedNameSeed);
   const [form, setForm] = useState<BuilderForm>(
     initialDraft
       ? {
@@ -1714,7 +1718,7 @@ export function Builder({
       : {
           appName: initialAppName,
           repository: repositoryNameFromAppName(initialAppName),
-          brief: initialBrief,
+          brief: effectiveInitialBrief,
           privateRepository: true,
           buildDestination: "codex",
           connections: [],
@@ -1787,25 +1791,20 @@ export function Builder({
     validAppId = true;
   } catch {}
   const canSubmit = Boolean(
-    validAppId &&
-    form.appName.trim() &&
-    form.repository.trim() &&
     form.brief.trim() &&
+    (!form.appName.trim() || validAppId) &&
     (form.buildDestination !== "web" ||
       (integrations.models.status === "ready" && model)),
   );
-  const submitGuidance = !form.appName.trim()
-    ? "Add an app name to continue."
-    : !validAppId
+  const submitGuidance =
+    form.appName.trim() && !validAppId
       ? "Use an app name that can form a lowercase, URL-safe app ID."
       : !form.brief.trim()
         ? "Add an app brief to continue."
-        : !form.repository.trim()
-          ? "Add a repository name to continue."
-          : form.buildDestination === "web" &&
-              (integrations.models.status !== "ready" || !model)
-            ? "Choose an available model to continue."
-            : undefined;
+        : form.buildDestination === "web" &&
+            (integrations.models.status !== "ready" || !model)
+          ? "Choose an available model to continue."
+          : undefined;
   const updateBrief = (brief: string) => {
     if (brief !== form.brief) hasUnsavedChanges.current = true;
     setForm((current) => {
@@ -1893,12 +1892,14 @@ export function Builder({
   function submit(event: FormEvent) {
     event.preventDefault();
     if (canSubmit) {
-      const appName = form.appName.trim();
+      const appName =
+        form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
       onCreate(
         {
           ...form,
           appName,
-          repository: form.repository.trim(),
+          repository:
+            form.repository.trim() || repositoryNameFromAppName(appName),
           ...(deploymentProvider === "vercel" && team
             ? { vercelInstallationId: team }
             : {}),
@@ -1944,57 +1945,6 @@ export function Builder({
             updateBrief(briefExamples[nextIndex]);
           }}
         />
-        <DeployToSection
-          available={integrations.vercel.status !== "unavailable"}
-          comingSoonEnabled={comingSoonEnabled}
-          connected={integrations.vercel.status === "connected"}
-          selected={deploymentProvider}
-          team={team}
-          teamOptions={teamOptions}
-          onProviderChange={(provider) => {
-            hasUnsavedChanges.current = true;
-            setDeploymentProvider((current) =>
-              current === provider ? null : provider,
-            );
-          }}
-          onTeamChange={(value) => {
-            if (value !== team) hasUnsavedChanges.current = true;
-            setTeam(value);
-          }}
-          onConnect={() => beginProviderConnection("vercel")}
-        />
-        <StoreInSection
-          available={integrations.github.status !== "unavailable"}
-          comingSoonEnabled={comingSoonEnabled}
-          connected={integrations.github.status === "connected"}
-          selected={storageProvider}
-          gitScope={gitScope}
-          gitScopeOptions={gitScopeOptions}
-          repository={form.repository}
-          privateRepository={form.privateRepository}
-          onProviderChange={(provider) => {
-            hasUnsavedChanges.current = true;
-            setStorageProvider((current) =>
-              current === provider ? null : provider,
-            );
-          }}
-          onGitScopeChange={(value) => {
-            if (value !== gitScope) hasUnsavedChanges.current = true;
-            setGitScope(value);
-          }}
-          onRepositoryChange={(repository) => {
-            repositoryEditedByUser.current = true;
-            if (repository !== form.repository)
-              hasUnsavedChanges.current = true;
-            setForm((current) => ({ ...current, repository }));
-          }}
-          onPrivacyChange={(privateRepository) => {
-            if (privateRepository !== form.privateRepository)
-              hasUnsavedChanges.current = true;
-            setForm((current) => ({ ...current, privateRepository }));
-          }}
-          onConnect={() => beginProviderConnection("github")}
-        />
         <BuildWithSection
           comingSoonEnabled={comingSoonEnabled}
           selected={form.buildDestination}
@@ -2029,6 +1979,57 @@ export function Builder({
             />
           ) : null}
         </BuildWithSection>
+        <StoreInSection
+          available={integrations.github.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
+          connected={integrations.github.status === "connected"}
+          selected={storageProvider}
+          gitScope={gitScope}
+          gitScopeOptions={gitScopeOptions}
+          repository={form.repository}
+          privateRepository={form.privateRepository}
+          onProviderChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setStorageProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+          onGitScopeChange={(value) => {
+            if (value !== gitScope) hasUnsavedChanges.current = true;
+            setGitScope(value);
+          }}
+          onRepositoryChange={(repository) => {
+            repositoryEditedByUser.current = true;
+            if (repository !== form.repository)
+              hasUnsavedChanges.current = true;
+            setForm((current) => ({ ...current, repository }));
+          }}
+          onPrivacyChange={(privateRepository) => {
+            if (privateRepository !== form.privateRepository)
+              hasUnsavedChanges.current = true;
+            setForm((current) => ({ ...current, privateRepository }));
+          }}
+          onConnect={() => beginProviderConnection("github")}
+        />
+        <DeployToSection
+          available={integrations.vercel.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
+          connected={integrations.vercel.status === "connected"}
+          selected={deploymentProvider}
+          team={team}
+          teamOptions={teamOptions}
+          onProviderChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setDeploymentProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+          onTeamChange={(value) => {
+            if (value !== team) hasUnsavedChanges.current = true;
+            setTeam(value);
+          }}
+          onConnect={() => beginProviderConnection("vercel")}
+        />
         {connectionsEnabled ? (
           <ConnectionsSection
             connected={connectedConnections}
