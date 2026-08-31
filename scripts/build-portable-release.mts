@@ -42,8 +42,11 @@ const git = (...args: string[]) =>
       NODE_ENV: "production",
     },
   }).trim();
-if (git("status", "--porcelain=v1") !== "")
-  throw new Error("Portable releases require a clean source checkout.");
+const sourceStatus = git("status", "--porcelain=v1");
+if (sourceStatus !== "")
+  throw new Error(
+    `Portable releases require a clean source checkout. Dirty entries:\n${sourceStatus}`,
+  );
 const sourceRepository =
   "https://github.com/withAutograph/autograph-app-builder";
 if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository))
