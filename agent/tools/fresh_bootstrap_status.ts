@@ -8,8 +8,8 @@ import {
 import { currentFreshBootstrapCapability } from "@/lib/agent/fresh-bootstrap-capability";
 import {
   appBuilderWorkflowState,
-  assertExactWorkflowState,
   assertFreshBootstrapJournalStatus,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   exactFreshBootstrapProposalMatch,
@@ -120,25 +120,24 @@ export default defineTool({
         sourceWorkspace,
       });
       if (workflow.phase !== "published_fresh_bootstrap")
-        appBuilderWorkflowState.update((current) => {
-          assertExactWorkflowState(
-            current,
-            workflow,
-            "fresh-bootstrap success reconciliation",
-          );
-          if (
-            current.phase !== "reviewed" &&
-            current.phase !== "fresh_bootstrap_pending" &&
-            current.phase !== "fresh_bootstrap_failed"
-          )
-            throw new Error(
-              "The workflow cannot reconcile fresh-bootstrap success.",
-            );
-          return {
-            ...current,
-            phase: "published_fresh_bootstrap",
-            freshBootstrapReceipt: journal,
-          };
+        updateExactWorkflow({
+          expected: workflow,
+          operation: "fresh-bootstrap success reconciliation",
+          transition: (current) => {
+            if (
+              current.phase !== "reviewed" &&
+              current.phase !== "fresh_bootstrap_pending" &&
+              current.phase !== "fresh_bootstrap_failed"
+            )
+              throw new Error(
+                "The workflow cannot reconcile fresh-bootstrap success.",
+              );
+            return {
+              ...current,
+              phase: "published_fresh_bootstrap",
+              freshBootstrapReceipt: journal,
+            };
+          },
         });
       return {
         ...journal,
@@ -150,42 +149,40 @@ export default defineTool({
       journal.status === "failed" &&
       workflow.phase !== "fresh_bootstrap_failed"
     )
-      appBuilderWorkflowState.update((current) => {
-        assertExactWorkflowState(
-          current,
-          workflow,
-          "fresh-bootstrap failure reconciliation",
-        );
-        if (
-          current.phase !== "reviewed" &&
-          current.phase !== "fresh_bootstrap_pending"
-        )
-          throw new Error(
-            "The workflow cannot reconcile fresh-bootstrap failure.",
-          );
-        return {
-          ...current,
-          phase: "fresh_bootstrap_failed",
-          freshBootstrapReceipt: journal,
-        };
+      updateExactWorkflow({
+        expected: workflow,
+        operation: "fresh-bootstrap failure reconciliation",
+        transition: (current) => {
+          if (
+            current.phase !== "reviewed" &&
+            current.phase !== "fresh_bootstrap_pending"
+          )
+            throw new Error(
+              "The workflow cannot reconcile fresh-bootstrap failure.",
+            );
+          return {
+            ...current,
+            phase: "fresh_bootstrap_failed",
+            freshBootstrapReceipt: journal,
+          };
+        },
       });
     if (journal.status === "pending" && workflow.phase === "reviewed")
-      appBuilderWorkflowState.update((current) => {
-        assertExactWorkflowState(
-          current,
-          workflow,
-          "fresh-bootstrap pending reconciliation",
-        );
-        if (current.phase !== "reviewed")
-          throw new Error(
-            "The workflow cannot reconcile fresh-bootstrap pending state.",
-          );
-        return {
-          ...current,
-          phase: "fresh_bootstrap_pending",
-          freshBootstrapProposal: proposal,
-          freshBootstrapCallId: journal.publishedByCallId,
-        };
+      updateExactWorkflow({
+        expected: workflow,
+        operation: "fresh-bootstrap pending reconciliation",
+        transition: (current) => {
+          if (current.phase !== "reviewed")
+            throw new Error(
+              "The workflow cannot reconcile fresh-bootstrap pending state.",
+            );
+          return {
+            ...current,
+            phase: "fresh_bootstrap_pending",
+            freshBootstrapProposal: proposal,
+            freshBootstrapCallId: journal.publishedByCallId,
+          };
+        },
       });
     return {
       ...journal,
