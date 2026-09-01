@@ -142,6 +142,37 @@ isolated workspace.
    run full walkthroughs once at local acceptance, and keep artifacts, package
    builds, deploys, publication, and broad suites out of the hot loop. Record
    concise HMR/restart time, sandbox reuse, snapshot delta, and cache hit/miss.
+   `mise run dev` is the sole supported local entrypoint. Use Vercel Sandbox as
+   the only real execution backend, authenticated with project-scoped Vercel
+   OIDC. Never fall back to Microsandbox, OCI, Docker, GHCR, a static provider
+   key, or a host-shell implementation when the Vercel Sandbox path is
+   unavailable. Reuse the same development sandbox and its builder-owned
+   mutable overlay across targeted Eve cycles; do not recreate it for ordinary
+   App Builder or Arrusted source edits.
+   Treat the selected Git snapshot as the immutable source input, not the whole
+   sandbox filesystem. Dependencies, package-manager caches, generated planning
+   files, and execution overlays MUST live outside that source tree and MAY be
+   mutated as runtime setup. Never make the source writable to install
+   dependencies, and never make the dependency/cache overlay read-only merely
+   to imitate source immutability. Accept legitimate package-manager input
+   topology, including contained symlinks or hardlinks, when staging a closed
+   dependency copy; enforce containment, safe permissions, architecture, byte
+   count, and digest on the consumed staged copy.
+   Assertions MUST protect a concrete product boundary such as tenant authority,
+   source identity, path containment, dependency identity, reviewed content, or
+   an outward effect. Do not turn an implementation detail, normal source edit,
+   package-manager layout, process restart, cache timestamp, or transient runtime
+   state into an authority gate. Prefer re-observation and a new inexpensive
+   snapshot over rejecting harmless development change. Preserve strict checks
+   where relaxing them could change what source was reviewed, cross a tenant or
+   path boundary, or publish a different effect.
+   During iteration, do not automatically run tests, broad validation, fresh
+   installs, full walkthroughs, or release proofs after edits or restarts. Run
+   only the focused check needed to diagnose a concrete failure. Once the local
+   behavior is ready, perform one local acceptance pass; otherwise let exact-head
+   CI provide broad verification. A passing iteration never requires rebuilding
+   dependencies, a plugin package, or immutable release bytes unless their own
+   dependency inputs changed.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
    shell command or retry with altered inputs. Use only `apply_app_creation` to
