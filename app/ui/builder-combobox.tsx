@@ -1,7 +1,16 @@
 "use client";
 
 import { Check, ChevronDown, Plus } from "@geist-ui/icons";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 import styles from "./app-builder.module.css";
 
@@ -19,23 +28,29 @@ type SearchComboboxProps = {
   value: string;
   options: ComboOption[];
   onChange: (value: string) => void;
-  prefix: ReactNode;
-  menuFooter?: ComboFooter;
-  optionIcon?: (option: ComboOption) => ReactNode;
-  footerIcon?: ReactNode;
-  detailPills?: boolean;
-  showSelectedCheck?: boolean;
-  placeholder?: string;
-  disabled?: boolean;
-  onFooterSelect?: () => void;
-  inputId?: string;
+  input?: {
+    id?: string;
+    placeholder?: string;
+    disabled?: boolean;
+  };
+  presentation: {
+    prefix: ReactNode;
+    footerIcon?: ReactNode;
+    detailPills?: boolean;
+    showSelectedCheck?: boolean;
+    optionIcon?: (option: ComboOption) => ReactNode;
+  };
+  footer?: {
+    option: ComboFooter;
+    onSelect?: () => void;
+  };
 };
 
 function useComboboxController({
   value,
   options,
   onChange,
-}: SearchComboboxProps) {
+}: Pick<SearchComboboxProps, "value" | "options" | "onChange">) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -75,57 +90,74 @@ function useComboboxController({
     setOpen(false);
   }
 
+  function onInputFocus(event: FocusEvent<HTMLInputElement>) {
+    setOpen(true);
+    setFiltering(false);
+    event.currentTarget.select();
+  }
+
+  function onInputChange(event: ChangeEvent<HTMLInputElement>) {
+    setQuery(event.target.value);
+    setFiltering(true);
+    setOpen(true);
+    setActive(0);
+  }
+
+  function onInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") closeAndRestore();
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setOpen(true);
+      setActive((index) => Math.min(index + 1, Math.max(shown.length - 1, 0)));
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((index) => Math.max(index - 1, 0));
+    }
+    if (event.key === "Enter" && open && shown[active]) {
+      event.preventDefault();
+      choose(shown[active]);
+    }
+  }
+
   return {
-    active,
-    choose,
-    closeAndRestore,
     id,
-    open,
-    query,
     rootRef,
     selected,
-    setActive,
-    setFiltering,
-    setOpen,
-    setQuery,
-    shown,
+    isOpen: open,
+    input: {
+      query,
+      onFocus: onInputFocus,
+      onChange: onInputChange,
+      onKeyDown: onInputKeyDown,
+    },
+    menu: {
+      active,
+      options: shown,
+      onChoose: choose,
+      onOptionFocus: setActive,
+    },
+    toggle: () => setOpen((current) => !current),
+    close: () => setOpen(false),
   };
 }
 
 type ComboboxInputProps = {
-  active: number;
   disabled: boolean;
   id: string;
   inputId?: string;
   label: string;
-  onChoose: (option: ComboOption) => void;
-  onCloseAndRestore: () => void;
-  open: boolean;
   placeholder: string;
-  query: string;
-  setActive: (active: number | ((current: number) => number)) => void;
-  setFiltering: (filtering: boolean) => void;
-  setOpen: (open: boolean | ((current: boolean) => boolean)) => void;
-  setQuery: (query: string) => void;
-  shown: ComboOption[];
+  controller: ReturnType<typeof useComboboxController>["input"];
 };
 
 function ComboboxInput({
-  active,
   disabled,
   id,
   inputId,
   label,
-  onChoose,
-  onCloseAndRestore,
-  open,
   placeholder,
-  query,
-  setActive,
-  setFiltering,
-  setOpen,
-  setQuery,
-  shown,
+  controller,
 }: ComboboxInputProps) {
   return (
     <input
@@ -134,75 +166,43 @@ function ComboboxInput({
       aria-label={label}
       aria-autocomplete="list"
       aria-controls={`${id}-listbox`}
-      value={query}
+      value={controller.query}
       placeholder={placeholder}
       disabled={disabled}
       autoComplete="off"
       spellCheck={false}
-      onFocus={(event) => {
-        setOpen(true);
-        setFiltering(false);
-        event.currentTarget.select();
-      }}
-      onChange={(event) => {
-        setQuery(event.target.value);
-        setFiltering(true);
-        setOpen(true);
-        setActive(0);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onCloseAndRestore();
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setOpen(true);
-          setActive((index) =>
-            Math.min(index + 1, Math.max(shown.length - 1, 0)),
-          );
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setActive((index) => Math.max(index - 1, 0));
-        }
-        if (event.key === "Enter" && open && shown[active]) {
-          event.preventDefault();
-          onChoose(shown[active]);
-        }
-      }}
+      onFocus={controller.onFocus}
+      onChange={controller.onChange}
+      onKeyDown={controller.onKeyDown}
     />
   );
 }
 
 function ComboboxOptions({
-  active,
-  detailPills,
-  onChoose,
-  optionIcon,
-  setActive,
-  showSelectedCheck,
-  shown,
+  controller,
+  presentation,
   value,
-}: Pick<
-  SearchComboboxProps,
-  "detailPills" | "optionIcon" | "showSelectedCheck" | "value"
-> & {
-  active: number;
-  onChoose: (option: ComboOption) => void;
-  setActive: (active: number) => void;
-  shown: ComboOption[];
+}: Pick<SearchComboboxProps, "presentation" | "value"> & {
+  controller: ReturnType<typeof useComboboxController>["menu"];
 }) {
+  const {
+    detailPills = false,
+    optionIcon,
+    showSelectedCheck = true,
+  } = presentation;
   return (
     <>
-      {shown.map((option, index) => (
+      {controller.options.map((option, index) => (
         <button
           type="button"
           role="option"
           aria-selected={option.value === value}
           data-has-icon={optionIcon ? "" : undefined}
           data-option-value={option.value}
-          data-active={index === active || undefined}
+          data-active={index === controller.active || undefined}
           key={option.value}
-          onPointerMove={() => setActive(index)}
-          onClick={() => onChoose(option)}
+          onPointerMove={() => controller.onOptionFocus(index)}
+          onClick={() => controller.onChoose(option)}
         >
           {optionIcon ? (
             <span className={styles.comboOptionIcon} aria-hidden="true">
@@ -218,7 +218,7 @@ function ComboboxOptions({
           ) : null}
         </button>
       ))}
-      {!shown.length ? (
+      {!controller.options.length ? (
         <p className={styles.noResults}>No results found.</p>
       ) : null}
     </>
@@ -226,120 +226,83 @@ function ComboboxOptions({
 }
 
 function ComboboxFooter({
-  menuFooter,
-  footerIcon,
+  footer,
+  presentation,
   onSelect,
-}: Pick<SearchComboboxProps, "menuFooter" | "footerIcon"> & {
+}: Pick<SearchComboboxProps, "footer" | "presentation"> & {
   onSelect?: () => void;
 }) {
-  if (!menuFooter) return null;
+  if (!footer) return null;
   return (
     <button
       className={styles.comboFooter}
       type="button"
-      disabled={menuFooter.disabled}
+      disabled={footer.option.disabled}
       onClick={onSelect}
     >
       <span className={styles.comboOptionIcon} aria-hidden="true">
-        {footerIcon ?? <Plus size={20} />}
+        {presentation.footerIcon ?? <Plus size={20} />}
       </span>
-      <span className={styles.comboOptionLabel}>{menuFooter.label}</span>
+      <span className={styles.comboOptionLabel}>{footer.option.label}</span>
     </button>
   );
 }
 
 export function SearchCombobox(props: SearchComboboxProps) {
+  const { input = {}, label, presentation, footer, value } = props;
   const controller = useComboboxController(props);
-  const {
-    label,
-    prefix,
-    menuFooter,
-    footerIcon,
-    detailPills = false,
-    showSelectedCheck = true,
-    placeholder = "Select…",
-    disabled = false,
-    inputId,
-    optionIcon,
-    value,
-    onFooterSelect,
-  } = props;
-  const {
-    active,
-    choose,
-    closeAndRestore,
-    id,
-    open,
-    query,
-    rootRef,
-    selected,
-    setActive,
-    setFiltering,
-    setOpen,
-    setQuery,
-    shown,
-  } = controller;
+  const { disabled = false, id: inputId, placeholder = "Select…" } = input;
 
   return (
     <div
       className={styles.combobox}
-      ref={rootRef}
-      data-open={open || undefined}
+      ref={controller.rootRef}
+      data-open={controller.isOpen || undefined}
       data-label={label}
       role="combobox"
-      aria-expanded={open}
+      aria-expanded={controller.isOpen}
       aria-haspopup="listbox"
-      aria-controls={`${id}-listbox`}
+      aria-controls={`${controller.id}-listbox`}
     >
       <div className={styles.comboPrefix} aria-hidden="true">
-        {prefix}
+        {presentation.prefix}
       </div>
       <ComboboxInput
-        active={active}
         disabled={disabled}
-        id={id}
+        id={controller.id}
         inputId={inputId}
         label={label}
-        onChoose={choose}
-        onCloseAndRestore={closeAndRestore}
-        open={open}
         placeholder={placeholder}
-        query={query}
-        setActive={setActive}
-        setFiltering={setFiltering}
-        setOpen={setOpen}
-        setQuery={setQuery}
-        shown={shown}
+        controller={controller.input}
       />
-      {selected?.detail ? (
-        <span className={styles.comboDetail}>{selected.detail}</span>
+      {controller.selected?.detail ? (
+        <span className={styles.comboDetail}>{controller.selected.detail}</span>
       ) : null}
       <button
         type="button"
-        aria-label={open ? "Close menu" : "Open menu"}
-        onClick={() => setOpen((current) => !current)}
+        aria-label={controller.isOpen ? "Close menu" : "Open menu"}
+        onClick={controller.toggle}
       >
         <ChevronDown size={16} aria-hidden="true" />
       </button>
-      <div className={styles.comboMenu} role="dialog" hidden={!open}>
-        <div id={`${id}-listbox`} role="listbox">
+      <div
+        className={styles.comboMenu}
+        role="dialog"
+        hidden={!controller.isOpen}
+      >
+        <div id={`${controller.id}-listbox`} role="listbox">
           <ComboboxOptions
-            active={active}
-            detailPills={detailPills}
-            onChoose={choose}
-            optionIcon={optionIcon}
-            setActive={setActive}
-            showSelectedCheck={showSelectedCheck}
-            shown={shown}
+            controller={controller.menu}
+            presentation={presentation}
             value={value}
           />
         </div>
         <ComboboxFooter
-          menuFooter={menuFooter}
-          footerIcon={footerIcon}
+          footer={footer}
+          presentation={presentation}
           onSelect={() => {
-            setOpen(false);
-            onFooterSelect?.();
+            controller.close();
+            footer?.onSelect?.();
           }}
         />
       </div>
