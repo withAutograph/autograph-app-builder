@@ -488,7 +488,10 @@ NODE
 )"
 work="$(mktemp -d /tmp/app-builder-development-repair.XXXXXX)"
 stage='source-staging'
-cleanup() { status=$?; if [ "$status" -ne 0 ]; then printf 'development_vercel_repair_failed:%s\n' "$stage" >&2; fi; find "$work" -depth -delete 2>/dev/null || true; exit "$status"; }
+heartbeat() { while :; do printf 'development_vercel_repair_progress:%s\n' "$stage" >&2; sleep 15; done; }
+heartbeat &
+heartbeat_pid=$!
+cleanup() { status=$?; kill "$heartbeat_pid" 2>/dev/null || true; wait "$heartbeat_pid" 2>/dev/null || true; if [ "$status" -ne 0 ]; then printf 'development_vercel_repair_failed:%s\n' "$stage" >&2; fi; find "$work" -depth -delete 2>/dev/null || true; exit "$status"; }
 trap cleanup EXIT
 install -d -m 0755 "$work/source"
 tar --create --directory "$source_root" --exclude='./.git' --exclude='./node_modules' --exclude='./.app-builder' --file - . | tar --extract --file - --directory "$work/source" --no-same-owner --no-same-permissions
