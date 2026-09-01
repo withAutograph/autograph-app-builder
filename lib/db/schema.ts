@@ -961,6 +961,55 @@ export const builderProvisioningJournals = pgTable(
   ],
 );
 
+export const builderHandoffs = pgTable(
+  "builder_handoff",
+  {
+    handoffId: text("handoff_id").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    creationRequestId: text("creation_request_id").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    intent: jsonb("intent").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    sessionId: text("session_id"),
+  },
+  (table) => [
+    uniqueIndex("builder_handoff_creation_uidx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.creationRequestId,
+    ),
+    index("builder_handoff_expiry_idx").on(table.expiresAt),
+    check(
+      "builder_handoff_id_check",
+      sql`${table.handoffId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_handoff_creation_request_id_check",
+      sql`${table.creationRequestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_handoff_request_digest_check",
+      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "builder_handoff_intent_check",
+      sql`jsonb_typeof(${table.intent}) = 'object'`,
+    ),
+    check(
+      "builder_handoff_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "builder_handoff_redemption_check",
+      sql`(${table.redeemedAt} IS NULL AND ${table.sessionId} IS NULL) OR (${table.redeemedAt} BETWEEN ${table.createdAt} AND ${table.expiresAt} AND ${table.sessionId} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export const vercelInstallationAuthorizationStates = pgTable(
   "vercel_installation_authorization_state",
   {

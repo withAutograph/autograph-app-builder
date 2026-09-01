@@ -127,6 +127,13 @@
       "when": 1788264000000,
       "tag": "0018_durable_session_resume",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788267600000,
+      "tag": "0019_opaque_builder_handoff",
+      "breakpoints": true
     }
   ]
 }

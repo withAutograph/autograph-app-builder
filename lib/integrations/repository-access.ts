@@ -4,7 +4,6 @@ import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
-  hostedGitHubInstallationBindingSchema,
   mergeHostedGitHubInstallationBindings,
   type HostedGitHubInstallationBinding,
   type HostedGitHubInstallationStore,

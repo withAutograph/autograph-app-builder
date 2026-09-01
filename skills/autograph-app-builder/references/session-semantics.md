@@ -8,6 +8,9 @@
 - Resume a selected session with `autograph_start` and `resumeSessionId`.
   Healthy active work keeps its handle. Terminal or interrupted work may resume
   as a child from its last durable checkpoint.
+- A web handoff begins with `autograph_start` and its opaque `handoffId`. The
+  server binds the first successful redemption to one session, so retrying a
+  lost response returns the same session rather than creating duplicate work.
 - `cursor` is the next unread absolute event index. Pass it back to `autograph_get`.
 - `input_required` means the exact outstanding request must be answered before an unrelated follow-up.
 - An `authorization` input remains parked until the provider callback settles;

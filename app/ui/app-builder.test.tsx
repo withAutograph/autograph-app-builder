@@ -98,6 +98,17 @@ const integrationState = {
   },
 };
 
+const opaqueHandoffId = "123e4567-e89b-42d3-a456-426614174001";
+const refreshedHandoffId = "123e4567-e89b-42d3-a456-426614174002";
+
+function handoffResponse(handoffId = opaqueHandoffId) {
+  return Response.json({
+    version: 1,
+    handoffId,
+    expiresAt: "2026-09-08T12:00:00.000Z",
+  });
+}
+
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
     user?: { name: string; email: string };
@@ -849,7 +860,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(gitScope.value).toBe("withAutograph");
   });
 
-  it("copies the canonical brief and advances through truthful handoff states", async () => {
+  it("copies only an opaque handoff and advances through truthful handoff states", async () => {
     vi.useFakeTimers();
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -857,6 +868,9 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText },
     });
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(handoffResponse());
     const view = await render(
       <AppBuilder
         authenticated
@@ -882,9 +896,8 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
 
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("App Name:\nsupport-app"),
-    );
+    await act(async () => Promise.resolve());
+    expect(request).toHaveBeenCalledOnce();
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining("Use the Autograph App Builder plugin"),
     );
@@ -894,20 +907,23 @@ describe("Vercel-faithful App Builder flow", () => {
       ),
     );
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "Autograph App Builder is ready. Open a fresh Codex task",
-      ),
+      expect.stringContaining(opaqueHandoffId),
+    );
+    const copiedPrompt = String(writeText.mock.calls[0]?.[0]);
+    expect(copiedPrompt).not.toContain("support-app");
+    expect(copiedPrompt).not.toContain("Help customers resolve");
+    expect(copiedPrompt).not.toMatch(
+      /Installation|Repository ID|Head SHA|digest/iu,
     );
     expect(open).toHaveBeenCalledWith(
       expect.stringMatching(/^codex:\/\/new\?prompt=/u),
       "_blank",
       "noopener,noreferrer",
     );
-    const copiedPrompt = writeText.mock.calls[0]?.[0];
     const initialUrl = open.mock.calls[0]?.[0] as string;
     expect(new URL(initialUrl).searchParams.get("prompt")).toBe(copiedPrompt);
     expect(view.textContent).toContain("Handoff");
-    expect(view.textContent).toContain("Preparing App Brief");
+    expect(view.textContent).toContain("Preparing secure handoff");
 
     for (let index = 0; index < 6; index += 1) {
       await act(async () => vi.advanceTimersByTimeAsync(700));
@@ -926,6 +942,57 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(open).toHaveBeenCalledTimes(2);
     expect(open.mock.calls[1]?.[0]).toBe(initialUrl);
     expect(view.textContent).not.toContain("deployed");
+  });
+
+  it("retries a failed handoff with the same creation request before opening a client", async () => {
+    vi.useFakeTimers();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    const creationRequestIds: string[] = [];
+    let attempts = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        creationRequestId: string;
+      };
+      creationRequestIds.push(body.creationRequestId);
+      attempts += 1;
+      return attempts === 1
+        ? Response.json({ error: "handoff_unavailable" }, { status: 503 })
+        : handoffResponse();
+    });
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "Build a retry-safe handoff.",
+    );
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Create App",
+      )!,
+    );
+    await act(async () => Promise.resolve());
+    expect(view.textContent).toContain(
+      "We couldn’t finish preparing this handoff.",
+    );
+    expect(open).not.toHaveBeenCalled();
+
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Try again",
+      )!,
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(300));
+    expect(creationRequestIds).toHaveLength(2);
+    expect(new Set(creationRequestIds).size).toBe(1);
+    expect(open).toHaveBeenCalledOnce();
   });
 
   it("settles GitHub then Vercel before handoff and reopens only after an explicit successful retry", async () => {
@@ -971,9 +1038,17 @@ describe("Vercel-faithful App Builder flow", () => {
       updatedAt: "2026-08-30T12:00:00.000Z",
     };
     let vercelAttempts = 0;
+    let handoffAttempts = 0;
     const request = vi
       .spyOn(globalThis, "fetch")
-      .mockImplementation(async (_url, init) => {
+      .mockImplementation(async (url, init) => {
+        if (String(url) === "/api/builder/handoffs") {
+          events.push("handoff");
+          handoffAttempts += 1;
+          return handoffResponse(
+            handoffAttempts === 1 ? opaqueHandoffId : refreshedHandoffId,
+          );
+        }
         const body = JSON.parse(String(init?.body)) as {
           operation: "github" | "vercel";
           requestId: string;
@@ -1040,7 +1115,7 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(events).toEqual(["github", "vercel", "clipboard"]);
+    expect(events).toEqual(["github", "vercel", "handoff", "clipboard"]);
     expect(view.textContent).toContain("jasonmorganson/provider-app");
     expect(view.textContent).toContain("Vercel: the provider rejected");
     expect(view.textContent).toContain("App created with an issue");
@@ -1053,7 +1128,7 @@ describe("Vercel-faithful App Builder flow", () => {
         (button) => button.textContent === "Retry",
       )!,
     );
-    expect(request).toHaveBeenCalledTimes(3);
+    expect(request).toHaveBeenCalledTimes(5);
     expect(view.textContent).toContain("apps-provider-app");
     expect(view.textContent).toContain("App Brief Ready!");
     expect(view.textContent).not.toContain("Setup needs attention");
@@ -1064,7 +1139,8 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
     expect(open).toHaveBeenCalledTimes(2);
-    expect(writeText.mock.calls.at(-1)?.[0]).toContain("Project ID: prj_303");
+    expect(writeText.mock.calls.at(-1)?.[0]).toContain(refreshedHandoffId);
+    expect(writeText.mock.calls.at(-1)?.[0]).not.toContain("Project ID");
   });
 
   it("restores a settled request on Ready without relaunching the client", async () => {
@@ -1075,6 +1151,7 @@ describe("Vercel-faithful App Builder flow", () => {
       JSON.stringify({
         version: 1,
         requestId,
+        handoffCreationRequestId: "123e4567-e89b-42d3-a456-426614174003",
         phase: "ready",
         form: {
           appName: "Restored App",
@@ -1104,6 +1181,11 @@ describe("Vercel-faithful App Builder flow", () => {
           },
           updatedAt: "2026-08-30T12:00:00.000Z",
         },
+        handoff: {
+          version: 1,
+          handoffId: opaqueHandoffId,
+          expiresAt: "2026-09-08T12:00:00.000Z",
+        },
       }),
     );
     const view = await render(
@@ -1130,6 +1212,7 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText },
     });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(handoffResponse());
     const view = await render(
       <AppBuilder
         authenticated
@@ -1160,7 +1243,7 @@ describe("Vercel-faithful App Builder flow", () => {
       "noopener,noreferrer",
     );
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Build a billing dashboard in Cursor."),
+      expect.stringContaining(opaqueHandoffId),
     );
     const copiedPrompt = writeText.mock.calls[0]?.[0];
     const initialUrl = open.mock.calls[0]?.[0] as string;
@@ -1188,6 +1271,7 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) },
     });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(handoffResponse());
     const view = await render(
       <AppBuilder
         authenticated
@@ -1213,13 +1297,14 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Open in ChatGPT / Codex");
   });
 
-  it("does not launch an encoded prompt that exceeds the URL safety limit", async () => {
+  it("keeps a large brief out of the fixed-size opaque handoff URL", async () => {
     vi.useFakeTimers();
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(handoffResponse());
     const view = await render(
       <AppBuilder
         authenticated
@@ -1240,8 +1325,10 @@ describe("Vercel-faithful App Builder flow", () => {
       await act(async () => vi.advanceTimersByTimeAsync(700));
     }
 
-    expect(open).not.toHaveBeenCalled();
-    expect(view.textContent).toContain("This brief is too long to open");
+    expect(open).toHaveBeenCalledOnce();
+    const launchedUrl = open.mock.calls[0]?.[0] as string;
+    expect(launchedUrl.length).toBeLessThan(8_000);
+    expect(decodeURIComponent(launchedUrl)).not.toContain("A".repeat(100));
     expect(view.textContent).toContain("Open in ChatGPT / Codex");
   });
 

@@ -65,9 +65,11 @@ authorize another.
 
 ## Durable session behavior
 
-Every build is a durable session:
+Every build is a tenant-scoped durable session that remains resumable until it
+is explicitly deleted:
 
-- `autograph_start` begins a build or resumes a selected durable session.
+- `autograph_start` begins a build, redeems an opaque web handoff, or resumes a
+  selected durable session.
 - `autograph_get` lists recent sessions when no ID is supplied and reads new
   progress and evidence when a session ID is supplied.
 - `autograph_respond` answers the complete current batch of input requests.

@@ -63,6 +63,7 @@ export async function resetApplicationState() {
     await sql.unsafe("DROP FUNCTION IF EXISTS fail_passkey_session_insert()");
     await sql.unsafe(`
       TRUNCATE TABLE
+        "builder_handoff",
         "vercel_installation_authorization_state",
         "github_installation_authorization_state",
         "hosted_vercel_installation",

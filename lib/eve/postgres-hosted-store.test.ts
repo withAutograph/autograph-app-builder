@@ -282,7 +282,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
         {
           idx: 16,
           version: "7",
-          when: 1_788_260_400_000,
+          when: 1_788_261_600_000,
           tag: "0017_chat_repository_access",
           breakpoints: true,
         },
@@ -291,6 +291,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           version: "7",
           when: 1_788_264_000_000,
           tag: "0018_durable_session_resume",
+          breakpoints: true,
+        },
+        {
+          idx: 18,
+          version: "7",
+          when: 1_788_267_600_000,
+          tag: "0019_opaque_builder_handoff",
           breakpoints: true,
         },
       ],
@@ -309,6 +316,21 @@ describe("PostgreSQL hosted Eve row authority", () => {
       '"parent_session_id" text',
       '"last_progress_at" timestamptz',
       '"agent_session_recent_idx"',
+    ])
+      expect(migration).toContain(required);
+    expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
+  });
+
+  it("adds opaque handoffs without rewriting existing rows", async () => {
+    const migration = await readFile(
+      new URL("../../drizzle/0019_opaque_builder_handoff.sql", import.meta.url),
+      "utf8",
+    );
+    for (const required of [
+      'CREATE TABLE "builder_handoff"',
+      '"builder_handoff_creation_uidx"',
+      '"builder_handoff_expiry_idx"',
+      '"builder_handoff_redemption_check"',
     ])
       expect(migration).toContain(required);
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);

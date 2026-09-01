@@ -10,7 +10,7 @@ import {
 } from "./contracts";
 
 describe("durable session discovery contracts", () => {
-  it("lists without a session and requires exactly one new-or-resume start", () => {
+  it("lists without a session and requires exactly one new, handoff, or resume start", () => {
     expect(eveGetInputSchema.parse({})).toEqual({ cursor: 0, limit: 100 });
     expect(
       eveStartInputSchema.parse({
@@ -18,12 +18,25 @@ describe("durable session discovery contracts", () => {
         clientRequestId: "resume-one",
       }),
     ).toMatchObject({ resumeSessionId: "session-one" });
+    expect(
+      eveStartInputSchema.parse({
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "handoff-one",
+      }),
+    ).toMatchObject({
+      handoffId: "123e4567-e89b-42d3-a456-426614174000",
+    });
     for (const candidate of [
       { clientRequestId: "missing" },
       {
         prompt: "Build",
         resumeSessionId: "session-one",
         clientRequestId: "both",
+      },
+      {
+        prompt: "Build",
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "prompt-and-handoff",
       },
     ])
       expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);

@@ -20,7 +20,10 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
    `autograph_get` without a `sessionId` first and offer the relevant recent
    product sessions. Resume the chosen session with
    `autograph_start({ resumeSessionId, clientRequestId })`. Start genuinely new
-   work with `autograph_start({ prompt, clientRequestId })`.
+   work with `autograph_start({ prompt, clientRequestId })`. When the web App
+   Builder supplies an opaque handoff ID, redeem it with
+   `autograph_start({ handoffId, clientRequestId })`; never decode it or ask the
+   user to paste the underlying brief, provider IDs, or repository authority.
 2. Preserve the returned `sessionId` and `cursor`. A healthy active resume keeps
    the handle; recovery after a terminal or interrupted session may return a new
    child handle.

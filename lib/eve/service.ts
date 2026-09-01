@@ -29,8 +29,15 @@ export class AdapterNotConfiguredError extends Error {
 export interface EveSessionService {
   start(input: {
     prompt?: string;
+    handoffId?: string;
     resumeSessionId?: string;
     clientRequestId: string;
+  }): Promise<EveSessionResult>;
+  /** Internal lost-response recovery for an already-bound start operation. */
+  recoverStart?(input: {
+    sessionId: string;
+    cursor: number;
+    limit: number;
   }): Promise<EveSessionResult>;
   list(input: { cursor: number; limit: number }): Promise<EveSessionListResult>;
   get(input: {

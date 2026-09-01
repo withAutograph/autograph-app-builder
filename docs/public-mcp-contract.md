@@ -25,7 +25,8 @@ transport protocol remain implementation details.
 
 `autograph_get` without `sessionId` returns a tenant-scoped paginated recent
 session index. With `sessionId`, it retains absolute-cursor event pagination.
-`autograph_start` accepts exactly one of a new prompt or `resumeSessionId`.
+`autograph_start` accepts exactly one of a new prompt, an opaque `handoffId`,
+or `resumeSessionId`.
 Healthy active sessions retain their public handle. A terminal or interrupted
 session resumes from a bounded durable checkpoint as a child session, while a
 missing adapter for otherwise-active work is fenced by adapter generation before

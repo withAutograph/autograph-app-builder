@@ -8,6 +8,7 @@ import type { EveSessionService } from "../eve/service";
 import {
   createAutographMcpHandler,
   createMcpRequestHandler,
+  withHostedBuilderHandoffs,
   type HostedMcpRuntime,
 } from "./request-handler";
 
@@ -163,6 +164,271 @@ async function toolNames(response: Response): Promise<string[]> {
 }
 
 describe("branded public tool mapping", () => {
+  it("redeems an opaque handoff once and returns the same session after a lost response", async () => {
+    const calls: Array<{ operation: string; input: unknown }> = [];
+    const result = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 1,
+      events: [],
+    };
+    const service = {
+      async start(input: Parameters<EveSessionService["start"]>[0]) {
+        calls.push({ operation: "start", input });
+        return result;
+      },
+      async get(input: Parameters<EveSessionService["get"]>[0]) {
+        calls.push({ operation: "get", input });
+        return result;
+      },
+      async recoverStart(
+        input: Parameters<NonNullable<EveSessionService["recoverStart"]>>[0],
+      ) {
+        calls.push({ operation: "recoverStart", input });
+        return result;
+      },
+      async list() {
+        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      },
+      async send() {
+        return result;
+      },
+      async respond() {
+        return result;
+      },
+      async cancel() {
+        return result;
+      },
+    } satisfies EveSessionService;
+    let redeemed = false;
+    const bindSession = vi.fn(async () => {
+      redeemed = true;
+    });
+    const wrapped = withHostedBuilderHandoffs({
+      service,
+      principal: {
+        issuer: auth.issuer,
+        audience: auth.audience,
+        workspaceId: "workspace-one",
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+      },
+      handoffs: {
+        async resolve({ authority, handoffId }) {
+          expect(authority).toEqual({
+            issuer: auth.issuer,
+            audience: auth.audience,
+            workspaceId: "workspace-one",
+            ownerUserId: "user-one",
+          });
+          expect(handoffId).toBe("123e4567-e89b-42d3-a456-426614174000");
+          return redeemed
+            ? { status: "redeemed" as const, sessionId: "session-one" }
+            : {
+                status: "unredeemed" as const,
+                prompt:
+                  "Build the server-owned handoff. Call resolve_repository_access before repository work.",
+                deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+                record: {
+                  requestDigest: "a".repeat(64),
+                  intent: {
+                    repository: {
+                      requestedName: "app-builder-dogfood",
+                      resolvedFullName: "withAutograph/app-builder-dogfood",
+                    },
+                  },
+                },
+              };
+        },
+        bindSession,
+        async recheckRepositoryAccess({ principal, repository }) {
+          calls.push({
+            operation: "recheckRepositoryAccess",
+            input: { principal, repository },
+          });
+          return { status: "authorization-required", action: "update" };
+        },
+      },
+    });
+    const request = {
+      handoffId: "123e4567-e89b-42d3-a456-426614174000",
+      clientRequestId: "caller-one",
+    };
+
+    await expect(wrapped.start(request)).resolves.toEqual(result);
+    await expect(wrapped.start(request)).resolves.toEqual(result);
+    expect(bindSession).toHaveBeenCalledOnce();
+    expect(calls).toEqual([
+      {
+        operation: "recheckRepositoryAccess",
+        input: {
+          principal: {
+            issuer: auth.issuer,
+            audience: auth.audience,
+            workspaceId: "workspace-one",
+            ownerUserId: "user-one",
+            scopes: claims().scopes,
+          },
+          repository: "withAutograph/app-builder-dogfood",
+        },
+      },
+      {
+        operation: "start",
+        input: {
+          prompt:
+            "Build the server-owned handoff. Call resolve_repository_access before repository work.",
+          clientRequestId: `handoff:${"a".repeat(64)}`,
+        },
+      },
+      {
+        operation: "recoverStart",
+        input: { sessionId: "session-one", cursor: 0, limit: 100 },
+      },
+    ]);
+  });
+
+  it("leaves an opaque handoff unbound when the provider re-read is unavailable", async () => {
+    const start = vi.fn();
+    const bindSession = vi.fn();
+    const result = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 1,
+      events: [],
+    };
+    const service = {
+      start,
+      async list() {
+        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      },
+      async get() {
+        return result;
+      },
+      async send() {
+        return result;
+      },
+      async respond() {
+        return result;
+      },
+      async cancel() {
+        return result;
+      },
+    } satisfies EveSessionService;
+    const wrapped = withHostedBuilderHandoffs({
+      service,
+      principal: {
+        issuer: auth.issuer,
+        audience: auth.audience,
+        workspaceId: "workspace-one",
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+      },
+      handoffs: {
+        async resolve() {
+          return {
+            status: "unredeemed" as const,
+            prompt: "Build the server-owned handoff.",
+            deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+            record: {
+              requestDigest: "a".repeat(64),
+              intent: {
+                repository: {
+                  requestedName: "app-builder-dogfood",
+                  resolvedFullName: "withAutograph/app-builder-dogfood",
+                },
+              },
+            },
+          };
+        },
+        bindSession,
+        async recheckRepositoryAccess() {
+          return { status: "provider-unavailable" };
+        },
+      },
+    });
+
+    await expect(
+      wrapped.start({
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "caller-one",
+      }),
+    ).rejects.toThrow("handoff-repository-access-unavailable");
+    expect(start).not.toHaveBeenCalled();
+    expect(bindSession).not.toHaveBeenCalled();
+  });
+
+  it("silently starts an opaque handoff after a current ready provider read", async () => {
+    const result = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 1,
+      events: [],
+    };
+    const start = vi.fn(async () => result);
+    const bindSession = vi.fn();
+    const recheckRepositoryAccess = vi.fn(async () => ({
+      status: "ready" as const,
+    }));
+    const service = {
+      start,
+      async list() {
+        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      },
+      async get() {
+        return result;
+      },
+      async send() {
+        return result;
+      },
+      async respond() {
+        return result;
+      },
+      async cancel() {
+        return result;
+      },
+    } satisfies EveSessionService;
+    const wrapped = withHostedBuilderHandoffs({
+      service,
+      principal: {
+        issuer: auth.issuer,
+        audience: auth.audience,
+        workspaceId: "workspace-one",
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+      },
+      handoffs: {
+        async resolve() {
+          return {
+            status: "unredeemed" as const,
+            prompt: "Build the server-owned handoff.",
+            deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+            record: {
+              requestDigest: "a".repeat(64),
+              intent: {
+                repository: {
+                  requestedName: "app-builder-dogfood",
+                  resolvedFullName: "withAutograph/app-builder-dogfood",
+                },
+              },
+            },
+          };
+        },
+        bindSession,
+        recheckRepositoryAccess,
+      },
+    });
+
+    await expect(
+      wrapped.start({
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "caller-one",
+      }),
+    ).resolves.toEqual(result);
+    expect(recheckRepositoryAccess).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledOnce();
+    expect(bindSession).toHaveBeenCalledOnce();
+  });
+
   it("keeps ordinary tools free of unconditional MCP App resources", async () => {
     const handler = createAutographMcpHandler({} as EveSessionService);
     const response = await handler(mcpRequest());

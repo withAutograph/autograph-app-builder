@@ -260,9 +260,13 @@ describe("deployment repository access authorization", () => {
     await fixture.continuations.authorize({ authority, continuationId });
     const fetchImplementation = vi.fn(
       async (
-        _resource: Parameters<typeof fetch>[0],
-        _init?: Parameters<typeof fetch>[1],
-      ) => new Response(null, { status: 204 }),
+        resource: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1],
+      ) => {
+        void resource;
+        void init;
+        return new Response(null, { status: 204 });
+      },
     );
 
     await expect(

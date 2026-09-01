@@ -36,11 +36,13 @@ import {
 import {
   eveSessionResultSchema,
   publicImplementationPlanSchema,
+  publicInputRequestSchema,
   publicPrototypeSchema,
   publicEveEventSchema,
   publicSessionStageSchema,
   sessionStatusSchema,
   type EveSessionResult,
+  type PublicInputRequest,
 } from "../mcp/contracts";
 import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
@@ -256,6 +258,143 @@ function stageForResult(
   return "planning";
 }
 
+type CheckpointInputProfile = {
+  titleBytes: number;
+  descriptionBytes: number;
+  optionCount: number;
+  optionLabelBytes: number;
+  authorizationInstructionBytes: number;
+  repositoryScopeCount: number;
+};
+
+const checkpointInputProfiles: readonly CheckpointInputProfile[] = [
+  {
+    titleBytes: 2_048,
+    descriptionBytes: 4_096,
+    optionCount: 32,
+    optionLabelBytes: 512,
+    authorizationInstructionBytes: 1_000,
+    repositoryScopeCount: 32,
+  },
+  {
+    titleBytes: 512,
+    descriptionBytes: 1_024,
+    optionCount: 16,
+    optionLabelBytes: 256,
+    authorizationInstructionBytes: 512,
+    repositoryScopeCount: 16,
+  },
+  {
+    titleBytes: 128,
+    descriptionBytes: 0,
+    optionCount: 4,
+    optionLabelBytes: 64,
+    authorizationInstructionBytes: 0,
+    repositoryScopeCount: 4,
+  },
+];
+
+function truncateUtf8(value: string, maximumBytes: number): string {
+  if (maximumBytes === 0) return "";
+  const encoder = new TextEncoder();
+  if (encoder.encode(value).byteLength <= maximumBytes) return value;
+  let lower = 0;
+  let upper = value.length;
+  while (lower < upper) {
+    const midpoint = Math.ceil((lower + upper) / 2);
+    if (encoder.encode(value.slice(0, midpoint)).byteLength <= maximumBytes)
+      lower = midpoint;
+    else upper = midpoint - 1;
+  }
+  const end =
+    lower > 0 && /[\uD800-\uDBFF]/u.test(value.charAt(lower - 1))
+      ? lower - 1
+      : lower;
+  return value.slice(0, end);
+}
+
+function checkpointInputRequest(
+  request: PublicInputRequest,
+  profile: CheckpointInputProfile,
+): PublicInputRequest {
+  const options = request.options
+    ?.slice(0, profile.optionCount)
+    .map(({ id, label }) => ({
+      id,
+      label: truncateUtf8(label, profile.optionLabelBytes),
+    }));
+  const authorization = request.authorization;
+  const repositoryAccess = authorization?.repositoryAccess;
+  return publicInputRequestSchema.parse({
+    requestId: request.requestId,
+    kind: request.kind,
+    title: truncateUtf8(request.title, profile.titleBytes),
+    ...(profile.descriptionBytes === 0 || request.description === undefined
+      ? {}
+      : {
+          description: truncateUtf8(
+            request.description,
+            profile.descriptionBytes,
+          ),
+        }),
+    ...(options === undefined || options.length === 0 ? {} : { options }),
+    allowFreeform: request.allowFreeform,
+    ...(request.presentation === undefined
+      ? {}
+      : { presentation: request.presentation }),
+    ...(authorization === undefined
+      ? {}
+      : {
+          authorization: {
+            ...(authorization.url === undefined
+              ? {}
+              : { url: authorization.url }),
+            ...(authorization.userCode === undefined
+              ? {}
+              : { userCode: authorization.userCode }),
+            ...(authorization.expiresAt === undefined
+              ? {}
+              : { expiresAt: authorization.expiresAt }),
+            ...(profile.authorizationInstructionBytes === 0 ||
+            authorization.instructions === undefined
+              ? {}
+              : {
+                  instructions: truncateUtf8(
+                    authorization.instructions,
+                    profile.authorizationInstructionBytes,
+                  ),
+                }),
+            ...(authorization.displayName === undefined
+              ? {}
+              : { displayName: authorization.displayName }),
+            ...(repositoryAccess === undefined
+              ? {}
+              : {
+                  repositoryAccess: {
+                    ...repositoryAccess,
+                    scopes: repositoryAccess.scopes.slice(
+                      0,
+                      profile.repositoryScopeCount,
+                    ),
+                  },
+                }),
+          },
+        }),
+  });
+}
+
+function checkpointEvent(
+  event: z.infer<typeof publicEveEventSchema>,
+  profile: CheckpointInputProfile,
+): z.infer<typeof publicEveEventSchema> {
+  if (event.type === "input_required")
+    return {
+      ...event,
+      request: checkpointInputRequest(event.request, profile),
+    };
+  return event;
+}
+
 function checkpointForSnapshot(
   sessionId: string,
   snapshot: HostedEngineSnapshot,
@@ -292,48 +431,95 @@ function checkpointForSnapshot(
     const absoluteIndex = publicEventCount - retainedCount + index;
     return ring[absoluteIndex % ring.length]!;
   });
-  const inputRequests = outstandingInternalEveRequests(
+  const outstandingRequests = outstandingInternalEveRequests(
     snapshot.events.filter(
       (event): event is InternalEveEvent =>
         event !== null && typeof event === "object",
     ),
   );
-  while (events.length > 0) {
-    const candidate = hostedSessionCheckpointSchema.safeParse({
-      version: 1,
-      status: snapshot.status,
-      events,
-      ...(events[0] === undefined || events[0].index === 0
-        ? {}
-        : { truncatedBeforeIndex: events[0].index }),
-      ...(inputRequests.length === 0 ? {} : { inputRequests }),
-      ...(snapshot.prototype === undefined
-        ? {}
-        : { prototype: snapshot.prototype }),
-      ...(snapshot.implementationPlan === undefined
-        ? {}
-        : { implementationPlan: snapshot.implementationPlan }),
-      capturedAtEpochMs,
-    });
-    if (candidate.success) return candidate.data;
-    events = events.slice(1);
+
+  function fitCheckpoint(input: {
+    profile: CheckpointInputProfile;
+    includePrototype: boolean;
+    includeImplementationPlan: boolean;
+  }) {
+    const boundedEvents = events.map((event) =>
+      checkpointEvent(event, input.profile),
+    );
+    const inputRequests = outstandingRequests
+      .slice(0, 32)
+      .map((request) => checkpointInputRequest(request, input.profile));
+    let lower = 0;
+    let upper = boundedEvents.length;
+    let best: HostedSessionCheckpoint | undefined;
+    while (lower <= upper) {
+      const retainedCount = Math.floor((lower + upper) / 2);
+      const retainedEvents =
+        retainedCount === 0 ? [] : boundedEvents.slice(-retainedCount);
+      const candidate = hostedSessionCheckpointSchema.safeParse({
+        version: 1,
+        status: snapshot.status,
+        events: retainedEvents,
+        ...(retainedEvents[0] === undefined
+          ? publicEventCount === 0
+            ? {}
+            : { truncatedBeforeIndex: publicEventCount }
+          : retainedEvents[0].index === 0
+            ? {}
+            : { truncatedBeforeIndex: retainedEvents[0].index }),
+        ...(inputRequests.length === 0 ? {} : { inputRequests }),
+        ...(input.includePrototype && snapshot.prototype !== undefined
+          ? { prototype: snapshot.prototype }
+          : {}),
+        ...(input.includeImplementationPlan &&
+        snapshot.implementationPlan !== undefined
+          ? { implementationPlan: snapshot.implementationPlan }
+          : {}),
+        capturedAtEpochMs,
+      });
+      if (candidate.success) {
+        best = candidate.data;
+        lower = retainedCount + 1;
+      } else {
+        upper = retainedCount - 1;
+      }
+    }
+    return best;
   }
-  return hostedSessionCheckpointSchema.parse({
+
+  for (const profile of checkpointInputProfiles) {
+    const checkpoint = fitCheckpoint({
+      profile,
+      includePrototype: true,
+      includeImplementationPlan: true,
+    });
+    if (checkpoint !== undefined) return checkpoint;
+  }
+
+  const minimalProfile = checkpointInputProfiles.at(-1)!;
+  for (const artifactSelection of [
+    { includePrototype: false, includeImplementationPlan: true },
+    { includePrototype: true, includeImplementationPlan: false },
+    { includePrototype: false, includeImplementationPlan: false },
+  ]) {
+    const checkpoint = fitCheckpoint({
+      profile: minimalProfile,
+      ...artifactSelection,
+    });
+    if (checkpoint !== undefined) return checkpoint;
+  }
+
+  // A structurally valid fallback prevents an oversized transport snapshot
+  // from turning an already-dispatched mutation into an unknown outcome.
+  return {
     version: 1,
     status: snapshot.status,
     events: [],
     ...(publicEventCount === 0
       ? {}
       : { truncatedBeforeIndex: publicEventCount }),
-    ...(inputRequests.length === 0 ? {} : { inputRequests }),
-    ...(snapshot.prototype === undefined
-      ? {}
-      : { prototype: snapshot.prototype }),
-    ...(snapshot.implementationPlan === undefined
-      ? {}
-      : { implementationPlan: snapshot.implementationPlan }),
     capturedAtEpochMs,
-  });
+  };
 }
 
 function resultFromCheckpoint(
@@ -391,9 +577,15 @@ function recoveryPrompt(
     checkpoint.implementationPlan === undefined
       ? undefined
       : `Implementation plan: ${JSON.stringify(checkpoint.implementationPlan)}`,
+    checkpoint.inputRequests === undefined
+      ? undefined
+      : `Outstanding unresolved product requests from the prior runtime (the exact prior request IDs are retained for reconciliation): ${JSON.stringify(checkpoint.inputRequests)}`,
     messages.length === 0
       ? undefined
       : `Prior product conversation:\n${messages}`,
+    checkpoint.inputRequests === undefined
+      ? undefined
+      : "Reissue every unresolved product request before later work. Do not infer that any of them was answered or approved.",
     "Preserve the prior product decisions, revalidate current source access before any repository work, and continue from the next unfinished product step.",
   ]
     .filter((line): line is string => line !== undefined)
@@ -404,6 +596,11 @@ export function createHostedEveSessionService(input: {
   principal: HostedPrincipal;
   store: HostedEveStore;
   transport: HostedEveTransport;
+  beforeRead?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    adapterSessionId: string;
+  }) => Promise<void>;
   now?: () => number;
   admissionControl?: HostedPreviewAdmissionControlBinding;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
@@ -743,13 +940,93 @@ export function createHostedEveSessionService(input: {
     return completeResult;
   }
 
+  async function readSession(inputValue: {
+    sessionId: string;
+    cursor: number;
+    limit: number;
+  }) {
+    const { sessionId, cursor, limit } = inputValue;
+    const session = toDurableHostedSessionRecord(
+      await requireSession(sessionId),
+    );
+    await input.beforeRead?.({
+      principal,
+      sessionId,
+      adapterSessionId: session.adapterSessionId,
+    });
+    try {
+      const snapshot = await input.transport.get({
+        principal,
+        adapterSessionId: session.adapterSessionId,
+      });
+      const observedAt = now();
+      const observedCheckpoint = checkpointForSnapshot(
+        sessionId,
+        snapshot,
+        observedAt,
+      );
+      if (
+        snapshot.status === "working" &&
+        session.checkpointProgressDigest ===
+          hostedSessionCheckpointProgressDigest(observedCheckpoint) &&
+        observedAt >=
+          session.lastProgressAtEpochMs + sessionTimeoutPolicy.idleTimeoutMs
+      ) {
+        const checkpoint = session.checkpoint ?? observedCheckpoint;
+        await input.store.observeSession?.({
+          principal,
+          sessionId,
+          checkpoint,
+          stage: session.stage,
+          resumability: "checkpoint",
+          ...(session.appId === undefined ? {} : { appId: session.appId }),
+          nowEpochMs: observedAt,
+        });
+        return resultFromCheckpoint(sessionId, checkpoint, cursor, limit);
+      }
+      await observeSnapshot(sessionId, snapshot);
+      return projectSnapshot(sessionId, snapshot, cursor, limit);
+    } catch (error) {
+      if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
+      if (session.checkpoint === undefined)
+        throw new HostedSessionRecoveryUnavailableError();
+      await input.store.observeSession?.({
+        principal,
+        sessionId,
+        checkpoint: session.checkpoint,
+        stage: session.stage,
+        resumability: "checkpoint",
+        ...(session.appId === undefined ? {} : { appId: session.appId }),
+        nowEpochMs: now(),
+      });
+      return resultFromCheckpoint(sessionId, session.checkpoint, cursor, limit);
+    }
+  }
+
   return {
     async start(request) {
       requireHostedOperationScope(principal, "start");
       if (request.resumeSessionId !== undefined) {
-        const existing = toDurableHostedSessionRecord(
-          await requireSession(request.resumeSessionId),
-        );
+        const stored = await requireSession(request.resumeSessionId);
+        let existing = toDurableHostedSessionRecord(stored);
+        if (
+          stored.version === 1 &&
+          ["completed", "failed", "cancelled"].includes(stored.status)
+        ) {
+          try {
+            const snapshot = await input.transport.get({
+              principal,
+              adapterSessionId: stored.adapterSessionId,
+            });
+            await observeSnapshot(stored.sessionId, snapshot);
+            existing = toDurableHostedSessionRecord(
+              await requireSession(stored.sessionId),
+            );
+          } catch (error) {
+            if (!(error instanceof HostedAdapterSessionUnavailableError))
+              throw error;
+          }
+        }
         const terminal = ["completed", "failed", "cancelled"].includes(
           existing.status,
         );
@@ -953,64 +1230,13 @@ export function createHostedEveSessionService(input: {
         sessions: listed.sessions.map(hostedSessionSummary),
       };
     },
+    async recoverStart(request) {
+      requireHostedOperationScope(principal, "start");
+      return readSession(request);
+    },
     async get({ sessionId, cursor, limit }) {
       requireHostedOperationScope(principal, "get");
-      const session = toDurableHostedSessionRecord(
-        await requireSession(sessionId),
-      );
-      try {
-        const snapshot = await input.transport.get({
-          principal,
-          adapterSessionId: session.adapterSessionId,
-        });
-        const observedAt = now();
-        const observedCheckpoint = checkpointForSnapshot(
-          sessionId,
-          snapshot,
-          observedAt,
-        );
-        if (
-          snapshot.status === "working" &&
-          session.checkpointProgressDigest ===
-            hostedSessionCheckpointProgressDigest(observedCheckpoint) &&
-          observedAt >=
-            session.lastProgressAtEpochMs + sessionTimeoutPolicy.idleTimeoutMs
-        ) {
-          const checkpoint = session.checkpoint ?? observedCheckpoint;
-          await input.store.observeSession?.({
-            principal,
-            sessionId,
-            checkpoint,
-            stage: session.stage,
-            resumability: "checkpoint",
-            ...(session.appId === undefined ? {} : { appId: session.appId }),
-            nowEpochMs: observedAt,
-          });
-          return resultFromCheckpoint(sessionId, checkpoint, cursor, limit);
-        }
-        await observeSnapshot(sessionId, snapshot);
-        return projectSnapshot(sessionId, snapshot, cursor, limit);
-      } catch (error) {
-        if (!(error instanceof HostedAdapterSessionUnavailableError))
-          throw error;
-        if (session.checkpoint === undefined)
-          throw new HostedSessionRecoveryUnavailableError();
-        await input.store.observeSession?.({
-          principal,
-          sessionId,
-          checkpoint: session.checkpoint,
-          stage: session.stage,
-          resumability: "checkpoint",
-          ...(session.appId === undefined ? {} : { appId: session.appId }),
-          nowEpochMs: now(),
-        });
-        return resultFromCheckpoint(
-          sessionId,
-          session.checkpoint,
-          cursor,
-          limit,
-        );
-      }
+      return readSession({ sessionId, cursor, limit });
     },
     async send(request) {
       requireHostedOperationScope(principal, "send");

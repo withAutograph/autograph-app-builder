@@ -251,6 +251,10 @@ template manifest.
   silent, infers conventional defaults, and reserves approval for visible
   outward effects; see
   [`docs/public-conversation-contract.md`](docs/public-conversation-contract.md).
+- A chat-native repository-access and durable-session contract that requires
+  live provider readback, shared Store In controls, opaque web handoff, and
+  resumable tenant-scoped sessions; see
+  [`docs/chat-native-repository-access-and-session-resume.md`](docs/chat-native-repository-access-and-session-resume.md).
 - A loopback-only local MCP-to-Eve adapter.
 - A provider-neutral hosted Eve service core with strict request-scoped Bearer
   and remote-JWKS verification, protected-resource metadata, closed principal

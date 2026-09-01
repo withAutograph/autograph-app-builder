@@ -1,4 +1,7 @@
-import type { BuilderForm } from "@/app/ui/app-builder";
+import type {
+  BuilderForm,
+  BuilderHandoffReference,
+} from "@/app/ui/app-builder";
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
 
@@ -114,6 +117,12 @@ export const storyProvisioning = {
   },
   updatedAt: "2026-08-30T12:00:00.000Z",
 } satisfies BuilderProvisionResponse;
+
+export const storyHandoff = {
+  version: 1,
+  handoffId: "123e4567-e89b-42d3-a456-426614174001",
+  expiresAt: "2026-09-08T12:00:00.000Z",
+} satisfies BuilderHandoffReference;
 
 export const storyTeamOptions = storyIntegrations.vercel.scopes.map(
   (scope) => ({

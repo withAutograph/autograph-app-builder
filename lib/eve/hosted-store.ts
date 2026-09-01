@@ -115,8 +115,9 @@ export function hostedSessionCheckpointDigest(
 export function hostedSessionCheckpointProgressDigest(
   checkpoint: HostedSessionCheckpoint,
 ): string {
-  const { capturedAtEpochMs: _capturedAtEpochMs, ...progress } =
+  const { capturedAtEpochMs, ...progress } =
     hostedSessionCheckpointSchema.parse(checkpoint);
+  void capturedAtEpochMs;
   return `sha256:${createHash("sha256")
     .update(canonicalRecordValue(progress))
     .digest("hex")}`;

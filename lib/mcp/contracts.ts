@@ -254,15 +254,21 @@ export const eveGetResultSchema = z.union([
 export const eveStartInputSchema = z
   .object({
     prompt: z.string().trim().min(1).max(32_000).optional(),
+    handoffId: z.string().uuid().optional(),
     resumeSessionId: z.string().min(1).max(200).optional(),
     clientRequestId: z.string().min(1).max(200),
   })
   .strict()
-  .superRefine(({ prompt, resumeSessionId }, context) => {
-    if ((prompt === undefined) === (resumeSessionId === undefined))
+  .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
+    if (
+      [prompt, handoffId, resumeSessionId].filter(
+        (value) => value !== undefined,
+      ).length !== 1
+    )
       context.addIssue({
         code: "custom",
-        message: "Provide exactly one of prompt or resumeSessionId.",
+        message:
+          "Provide exactly one of prompt, handoffId, or resumeSessionId.",
       });
   });
 export const eveGetInputSchema = z

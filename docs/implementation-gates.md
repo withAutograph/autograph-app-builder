@@ -339,9 +339,10 @@ Before enabling real MCP mutations:
     MCP App. The MCP iframe must invoke tools through the host and never call
     Eve or private endpoints directly.
 11. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
-12. Enforce the fixed 30-minute idle and 24-hour maximum hosted session
-    lifetimes before transport access, and omit expired rows from admission
-    counts. Expiry is not deletion; retention and drained tenant deletion remain
+12. Keep user-facing hosted sessions resumable until explicit deletion. Apply
+    the fixed 30-minute idle and 24-hour maximum windows only to compute leases
+    and admission counts, fence replaced adapter generations, and recover from
+    bounded durable checkpoints. Retention and drained tenant deletion remain
     separately confirmed operations.
 
 The provider-neutral service prerequisite is documented in
