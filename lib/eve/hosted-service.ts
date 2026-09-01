@@ -797,12 +797,7 @@ export function createHostedEveSessionService(input: {
           ...(session.appId === undefined ? {} : { appId: session.appId }),
           nowEpochMs: observedAt,
         });
-        return resultFromHostedCheckpoint(
-          sessionId,
-          checkpoint,
-          cursor,
-          limit,
-        );
+        return resultFromHostedCheckpoint(sessionId, checkpoint, cursor, limit);
       }
       await observeSnapshot(sessionId, snapshot);
       return projectSnapshot(sessionId, snapshot, cursor, limit);
