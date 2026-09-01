@@ -29,23 +29,27 @@ or the repository's CD workflow. The fixed commands execute later inside the
 builder-owned planning or apply boundary and fail closed if the declared
 capability is not actually available.
 
-Source and release authority remain independent:
+Development, draft, and release authority remain independent:
 
-- The reviewed Git SHA/tree, tracked-file manifest, tenant GitHub binding, and
-  source preimage MUST still match before planning, apply, or publication.
-- Local compatibility inspection MUST read every required contract file from
-  the selected commit's Git blobs. Mutable working-tree bytes are reported as
-  dirty paths but MUST NOT redefine the selected snapshot's compatibility.
+- Local development compatibility inspection MAY read the selected live
+  checkout, including tracked and non-ignored working-tree changes. Those bytes
+  are a normal planning input and a new edit simply produces a new provisional
+  plan; they are not a rejection condition.
+- A draft PR uses provider-read current-base information but is provisional. It
+  does not need a frozen base guarantee while design and planning iterate, or
+  while the draft remains open. Git SHA/tree observations are diagnostic
+  metadata, not long-lived mutation authority or a source-drift blocker.
 - Dependency reuse MUST be decided from dependency inputs, toolchain,
   bootstrap, and platform, not repository identity, source SHA/tree,
   source-receipt version, planning receipt, or draft-PR identity.
 - A repository may be read and planned when its CD workflow is absent or
-  different. Any outward mutation, publication, deployment, or release MUST
-  still pass its own effect-based approval and MUST re-read the full release
-  policy from the selected Git snapshot immediately before the effect. Local
-  effects read the selected commit blob; hosted effects read the verified
-  prepared-snapshot manifest and bytes. Mutable checkout files, provider
-  variables alone, or a prior planning result are not release-policy evidence.
+  different. Draft creation records the proposal against the provider's current
+  branch without claiming future mergeability. At merge time, the coordinator
+  MUST re-read the current default branch, regenerate or rebase as needed, show
+  the actual diff, run relevant validation, and obtain effect-based merge
+  approval. Release-candidate bytes are the only build inputs that require
+  immutable identity for publication; ordinary execution workspaces, planning
+  sources, and draft proposals do not.
 
 `lib/repository/supported-template.ts` owns the normalized contract,
 planning-compatibility result, and the separate full release-policy result.

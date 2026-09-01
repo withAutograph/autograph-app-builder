@@ -10,7 +10,7 @@ Local development supports macOS and Linux on ARM64 or AMD64. Before you start, 
 - Codex with an active absolute `CODEX_HOME`
 - A local `withAutograph/arrusted-development` checkout
 
-Run commands from the App Builder repository root. The mise configuration supplies Node.js, pnpm, Docker CLI, Buildx, Microsandbox, Codex CLI, and Vercel CLI versions. Don't override those tools through `PATH` or ambient Node options.
+Run commands from the App Builder repository root. The mise configuration supplies Node.js, pnpm, Codex CLI, and Vercel CLI versions. Local execution uses Vercel Sandbox through project-scoped OIDC; do not override those tools through `PATH` or ambient Node options.
 
 ## Start App Builder for the first time
 
@@ -52,7 +52,7 @@ Open prototype URLs in the integrated Browser over loopback. Development mode do
 
 Edit App Builder in this checkout. Next.js reloads application changes while the development task runs.
 
-Edit Arrusted in the checkout passed to `--arrusted-root`. The task detects tracked, dirty, and non-ignored untracked changes. It stops the current services, creates a new read-only snapshot, and restarts before accepting more work. The sandbox never mounts or writes the live Arrusted checkout.
+Edit Arrusted in the checkout passed to `--arrusted-root`. Tracked, dirty, and non-ignored changes are normal local-development input. App Builder incrementally synchronizes them into its persistent Vercel Sandbox and plans from the updated bytes; it does not require a commit, stop the Next.js HMR loop, or rebuild dependencies for an application-code edit. The cloned checkout is writable, while dependencies and generated/apply work remain in builder-owned overlay paths.
 
 Source-only Arrusted edits reuse the dependency closure. Changes to `bun.lock`, `Cargo.lock`, `.config/mise/config.toml`, `.config/mise/mise.lock`, the platform, or relevant tool versions create a new dependency closure.
 
@@ -77,17 +77,6 @@ App Builder has two user-facing modes. Read [App Builder execution modes](docs/e
 ### `CODEX_HOME` is missing or relative
 
 Run the task from the Codex profile you want to update. `CODEX_HOME` must already identify that profile with an absolute path. The task refuses to guess because installing into another profile would make the plugin invisible to your new task.
-
-### Docker or Buildx can't connect
-
-Start Docker Desktop or Docker Engine, then verify the mise-owned client can reach it:
-
-```sh
-mise exec -- docker info
-mise exec -- docker buildx version
-```
-
-Rerun `mise run dev` after both commands succeed.
 
 ### Port 2000 or 3000 is already in use
 
@@ -114,9 +103,12 @@ mise exec -- codex plugin list
 
 The list must contain the enabled `app-builder@autograph-dev` plugin. Rerunning `mise run dev` replaces stale development package bytes.
 
-### Arrusted keeps restarting
+### Arrusted changes are not visible
 
-The task restarts whenever the Arrusted fingerprint changes. Save or stop tools that rewrite files repeatedly. A restart prevents one result from mixing source versions.
+Keep `mise run dev` running and retry the affected planning step. The local
+development binding incrementally synchronizes the changed working-tree bytes
+to the reusable sandbox. Restart only the Eve/MCP/agent cycle when its own
+code changed; keep Next.js running for UI HMR.
 
 ### A release command rejects the checkout
 

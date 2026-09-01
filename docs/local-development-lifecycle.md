@@ -27,9 +27,10 @@ MUST NOT leak into this loop.
   existing-repository iterate walkthrough.
 - Dirty App Builder and Arrusted working-tree code MAY be used only through the
   explicit local-development binding. Hosted and release modes MUST reject it.
-- Local App Builder development MUST use live HMR. An Arrusted working-tree
-  snapshot is transient input to one targeted Eve cycle; it MUST NOT be a
-  prerequisite for rebasing, freezing, or advancing `main`.
+- Local App Builder development MUST use live HMR. Arrusted working-tree bytes
+  are normal, moving planning input: a source edit simply starts the next
+  planning attempt from the updated bytes. It MUST NOT be a prerequisite for
+  rebasing, freezing, or advancing `main`.
 - Local prototypes and planning results MAY become stale. They MUST be treated
   as cheap, retryable local work, never as merge or release authority.
 - Dependency-cache identity MUST contain only dependency inputs plus the
@@ -46,9 +47,10 @@ MUST NOT leak into this loop.
 - UI work MUST NOT reinstall the development plugin. Ordinary edits MUST NOT
   rebuild the sandbox or dependency closure.
 - The builder MUST reuse its Vercel Sandbox and mutable overlay, synchronizing
-  only changed tracked, nonignored files. A per-planning source snapshot is a
-  separate input to that reusable sandbox and dependency state; a source change
-  MUST create a new input, not an error.
+  only changed tracked, nonignored files. The cloned development checkout is
+  writable: generated files, dependency setup, and proposed app changes belong
+  in builder-owned overlay paths outside the source input. A source change is a
+  new planning input, not an error or a reason to stop the local stack.
 - Local tool and eval debugging MUST be direct. Fresh Codex discovery is for a
   milestone or acceptance check, not ordinary iteration.
 - Maintain one fast new-app fixture and one fast existing-app fixture. Run each
@@ -75,6 +77,16 @@ local-development commands or permissions.
 
 A draft pull request is provisional. It MUST be based on provider-read current
 base information, MAY later conflict, and MUST NOT claim merge readiness.
+
+Planning and draft creation do not require a permanently frozen base. They use
+the current source and provider state available at the time. The result is a
+useful proposal that is reconciled later, rather than a promise that no normal
+development edit or upstream merge may occur.
+
+Git SHA/tree observations MAY be retained for diagnostics and reproducibility,
+but MUST NOT act as a long-lived drift gate. A moving branch is expected. Source
+changes produce a new disposable plan; they do not make development or draft
+creation unsafe by themselves.
 
 Reconciliation occurs at merge time. The coordinator MUST re-read the current
 default branch, rebase or regenerate the draft, rerun relevant validation,
