@@ -681,6 +681,7 @@ describe("Vercel-faithful App Builder flow", () => {
       ),
     ).toBe("Customer Feedback Portal");
     expect(repositoryNameFromAppName("Café & Orders")).toBe("cafe-and-orders");
+    expect(appNameFromBrief("x".repeat(8_100))).toHaveLength(120);
 
     sessionStorage.setItem(
       "autograph-app-brief",

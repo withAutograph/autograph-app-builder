@@ -18,6 +18,16 @@ const maximumRequestBytes = 64 * 1_024;
 
 class BuilderHandoffRequestError extends Error {}
 
+function hasCanonicalRequestOrigin(request: Request, origin: string) {
+  const requestUrl = new URL(request.url);
+  if (requestUrl.origin === origin) return true;
+  const canonicalUrl = new URL(origin);
+  return (
+    requestUrl.protocol === canonicalUrl.protocol &&
+    request.headers.get("host") === canonicalUrl.host
+  );
+}
+
 async function readBoundedJson(request: Request) {
   if (request.body === null) throw new BuilderHandoffRequestError();
   const reader = request.body.getReader();
@@ -83,7 +93,7 @@ export function createBuilderHandoffRouteHandler(input: {
     try {
       if (
         request.method !== "POST" ||
-        new URL(request.url).origin !== origin ||
+        !hasCanonicalRequestOrigin(request, origin) ||
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !==
           "application/json"

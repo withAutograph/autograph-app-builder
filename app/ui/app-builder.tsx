@@ -515,7 +515,10 @@ export function appNameFromBrief(brief: string) {
         ? `${word[0]?.toUpperCase()}${word.slice(1).toLowerCase()}`
         : word.toUpperCase(),
     )
-    .join(" ");
+    .join(" ")
+    .slice(0, 120)
+    .replace(/[\uD800-\uDBFF]$/u, "")
+    .trimEnd();
 }
 
 function randomAppName(seed?: string) {

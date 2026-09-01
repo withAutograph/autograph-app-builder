@@ -95,6 +95,38 @@ describe("builder handoff deployment", () => {
     expect(journal.read).not.toHaveBeenCalled();
   });
 
+  it("accepts a canonical browser host behind an internal bind address", async () => {
+    const response = await route().handler(
+      new Request("https://0.0.0.0:3001/api/builder/handoffs", {
+        method: "POST",
+        headers: {
+          host: new URL(origin).host,
+          origin,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(validBody),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects an internal bind address without the canonical browser host", async () => {
+    const response = await route().handler(
+      new Request("https://0.0.0.0:3001/api/builder/handoffs", {
+        method: "POST",
+        headers: {
+          host: "evil.example.test",
+          origin,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(validBody),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   it("rejects missing auth, cross-origin input, malformed JSON, and oversized streams", async () => {
     const unauthenticated = route({ authenticated: false }).handler;
     expect((await unauthenticated(request(validBody))).status).toBe(401);
