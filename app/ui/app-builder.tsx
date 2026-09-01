@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   ArrowLeft,
   Check,
   ChevronDown,
@@ -1793,6 +1794,18 @@ export function Builder({
     (form.buildDestination !== "web" ||
       (integrations.models.status === "ready" && model)),
   );
+  const submitGuidance = !form.appName.trim()
+    ? "Add an app name to continue."
+    : !validAppId
+      ? "Use an app name that can form a lowercase, URL-safe app ID."
+      : !form.brief.trim()
+        ? "Add an app brief to continue."
+        : !form.repository.trim()
+          ? "Add a repository name to continue."
+          : form.buildDestination === "web" &&
+              (integrations.models.status !== "ready" || !model)
+            ? "Choose an available model to continue."
+            : undefined;
   const updateBrief = (brief: string) => {
     if (brief !== form.brief) hasUnsavedChanges.current = true;
     setForm((current) => {
@@ -2037,13 +2050,23 @@ export function Builder({
             }
           />
         ) : null}
-        <button
-          className={styles.createButton}
-          type="submit"
-          disabled={!canSubmit}
-        >
-          Create App
-        </button>
+        <div className={styles.submitArea}>
+          <button
+            className={styles.createButton}
+            type="submit"
+            disabled={!canSubmit}
+            aria-describedby={
+              submitGuidance ? "create-app-guidance" : undefined
+            }
+          >
+            Create App
+          </button>
+          {submitGuidance ? (
+            <p className={styles.submitGuidance} id="create-app-guidance">
+              {submitGuidance}
+            </p>
+          ) : null}
+        </div>
       </form>
       {connectionFlow ? (
         <ConnectionDrawer
@@ -2312,6 +2335,15 @@ codex plugin add app-builder@autograph`;
   const [provisioning, setProvisioning] = useState(initialProvisioning);
   const [retrying, setRetrying] = useState<"github" | "vercel">();
   const destination = buildDestinationLabel(form.buildDestination);
+  const hasProvisioningFailure = (["github", "vercel"] as const).some(
+    (provider) => {
+      const selected =
+        provider === "github"
+          ? Boolean(form.githubInstallationId)
+          : Boolean(form.vercelInstallationId);
+      return selected && provisioning[provider].status === "failed";
+    },
+  );
   const continueState =
     retryClipboardState === "idle"
       ? initialClipboardState
@@ -2354,16 +2386,31 @@ codex plugin add app-builder@autograph`;
   return (
     <main className={styles.flowPage} id="main-content">
       <section className={styles.readyCard}>
-        <h1>App Brief Ready!</h1>
+        <h1>
+          {hasProvisioningFailure
+            ? "App created with an issue"
+            : "App Brief Ready!"}
+        </h1>
         <p>
           Your brief for <span className={styles.teamDot} />{" "}
-          <strong>{form.appName}</strong> is ready.
+          <strong>{form.appName}</strong>{" "}
+          {hasProvisioningFailure
+            ? "is ready, but one provider still needs attention."
+            : "is ready."}
         </p>
-        <div className={styles.previewPane}>
+        <div
+          className={styles.previewPane}
+          data-status={hasProvisioningFailure ? "attention" : "ready"}
+        >
           <AutographMark compact />
           <strong>{form.appName}</strong>
           <span>
-            <i /> Ready
+            {hasProvisioningFailure ? (
+              <AlertCircle size={12} aria-hidden="true" />
+            ) : (
+              <i />
+            )}
+            {hasProvisioningFailure ? "Setup needs attention" : "Ready"}
           </span>
           <button type="button" onClick={openSelectedClient}>
             Open in {destination}
@@ -2384,7 +2431,13 @@ codex plugin add app-builder@autograph`;
             return (
               <article key={provider} data-status={result.status}>
                 <span aria-hidden="true">
-                  {provider === "github" ? <FaGithub /> : <SiVercel />}
+                  {result.status === "failed" ? (
+                    <AlertCircle size={18} />
+                  ) : provider === "github" ? (
+                    <FaGithub />
+                  ) : (
+                    <SiVercel />
+                  )}
                 </span>
                 <div>
                   <strong>{label}</strong>
@@ -2406,7 +2459,16 @@ codex plugin add app-builder@autograph`;
                       <ExternalLink size={13} aria-hidden="true" />
                     </a>
                   ) : (
-                    <small>{providerSetupMessage(label, result)}</small>
+                    <>
+                      <small>{providerSetupMessage(label, result)}</small>
+                      {result.status === "failed" ? (
+                        <small className={styles.resourceRecovery}>
+                          {result.retryable && provisioningEnabled
+                            ? `Retry to finish setting up ${label}. Your app brief and completed resources are safe.`
+                            : `Reconnect ${label}, then create the app again to finish setup.`}
+                        </small>
+                      ) : null}
+                    </>
                   )}
                 </div>
                 {result.status !== "succeeded" &&

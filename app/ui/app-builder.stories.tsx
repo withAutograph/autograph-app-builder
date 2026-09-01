@@ -45,3 +45,23 @@ export const Default: Story = {
     ).toHaveTextContent("AU");
   },
 };
+
+export const MobileMissingBrief: Story = {
+  parameters: {
+    viewport: { defaultViewport: "mobile1" },
+  },
+  play: async ({ canvas, userEvent }) => {
+    const brief = canvas.getByRole("textbox", { name: "App Brief" });
+    await userEvent.clear(brief);
+
+    const createButton = canvas.getByRole("button", { name: "Create App" });
+    await expect(createButton).toBeDisabled();
+    await expect(createButton).toHaveAttribute(
+      "aria-describedby",
+      "create-app-guidance",
+    );
+    await expect(
+      canvas.getByText("Add an app brief to continue."),
+    ).toBeVisible();
+  },
+};
