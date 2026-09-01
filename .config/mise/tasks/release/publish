@@ -7,20 +7,17 @@ case "${1:-}" in
     cat <<'EOF'
 Usage:
   mise run release:publish -- \
-    --candidate-root /absolute/path/to/proven-candidate \
-    --token-file /absolute/path/to/owner-only-oauth-token
+    --candidate-root /absolute/path/to/proven-candidate
 
-Publish and deploy only the bytes sealed by release:prove. This command never
-rebuilds the package, image, or deployment output.
+Publish only the bytes sealed by release:prove. Vercel Git deploys the exact
+main commit independently; this command never rebuilds or deploys.
 
 Required:
   --candidate-root PATH  Absolute path to the unchanged proven candidate.
-  --token-file PATH      Absolute canonical path to a current-user-owned file
-                         with mode 0600 that contains the short-lived hosted
-                         OAuth token.
   -h, --help             Show this help.
 
-This command mutates GitHub, the registry, Vercel, and the release marketplace.
+This command creates the GitHub prerelease. Marketplace import is a separate
+reviewed workflow in withAutograph/marketplace.
 Run it only after explicit publication authorization.
 EOF
     exit 0
@@ -29,9 +26,5 @@ esac
 
 export APP_BUILDER_RELEASE_NODE_BIN="$(mise which node)"
 export APP_BUILDER_RELEASE_GH_BIN="$(mise which gh)"
-export APP_BUILDER_RELEASE_DOCKER_BIN="$(mise which docker)"
-export APP_BUILDER_RELEASE_BUILDX_BIN="$(mise which docker-cli-plugin-docker-buildx)"
-export APP_BUILDER_RELEASE_VERCEL_BIN="$(mise which vercel)"
-
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
-  "$APP_BUILDER_RELEASE_NODE_BIN" --import tsx scripts/release-publish.mts "$@"
+  "$APP_BUILDER_RELEASE_NODE_BIN" --import tsx scripts/publish-release-candidate.mts "$@"

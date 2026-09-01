@@ -6,7 +6,10 @@ on:
     branches: [main]
 
 permissions:
+  attestations: write
   contents: read
+  deployments: read
+  id-token: write
 
 jobs:
   repository:
@@ -104,6 +107,54 @@ jobs:
       - run: mise run dependencies:install
       - run: mise run ci-auth-e2e-emulated
 
+  vercel-preview:
+    name: Vercel deployment proof
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require exact Vercel Git deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_ENVIRONMENT: ${{ github.event_name == 'pull_request' && 'Preview' || 'Production' }}
+        run: |
+          set -eu
+          attempt=0
+          deployment_id=
+          deployment_url=
+          while [ "$attempt" -lt 90 ]; do
+            deployment_id="$(gh api -X GET "repos/$GITHUB_REPOSITORY/deployments" -f sha="$EXPECTED_SHA" -f per_page=100 --jq ".[] | select(.environment == \"$EXPECTED_ENVIRONMENT\") | .id" | head -n 1)"
+            if [ -n "$deployment_id" ]; then
+              deployment_url="$(gh api "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" --jq '.[] | select(.state == "success") | .environment_url' | head -n 1)"
+              [ -n "$deployment_url" ] && break
+            fi
+            attempt=$((attempt + 1))
+            sleep 10
+          done
+          [ -n "$deployment_id" ]
+          [ -n "$deployment_url" ]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/deployments/$deployment_id" --jq .sha)" = "$EXPECTED_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/deployments/$deployment_id" --jq .environment)" = "$EXPECTED_ENVIRONMENT"
+          case "$deployment_url" in https://*.vercel.app) ;; *) exit 1 ;; esac
+          if [ "$EXPECTED_ENVIRONMENT" = Production ]; then
+            curl --fail --silent --show-error --location --max-time 30 "https://new.autograph.so/healthz" > health.json
+            curl --fail --silent --show-error --location --max-time 30 "https://new.autograph.so/.well-known/oauth-protected-resource" > oauth-resource.json
+            jq -e '.resource == "https://new.autograph.so/mcp" and (.authorization_servers | length == 1)' oauth-resource.json
+            contract="canonical-public-contract"
+          else
+            # Vercel Deployment Protection intentionally prevents an
+            # unauthenticated GitHub runner from probing a Preview URL. The
+            # provider-owned exact-SHA success record is the Preview gate; no
+            # static bypass credential is introduced.
+            contract="provider-deployment-status"
+          fi
+          jq -n --arg sha "$EXPECTED_SHA" --arg environment "$EXPECTED_ENVIRONMENT" --arg url "$deployment_url" --arg contract "$contract" \
+            '{format:"autograph-vercel-deployment-proof-v1",sha:$sha,environment:$environment,url:$url,contract:$contract}' > vercel-deployment-proof.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vercel-deployment-proof-${{ github.event.pull_request.head.sha || github.sha }}
+          path: vercel-deployment-proof.json
+          if-no-files-found: error
+
   check:
     if: ${{ always() }}
     needs:
@@ -113,6 +164,7 @@ jobs:
       - sandbox-toolchain
       - package-build
       - auth-e2e-emulated
+      - vercel-preview
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI lane
@@ -123,3 +175,50 @@ jobs:
           test "${{ needs.sandbox-toolchain.result }}" = success
           test "${{ needs.package-build.result }}" = success
           test "${{ needs.auth-e2e-emulated.result }}" = success
+          test "${{ needs.vercel-preview.result }}" = success
+
+  promote:
+    name: Publish exact main package
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs: [check, vercel-preview]
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - uses: actions/download-artifact@v4
+        with:
+          name: vercel-deployment-proof-${{ github.sha }}
+          path: .artifacts/deployment-proof
+      - name: Build and seal exact release bytes once
+        run: |
+          deployment_url="$(jq -r .url .artifacts/deployment-proof/vercel-deployment-proof.json)"
+          mise run release:prove -- \
+            --endpoint https://new.autograph.so \
+            --deployment-url "$deployment_url" \
+            --output "$PWD/.artifacts/promotion"
+      - name: Attest immutable release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            .artifacts/promotion/package/*.tar.gz
+            .artifacts/promotion/package/release-receipt.json
+            .artifacts/promotion/package/SHA256SUMS
+            .artifacts/promotion/promotion-receipt.json
+      - name: Publish exact prerelease bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: mise run release:publish -- --candidate-root "$PWD/.artifacts/promotion"
