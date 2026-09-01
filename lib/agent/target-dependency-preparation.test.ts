@@ -63,6 +63,7 @@ const mocks = vi.hoisted(() => {
     inspectDependencyCache: vi.fn(async () => cache),
     materializeOfflineDependencies: vi.fn(async () => cache),
     materializePlanningOverlay: vi.fn(async () => undefined),
+    inspectSourceBoundSandboxWorkspace: vi.fn(async () => undefined),
     executeTargetIdentityAndPlanning: vi.fn(),
   };
 });
@@ -132,6 +133,11 @@ vi.mock("@/lib/repository/dependency-cache", () => ({
 
 vi.mock("@/lib/repository/source-receipt", () => ({
   SOURCE_RECEIPT_VERSION: 4,
+}));
+
+vi.mock("@/lib/repository/arrusted-template", () => ({
+  inspectSourceBoundSandboxWorkspace:
+    mocks.inspectSourceBoundSandboxWorkspace,
 }));
 
 vi.mock("@/lib/repository/target-planning", () => ({

@@ -123,6 +123,7 @@ function review(
       after: { mode: "644", digest: reviewedBytesDigest },
     },
   ],
+  overrides: Partial<Pick<NormalizedChangeSet, "sourceReceiptDigest">> = {},
 ) {
   const changes = [...inputChanges].toSorted((left, right) =>
     compareOverlayPaths(left.path, right.path),
@@ -136,6 +137,7 @@ function review(
     repositoryContractDigest: "5".repeat(64),
     sourceSha: sha,
     sourceTree: tree,
+    sourceReceiptDigest: source().digest,
     eligibilityDigest: "4".repeat(64),
     workspaceDigest: "a".repeat(64),
     appSpecDigest: "b".repeat(64),
@@ -160,6 +162,7 @@ function review(
     changedContentDigest: hash(changes),
     changes,
     approvedPaths: changes.map(({ path }) => path),
+    ...overrides,
   };
   const changeSet: NormalizedChangeSet = {
     ...unsigned,
@@ -552,6 +555,21 @@ describe("closed GitHub publication contract", () => {
     expect(() =>
       assertExactFreshRepositoryProposal(releaseEnabled as never),
     ).toThrow(/malformed/u);
+  });
+
+  it("binds a fresh proposal to the exact reviewed source receipt", () => {
+    const adapter = new Adapter();
+    expect(() =>
+      createFreshRepositoryProposal({
+        installation: adapter.identities.create,
+        source: source(),
+        review: review(undefined, {
+          sourceReceiptDigest: "0".repeat(64),
+        }),
+        destinationOwner: "withAutograph",
+        destinationName: "new-app",
+      }),
+    ).toThrow(/exact source receipt/u);
   });
 
   it("rejects proposal unknown keys, unsafe names, titles, and paths", () => {

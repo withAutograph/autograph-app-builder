@@ -11,7 +11,8 @@ describe("web theme integration", () => {
     expect(layout).toContain("suppressHydrationWarning");
     expect(providers).toContain('attribute="class"');
     expect(providers).toContain('defaultTheme="system"');
-    expect(providers).toContain("themePlugin({ useTheme })");
+    expect(providers).toContain("themePlugin({ useTheme: themeHook })");
+    expect(providers).toContain("authPlugins(passkeysEnabled, useTheme)");
   });
 
   it("themes every web surface while preserving host-controlled MCP theming", async () => {

@@ -24,13 +24,13 @@ describe("existing-app sequencing", () => {
   it("does not expose inspection before workspace preparation", () => {
     expect(
       canInspectExistingApplication({
-        version: 15,
+        version: 16,
         phase: "empty",
       } as AppBuilderWorkflowState),
     ).toBe(false);
     expect(
       canInspectExistingApplication({
-        version: 15,
+        version: 16,
         phase: "prepared",
       } as AppBuilderWorkflowState),
     ).toBe(true);

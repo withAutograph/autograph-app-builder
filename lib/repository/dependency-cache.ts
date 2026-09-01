@@ -232,13 +232,14 @@ type ExactSourceBinding = {
 };
 
 type ExactDependencyReceiptBinding = ExactSourceBinding & {
+  sourceReceiptDigest: string;
   targetSha: string;
   targetTree: string;
 };
 
 export function assertExactDependencyTargetBinding(input: {
   workspace: ExactSourceBinding;
-  sourceReceipt: ExactSourceBinding;
+  sourceReceipt: ExactSourceBinding & { digest?: string };
   cache: ObservedDependencyCache;
   dependencyReceipt?: ExactDependencyReceiptBinding;
 }): void {
@@ -251,6 +252,9 @@ export function assertExactDependencyTargetBinding(input: {
     (input.dependencyReceipt !== undefined &&
       (input.dependencyReceipt.sourceSha !== input.workspace.sourceSha ||
         input.dependencyReceipt.sourceTree !== input.workspace.sourceTree ||
+        input.sourceReceipt.digest === undefined ||
+        input.dependencyReceipt.sourceReceiptDigest !==
+          input.sourceReceipt.digest ||
         input.dependencyReceipt.targetSha !== target.sha ||
         input.dependencyReceipt.targetTree !== target.tree))
   )

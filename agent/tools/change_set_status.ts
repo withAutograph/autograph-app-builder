@@ -13,6 +13,7 @@ import {
   deriveNormalizedChangeSet,
 } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export async function exactNormalizedChangeSet(input: {
   state: Extract<
@@ -23,11 +24,18 @@ export async function exactNormalizedChangeSet(input: {
   sandbox: Parameters<typeof inspectApplyOverlay>[0];
 }): Promise<ReturnType<typeof deriveNormalizedChangeSet>> {
   const { state } = input;
+  await inspectSourceBoundSandboxWorkspace({
+    sandbox: input.sandbox,
+    receipt: state.sourceReceipt,
+    expectedWorkspace: state.workspace,
+  });
   if (
     state.proposal.digest !== state.applyReceipt.proposalDigest ||
     state.proposal.contractDigest !==
       targetContractDigest(state.proposal.target.contract) ||
     state.workspace.sourceSha !== state.applyReceipt.sourceSha ||
+    state.workspace.sourceTree !== state.applyReceipt.sourceTree ||
+    state.sourceReceipt.digest !== state.applyReceipt.sourceReceiptDigest ||
     state.workspace.eligibilityDigest !==
       state.applyReceipt.eligibilityDigest ||
     state.workspace.workspaceDigest !== state.applyReceipt.workspaceDigest ||

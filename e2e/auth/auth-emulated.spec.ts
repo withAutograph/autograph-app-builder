@@ -4,6 +4,7 @@ import { expect, test, type Page } from "playwright/test";
 import { VirtualAuthenticator } from "./virtual-authenticator";
 import {
   applicationCounts as authCounts,
+  appOrigin,
   currentSession,
   databaseUrl,
   finishOAuth,
@@ -73,6 +74,49 @@ function reportPasskeyFailures(page: Page) {
 }
 
 test.beforeEach(async () => resetApplicationState());
+
+test("passkey UI defaults off without a Vercel flag override", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    baseURL: appOrigin,
+    ignoreHTTPSErrors: true,
+    storageState: { cookies: [], origins: [] },
+  });
+  const page = await context.newPage();
+  let passkeyRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/auth/passkey/")) {
+      passkeyRequests += 1;
+    }
+  });
+
+  try {
+    await page.goto("/auth/sign-in");
+    await expect(
+      page.getByRole("button", { name: "Continue with Passkey" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Continue with GitHub" }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Sign Up" }).click();
+    await expect(
+      page.getByRole("button", { name: "Continue with Passkey" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Continue with Vercel" }),
+    ).toBeVisible();
+
+    await finishOAuth(page, "GitHub");
+    await page.goto("/settings/account");
+    await expect(page.getByRole("button", { name: "Add passkey" })).toHaveCount(
+      0,
+    );
+    expect(passkeyRequests).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
 
 test("Sign In and Sign Up are passive, reciprocal, and geometrically identical", async ({
   page,

@@ -200,6 +200,21 @@ describe("Vercel-faithful App Builder flow", () => {
         ?.textContent,
     ).toBe("Sign Up");
     expect(view.querySelector("button")?.hasAttribute("disabled")).toBe(true);
+    expect(view.querySelector("header")?.textContent).toContain("Autograph");
+
+    const suggestion = [...view.querySelectorAll("button")].find(
+      (button) => button.textContent === "Build a customer feedback portal",
+    );
+    expect(suggestion).toBeDefined();
+    await click(suggestion!);
+    expect(
+      view.querySelector<HTMLTextAreaElement>("#anonymous-brief")?.value,
+    ).toBe("Build a customer feedback portal");
+    expect(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Continue",
+      )?.disabled,
+    ).toBe(false);
   });
 
   it("hides Connections when the server feature flag is disabled", async () => {
@@ -709,6 +724,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilder
         authenticated
+        generatedNameSeed="request-stable-seed"
         user={{ name: "Taylor", email: "taylor@example.com" }}
       />,
     );
@@ -718,6 +734,22 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(
       view.querySelector<HTMLInputElement>("#repository-name")?.value,
     ).toBe(repositoryNameFromAppName(appName ?? ""));
+  });
+
+  it("does not replace an edited generated name after the builder mounts", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        generatedNameSeed="request-stable-seed"
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    const appName = view.querySelector<HTMLInputElement>("#app-name")!;
+
+    await fill(appName, "Replay Draft");
+    await act(async () => new Promise(requestAnimationFrame));
+
+    expect(appName.value).toBe("Replay Draft");
   });
 
   it("selects and searches seeded teams, GitHub scopes, and models", async () => {
@@ -956,6 +988,9 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(events).toEqual(["github", "vercel", "clipboard"]);
     expect(view.textContent).toContain("jasonmorganson/provider-app");
     expect(view.textContent).toContain("Vercel: the provider rejected");
+    expect(view.textContent).toContain("App created with an issue");
+    expect(view.textContent).toContain("Setup needs attention");
+    expect(view.textContent).toContain("Retry to finish setting up Vercel");
     expect(open).toHaveBeenCalledTimes(1);
 
     await click(
@@ -965,6 +1000,8 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(request).toHaveBeenCalledTimes(3);
     expect(view.textContent).toContain("apps-provider-app");
+    expect(view.textContent).toContain("App Brief Ready!");
+    expect(view.textContent).not.toContain("Setup needs attention");
     expect(open).toHaveBeenCalledTimes(1);
     await click(
       [...view.querySelectorAll("button")].find(
@@ -1022,7 +1059,7 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
     await act(async () => new Promise(requestAnimationFrame));
-    expect(view.textContent).toContain("App Brief Ready!");
+    expect(view.textContent).toContain("App created with an issue");
     expect(view.textContent).toContain("Restored App");
     expect(view.textContent).toContain(
       "GitHub: the provider could not be reached",

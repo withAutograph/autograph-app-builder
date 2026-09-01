@@ -10,6 +10,7 @@ const keyPath = path.join(stateDirectory, "github-app-private-key.pem");
 const configPath = path.join(stateDirectory, "config.yaml");
 const relayPath = path.join(stateDirectory, "relay-secret");
 const authSecretPath = path.join(stateDirectory, "better-auth-secret");
+const flagsSecretPath = path.join(stateDirectory, "flags-secret");
 
 const origin = process.argv[2];
 if (!origin) throw new Error("Expected the local application origin.");
@@ -36,6 +37,13 @@ try {
   await readFile(relayPath, "utf8");
 } catch {
   await writeFile(relayPath, randomBytes(32).toString("base64url"), {
+    mode: 0o600,
+  });
+}
+try {
+  await readFile(flagsSecretPath, "utf8");
+} catch {
+  await writeFile(flagsSecretPath, randomBytes(32).toString("base64url"), {
     mode: 0o600,
   });
 }

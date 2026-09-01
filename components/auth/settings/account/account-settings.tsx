@@ -20,8 +20,7 @@ export type AccountSettingsProps = {
  *   or the `magicLink` plugin is registered, and a plugin may replace it via
  *   `cardOverrides.account.changeEmail` (the email-OTP plugin swaps in its
  *   code-based flow).
- * - Plugin-contributed account cards are rendered via the plugins array
- *   (e.g. `Appearance` from the theme plugin, multi-session accounts).
+ * - Plugin-contributed account cards are rendered via the plugins array.
  */
 export function AccountSettings({
   className,

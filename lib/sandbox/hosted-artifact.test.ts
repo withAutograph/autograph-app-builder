@@ -8,20 +8,12 @@ import {
   HOSTED_ARTIFACT_RELEASE_TAG,
   HOSTED_ARTIFACT_SHA256,
   HOSTED_ARTIFACT_URL,
-  HOSTED_SOURCE_PATH,
   hostedExecutionArtifactDigest,
 } from "./hosted-artifact";
-import {
-  HOSTED_CONTRACT_DIGEST,
-  HOSTED_ELIGIBILITY_DIGEST,
-  HOSTED_SOURCE_RECEIPT_DIGEST,
-  hostedSourceReceipt,
-} from "../repository/hosted-source";
 import {
   ARRUSTED_TARGET_SHA,
   ARRUSTED_TARGET_TREE,
 } from "../repository/dependency-cache";
-import { LEGACY_SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 
 describe("hosted Arrusted artifact", () => {
   it("pins an immutable release asset without embedding its bytes", () => {
@@ -40,53 +32,26 @@ describe("hosted Arrusted artifact", () => {
     );
   }, 20_000);
 
-  it.each(["preview", "production"] as const)(
-    "exposes only the fixed release-disabled source receipt in %s",
-    (environmentName) => {
-      const receipt = hostedSourceReceipt(
-        "existing-repository",
-        HOSTED_SOURCE_PATH,
-        {
-          VERCEL: "1",
-          EVE_HOSTED_ADAPTER: "1",
-          VERCEL_ENV: environmentName,
-          EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
-        },
-      );
-      expect(receipt?.version).toBe(LEGACY_SOURCE_RECEIPT_VERSION);
-      expect(receipt?.digest).toBe(HOSTED_SOURCE_RECEIPT_DIGEST);
-      expect(receipt?.releaseEnabled).toBe(false);
-      expect(() =>
-        hostedSourceReceipt("existing-repository", "/tmp/other", {
-          VERCEL: "1",
-          EVE_HOSTED_ADAPTER: "1",
-          VERCEL_ENV: environmentName,
-          EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
-        }),
-      ).toThrow("supports only the fixed source");
-      expect(
-        hostedSourceReceipt("existing-repository", HOSTED_SOURCE_PATH, {}),
-      ).toBeUndefined();
-    },
-  );
-
-  it("binds release identity to the exact hosted execution receipt", () => {
+  it("binds release identity to the exact hosted dependency closure", () => {
     expect(HOSTED_ARTIFACT_RELEASE_TAG).toContain(
       ARRUSTED_TARGET_SHA.slice(0, 8),
     );
-    expect(HOSTED_ELIGIBILITY_DIGEST).toMatch(/^[0-9a-f]{64}$/u);
-    expect(HOSTED_CONTRACT_DIGEST).toMatch(/^[0-9a-f]{64}$/u);
     expect(ARRUSTED_TARGET_TREE).toMatch(/^[0-9a-f]{40}$/u);
   });
 
-  it("rejects a hosted source before inspection when environments differ", () => {
-    expect(() =>
-      hostedSourceReceipt("existing-repository", HOSTED_SOURCE_PATH, {
-        VERCEL: "1",
-        EVE_HOSTED_ADAPTER: "1",
-        VERCEL_ENV: "production",
-        EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
-      }),
-    ).toThrow("exact matching Preview or Production");
+  it("contains no production fixed-source receipt or materialization path", () => {
+    for (const path of [
+      "agent/tools/inspect_source.ts",
+      "agent/tools/prepare_workspace.ts",
+      "lib/sandbox/hosted-toolchain.ts",
+    ]) {
+      const definition = readFileSync(path, "utf8");
+      expect(definition).not.toContain("hosted-source");
+      expect(definition).not.toContain("source-tree.tar.gz");
+    }
+    expect(
+      readFileSync("lib/repository/supported-template.ts", "utf8"),
+    ).not.toContain("/opt/app-builder/hosted-source");
+    expect(existsSync("lib/repository/hosted-source.ts")).toBe(false);
   });
 });

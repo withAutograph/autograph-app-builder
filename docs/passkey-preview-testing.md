@@ -5,6 +5,14 @@ loopback development origins and explicitly enabled Vercel Preview deployments.
 It does not add a test-user bypass, password, impersonation endpoint, or public
 registration token. Production passkey onboarding is rejected by the runtime.
 
+All visible passkey controls are additionally governed by the Vercel Boolean
+flag `passkeys`. The flag defaults to disabled and fails closed when Vercel
+Flags is unavailable. Enabling `PASSKEY_ONBOARDING` alone does not expose
+passkey controls: the `passkeys` flag must also resolve to enabled. Disabling
+the flag hides passkeys from Sign In, Sign Up, and Account settings without
+removing credentials or disabling Better Auth's passkey API endpoints, so the
+controls can be restored without a data migration.
+
 ## Local development
 
 Use PostgreSQL with migration `0013_passkey_onboarding` applied. Put the local
@@ -55,9 +63,13 @@ mise run auth-e2e:test
 The repository starts HTTPS on exact `https://localhost:3001`, PostgreSQL, and
 the GitHub and Vercel Emulate services. Playwright uses a Chromium virtual
 authenticator; Better Auth requests, callbacks, sessions, and workspace
-provisioning remain real. Use `mise run auth-e2e:reset` to remove only ignored
-emulator and database state. The test task also performs this cleanup when it
-exits.
+provisioning remain real. Playwright uses the Flags SDK to encrypt
+`{ passkeys: true }` into the standard `vercel-flag-overrides` cookie. The
+emulated Next server and Playwright share a generated local `FLAGS_SECRET`, so
+tests exercise the same `passkeys` declaration and override mechanism as the
+Vercel Flags Explorer. A context with empty storage verifies the default-off
+experience. Use `mise run auth-e2e:reset` to remove only ignored emulator and
+database state. The test task also performs this cleanup when it exits.
 
 ## Vercel Preview
 
@@ -67,6 +79,10 @@ Enable Vercel Authentication under Deployment Protection before setting:
 PASSKEY_ONBOARDING=local-preview-v1
 PASSKEY_PREVIEW_PROTECTION=vercel-authentication
 ```
+
+Also enable the `passkeys` Boolean in Vercel Flags for the intended Preview
+audience. Leave it disabled to keep every passkey control hidden while retaining
+the server capability and existing credentials.
 
 The runtime also requires Vercel's exact `VERCEL_ENV=preview`, `VERCEL_URL`, and
 `VERCEL_DEPLOYMENT_ID` metadata. Normally it derives the auth origin from

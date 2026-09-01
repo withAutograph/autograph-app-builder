@@ -267,6 +267,7 @@ describe("offline dependency cache", () => {
     const target = {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
+      digest: "5".repeat(64),
     };
     const cache = await inspectDependencyCache(
       {} as SandboxSession,
@@ -293,6 +294,7 @@ describe("offline dependency cache", () => {
     const target = {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
+      digest: "6".repeat(64),
     };
     const cache = await inspectDependencyCache(
       {} as SandboxSession,
@@ -316,13 +318,31 @@ describe("offline dependency cache", () => {
           ...target,
           targetSha: target.sourceSha,
           targetTree: "5".repeat(40),
+          sourceReceiptDigest: target.digest,
+        },
+      }),
+    ).toThrow("prepared source does not match");
+    expect(() =>
+      assertExactDependencyTargetBinding({
+        workspace: target,
+        sourceReceipt: target,
+        cache,
+        dependencyReceipt: {
+          ...target,
+          targetSha: target.sourceSha,
+          targetTree: target.sourceTree,
+          sourceReceiptDigest: "7".repeat(64),
         },
       }),
     ).toThrow("prepared source does not match");
   });
 
   it("binds reusable development dependencies to the per-run source without making source bytes part of the cache key", () => {
-    const workspace = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
+    const workspace = {
+      sourceSha: "7".repeat(40),
+      sourceTree: "8".repeat(40),
+      digest: "6".repeat(64),
+    };
     const cache = {
       manifest: {
         version: 2,

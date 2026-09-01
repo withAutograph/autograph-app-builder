@@ -2,6 +2,11 @@
 #MISE description="Validate the environment-aware hosted sandbox contract"
 set -eu
 
+if [ "$#" -ne 6 ] || [ "$1" != "--arrusted-root" ] || [ "$3" != "--artifact" ] || [ "$5" != "--artifact-sha256" ]; then
+  echo "usage: mise run test:hosted-sandbox -- --arrusted-root <exact-checkout> --artifact <dependency-artifact> --artifact-sha256 <sha256>" >&2
+  exit 64
+fi
+
 "$PWD/.config/mise/scripts/trusted-node-launcher" \
   "$(mise which node)" --import tsx scripts/run-vitest.mts run \
   lib/sandbox/backend.test.ts lib/sandbox/hosted-artifact.test.ts \
@@ -9,4 +14,4 @@ set -eu
   lib/sandbox/hosted-toolchain.test.ts \
   lib/sandbox/toolchain.test.ts lib/sandbox/vercel-backend.test.ts
 
-exec mise run hosted:artifact-prove
+exec mise run hosted:artifact-prove -- "$@"

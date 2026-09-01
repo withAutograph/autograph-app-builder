@@ -1,4 +1,5 @@
 import { SignIn } from "@/components/auth/sign-in";
+import { AuthContinuity } from "@/components/auth/auth-continuity";
 import { getPreviewOAuthDeploymentOrigin } from "@/lib/auth/preview-oauth-deployment";
 import {
   DEFAULT_AUTH_REDIRECT_TO,
@@ -21,7 +22,9 @@ export default async function PreviewSignInPage({
 
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
-      <SignIn socialPosition="top" signUpRedirectTo={signUpRedirectTo} />
+      <AuthContinuity>
+        <SignIn socialPosition="top" signUpRedirectTo={signUpRedirectTo} />
+      </AuthContinuity>
     </main>
   );
 }

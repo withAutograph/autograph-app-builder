@@ -36,9 +36,11 @@ export function InputControl({
             name={request.requestId}
             value={kind}
             icon={
-              <span className="choice-icon">
-                {kind === "approve" ? "✓" : "×"}
-              </span>
+              answer?.kind === kind ? (
+                <span className="choice-icon" aria-hidden="true">
+                  {kind === "approve" ? "✓" : "×"}
+                </span>
+              ) : undefined
             }
             onChange={() => onAnswer({ kind })}
           >
@@ -51,25 +53,35 @@ export function InputControl({
   if (request.options?.length)
     return (
       <div className="choices" role="radiogroup" aria-label={request.title}>
-        {request.options.map((option) => (
-          <ChoiceCard
-            key={option.id}
-            checked={answer?.kind === "answer" && answer.optionId === option.id}
-            inputType="radio"
-            name={request.requestId}
-            value={option.id}
-            icon={<span className="choice-icon">✓</span>}
-            onChange={() =>
-              onAnswer({
-                kind: "answer",
-                optionId: option.id,
-                value: option.label,
-              })
-            }
-          >
-            {option.label}
-          </ChoiceCard>
-        ))}
+        {request.options.map((option) => {
+          const selected =
+            answer?.kind === "answer" && answer.optionId === option.id;
+          return (
+            <ChoiceCard
+              key={option.id}
+              checked={selected}
+              inputType="radio"
+              name={request.requestId}
+              value={option.id}
+              icon={
+                selected ? (
+                  <span className="choice-icon" aria-hidden="true">
+                    ✓
+                  </span>
+                ) : undefined
+              }
+              onChange={() =>
+                onAnswer({
+                  kind: "answer",
+                  optionId: option.id,
+                  value: option.label,
+                })
+              }
+            >
+              {option.label}
+            </ChoiceCard>
+          );
+        })}
       </div>
     );
 
@@ -188,6 +200,18 @@ export function SessionAppView({
       }),
     [answers, respondable],
   );
+  const unansweredCount = respondable.filter((request) => {
+    const answer = answers[request.requestId];
+    return (
+      answer === undefined ||
+      (answer.kind === "answer" && answer.value.trim().length === 0)
+    );
+  }).length;
+  const continueGuidance = !canCallTools
+    ? "Answer in chat to continue."
+    : unansweredCount > 0
+      ? `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`
+      : undefined;
 
   async function submit() {
     if (!result || !complete || !canCallTools || state === "submitting") return;
@@ -275,12 +299,17 @@ export function SessionAppView({
             type="button"
             className="primary"
             disabled={!complete || !canCallTools || state === "submitting"}
+            aria-describedby={
+              continueGuidance ? "continue-guidance" : undefined
+            }
             onClick={submit}
           >
             {state === "submitting" ? "Submitting…" : "Continue"}
           </button>
-          {!canCallTools ? (
-            <p className="fallback">Answer in chat to continue.</p>
+          {continueGuidance ? (
+            <p className="continue-guidance" id="continue-guidance">
+              {continueGuidance}
+            </p>
           ) : null}
           {error ? (
             <p className="error" role="alert">

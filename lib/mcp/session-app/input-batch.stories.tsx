@@ -30,7 +30,17 @@ const meta = {
 } satisfies Meta<typeof SessionAppView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const MixedRequests: Story = {};
+export const MixedRequests: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("button", { name: "Continue" }),
+    ).toBeDisabled();
+    await expect(
+      canvas.getByText("Answer all 3 remaining requests to continue."),
+    ).toBeVisible();
+  },
+};
 export const HostToolsUnavailable: Story = { args: { canCallTools: false } };
 export const Submitted: Story = {
   args: {

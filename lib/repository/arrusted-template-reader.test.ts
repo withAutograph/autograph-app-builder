@@ -51,7 +51,7 @@ function readerFetch(input?: {
         total_count: input?.totalCount ?? 1,
         repositories: [
           input?.repository ?? {
-            id: 100,
+            id: ARRUSTED_TEMPLATE_REPOSITORY_ID,
             full_name: "withAutograph/arrusted-development",
             private: true,
           },
@@ -108,6 +108,13 @@ describe("Arrusted private template reader", () => {
       repository: {
         id: 101,
         full_name: "withAutograph/another-private-repository",
+        private: true,
+      },
+    },
+    {
+      repository: {
+        id: ARRUSTED_TEMPLATE_REPOSITORY_ID + 1,
+        full_name: "withAutograph/arrusted-development",
         private: true,
       },
     },

@@ -3,12 +3,12 @@ import { createHash } from "node:crypto";
 
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { GitHubPublicationContentSource } from "../repository/github-publication";
+import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
 import {
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
 } from "../repository/target-apply";
-import { inspectPreparedSandboxWorkspace } from "../repository/supported-template";
-import { safeSourcePath } from "../repository/source-path";
+import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { hasTestCapability } from "../testing/test-capability";
 
 type ReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
@@ -52,51 +52,17 @@ export function publicationContentSourceForReviewedWorkflow(input: {
     })());
   return {
     async readFreshTree() {
-      const prepared = await inspectPreparedSandboxWorkspace(input.sandbox);
-      if (
-        prepared.state !== "prepared" ||
-        prepared.workspace.sourceSha !== input.state.workspace.sourceSha ||
-        prepared.workspace.sourceTree !== input.state.workspace.sourceTree ||
-        prepared.workspace.workspaceDigest !==
-          input.state.workspace.workspaceDigest
-      )
-        throw new Error(
-          "The prepared source workspace changed before publication.",
-        );
-      const raw = await input.sandbox.readTextFile({
-        path: ".app-builder/source-files.json",
+      const prepared = await inspectSourceBoundSandboxWorkspace({
+        sandbox: input.sandbox,
+        receipt: input.state.sourceReceipt,
+        expectedWorkspace: input.state.workspace,
       });
-      if (raw === null)
-        throw new Error("The prepared source manifest is missing.");
-      const parsed: unknown = JSON.parse(raw);
-      if (
-        !Array.isArray(parsed) ||
-        sha256(JSON.stringify(parsed)) !== prepared.workspace.workspaceDigest
-      )
-        throw new Error(
-          "The prepared source manifest changed before publication.",
-        );
+      const sourceFiles = await readPreparedSandboxSourceManifest(
+        input.sandbox,
+        prepared,
+      );
       const files = await Promise.all(
-        parsed.map(async (candidate) => {
-          if (
-            typeof candidate !== "object" ||
-            candidate === null ||
-            Array.isArray(candidate) ||
-            Object.keys(candidate).toSorted().join("\0") !==
-              ["mode", "objectId", "path", "sha256"].toSorted().join("\0")
-          )
-            throw new Error("The prepared source manifest is invalid.");
-          const file = candidate as Record<string, unknown>;
-          if (
-            (file.mode !== "100644" && file.mode !== "100755") ||
-            typeof file.objectId !== "string" ||
-            !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(file.objectId) ||
-            typeof file.path !== "string" ||
-            !safeSourcePath(file.path) ||
-            typeof file.sha256 !== "string" ||
-            !/^[0-9a-f]{64}$/u.test(file.sha256)
-          )
-            throw new Error("The prepared source manifest is invalid.");
+        sourceFiles.map(async (file) => {
           const bytes = await input.sandbox.readBinaryFile({
             path: `repository/${file.path}`,
           });
@@ -113,11 +79,16 @@ export function publicationContentSourceForReviewedWorkflow(input: {
           };
         }),
       );
+      await inspectSourceBoundSandboxWorkspace({
+        sandbox: input.sandbox,
+        receipt: input.state.sourceReceipt,
+        expectedWorkspace: input.state.workspace,
+      });
       return {
         version: 1 as const,
         kind: "fresh-repository-source-tree" as const,
-        sourceSha: prepared.workspace.sourceSha,
-        sourceTree: prepared.workspace.sourceTree,
+        sourceSha: prepared.sourceSha,
+        sourceTree: prepared.sourceTree,
         files,
       };
     },

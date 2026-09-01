@@ -29,9 +29,13 @@ import {
   readFreshBootstrapJournal,
   recoverFreshBootstrap,
   verifyFreshBootstrap,
+  type FreshBootstrapSourceWorkspace,
 } from "./node-fresh-bootstrap";
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { inspectSourceReceipt } from "./source-receipt";
+import {
+  inspectClonedTemplateSourceReceipt,
+  inspectSourceReceipt,
+} from "./source-receipt";
 import {
   assertCanonicalFreshBootstrapJournal,
   assertExactFreshBootstrapProposal,
@@ -128,15 +132,64 @@ async function createTestSource(): Promise<string> {
   return root;
 }
 
+function captureSourceWorkspace(
+  root: string,
+  sourceSha: string,
+): FreshBootstrapSourceWorkspace {
+  const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+  const entries = execFileSync(
+    git,
+    ["ls-tree", "-rz", "--full-tree", sourceSha],
+    { cwd: root, encoding: "utf8" },
+  )
+    .split("\0")
+    .filter(Boolean)
+    .map((entry) => {
+      const match = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u.exec(entry);
+      if (match === null) throw new Error("invalid source fixture");
+      const bytes = execFileSync(git, ["cat-file", "blob", match[2]!], {
+        cwd: root,
+      });
+      return {
+        file: {
+          mode: match[1] as "100644" | "100755",
+          objectId: match[2]!,
+          path: match[3]!,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        },
+        bytes,
+      };
+    });
+  const contents = new Map(
+    entries.map(({ file, bytes }) => [file.path, bytes]),
+  );
+  return {
+    files: entries.map(({ file }) => file),
+    readSourceFile: async (path) => contents.get(path) ?? null,
+    reverify: vi.fn(async () => undefined),
+  };
+}
+
 async function fixture(
   expectedPrestate: "absent" | "empty-directory",
   lockSelection?: {
     strategy: FreshBootstrapCapability["lockStrategy"];
     path: string;
   },
+  sourceVersion: "legacy" | "canonical" = "legacy",
 ) {
   const sourceRoot = await createTestSource();
-  const source = await inspectSourceReceipt("fresh-template", sourceRoot);
+  const source =
+    sourceVersion === "canonical"
+      ? await inspectClonedTemplateSourceReceipt({
+          path: sourceRoot,
+          readinessDigest: "9".repeat(64),
+        })
+      : await inspectSourceReceipt("fresh-template", sourceRoot);
+  const sourceWorkspace =
+    sourceVersion === "canonical"
+      ? captureSourceWorkspace(sourceRoot, source.sourceSha)
+      : undefined;
   const changedPath = "microfrontends.json";
   const beforeBytes = Buffer.from("{}\n");
   const afterBytes = Buffer.from('{"apps":[]}\n');
@@ -157,6 +210,7 @@ async function fixture(
     repositoryContractDigest: source.contractDigest,
     sourceSha: source.sourceSha,
     sourceTree: source.sourceTree,
+    sourceReceiptDigest: source.digest,
     eligibilityDigest: source.eligibilityDigest,
     workspaceDigest: "d".repeat(64),
     appSpecDigest: "e".repeat(64),
@@ -244,6 +298,7 @@ async function fixture(
     review,
     protectedPaths: [],
     readOverlayFile,
+    sourceWorkspace,
   });
   return {
     sourceRoot,
@@ -254,6 +309,7 @@ async function fixture(
     destinationPath,
     proposal,
     readOverlayFile,
+    sourceWorkspace,
   };
 }
 
@@ -362,6 +418,46 @@ describe.each(["absent", "empty-directory"] as const)(
     });
   },
 );
+
+it("publishes a V4 fresh template from the prepared snapshot after its host checkout is gone", async () => {
+  const input = await fixture("absent", undefined, "canonical");
+  await rm(input.sourceRoot, { recursive: true, force: true });
+  expect(existsSync(input.sourceReceipt.sourcePath)).toBe(false);
+
+  const result = await publishFreshBootstrap({
+    ...input,
+    publishedByCallId: "publish-canonical-call",
+  });
+
+  expect(result).toMatchObject({ ok: true });
+  if (!result.ok) throw new Error(result.receipt.failureMessage);
+  await verifyFreshBootstrap({ ...input, receipt: result.receipt });
+  expect(input.sourceWorkspace?.reverify).toHaveBeenCalled();
+  expect(
+    await readFile(join(input.destinationPath, "microfrontends.json"), "utf8"),
+  ).toBe('{"apps":[]}\n');
+});
+
+it("rejects drift in V4 prepared source bytes before bootstrap mutation", async () => {
+  const input = await fixture("absent", undefined, "canonical");
+  const sourceWorkspace = input.sourceWorkspace!;
+  await expect(
+    deriveFreshBootstrapProposal({
+      ...input,
+      expectedPrestate: "absent",
+      repositoryIdentity: input.proposal.repositoryIdentity,
+      protectedPaths: [],
+      sourceWorkspace: {
+        ...sourceWorkspace,
+        readSourceFile: async (path) =>
+          path === "microfrontends.json"
+            ? Buffer.from("drifted\n")
+            : await sourceWorkspace.readSourceFile(path),
+      },
+    }),
+  ).rejects.toThrow("source drifted");
+  expect(existsSync(input.destinationPath)).toBe(false);
+});
 
 it("fails closed after a durable partial stage and recovers only by exact journal digest", async () => {
   const input = await fixture("absent");

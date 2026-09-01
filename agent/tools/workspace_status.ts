@@ -7,6 +7,7 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 function isReviewedPhase(
   state: ReturnType<typeof appBuilderWorkflowState.get>,
@@ -162,23 +163,20 @@ export default defineTool({
   inputSchema: z.object({}),
   async execute(_input, ctx) {
     const durable = appBuilderWorkflowState.get();
-    const observed = await inspectPreparedSandboxWorkspace(
-      await ctx.getSandbox(),
-    );
+    const sandbox = await ctx.getSandbox();
     if (durable.phase === "empty") {
+      const observed = await inspectPreparedSandboxWorkspace(sandbox);
       if (observed.state === "absent") return durable;
       throw new Error(
         "The sandbox workspace cannot be recovered without its original durable source receipt.",
       );
     }
-    if (observed.state === "absent")
-      throw new Error(
-        "The durable workflow receipt exists but its sandbox workspace is missing.",
-      );
-    if (
-      JSON.stringify(workflowWorkspace(durable)) !==
-      JSON.stringify(observed.workspace)
-    )
+    const observed = await inspectSourceBoundSandboxWorkspace({
+      sandbox,
+      receipt: durable.sourceReceipt,
+      expectedWorkspace: durable.workspace,
+    });
+    if (JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed))
       throw new Error(
         "The durable workflow receipt does not match the sandbox workspace.",
       );

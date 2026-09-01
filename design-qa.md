@@ -30,6 +30,16 @@ The authenticated builder comparison used the source viewport of 1699 x 1600 at 
 
 ## Comparison history
 
+### Future consideration: anonymous desktop orientation
+
+The anonymous start is healthy and requires no current design or behavior
+change. At wider desktop viewports, the deliberately compact entry card leaves
+substantial open space below it. A future design pass could explore a small
+amount of supporting context about what Autograph creates or what follows after
+Continue, provided it preserves the current focused, low-friction hierarchy.
+This is an optional improvement, not a committed requirement or an actionable
+finding from this review.
+
 ### Pass 1
 
 - P2: The application font was being overridden by the global Arial declaration, creating visible differences in heading weight, label density, and control text.

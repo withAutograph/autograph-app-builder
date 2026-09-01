@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SignUp } from "@/components/auth/sign-up";
+import { AuthContinuity } from "@/components/auth/auth-continuity";
 import {
   getPreviewOAuthDeploymentOrigin,
   getPreviewOAuthDeploymentSession,
@@ -37,7 +38,9 @@ export default async function SignUpPage({
 
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
-      <SignUp socialPosition="top" signInRedirectTo={signInRedirectTo} />
+      <AuthContinuity action="sign-up">
+        <SignUp socialPosition="top" signInRedirectTo={signInRedirectTo} />
+      </AuthContinuity>
     </main>
   );
 }
