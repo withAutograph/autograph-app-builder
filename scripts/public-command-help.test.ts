@@ -12,7 +12,7 @@ const commands = [
   {
     task: ".config/mise/tasks/release/prove",
     usage: "mise run release:prove --",
-    boundary: "does not publish anything",
+    boundary: "does not deploy or publish",
   },
   {
     task: ".config/mise/tasks/release/publish",
