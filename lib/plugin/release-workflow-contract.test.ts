@@ -12,7 +12,7 @@ describe("release publication workflow", () => {
     expect(workflow).toContain("types: [published]");
     expect(workflow).toContain("Download already-promoted bytes");
     expect(workflow).toContain("promotion-receipt.json");
-    expect(workflow).toContain("autograph-release-promotion-v1");
+    expect(workflow).toContain("autograph-release-promotion-v2");
     expect(workflow).toContain(
       "--json isDraft,isPrerelease --jq '(.isDraft | not) and .isPrerelease'",
     );
