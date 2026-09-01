@@ -232,15 +232,6 @@ export default defineTool({
       });
       return { ...current.validationReceipt, reused: true };
     }
-    const readiness = await inspectTargetExecutionReadiness({
-      state: current,
-      sandbox,
-      expectedProposalDigest: current.proposal.digest,
-    });
-    if (!readiness.targetCommandReady)
-      throw new Error(
-        `Target validation is not ready: ${readiness.blockers.join(" ")}`,
-      );
     const applied = fixture
       ? await inspectFixtureApplyOverlay(
           sandbox,
