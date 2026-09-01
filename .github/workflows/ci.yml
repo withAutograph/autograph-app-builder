@@ -192,18 +192,34 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Publish only an unreleased package version
+        id: release_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(jq -r .version package.json)"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        if: steps.release_state.outputs.publish == 'true'
       - uses: actions/setup-node@v4
+        if: steps.release_state.outputs.publish == 'true'
         with:
           node-version: 24.18.0
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: mise run dependencies:install
+        if: steps.release_state.outputs.publish == 'true'
       - uses: actions/download-artifact@v4
+        if: steps.release_state.outputs.publish == 'true'
         with:
           name: vercel-deployment-proof-${{ github.sha }}
           path: .artifacts/deployment-proof
       - name: Build and seal exact release bytes once
+        if: steps.release_state.outputs.publish == 'true'
         run: |
           deployment_url="$(jq -r .url .artifacts/deployment-proof/vercel-deployment-proof.json)"
           mise run release:prove -- \
@@ -211,6 +227,7 @@ jobs:
             --deployment-url "$deployment_url" \
             --output "$PWD/.artifacts/promotion"
       - name: Attest immutable release assets
+        if: steps.release_state.outputs.publish == 'true'
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
@@ -219,6 +236,7 @@ jobs:
             .artifacts/promotion/package/SHA256SUMS
             .artifacts/promotion/promotion-receipt.json
       - name: Publish exact prerelease bytes
+        if: steps.release_state.outputs.publish == 'true'
         env:
           APP_BUILDER_RELEASE_GITHUB_TOKEN: ${{ github.token }}
         run: mise run release:publish -- --candidate-root "$PWD/.artifacts/promotion"
