@@ -124,7 +124,7 @@ const manifest = {
   },
 } as const;
 const developmentManifest = {
-  version: 2,
+  version: 3,
   scope: "development-execution",
   platform: "linux/amd64",
   dependencyKey: "d".repeat(64),
@@ -141,9 +141,11 @@ const developmentManifest = {
     rust: "1.97.1",
   },
   closure: {
-    ...manifest.closure,
-    archivePath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/node-modules.tar.gz`,
-    cargoArchivePath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz`,
+    package: "@vercel/microfrontends",
+    version: "2.4.0",
+    contentDigest: "d".repeat(64),
+    nodeModulesPath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${"d".repeat(64)}/node_modules`,
+    cargoConfigPath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`,
   },
 } as const;
 
@@ -1137,12 +1139,13 @@ describe("offline dependency cache", () => {
       },
       environment: {
         APP_BUILDER_EXECUTION_MODE: "development",
-        APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: developmentManifest.dependencyKey,
+        APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY:
+          developmentManifest.dependencyKey,
       },
     });
 
     expect(run.mock.calls[1]?.[0].command).toContain(
-      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz`,
+      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`,
     );
     const developmentLinkCommand = run.mock.calls
       .map(([request]) => request.command as string)

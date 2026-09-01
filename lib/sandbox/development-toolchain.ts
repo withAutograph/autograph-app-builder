@@ -425,26 +425,21 @@ sed -i "s#$work/cargo-closure/vendor#${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/
 grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
 if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
 printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
-stage='archive'
-tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --format=posix --pax-option=delete=atime,delete=ctime --create --file - node_modules | gzip --no-name --best > "$work/node-modules.tar.gz"
-tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --format=posix --pax-option=delete=atime,delete=ctime --create --file - --directory "$work/cargo-closure" config.toml vendor | gzip --no-name --best > "$work/cargo-closure.tar.gz"
-archive_sha="$(sha256sum "$work/node-modules.tar.gz" | cut -d' ' -f1)"
-archive_bytes="$(stat --format='%s' "$work/node-modules.tar.gz")"
-cargo_sha="$(sha256sum "$work/cargo-closure.tar.gz" | cut -d' ' -f1)"
-cargo_bytes="$(stat --format='%s' "$work/cargo-closure.tar.gz")"
-cat > "$work/manifest.json" <<'JSON'
-{"version":2,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${input.dependencyKey}","lockfiles":{".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","archivePath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/node-modules.tar.gz","archiveSha256":"ARCHIVE_SHA","archiveBytes":ARCHIVE_BYTES,"cargoArchivePath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz","cargoArchiveSha256":"CARGO_SHA","cargoArchiveBytes":CARGO_BYTES}}
-JSON
-sed -i "s/ARCHIVE_SHA/$archive_sha/g;s/ARCHIVE_BYTES/$archive_bytes/g;s/CARGO_SHA/$cargo_sha/g;s/CARGO_BYTES/$cargo_bytes/g" "$work/manifest.json"
 stage='cache-installation'
 cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
-install -d -m 0755 "$cache_root" "$cache_root/dependencies/$archive_sha" "$cache_root/cargo"
+cache_dependencies="$cache_root/dependencies/${input.dependencyKey}"
+install -d -m 0755 "$cache_root"
 test "$(realpath "$cache_root")" = "$cache_root"
+rm -rf "$cache_dependencies" "$cache_root/cargo"
+install -d -m 0755 "$cache_dependencies" "$cache_root/cargo"
+mv node_modules "$cache_dependencies/node_modules"
+mv "$work/cargo-closure/vendor" "$cache_root/cargo/vendor"
+install -m 0644 "$work/cargo-closure/config.toml" "$cache_root/cargo/config.toml"
+chmod -R u+rwX,go-w "$cache_dependencies" "$cache_root/cargo"
+cat > "$work/manifest.json" <<'JSON'
+{"version":3,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${input.dependencyKey}","lockfiles":{".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","contentDigest":"${input.dependencyKey}","nodeModulesPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${input.dependencyKey}/node_modules","cargoConfigPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"}}
+JSON
 install -m 0644 "$work/manifest.json" "$cache_root/manifest.json"
-install -m 0644 "$work/node-modules.tar.gz" "$cache_root/node-modules.tar.gz"
-install -m 0644 "$work/cargo-closure.tar.gz" "$cache_root/cargo-closure.tar.gz"
-tar --extract --gzip --file "$work/node-modules.tar.gz" --directory "$cache_root/dependencies/$archive_sha" --no-same-owner --no-same-permissions
-tar --extract --gzip --file "$work/cargo-closure.tar.gz" --directory "$cache_root/cargo" --no-same-owner --no-same-permissions
 if find "$cache_root" -perm /022 -print -quit | grep -q .; then exit 1; fi
 printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
 }
@@ -457,7 +452,9 @@ printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
  * tree, then installs the same reusable development cache that template
  * bootstrap creates.
  */
-export function developmentVercelDependencyRepairCommand(dependencyKey: string) {
+export function developmentVercelDependencyRepairCommand(
+  dependencyKey: string,
+) {
   if (!sha256Pattern.test(dependencyKey))
     throw new Error("Development dependency key was invalid.");
   return `set -euo pipefail
@@ -510,24 +507,20 @@ sed -i "s#$work/cargo-closure/vendor#${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/
 grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
 if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
 printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
-stage='archive'
-tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --format=posix --pax-option=delete=atime,delete=ctime --create --file - node_modules | gzip --no-name --best > "$work/node-modules.tar.gz"
-tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --format=posix --pax-option=delete=atime,delete=ctime --create --file - --directory "$work/cargo-closure" config.toml vendor | gzip --no-name --best > "$work/cargo-closure.tar.gz"
-archive_sha="$(sha256sum "$work/node-modules.tar.gz" | cut -d' ' -f1)"
-archive_bytes="$(stat --format='%s' "$work/node-modules.tar.gz")"
-cargo_sha="$(sha256sum "$work/cargo-closure.tar.gz" | cut -d' ' -f1)"
-cargo_bytes="$(stat --format='%s' "$work/cargo-closure.tar.gz")"
-cat > "$work/manifest.json" <<JSON
-{"version":2,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${dependencyKey}","lockfiles":$lockfiles,"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","archivePath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/node-modules.tar.gz","archiveSha256":"$archive_sha","archiveBytes":$archive_bytes,"cargoArchivePath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz","cargoArchiveSha256":"$cargo_sha","cargoArchiveBytes":$cargo_bytes}}
-JSON
 stage='cache-installation'
 cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
-install -d -m 0755 "$cache_root" "$cache_root/dependencies/$archive_sha" "$cache_root/cargo"
+cache_dependencies="$cache_root/dependencies/${dependencyKey}"
+install -d -m 0755 "$cache_root"
 test "$(realpath "$cache_root")" = "$cache_root"
-install -m 0644 "$work/node-modules.tar.gz" "$cache_root/node-modules.tar.gz"
-install -m 0644 "$work/cargo-closure.tar.gz" "$cache_root/cargo-closure.tar.gz"
-tar --extract --gzip --file "$work/node-modules.tar.gz" --directory "$cache_root/dependencies/$archive_sha" --no-same-owner --no-same-permissions
-tar --extract --gzip --file "$work/cargo-closure.tar.gz" --directory "$cache_root/cargo" --no-same-owner --no-same-permissions
+rm -rf "$cache_dependencies" "$cache_root/cargo"
+install -d -m 0755 "$cache_dependencies" "$cache_root/cargo"
+mv node_modules "$cache_dependencies/node_modules"
+mv "$work/cargo-closure/vendor" "$cache_root/cargo/vendor"
+install -m 0644 "$work/cargo-closure/config.toml" "$cache_root/cargo/config.toml"
+chmod -R u+rwX,go-w "$cache_dependencies" "$cache_root/cargo"
+cat > "$work/manifest.json" <<JSON
+{"version":3,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${dependencyKey}","lockfiles":$lockfiles,"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","contentDigest":"${dependencyKey}","nodeModulesPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${dependencyKey}/node_modules","cargoConfigPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"}}
+JSON
 if find "$cache_root" -perm /022 -print -quit | grep -q .; then exit 1; fi
 install -m 0644 "$work/manifest.json" "$cache_root/manifest.json"
 printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;

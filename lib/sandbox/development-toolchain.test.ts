@@ -66,12 +66,12 @@ describe("Development Vercel Sandbox dependency template", () => {
   it("builds the standard closed development-execution cache without an image", () => {
     const command = developmentVercelDependencyCommand(input());
     expect(command).toContain('"scope":"development-execution"');
-    expect(command).toContain('"version":2');
+    expect(command).toContain('"version":3');
     expect(command).toContain(
-      "/workspace/.app-builder/dependency-cache/node-modules.tar.gz",
+      `/workspace/.app-builder/dependency-cache/dependencies/${input().dependencyKey}/node_modules`,
     );
     expect(command).toContain(
-      "/workspace/.app-builder/dependency-cache/cargo-closure.tar.gz",
+      "/workspace/.app-builder/dependency-cache/cargo/config.toml",
     );
     expect(command).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
@@ -88,7 +88,9 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).not.toContain("microsandbox");
     expect(command).not.toContain("sudo");
     expect(command).not.toContain("chmod -R a-w");
-    expect(command).toContain('test "$(realpath "$cache_root")" = "$cache_root"');
+    expect(command).toContain(
+      'test "$(realpath "$cache_root")" = "$cache_root"',
+    );
     expect(command).toContain('find "$cache_root" -perm /022');
     expect(DEVELOPMENT_SANDBOX_ENVIRONMENT).toMatchObject({
       CARGO_NET_OFFLINE: "true",

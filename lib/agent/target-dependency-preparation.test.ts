@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
   } as const;
   const cache = {
     manifest: {
-      version: 2,
+      version: 3,
       scope: "development-execution",
       platform: "linux/arm64",
       dependencyKey: "1".repeat(64),
@@ -37,17 +37,15 @@ const mocks = vi.hoisted(() => {
       closure: {
         package: "@vercel/microfrontends",
         version: "2.4.0",
-        archivePath: "/opt/app-builder/dependency-cache/node-modules.tar.gz",
-        archiveSha256: "6".repeat(64),
-        archiveBytes: 1,
-        cargoArchivePath:
-          "/opt/app-builder/dependency-cache/cargo-closure.tar.gz",
-        cargoArchiveSha256: "7".repeat(64),
-        cargoArchiveBytes: 1,
+        contentDigest: "1".repeat(64),
+        nodeModulesPath:
+          "/workspace/.app-builder/dependency-cache/dependencies/1111111111111111111111111111111111111111111111111111111111111111/node_modules",
+        cargoConfigPath:
+          "/workspace/.app-builder/dependency-cache/cargo/config.toml",
       },
     },
     manifestDigest: "8".repeat(64),
-    contentDigest: "6".repeat(64),
+    contentDigest: "1".repeat(64),
     dependencyLayout: {
       version: 1,
       kind: "fixture",

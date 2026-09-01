@@ -50,8 +50,7 @@ export const LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION = 3;
 const DEVELOPMENT_TOOLCHAIN_PATH =
   "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin";
 const DEVELOPMENT_CARGO_HOME = "/workspace/.app-builder/toolchain/cargo-home";
-const DEVELOPMENT_CARGO_CONFIG =
-  `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`;
+const DEVELOPMENT_CARGO_CONFIG = `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`;
 
 const REQUIRED_EXECUTION_PACKAGES = [
   ".bin/next",
@@ -174,7 +173,7 @@ export const hostedExecutionDependencyCacheManifestSchema = z.strictObject({
 });
 
 export const developmentDependencyCacheManifestSchema = z.strictObject({
-  version: z.literal(2),
+  version: z.literal(3),
   scope: z.literal("development-execution"),
   platform: z.union([z.literal("linux/arm64"), z.literal("linux/amd64")]),
   dependencyKey: sha256Digest,
@@ -193,16 +192,15 @@ export const developmentDependencyCacheManifestSchema = z.strictObject({
   closure: z.strictObject({
     package: z.literal("@vercel/microfrontends"),
     version: z.literal(ARRUSTED_MICROFRONTENDS_VERSION),
-    archivePath: z.literal(
-      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/node-modules.tar.gz`,
+    contentDigest: sha256Digest,
+    nodeModulesPath: z
+      .string()
+      .regex(
+        /^\/workspace\/\.app-builder\/dependency-cache\/dependencies\/[0-9a-f]{64}\/node_modules$/u,
+      ),
+    cargoConfigPath: z.literal(
+      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`,
     ),
-    archiveSha256: sha256Digest,
-    archiveBytes: z.number().int().positive(),
-    cargoArchivePath: z.literal(
-      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz`,
-    ),
-    cargoArchiveSha256: sha256Digest,
-    cargoArchiveBytes: z.number().int().positive(),
   }),
 });
 
@@ -537,7 +535,8 @@ export const executionDependencyViewScript = String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 
-const [layoutPath, overlayRootInput, viewRootInput, workspaceRootInput = "/workspace"] = process.argv.slice(2);
+const [layoutPath, overlayRootInput, viewRootInput, workspaceRootInput = "/workspace", allowOwnerWriteInput = "0"] = process.argv.slice(2);
+const allowOwnerWrite = allowOwnerWriteInput === "1";
 const layout = JSON.parse(fs.readFileSync(layoutPath, "utf8"));
 const requestedWorkspaceRoot = path.resolve(workspaceRootInput);
 const workspaceRoot = fs.realpathSync(workspaceRootInput);
@@ -565,7 +564,7 @@ const rootByPath = new Map();
 for (const root of layout.roots) {
   if (!safeRelative(root.path) || !(root.path === "node_modules" || root.path.endsWith("/node_modules")) || typeof root.cachePath !== "string" || !path.isAbsolute(root.cachePath)) process.exit(1);
   const stat = fs.lstatSync(root.cachePath);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o222) !== 0) process.exit(1);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & (allowOwnerWrite ? 0o022 : 0o222)) !== 0) process.exit(1);
   rootByPath.set(root.path, root);
 }
 if (rootByPath.size !== layout.roots.length || !rootByPath.has("node_modules")) process.exit(1);
@@ -645,7 +644,7 @@ export async function materializeExecutionDependencyView(input: {
     content: `${JSON.stringify(layout)}\n`,
   });
   const result = await input.sandbox.run({
-    command: `node - '/workspace/${layoutPath}' '/workspace/${input.overlayRoot}' '/workspace/${viewRoot}' '/workspace' <<'NODE'\n${executionDependencyViewScript}\nNODE`,
+    command: `node - '/workspace/${layoutPath}' '/workspace/${input.overlayRoot}' '/workspace/${viewRoot}' '/workspace' '${input.layout.kind === "cache" && input.layout.roots.some((root) => root.cachePath.startsWith(`${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/`)) ? "1" : "0"}' <<'NODE'\n${executionDependencyViewScript}\nNODE`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
   });
@@ -670,8 +669,8 @@ function dependencyCachePaths(
   const root = isDevelopmentExecution(environment)
     ? DEVELOPMENT_DEPENDENCY_CACHE_ROOT
     : hostedArtifactDependencyCacheEnabled(environment)
-    ? HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT
-    : "/opt/app-builder/dependency-cache";
+      ? HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT
+      : "/opt/app-builder/dependency-cache";
   return {
     manifest: `${root}/manifest.json`,
     archive: `${root}/node-modules.tar.gz`,
@@ -1330,7 +1329,9 @@ export async function inspectDependencyCache(
   const archiveResult = await sandbox.run({
     command: hostedExecution
       ? `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive}`
-      : `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive} && sha256sum -- ${cachePaths.cargoArchive} && stat --format='%s' -- ${cachePaths.cargoArchive}`,
+      : developmentExecution
+        ? `test -d ${developmentDependencyCacheManifestSchema.parse(validated.data).closure.nodeModulesPath} && test ! -L ${developmentDependencyCacheManifestSchema.parse(validated.data).closure.nodeModulesPath} && test -f ${developmentDependencyCacheManifestSchema.parse(validated.data).closure.cargoConfigPath}`
+        : `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive} && sha256sum -- ${cachePaths.cargoArchive} && stat --format='%s' -- ${cachePaths.cargoArchive}`,
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
@@ -1343,21 +1344,33 @@ export async function inspectDependencyCache(
     throw new Error("The fixed offline dependency cache archive is missing.");
   const [checksumLine, sizeLine, cargoChecksumLine, cargoSizeLine] =
     archiveResult.stdout.trim().split("\n");
-  const observedDigest = checksumLine?.trim().split(/\s+/u)[0];
+  const developmentClosure = developmentExecution
+    ? developmentDependencyCacheManifestSchema.parse(validated.data).closure
+    : undefined;
+  const archiveClosure = developmentExecution
+    ? undefined
+    : hostedExecution
+      ? hostedExecutionDependencyCacheManifestSchema.parse(validated.data)
+          .closure
+      : dependencyCacheManifestSchema.parse(validated.data).closure;
+  const observedDigest =
+    developmentClosure?.contentDigest ?? checksumLine?.trim().split(/\s+/u)[0];
   const observedBytes = Number(sizeLine);
   const observedCargoDigest = cargoChecksumLine?.trim().split(/\s+/u)[0];
   const observedCargoBytes = Number(cargoSizeLine);
   const fullClosure = hostedExecution
     ? undefined
     : developmentExecution
-      ? developmentDependencyCacheManifestSchema.parse(validated.data).closure
+      ? undefined
       : dependencyCacheManifestSchema.parse(validated.data).closure;
   if (
     observedDigest === undefined ||
     !sha256Digest.safeParse(observedDigest).success ||
-    observedDigest !== validated.data.closure.archiveSha256 ||
-    observedBytes !== validated.data.closure.archiveBytes ||
+    (!developmentExecution &&
+      (observedDigest !== archiveClosure?.archiveSha256 ||
+        observedBytes !== archiveClosure?.archiveBytes)) ||
     (fullClosure !== undefined &&
+      !developmentExecution &&
       (observedCargoDigest === undefined ||
         !sha256Digest.safeParse(observedCargoDigest).success ||
         observedCargoDigest !== fullClosure.cargoArchiveSha256 ||
