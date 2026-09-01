@@ -2,12 +2,39 @@ import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import { isHostedVercelRuntime } from "../sandbox/backend";
-import { inspectSourceReceipt, type SourceReceipt } from "./source-receipt";
+import {
+  inspectSourceReceipt,
+  type SourceKind,
+  type SourceReceipt,
+} from "./source-receipt";
 
 const gitObjectPattern = /^[0-9a-f]{40}$/u;
 const sha256Pattern = /^[0-9a-f]{64}$/u;
 
 type Environment = Readonly<Record<string, string | undefined>>;
+
+const closedDevelopmentBinding = (environment: Environment) =>
+  environment.APP_BUILDER_EXECUTION_MODE === "development" &&
+  environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
+  environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel" &&
+  environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
+  environment.APP_BUILDER_LOCAL_PUBLICATION === "0" &&
+  environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "0" &&
+  environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED === "0" &&
+  environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED === "0" &&
+  environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === "0" &&
+  environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "0" &&
+  environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF === "0" &&
+  environment.EVE_HOSTED_ADAPTER === "0" &&
+  environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS === "0";
+
+export function canAutoSelectDevelopmentSource(
+  environment: Environment = process.env,
+) {
+  return (
+    !isHostedVercelRuntime(environment) && closedDevelopmentBinding(environment)
+  );
+}
 
 function required(environment: Environment, name: string) {
   const value = environment[name];
@@ -35,35 +62,28 @@ function exactDevelopmentSourceRoot(path: string) {
 }
 
 /**
- * Selects the transient source snapshot only for the exact `mise run dev`
- * authority. Hosted execution deliberately falls through to its fixed remote
- * or release reader and can never consume this host path.
+ * Selects the single transient source snapshot only for the exact `mise run
+ * dev` authority. Hosted execution and non-development explicit paths
+ * deliberately fall through to their existing readers.
  */
-export async function developmentFreshTemplateSourceReceipt(
+export async function developmentSourceReceipt(
+  sourceKind: SourceKind,
+  suppliedPath?: string,
   environment: Environment = process.env,
 ): Promise<SourceReceipt | undefined> {
   if (isHostedVercelRuntime(environment)) return undefined;
   if (environment.APP_BUILDER_EXECUTION_MODE !== "development")
     return undefined;
-  if (
-    environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development" ||
-    environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
-    environment.APP_BUILDER_LOCAL_ADAPTER !== "1" ||
-    environment.APP_BUILDER_LOCAL_PUBLICATION !== "0" ||
-    environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "0" ||
-    environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED !== "0" ||
-    environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED !== "0" ||
-    environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "0" ||
-    environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "0" ||
-    environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF !== "0" ||
-    environment.EVE_HOSTED_ADAPTER !== "0" ||
-    environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS !== "0"
-  )
+  if (!closedDevelopmentBinding(environment))
     throw new Error("Development source binding was not closed.");
 
   const sourceRoot = exactDevelopmentSourceRoot(
     required(environment, "REPOSITORY_LOCAL_ROOTS"),
   );
+  if (suppliedPath !== undefined && suppliedPath !== sourceRoot)
+    throw new Error(
+      "Development source path did not match the selected snapshot.",
+    );
   const expectedSha = required(
     environment,
     "APP_BUILDER_DEVELOPMENT_SOURCE_SHA",
@@ -83,7 +103,7 @@ export async function developmentFreshTemplateSourceReceipt(
   )
     throw new Error("Development source identity was invalid.");
 
-  const receipt = await inspectSourceReceipt("fresh-template", sourceRoot);
+  const receipt = await inspectSourceReceipt(sourceKind, sourceRoot);
   if (
     receipt.sourcePath !== sourceRoot ||
     receipt.sourceSha !== expectedSha ||

@@ -7,13 +7,16 @@ import {
 } from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
-import { developmentFreshTemplateSourceReceipt } from "@/lib/repository/development-source";
+import {
+  canAutoSelectDevelopmentSource,
+  developmentSourceReceipt,
+} from "@/lib/repository/development-source";
 import { hostedSourceReceipt } from "@/lib/repository/hosted-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
-    "Inspect an existing allowlisted checkout, or clone the canonical Arrusted template once into this app build's workspace and record its exact release-disabled receipt. Acquisition never uses a caller-provided remote or ref.",
+    "Inspect the exact preselected Development snapshot or an explicit allowlisted existing checkout, or clone the canonical Arrusted template once into this app build's workspace and record its exact release-disabled receipt. Acquisition never uses a caller-provided remote or ref.",
   inputSchema: z
     .object({
       sourceKind: z.enum(["existing-repository", "fresh-template"]),
@@ -22,7 +25,8 @@ export default defineTool({
     .superRefine((value, context) => {
       if (
         value.sourceKind === "existing-repository" &&
-        value.path === undefined
+        value.path === undefined &&
+        !canAutoSelectDevelopmentSource()
       )
         context.addIssue({
           code: "custom",
@@ -42,19 +46,25 @@ export default defineTool({
         });
     }),
   async execute({ sourceKind, path }, ctx) {
-    const receipt =
-      (sourceKind === "fresh-template"
-        ? await developmentFreshTemplateSourceReceipt()
-        : undefined) ??
-      (sourceKind === "fresh-template" &&
+    let receipt = await developmentSourceReceipt(sourceKind, path);
+    if (
+      receipt === undefined &&
+      sourceKind === "fresh-template" &&
       !(hasTestCapability("simulated-target") && path !== undefined)
-        ? await acquireCanonicalArrustedTemplate({
-            sandbox: await ctx.getSandbox(),
-            callId: ctx.callId,
-          })
-        : undefined) ??
-      hostedSourceReceipt(sourceKind, path!) ??
-      (await inspectSourceReceipt(sourceKind, path!));
+    )
+      receipt = await acquireCanonicalArrustedTemplate({
+        sandbox: await ctx.getSandbox(),
+        callId: ctx.callId,
+      });
+    if (receipt === undefined) {
+      if (path === undefined)
+        throw new Error(
+          "Existing repositories require an allowlisted local path.",
+        );
+      receipt =
+        hostedSourceReceipt(sourceKind, path) ??
+        (await inspectSourceReceipt(sourceKind, path));
+    }
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",

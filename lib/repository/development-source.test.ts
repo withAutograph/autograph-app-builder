@@ -11,7 +11,11 @@ vi.mock("./source-receipt", async (importOriginal) => ({
   inspectSourceReceipt,
 }));
 
-import { developmentFreshTemplateSourceReceipt } from "./development-source";
+import {
+  canAutoSelectDevelopmentSource,
+  developmentSourceReceipt,
+} from "./development-source";
+import type { SourceKind } from "./source-receipt";
 
 const roots: string[] = [];
 
@@ -50,10 +54,10 @@ function fixtureRoot() {
   return root;
 }
 
-function receipt(root: string) {
+function receipt(root: string, sourceKind: SourceKind = "fresh-template") {
   return {
     version: 3 as const,
-    sourceKind: "fresh-template" as const,
+    sourceKind,
     sourcePath: root,
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
@@ -65,48 +69,98 @@ function receipt(root: string) {
   };
 }
 
-describe("Development fresh-template source selection", () => {
-  it("uses the exact transient local snapshot without a deployment reader", async () => {
+describe("Development source selection", () => {
+  it.each(["fresh-template", "existing-repository"] as const)(
+    "uses the exact transient local snapshot for %s without a deployment reader",
+    async (sourceKind) => {
+      const root = fixtureRoot();
+      const expected = receipt(root, sourceKind);
+      inspectSourceReceipt.mockResolvedValue(expected);
+
+      await expect(
+        developmentSourceReceipt(sourceKind, undefined, exactEnvironment(root)),
+      ).resolves.toEqual(expected);
+      expect(inspectSourceReceipt).toHaveBeenCalledWith(sourceKind, root);
+    },
+  );
+
+  it("accepts only the exact preselected path when one is supplied", async () => {
     const root = fixtureRoot();
-    const expected = receipt(root);
+    const expected = receipt(root, "existing-repository");
     inspectSourceReceipt.mockResolvedValue(expected);
 
     await expect(
-      developmentFreshTemplateSourceReceipt(exactEnvironment(root)),
+      developmentSourceReceipt(
+        "existing-repository",
+        root,
+        exactEnvironment(root),
+      ),
     ).resolves.toEqual(expected);
-    expect(inspectSourceReceipt).toHaveBeenCalledWith("fresh-template", root);
+    await expect(
+      developmentSourceReceipt(
+        "existing-repository",
+        `${root}-other`,
+        exactEnvironment(root),
+      ),
+    ).rejects.toThrow("did not match the selected snapshot");
+    expect(inspectSourceReceipt).toHaveBeenCalledTimes(1);
   });
 
   it("never selects a local path in a hosted Vercel runtime", async () => {
     const root = fixtureRoot();
     await expect(
-      developmentFreshTemplateSourceReceipt({
+      developmentSourceReceipt("existing-repository", undefined, {
         ...exactEnvironment(root),
         VERCEL: "1",
       }),
     ).resolves.toBeUndefined();
+    expect(
+      canAutoSelectDevelopmentSource({
+        ...exactEnvironment(root),
+        VERCEL: "1",
+      }),
+    ).toBe(false);
+    expect(inspectSourceReceipt).not.toHaveBeenCalled();
+  });
+
+  it("leaves explicit existing-repository paths to non-development readers", async () => {
+    const root = fixtureRoot();
+    await expect(
+      developmentSourceReceipt("existing-repository", root, {}),
+    ).resolves.toBeUndefined();
+    expect(canAutoSelectDevelopmentSource({})).toBe(false);
     expect(inspectSourceReceipt).not.toHaveBeenCalled();
   });
 
   it("rejects a development binding that could publish", async () => {
     const root = fixtureRoot();
     await expect(
-      developmentFreshTemplateSourceReceipt({
+      developmentSourceReceipt("existing-repository", undefined, {
         ...exactEnvironment(root),
         APP_BUILDER_LOCAL_PUBLICATION: "1",
       }),
     ).rejects.toThrow("binding was not closed");
+    expect(
+      canAutoSelectDevelopmentSource({
+        ...exactEnvironment(root),
+        APP_BUILDER_LOCAL_PUBLICATION: "1",
+      }),
+    ).toBe(false);
     expect(inspectSourceReceipt).not.toHaveBeenCalled();
   });
 
   it("rejects a source whose exact Git identity drifted", async () => {
     const root = fixtureRoot();
     inspectSourceReceipt.mockResolvedValue({
-      ...receipt(root),
+      ...receipt(root, "existing-repository"),
       sourceSha: "9".repeat(40),
     });
     await expect(
-      developmentFreshTemplateSourceReceipt(exactEnvironment(root)),
+      developmentSourceReceipt(
+        "existing-repository",
+        undefined,
+        exactEnvironment(root),
+      ),
     ).rejects.toThrow("snapshot drifted");
   });
 });

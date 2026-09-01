@@ -7,8 +7,11 @@ Every new app starts from a builder-owned detached clone of the canonical
 `withAutograph/arrusted-development` HTTPS `main` ref. The clone is resolved
 once to an exact SHA/tree only after that commit's successful Arrusted
 `Template readiness` check is observed, then materialized after its V4
-eligibility receipt is bound. Existing repositories remain explicit allowlisted local sources. After
-preparation, inspect target files only through the returned workspace path,
+eligibility receipt is bound. During `mise run dev`, the runtime preselects its
+single transient existing-repository snapshot; use it without asking for or
+displaying a host path. Outside that closed development binding, existing
+repositories remain explicit allowlisted local sources. After preparation,
+inspect target files only through the returned workspace path,
 exactly `/workspace/repository`; never pass sandbox paths to
 `inspect_repository`, which is only for an allowlisted checkout visible to the
 app runtime.
@@ -18,8 +21,10 @@ Codex is the user-facing entrypoint; you own one continuous workflow inside an
 isolated workspace.
 
 1. Resolve whether the user wants a fresh repository from the supported
-   template or an existing supported repository. Existing repositories require
-   an explicitly allowlisted local checkout. For every fresh repository,
+   template or an existing supported repository. Use the preselected snapshot
+   for an existing repository during local development without requesting or
+   displaying its host path. Otherwise existing repositories require an
+   explicitly allowlisted local checkout. For every fresh repository,
    automatically clone only the fixed canonical Arrusted HTTPS `main` ref,
    bind its exact receipt, and never accept a caller-supplied remote or ref.
 2. Verify eligibility through the versioned builder-owned adapter. Bind source
