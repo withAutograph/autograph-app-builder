@@ -5,7 +5,10 @@ import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
-import { HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT } from "../sandbox/hosted-toolchain";
+import {
+  HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT,
+  HOSTED_NODE_VERSION,
+} from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 
 export const ARRUSTED_TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
@@ -414,8 +417,10 @@ const LIVE_TEMPLATE_BOOTSTRAP_HOSTS = [
 const liveTemplateBootstrapCommand = String.raw`
 set -euo pipefail
 cd /workspace/repository
-mise trust >&2
-mise install >&2
+test "$(node --version)" = "v${HOSTED_NODE_VERSION}"
+test "$(bun --version)" = "${ARRUSTED_BUN_VERSION}"
+test "$(rustc --version | cut -d' ' -f2)" = "${ARRUSTED_RUST_VERSION}"
+test "$(cargo --version | cut -d' ' -f2)" = "${ARRUSTED_RUST_VERSION}"
 bun install --frozen-lockfile --ignore-scripts --linker=hoisted >&2
 cargo fetch --locked >&2
 for required in .bin/next .bin/turbo .bin/vp @autograph/vite-config/package.json @tailwindcss/vite/package.json @testing-library/react/package.json @vercel/microfrontends/package.json @vitejs/plugin-react/package.json next/package.json react/package.json react-dom/package.json typescript/package.json turbo/package.json vite-plus/package.json vitest/package.json; do

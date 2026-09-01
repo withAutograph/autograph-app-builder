@@ -446,6 +446,16 @@ describe("offline dependency cache", () => {
     expect(run.mock.calls[1]?.[0].command).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
+    expect(run.mock.calls[1]?.[0].command).toContain(
+      'test "$(node --version)" = "v24.18.0"',
+    );
+    expect(run.mock.calls[1]?.[0].command).toContain(
+      'test "$(bun --version)" = "1.3.14"',
+    );
+    expect(run.mock.calls[1]?.[0].command).toContain(
+      'test "$(rustc --version | cut -d\' \' -f2)" = "1.97.1"',
+    );
+    expect(run.mock.calls[1]?.[0].command).not.toContain("mise install");
     expect(run.mock.calls[1]?.[0].command).toContain("cargo fetch --locked");
     expect(setNetworkPolicy).toHaveBeenNthCalledWith(
       1,
