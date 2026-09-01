@@ -368,11 +368,8 @@ describe("sandbox GitHub source transport", () => {
       readTextFile: vi.fn(
         async ({ path }: { path: string }) => files.get(path) ?? null,
       ),
-      readBinaryFile: vi.fn(
-        async ({ path }: { path: string }) =>
-          path === "repository/microfrontends.json"
-            ? fixture.sourceBytes
-            : null,
+      readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
+        path === "repository/microfrontends.json" ? fixture.sourceBytes : null,
       ),
       run,
       setNetworkPolicy,
