@@ -89,8 +89,22 @@ export function createSupportedRepositoryFixture(): string {
       '[tasks."app:test"]',
       'run = \'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"\'',
     ].join("\n"),
+    ".config/mise/tasks/repository/exec": [
+      "#!/usr/bin/env bash",
+      'exec mise exec -- bun ".config/mise/scripts/repository/$1" "${@:2}"',
+      "",
+    ].join("\n"),
     ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
     "microfrontends.json": "{}\n",
+    "package.json": `${JSON.stringify(
+      {
+        name: "@autograph/supported-repository-fixture",
+        private: true,
+        dependencies: { next: "16.1.6" },
+      },
+      null,
+      2,
+    )}\n`,
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":

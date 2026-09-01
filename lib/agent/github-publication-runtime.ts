@@ -34,7 +34,7 @@ const supportedOperations = [
 ] as const;
 
 export type GitHubPublicationRuntimeStatus = {
-  version: 2;
+  version: 3;
   enabled: boolean;
   adapterConfigured: boolean;
   durableStoreConfigured: boolean;
@@ -43,7 +43,15 @@ export type GitHubPublicationRuntimeStatus = {
   supportedOperations: typeof supportedOperations;
   releaseGate: {
     name: "REPOSITORY_RELEASE_ENABLED";
-    requiredState: "absent";
+    policies: {
+      "create-approved-private-fresh-history-repository": {
+        requiredConfiguredState: false;
+      };
+      "publish-approved-branch-and-draft-pull-request": {
+        requiredConfiguredState: "sealed-proposal-value";
+        rejectsDrift: true;
+      };
+    };
   };
   reason: string;
 };
@@ -81,7 +89,7 @@ export interface GitHubPublicationRuntime {
 
 function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
   return {
-    version: 2,
+    version: 3,
     enabled,
     adapterConfigured: enabled,
     durableStoreConfigured: enabled,
@@ -90,7 +98,15 @@ function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
     supportedOperations,
     releaseGate: {
       name: "REPOSITORY_RELEASE_ENABLED",
-      requiredState: "absent",
+      policies: {
+        "create-approved-private-fresh-history-repository": {
+          requiredConfiguredState: false,
+        },
+        "publish-approved-branch-and-draft-pull-request": {
+          requiredConfiguredState: "sealed-proposal-value",
+          rejectsDrift: true,
+        },
+      },
     },
     reason: enabled
       ? "The explicit installation adapter and durable PostgreSQL stores are configured."

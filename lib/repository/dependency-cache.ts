@@ -7,13 +7,12 @@ import type { SandboxSession } from "eve/sandbox";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import {
   HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT,
+  HOSTED_MISE_VERSION,
   HOSTED_NODE_VERSION,
 } from "../sandbox/hosted-toolchain";
+import { developmentDependencySymlinkScript } from "../sandbox/development-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
-import {
-  LEGACY_SOURCE_RECEIPT_VERSION,
-  SOURCE_RECEIPT_VERSION,
-} from "./source-receipt";
+import { safeSourcePath } from "./source-path";
 
 export const ARRUSTED_TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 export const ARRUSTED_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
@@ -44,7 +43,7 @@ export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 600_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 export const LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT =
   ".app-builder/template-dependency-cache";
-const LIVE_TEMPLATE_NODE_MODULES_PATH = "/workspace/repository/node_modules";
+export const LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION = 3;
 const DEVELOPMENT_TOOLCHAIN_PATH =
   "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin";
 const DEVELOPMENT_CARGO_HOME = "/workspace/.app-builder/toolchain/cargo-home";
@@ -190,19 +189,69 @@ export const developmentDependencyCacheManifestSchema = z.strictObject({
   closure: dependencyCacheManifestShapeSchema.shape.closure,
 });
 
+const requiredLiveTemplateDependencyInputs = [
+  ".config/mise/config.toml",
+  ".config/mise/mise.lock",
+  "package.json",
+  "bun.lock",
+  "Cargo.toml",
+  "Cargo.lock",
+] as const;
+
+const liveTemplateDependencyInputsSchema = z
+  .record(z.string(), sha256Digest)
+  .refine(
+    (inputs) =>
+      requiredLiveTemplateDependencyInputs.every(
+        (path) => inputs[path] !== undefined,
+      ),
+    "required dependency inputs are missing",
+  );
+
+const cacheSourcePathSchema = z.string().refine(safeSourcePath);
+const liveTemplateNodeModulesPathSchema = z
+  .string()
+  .regex(
+    /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/(?:arm64|x86_64)\/source\/(?:node_modules|.+\/node_modules)$/u,
+  )
+  .refine((value) => !value.includes("/../"));
+const workspaceDependencyRootSchema = z.strictObject({
+  path: cacheSourcePathSchema.refine(
+    (value) => value === "node_modules" || value.endsWith("/node_modules"),
+  ),
+  nodeModulesPath: liveTemplateNodeModulesPathSchema,
+  digest: sha256Digest,
+});
+const workspaceDependencyLinkSchema = z.strictObject({
+  path: cacheSourcePathSchema,
+  target: z.string().min(1).max(4096),
+  sourcePath: cacheSourcePathSchema,
+});
+
 const liveTemplateDependencyCacheManifestSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.literal(4),
   scope: z.literal("live-template-execution"),
   platform: z.union([z.literal("linux/arm64"), z.literal("linux/x86_64")]),
-  target: z.strictObject({ sha: gitObjectId, tree: gitObjectId }),
-  locks: z.strictObject({
-    miseConfigSha256: sha256Digest,
-    miseLockSha256: sha256Digest,
-    bunLockSha256: sha256Digest,
-    cargoLockSha256: sha256Digest,
+  dependencyKey: sha256Digest,
+  dependencyInputs: liveTemplateDependencyInputsSchema,
+  runtime: z.strictObject({
+    node: z.literal(HOSTED_NODE_VERSION),
+    mise: z.literal(HOSTED_MISE_VERSION),
+    bun: z.literal(ARRUSTED_BUN_VERSION),
+    rust: z.literal(ARRUSTED_RUST_VERSION),
   }),
+  bootstrapVersion: z.literal(LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION),
   closure: z.strictObject({
-    nodeModulesPath: z.literal(LIVE_TEMPLATE_NODE_MODULES_PATH),
+    nodeModulesPath: liveTemplateNodeModulesPathSchema,
+    nodeModulesDigest: sha256Digest,
+    workspaceNodeModules: z.array(workspaceDependencyRootSchema),
+    workspaceLinks: z.array(workspaceDependencyLinkSchema),
+    cargoHomePath: z
+      .string()
+      .regex(
+        /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/(?:arm64|x86_64)\/cargo-home$/u,
+      ),
+    cargoHomeDigest: sha256Digest,
     microfrontendsVersion: z.string().min(1),
   }),
 });
@@ -227,6 +276,37 @@ export type ObservedDependencyCache = {
   contentDigest: string;
 };
 
+const executionDependencyRootSchema = z.strictObject({
+  path: cacheSourcePathSchema.refine(
+    (value) => value === "node_modules" || value.endsWith("/node_modules"),
+  ),
+  cachePath: z
+    .string()
+    .regex(
+      /^(?:\/opt\/app-builder\/dependencies\/[0-9a-f]{64}\/node_modules|\/workspace\/\.app-builder\/hosted-dependencies\/[0-9a-f]{64}\/node_modules|\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/(?:arm64|x86_64)\/source\/(?:node_modules|.+\/node_modules))$/u,
+    ),
+  digest: sha256Digest,
+});
+
+export const executionDependencyLayoutSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    version: z.literal(1),
+    kind: z.literal("fixture"),
+    roots: z.tuple([]),
+    workspaceLinks: z.tuple([]),
+  }),
+  z.strictObject({
+    version: z.literal(1),
+    kind: z.literal("cache"),
+    roots: z.array(executionDependencyRootSchema).min(1),
+    workspaceLinks: z.array(workspaceDependencyLinkSchema),
+  }),
+]);
+
+export type ExecutionDependencyLayout = z.infer<
+  typeof executionDependencyLayoutSchema
+>;
+
 export class DependencyCacheMissingError extends Error {
   readonly code = "dependency_cache_missing" as const;
 
@@ -237,14 +317,10 @@ export class DependencyCacheMissingError extends Error {
 }
 
 export function shouldPreferLiveTemplateDependencies(
-  sourceReceiptVersion: number,
+  _sourceReceiptVersion: number,
   environment: Readonly<Record<string, string | undefined>>,
 ) {
-  return (
-    (sourceReceiptVersion === SOURCE_RECEIPT_VERSION ||
-      sourceReceiptVersion === LEGACY_SOURCE_RECEIPT_VERSION) &&
-    environment.APP_BUILDER_EXECUTION_MODE !== "development"
-  );
+  return environment.APP_BUILDER_EXECUTION_MODE !== "development";
 }
 
 type ExactSourceBinding = {
@@ -294,14 +370,62 @@ export function dependencyTargetForWorkspace(
     : { sha: cache.manifest.target.sha, tree: cache.manifest.target.tree };
 }
 
-const sha256 = (value: string) =>
+const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
+function isLiveTemplateDependencyInputPath(path: string) {
+  return (
+    requiredLiveTemplateDependencyInputs.includes(
+      path as (typeof requiredLiveTemplateDependencyInputs)[number],
+    ) ||
+    path.endsWith("/package.json") ||
+    path.endsWith("/Cargo.toml") ||
+    path === "bunfig.toml" ||
+    path.endsWith("/bunfig.toml") ||
+    path === "rust-toolchain.toml" ||
+    path === ".cargo/config.toml"
+  );
+}
+
+type LiveTemplateDependencyIdentity = Readonly<{
+  platform: z.infer<typeof liveTemplatePlatformSchema>;
+  dependencyKey: string;
+  dependencyInputs: z.infer<typeof liveTemplateDependencyInputsSchema>;
+  runtime: {
+    node: typeof HOSTED_NODE_VERSION;
+    mise: typeof HOSTED_MISE_VERSION;
+    bun: typeof ARRUSTED_BUN_VERSION;
+    rust: typeof ARRUSTED_RUST_VERSION;
+  };
+  bootstrapVersion: typeof LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION;
+}>;
+
+export function liveTemplateDependencyKey(input: {
+  platform: string;
+  dependencyInputs: Readonly<Record<string, string>>;
+  runtime: Readonly<Record<string, string>>;
+  bootstrapVersion: number;
+}) {
+  return sha256(
+    JSON.stringify({
+      version: 1,
+      platform: input.platform,
+      dependencyInputs: Object.fromEntries(
+        Object.entries(input.dependencyInputs).sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
+      ),
+      runtime: input.runtime,
+      bootstrapVersion: input.bootstrapVersion,
+    }),
+  );
+}
+
 function liveTemplateManifestPath(
-  target: ExactSourceBinding,
+  dependencyKey: string,
   platform: z.infer<typeof liveTemplatePlatformSchema>,
 ) {
-  return `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${target.sourceSha}/${platform}/manifest.json`;
+  return `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${dependencyKey}/${platform}/manifest.json`;
 }
 
 export function dependencyCacheNodeModulesRoot(contentDigest: string): string {
@@ -340,6 +464,179 @@ export function materializedDependencyNodeModulesRoot(
   if (hostedWorkspaceDependencyExtractionEnabled(environment))
     return `/workspace/.app-builder/hosted-dependencies/${contentDigest}/node_modules`;
   return immutableImageRoot;
+}
+
+export function dependencyExecutionLayout(
+  observed: ObservedDependencyCache,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): ExecutionDependencyLayout {
+  if (fixtureDependencyCacheEnabled(environment))
+    return { version: 1, kind: "fixture", roots: [], workspaceLinks: [] };
+  if (observed.manifest.scope === "live-template-execution") {
+    return executionDependencyLayoutSchema.parse({
+      version: 1,
+      kind: "cache",
+      roots: [
+        {
+          path: "node_modules",
+          cachePath: observed.manifest.closure.nodeModulesPath,
+          digest: observed.manifest.closure.nodeModulesDigest,
+        },
+        ...observed.manifest.closure.workspaceNodeModules.map((root) => ({
+          path: root.path,
+          cachePath: root.nodeModulesPath,
+          digest: root.digest,
+        })),
+      ],
+      workspaceLinks: observed.manifest.closure.workspaceLinks,
+    });
+  }
+  return executionDependencyLayoutSchema.parse({
+    version: 1,
+    kind: "cache",
+    roots: [
+      {
+        path: "node_modules",
+        cachePath: materializedDependencyNodeModulesRoot(
+          observed.contentDigest,
+          environment,
+        ),
+        digest: observed.contentDigest,
+      },
+    ],
+    workspaceLinks: [],
+  });
+}
+
+export function executionDependencyLayoutDigest(
+  layout: ExecutionDependencyLayout,
+) {
+  return sha256(JSON.stringify(executionDependencyLayoutSchema.parse(layout)));
+}
+
+export const executionDependencyViewScript = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+
+const [layoutPath, overlayRootInput, viewRootInput, workspaceRootInput = "/workspace"] = process.argv.slice(2);
+const layout = JSON.parse(fs.readFileSync(layoutPath, "utf8"));
+const requestedWorkspaceRoot = path.resolve(workspaceRootInput);
+const workspaceRoot = fs.realpathSync(workspaceRootInput);
+const safeRelative = (value) =>
+  typeof value === "string" &&
+  value.length > 0 &&
+  !path.isAbsolute(value) &&
+  value !== ".." &&
+  !value.startsWith(".." + path.sep) &&
+  !value.split(/[\\/]/u).includes("..");
+const contains = (root, candidate) => {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep));
+};
+const canonicalWorkspaceChild = (candidate) => {
+  const relative = path.relative(requestedWorkspaceRoot, path.resolve(candidate));
+  if (relative === "" || path.isAbsolute(relative) || relative === ".." || relative.startsWith(".." + path.sep)) process.exit(1);
+  return path.resolve(workspaceRoot, relative);
+};
+const overlayRoot = canonicalWorkspaceChild(overlayRootInput);
+const viewRoot = canonicalWorkspaceChild(viewRootInput);
+if (!layout || layout.version !== 1 || layout.kind !== "cache" || !Array.isArray(layout.roots) || layout.roots.length === 0 || !Array.isArray(layout.workspaceLinks)) process.exit(1);
+if (!contains(workspaceRoot, overlayRoot) || !contains(path.join(workspaceRoot, ".app-builder/dependency-views"), viewRoot)) process.exit(1);
+const rootByPath = new Map();
+for (const root of layout.roots) {
+  if (!safeRelative(root.path) || !(root.path === "node_modules" || root.path.endsWith("/node_modules")) || typeof root.cachePath !== "string" || !path.isAbsolute(root.cachePath)) process.exit(1);
+  const stat = fs.lstatSync(root.cachePath);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o222) !== 0) process.exit(1);
+  rootByPath.set(root.path, root);
+}
+if (rootByPath.size !== layout.roots.length || !rootByPath.has("node_modules")) process.exit(1);
+const rootCache = rootByPath.get("node_modules").cachePath;
+const sourceRoot = path.resolve(rootCache, "..");
+for (const root of layout.roots) {
+  if (path.resolve(sourceRoot, root.path) !== path.resolve(root.cachePath)) process.exit(1);
+}
+const workspaceLinks = new Map();
+for (const link of layout.workspaceLinks) {
+  if (!safeRelative(link.path) || !safeRelative(link.sourcePath) || typeof link.target !== "string" || link.target.length === 0 || link.target.length > 4096) process.exit(1);
+  const owner = [...rootByPath.keys()].filter((rootPath) => link.path.startsWith(rootPath + "/")).sort((left, right) => right.length - left.length)[0];
+  if (!owner || workspaceLinks.has(link.path)) process.exit(1);
+  const cachedLink = path.resolve(sourceRoot, link.path);
+  if (!contains(sourceRoot, cachedLink) || !fs.lstatSync(cachedLink).isSymbolicLink() || fs.readlinkSync(cachedLink) !== link.target) process.exit(1);
+  if (fs.realpathSync(cachedLink) !== fs.realpathSync(path.resolve(sourceRoot, link.sourcePath))) process.exit(1);
+  const overlayTarget = path.resolve(overlayRoot, link.sourcePath);
+  if (!contains(overlayRoot, overlayTarget) || !fs.existsSync(overlayTarget)) process.exit(1);
+  workspaceLinks.set(link.path, { ...link, overlayTarget });
+}
+
+fs.rmSync(viewRoot, { recursive: true, force: true });
+fs.mkdirSync(viewRoot, { recursive: true, mode: 0o755 });
+const populate = (cacheDirectory, viewDirectory, relativeDirectory) => {
+  fs.mkdirSync(viewDirectory, { recursive: true, mode: 0o755 });
+  for (const entry of fs.readdirSync(cacheDirectory, { withFileTypes: true })) {
+    const relative = relativeDirectory ? relativeDirectory + "/" + entry.name : entry.name;
+    const cached = path.join(cacheDirectory, entry.name);
+    const viewed = path.join(viewDirectory, entry.name);
+    const workspace = workspaceLinks.get(relative);
+    if (workspace) {
+      fs.symlinkSync(workspace.overlayTarget, viewed);
+      continue;
+    }
+    const hasWorkspaceDescendant = [...workspaceLinks.keys()].some((candidate) => candidate.startsWith(relative + "/"));
+    if (hasWorkspaceDescendant) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) process.exit(1);
+      populate(cached, viewed, relative);
+      continue;
+    }
+    fs.symlinkSync(cached, viewed);
+  }
+};
+for (const root of layout.roots) {
+  const viewDependencyRoot = path.resolve(viewRoot, root.path);
+  if (!contains(viewRoot, viewDependencyRoot)) process.exit(1);
+  populate(root.cachePath, viewDependencyRoot, root.path);
+  const overlayDependencyRoot = path.resolve(overlayRoot, root.path);
+  if (!contains(overlayRoot, overlayDependencyRoot)) process.exit(1);
+  fs.rmSync(overlayDependencyRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(overlayDependencyRoot), { recursive: true, mode: 0o755 });
+  fs.symlinkSync(viewDependencyRoot, overlayDependencyRoot);
+}
+`;
+
+export async function materializeExecutionDependencyView(input: {
+  sandbox: SandboxSession;
+  layout: ExecutionDependencyLayout;
+  overlayRoot: string;
+  viewKey: string;
+}) {
+  const layout = executionDependencyLayoutSchema.parse(input.layout);
+  if (layout.kind === "fixture") return;
+  if (!sha256Digest.safeParse(input.viewKey).success)
+    throw new Error("The dependency view key is invalid.");
+  if (!safeSourcePath(input.overlayRoot))
+    throw new Error("The dependency overlay path is invalid.");
+  const layoutDigest = executionDependencyLayoutDigest(layout);
+  const layoutPath = `.app-builder/dependency-layouts/${layoutDigest}.json`;
+  const viewRoot = `.app-builder/dependency-views/${layoutDigest}/${input.viewKey}`;
+  await ensureSandboxDirectories(input.sandbox, [
+    ".app-builder/dependency-layouts",
+    `.app-builder/dependency-views/${layoutDigest}`,
+  ]);
+  await input.sandbox.writeTextFile({
+    path: layoutPath,
+    content: `${JSON.stringify(layout)}\n`,
+  });
+  const result = await input.sandbox.run({
+    command: `node - '/workspace/${layoutPath}' '/workspace/${input.overlayRoot}' '/workspace/${viewRoot}' '/workspace' <<'NODE'\n${executionDependencyViewScript}\nNODE`,
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
+  });
+  boundedOutput(
+    result.stdout,
+    result.stderr,
+    "Dependency view materialization",
+  );
+  if (result.exitCode !== 0)
+    throw new Error("The dependency execution view could not be materialized.");
 }
 
 function dependencyCachePaths(
@@ -413,9 +710,12 @@ function fixtureManifest(
   };
 }
 
-const liveTemplateBootstrapObservationSchema = z.strictObject({
+const liveTemplateClosureObservationSchema = z.strictObject({
   platform: liveTemplatePlatformSchema,
-  locks: liveTemplateDependencyCacheManifestSchema.shape.locks,
+  nodeModulesDigest: sha256Digest,
+  workspaceNodeModules: z.array(workspaceDependencyRootSchema),
+  workspaceLinks: z.array(workspaceDependencyLinkSchema),
+  cargoHomeDigest: sha256Digest,
   microfrontendsVersion: z.string().min(1),
 });
 
@@ -429,20 +729,190 @@ const LIVE_TEMPLATE_BOOTSTRAP_HOSTS = [
   "static.rust-lang.org",
 ] as const;
 
-const liveTemplateBootstrapCommand = String.raw`
+function liveTemplateDependencyWorkspaceRoot(
+  dependencyKey: string,
+  platform: z.infer<typeof liveTemplatePlatformSchema>,
+) {
+  return `/workspace/${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${dependencyKey}/${platform}/source`;
+}
+
+function liveTemplateCargoHomeRoot(
+  dependencyKey: string,
+  platform: z.infer<typeof liveTemplatePlatformSchema>,
+) {
+  return `/workspace/${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${dependencyKey}/${platform}/cargo-home`;
+}
+
+export const liveTemplateClosureInspectionScript = String.raw`
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const [sourceRootInput, cargoHomeInput, platform, sourceManifestPath] = process.argv.slice(2);
+const sourceRoot = fs.realpathSync(sourceRootInput);
+const cargoHomePath = fs.realpathSync(cargoHomeInput);
+const contains = (root, candidate) => {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep));
+};
+const relativeSourcePath = (candidate) => path.relative(sourceRoot, candidate).split(path.sep).join("/");
+const manifest = JSON.parse(fs.readFileSync(sourceManifestPath, "utf8"));
+if (!Array.isArray(manifest) || manifest.length === 0) process.exit(1);
+const tracked = new Set(manifest.map((entry) => entry && entry.path));
+if (tracked.size !== manifest.length || [...tracked].some((entry) => typeof entry !== "string")) process.exit(1);
+const isTrackedWorkspacePath = (candidate) => {
+  const relative = relativeSourcePath(candidate);
+  if (!relative || relative.startsWith("../") || path.isAbsolute(relative)) return false;
+  return tracked.has(relative) || [...tracked].some((entry) => entry.startsWith(relative + "/"));
+};
+
+const dependencyRoots = [];
+const discoverRoots = (directory) => {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolute = path.join(directory, entry.name);
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+    if (entry.name === "node_modules") {
+      dependencyRoots.push(absolute);
+      continue;
+    }
+    discoverRoots(absolute);
+  }
+};
+discoverRoots(sourceRoot);
+dependencyRoots.sort((left, right) => {
+  const leftPath = relativeSourcePath(left);
+  const rightPath = relativeSourcePath(right);
+  if (leftPath === "node_modules") return -1;
+  if (rightPath === "node_modules") return 1;
+  return leftPath.localeCompare(rightPath);
+});
+if (dependencyRoots.length === 0 || relativeSourcePath(dependencyRoots[0]) !== "node_modules") process.exit(1);
+
+const workspaceLinks = new Map();
+function digestTree(root, allowTrackedWorkspaceLinks) {
+  const rootStat = fs.lstatSync(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || (rootStat.mode & 0o222) !== 0) process.exit(1);
+  const hash = crypto.createHash("sha256");
+  const visit = (directory, relativeDirectory = "") => {
+    const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    );
+    for (const entry of entries) {
+      const relative = relativeDirectory ? relativeDirectory + "/" + entry.name : entry.name;
+      const absolute = path.join(directory, entry.name);
+      const stat = fs.lstatSync(absolute);
+      if (stat.isDirectory()) {
+        if ((stat.mode & 0o222) !== 0) process.exit(1);
+        hash.update("directory\0" + relative + "\0");
+        visit(absolute, relative);
+      } else if (stat.isFile()) {
+        if ((stat.mode & 0o222) !== 0) process.exit(1);
+        hash.update("file\0" + relative + "\0" + stat.size + "\0");
+        hash.update(fs.readFileSync(absolute));
+        hash.update("\0");
+      } else if (stat.isSymbolicLink()) {
+        const target = fs.readlinkSync(absolute);
+        if (target.includes("/workspace/repository")) process.exit(1);
+        let resolved;
+        try {
+          resolved = fs.realpathSync(absolute);
+        } catch {
+          process.exit(1);
+        }
+        if (!contains(allowTrackedWorkspaceLinks ? sourceRoot : root, resolved)) process.exit(1);
+        const dependencyTarget = dependencyRoots.some((dependencyRoot) =>
+          contains(dependencyRoot, resolved),
+        );
+        if (
+          allowTrackedWorkspaceLinks &&
+          !contains(root, resolved) &&
+          !dependencyTarget
+        ) {
+          if (!isTrackedWorkspacePath(resolved)) process.exit(1);
+          const linkPath = relativeSourcePath(absolute);
+          workspaceLinks.set(linkPath, {
+            path: linkPath,
+            target,
+            sourcePath: relativeSourcePath(resolved),
+          });
+        }
+        hash.update("symlink\0" + relative + "\0" + target + "\0");
+      } else {
+        process.exit(1);
+      }
+    }
+  };
+  visit(root);
+  return hash.digest("hex");
+}
+
+const workspaceNodeModules = dependencyRoots.map((root) => ({
+  path: relativeSourcePath(root),
+  nodeModulesPath: root,
+  digest: digestTree(root, true),
+}));
+const nodeModulesPath = dependencyRoots[0];
+const packageJson = JSON.parse(
+  fs.readFileSync(path.join(nodeModulesPath, "@vercel/microfrontends/package.json"), "utf8"),
+);
+console.log(JSON.stringify({
+  platform,
+  nodeModulesDigest: workspaceNodeModules[0].digest,
+  workspaceNodeModules: workspaceNodeModules.slice(1),
+  workspaceLinks: [...workspaceLinks.values()].sort((left, right) => left.path.localeCompare(right.path)),
+  cargoHomeDigest: digestTree(cargoHomePath, false),
+  microfrontendsVersion: packageJson.version,
+}));
+`;
+
+function liveTemplateClosureInspectionCommand(
+  input: LiveTemplateDependencyIdentity,
+) {
+  const sourceRoot = liveTemplateDependencyWorkspaceRoot(
+    input.dependencyKey,
+    input.platform,
+  );
+  const cargoHomePath = liveTemplateCargoHomeRoot(
+    input.dependencyKey,
+    input.platform,
+  );
+  return String.raw`node - '${sourceRoot}' '${cargoHomePath}' '${input.platform}' '/workspace/.app-builder/source-files.json' <<'NODE'
+${liveTemplateClosureInspectionScript}
+NODE`;
+}
+
+function liveTemplateBootstrapCommand(input: LiveTemplateDependencyIdentity) {
+  const workspace = liveTemplateDependencyWorkspaceRoot(
+    input.dependencyKey,
+    input.platform,
+  );
+  const cargoHome = liveTemplateCargoHomeRoot(
+    input.dependencyKey,
+    input.platform,
+  );
+  return String.raw`
 set -euo pipefail
-cd /workspace/repository
+test -d /workspace/repository
+test ! -L /workspace/repository
+rm -rf ${workspace} ${cargoHome}
+install -d -m 0755 ${workspace} ${cargoHome}
+git -C /workspace/repository archive --format=tar HEAD | tar --extract --file - --directory ${workspace}
+cd ${workspace}
 test "$(node --version)" = "v${HOSTED_NODE_VERSION}"
 test "$(bun --version)" = "${ARRUSTED_BUN_VERSION}"
 test "$(rustc --version | cut -d' ' -f2)" = "${ARRUSTED_RUST_VERSION}"
 test "$(cargo --version | cut -d' ' -f2)" = "${ARRUSTED_RUST_VERSION}"
 bun install --frozen-lockfile --ignore-scripts --linker=hoisted >&2
-cargo fetch --locked >&2
+CARGO_HOME=${cargoHome} cargo fetch --locked >&2
 for required in .bin/next .bin/turbo .bin/vp @autograph/vite-config/package.json @tailwindcss/vite/package.json @testing-library/react/package.json @vercel/microfrontends/package.json @vitejs/plugin-react/package.json next/package.json react/package.json react-dom/package.json typescript/package.json turbo/package.json vite-plus/package.json vitest/package.json; do
   test -e "node_modules/$required"
 done
-chmod -R a-w,a+rX node_modules
-node -e 'const c=require("node:crypto"),f=require("node:fs");const sha=(p)=>c.createHash("sha256").update(f.readFileSync(p)).digest("hex");const arch=process.arch==="x64"?"linux/x86_64":process.arch==="arm64"?"linux/arm64":"unsupported";console.log(JSON.stringify({platform:arch,locks:{miseConfigSha256:sha(".config/mise/config.toml"),miseLockSha256:sha(".config/mise/mise.lock"),bunLockSha256:sha("bun.lock"),cargoLockSha256:sha("Cargo.lock")},microfrontendsVersion:JSON.parse(f.readFileSync("node_modules/@vercel/microfrontends/package.json","utf8")).version}))'`;
+node - "${workspace}" "${workspace}" <<'NODE'
+${developmentDependencySymlinkScript}
+NODE
+chmod -R a-w,a+rX ${workspace} ${cargoHome}
+${liveTemplateClosureInspectionCommand(input)}`;
+}
 
 async function liveTemplatePlatform(
   sandbox: SandboxSession,
@@ -462,20 +932,195 @@ async function liveTemplatePlatform(
   return platform.data;
 }
 
+const preparedDependencyInputSchema = z.strictObject({
+  mode: z.union([z.literal("100644"), z.literal("100755")]),
+  objectId: gitObjectId,
+  path: z.string().refine(safeSourcePath),
+  sha256: sha256Digest,
+});
+
+async function inspectLiveTemplateDependencyIdentity(
+  sandbox: SandboxSession,
+  platform: z.infer<typeof liveTemplatePlatformSchema>,
+): Promise<LiveTemplateDependencyIdentity> {
+  const manifestSource = await sandbox.readTextFile({
+    path: ".app-builder/source-files.json",
+  });
+  if (manifestSource === null)
+    throw new Error("The prepared source manifest is missing.");
+  let entries: z.infer<typeof preparedDependencyInputSchema>[];
+  try {
+    entries = z
+      .array(preparedDependencyInputSchema)
+      .min(1)
+      .parse(JSON.parse(manifestSource) as unknown);
+  } catch {
+    throw new Error("The prepared source manifest is invalid.");
+  }
+  const files = new Map(entries.map((entry) => [entry.path, entry]));
+  if (files.size !== entries.length)
+    throw new Error("The prepared source manifest is invalid.");
+  const dependencyInputPaths = entries
+    .map(({ path }) => path)
+    .filter(isLiveTemplateDependencyInputPath)
+    .sort();
+  const dependencyInputs = liveTemplateDependencyInputsSchema.parse(
+    Object.fromEntries(
+      await Promise.all(
+        dependencyInputPaths.map(async (path) => {
+          const entry = files.get(path);
+          const content = await sandbox.readBinaryFile({
+            path: `repository/${path}`,
+          });
+          if (
+            entry === undefined ||
+            content === null ||
+            sha256(content) !== entry.sha256
+          )
+            throw new Error("A dependency input changed after source review.");
+          return [path, entry.sha256] as const;
+        }),
+      ),
+    ),
+  );
+  const basis = {
+    version: 1 as const,
+    platform,
+    dependencyInputs,
+    runtime: {
+      node: HOSTED_NODE_VERSION,
+      mise: HOSTED_MISE_VERSION,
+      bun: ARRUSTED_BUN_VERSION,
+      rust: ARRUSTED_RUST_VERSION,
+    },
+    bootstrapVersion: LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION,
+  } as const;
+  return {
+    platform,
+    dependencyKey: liveTemplateDependencyKey(basis),
+    dependencyInputs,
+    runtime: basis.runtime,
+    bootstrapVersion: basis.bootstrapVersion,
+  };
+}
+
+function expectedLiveTemplateNodeModulesPath(
+  identity: LiveTemplateDependencyIdentity,
+) {
+  return `${liveTemplateDependencyWorkspaceRoot(identity.dependencyKey, identity.platform)}/node_modules`;
+}
+
+function expectedLiveTemplateCargoHomePath(
+  identity: LiveTemplateDependencyIdentity,
+) {
+  return liveTemplateCargoHomeRoot(identity.dependencyKey, identity.platform);
+}
+
+function assertExactLiveTemplateManifest(
+  manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>,
+  identity: LiveTemplateDependencyIdentity,
+) {
+  const sourceRoot = liveTemplateDependencyWorkspaceRoot(
+    identity.dependencyKey,
+    identity.platform,
+  );
+  if (
+    manifest.platform !== identity.platform ||
+    manifest.dependencyKey !== identity.dependencyKey ||
+    JSON.stringify(manifest.dependencyInputs) !==
+      JSON.stringify(identity.dependencyInputs) ||
+    JSON.stringify(manifest.runtime) !== JSON.stringify(identity.runtime) ||
+    manifest.bootstrapVersion !== identity.bootstrapVersion ||
+    manifest.closure.nodeModulesPath !==
+      expectedLiveTemplateNodeModulesPath(identity) ||
+    manifest.closure.cargoHomePath !==
+      expectedLiveTemplateCargoHomePath(identity) ||
+    manifest.closure.workspaceNodeModules.some(
+      (entry) => entry.nodeModulesPath !== `${sourceRoot}/${entry.path}`,
+    ) ||
+    manifest.closure.workspaceLinks.some(
+      (entry) => entry.path === entry.sourcePath,
+    )
+  )
+    throw new Error("The live template dependency cache binding drifted.");
+}
+
+function assertExactLiveTemplateClosure(
+  manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>,
+  observation: z.infer<typeof liveTemplateClosureObservationSchema>,
+) {
+  if (
+    observation.platform !== manifest.platform ||
+    observation.nodeModulesDigest !== manifest.closure.nodeModulesDigest ||
+    JSON.stringify(observation.workspaceNodeModules) !==
+      JSON.stringify(manifest.closure.workspaceNodeModules) ||
+    JSON.stringify(observation.workspaceLinks) !==
+      JSON.stringify(manifest.closure.workspaceLinks) ||
+    observation.cargoHomeDigest !== manifest.closure.cargoHomeDigest ||
+    observation.microfrontendsVersion !== manifest.closure.microfrontendsVersion
+  )
+    throw new Error("The live template dependency cache closure drifted.");
+}
+
+async function inspectLiveTemplateClosure(input: {
+  sandbox: SandboxSession;
+  identity: LiveTemplateDependencyIdentity;
+}) {
+  const result = await input.sandbox.run({
+    command: liveTemplateClosureInspectionCommand(input.identity),
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+  });
+  boundedOutput(
+    result.stdout,
+    result.stderr,
+    "Template dependency closure inspection",
+  );
+  if (result.exitCode !== 0)
+    throw new Error("The live template dependency cache closure is missing.");
+  try {
+    return liveTemplateClosureObservationSchema.parse(
+      JSON.parse(result.stdout) as unknown,
+    );
+  } catch {
+    throw new Error("The live template dependency cache closure is invalid.");
+  }
+}
+
+function liveTemplateContentDigest(
+  manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>,
+) {
+  return sha256(
+    JSON.stringify({
+      platform: manifest.platform,
+      dependencyKey: manifest.dependencyKey,
+      dependencyInputs: manifest.dependencyInputs,
+      runtime: manifest.runtime,
+      bootstrapVersion: manifest.bootstrapVersion,
+      closure: manifest.closure,
+    }),
+  );
+}
+
 export async function bootstrapLiveTemplateDependencies(input: {
   sandbox: SandboxSession;
-  target: ExactSourceBinding;
 }): Promise<ObservedDependencyCache> {
   const platform = await liveTemplatePlatform(input.sandbox);
+  const identity = await inspectLiveTemplateDependencyIdentity(
+    input.sandbox,
+    platform,
+  );
+  const manifestPath = liveTemplateManifestPath(
+    identity.dependencyKey,
+    platform,
+  );
   const prior = await input.sandbox.readTextFile({
-    path: liveTemplateManifestPath(input.target, platform),
+    path: manifestPath,
   });
   if (prior !== null) {
-    let manifest: ReturnType<
-      typeof liveTemplateDependencyCacheManifestSchema.safeParse
-    >;
+    let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
     try {
-      manifest = liveTemplateDependencyCacheManifestSchema.safeParse(
+      manifest = liveTemplateDependencyCacheManifestSchema.parse(
         JSON.parse(prior) as unknown,
       );
     } catch {
@@ -483,30 +1128,28 @@ export async function bootstrapLiveTemplateDependencies(input: {
         "The live template dependency cache manifest is invalid.",
       );
     }
-    if (
-      manifest.success &&
-      manifest.data.target.sha === input.target.sourceSha &&
-      manifest.data.target.tree === input.target.sourceTree
-    )
-      return {
-        manifest: manifest.data,
-        manifestDigest: sha256(prior),
-        contentDigest: sha256(
-          JSON.stringify({
-            locks: manifest.data.locks,
-            closure: manifest.data.closure,
-            platform: manifest.data.platform,
-          }),
-        ),
-      };
+    assertExactLiveTemplateManifest(manifest, identity);
+    const observation = await inspectLiveTemplateClosure({
+      sandbox: input.sandbox,
+      identity,
+    });
+    assertExactLiveTemplateClosure(manifest, observation);
+    return {
+      manifest,
+      manifestDigest: sha256(prior),
+      contentDigest: liveTemplateContentDigest(manifest),
+    };
   }
+  await ensureSandboxDirectories(input.sandbox, [
+    `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${identity.dependencyKey}/${platform}`,
+  ]);
   await input.sandbox.setNetworkPolicy({
     allow: [...LIVE_TEMPLATE_BOOTSTRAP_HOSTS],
   });
   let result;
   try {
     result = await input.sandbox.run({
-      command: liveTemplateBootstrapCommand,
+      command: liveTemplateBootstrapCommand(identity),
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
@@ -518,9 +1161,9 @@ export async function bootstrapLiveTemplateDependencies(input: {
     throw new Error(
       "The canonical template dependencies could not be bootstrapped.",
     );
-  let observation: z.infer<typeof liveTemplateBootstrapObservationSchema>;
+  let observation: z.infer<typeof liveTemplateClosureObservationSchema>;
   try {
-    observation = liveTemplateBootstrapObservationSchema.parse(
+    observation = liveTemplateClosureObservationSchema.parse(
       JSON.parse(result.stdout) as unknown,
     );
   } catch {
@@ -531,35 +1174,33 @@ export async function bootstrapLiveTemplateDependencies(input: {
   if (observation.platform !== platform)
     throw new Error("The canonical template dependency platform drifted.");
   const manifest = {
-    version: 1 as const,
+    version: 4 as const,
     scope: "live-template-execution" as const,
     platform: observation.platform,
-    target: { sha: input.target.sourceSha, tree: input.target.sourceTree },
-    locks: observation.locks,
+    dependencyKey: identity.dependencyKey,
+    dependencyInputs: identity.dependencyInputs,
+    runtime: identity.runtime,
+    bootstrapVersion: identity.bootstrapVersion,
     closure: {
-      nodeModulesPath: LIVE_TEMPLATE_NODE_MODULES_PATH,
+      nodeModulesPath: expectedLiveTemplateNodeModulesPath(identity),
+      nodeModulesDigest: observation.nodeModulesDigest,
+      workspaceNodeModules: observation.workspaceNodeModules,
+      workspaceLinks: observation.workspaceLinks,
+      cargoHomePath: expectedLiveTemplateCargoHomePath(identity),
+      cargoHomeDigest: observation.cargoHomeDigest,
       microfrontendsVersion: observation.microfrontendsVersion,
     },
   };
   const parsed = liveTemplateDependencyCacheManifestSchema.parse(manifest);
   const serialized = `${JSON.stringify(parsed, null, 2)}\n`;
-  await ensureSandboxDirectories(input.sandbox, [
-    `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${input.target.sourceSha}/${platform}`,
-  ]);
   await input.sandbox.writeTextFile({
-    path: liveTemplateManifestPath(input.target, platform),
+    path: manifestPath,
     content: serialized,
   });
   return {
     manifest: parsed,
     manifestDigest: sha256(serialized),
-    contentDigest: sha256(
-      JSON.stringify({
-        locks: parsed.locks,
-        closure: parsed.closure,
-        platform: parsed.platform,
-      }),
-    ),
+    contentDigest: liveTemplateContentDigest(parsed),
   };
 }
 
@@ -580,8 +1221,12 @@ export async function inspectDependencyCache(
   }
   if (preferLiveTemplate && fixtureTarget !== undefined) {
     const platform = await liveTemplatePlatform(sandbox);
+    const identity = await inspectLiveTemplateDependencyIdentity(
+      sandbox,
+      platform,
+    );
     const liveManifest = await sandbox.readTextFile({
-      path: liveTemplateManifestPath(fixtureTarget, platform),
+      path: liveTemplateManifestPath(identity.dependencyKey, platform),
     });
     if (liveManifest === null)
       throw new DependencyCacheMissingError(
@@ -597,22 +1242,16 @@ export async function inspectDependencyCache(
         "The live template dependency cache manifest is invalid.",
       );
     }
-    if (
-      manifest.target.sha !== fixtureTarget.sourceSha ||
-      manifest.target.tree !== fixtureTarget.sourceTree ||
-      manifest.platform !== platform
-    )
-      throw new Error("The live template dependency cache source drifted.");
+    assertExactLiveTemplateManifest(manifest, identity);
+    const observation = await inspectLiveTemplateClosure({
+      sandbox,
+      identity,
+    });
+    assertExactLiveTemplateClosure(manifest, observation);
     return {
       manifest,
       manifestDigest: sha256(liveManifest),
-      contentDigest: sha256(
-        JSON.stringify({
-          locks: manifest.locks,
-          closure: manifest.closure,
-          platform: manifest.platform,
-        }),
-      ),
+      contentDigest: liveTemplateContentDigest(manifest),
     };
   }
 
@@ -722,20 +1361,19 @@ export async function materializeOfflineDependencies(input: {
   const developmentExecution =
     observed.manifest.scope === "development-execution";
   const root = planningOverlayRoot(input.artifactRevision);
+  const dependencyLayout = dependencyExecutionLayout(observed, environment);
   if (!fixtureDependencyCacheEnabled(environment)) {
     const liveTemplate = observed.manifest.scope === "live-template-execution";
     const hostedExecution =
       !liveTemplate && hostedWorkspaceDependencyExtractionEnabled(environment);
     const hostedDependencyRoot = `/workspace/.app-builder/hosted-dependencies/${observed.contentDigest}`;
-    const absoluteNodeModules = liveTemplate
-      ? LIVE_TEMPLATE_NODE_MODULES_PATH
-      : materializedDependencyNodeModulesRoot(
-          observed.contentDigest,
-          environment,
-        );
-    const developmentWorkspaceDependencyLink = developmentExecution
-      ? `test -d /workspace/repository && test ! -L /workspace/repository && if [ -e /workspace/repository/node_modules ] || [ -L /workspace/repository/node_modules ]; then test -L /workspace/repository/node_modules && test "$(readlink -- /workspace/repository/node_modules)" = "${absoluteNodeModules}"; else ln -s ${absoluteNodeModules} /workspace/repository/node_modules; fi && test -L /workspace/repository/node_modules && test "$(readlink -- /workspace/repository/node_modules)" = "${absoluteNodeModules}" && `
-      : "";
+    const absoluteNodeModules =
+      observed.manifest.scope === "live-template-execution"
+        ? observed.manifest.closure.nodeModulesPath
+        : materializedDependencyNodeModulesRoot(
+            observed.contentDigest,
+            environment,
+          );
     const installHostedClosure = hostedExecution
       ? `if [ ! -d ${absoluteNodeModules} ]; then rm -rf ${hostedDependencyRoot} && install -d -m 0755 ${hostedDependencyRoot} && tar --extract --gzip --file ${dependencyCachePaths(environment).archive} --directory ${hostedDependencyRoot} --no-same-owner --no-same-permissions && chmod -R a-w,a+rX ${hostedDependencyRoot}; fi && `
       : "";
@@ -744,7 +1382,7 @@ export async function materializeOfflineDependencies(input: {
       (path) => `test -e ${absoluteNodeModules}/${path}`,
     ).join(" && ");
     const extraction = await input.sandbox.run({
-      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && ${developmentWorkspaceDependencyLink}rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}" && cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && test ! -e /workspace/repository/node_modules && test ! -L /workspace/repository/node_modules`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
@@ -757,6 +1395,24 @@ export async function materializeOfflineDependencies(input: {
       throw new Error(
         "The fixed offline dependency cache could not be materialized.",
       );
+    await materializeExecutionDependencyView({
+      sandbox: input.sandbox,
+      layout: dependencyLayout,
+      overlayRoot: root,
+      viewKey: input.artifactRevision,
+    });
+    const resolution = await input.sandbox.run({
+      command: `cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
+      workingDirectory: "/workspace",
+      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
+    });
+    boundedOutput(
+      resolution.stdout,
+      resolution.stderr,
+      "Dependency view resolution",
+    );
+    if (resolution.exitCode !== 0)
+      throw new Error("The dependency execution view is incomplete.");
   }
   const packageContent = fixtureDependencyCacheEnabled(environment)
     ? JSON.stringify({ version: ARRUSTED_MICROFRONTENDS_VERSION })
@@ -812,7 +1468,11 @@ export async function materializeOfflineDependencies(input: {
         throw new Error("The required offline Rust toolchain is incomplete.");
     }
   }
-  return { ...observed, planningRoot: `/workspace/${root}` };
+  return {
+    ...observed,
+    dependencyLayout,
+    planningRoot: `/workspace/${root}`,
+  };
 }
 
 export function dependencyCacheReceiptDigest(

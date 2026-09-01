@@ -109,6 +109,10 @@ export default defineTool({
         expectedEligibilityDigest,
         sandbox,
         ctx.callId,
+        false,
+        source.receipt.sourceKind === "existing-repository"
+          ? "planning"
+          : "full",
       );
     }
     if (workspace.sourceTree !== expectedTree)

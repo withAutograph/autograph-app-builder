@@ -228,4 +228,23 @@ describe("deployment GitHub publication composition", () => {
       expect(mutationTool).toContain("approval: always()");
     }
   });
+
+  it("describes draft publication as release-gate drift protected", async () => {
+    const [publishDraft, instructions] = await Promise.all([
+      readFile("agent/tools/publish_github_draft_pr.ts", "utf8"),
+      readFile("agent/instructions.md", "utf8"),
+    ]);
+
+    expect(publishDraft).toContain("release-gate drift");
+    expect(publishDraft).toContain(
+      "an already-enabled release gate is allowed only when its sealed state remains unchanged",
+    );
+    expect(publishDraft).not.toContain("an enabled release gate");
+    expect(instructions).toContain(
+      "An existing repository may already have it configured",
+    );
+    expect(instructions).toContain(
+      "draft-PR publication must preserve the sealed state and refuse only drift",
+    );
+  });
 });

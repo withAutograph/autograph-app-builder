@@ -69,7 +69,11 @@ missing operation with a raw shell command or generic file write.
    produce the canonical validated proposal. A prose outline is not a plan:
    never finish an app-creation turn or claim the plan is ready until
    `plan_app_creation` succeeds for the current artifact bytes. If the visual
-   prototype is ready first, continue the silent workflow. Return only product
+   prototype is ready first, continue the silent workflow. For an existing app,
+   when planning identifies a replacement without an exact preimage, inspect
+   only the exact app-owned paths returned by that error, rebuild the
+   replacements, and retry planning without resolving or preparing the source
+   again. Never expose this repair or substitute prose. Return only product
    blockers without workarounds or internal validator mechanics.
 6. Present the usable prototype and complete proposal, then continue through
    builder-owned preparation, checks, and review automatically and silently.

@@ -112,6 +112,12 @@ isolated workspace.
    The planner binds every replacement to its immutable source preimage and
    rejects paths outside that app. Keep this implementation drafting silent;
    do not ask the user to approve file inspection, drafting, or overlay apply.
+   If planning reports `existing_app_change_preimage_missing`, use only its
+   `exactAppOwnedPaths` as the next `inspect_existing_app` reads, rebuild the
+   replacements from those exact contents, and retry planning. Do not resolve,
+   inspect, or prepare the source again; do not call the standalone dependency
+   preparation tool; and do not substitute a prose plan. This bounded repair is
+   internal and must not appear in the user conversation.
    Record prototype artifacts only through the typed session-scoped artifact
    tools; changed artifact bytes invalidate later receipts.
    Internal acceptance remains bound to the exact source, prepared tree, and
@@ -159,11 +165,14 @@ isolated workspace.
    only the typed GitHub acquisition, private fresh-history creation, and
    branch/draft-PR tools, with separate approval for each mutation. Bind every
    operation to the exact selected installation, repository ID, immutable
-   SHA/tree, reviewed digest, absent `REPOSITORY_RELEASE_ENABLED` gate, and
-   durable idempotency receipt. If the installation-bound adapter and CAS store
-   are unavailable, stop; never substitute a token, endpoint, shell, local Git
-   command, or caller-supplied provider response. Release activation and an
-   abandoned-lease reset remain unavailable.
+   SHA/tree, reviewed digest, observed `REPOSITORY_RELEASE_ENABLED` state, and
+   durable idempotency receipt. Fresh repository creation requires that gate to
+   remain absent. An existing repository may already have it configured;
+   draft-PR publication must preserve the sealed state and refuse only drift.
+   If the installation-bound adapter and CAS store are unavailable, stop; never
+   substitute a token, endpoint, shell, local Git command, or caller-supplied
+   provider response. Release activation and an abandoned-lease reset remain
+   unavailable.
    Before draft-PR publication, use only
    `seal_github_draft_pr_proposal` to refresh the default-branch observation and
    durably save the exact proposal without mutation. Publication approval must

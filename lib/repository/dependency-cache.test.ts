@@ -1,4 +1,20 @@
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -21,11 +37,16 @@ import {
   assertExactDependencyTargetBinding,
   bootstrapLiveTemplateDependencies,
   dependencyTargetForWorkspace,
+  executionDependencyViewScript,
   inspectDependencyCache,
   materializedDependencyNodeModulesRoot,
   materializeOfflineDependencies,
+  liveTemplateClosureInspectionScript,
+  liveTemplateDependencyKey,
   shouldPreferLiveTemplateDependencies,
 } from "./dependency-cache";
+
+const executeFile = promisify(execFile);
 
 const archiveDigest = "a".repeat(64);
 const hostedArchiveDigest =
@@ -120,6 +141,127 @@ const developmentManifest = {
   closure: manifest.closure,
 } as const;
 
+function liveDependencySourceFixture(input?: {
+  packageJson?: string;
+  ordinarySource?: string;
+}) {
+  const contents = new Map([
+    [".config/mise/config.toml", "[tools]\nnode = '24.18.0'\n"],
+    [".config/mise/mise.lock", "mise-lock\n"],
+    ["package.json", input?.packageJson ?? '{"workspaces":["apps/*"]}\n'],
+    ["bun.lock", "bun-lock\n"],
+    ["Cargo.toml", '[workspace]\nmembers = ["crates/*"]\n'],
+    ["Cargo.lock", "cargo-lock\n"],
+    ["apps/vendor/package.json", '{"name":"@autograph/vendor"}\n'],
+    ["crates/vendor/Cargo.toml", '[package]\nname = "vendor"\n'],
+    [
+      "apps/vendor/app/page.tsx",
+      input?.ordinarySource ?? "export default function Page() {}\n",
+    ],
+  ]);
+  const sourceFiles = [...contents].map(([path, content]) => ({
+    mode: "100644" as const,
+    objectId: createHash("sha1").update(content).digest("hex"),
+    path,
+    sha256: createHash("sha256").update(content).digest("hex"),
+  }));
+  const dependencyInputs = Object.fromEntries(
+    sourceFiles
+      .filter(
+        ({ path }) =>
+          path === ".config/mise/config.toml" ||
+          path === ".config/mise/mise.lock" ||
+          path === "package.json" ||
+          path === "bun.lock" ||
+          path === "Cargo.toml" ||
+          path === "Cargo.lock" ||
+          path.endsWith("/package.json") ||
+          path.endsWith("/Cargo.toml"),
+      )
+      .map(({ path, sha256 }) => [path, sha256]),
+  );
+  return { contents, dependencyInputs, sourceFiles };
+}
+
+const liveNodeModulesDigest = "a".repeat(64);
+const liveCargoHomeDigest = "b".repeat(64);
+
+function liveTemplateCacheFixture() {
+  let source = liveDependencySourceFixture();
+  let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" =
+    "clean";
+  const stored = new Map<string, string>();
+  const setNetworkPolicy = vi.fn(async () => undefined);
+  const observation = (tampered: "cargo" | "node" | undefined = undefined) =>
+    JSON.stringify({
+      platform: "linux/x86_64",
+      nodeModulesDigest:
+        tampered === "node" ? "c".repeat(64) : liveNodeModulesDigest,
+      workspaceNodeModules: [],
+      workspaceLinks: [],
+      cargoHomeDigest:
+        tampered === "cargo" ? "d".repeat(64) : liveCargoHomeDigest,
+      microfrontendsVersion: "2.4.0",
+    });
+  const run = vi.fn(async ({ command }: { command: string }) => {
+    if (command.includes("uname -s"))
+      return { exitCode: 0, stdout: "linux/x86_64\n", stderr: "" };
+    if (command.includes("bun install"))
+      return { exitCode: 0, stdout: observation(), stderr: "" };
+    if (
+      command.includes("function digestTree(root, allowTrackedWorkspaceLinks)")
+    ) {
+      if (closureState === "missing")
+        return { exitCode: 1, stdout: "", stderr: "missing closure" };
+      return {
+        exitCode: 0,
+        stdout: observation(
+          closureState === "node-tampered"
+            ? "node"
+            : closureState === "cargo-tampered"
+              ? "cargo"
+              : undefined,
+        ),
+        stderr: "",
+      };
+    }
+    return { exitCode: 0, stdout: "", stderr: "" };
+  });
+  const writeTextFile = vi.fn(
+    async ({ path, content }: { path: string; content: string }) => {
+      stored.set(path, content);
+    },
+  );
+  const sandbox = {
+    readTextFile: vi.fn(async ({ path }: { path: string }) =>
+      path === ".app-builder/source-files.json"
+        ? JSON.stringify(source.sourceFiles)
+        : (stored.get(path) ?? null),
+    ),
+    readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
+      const content = source.contents.get(path.replace(/^repository\//u, ""));
+      return content === undefined ? null : Buffer.from(content);
+    }),
+    setNetworkPolicy,
+    run,
+    writeTextFile,
+  } as unknown as SandboxSession;
+  return {
+    sandbox,
+    run,
+    setNetworkPolicy,
+    stored,
+    writeTextFile,
+    source: () => source,
+    setSource: (next: ReturnType<typeof liveDependencySourceFixture>) => {
+      source = next;
+    },
+    setClosureState: (next: typeof closureState) => {
+      closureState = next;
+    },
+  };
+}
+
 function sandboxFixture(inputManifest: unknown = manifest) {
   const run = vi
     .fn()
@@ -137,11 +279,14 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+  run.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+  const writeTextFile = vi.fn(async () => undefined);
   const sandbox = {
     run,
+    writeTextFile,
     readTextFile: vi.fn(async () => JSON.stringify({ version: "2.4.0" })),
   } as unknown as SandboxSession;
-  return { run, sandbox };
+  return { run, sandbox, writeTextFile };
 }
 
 function hostedExecutionSandbox(
@@ -162,8 +307,264 @@ function hostedExecutionSandbox(
   return { run, sandbox: { run } as unknown as SandboxSession };
 }
 
+async function writeDependencyTopologyFixture(root: string) {
+  const source = join(root, "cache", "source");
+  const cargo = join(root, "cache", "cargo-home");
+  const rootModules = join(source, "node_modules");
+  const appModules = join(source, "apps", "vendor", "node_modules");
+  await Promise.all([
+    mkdir(join(rootModules, "@autograph"), { recursive: true }),
+    mkdir(join(rootModules, "@vercel", "microfrontends"), {
+      recursive: true,
+    }),
+    mkdir(join(rootModules, "react"), { recursive: true }),
+    mkdir(join(appModules, "@autograph"), { recursive: true }),
+    mkdir(join(appModules, "zod"), { recursive: true }),
+    mkdir(join(source, "packages", "ui"), { recursive: true }),
+    mkdir(cargo, { recursive: true }),
+  ]);
+  await Promise.all([
+    writeFile(
+      join(source, "package.json"),
+      '{"workspaces":["apps/*","packages/*"]}\n',
+    ),
+    writeFile(
+      join(source, "apps", "vendor", "package.json"),
+      '{"name":"vendor"}\n',
+    ),
+    writeFile(
+      join(source, "packages", "ui", "index.js"),
+      'export const source = "cache";\n',
+    ),
+    writeFile(
+      join(rootModules, "@vercel", "microfrontends", "package.json"),
+      '{"version":"2.4.0"}\n',
+    ),
+    writeFile(
+      join(rootModules, "react", "package.json"),
+      '{"version":"19.2.4"}\n',
+    ),
+    writeFile(join(appModules, "zod", "package.json"), '{"version":"4.4.3"}\n'),
+    symlink("../../packages/ui", join(rootModules, "@autograph", "ui")),
+    symlink("../../../../packages/ui", join(appModules, "@autograph", "ui")),
+  ]);
+  const trackedPaths = [
+    "package.json",
+    "apps/vendor/package.json",
+    "packages/ui/index.js",
+  ];
+  const sourceManifest = trackedPaths.map((path) => ({
+    mode: "100644",
+    objectId: "1".repeat(40),
+    path,
+    sha256: "2".repeat(64),
+  }));
+  const manifestPath = join(root, "source-files.json");
+  await writeFile(manifestPath, JSON.stringify(sourceManifest));
+  await executeFile("/bin/chmod", ["-R", "a-w,a+rX", source, cargo]);
+  return {
+    source: await realpath(source),
+    cargo: await realpath(cargo),
+    rootModules: await realpath(rootModules),
+    appModules: await realpath(appModules),
+    manifestPath: await realpath(manifestPath),
+  };
+}
+
 describe("offline dependency cache", () => {
-  it("uses workspace-bound dependencies for both supported hosted source receipts", () => {
+  it("invalidates the live cache key only for declared dependency and runtime inputs", () => {
+    const source = liveDependencySourceFixture();
+    const basis = {
+      platform: "linux/x86_64",
+      dependencyInputs: source.dependencyInputs,
+      runtime: {
+        node: "24.18.0",
+        mise: "2026.8.12",
+        bun: "1.3.14",
+        rust: "1.97.1",
+      },
+      bootstrapVersion: 3,
+    } as const;
+    const original = liveTemplateDependencyKey(basis);
+    for (const path of [
+      "Cargo.toml",
+      "Cargo.lock",
+      ".config/mise/config.toml",
+      ".config/mise/mise.lock",
+      "apps/vendor/package.json",
+      "crates/vendor/Cargo.toml",
+    ]) {
+      expect(
+        liveTemplateDependencyKey({
+          ...basis,
+          dependencyInputs: {
+            ...basis.dependencyInputs,
+            [path]: "f".repeat(64),
+          },
+        }),
+        path,
+      ).not.toBe(original);
+    }
+    expect(
+      liveTemplateDependencyKey({ ...basis, platform: "linux/arm64" }),
+    ).not.toBe(original);
+    for (const runtime of ["node", "mise", "bun", "rust"] as const) {
+      expect(
+        liveTemplateDependencyKey({
+          ...basis,
+          runtime: { ...basis.runtime, [runtime]: "changed" },
+        }),
+        runtime,
+      ).not.toBe(original);
+    }
+    expect(
+      liveTemplateDependencyKey({ ...basis, bootstrapVersion: 4 }),
+    ).not.toBe(original);
+  });
+
+  it("executes the live closure inspector and rebinds complete workspace topology", async () => {
+    const root = await mkdtemp(join(tmpdir(), "app-builder-topology-"));
+    try {
+      const fixture = await writeDependencyTopologyFixture(root);
+      const inspectionPath = join(root, "inspect.cjs");
+      await writeFile(inspectionPath, liveTemplateClosureInspectionScript);
+      const inspected = await executeFile(process.execPath, [
+        inspectionPath,
+        fixture.source,
+        fixture.cargo,
+        "linux/x86_64",
+        fixture.manifestPath,
+      ]);
+      const observation = JSON.parse(inspected.stdout) as {
+        nodeModulesDigest: string;
+        workspaceNodeModules: Array<{
+          path: string;
+          nodeModulesPath: string;
+          digest: string;
+        }>;
+        workspaceLinks: Array<{
+          path: string;
+          target: string;
+          sourcePath: string;
+        }>;
+      };
+      expect(observation.workspaceNodeModules).toEqual([
+        expect.objectContaining({
+          path: "apps/vendor/node_modules",
+          nodeModulesPath: fixture.appModules,
+        }),
+      ]);
+      expect(observation.workspaceLinks).toEqual([
+        {
+          path: "apps/vendor/node_modules/@autograph/ui",
+          target: "../../../../packages/ui",
+          sourcePath: "packages/ui",
+        },
+        {
+          path: "node_modules/@autograph/ui",
+          target: "../../packages/ui",
+          sourcePath: "packages/ui",
+        },
+      ]);
+
+      const workspace = join(root, "workspace");
+      const overlay = join(workspace, "overlay");
+      const view = join(workspace, ".app-builder", "dependency-views", "view");
+      await Promise.all([
+        mkdir(join(overlay, "packages", "ui"), { recursive: true }),
+        mkdir(join(overlay, "apps", "vendor"), { recursive: true }),
+        mkdir(join(workspace, ".app-builder", "dependency-views"), {
+          recursive: true,
+        }),
+      ]);
+      await Promise.all([
+        writeFile(
+          join(overlay, "packages", "ui", "index.js"),
+          'export const source = "overlay";\n',
+        ),
+        writeFile(
+          join(overlay, "apps", "vendor", "package.json"),
+          '{"name":"vendor"}\n',
+        ),
+      ]);
+      const layout = {
+        version: 1,
+        kind: "cache",
+        roots: [
+          {
+            path: "node_modules",
+            cachePath: fixture.rootModules,
+            digest: observation.nodeModulesDigest,
+          },
+          ...observation.workspaceNodeModules.map((entry) => ({
+            path: entry.path,
+            cachePath: entry.nodeModulesPath,
+            digest: entry.digest,
+          })),
+        ],
+        workspaceLinks: observation.workspaceLinks,
+      };
+      const layoutPath = join(root, "layout.json");
+      const viewScriptPath = join(root, "view.cjs");
+      await Promise.all([
+        writeFile(layoutPath, JSON.stringify(layout)),
+        writeFile(viewScriptPath, executionDependencyViewScript),
+      ]);
+      await executeFile(process.execPath, [
+        viewScriptPath,
+        layoutPath,
+        overlay,
+        view,
+        workspace,
+      ]);
+
+      expect(await realpath(join(overlay, "node_modules", "react"))).toBe(
+        await realpath(join(fixture.rootModules, "react")),
+      );
+      expect(
+        await realpath(join(overlay, "node_modules", "@autograph", "ui")),
+      ).toBe(await realpath(join(overlay, "packages", "ui")));
+      expect(
+        await realpath(
+          join(overlay, "apps", "vendor", "node_modules", "@autograph", "ui"),
+        ),
+      ).toBe(await realpath(join(overlay, "packages", "ui")));
+      expect(
+        await realpath(join(overlay, "apps", "vendor", "node_modules", "zod")),
+      ).toBe(await realpath(join(fixture.appModules, "zod")));
+
+      const cachedPackage = join(fixture.rootModules, "react", "package.json");
+      const cachedBefore = {
+        content: await readFile(cachedPackage, "utf8"),
+        mode: (await lstat(cachedPackage)).mode,
+      };
+      const overlayModules = await realpath(join(overlay, "node_modules"));
+      await writeFile(join(overlayModules, "overlay-owned.txt"), "owned\n");
+      await chmod(overlayModules, 0o700);
+      expect(await readFile(cachedPackage, "utf8")).toBe(cachedBefore.content);
+      expect((await lstat(cachedPackage)).mode).toBe(cachedBefore.mode);
+
+      await chmod(fixture.rootModules, 0o755);
+      await symlink(join(root, "outside"), join(fixture.rootModules, "escape"));
+      await mkdir(join(root, "outside"));
+      await chmod(fixture.rootModules, 0o555);
+      await expect(
+        executeFile(process.execPath, [
+          inspectionPath,
+          fixture.source,
+          fixture.cargo,
+          "linux/x86_64",
+          fixture.manifestPath,
+        ]),
+      ).rejects.toThrow();
+    } finally {
+      await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(
+        () => undefined,
+      );
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("keeps cache selection independent of source-receipt transport versions", () => {
     expect(shouldPreferLiveTemplateDependencies(3, {})).toBe(true);
     expect(shouldPreferLiveTemplateDependencies(4, {})).toBe(true);
     expect(
@@ -171,7 +572,7 @@ describe("offline dependency cache", () => {
         APP_BUILDER_EXECUTION_MODE: "development",
       }),
     ).toBe(false);
-    expect(shouldPreferLiveTemplateDependencies(2, {})).toBe(false);
+    expect(shouldPreferLiveTemplateDependencies(2, {})).toBe(true);
   });
 
   it("keeps cold dependency preparation bounded below the sandbox session ceiling", () => {
@@ -399,6 +800,7 @@ describe("offline dependency cache", () => {
 
   it("reports a typed live-template miss without falling through to another cache", async () => {
     const target = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
+    const source = liveDependencySourceFixture();
     const run = vi.fn(async () => ({
       exitCode: 0,
       stdout: "linux/x86_64\n",
@@ -406,7 +808,15 @@ describe("offline dependency cache", () => {
     }));
     const sandbox = {
       run,
-      readTextFile: vi.fn(async () => null),
+      readTextFile: vi.fn(async ({ path }: { path: string }) =>
+        path === ".app-builder/source-files.json"
+          ? JSON.stringify(source.sourceFiles)
+          : null,
+      ),
+      readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
+        const content = source.contents.get(path.replace(/^repository\//u, ""));
+        return content === undefined ? null : Buffer.from(content);
+      }),
     } as unknown as SandboxSession;
 
     await expect(
@@ -415,76 +825,203 @@ describe("offline dependency cache", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  it("bootstraps a SHA-scoped locked template closure, then restores deny-all networking", async () => {
-    const target = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
-    const setNetworkPolicy = vi.fn(async () => undefined);
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: "linux/x86_64\n",
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: JSON.stringify({
-          platform: "linux/x86_64",
-          locks: {
-            miseConfigSha256: "1".repeat(64),
-            miseLockSha256: "2".repeat(64),
-            bunLockSha256: "3".repeat(64),
-            cargoLockSha256: "4".repeat(64),
-          },
-          microfrontendsVersion: "2.4.0",
-        }),
-        stderr: "",
-      })
-      .mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
-    const writeTextFile = vi.fn(async () => undefined);
-    const sandbox = {
-      readTextFile: vi.fn(async () => null),
-      setNetworkPolicy,
-      run,
-      writeTextFile,
-    } as unknown as SandboxSession;
+  it("bootstraps a dependency-keyed template closure outside the source checkout", async () => {
+    const fixture = liveTemplateCacheFixture();
+    const originalDependencyInputs = fixture.source().dependencyInputs;
 
-    const cache = await bootstrapLiveTemplateDependencies({ sandbox, target });
-
-    expect(cache.manifest).toMatchObject({
-      scope: "live-template-execution",
-      target: { sha: target.sourceSha, tree: target.sourceTree },
-      closure: { nodeModulesPath: "/workspace/repository/node_modules" },
+    const first = await bootstrapLiveTemplateDependencies({
+      sandbox: fixture.sandbox,
     });
-    expect(run.mock.calls[1]?.[0].command).toContain(
+    fixture.setSource(
+      liveDependencySourceFixture({
+        ordinarySource:
+          "export default function Page() { return 'Changed'; }\n",
+      }),
+    );
+    const second = await bootstrapLiveTemplateDependencies({
+      sandbox: fixture.sandbox,
+    });
+
+    expect(first).toEqual(second);
+    expect(first.manifest).toMatchObject({
+      version: 4,
+      scope: "live-template-execution",
+      dependencyKey: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      dependencyInputs: originalDependencyInputs,
+      bootstrapVersion: 3,
+      closure: {
+        nodeModulesPath: expect.stringMatching(
+          /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/source\/node_modules$/u,
+        ),
+        nodeModulesDigest: liveNodeModulesDigest,
+        workspaceNodeModules: [],
+        workspaceLinks: [],
+        cargoHomePath: expect.stringMatching(
+          /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/cargo-home$/u,
+        ),
+        cargoHomeDigest: liveCargoHomeDigest,
+      },
+    });
+    const bootstrap = fixture.run.mock.calls.find(([call]) =>
+      call.command.includes("bun install"),
+    )?.[0].command;
+    expect(bootstrap).toBeDefined();
+    expect(bootstrap).toContain(
+      "git -C /workspace/repository archive --format=tar HEAD",
+    );
+    expect(bootstrap).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
-    expect(run.mock.calls[1]?.[0].command).toContain(
-      'test "$(node --version)" = "v24.18.0"',
+    expect(bootstrap).toMatch(
+      /CARGO_HOME=\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/cargo-home cargo fetch --locked/u,
     );
-    expect(run.mock.calls[1]?.[0].command).toContain(
-      'test "$(bun --version)" = "1.3.14"',
+    expect(bootstrap).toContain(
+      "function digestTree(root, allowTrackedWorkspaceLinks)",
     );
-    expect(run.mock.calls[1]?.[0].command).toContain(
+    expect(bootstrap).toContain('test "$(node --version)" = "v24.18.0"');
+    expect(bootstrap).toContain('test "$(bun --version)" = "1.3.14"');
+    expect(bootstrap).toContain(
       'test "$(rustc --version | cut -d\' \' -f2)" = "1.97.1"',
     );
-    expect(run.mock.calls[1]?.[0].command).not.toContain("mise install");
-    expect(run.mock.calls[1]?.[0].command).toContain("cargo fetch --locked");
-    expect(setNetworkPolicy).toHaveBeenNthCalledWith(
+    expect(bootstrap).not.toContain("cd /workspace/repository\n");
+    expect(bootstrap).not.toMatch(/chmod[^\n]*\/workspace\/repository/u);
+    expect(bootstrap).not.toContain("mise install");
+    fixture.setSource(
+      liveDependencySourceFixture({
+        packageJson: '{"workspaces":["apps/*","packages/*"]}\n',
+        ordinarySource:
+          "export default function Page() { return 'Changed'; }\n",
+      }),
+    );
+    const changedManifest = await bootstrapLiveTemplateDependencies({
+      sandbox: fixture.sandbox,
+    });
+    if (
+      first.manifest.scope !== "live-template-execution" ||
+      changedManifest.manifest.scope !== "live-template-execution"
+    )
+      throw new Error("expected live template manifests");
+    expect(changedManifest.manifest.dependencyKey).not.toBe(
+      first.manifest.dependencyKey,
+    );
+    expect(changedManifest.manifest.dependencyInputs).toEqual(
+      fixture.source().dependencyInputs,
+    );
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(4);
+    expect(fixture.setNetworkPolicy).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         allow: expect.arrayContaining(["registry.npmjs.org"]),
       }),
     );
-    expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
-    expect(writeTextFile).toHaveBeenCalledWith(
+    expect(fixture.setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
+    expect(fixture.writeTextFile).toHaveBeenCalledTimes(2);
+    expect(fixture.writeTextFile).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
-        path: `.app-builder/template-dependency-cache/${target.sourceSha}/linux/x86_64/manifest.json`,
+        path: expect.stringMatching(
+          /^\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/manifest\.json$/u,
+        ),
       }),
     );
+    expect(
+      fixture.run.mock.calls.filter(([call]) =>
+        call.command.includes("bun install"),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("reuses a manifest-bound live template closure without reinstalling", async () => {
+    const fixture = liveTemplateCacheFixture();
+    const first = await bootstrapLiveTemplateDependencies({
+      sandbox: fixture.sandbox,
+    });
+
+    const second = await bootstrapLiveTemplateDependencies({
+      sandbox: fixture.sandbox,
+    });
+
+    expect(second).toEqual(first);
+    expect(
+      fixture.run.mock.calls.filter(([call]) =>
+        call.command.includes("bun install"),
+      ),
+    ).toHaveLength(1);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+    expect(
+      fixture.run.mock.calls.filter(([call]) =>
+        call.command.includes(
+          "function digestTree(root, allowTrackedWorkspaceLinks)",
+        ),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("rejects byte-tampered live template closure content without reinstalling", async () => {
+    const fixture = liveTemplateCacheFixture();
+    await bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox });
+    fixture.setClosureState("node-tampered");
+
+    await expect(
+      inspectDependencyCache(
+        fixture.sandbox,
+        {},
+        { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) },
+        true,
+      ),
+    ).rejects.toThrow("dependency cache closure drifted");
+    expect(
+      fixture.run.mock.calls.filter(([call]) =>
+        call.command.includes("bun install"),
+      ),
+    ).toHaveLength(1);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects byte-tampered Cargo closure content without reinstalling", async () => {
+    const fixture = liveTemplateCacheFixture();
+    await bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox });
+    fixture.setClosureState("cargo-tampered");
+
+    await expect(
+      inspectDependencyCache(
+        fixture.sandbox,
+        {},
+        { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) },
+        true,
+      ),
+    ).rejects.toThrow("dependency cache closure drifted");
+    expect(
+      fixture.run.mock.calls.filter(([call]) =>
+        call.command.includes("bun install"),
+      ),
+    ).toHaveLength(1);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a missing live template closure with a present manifest without reinstalling", async () => {
+    const fixture = liveTemplateCacheFixture();
+    await bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox });
+    fixture.setClosureState("missing");
+
+    await expect(
+      inspectDependencyCache(
+        fixture.sandbox,
+        {},
+        { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) },
+        true,
+      ),
+    ).rejects.toThrow("dependency cache closure is missing");
+    expect(
+      fixture.run.mock.calls.filter(([call]) =>
+        call.command.includes("bun install"),
+      ),
+    ).toHaveLength(1);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
   });
 
   it("verifies target-bound manifest and archive bytes before extraction", async () => {
-    const { run, sandbox } = sandboxFixture();
+    const { run, sandbox, writeTextFile } = sandboxFixture();
     const result = await materializeOfflineDependencies({
       sandbox,
       artifactRevision: "b".repeat(64),
@@ -505,17 +1042,13 @@ describe("offline dependency cache", () => {
       workingDirectory: "/workspace",
       abortSignal: expect.any(AbortSignal),
     });
-    expect(run).toHaveBeenNthCalledWith(
-      4,
-      expect.objectContaining({
-        command: expect.stringContaining(
-          `.app-builder/target-inputs/${"b".repeat(64)}/repository/node_modules`,
-        ),
-        workingDirectory: "/workspace",
-      }),
-    );
-    expect(run.mock.calls[3]?.[0]).not.toHaveProperty("env");
-    const linkCommand = run.mock.calls[3]?.[0].command as string;
+    const linkCommand = run.mock.calls
+      .map(([request]) => request.command as string)
+      .find(
+        (command) => command.includes("test -x") && command.includes(".bin/vp"),
+      );
+    expect(linkCommand).toBeDefined();
+    if (linkCommand === undefined) throw new Error("missing closure check");
     expect(linkCommand).not.toContain(
       "test -d /workspace/repository && test ! -L /workspace/repository",
     );
@@ -549,35 +1082,34 @@ describe("offline dependency cache", () => {
     expect(linkCommand).toContain(
       `test -x /opt/app-builder/dependencies/${archiveDigest}/node_modules/.bin/turbo`,
     );
-    expect(linkCommand).toContain('await import("@autograph/vite-config")');
     expect(linkCommand).toContain("\\( -type f -o -type d \\) -perm /222");
-    expect(linkCommand).toContain("ln -s");
-    expect(linkCommand).toContain(
-      `test -L /workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/node_modules`,
+    expect(linkCommand).not.toContain("ln -s");
+    expect(writeTextFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
+        ),
+      }),
     );
-    expect(linkCommand).toContain("readlink --");
-    expect(run).toHaveBeenNthCalledWith(5, {
-      command: expect.stringContaining(
-        'const {match}=require("path-to-regexp")',
-      ),
-      workingDirectory: `/workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/packages/platform-microfrontends`,
-      abortSignal: expect.any(AbortSignal),
-    });
-    const resolutionCommand = run.mock.calls[4]?.[0].command as string;
+    const resolutionCommand = run.mock.calls
+      .map(([request]) => request.command as string)
+      .find((command) =>
+        command.includes('const {match}=require("path-to-regexp")'),
+      );
+    expect(resolutionCommand).toBeDefined();
+    if (resolutionCommand === undefined)
+      throw new Error("missing topology check");
     expect(resolutionCommand).toContain(ARRUSTED_PATH_TO_REGEXP_VERSION);
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
     expect(resolutionCommand).toContain(
       ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
     );
     expect(resolutionCommand).toContain('result?.path!=="/vendor"');
-    expect(run).toHaveBeenNthCalledWith(6, {
-      command: expect.stringContaining(
-        `cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}"`,
-      ),
-      workingDirectory: `/workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository`,
-      abortSignal: expect.any(AbortSignal),
-    });
-    const rustCommand = run.mock.calls[5]?.[0].command as string;
+    const rustCommand = run.mock.calls
+      .map(([request]) => request.command as string)
+      .find((command) => command.includes("cargo metadata --format-version 1"));
+    expect(rustCommand).toBeDefined();
+    if (rustCommand === undefined) throw new Error("missing Cargo check");
     expect(rustCommand).toContain("MISE_AUTO_INSTALL=false");
     expect(rustCommand).toContain("MISE_EXEC_AUTO_INSTALL=false");
     expect(rustCommand).toContain("MISE_TASK_RUN_AUTO_INSTALL=false");
@@ -589,7 +1121,7 @@ describe("offline dependency cache", () => {
   });
 
   it("uses the pinned Vercel Development toolchain and offline Cargo closure", async () => {
-    const { run, sandbox } = sandboxFixture(developmentManifest);
+    const { run, sandbox, writeTextFile } = sandboxFixture(developmentManifest);
     await materializeOfflineDependencies({
       sandbox,
       artifactRevision: "b".repeat(64),
@@ -603,20 +1135,30 @@ describe("offline dependency cache", () => {
     expect(run.mock.calls[1]?.[0].command).toContain(
       DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
     );
-    expect(run.mock.calls[3]?.[0].command).toContain(
-      `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
-    );
-    const developmentLinkCommand = run.mock.calls[3]?.[0].command as string;
+    const developmentLinkCommand = run.mock.calls
+      .map(([request]) => request.command as string)
+      .find(
+        (command) => command.includes("test -x") && command.includes(".bin/vp"),
+      );
+    expect(developmentLinkCommand).toBeDefined();
+    if (developmentLinkCommand === undefined)
+      throw new Error("missing development closure check");
     expect(developmentLinkCommand).toContain(
-      `test -d /workspace/repository && test ! -L /workspace/repository`,
+      "test ! -e /workspace/repository/node_modules",
     );
-    expect(developmentLinkCommand).toContain(
-      `test "$(readlink -- /workspace/repository/node_modules)" = "/opt/app-builder/dependencies/${archiveDigest}/node_modules"`,
+    expect(developmentLinkCommand).not.toContain("ln -s");
+    expect(writeTextFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
+        ),
+      }),
     );
-    expect(developmentLinkCommand).toContain(
-      `ln -s /opt/app-builder/dependencies/${archiveDigest}/node_modules /workspace/repository/node_modules`,
-    );
-    const rustCommand = run.mock.calls[5]?.[0].command as string;
+    const rustCommand = run.mock.calls
+      .map(([request]) => request.command as string)
+      .find((command) => command.includes("cargo metadata --config"));
+    expect(rustCommand).toBeDefined();
+    if (rustCommand === undefined) throw new Error("missing Cargo check");
     expect(rustCommand).toContain(
       "PATH=/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",
     );

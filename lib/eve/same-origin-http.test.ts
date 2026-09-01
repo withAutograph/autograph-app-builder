@@ -88,6 +88,14 @@ function pendingApprovalEvents(requestId: string) {
 function plannedEvents() {
   const callId = "call_plan";
   const appSpecDigest = "a".repeat(64);
+  const existingAppChanges = [
+    {
+      path: "apps/vendor-onboarding/app/page.tsx",
+      content: "export default function Page() { return 'Ready'; }\n",
+    },
+  ];
+  const hash = (value: string) =>
+    createHash("sha256").update(value).digest("hex");
   const target = {
     contract: {
       version: 1,
@@ -122,9 +130,16 @@ function plannedEvents() {
     },
     blockers: [],
     mutations: [],
+    operation: "iterate-existing-app",
+    iteration: {
+      changes: existingAppChanges.map(({ path, content }) => ({
+        path,
+        before: { mode: "644", digest: hash(`before:${path}`) },
+        after: { mode: "644", digest: hash(content), content },
+      })),
+      digest: hash(JSON.stringify(existingAppChanges)),
+    },
   };
-  const hash = (value: string) =>
-    createHash("sha256").update(value).digest("hex");
   const unsigned = {
     version: 1,
     sourceSha: "1".repeat(40),
@@ -150,7 +165,10 @@ function plannedEvents() {
             kind: "tool-call",
             callId,
             toolName: "plan_app_creation",
-            input: { expectedAppSpecDigest: appSpecDigest },
+            input: {
+              expectedAppSpecDigest: appSpecDigest,
+              existingAppChanges,
+            },
           },
         ],
       },

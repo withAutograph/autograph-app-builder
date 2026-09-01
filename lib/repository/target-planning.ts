@@ -99,6 +99,16 @@ export const targetIterationProposalSchema =
       changes: z.array(iterationChangeSchema).min(1).max(32),
       digest,
     }),
+  }).superRefine((proposal, context) => {
+    if (
+      sha256(JSON.stringify(proposal.iteration.changes)) !==
+      proposal.iteration.digest
+    )
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["iteration", "digest"],
+        message: "The iteration digest does not bind its changes.",
+      });
   });
 
 export const targetProposalSchema = z.union([
@@ -110,6 +120,30 @@ export type TargetIdentity = z.infer<typeof targetIdentitySchema>;
 export type TargetProposal = z.infer<typeof targetProposalSchema>;
 export type TargetIterationChange = z.infer<typeof iterationChangeSchema>;
 
+export class ExistingAppChangePreimageError extends Error {
+  readonly code = "existing_app_change_preimage_missing" as const;
+  readonly rejectedPaths: readonly string[];
+  readonly exactAppOwnedPaths: readonly string[];
+
+  constructor(input: {
+    rejectedPaths: readonly string[];
+    exactAppOwnedPaths: readonly string[];
+  }) {
+    const repair = {
+      code: "existing_app_change_preimage_missing",
+      rejectedPaths: [...input.rejectedPaths],
+      exactAppOwnedPaths: [...input.exactAppOwnedPaths],
+      next: "Inspect only the listed exact paths, draft replacements from their returned contents, and retry target planning without resolving or preparing the source again.",
+    } as const;
+    super(
+      `Existing-app changes require exact source preimages. ${JSON.stringify(repair)}`,
+    );
+    this.name = "ExistingAppChangePreimageError";
+    this.rejectedPaths = repair.rejectedPaths;
+    this.exactAppOwnedPaths = repair.exactAppOwnedPaths;
+  }
+}
+
 export function targetContractDigest(
   contract: TargetProposal["contract"],
 ): string {
@@ -118,6 +152,8 @@ export function targetContractDigest(
 
 export const TARGET_COMMAND_TIMEOUT_MS = 30_000;
 export const TARGET_COMMAND_OUTPUT_BYTES = 1_048_576;
+export const TRACKED_SOURCE_ARCHIVE_COMMAND =
+  "git -C repository archive --format=tar HEAD";
 export const TARGET_PLANNING_MISE_PROFILE = `[settings]
 exec_auto_install = false
 not_found_auto_install = false
@@ -254,7 +290,7 @@ export async function materializePlanningOverlay(input: {
     }
   } else {
     const copy = await input.sandbox.run({
-      command: `tar --create --file - --exclude=node_modules -C repository . | tar --extract --file - --directory ${root}`,
+      command: `${TRACKED_SOURCE_ARCHIVE_COMMAND} | tar --extract --file - --directory ${root}`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
     });
@@ -393,7 +429,6 @@ export async function executeTargetIdentityAndPlanning(input: {
   };
   if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity))
     throw new Error("Target identity did not match the accepted AppSpec.");
-  await input.onIdentity?.(identity);
   const manifestSource = await input.sandbox.readTextFile({
     path: ".app-builder/source-files.json",
   });
@@ -438,10 +473,30 @@ export async function executeTargetIdentityAndPlanning(input: {
         throw new Error("An existing-app change path is not allowed.");
       seen.add(requested.path);
       const entry = files.get(requested.path);
-      if (entry === undefined)
-        throw new Error(
-          "An existing-app change is not bound to a source preimage.",
+      if (entry === undefined) {
+        const rejectedPaths = input.existingAppChanges
+          .map(({ path }) => path)
+          .filter((path) => !files.has(path));
+        const basenames = new Set(
+          rejectedPaths.map((path) => path.split("/").at(-1)),
         );
+        const appOwned = [...files.keys()]
+          .filter(
+            (path) =>
+              path.startsWith(`${identity.workspacePath}/`) &&
+              path !== identity.contractPath,
+          )
+          .sort();
+        const matching = appOwned.filter((path) =>
+          basenames.has(path.split("/").at(-1)),
+        );
+        throw new ExistingAppChangePreimageError({
+          rejectedPaths,
+          exactAppOwnedPaths: [...matching, ...appOwned]
+            .filter((path, index, values) => values.indexOf(path) === index)
+            .slice(0, 32),
+        });
+      }
       const before = await input.sandbox.readBinaryFile({
         path: `repository/${requested.path}`,
       });
@@ -474,6 +529,7 @@ export async function executeTargetIdentityAndPlanning(input: {
       },
     };
     const iterationDigest = sha256(JSON.stringify(changes));
+    await input.onIdentity?.(identity);
     const proposal = targetIterationProposalSchema.parse({
       operation: "iterate-existing-app",
       contract,
@@ -505,6 +561,7 @@ export async function executeTargetIdentityAndPlanning(input: {
     });
     return { identity, proposal, ...overlay };
   }
+  await input.onIdentity?.(identity);
   const proposal = parseOutput(
     await input.executor({
       command: "planning",

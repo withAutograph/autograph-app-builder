@@ -4,6 +4,7 @@ import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertExactDependencyPreparationReceipt,
   assertExactWorkflowState,
   sha256,
   type AppBuilderWorkflowState,
@@ -13,6 +14,7 @@ import {
   assertExactDependencyTargetBinding,
   bootstrapLiveTemplateDependencies,
   DependencyCacheMissingError,
+  dependencyExecutionLayout,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
   materializeOfflineDependencies,
@@ -48,12 +50,16 @@ function assertReceiptMatchesCache(
   cache: ObservedDependencyCache,
   environment: Readonly<Record<string, string | undefined>>,
 ) {
+  assertExactDependencyPreparationReceipt(receipt);
   const execution = targetExecutionBinding(cache, environment);
+  const dependencyLayout = dependencyExecutionLayout(cache, environment);
   if (
     receipt.imageDigest !== execution.imageDigest ||
     receipt.dependencyCacheDigest !== execution.dependencyCacheDigest ||
     receipt.cacheManifestDigest !== cache.manifestDigest ||
-    receipt.cacheContentDigest !== cache.contentDigest
+    receipt.cacheContentDigest !== cache.contentDigest ||
+    JSON.stringify(receipt.dependencyLayout) !==
+      JSON.stringify(dependencyLayout)
   )
     throw new Error(
       "The offline dependency cache changed after its durable receipt.",
@@ -139,7 +145,14 @@ export async function prepareOrReuseDependencies(input: {
       throw error;
     await bootstrapLiveTemplateDependencies({
       sandbox,
-      target: current.workspace,
+    });
+    await inspectSourceBoundSandboxWorkspace({
+      sandbox,
+      receipt: current.sourceReceipt,
+      expectedWorkspace: current.workspace,
+      ...(current.githubSource === undefined
+        ? {}
+        : { githubSource: current.githubSource }),
     });
     observedCache = await inspectDependencyCache(
       sandbox,
@@ -192,6 +205,7 @@ export async function prepareOrReuseDependencies(input: {
     targetTree: dependencyTarget.tree,
     cacheManifestDigest: cache.manifestDigest,
     cacheContentDigest: cache.contentDigest,
+    dependencyLayout: cache.dependencyLayout,
     preparedByCallId: input.callId,
   };
   const dependencyReceipt = {

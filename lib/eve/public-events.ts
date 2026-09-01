@@ -41,6 +41,8 @@ const silentInternalApprovalTools = new Set([
 ]);
 const unavailableConfirmationMessage =
   "I couldn't verify this action, so it was not run.";
+const unavailableContinuationMessage =
+  "I couldn't finish preparing your app. Your progress is saved, so you can try again.";
 const maximumPrototypeBytes = 262_144;
 const prototypePathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
@@ -72,7 +74,25 @@ const prototypeResultSchema = z
   })
   .strict();
 const planRequestSchema = z
-  .object({ expectedAppSpecDigest: lowercaseSha256Schema })
+  .object({
+    expectedAppSpecDigest: lowercaseSha256Schema,
+    existingAppChanges: z
+      .array(
+        z
+          .object({
+            path: z
+              .string()
+              .min(1)
+              .max(512)
+              .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u),
+            content: z.string().max(262_144),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(32)
+      .optional(),
+  })
   .strict();
 const planResultSchema = z
   .object({
@@ -101,13 +121,25 @@ function sha256(value: string): string {
 
 function verifiedImplementationPlan(
   callId: string,
-  expectedAppSpecDigest: string,
+  request: z.infer<typeof planRequestSchema>,
   candidate: unknown,
 ): PublicImplementationPlan | undefined {
   const parsed = planResultSchema.safeParse(candidate);
   if (!parsed.success) return undefined;
   const result = parsed.data;
   const target = result.target;
+  const requestedChanges = request.existingAppChanges;
+  const iterationMatchesRequest =
+    requestedChanges === undefined
+      ? !("operation" in target)
+      : "operation" in target &&
+        target.operation === "iterate-existing-app" &&
+        target.iteration.changes.length === requestedChanges.length &&
+        target.iteration.changes.every(
+          (change, index) =>
+            change.path === requestedChanges[index]?.path &&
+            change.after.content === requestedChanges[index]?.content,
+        );
   const unsigned = {
     version: result.version,
     sourceSha: result.sourceSha,
@@ -126,9 +158,10 @@ function verifiedImplementationPlan(
   };
   if (
     (!result.reused && result.plannedByCallId !== callId) ||
-    result.appSpecDigest !== expectedAppSpecDigest ||
-    target.contract.appSpec.sha256 !== expectedAppSpecDigest ||
-    target.plan.product.appSpec.sha256 !== expectedAppSpecDigest ||
+    result.appSpecDigest !== request.expectedAppSpecDigest ||
+    target.contract.appSpec.sha256 !== request.expectedAppSpecDigest ||
+    target.plan.product.appSpec.sha256 !== request.expectedAppSpecDigest ||
+    !iterationMatchesRequest ||
     result.contractDigest !== sha256(JSON.stringify(target.contract)) ||
     result.digest !== sha256(JSON.stringify(unsigned)) ||
     target.blockers.length !== 0 ||
@@ -200,7 +233,7 @@ export function latestInstalledImplementationPlan(
     if (input === undefined) continue;
     const plan = verifiedImplementationPlan(
       callId,
-      input.expectedAppSpecDigest,
+      input,
       event.data.result.output,
     );
     if (plan !== undefined) latest = plan;
@@ -472,8 +505,8 @@ export function projectInstalledEveEvent(
         {
           type: "error.public",
           index,
-          code: event.data.code,
-          message: event.data.message,
+          code: "unable_to_continue",
+          message: unavailableContinuationMessage,
         },
         { type: "status", index, status: "failed" },
       ];

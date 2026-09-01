@@ -9,6 +9,7 @@ import {
 } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
+  SUPPORTED_REPOSITORY_CONTRACT,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type PreparedSandboxWorkspace,
 } from "./supported-template";
@@ -142,7 +143,8 @@ for (const path of [...inputPaths, ".config/repository-template.json"]) {
   }
 }
 const filesByPath = new Map(files.map((file) => [file.path, file]));
-const contract = inputPaths.map((path) => {
+const contractPaths = ${JSON.stringify(SUPPORTED_REPOSITORY_CONTRACT.requiredPaths)};
+const contract = contractPaths.map((path) => {
   const file = filesByPath.get(path);
   if (file === undefined)
     throw new Error("source contract path is not a regular blob");
@@ -260,7 +262,8 @@ for (const path of [...inputPaths, ".config/repository-template.json"]) {
   }
 }
 const filesByPath = new Map(files.map((file) => [file.path, file]));
-const contract = inputPaths.map((path) => {
+const contractPaths = ${JSON.stringify(SUPPORTED_REPOSITORY_CONTRACT.requiredPaths)};
+const contract = contractPaths.map((path) => {
   const file = filesByPath.get(path);
   if (file === undefined) throw new Error("source contract path is not a regular blob");
   return {

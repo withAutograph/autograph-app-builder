@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,14 +14,36 @@ import { hasTestCapability } from "../testing/test-capability";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
+export const SUPPORTED_REPOSITORY_CONTRACT = {
+  version: 1,
+  runtime: "nextjs",
+  requiredPaths: [
+    ".config/mise/config.toml",
+    ".config/mise/tasks/repository/exec",
+    ".config/mise/scripts/repository/app-contract.ts",
+    ".config/mise/scripts/repository/app-identity.ts",
+    ".config/mise/scripts/repository/app-validation.ts",
+    ".config/mise/scripts/repository/repository-preflight.ts",
+    "microfrontends.json",
+    "package.json",
+  ],
+  commands: {
+    appIdentity: "mise run repository:exec -- app-identity.ts --app <app-id>",
+    planning:
+      "mise run repository:exec -- app-contract.ts --contract <contract-file>",
+    apply: "mise run create:app -- --proposal <proposal-file>",
+    repositoryPreflight: "mise run repository:preflight",
+  },
+  topologyOwner: "microfrontends.json",
+  validationCommands: [
+    "mise run app:check-build <app-id>",
+    "mise run app:test <app-id> <shard>",
+  ],
+} as const;
+
 export const SUPPORTED_TEMPLATE_INPUT_PATHS = [
-  ".config/mise/config.toml",
+  ...SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
   ".github/workflows/cd.yml",
-  "microfrontends.json",
-  ".config/mise/scripts/repository/app-contract.ts",
-  ".config/mise/scripts/repository/app-identity.ts",
-  ".config/mise/scripts/repository/app-validation.ts",
-  ".config/mise/scripts/repository/repository-preflight.ts",
   ".config/turbo/generators/config.ts",
   ".config/turbo/generators/create-app.ts",
   ".config/turbo/generators/templates/app/next.config.ts.hbs",
@@ -49,22 +71,18 @@ export const SUPPORTED_TEMPLATE_DEPENDENCY_PATHS = [
   "tsconfig.json",
 ] as const;
 
-const expectedCommands = {
-  appIdentity: "mise run repository:exec -- app-identity.ts --app <app-id>",
-  planning:
-    "mise run repository:exec -- app-contract.ts --contract <contract-file>",
-  scaffold: "mise run generate:app <app-id>",
-  apply: "mise run create:app -- --proposal <proposal-file>",
-  preflight: "mise run repository:preflight",
-  validation: [
-    "mise run app:check-build <app-id>",
-    "mise run app:test <app-id> <shard>",
-  ],
-} as const;
-
 export const SUPPORTED_VALIDATION_COMMAND_TEMPLATES =
-  expectedCommands.validation;
+  SUPPORTED_REPOSITORY_CONTRACT.validationCommands;
 export const SUPPORTED_VALIDATION_TEST_SHARDS = ["1/1"] as const;
+
+const expectedCommands = {
+  appIdentity: SUPPORTED_REPOSITORY_CONTRACT.commands.appIdentity,
+  planning: SUPPORTED_REPOSITORY_CONTRACT.commands.planning,
+  scaffold: "mise run generate:app <app-id>",
+  apply: SUPPORTED_REPOSITORY_CONTRACT.commands.apply,
+  preflight: SUPPORTED_REPOSITORY_CONTRACT.commands.repositoryPreflight,
+  validation: SUPPORTED_REPOSITORY_CONTRACT.validationCommands,
+} as const;
 
 export function supportedValidationCommands(
   appId: string,
@@ -92,12 +110,21 @@ export function supportedValidationCommands(
 export type EligibilityResult = {
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
   eligible: boolean;
+  planningEligible: boolean;
   sourcePath: string;
   sourceSha?: string;
   dirtyPaths: string[];
   failures: string[];
+  planningFailures: string[];
+  compatibilityDigest: string;
+  releasePolicy: {
+    gate: "REPOSITORY_RELEASE_ENABLED";
+    eligible: boolean;
+  };
   observed: {
+    contractVersion: typeof SUPPORTED_REPOSITORY_CONTRACT.version;
     runtime: "nextjs" | "unsupported";
+    requiredPaths: readonly string[];
     packageScope: "@autograph" | "unsupported";
     appIdentityCommand: string;
     planningCommand: string;
@@ -264,6 +291,8 @@ fi
 echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
 `;
 
+const repositoryReleasePolicyPath = ".github/workflows/cd.yml" as const;
+
 function supportsReleaseGate(workflowSource: string): boolean {
   let workflow: Record<string, unknown>;
   try {
@@ -294,6 +323,223 @@ function supportsReleaseGate(workflowSource: string): boolean {
     scope.needs === "template-safety" &&
     scope.if === expectedScopeCondition
   );
+}
+
+export type RepositoryReleasePolicyObservation = {
+  gate: "REPOSITORY_RELEASE_ENABLED";
+  eligible: boolean;
+  sourceSha: string;
+  sourceTree: string;
+  workflow:
+    | { status: "absent" }
+    | {
+        status: "present";
+        path: typeof repositoryReleasePolicyPath;
+        mode: "100644" | "100755";
+        objectId: string;
+        sha256: string;
+      };
+  digest: string;
+};
+
+function releasePolicyObservation(input: {
+  sourceSha: string;
+  sourceTree: string;
+  workflow:
+    | { status: "absent" }
+    | {
+        status: "present";
+        mode: "100644" | "100755";
+        objectId: string;
+        bytes: Uint8Array;
+      };
+}): RepositoryReleasePolicyObservation {
+  const workflow =
+    input.workflow.status === "absent"
+      ? input.workflow
+      : {
+          status: "present" as const,
+          path: repositoryReleasePolicyPath,
+          mode: input.workflow.mode,
+          objectId: input.workflow.objectId,
+          sha256: sha256(input.workflow.bytes),
+        };
+  const unsigned = {
+    gate: "REPOSITORY_RELEASE_ENABLED" as const,
+    eligible:
+      input.workflow.status === "present" &&
+      supportsReleaseGate(Buffer.from(input.workflow.bytes).toString("utf8")),
+    sourceSha: input.sourceSha,
+    sourceTree: input.sourceTree,
+    workflow,
+  };
+  return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
+}
+
+/**
+ * Re-read the release policy from the reviewed commit, never from mutable
+ * working-tree bytes. Outward existing-repository effects use this after
+ * approval so planning compatibility can remain independent of CD layout.
+ */
+export function inspectRepositoryReleasePolicyAtGitSnapshot(input: {
+  sourcePath: string;
+  sourceSha: string;
+  sourceTree: string;
+}): RepositoryReleasePolicyObservation {
+  const sourceSha = git(input.sourcePath, [
+    "rev-parse",
+    `${input.sourceSha}^{commit}`,
+  ]);
+  const sourceTree = git(input.sourcePath, [
+    "rev-parse",
+    `${sourceSha}^{tree}`,
+  ]);
+  if (sourceSha !== input.sourceSha || sourceTree !== input.sourceTree)
+    throw new Error(
+      "The existing-repository release policy is not bound to the reviewed Git snapshot.",
+    );
+  const entry = git(input.sourcePath, [
+    "ls-tree",
+    sourceSha,
+    "--",
+    repositoryReleasePolicyPath,
+  ]);
+  const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+  if (match === null || match[3] !== repositoryReleasePolicyPath)
+    return releasePolicyObservation({
+      sourceSha,
+      sourceTree,
+      workflow: { status: "absent" },
+    });
+  return releasePolicyObservation({
+    sourceSha,
+    sourceTree,
+    workflow: {
+      status: "present",
+      mode: match[1] as "100644" | "100755",
+      objectId: match[2]!,
+      bytes: gitBytes(input.sourcePath, [
+        "show",
+        `${sourceSha}:${repositoryReleasePolicyPath}`,
+      ]),
+    },
+  });
+}
+
+export function assertRepositoryReleasePolicyAtGitSnapshot(input: {
+  sourcePath: string;
+  sourceSha: string;
+  sourceTree: string;
+}): RepositoryReleasePolicyObservation {
+  const observation = inspectRepositoryReleasePolicyAtGitSnapshot(input);
+  if (!observation.eligible)
+    throw new Error(
+      "The reviewed repository does not satisfy the release policy required for outward effects.",
+    );
+  return observation;
+}
+
+function declaredNextRuntime(packageSource: string): "nextjs" | "unsupported" {
+  let packageManifest: Record<string, unknown>;
+  try {
+    packageManifest = configurationRecord(JSON.parse(packageSource) as unknown);
+  } catch {
+    return "unsupported";
+  }
+  const dependencies = configurationRecord(packageManifest.dependencies);
+  const devDependencies = configurationRecord(packageManifest.devDependencies);
+  const next = dependencies.next ?? devDependencies.next;
+  return typeof next === "string" && next.trim() !== ""
+    ? "nextjs"
+    : "unsupported";
+}
+
+function declaredMiseTasks(source: string): Map<string, number> {
+  const tasks = new Map<string, number>();
+  for (const match of source.matchAll(/^\[tasks\."([^"]+)"\]\s*$/gmu)) {
+    const name = match[1];
+    if (name !== undefined) tasks.set(name, (tasks.get(name) ?? 0) + 1);
+  }
+  return tasks;
+}
+
+function hasOneTask(tasks: ReadonlyMap<string, number>, name: string): boolean {
+  return tasks.get(name) === 1;
+}
+
+function validTopologyOwner(source: string): boolean {
+  try {
+    const value = JSON.parse(source) as unknown;
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
+
+function inspectPlanningCompatibility(
+  contents: SupportedTemplateSnapshot["contents"],
+) {
+  const failures: string[] = [];
+  for (const path of SUPPORTED_REPOSITORY_CONTRACT.requiredPaths) {
+    if (!safeSourcePath(path))
+      throw new Error(
+        "The supported repository contract contains an unsafe path.",
+      );
+    if (contents[path] === undefined)
+      failures.push(`missing required path ${path}`);
+  }
+
+  const runtime = declaredNextRuntime(contents["package.json"] ?? "");
+  if (runtime === "unsupported")
+    failures.push("repository does not declare the Next.js runtime");
+
+  const tasks = declaredMiseTasks(contents[".config/mise/config.toml"] ?? "");
+  for (const task of [
+    "create:app",
+    "repository:preflight",
+    "app:check-build",
+    "app:test",
+  ]) {
+    if (!hasOneTask(tasks, task)) failures.push(`${task} command is missing`);
+  }
+  if (
+    contents[".config/mise/tasks/repository/exec"] === undefined ||
+    contents[".config/mise/scripts/repository/app-identity.ts"] === undefined ||
+    contents[".config/mise/scripts/repository/app-contract.ts"] === undefined
+  )
+    failures.push("repository:exec command is unavailable");
+  if (
+    !validTopologyOwner(
+      contents[SUPPORTED_REPOSITORY_CONTRACT.topologyOwner] ?? "",
+    )
+  )
+    failures.push("repository topology owner is invalid");
+
+  const observed = {
+    contractVersion: SUPPORTED_REPOSITORY_CONTRACT.version,
+    runtime,
+    requiredPaths: [...SUPPORTED_REPOSITORY_CONTRACT.requiredPaths],
+    appIdentityCommand: SUPPORTED_REPOSITORY_CONTRACT.commands.appIdentity,
+    planningCommand: SUPPORTED_REPOSITORY_CONTRACT.commands.planning,
+    applyCommand: SUPPORTED_REPOSITORY_CONTRACT.commands.apply,
+    repositoryPreflightCommand:
+      SUPPORTED_REPOSITORY_CONTRACT.commands.repositoryPreflight,
+    topologyOwner: SUPPORTED_REPOSITORY_CONTRACT.topologyOwner,
+    validationCommands: SUPPORTED_REPOSITORY_CONTRACT.validationCommands,
+  } as const;
+  const sortedFailures = failures.toSorted();
+  return {
+    eligible: sortedFailures.length === 0,
+    failures: sortedFailures,
+    observed,
+    digest: sha256(
+      JSON.stringify({
+        adapter: SUPPORTED_TEMPLATE_ADAPTER,
+        failures: sortedFailures,
+        observed,
+      }),
+    ),
+  };
 }
 
 function allowedRoots(): string[] {
@@ -353,13 +599,31 @@ async function inspectSupportedRepositoryAtPath(
 ): Promise<EligibilityResult> {
   const failures: string[] = [];
   let sourceSha: string | undefined;
-  let dirtyPaths: string[] = [];
+  const dirtyPaths: string[] = [];
   try {
     sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
-    dirtyPaths = git(sourcePath, ["status", "--porcelain=v1"])
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => line.slice(3));
+    const statusRecords = gitBytes(sourcePath, [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+    ])
+      .toString("utf8")
+      .split("\0");
+    for (let index = 0; index < statusRecords.length; index += 1) {
+      const record = statusRecords[index];
+      if (record === undefined || record === "") continue;
+      if (record.length < 4 || record[2] !== " ")
+        throw new Error("Git returned a malformed worktree status record.");
+      dirtyPaths.push(record.slice(3));
+      if (/[RC]/u.test(record.slice(0, 2))) {
+        const originalPath = statusRecords[index + 1];
+        if (originalPath === undefined || originalPath === "")
+          throw new Error("Git returned a malformed rename status record.");
+        dirtyPaths.push(originalPath);
+        index += 1;
+      }
+    }
   } catch {
     failures.push("source is not a readable Git worktree");
   }
@@ -367,10 +631,18 @@ async function inspectSupportedRepositoryAtPath(
   const contents = Object.fromEntries(
     [...SUPPORTED_TEMPLATE_INPUT_PATHS, ".config/repository-template.json"].map(
       (path) => {
-        const file = resolve(sourcePath, path);
+        if (sourceSha === undefined) return [path, undefined];
+        const entry = git(sourcePath, ["ls-tree", sourceSha, "--", path]);
+        const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(
+          entry,
+        );
         return [
           path,
-          existsSync(file) ? readFileSync(file, "utf8") : undefined,
+          match !== null && match[3] === path
+            ? gitBytes(sourcePath, ["show", `${sourceSha}:${path}`]).toString(
+                "utf8",
+              )
+            : undefined,
         ];
       },
     ),
@@ -394,6 +666,7 @@ export function inspectSupportedTemplateSnapshot(
 ): EligibilityResult {
   const failures = [...(input.failures ?? [])];
   const contents = input.contents;
+  const planningCompatibility = inspectPlanningCompatibility(contents);
   for (const path of SUPPORTED_TEMPLATE_INPUT_PATHS) {
     if (contents[path] === undefined)
       failures.push(`missing required path ${path}`);
@@ -403,10 +676,10 @@ export function inspectSupportedTemplateSnapshot(
 
   const appContract =
     contents[".config/mise/scripts/repository/app-contract.ts"] ?? "";
-  const runtime = /runtime:\s*"nextjs"/u.test(appContract)
+  const adapterRuntime = /runtime:\s*"nextjs"/u.test(appContract)
     ? "nextjs"
     : "unsupported";
-  if (runtime === "unsupported")
+  if (adapterRuntime === "unsupported")
     failures.push("app planner does not declare the Next.js runtime");
 
   const generator = contents[".config/turbo/generators/config.ts"] ?? "";
@@ -457,7 +730,11 @@ export function inspectSupportedTemplateSnapshot(
     failures.push("repository preflight validation commands drifted");
 
   const cd = contents[".github/workflows/cd.yml"] ?? "";
-  if (!supportsReleaseGate(cd))
+  const releasePolicy = {
+    gate: "REPOSITORY_RELEASE_ENABLED" as const,
+    eligible: supportsReleaseGate(cd),
+  };
+  if (!releasePolicy.eligible)
     failures.push(
       "REPOSITORY_RELEASE_ENABLED gate is not the supported CD gate",
     );
@@ -468,7 +745,9 @@ export function inspectSupportedTemplateSnapshot(
     dirtyPaths: input.dirtyPaths.toSorted(),
     failures: failures.toSorted(),
     observed: {
-      runtime,
+      contractVersion: planningCompatibility.observed.contractVersion,
+      runtime: planningCompatibility.observed.runtime,
+      requiredPaths: planningCompatibility.observed.requiredPaths,
       packageScope,
       appIdentityCommand: expectedCommands.appIdentity,
       planningCommand: expectedCommands.planning,
@@ -483,7 +762,11 @@ export function inspectSupportedTemplateSnapshot(
   return {
     ...normalized,
     eligible: failures.length === 0,
+    planningEligible: planningCompatibility.eligible,
+    planningFailures: planningCompatibility.failures,
     sourcePath: input.sourcePath,
+    compatibilityDigest: planningCompatibility.digest,
+    releasePolicy,
     digest: sha256(JSON.stringify(normalized)),
   };
 }
@@ -706,6 +989,66 @@ export async function inspectPreparedSandboxSourceFiles(
 }
 
 /**
+ * Re-read and verify the full release policy from the exact prepared Git tree.
+ * Hosted execution has no host checkout, so the prepared manifest is the
+ * selected snapshot's object-id and byte-digest authority.
+ */
+export async function inspectPreparedSandboxReleasePolicy(input: {
+  sandbox: SandboxSession;
+  sourceSha: string;
+  sourceTree: string;
+  workspaceDigest: string;
+}): Promise<RepositoryReleasePolicyObservation> {
+  const prepared = await inspectPreparedSandboxWorkspace(input.sandbox);
+  if (
+    prepared.state !== "prepared" ||
+    prepared.workspace.sourceSha !== input.sourceSha ||
+    prepared.workspace.sourceTree !== input.sourceTree ||
+    prepared.workspace.workspaceDigest !== input.workspaceDigest
+  )
+    throw new Error(
+      "The hosted release policy is not bound to the reviewed Git snapshot.",
+    );
+  const files = await inspectPreparedSandboxSourceFiles(input.sandbox);
+  const entry = files.find(({ path }) => path === repositoryReleasePolicyPath);
+  if (entry === undefined)
+    return releasePolicyObservation({
+      sourceSha: input.sourceSha,
+      sourceTree: input.sourceTree,
+      workflow: { status: "absent" },
+    });
+  const bytes = await input.sandbox.readBinaryFile({
+    path: `repository/${repositoryReleasePolicyPath}`,
+  });
+  if (bytes === null || sha256(bytes) !== entry.sha256)
+    throw new Error("The hosted release-policy bytes changed after review.");
+  return releasePolicyObservation({
+    sourceSha: input.sourceSha,
+    sourceTree: input.sourceTree,
+    workflow: {
+      status: "present",
+      mode: entry.mode,
+      objectId: entry.objectId,
+      bytes,
+    },
+  });
+}
+
+export async function assertPreparedSandboxReleasePolicy(input: {
+  sandbox: SandboxSession;
+  sourceSha: string;
+  sourceTree: string;
+  workspaceDigest: string;
+}): Promise<RepositoryReleasePolicyObservation> {
+  const observation = await inspectPreparedSandboxReleasePolicy(input);
+  if (!observation.eligible)
+    throw new Error(
+      "The reviewed repository does not satisfy the release policy required for outward effects.",
+    );
+  return observation;
+}
+
+/**
  * Seal an already materialized workspace after the producer has written the
  * exact source manifest and checksum receipt.  Canonical remote clones use
  * this instead of serializing a host checkout into an archive.
@@ -781,18 +1124,31 @@ export async function prepareSupportedSandboxWorkspace(
   sandbox: SandboxSession,
   callId: string,
   builderOwned = false,
+  compatibility: "full" | "planning" = "full",
 ): Promise<PreparedSandboxWorkspace> {
   const eligibility = builderOwned
     ? await inspectBuilderOwnedSupportedRepository(sourcePathInput)
     : await inspectSupportedRepository(sourcePathInput);
-  if (!eligibility.eligible || eligibility.sourceSha === undefined) {
+  const eligible =
+    compatibility === "planning"
+      ? eligibility.planningEligible
+      : eligibility.eligible;
+  const eligibilityDigest =
+    compatibility === "planning"
+      ? eligibility.compatibilityDigest
+      : eligibility.digest;
+  const failures =
+    compatibility === "planning"
+      ? eligibility.planningFailures
+      : eligibility.failures;
+  if (!eligible || eligibility.sourceSha === undefined) {
     throw new Error(
-      `Repository is not eligible: ${eligibility.failures.join("; ")}`,
+      `Repository is not ${compatibility === "planning" ? "planning-compatible" : "eligible"}: ${failures.join("; ")}`,
     );
   }
   if (eligibility.sourceSha !== expectedSha)
     throw new Error("Source SHA changed after eligibility review.");
-  if (eligibility.digest !== expectedEligibilityDigest)
+  if (eligibilityDigest !== expectedEligibilityDigest)
     throw new Error("Repository eligibility changed after review.");
 
   const sourceTree = git(eligibility.sourcePath, [

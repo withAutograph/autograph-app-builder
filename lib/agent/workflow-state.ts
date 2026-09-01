@@ -38,6 +38,7 @@ import type {
   ImmutableGitHubSourceReceipt,
 } from "@/lib/repository/github-publication";
 import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
+import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
 
 export const APP_BUILDER_WORKFLOW_VERSION = 16 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
@@ -82,9 +83,24 @@ export type DependencyPreparationReceipt = TargetExecutionBinding & {
   targetTree: string;
   cacheManifestDigest: string;
   cacheContentDigest: string;
+  dependencyLayout: ExecutionDependencyLayout;
   preparedByCallId: string;
   digest: string;
 };
+
+/** Reject persisted V2 receipts whose durable fields no longer bind together. */
+export function assertExactDependencyPreparationReceipt(
+  receipt: DependencyPreparationReceipt,
+): void {
+  const { digest, ...unsigned } = receipt;
+  if (
+    receipt.version !== 2 ||
+    receipt.dependencyLayout === undefined ||
+    !/^[0-9a-f]{64}$/u.test(digest) ||
+    digest !== sha256(JSON.stringify(unsigned))
+  )
+    throw new Error("The dependency preparation receipt is malformed.");
+}
 
 export type TargetIdentityReceipt = TargetExecutionBinding & {
   version: 1;

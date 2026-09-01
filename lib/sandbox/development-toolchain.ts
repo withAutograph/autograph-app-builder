@@ -135,13 +135,21 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
 /**
  * Makes Bun's installed dependency links portable before the closure is
  * archived. Links into node_modules stay relative to that closure. Workspace
- * links are rebound to the fixed sandbox repository path. Everything else is
- * rejected rather than producing a cache that will fail later.
+ * links are rebound to an explicit immutable source root when one is supplied,
+ * or to the fixed sandbox repository path for the legacy development archive.
+ * Everything else is rejected rather than producing a cache that will fail
+ * later.
  */
 export const developmentDependencySymlinkScript = String.raw`const fs = require("node:fs");
 const path = require("node:path");
 
 const sourceRoot = fs.realpathSync(process.argv[2]);
+const requestedWorkspaceRoot = process.argv[3];
+if (requestedWorkspaceRoot !== undefined && !path.isAbsolute(requestedWorkspaceRoot))
+  throw new Error("Development workspace dependency root must be absolute.");
+const workspaceRoot = requestedWorkspaceRoot === undefined
+  ? "/workspace/repository"
+  : fs.realpathSync(requestedWorkspaceRoot);
 const modulesRoot = fs.realpathSync(path.join(sourceRoot, "node_modules"));
 const contains = (root, candidate) => {
   const relative = path.relative(root, candidate);
@@ -187,7 +195,7 @@ for (const link of links) {
   } else if (contains(sourceRoot, target)) {
     const sourceRelative = path.relative(sourceRoot, target);
     replacement =
-      "/workspace/repository" +
+      workspaceRoot +
       (sourceRelative === ""
         ? ""
         : "/" + sourceRelative.split(path.sep).join("/"));

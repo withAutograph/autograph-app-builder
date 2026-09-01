@@ -75,6 +75,12 @@ const state = {
     targetTree: "0".repeat(40),
     cacheManifestDigest: "2".repeat(64),
     cacheContentDigest: "3".repeat(64),
+    dependencyLayout: {
+      version: 1,
+      kind: "fixture",
+      roots: [],
+      workspaceLinks: [],
+    },
     preparedByCallId: "dependency-call",
     digest: "4".repeat(64),
   },

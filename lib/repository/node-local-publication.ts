@@ -43,7 +43,10 @@ import {
   type PublicationPathEvidence,
 } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { resolveAllowedRepository } from "./supported-template";
+import {
+  resolveAllowedRepository,
+  SUPPORTED_REPOSITORY_CONTRACT,
+} from "./supported-template";
 import {
   inspectSourceContractDigest,
   type SourceReceipt,
@@ -451,7 +454,11 @@ export async function inspectLocalPublicationDestination(input: {
     headReference,
     indexFileDigest,
     remoteDigest,
-    contractDigest: inspectSourceContractDigest(canonicalPath, headSha),
+    contractDigest: inspectSourceContractDigest(
+      canonicalPath,
+      headSha,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
     dirty,
     index,
     dirtyDigest,

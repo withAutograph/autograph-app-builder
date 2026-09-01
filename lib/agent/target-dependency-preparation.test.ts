@@ -48,6 +48,12 @@ const mocks = vi.hoisted(() => {
     },
     manifestDigest: "8".repeat(64),
     contentDigest: "6".repeat(64),
+    dependencyLayout: {
+      version: 1,
+      kind: "fixture",
+      roots: [],
+      workspaceLinks: [],
+    },
   } as const;
   class MissingDependencyCache extends Error {
     readonly code = "dependency_cache_missing" as const;
@@ -134,6 +140,7 @@ vi.mock("@/lib/repository/dependency-cache", () => ({
       );
   },
   bootstrapLiveTemplateDependencies: mocks.bootstrapLiveTemplateDependencies,
+  dependencyExecutionLayout: () => mocks.cache.dependencyLayout,
   dependencyTargetForWorkspace: (
     _cache: unknown,
     workspace: { sourceSha: string; sourceTree: string },
@@ -141,11 +148,9 @@ vi.mock("@/lib/repository/dependency-cache", () => ({
   inspectDependencyCache: mocks.inspectDependencyCache,
   materializeOfflineDependencies: mocks.materializeOfflineDependencies,
   shouldPreferLiveTemplateDependencies: (
-    sourceReceiptVersion: number,
+    _sourceReceiptVersion: number,
     environment: Readonly<Record<string, string | undefined>>,
-  ) =>
-    (sourceReceiptVersion === 3 || sourceReceiptVersion === 4) &&
-    environment.APP_BUILDER_EXECUTION_MODE !== "development",
+  ) => environment.APP_BUILDER_EXECUTION_MODE !== "development",
 }));
 
 vi.mock("@/lib/repository/source-receipt", () => ({
@@ -394,6 +399,62 @@ describe("target dependency preparation", () => {
     );
   });
 
+  it("reuses one prepared closure while an existing-app preimage is repaired and retried", async () => {
+    mocks.current = existingRepositoryAcceptedState();
+    mocks.inspectDependencyCache
+      .mockRejectedValueOnce(
+        new DependencyCacheMissingError("hosted cache missing"),
+      )
+      .mockResolvedValue(mocks.cache);
+    mocks.executeTargetIdentityAndPlanning.mockRejectedValueOnce(
+      Object.assign(new Error("exact preimage required"), {
+        code: "existing_app_change_preimage_missing",
+        rejectedPaths: ["apps/expense-review/app/missing.tsx"],
+        exactAppOwnedPaths: ["apps/expense-review/app/page.tsx"],
+      }),
+    );
+    planningResult();
+
+    await expect(
+      planAppCreation.execute(
+        {
+          expectedAppSpecDigest: appSpecDigest,
+          existingAppChanges: [
+            {
+              path: "apps/expense-review/app/missing.tsx",
+              content: "invalid\n",
+            },
+          ],
+        },
+        toolContext("first-plan").context,
+      ),
+    ).rejects.toMatchObject({
+      code: "existing_app_change_preimage_missing",
+    });
+    expect(mocks.current).toMatchObject({ phase: "dependencies_prepared" });
+
+    await expect(
+      planAppCreation.execute(
+        {
+          expectedAppSpecDigest: appSpecDigest,
+          existingAppChanges: [
+            {
+              path: "apps/expense-review/app/page.tsx",
+              content: "export default function Page() { return 'Ready'; }\n",
+            },
+          ],
+        },
+        toolContext("retry-plan").context,
+      ),
+    ).resolves.toMatchObject({ reused: false });
+
+    expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeOfflineDependencies).toHaveBeenCalledTimes(1);
+    expect(mocks.executeTargetIdentityAndPlanning).toHaveBeenCalledTimes(2);
+    expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledTimes(3);
+    expect(mocks.current).toMatchObject({ phase: "planned" });
+  });
+
   it("reuses one development closure for code-only source changes", async () => {
     vi.stubEnv("APP_BUILDER_EXECUTION_MODE", "development");
     const firstContext = toolContext("first-call");
@@ -477,6 +538,7 @@ describe("target dependency preparation", () => {
     );
 
     expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledTimes(1);
+    expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledTimes(2);
   });
 
   it("plans a hosted existing repository against its exact live dependency closure", async () => {
@@ -504,7 +566,6 @@ describe("target dependency preparation", () => {
     );
     expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledWith({
       sandbox: expect.anything(),
-      target: mocks.workspace,
     });
     expect(mocks.current).toMatchObject({
       phase: "planned",

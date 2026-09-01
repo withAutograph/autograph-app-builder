@@ -7,6 +7,7 @@ import {
   inspectBuilderOwnedSupportedRepository,
   inspectSupportedRepository,
   inspectSupportedTemplateSnapshot,
+  SUPPORTED_REPOSITORY_CONTRACT,
   SUPPORTED_TEMPLATE_ADAPTER,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type SupportedTemplateSnapshot,
@@ -78,8 +79,9 @@ function fixedGit(
 export function inspectSourceContractDigest(
   sourcePath: string,
   sourceSha: string,
+  contractPaths: readonly string[] = SUPPORTED_TEMPLATE_INPUT_PATHS,
 ): string {
-  const contract = SUPPORTED_TEMPLATE_INPUT_PATHS.map((contractPath) => {
+  const contract = contractPaths.map((contractPath) => {
     const entry = fixedGit(
       sourcePath,
       ["ls-tree", sourceSha, "--", contractPath],
@@ -405,10 +407,20 @@ export async function inspectSourceReceipt(
   path: string,
 ): Promise<SourceReceipt> {
   const eligibility = await inspectSupportedRepository(path);
-  if (!eligibility.eligible || eligibility.sourceSha === undefined)
-    throw new Error(
-      `Source is not eligible: ${eligibility.failures.join("; ")}`,
-    );
+  const eligible =
+    sourceKind === "existing-repository"
+      ? eligibility.planningEligible
+      : eligibility.eligible;
+  const eligibilityDigest =
+    sourceKind === "existing-repository"
+      ? eligibility.compatibilityDigest
+      : eligibility.digest;
+  const failures =
+    sourceKind === "existing-repository"
+      ? eligibility.planningFailures
+      : eligibility.failures;
+  if (!eligible || eligibility.sourceSha === undefined)
+    throw new Error(`Source is not eligible: ${failures.join("; ")}`);
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
     sourceKind,
@@ -419,10 +431,13 @@ export async function inspectSourceReceipt(
       "utf8",
     ).trim(),
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: eligibility.digest,
+    eligibilityDigest,
     contractDigest: inspectSourceContractDigest(
       eligibility.sourcePath,
       eligibility.sourceSha,
+      sourceKind === "existing-repository"
+        ? SUPPORTED_REPOSITORY_CONTRACT.requiredPaths
+        : SUPPORTED_TEMPLATE_INPUT_PATHS,
     ),
     releaseEnabled: false,
   } as const;
@@ -475,12 +490,13 @@ export async function inspectClonedTemplateSourceReceipt(input: {
 
 function contractDigestFromSnapshot(
   contract: CanonicalTemplateSnapshot["contract"],
+  expectedPaths: readonly string[] = SUPPORTED_TEMPLATE_INPUT_PATHS,
 ): string {
-  if (contract.length !== SUPPORTED_TEMPLATE_INPUT_PATHS.length)
+  if (contract.length !== expectedPaths.length)
     throw new Error("Canonical template contract receipt is invalid.");
   const paths = new Set<string>();
   const normalized = contract.map((entry, index) => {
-    const expectedPath = SUPPORTED_TEMPLATE_INPUT_PATHS[index];
+    const expectedPath = expectedPaths[index];
     if (
       expectedPath === undefined ||
       entry.path !== expectedPath ||
@@ -550,9 +566,9 @@ export function inspectExistingRepositorySnapshotReceipt(
   if (snapshot.dirtyPaths.length !== 0)
     throw new Error("Cloned repository inspection is not clean.");
   const eligibility = inspectSupportedTemplateSnapshot(snapshot);
-  if (!eligibility.eligible || eligibility.sourceSha === undefined)
+  if (!eligibility.planningEligible || eligibility.sourceSha === undefined)
     throw new Error(
-      `Cloned repository is not eligible: ${eligibility.failures.join("; ")}`,
+      `Cloned repository is not eligible: ${eligibility.planningFailures.join("; ")}`,
     );
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
@@ -560,8 +576,11 @@ export function inspectExistingRepositorySnapshotReceipt(
     sourceSha: eligibility.sourceSha,
     sourceTree: snapshot.sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: eligibility.digest,
-    contractDigest: contractDigestFromSnapshot(snapshot.contract),
+    eligibilityDigest: eligibility.compatibilityDigest,
+    contractDigest: contractDigestFromSnapshot(
+      snapshot.contract,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
     releaseEnabled: false as const,
   };
   return parseSourceReceipt({

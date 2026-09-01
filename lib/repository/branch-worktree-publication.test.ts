@@ -50,7 +50,9 @@ function git(root: string, args: string[]): string {
   });
 }
 
-async function fixture() {
+async function fixture({
+  unsupportedReleasePolicy = false,
+}: { unsupportedReleasePolicy?: boolean } = {}) {
   const root = createSupportedRepositoryFixture();
   await writeFile(join(root, "obsolete.txt"), "remove\n");
   await writeFile(
@@ -58,7 +60,18 @@ async function fixture() {
     "filtered.txt filter=fixture\n",
   );
   await writeFile(join(root, "filtered.txt"), "raw filtered content\n");
-  git(root, ["add", "obsolete.txt", ".gitattributes", "filtered.txt"]);
+  if (unsupportedReleasePolicy)
+    await writeFile(
+      join(root, ".github/workflows/cd.yml"),
+      "jobs:\n  release:\n    runs-on: ubuntu-latest\n",
+    );
+  git(root, [
+    "add",
+    "obsolete.txt",
+    ".gitattributes",
+    "filtered.txt",
+    ...(unsupportedReleasePolicy ? [".github/workflows/cd.yml"] : []),
+  ]);
   git(root, [
     "-c",
     "user.name=Test",
@@ -172,6 +185,17 @@ describe(
       vi.stubEnv("APP_BUILDER_TEST_MODEL", "1");
       vi.stubEnv("APP_BUILDER_BRANCH_WORKTREE_PUBLICATION", "1");
       await useIsolatedPublicationRoot();
+    });
+
+    it("blocks branch-worktree publication when the reviewed snapshot has unsupported release policy", async () => {
+      const candidate = await fixture({ unsupportedReleasePolicy: true });
+
+      await expect(
+        deriveBranchWorktreePublicationProposal({
+          sourceReceipt: candidate.sourceReceipt,
+          review: candidate.review,
+        }),
+      ).rejects.toThrow("release policy required for outward effects");
     });
 
     it.each(["path-less-v1", "wrong-version"] as const)(

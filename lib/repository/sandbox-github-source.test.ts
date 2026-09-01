@@ -14,7 +14,7 @@ import {
   inspectGitHubSourceSandboxWorkspace,
 } from "./sandbox-github-source";
 import { inspectExistingRepositorySnapshotReceipt } from "./source-receipt";
-import { SUPPORTED_TEMPLATE_INPUT_PATHS } from "./supported-template";
+import { SUPPORTED_REPOSITORY_CONTRACT } from "./supported-template";
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
@@ -33,6 +33,7 @@ function eligibleContents() {
       '[tasks."generate:app"]',
       "turbo gen --config .config/turbo/generators/config.ts app --args",
     ].join("\n"),
+    ".config/mise/tasks/repository/exec": "#!/bin/sh\nexit 0\n",
     ".github/workflows/cd.yml": [
       "jobs:",
       "  template-safety:",
@@ -58,6 +59,7 @@ function eligibleContents() {
       "    if: needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository",
     ].join("\n"),
     "microfrontends.json": "{}\n",
+    "package.json": '{"devDependencies":{"next":"16.3.3"}}\n',
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts": "export {};\n",
@@ -96,7 +98,7 @@ function sourceFixture() {
     sourceTree,
     dirtyPaths: [] as string[],
     contents,
-    contract: SUPPORTED_TEMPLATE_INPUT_PATHS.map((path) => ({
+    contract: SUPPORTED_REPOSITORY_CONTRACT.requiredPaths.map((path) => ({
       path,
       mode: "100644",
       objectId: "4".repeat(40),

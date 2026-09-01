@@ -265,6 +265,41 @@ describe("approval-bound local publication", { timeout: 20_000 }, () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it("allows planning but blocks local apply when the reviewed snapshot has unsupported release policy", async () => {
+    const root = createSupportedRepositoryFixture();
+    await writeFile(
+      join(root, ".github/workflows/cd.yml"),
+      "jobs:\n  release:\n    runs-on: ubuntu-latest\n",
+    );
+    git(root, ["add", "--", ".github/workflows/cd.yml"]);
+    git(root, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "unsupported release policy",
+    ]);
+    const source = await inspectSourceReceipt("existing-repository", root);
+    const { review } = await reviewFor(source.sourcePath, source, {
+      "apps/example/new.txt": {
+        kind: "added",
+        bytes: Buffer.from("reviewed\n"),
+      },
+    });
+
+    await expect(
+      deriveLocalPublicationProposal({
+        destinationPath: source.sourcePath,
+        sourceReceipt: source,
+        review,
+      }),
+    ).rejects.toThrow("release policy required for outward effects");
+  });
+
   it("round-trips UTF-8 ordered review paths into local publication", async () => {
     const { root, source } = await fixtureRoot();
     const reviewed = await reviewFor(root, source, {

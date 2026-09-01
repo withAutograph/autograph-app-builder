@@ -132,6 +132,15 @@ export default defineTool({
         ? {}
         : { githubSource: current.githubSource }),
     });
+    const readiness = await inspectTargetExecutionReadiness({
+      state: current,
+      sandbox,
+      expectedProposalDigest: current.proposal.digest,
+    });
+    if (!readiness.targetCommandReady)
+      throw new Error(
+        `Target validation is not ready: ${readiness.blockers.join(" ")}`,
+      );
     await assertAppliedComponentComposition({
       appId: current.appSpec.appId,
       applyRoot: current.applyReceipt.applyRoot,
@@ -284,6 +293,7 @@ export default defineTool({
         : {}),
       apply: current.applyReceipt,
       attempt,
+      dependencyLayout: current.dependencyReceipt.dependencyLayout,
       appId: current.appSpec.appId,
       verifyProtectedState: async () => {
         const latest = appBuilderWorkflowState.get();

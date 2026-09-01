@@ -73,4 +73,26 @@ describe("hosted managed sandbox seeds", () => {
       expect(content).toContain("local checkout path");
     }
   });
+
+  it("requires silent exact-path repair instead of source replay or prose planning", () => {
+    const instructions = readFileSync("agent/instructions.md", "utf8");
+    const createApp = readFileSync("agent/skills/create-app/SKILL.md", "utf8");
+    const planApp = readFileSync(
+      "agent/skills/plan-app-creation/SKILL.md",
+      "utf8",
+    );
+    const planningTool = readFileSync(
+      "agent/tools/plan_app_creation.ts",
+      "utf8",
+    );
+    for (const content of [instructions, createApp, planApp, planningTool]) {
+      expect(content).toMatch(/exact(?:AppOwnedPaths| app-owned)/u);
+      expect(content).toMatch(/do not resolve|without resolving/iu);
+      expect(content).toMatch(
+        /prose (?:implementation outline|outline|plan)/iu,
+      );
+    }
+    expect(instructions).toContain("existing_app_change_preimage_missing");
+    expect(instructions).toContain("must not appear in the user conversation");
+  });
 });

@@ -197,10 +197,13 @@ The shipped default runtime is still disabled until
 that live deployment composition is installed.
 The skills do not authorize raw target commands, tokens, or shell fallbacks.
 
-The initial adapter supports the known `withAutograph/arrusted-development`
-repository family and fails closed on drift. It deliberately does not infer
-workflows for arbitrary repositories and does not use a target-owned repository
-template manifest.
+The initial adapter supports repositories that satisfy the declared
+[minimum planning contract](docs/repository-compatibility.md). Compatibility is
+based on the Next.js runtime, required repository-owned paths, fixed identity,
+planning, apply, and validation commands, and the topology owner. It is not
+inferred from generator implementation text, package branding, receipt history,
+or release-workflow layout. Exact source SHA/tree binding and outward release
+policy remain separate fail-closed checks.
 
 ## Included surfaces
 

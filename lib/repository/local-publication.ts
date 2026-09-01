@@ -4,6 +4,7 @@ import { compareOverlayPaths, type OverlayChange } from "./target-apply";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
+import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template";
 
 export const LOCAL_PUBLICATION_VERSION = 2 as const;
 export const LOCAL_PUBLICATION_MAX_FILE_BYTES = 4 * 1024 * 1024;
@@ -262,6 +263,11 @@ export function createLocalPublicationProposal(input: {
     throw new Error(
       "Local publication accepts only the original existing-repository source.",
     );
+  assertRepositoryReleasePolicyAtGitSnapshot({
+    sourcePath: source.sourcePath,
+    sourceSha: source.sourceSha,
+    sourceTree: source.sourceTree,
+  });
   if (
     destination.canonicalPath !== source.sourcePath ||
     destination.headSha !== source.sourceSha ||

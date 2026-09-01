@@ -8,8 +8,9 @@ import { hasTestCapability } from "../testing/test-capability";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
-  materializedDependencyNodeModulesRoot,
+  materializeExecutionDependencyView,
   planningOverlayRoot,
+  type ExecutionDependencyLayout,
 } from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
 
@@ -202,7 +203,7 @@ export function applyOverlayRoot(proposalDigest: string): string {
 export async function materializeFreshApplyOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
-  dependencyCacheContentDigest: string;
+  dependencyLayout?: ExecutionDependencyLayout;
   proposalDigest: string;
   proposal: TargetProposal;
   environment?: Readonly<Record<string, string | undefined>>;
@@ -239,13 +240,21 @@ export async function materializeFreshApplyOverlay(input: {
     );
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
   const environment = input.environment ?? process.env;
-  const dependencyRoot = materializedDependencyNodeModulesRoot(
-    input.dependencyCacheContentDigest,
-    environment,
-  );
+  const dependencyLayout =
+    input.dependencyLayout ??
+    (hasTestCapability("simulated-target", environment)
+      ? ({
+          version: 1,
+          kind: "fixture",
+          roots: [],
+          workspaceLinks: [],
+        } as const)
+      : undefined);
+  if (dependencyLayout === undefined)
+    throw new Error("The dependency execution layout receipt is missing.");
   const copyCommand = hasTestCapability("simulated-target", environment)
     ? `cp -R ${planningRoot} ${absoluteRoot}`
-    : `test -L ${planningRoot}/node_modules && test "$(readlink -- ${planningRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${planningRoot} ${absoluteRoot} && test -L ${absoluteRoot}/node_modules && test "$(readlink -- ${absoluteRoot}/node_modules)" = "${dependencyRoot}"`;
+    : `cp -R ${planningRoot} ${absoluteRoot}`;
   const copy = await input.sandbox.run({
     command: copyCommand,
     workingDirectory: "/workspace",
@@ -268,6 +277,26 @@ export async function materializeFreshApplyOverlay(input: {
     throw new Error(
       "The fresh proposal apply overlay could not be materialized.",
     );
+  }
+  try {
+    await materializeExecutionDependencyView({
+      sandbox: input.sandbox,
+      layout: dependencyLayout,
+      overlayRoot: relativeRoot,
+      viewKey: input.proposalDigest,
+    });
+  } catch (error) {
+    await input.sandbox.removePath({
+      path: relativeRoot,
+      recursive: true,
+      force: true,
+    });
+    await input.sandbox.removePath({
+      path: claim,
+      recursive: true,
+      force: true,
+    });
+    throw error;
   }
   await input.sandbox.removePath({ path: claim, recursive: true, force: true });
   try {
@@ -693,6 +722,7 @@ export async function executeProposalBoundApply(input: {
   snapshotter?: typeof inspectApplyOverlay;
   binding: TargetApplyBinding;
   artifactRevision: string;
+  dependencyLayout?: ExecutionDependencyLayout;
   proposal: TargetProposal;
   appliedByCallId: string;
   environment?: Readonly<Record<string, string | undefined>>;
@@ -709,7 +739,7 @@ export async function executeProposalBoundApply(input: {
   const overlay = await materializeFreshApplyOverlay({
     sandbox: input.sandbox,
     artifactRevision: input.artifactRevision,
-    dependencyCacheContentDigest: input.binding.dependencyCacheContentDigest,
+    dependencyLayout: input.dependencyLayout,
     proposalDigest: input.binding.proposalDigest,
     proposal: input.proposal,
     environment: input.environment,
