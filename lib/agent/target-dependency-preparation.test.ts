@@ -73,7 +73,7 @@ vi.mock("@/lib/agent/prototype-artifacts", () => ({
 }));
 
 vi.mock("@/lib/agent/workflow-state", () => ({
-  APP_BUILDER_WORKFLOW_VERSION: 15,
+  APP_BUILDER_WORKFLOW_VERSION: 16,
   appBuilderWorkflowState: {
     get: () => mocks.current,
     update: (
@@ -166,7 +166,7 @@ function acceptedState(
   workspace: typeof mocks.workspace = mocks.workspace,
 ): AppBuilderWorkflowState {
   return {
-    version: 15,
+    version: 16,
     phase: "app_spec_accepted",
     preparedByCallId: "prepare-call",
     workspace,

@@ -125,7 +125,6 @@ export default defineTool({
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
       sourceReceiptDigest: current.sourceReceipt.digest,
-      sourceReceiptDigest: current.sourceReceipt.digest,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: execution.imageDigest,
