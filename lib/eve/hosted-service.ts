@@ -116,7 +116,6 @@ function assertNever(value: never): never {
   throw new HostedSubmissionUnknownError();
 }
 
-
 function titleFromPrompt(prompt: string): string {
   const firstLine = prompt.trim().split(/\r?\n/u, 1)[0]?.trim() ?? "";
   return firstLine.slice(0, 200) || "Untitled app";
