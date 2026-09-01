@@ -100,6 +100,9 @@ export async function prepareOrReuseDependencies(input: {
     sandbox,
     receipt: current.sourceReceipt,
     expectedWorkspace: current.workspace,
+    ...(current.githubSource === undefined
+      ? {}
+      : { githubSource: current.githubSource }),
   });
   const preferLiveTemplate = shouldPreferLiveTemplateDependencies(
     current.sourceReceipt.version,

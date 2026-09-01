@@ -77,6 +77,9 @@ export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
     owner: string;
     name: string;
   }): Promise<unknown | undefined>;
+  acquireRepositoryReadCredential(input: {
+    repositoryId: string;
+  }): Promise<{ token: string }>;
 }
 
 type Fetch = typeof fetch;
@@ -339,6 +342,31 @@ export function createGitHubAppHttpProvider(input: {
     return value;
   }
 
+  async function repositoryReadToken(repositoryId: string) {
+    decimal.parse(repositoryId);
+    const authentication = await app.octokit.auth({
+      type: "installation",
+      installationId: config.installationId,
+      permissions: { contents: "read" },
+      repositoryIds: [safeRepositoryIdNumber(repositoryId)],
+      refresh: true,
+    });
+    const value = stringProperty(authentication, "token");
+    if (value.length < 20 || value.length > 512)
+      throw new Error("invalid-response");
+    const permissions = property(authentication, "permissions");
+    if (
+      !record(permissions) ||
+      permissions.contents !== "read" ||
+      (permissions.metadata !== undefined && permissions.metadata !== "read") ||
+      Object.keys(permissions).some(
+        (key) => key !== "contents" && key !== "metadata",
+      )
+    )
+      throw new Error("invalid-response");
+    return value;
+  }
+
   async function selectedRepositories(
     permissions: PermissionSnapshot,
   ): Promise<readonly string[]> {
@@ -545,6 +573,13 @@ export function createGitHubAppHttpProvider(input: {
   }
 
   return {
+    async acquireRepositoryReadCredential({ repositoryId }) {
+      try {
+        return { token: await repositoryReadToken(repositoryId) };
+      } catch {
+        throw new Error("GitHub provider operation failed.");
+      }
+    },
     async inspectInstallation({ requestedPermissions }) {
       const identity = await installation();
       const selectedRepositoryIds =

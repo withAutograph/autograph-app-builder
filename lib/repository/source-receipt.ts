@@ -538,3 +538,35 @@ export function inspectCanonicalTemplateSnapshotReceipt(input: {
     sourcePath: input.snapshot.sourcePath,
   });
 }
+
+/**
+ * Construct the legacy existing-repository receipt from a closed inspection
+ * produced inside the session-owned GitHub clone. The diagnostic path remains
+ * the fixed sandbox workspace and is excluded from the receipt digest.
+ */
+export function inspectExistingRepositorySnapshotReceipt(
+  snapshot: CanonicalTemplateSnapshot,
+): SourceReceipt {
+  if (snapshot.dirtyPaths.length !== 0)
+    throw new Error("Cloned repository inspection is not clean.");
+  const eligibility = inspectSupportedTemplateSnapshot(snapshot);
+  if (!eligibility.eligible || eligibility.sourceSha === undefined)
+    throw new Error(
+      `Cloned repository is not eligible: ${eligibility.failures.join("; ")}`,
+    );
+  const evidence = {
+    version: LEGACY_SOURCE_RECEIPT_VERSION,
+    sourceKind: "existing-repository" as const,
+    sourceSha: eligibility.sourceSha,
+    sourceTree: snapshot.sourceTree,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
+    eligibilityDigest: eligibility.digest,
+    contractDigest: contractDigestFromSnapshot(snapshot.contract),
+    releaseEnabled: false as const,
+  };
+  return parseSourceReceipt({
+    ...evidence,
+    digest: sourceReceiptDigest(evidence),
+    sourcePath: snapshot.sourcePath,
+  });
+}

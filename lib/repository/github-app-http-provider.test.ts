@@ -336,6 +336,37 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     },
   );
 
+  it("mints only a contents-read credential for the exact source repository", async () => {
+    const mock = providerFetch();
+    const provider = createProvider(mock.implementation);
+
+    await expect(
+      provider.acquireRepositoryReadCredential({ repositoryId: "200" }),
+    ).resolves.toEqual({
+      token: "ghs_operation_scoped_installation_token",
+    });
+    expect(
+      mock.calls.find(({ url }) =>
+        url.endsWith("/app/installations/456/access_tokens"),
+      )?.body,
+    ).toEqual({
+      repository_ids: [200],
+      permissions: { contents: "read" },
+    });
+
+    let message = "";
+    try {
+      await createProvider(
+        providerFetch({ extraPermission: true }).implementation,
+      ).acquireRepositoryReadCredential({ repositoryId: "200" });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toBe("GitHub provider operation failed.");
+    expect(message).not.toContain("ghs_operation_scoped_installation_token");
+    expect(message).not.toContain(privateKeyPem);
+  });
+
   it("preserves an all-repositories installation through the adapter", async () => {
     const adapter = createGitHubAppPublicationAdapter(
       createProvider(

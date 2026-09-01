@@ -6,6 +6,7 @@ import {
   validAppId,
 } from "@/lib/agent/workflow-state";
 import { canInspectExistingApplication } from "@/lib/agent/existing-app-sequencing";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { safeSourcePath } from "@/lib/repository/source-path";
 
 const maximumFileBytes = 262_144;
@@ -27,7 +28,7 @@ export default defineDynamic({
           if (!validAppId(appId))
             throw new Error("The existing application id is invalid.");
           const state = appBuilderWorkflowState.get();
-          if (!canInspectExistingApplication(state))
+          if (state.phase === "empty" || !canInspectExistingApplication(state))
             throw new Error("Prepare the source before inspection.");
           const prefix = `apps/${appId}/`;
           if (
@@ -40,6 +41,14 @@ export default defineDynamic({
               "An existing application inspection path is not allowed.",
             );
           const sandbox = await ctx.getSandbox();
+          await inspectSourceBoundSandboxWorkspace({
+            sandbox,
+            receipt: state.sourceReceipt,
+            expectedWorkspace: state.workspace,
+            ...(state.githubSource === undefined
+              ? {}
+              : { githubSource: state.githubSource }),
+          });
           const manifestSource = await sandbox.readTextFile({
             path: ".app-builder/source-files.json",
           });

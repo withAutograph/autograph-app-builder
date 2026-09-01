@@ -171,10 +171,9 @@ describe("deployment GitHub publication composition", () => {
     });
   });
 
-  it("routes all five GitHub tools through the per-session resolver", async () => {
+  it("routes mutation tools through publication authority and source through repository access authority", async () => {
     for (const path of [
       "agent/tools/github_publication_status.ts",
-      "agent/tools/resolve_github_source.ts",
       "agent/tools/seal_github_draft_pr_proposal.ts",
       "agent/tools/create_github_repository.ts",
       "agent/tools/publish_github_draft_pr.ts",
@@ -184,33 +183,43 @@ describe("deployment GitHub publication composition", () => {
       expect(source).toContain("ctx.session.auth");
       expect(source).not.toContain("githubPublicationRuntime.");
     }
+    const resolveSource = await readFile(
+      "agent/tools/resolve_github_source.ts",
+      "utf8",
+    );
+    expect(resolveSource).toContain("repositoryAccessRuntimeForSession");
+    expect(resolveSource).toContain("ctx.session.auth");
+    expect(resolveSource).not.toContain("githubPublicationRuntimeForSession");
   });
 
   it("requires a session-bound access receipt for automatic source resolution while mutations stay approval-bound", async () => {
-    const [resolveSource, resolveAccess, createRepository, publishDraft] =
-      await Promise.all([
-        readFile("agent/tools/resolve_github_source.ts", "utf8"),
-        readFile("agent/tools/resolve_repository_access.ts", "utf8"),
-        readFile("agent/tools/create_github_repository.ts", "utf8"),
-        readFile("agent/tools/publish_github_draft_pr.ts", "utf8"),
-      ]);
+    const [
+      resolveSource,
+      resolveAccess,
+      prepareWorkspace,
+      createRepository,
+      publishDraft,
+    ] = await Promise.all([
+      readFile("agent/tools/resolve_github_source.ts", "utf8"),
+      readFile("agent/tools/resolve_repository_access.ts", "utf8"),
+      readFile("agent/tools/prepare_workspace.ts", "utf8"),
+      readFile("agent/tools/create_github_repository.ts", "utf8"),
+      readFile("agent/tools/publish_github_draft_pr.ts", "utf8"),
+    ]);
 
-    expect(resolveAccess).toContain("recordRepositoryAccessReceipt");
+    expect(resolveAccess).toContain("resolveRepositoryAccessForTool");
     expect(resolveAccess).toContain("repositoryAccessReceiptDigest");
     expect(resolveSource).toContain(
       'import { never } from "eve/tools/approval";',
     );
     expect(resolveSource).toContain("approval: never()");
-    expect(resolveSource).toContain("expectedRepositoryAccessDigest");
-    expect(resolveSource).toContain("assertRepositoryAccessReceiptForSource");
-    expect(resolveSource).toContain(
-      "assertResolvedSourceMatchesRepositoryAccess",
-    );
-    expect(resolveSource).toContain("runtime.resolveImmutableSource");
-    expect(resolveSource).toContain(
-      "expectedInstallationId: access.scope.installationId",
-    );
+    expect(resolveSource).toContain("resolveRepositoryAccessForTool");
+    expect(resolveSource).toContain("runtime.prepareExistingSource");
+    expect(resolveSource).not.toContain("expectedRepositoryAccessDigest");
+    expect(resolveSource).not.toContain("expectedInstallationId");
     expect(resolveSource).not.toContain("approval: always()");
+    expect(prepareWorkspace).toContain("inspectGitHubSourceSandboxWorkspace");
+    expect(prepareWorkspace).toContain("source.githubSource !== undefined");
 
     for (const mutationTool of [createRepository, publishDraft]) {
       expect(mutationTool).toContain(

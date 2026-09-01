@@ -41,6 +41,9 @@ export default defineTool({
       sandbox,
       receipt: current.sourceReceipt,
       expectedWorkspace: current.workspace,
+      ...(current.githubSource === undefined
+        ? {}
+        : { githubSource: current.githubSource }),
     });
     const observedTools = await Promise.all(
       commands.map(async (command) => {

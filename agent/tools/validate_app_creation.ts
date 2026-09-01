@@ -70,6 +70,9 @@ export default defineTool({
       sandbox,
       receipt: current.sourceReceipt,
       expectedWorkspace: current.workspace,
+      ...(current.githubSource === undefined
+        ? {}
+        : { githubSource: current.githubSource }),
     });
     const fixture = hasTestCapability("simulated-target");
     const attempt =

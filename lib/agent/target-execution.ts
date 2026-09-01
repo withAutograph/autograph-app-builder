@@ -174,6 +174,9 @@ export async function inspectTargetExecutionReadiness(input: {
     sandbox: input.sandbox,
     receipt: input.state.sourceReceipt,
     expectedWorkspace: input.state.workspace,
+    ...(input.state.githubSource === undefined
+      ? {}
+      : { githubSource: input.state.githubSource }),
   });
   const fixture = hasTestCapability("simulated-target", environment);
   const tools = fixture

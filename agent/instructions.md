@@ -46,26 +46,24 @@ isolated workspace.
    installation-selected repository ID, owner/name, default-branch ref, SHA,
    and tree before preparation. Do not treat an unbound local source receipt as
    GitHub publication authority.
-   In hosted execution, call `resolve_repository_access` with the requested
-   `owner/name` before inspecting a GitHub-backed existing repository. It
-   re-reads the current tenant-bound GitHub installation and repository; never
-   accept an installation id, repository id, SHA, tree, or a statement such as
-   “Repository selected” as proof of access. If access is missing or does not
-   include that repository, let the operation emit its structured GitHub
-   authorization request and park the turn. Do not replace it with a plain
-   question, ask the user to edit settings, or ask them to confirm that they
-   selected the repository. The Store In control owns the connection/update
-   link, and the same turn resumes only after the callback rechecks access.
-   If the resolver instead returns `scope-selection-required`, ask the single
-   product-facing choice it provides, with each exact installation id kept as
-   the option id. Retry `resolve_repository_access` with the selected
-   `selectedInstallationId`; the selection only narrows server-read access and
-   never establishes authority. Authorization cards list scopes read-only.
-   After a ready result, pass its exact `repositoryAccessReceiptDigest` to
-   `resolve_github_source` with the returned repository id, default-branch ref,
-   SHA, and tree. This internal read is automatic: it requires the current
-   session-bound Store In receipt and independently re-reads GitHub before
-   recording the immutable source. Never ask the user to approve it.
+   In hosted execution, call `resolve_github_source` with the requested
+   `owner/name`. That one automatic operation owns the tenant-bound GitHub
+   access readback, exact default-branch source inspection, and isolated
+   workspace preparation; never require a preceding access tool call or accept
+   caller-supplied installation authority, repository ids, SHAs, trees, or a
+   statement such as “Repository selected” as proof of access. If access is
+   missing or does not include that repository, let the operation emit its
+   structured GitHub authorization request and park the turn. Do not replace it
+   with a plain question, ask the user to edit settings, or ask them to confirm
+   that they selected the repository. The Store In control owns the
+   connection/update link, and the same turn resumes only after the callback
+   rechecks access. If the operation returns `scope-selection-required`, ask
+   the single product-facing choice it provides, with each exact installation
+   id kept as the option id, then retry `resolve_github_source` with that
+   `selectedInstallationId`. The selection only narrows server-read access and
+   never establishes authority. `resolve_repository_access` remains a
+   diagnostic operation and is never a required predecessor. Never ask the
+   user to approve this internal read or preparation.
 3. Infer a concise user-facing app name and deterministic lowercase kebab-case
    app id when the product brief omits them. Briefly tell the user what was
    inferred and continue without confirmation. Preserve an explicitly supplied

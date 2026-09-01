@@ -175,6 +175,9 @@ export default defineTool({
       sandbox,
       receipt: durable.sourceReceipt,
       expectedWorkspace: durable.workspace,
+      ...(durable.githubSource === undefined
+        ? {}
+        : { githubSource: durable.githubSource }),
     });
     if (JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed))
       throw new Error(
