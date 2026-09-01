@@ -3,7 +3,9 @@ import { readFile } from "node:fs/promises";
 import type { ToolContext } from "eve/tools";
 import { describe, expect, it, vi } from "vitest";
 
-import readSkillReference from "../../agent/tools/read_skill_reference";
+import readSkillReference, {
+  readSkillReferenceInputSchema,
+} from "../../agent/tools/read_skill_reference";
 
 describe("skill reference routing", () => {
   it.each([
@@ -24,7 +26,7 @@ describe("skill reference routing", () => {
       reference: "references/app-contract-v1.md",
     },
   ])("accepts the bundled $skill $reference file", (input) => {
-    expect(readSkillReference.inputSchema.safeParse(input).success).toBe(true);
+    expect(readSkillReferenceInputSchema.safeParse(input).success).toBe(true);
   });
 
   it.each([
@@ -45,7 +47,7 @@ describe("skill reference routing", () => {
       reference: "references/app-spec.md",
     },
   ])("rejects non-reference routing %#", (input) => {
-    expect(readSkillReference.inputSchema.safeParse(input).success).toBe(false);
+    expect(readSkillReferenceInputSchema.safeParse(input).success).toBe(false);
   });
 
   it("reads through the selected skill package handle", async () => {
