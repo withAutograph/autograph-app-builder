@@ -286,13 +286,7 @@ describe("Vercel-faithful App Builder flow", () => {
         view.querySelectorAll<HTMLElement>('[role="heading"][aria-level="2"]'),
         (heading) => heading.textContent,
       ),
-    ).toEqual([
-      "Describe your app",
-      "Build with",
-      "Store in",
-      "Deploy to",
-      "Connections",
-    ]);
+    ).toEqual(["Build with", "Store in", "Deploy to", "Connections"]);
     expect(view.querySelector('[aria-label="Settings"]')).toBeNull();
     expect(
       view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder,

@@ -889,17 +889,19 @@ export function AppDetailsSection({
   onCycleBrief: () => void;
 }) {
   return (
-    <SectionShell
+    <fieldset
       className={`${styles.sectionField} ${styles.appDetailsSection}`}
-      section="app-details"
-      title="Describe your app"
-      description="Start with the outcome. The name can be generated from your brief."
+      data-create-app-section="app-details"
     >
+      <legend className={styles.visuallyHidden}>App details</legend>
       <label htmlFor="app-name">
-        App Name
+        <span className={styles.fieldLabel}>
+          App Name <small aria-hidden="true">Optional</small>
+        </span>
         <input
           id="app-name"
           name="app-name"
+          aria-label="App Name"
           autoComplete="off"
           spellCheck={false}
           value={appName}
@@ -908,11 +910,14 @@ export function AppDetailsSection({
         />
       </label>
       <label htmlFor="app-brief">
-        App Brief
+        <span className={styles.fieldLabel}>
+          App Brief <small aria-hidden="true">Required</small>
+        </span>
         <div className={styles.briefField}>
           <textarea
             id="app-brief"
             name="app-brief"
+            aria-label="App Brief"
             autoComplete="off"
             value={brief}
             onChange={(event) => onBriefChange(event.target.value)}
@@ -938,7 +943,7 @@ export function AppDetailsSection({
         </a>
         .
       </p>
-    </SectionShell>
+    </fieldset>
   );
 }
 
@@ -1922,7 +1927,13 @@ export function Builder({
     <main className={styles.authenticatedPage} id="main-content">
       <form className={styles.builderCard} onSubmit={submit}>
         <div className={styles.cardTitle}>
-          <h1>Build an app</h1>
+          <div>
+            <h1>Build an app</h1>
+            <p>
+              Describe what you want to build, then choose how it should be
+              created and delivered.
+            </p>
+          </div>
           <AutographMark compact />
         </div>
         <ProviderNotices notices={visibleProviderNotices} />
