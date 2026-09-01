@@ -209,13 +209,10 @@ export function composeGitHubPublicationRuntime(input: {
           request.githubSource.repository.repositoryId ||
         repository.owner !== request.githubSource.repository.owner ||
         repository.name !== request.githubSource.repository.name ||
-        repository.defaultBranch !==
-          request.githubSource.repository.defaultBranch ||
-        repository.headSha !== request.githubSource.resolvedSha ||
-        repository.headTree !== request.githubSource.resolvedTree
+        repository.defaultBranch !== request.githubSource.repository.defaultBranch
       )
         throw new Error(
-          "The GitHub default branch changed after immutable source review.",
+          "The GitHub repository identity changed after source review.",
         );
       const proposal = createDraftPullRequestProposal({
         installation,

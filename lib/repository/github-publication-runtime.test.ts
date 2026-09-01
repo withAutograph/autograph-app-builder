@@ -629,7 +629,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     expect(provider.draftMutations).toBe(0);
   });
 
-  it("refuses a stale default-branch observation before proposal persistence", async () => {
+  it("records the current default-branch observation when it advanced after source resolution", async () => {
     const provider = new Provider();
     const stores = new MemoryStores();
     const runtime = composeGitHubPublicationRuntime({
@@ -654,15 +654,14 @@ describe("GitHub runtime adapter and durable-store composition", () => {
       };
     };
 
-    await expect(
-      runtime.sealDraftPullRequestProposal({
-        githubSource,
-        source: source("existing-repository"),
-        review: review(),
-        title: "Add demo",
-      }),
-    ).rejects.toThrow(/default branch changed/u);
-    expect(stores.proposals.size).toBe(0);
+    const proposal = await runtime.sealDraftPullRequestProposal({
+      githubSource,
+      source: source("existing-repository"),
+      review: review(),
+      title: "Add demo",
+    });
+    expect(proposal.baseSha).toBe(branchSha);
+    expect(stores.proposals.size).toBe(1);
     expect(provider.draftMutations).toBe(0);
   });
 

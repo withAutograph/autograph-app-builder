@@ -353,9 +353,7 @@ export function assertCurrentGitHubDraftProposal(input: {
     proposal.repositoryId !== input.githubSource.repository.repositoryId ||
     proposal.owner !== input.githubSource.repository.owner ||
     proposal.name !== input.githubSource.repository.name ||
-    proposal.baseBranch !== input.githubSource.repository.defaultBranch ||
-    proposal.baseSha !== input.githubSource.resolvedSha ||
-    proposal.baseTree !== input.githubSource.resolvedTree
+    proposal.baseBranch !== input.githubSource.repository.defaultBranch
   )
     throw new Error(
       "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",

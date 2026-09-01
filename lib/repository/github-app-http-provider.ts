@@ -984,11 +984,6 @@ export function createGitHubAppHttpProvider(input: {
         proposal,
         permissions,
       );
-      if (
-        snapshot.headSha !== proposal.baseSha ||
-        snapshot.headTree !== proposal.baseTree
-      )
-        return { status: "rejected", code: "stale-base" };
       const files = changes.flatMap((change) =>
         change.after === undefined ? [] : [change.after],
       );
