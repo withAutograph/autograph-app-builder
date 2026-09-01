@@ -62,6 +62,7 @@ import {
   readBuilderDraft,
 } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
+import { AppDetailsSection } from "./builder-app-details";
 import type {
   BuilderDraft,
   BuilderForm,
@@ -668,6 +669,7 @@ export function SearchCombobox({
   );
 }
 
+<<<<<<< HEAD
 export function AppDetailsSection({
   appName,
   brief,
@@ -737,6 +739,180 @@ export function AppDetailsSection({
         .
       </p>
     </fieldset>
+||||||| parent of bacc66d (refactor: extract builder app details)
+export function Header() {
+  return (
+    <header className={styles.header}>
+      <a className={styles.skipLink} href="#main-content">
+        Skip to content
+      </a>
+      <Link href="/" className={styles.back}>
+        <ArrowLeft size={17} aria-hidden="true" /> Back
+      </Link>
+      <span>New App</span>
+      <div className={styles.headerActions}>
+        <UserButton align="end" sideOffset={8} size="icon" />
+      </div>
+    </header>
+  );
+}
+
+export function ProviderNotices({
+  notices,
+}: {
+  notices: ProviderConnectionNotice[];
+}) {
+  if (!notices.length) return null;
+  return (
+    <div className={styles.providerNotices} aria-live="polite">
+      {notices.map((notice) => {
+        const provider = notice.provider === "vercel" ? "Vercel" : "GitHub";
+        return (
+          <p
+            key={`${notice.provider}-${notice.status}`}
+            role={notice.status === "failed" ? "alert" : "status"}
+            data-status={notice.status}
+          >
+            {notice.status === "connected" ? (
+              <>
+                <Check size={15} aria-hidden="true" />
+                {provider} connected successfully.
+              </>
+            ) : (
+              <>
+                <Info size={15} aria-hidden="true" />
+                {providerConnectionFailureMessage(provider, notice.reason)}
+              </>
+            )}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+export function AppDetailsSection({
+  appName,
+  brief,
+  onAppNameChange,
+  onBriefChange,
+  onCycleBrief,
+}: {
+  appName: string;
+  brief: string;
+  onAppNameChange: (value: string) => void;
+  onBriefChange: (value: string) => void;
+  onCycleBrief: () => void;
+}) {
+  return (
+    <fieldset
+      className={`${styles.sectionField} ${styles.appDetailsSection}`}
+      data-create-app-section="app-details"
+    >
+      <legend className={styles.visuallyHidden}>App details</legend>
+      <label htmlFor="app-name">
+        <span className={styles.fieldLabel}>
+          App Name <small aria-hidden="true">Optional</small>
+        </span>
+        <input
+          id="app-name"
+          name="app-name"
+          aria-label="App Name"
+          autoComplete="off"
+          spellCheck={false}
+          value={appName}
+          onChange={(event) => onAppNameChange(event.target.value)}
+          placeholder="support-app"
+        />
+      </label>
+      <label htmlFor="app-brief">
+        <span className={styles.fieldLabel}>
+          App Brief <small aria-hidden="true">Required</small>
+        </span>
+        <div className={styles.briefField}>
+          <textarea
+            id="app-brief"
+            name="app-brief"
+            aria-label="App Brief"
+            autoComplete="off"
+            value={brief}
+            onChange={(event) => onBriefChange(event.target.value)}
+            placeholder="Describe the app you want to build…"
+          />
+          <button
+            type="button"
+            aria-label="Try another app brief example"
+            onClick={onCycleBrief}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </label>
+      <p className={styles.helpText}>
+        Define this app’s users, workflow, constraints, and desired outcome.{" "}
+        <a
+          href="https://github.com/withAutograph/autograph-app-builder"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Read the App Builder docs ↗
+        </a>
+        .
+      </p>
+    </fieldset>
+  );
+}
+
+=======
+export function Header() {
+  return (
+    <header className={styles.header}>
+      <a className={styles.skipLink} href="#main-content">
+        Skip to content
+      </a>
+      <Link href="/" className={styles.back}>
+        <ArrowLeft size={17} aria-hidden="true" /> Back
+      </Link>
+      <span>New App</span>
+      <div className={styles.headerActions}>
+        <UserButton align="end" sideOffset={8} size="icon" />
+      </div>
+    </header>
+  );
+}
+
+export function ProviderNotices({
+  notices,
+}: {
+  notices: ProviderConnectionNotice[];
+}) {
+  if (!notices.length) return null;
+  return (
+    <div className={styles.providerNotices} aria-live="polite">
+      {notices.map((notice) => {
+        const provider = notice.provider === "vercel" ? "Vercel" : "GitHub";
+        return (
+          <p
+            key={`${notice.provider}-${notice.status}`}
+            role={notice.status === "failed" ? "alert" : "status"}
+            data-status={notice.status}
+          >
+            {notice.status === "connected" ? (
+              <>
+                <Check size={15} aria-hidden="true" />
+                {provider} connected successfully.
+              </>
+            ) : (
+              <>
+                <Info size={15} aria-hidden="true" />
+                {providerConnectionFailureMessage(provider, notice.reason)}
+              </>
+            )}
+          </p>
+        );
+      })}
+    </div>
+>>>>>>> bacc66d (refactor: extract builder app details)
   );
 }
 
