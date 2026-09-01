@@ -34,28 +34,22 @@ import {
   type InternalEveEvent,
 } from "./public-events";
 import {
+  projectHostedSnapshot,
+  type HostedEngineSnapshot,
+} from "./hosted-projection";
+
+const projectSnapshot = projectHostedSnapshot;
+import {
   eveSessionResultSchema,
-  publicImplementationPlanSchema,
   publicInputRequestSchema,
-  publicPrototypeSchema,
   publicEveEventSchema,
   publicSessionStageSchema,
-  sessionStatusSchema,
   type EveSessionResult,
   type PublicInputRequest,
 } from "../mcp/contracts";
 import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
-const hostedSnapshotSchema = z
-  .object({
-    status: sessionStatusSchema,
-    events: z.array(z.unknown()).max(100_000),
-    prototype: publicPrototypeSchema.optional(),
-    implementationPlan: publicImplementationPlanSchema.optional(),
-  })
-  .strict();
-
-export type HostedEngineSnapshot = z.infer<typeof hostedSnapshotSchema>;
+export type { HostedEngineSnapshot } from "./hosted-projection";
 
 export interface HostedEveTransport {
   start(input: {
@@ -201,44 +195,6 @@ function digest(value: unknown): string {
 
 function stableId(prefix: string, value: unknown): string {
   return `${prefix}_${digest(value).slice("sha256:".length)}`;
-}
-
-function projectSnapshot(
-  sessionId: string,
-  snapshotInput: unknown,
-  cursor = 0,
-  limit = 100,
-): EveSessionResult {
-  const snapshot = hostedSnapshotSchema.parse(snapshotInput);
-  const projected = snapshot.events
-    .flatMap((candidate) => {
-      if (candidate === null || typeof candidate !== "object") return [];
-      const projected = toPublicEvent(candidate as InternalEveEvent);
-      if (projected === null) return [];
-      const parsed = publicEveEventSchema.safeParse(projected);
-      return parsed.success ? [parsed.data] : [];
-    })
-    .map((event, index) => ({ ...event, index }));
-  const events = projected.slice(cursor, cursor + limit);
-  const inputRequests = outstandingInternalEveRequests(
-    snapshot.events.filter(
-      (event): event is InternalEveEvent =>
-        event !== null && typeof event === "object",
-    ),
-  );
-  return eveSessionResultSchema.parse({
-    sessionId,
-    status: snapshot.status,
-    cursor: Math.min(cursor + events.length, projected.length),
-    events,
-    ...(inputRequests.length === 0 ? {} : { inputRequests }),
-    ...(snapshot.prototype === undefined
-      ? {}
-      : { prototype: snapshot.prototype }),
-    ...(snapshot.implementationPlan === undefined
-      ? {}
-      : { implementationPlan: snapshot.implementationPlan }),
-  });
 }
 
 function titleFromPrompt(prompt: string): string {
