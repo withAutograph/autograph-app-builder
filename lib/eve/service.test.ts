@@ -167,12 +167,16 @@ describe("local Eve acceptance", () => {
       respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
-    const firstService = createLocalEveSessionService({
-      sessions: {
-        create: vi.fn(async () => ({ session, response })),
-        attach: vi.fn(() => session),
-      } as never,
-    });
+    const stateGeneration = "one-development-invocation";
+    const firstService = createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach: vi.fn(() => session),
+        } as never,
+      },
+      { stateGeneration },
+    );
     const started = await firstService.start({
       prompt: "Build",
       clientRequestId: "module-reload-start",
@@ -189,12 +193,15 @@ describe("local Eve acceptance", () => {
 
     vi.resetModules();
     const reloaded = await import("./service");
-    const reloadedService = reloaded.createLocalEveSessionService({
-      sessions: {
-        create: vi.fn(),
-        attach: vi.fn(() => session),
-      } as never,
-    });
+    const reloadedService = reloaded.createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(),
+          attach: vi.fn(() => session),
+        } as never,
+      },
+      { stateGeneration },
+    );
 
     await expect(
       reloadedService.get({
@@ -212,6 +219,16 @@ describe("local Eve acceptance", () => {
         }),
         expect.objectContaining({ type: "status", status: "waiting" }),
       ]),
+    });
+    await expect(
+      reloadedService.list({ cursor: 0, limit: 10 }),
+    ).resolves.toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          sessionId: started.sessionId,
+          title: "Build",
+        }),
+      ],
     });
   });
 

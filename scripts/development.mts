@@ -163,7 +163,6 @@ async function runEveCycle(input: {
     applicationRoot: input.applicationRoot,
     runRoot: input.supervisorRoot,
   });
-  await rotateLocalEveCycleBinding(input.cycleFile);
   const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
   try {
     const snapshot = await createDevelopmentSnapshot({
