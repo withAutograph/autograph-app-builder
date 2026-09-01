@@ -6,8 +6,8 @@ import { inspectTargetExecutionReadiness } from "@/lib/agent/target-execution";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactWorkflowState,
   assertUpstreamMutationAllowed,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   executeProposalBoundApply,
@@ -120,13 +120,10 @@ export default defineTool({
       appliedByCallId: ctx.callId,
     });
     if (!result.ok) {
-      appBuilderWorkflowState.update((latest) => {
-        assertExactWorkflowState(
-          latest,
-          current,
-          "target apply failure recording",
-        );
-        return {
+      updateExactWorkflow({
+        expected: current,
+        operation: "target apply failure recording",
+        transition: () => ({
           version: APP_BUILDER_WORKFLOW_VERSION,
           phase: "apply_failed",
           preparedByCallId: current.preparedByCallId,
@@ -141,19 +138,16 @@ export default defineTool({
           identityReceipt: current.identityReceipt,
           proposal: current.proposal,
           applyFailure: result.receipt,
-        };
+        }),
       });
       throw new Error(
         `Target apply entered recovery-required partial failure ${result.receipt.digest}.`,
       );
     }
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(
-        latest,
-        current,
-        "target apply success recording",
-      );
-      return {
+    updateExactWorkflow({
+      expected: current,
+      operation: "target apply success recording",
+      transition: () => ({
         version: APP_BUILDER_WORKFLOW_VERSION,
         phase: "applied",
         preparedByCallId: current.preparedByCallId,
@@ -168,7 +162,7 @@ export default defineTool({
         identityReceipt: current.identityReceipt,
         proposal: current.proposal,
         applyReceipt: result.receipt,
-      };
+      }),
     });
     return { ...result.receipt, reused: false };
   },
