@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { SandboxSession } from "eve/sandbox";
 
 import { createGitHubTokenOctokit } from "../github/octokit";
+import { canAutoSelectDevelopmentSource } from "./development-source";
 
 import {
   ARRUSTED_TEMPLATE_REF,
@@ -543,10 +544,9 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
 }
 
 /**
- * Re-inspect the exact source workspace represented by a durable receipt.
- * Fresh-template V4 receipts additionally prove the live detached clone and
- * its canonical origin/ref; legacy V3 existing repositories retain their
- * prepared-workspace verification path.
+ * Re-inspect the active source workspace. Development uses the writable live
+ * workspace as current planning input; hosted release adapters retain their
+ * closed receipt checks until the moving-source policy reaches those paths.
  */
 export async function inspectSourceBoundSandboxWorkspace(input: {
   sandbox: SandboxSession;
@@ -554,6 +554,21 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   expectedWorkspace?: PreparedSandboxWorkspace;
   githubSource?: ImmutableGitHubSourceReceipt;
 }): Promise<PreparedSandboxWorkspace> {
+  if (canAutoSelectDevelopmentSource()) {
+    const status = await inspectPreparedSandboxWorkspace(input.sandbox);
+    if (status.state !== "prepared")
+      throw new Error("The prepared development workspace is missing.");
+    const observed = status.workspace;
+    if (
+      observed.workspaceId !== input.sandbox.id ||
+      (input.expectedWorkspace !== undefined &&
+        JSON.stringify(observed) !== JSON.stringify(input.expectedWorkspace))
+    )
+      throw new Error(
+        "The prepared development workspace does not match the active workflow.",
+      );
+    return observed;
+  }
   const receipt = parseSourceReceipt(input.receipt);
   const observed =
     input.githubSource !== undefined
