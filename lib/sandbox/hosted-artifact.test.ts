@@ -20,7 +20,7 @@ describe("hosted Arrusted artifact", () => {
     expect(HOSTED_ARTIFACT_URL).toBe(
       `https://github.com/withAutograph/autograph-app-builder/releases/download/${HOSTED_ARTIFACT_RELEASE_TAG}/${HOSTED_ARTIFACT_RELEASE_NAME}`,
     );
-    expect(HOSTED_ARTIFACT_BYTES).toBe(180_168_876);
+    expect(HOSTED_ARTIFACT_BYTES).toBe(175_953_869);
     expect(HOSTED_ARTIFACT_SHA256).toMatch(/^[0-9a-f]{64}$/u);
     expect(existsSync("lib/sandbox/hosted-artifact.generated.ts")).toBe(false);
     expect(existsSync("public/hosted-artifacts")).toBe(false);

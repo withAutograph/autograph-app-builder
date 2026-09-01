@@ -222,7 +222,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     );
     expect(command).not.toMatch(/sudo|token|password|authorization/iu);
     expect(command).toContain(
-      "releases/download/hosted-arrusted-d378904a-execution-v4",
+      "releases/download/hosted-arrusted-d378904a-execution-v6",
     );
   });
 
