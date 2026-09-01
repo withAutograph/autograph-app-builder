@@ -1295,7 +1295,9 @@ export async function inspectDependencyCache(
     "Dependency cache manifest inspection",
   );
   if (manifestResult.exitCode !== 0)
-    throw new Error("The fixed offline dependency cache manifest is missing.");
+    throw new DependencyCacheMissingError(
+      "The fixed offline dependency cache manifest is missing.",
+    );
   let parsed: unknown;
   try {
     parsed = JSON.parse(manifestResult.stdout) as unknown;

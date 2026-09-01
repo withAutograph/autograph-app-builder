@@ -22,6 +22,10 @@ import {
   type ObservedDependencyCache,
 } from "@/lib/repository/dependency-cache";
 import {
+  DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
+  developmentVercelDependencyRepairCommand,
+} from "@/lib/sandbox/development-toolchain";
+import {
   materializePlanningOverlay,
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
@@ -44,6 +48,34 @@ export type TargetDependencyPreparationResult = {
   receipt: DependencyPreparationReceipt;
   reused: boolean;
 };
+
+async function repairDevelopmentDependencyCache(input: {
+  sandbox: SandboxSession;
+  environment: Readonly<Record<string, string | undefined>>;
+}) {
+  const dependencyKey = input.environment.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY;
+  if (
+    input.environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
+    dependencyKey === undefined
+  )
+    throw new Error("Development dependency repair was not authorized.");
+  await input.sandbox.setNetworkPolicy({
+    allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
+  });
+  const result = await (async () => {
+    try {
+      return await input.sandbox.run({
+        command: developmentVercelDependencyRepairCommand(dependencyKey),
+        workingDirectory: "/workspace",
+        abortSignal: AbortSignal.timeout(900_000),
+      });
+    } finally {
+      await input.sandbox.setNetworkPolicy("deny-all");
+    }
+  })();
+  if (result.exitCode !== 0)
+    throw new Error("The development dependency cache could not be prepared.");
+}
 
 function assertReceiptMatchesCache(
   receipt: DependencyPreparationReceipt,
@@ -141,11 +173,19 @@ export async function prepareOrReuseDependencies(input: {
       preferLiveTemplate,
     );
   } catch (error) {
-    if (!preferLiveTemplate || !(error instanceof DependencyCacheMissingError))
+    if (!(error instanceof DependencyCacheMissingError)) throw error;
+    if (input.environment.APP_BUILDER_EXECUTION_MODE === "development") {
+      await repairDevelopmentDependencyCache({
+        sandbox,
+        environment: input.environment,
+      });
+    } else if (preferLiveTemplate) {
+      await bootstrapLiveTemplateDependencies({
+        sandbox,
+      });
+    } else {
       throw error;
-    await bootstrapLiveTemplateDependencies({
-      sandbox,
-    });
+    }
     await inspectSourceBoundSandboxWorkspace({
       sandbox,
       receipt: current.sourceReceipt,
@@ -158,7 +198,7 @@ export async function prepareOrReuseDependencies(input: {
       sandbox,
       input.environment,
       current.workspace,
-      true,
+      preferLiveTemplate,
     );
   }
   assertExactDependencyTargetBinding({
