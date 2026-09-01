@@ -61,6 +61,8 @@ import {
 } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
 import { BuildWithSection } from "./builder-destination";
+
+export { BuildWithSection } from "./builder-destination";
 import type {
   BuilderDraft,
   BuilderForm,
