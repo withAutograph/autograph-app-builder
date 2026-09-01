@@ -285,6 +285,85 @@ describe("local Eve acceptance", () => {
     });
   });
 
+  it("makes an active local turn resumable after its Eve child restarts", async () => {
+    let keepOldResponseOpen!: () => void;
+    const oldResponse = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: "step.started",
+          data: { turnId: "turn-before-restart" },
+        } as MessageStreamEvent;
+        await new Promise<void>((resolve) => (keepOldResponseOpen = resolve));
+      },
+    };
+    const resumedEvents = [
+      { type: "session.waiting", data: {} },
+    ] as MessageStreamEvent[];
+    const resumedResponse = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        for (const event of resumedEvents) yield event;
+      },
+    };
+    const session = {
+      state: { sessionId: "wrun_restart_interrupted" },
+      send: vi.fn(async () => resumedResponse),
+      respond: vi.fn(async () => resumedResponse),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const client = {
+      sessions: {
+        create: vi.fn(async () => ({ session, response: oldResponse })),
+        attach: vi.fn(() => session),
+      } as never,
+    };
+    const first = createLocalEveSessionService(client, {
+      stateGeneration: "one-local-invocation",
+      restartGeneration: "eve-child-one",
+    });
+    const started = await first.start({
+      prompt: "Build",
+      clientRequestId: "restart-interrupted-start",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        first.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "working", cursor: 1 });
+    });
+
+    const restarted = createLocalEveSessionService(client, {
+      stateGeneration: "one-local-invocation",
+      restartGeneration: "eve-child-two",
+    });
+    await expect(
+      restarted.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+    ).resolves.toMatchObject({ status: "waiting", cursor: 1 });
+    await expect(restarted.cancel({ sessionId: started.sessionId })).resolves.toMatchObject({
+      status: "waiting",
+    });
+    expect(session.cancel).not.toHaveBeenCalled();
+
+    await restarted.send({
+      sessionId: started.sessionId,
+      message: "Continue from the last product decision.",
+      clientRequestId: "restart-interrupted-send",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        restarted.get({
+          sessionId: started.sessionId,
+          cursor: 0,
+          limit: 100,
+        }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+    });
+    expect(client.sessions.attach).toHaveBeenCalledWith(started.sessionId, {
+      streamIndex: 1,
+    });
+    keepOldResponseOpen();
+  });
+
   it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
     const content = "<!doctype html><html><body>Vendor queue</body></html>";
     const path = "prototype/vendor-onboarding/index.html";

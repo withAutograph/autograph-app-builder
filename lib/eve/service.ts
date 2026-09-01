@@ -100,10 +100,18 @@ type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
 
 type LocalEveRuntimeState = {
   generation: string;
+  /** The Eve child that was serving when this state was last observed. */
+  restartGeneration?: string;
   requests: Map<string, string>;
   sessionEvents: Map<string, MessageStreamEvent[]>;
   sessionHandles: Map<string, ClientSession>;
   activeResponses: Map<string, CancellableResponse>;
+  /**
+   * A local Eve child was replaced while this session still had an in-flight
+   * response. The old transport cannot settle it, but the durable session can
+   * accept the next continuation from its last buffered boundary.
+   */
+  restartInterrupted: Set<string>;
   recoveryRequired: Set<string>;
   recoveries: Map<string, Promise<void>>;
   metadata: Map<
@@ -128,6 +136,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     sessionEvents: new Map(),
     sessionHandles: new Map(),
     activeResponses: new Map(),
+    restartInterrupted: new Set(),
     recoveryRequired: new Set(),
     recoveries: new Map(),
     metadata: new Map(),
@@ -150,7 +159,25 @@ function localCycleGeneration(
   const path = environment.APP_BUILDER_LOCAL_EVE_CYCLE_FILE;
   if (path === undefined)
     throw new Error("The local Eve cycle binding was unavailable.");
-  return `cycle:${readLocalEveCycleBinding(path)}`;
+  // The binding is rotated for each Eve child. Keep the in-memory public
+  // session index for the whole `mise run dev` invocation instead of treating
+  // a targeted child restart as a new application.
+  readLocalEveCycleBinding(path);
+  return `local:${path}`;
+}
+
+function localEveRestartGeneration(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+) {
+  if (
+    environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
+    environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
+  )
+    return undefined;
+  const path = environment.APP_BUILDER_LOCAL_EVE_CYCLE_FILE;
+  if (path === undefined)
+    throw new Error("The local Eve cycle binding was unavailable.");
+  return readLocalEveCycleBinding(path);
 }
 
 function resultForEvents(
@@ -158,6 +185,7 @@ function resultForEvents(
   snapshotEvents: readonly MessageStreamEvent[],
   cursor = 0,
   limit = 100,
+  options: { status?: EveSessionResult["status"] } = {},
 ): EveSessionResult {
   const projected = projectInstalledEveEvents(snapshotEvents);
   const events = projected.slice(cursor, cursor + limit);
@@ -166,7 +194,7 @@ function resultForEvents(
   const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
     sessionId,
-    status: deriveInstalledEveStatus(snapshotEvents),
+    status: options.status ?? deriveInstalledEveStatus(snapshotEvents),
     cursor: Math.min(cursor + events.length, projected.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
@@ -216,13 +244,31 @@ function consumeResponse(
 
 export function createLocalEveSessionService(
   client: Pick<Client, "sessions">,
-  options: { stateGeneration?: string } = {},
+  options: { stateGeneration?: string; restartGeneration?: string } = {},
 ): EveSessionService {
   const state = localRuntimeState(options.stateGeneration ?? "process");
   const localRequests = state.requests;
   const localSessionEvents = state.sessionEvents;
   const localSessionHandles = state.sessionHandles;
   const localActiveResponses = state.activeResponses;
+
+  // A targeted local restart ends the old HTTP stream without giving it a
+  // reliable terminal Eve event. Preserve its buffered product progress, but
+  // fence the dead response so a subsequent send can attach to the new child.
+  // This is deliberately local-only: hosted sessions use their durable lease
+  // and adapter-generation recovery path.
+  if (
+    options.restartGeneration !== undefined &&
+    state.restartGeneration !== undefined &&
+    state.restartGeneration !== options.restartGeneration
+  ) {
+    for (const sessionId of localActiveResponses.keys()) {
+      localActiveResponses.delete(sessionId);
+      state.restartInterrupted.add(sessionId);
+    }
+  }
+  if (options.restartGeneration !== undefined)
+    state.restartGeneration = options.restartGeneration;
 
   function sessionFor(sessionId: string): ClientSession {
     const existing = localSessionHandles.get(sessionId);
@@ -278,7 +324,10 @@ export function createLocalEveSessionService(
           throw new Error("Eve changed the local session during resume.");
         localSessionEvents.set(resumeSessionId, [...snapshot.events]);
         touchSession(resumeSessionId);
-        return resultForEvents(resumeSessionId, snapshot.events);
+        return resultForEvents(resumeSessionId, snapshot.events, 0, 100, {
+          status:
+            state.restartInterrupted.has(resumeSessionId) ? "waiting" : undefined,
+        });
       }
       if (prompt === undefined)
         throw new Error("A new App Builder session requires a prompt.");
@@ -351,12 +400,16 @@ export function createLocalEveSessionService(
         localSessionEvents.get(sessionId) ?? [],
         cursor,
         limit,
+        {
+          status: state.restartInterrupted.has(sessionId) ? "waiting" : undefined,
+        },
       );
     },
     async send({ sessionId, message, clientRequestId }) {
       const key = `send:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
         const response = await sessionAtBufferedTail(sessionId).send(message);
+        state.restartInterrupted.delete(sessionId);
         consumeResponse(state, sessionId, response);
         localRequests.set(key, sessionId);
       }
@@ -381,6 +434,7 @@ export function createLocalEveSessionService(
         const result = await sessionAtBufferedTail(sessionId).respond(
           toEveInputResponses(responses),
         );
+        state.restartInterrupted.delete(sessionId);
         consumeResponse(state, sessionId, result);
         localRequests.set(key, sessionId);
       }
@@ -388,6 +442,16 @@ export function createLocalEveSessionService(
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async cancel({ sessionId, turnId }) {
+      if (state.restartInterrupted.has(sessionId)) {
+        touchSession(sessionId);
+        return resultForEvents(
+          sessionId,
+          localSessionEvents.get(sessionId) ?? [],
+          0,
+          100,
+          { status: "waiting" },
+        );
+      }
       const active = localActiveResponses.get(sessionId);
       if (turnId === undefined && active !== undefined) {
         await active.cancel();
@@ -424,7 +488,10 @@ export function createEveSessionService(
     }
     return createLocalEveSessionService(
       new Client({ host: url.origin, redirect: "error" }),
-      { stateGeneration: localCycleGeneration(environment) },
+      {
+        stateGeneration: localCycleGeneration(environment),
+        restartGeneration: localEveRestartGeneration(environment),
+      },
     );
   }
   return {

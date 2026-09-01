@@ -157,6 +157,10 @@ async function runEveCycle(input: {
   nextExited: Promise<{ kind: "next-exit"; code: number }>;
 }) {
   input.signal.throwIfAborted();
+  // Every child gets a new restart generation. Next keeps its public local
+  // session index, observes this marker on the next MCP request, and fences
+  // any response stream owned by the child we are replacing.
+  await rotateLocalEveCycleBinding(input.cycleFile);
   const cycleStartedAt = performance.now();
   await refreshDevelopmentApplication({
     repositoryRoot,
