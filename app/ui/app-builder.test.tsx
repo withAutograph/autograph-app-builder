@@ -252,7 +252,10 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).not.toContain("Vercel Team (Optional)");
-    expect(view.textContent).toContain("Git Scope (Optional)");
+    expect(view.textContent).not.toContain(
+      "Connect Vercel and Autograph can create and deploy the project for you.",
+    );
+    expect(view.textContent).toContain("Git Scope");
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");
     expect(view.textContent).toContain("Build with");
@@ -269,6 +272,24 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Connections");
     expect(view.textContent).not.toContain("Channels");
     expect(view.textContent).not.toContain("Agent Name");
+    expect(
+      Array.from(
+        view.querySelectorAll<HTMLElement>("[data-create-app-section]"),
+        (section) => section.dataset.createAppSection,
+      ),
+    ).toEqual([
+      "app-details",
+      "build-with",
+      "store-in",
+      "deploy-to",
+      "connections",
+    ]);
+    expect(
+      Array.from(
+        view.querySelectorAll<HTMLElement>('[role="heading"][aria-level="2"]'),
+        (heading) => heading.textContent,
+      ),
+    ).toEqual(["Build with", "Store in", "Deploy to", "Connections"]);
     expect(view.querySelector('[aria-label="Settings"]')).toBeNull();
     expect(
       view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder,
@@ -496,7 +517,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector("#repository-name")).toBeNull();
     expect(view.querySelector('[aria-label="Private repository"]')).toBeNull();
     expect(view.textContent).not.toContain("Private Repository Name");
-    expect(view.textContent).toContain(
+    expect(view.textContent).not.toContain(
       "Connect GitHub and Autograph can create and configure the repository for you.",
     );
   });
@@ -665,7 +686,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
     const repository =
       view.querySelector<HTMLInputElement>("#repository-name")!;
-    expect(appName.value).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/u);
+    expect(appName.value).toBe("Vendor Onboarding");
     expect(repository.value).toBe(repositoryNameFromAppName(appName.value));
 
     await fill(
@@ -720,7 +741,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(repository.value).toBe("my-existing-repository");
   });
 
-  it("generates a random app name and matching repository when no brief exists", async () => {
+  it("generates an actionable brief and matching identity when no brief exists", async () => {
     const view = await render(
       <AppBuilder
         authenticated
@@ -729,11 +750,45 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
 
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")?.value;
     const appName = view.querySelector<HTMLInputElement>("#app-name")?.value;
-    expect(appName).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/u);
+    expect(brief).toContain("Build a focused app");
+    expect(appName).toBe("Product");
     expect(
       view.querySelector<HTMLInputElement>("#repository-name")?.value,
     ).toBe(repositoryNameFromAppName(appName ?? ""));
+    expect(
+      [...view.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Create App",
+      )?.disabled,
+    ).toBe(false);
+  });
+
+  it("infers optional identity fields but blocks a missing brief or invalid explicit name", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    const appName = view.querySelector<HTMLInputElement>("#app-name")!;
+    const repository =
+      view.querySelector<HTMLInputElement>("#repository-name")!;
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    const create = [...view.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Create App",
+    )!;
+
+    await fill(appName, "");
+    await fill(repository, "");
+    expect(create.disabled).toBe(false);
+
+    await fill(appName, "123 only");
+    expect(create.disabled).toBe(true);
+
+    await fill(appName, "");
+    await fill(brief, "");
+    expect(create.disabled).toBe(true);
   });
 
   it("does not replace an edited generated name after the builder mounts", async () => {

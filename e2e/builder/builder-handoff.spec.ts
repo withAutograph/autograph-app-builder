@@ -24,17 +24,22 @@ test("builder keeps generated fields user-owned and feature-gated", async ({
   await finishOAuth(page, "GitHub");
   await page.goto("/");
   const appName = page.getByLabel("App Name");
-  await expect(appName).toHaveValue(/^[A-Z][a-z]+ [A-Z][a-z]+$/u);
+  const appBrief = page.locator("#app-brief");
+  const createApp = page.getByRole("button", { name: "Create App" });
+  await expect(appName).toHaveValue("Product");
   await expect(page.getByRole("group", { name: "Connections" })).toHaveCount(0);
   await expect(page.getByRole("radio", { name: /Web Chat/u })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Create App" })).toBeDisabled();
+  await expect(createApp).toBeEnabled();
 
-  await page.locator("#app-brief").fill("Build a customer support workspace.");
+  await appBrief.fill("");
+  await expect(createApp).toBeDisabled();
+
+  await appBrief.fill("Build a customer support workspace.");
   await expect(appName).toHaveValue("Customer Support Workspace");
   await appName.fill("Operator Console");
-  await page.locator("#app-brief").fill("Build a billing reconciliation tool.");
+  await appBrief.fill("Build a billing reconciliation tool.");
   await expect(appName).toHaveValue("Operator Console");
-  await expect(page.getByRole("button", { name: "Create App" })).toBeEnabled();
+  await expect(createApp).toBeEnabled();
 });
 
 test("Codex handoff includes connected provider choices and supports reset", async ({

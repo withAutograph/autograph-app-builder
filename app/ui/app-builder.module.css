@@ -207,16 +207,24 @@
 }
 .cardTitle {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 24px;
 }
 .cardTitle h1 {
-  font-size: 24px;
+  font-size: 26px;
   line-height: 1.25;
   letter-spacing: -0.04em;
   margin: 0;
   font-weight: 650;
   text-wrap: balance;
+}
+.cardTitle p {
+  max-width: 470px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
 }
 .providerNotices {
   display: grid;
@@ -245,7 +253,7 @@
 .providerNotices p[data-status="connected"] svg {
   color: #1a9c4b;
 }
-.builderCard > label,
+.appDetailsSection > label,
 .repoRow > label,
 .repoLabel,
 .integrationField {
@@ -253,6 +261,17 @@
   gap: 9px;
   font-size: 13px;
   color: var(--muted);
+}
+.fieldLabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fieldLabel small {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 400;
 }
 .integrationField {
   min-width: 0;
@@ -283,11 +302,6 @@
   cursor: not-allowed;
   opacity: 0.5;
 }
-.integrationHelp {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
 .integrationUnavailable {
   padding: 8px 10px;
 }
@@ -305,7 +319,7 @@
   background: var(--surface);
   color: var(--text);
 }
-.builderCard > label > input {
+.appDetailsSection > label > input {
   height: 38px;
   padding: 0 12px;
 }
@@ -398,6 +412,7 @@
   color: #0672ce;
   background: #e2f2ff;
   font-size: 12px;
+  text-transform: capitalize;
 }
 .combobox[data-label="Select a Vercel Team"] > input {
   padding-right: 96px;
@@ -485,6 +500,7 @@
   small[data-pill]:not(:empty) {
   background: #eaeaea;
   color: #444;
+  text-transform: capitalize;
 }
 .combobox[data-label="Select a Vercel Team"]
   .comboMenu
@@ -613,7 +629,7 @@
   width: 40px;
   height: 24px;
   border-radius: 14px;
-  background: #f2f2f2;
+  background: var(--hover);
   position: relative;
   transition:
     background-color 150ms cubic-bezier(0, 0, 0.2, 1),
@@ -627,7 +643,7 @@
   height: 22px;
   border-radius: 50%;
   background: var(--surface);
-  color: #000;
+  color: var(--text);
   display: grid;
   place-items: center;
   box-shadow:
@@ -819,13 +835,13 @@
   margin: 0;
 }
 .checkLine input:checked {
-  background: #171717;
-  box-shadow: inset 0 0 0 1px #171717;
+  background: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
 }
 .checkLine input:checked::after {
   content: "✓";
   display: block;
-  color: #fff;
+  color: var(--bg);
   font-size: 11px;
   line-height: 14px;
   text-align: center;
@@ -838,11 +854,26 @@
 .sectionField {
   padding-top: 0;
 }
+.appDetailsSection,
+.buildSection,
+.storeSection {
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--border);
+}
+.appDetailsSection {
+  gap: 14px;
+}
+.appDetailsSection .helpText {
+  margin-top: -4px;
+}
 .sectionField + .modelField {
   margin-top: 20px;
 }
 .sectionField + .sectionField {
-  margin-top: 20px;
+  margin-top: 0;
+}
+.appDetailsSection {
+  order: 0;
 }
 .buildSection {
   order: 1;
@@ -908,14 +939,14 @@
   border-radius: 4px;
 }
 .optionGrid.providerChoiceGrid input:checked {
-  border-color: #171717;
-  background: #171717;
-  box-shadow: inset 0 0 0 1px #171717;
+  border-color: var(--text);
+  background: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
 }
 .optionGrid.providerChoiceGrid input:checked::after {
   content: "✓";
   display: block;
-  color: #fff;
+  color: var(--bg);
   font-size: 11px;
   line-height: 14px;
   text-align: center;
@@ -927,14 +958,28 @@
   padding-top: 4px;
 }
 .sectionField legend {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.03em;
+}
+.sectionField legend > span {
+  display: block;
 }
 .sectionField > p {
   margin: 0;
   color: var(--muted);
   font-size: 14px;
+}
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .optionGrid,
 .connectionGrid {
@@ -960,8 +1005,8 @@
   border-radius: 50%;
 }
 .optionGrid input:checked {
-  border-color: #171717;
-  background: #171717;
+  border-color: var(--text);
+  background: var(--text);
   box-shadow: inset 0 0 0 4px var(--surface);
 }
 .buildDestinationGrid {
@@ -1953,7 +1998,7 @@
   .readyCard {
     padding: 22px 16px;
   }
-  .repoRow {
+  .repoRow.repoRowWithRepository {
     grid-template-columns: 1fr;
     gap: 12px;
   }

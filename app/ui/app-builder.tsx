@@ -889,12 +889,19 @@ export function AppDetailsSection({
   onCycleBrief: () => void;
 }) {
   return (
-    <>
+    <fieldset
+      className={`${styles.sectionField} ${styles.appDetailsSection}`}
+      data-create-app-section="app-details"
+    >
+      <legend className={styles.visuallyHidden}>App details</legend>
       <label htmlFor="app-name">
-        App Name
+        <span className={styles.fieldLabel}>
+          App Name <small aria-hidden="true">Optional</small>
+        </span>
         <input
           id="app-name"
           name="app-name"
+          aria-label="App Name"
           autoComplete="off"
           spellCheck={false}
           value={appName}
@@ -903,11 +910,14 @@ export function AppDetailsSection({
         />
       </label>
       <label htmlFor="app-brief">
-        App Brief
+        <span className={styles.fieldLabel}>
+          App Brief <small aria-hidden="true">Required</small>
+        </span>
         <div className={styles.briefField}>
           <textarea
             id="app-brief"
             name="app-brief"
+            aria-label="App Brief"
             autoComplete="off"
             value={brief}
             onChange={(event) => onBriefChange(event.target.value)}
@@ -933,7 +943,7 @@ export function AppDetailsSection({
         </a>
         .
       </p>
-    </>
+    </fieldset>
   );
 }
 
@@ -1104,7 +1114,9 @@ export function DeployToSection({
       {selected === "vercel" && available ? (
         <div className={styles.providerPanel} id="deployment-provider-vercel">
           <div className={styles.integrationField}>
-            <span>Vercel Team (Optional)</span>
+            <span className={styles.fieldLabel}>
+              Vercel Team <small aria-hidden="true">Optional</small>
+            </span>
             {connected ? (
               <SearchCombobox
                 label="Select a Vercel Team"
@@ -1134,10 +1146,6 @@ export function DeployToSection({
                 Connect to Vercel
               </button>
             )}
-            <small className={styles.integrationHelp}>
-              Connect Vercel and Autograph can create and deploy the project for
-              you. You can also skip this and deploy later.
-            </small>
           </div>
         </div>
       ) : null}
@@ -1200,7 +1208,9 @@ export function StoreInSection({
               className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}
             >
               <div className={styles.integrationField}>
-                <span>Git Scope (Optional)</span>
+                <span className={styles.fieldLabel}>
+                  Git Scope <small aria-hidden="true">Optional</small>
+                </span>
                 {connected ? (
                   <SearchCombobox
                     label="Git Scope"
@@ -1234,7 +1244,10 @@ export function StoreInSection({
                     /
                   </span>
                   <div className={styles.repoLabel}>
-                    {privateRepository ? "Private" : "Public"} Repository Name
+                    <span className={styles.fieldLabel}>
+                      {privateRepository ? "Private" : "Public"} Repository Name{" "}
+                      <small aria-hidden="true">Optional</small>
+                    </span>
                     <div className={styles.lockedInput}>
                       <input
                         id="repository-name"
@@ -1277,11 +1290,6 @@ export function StoreInSection({
                 </>
               ) : null}
             </div>
-            <small className={styles.integrationHelp}>
-              Connect GitHub and Autograph can create and configure the
-              repository for you. You can also skip this and connect a
-              repository later.
-            </small>
           </div>
         </div>
       ) : null}
@@ -1704,7 +1712,11 @@ export function Builder({
   )
     ? preferredModelId
     : (integrations.models.defaultModelId ?? allModelOptions[0]?.value ?? "");
-  const initialAppName = randomAppName(generatedNameSeed);
+  const effectiveInitialBrief = initialBrief.trim()
+    ? initialBrief
+    : defaultBrief;
+  const initialAppName =
+    appNameFromBrief(effectiveInitialBrief) || randomAppName(generatedNameSeed);
   const [form, setForm] = useState<BuilderForm>(
     initialDraft
       ? {
@@ -1714,7 +1726,7 @@ export function Builder({
       : {
           appName: initialAppName,
           repository: repositoryNameFromAppName(initialAppName),
-          brief: initialBrief,
+          brief: effectiveInitialBrief,
           privateRepository: true,
           buildDestination: "codex",
           connections: [],
@@ -1787,25 +1799,20 @@ export function Builder({
     validAppId = true;
   } catch {}
   const canSubmit = Boolean(
-    validAppId &&
-    form.appName.trim() &&
-    form.repository.trim() &&
     form.brief.trim() &&
+    (!form.appName.trim() || validAppId) &&
     (form.buildDestination !== "web" ||
       (integrations.models.status === "ready" && model)),
   );
-  const submitGuidance = !form.appName.trim()
-    ? "Add an app name to continue."
-    : !validAppId
+  const submitGuidance =
+    form.appName.trim() && !validAppId
       ? "Use an app name that can form a lowercase, URL-safe app ID."
       : !form.brief.trim()
         ? "Add an app brief to continue."
-        : !form.repository.trim()
-          ? "Add a repository name to continue."
-          : form.buildDestination === "web" &&
-              (integrations.models.status !== "ready" || !model)
-            ? "Choose an available model to continue."
-            : undefined;
+        : form.buildDestination === "web" &&
+            (integrations.models.status !== "ready" || !model)
+          ? "Choose an available model to continue."
+          : undefined;
   const updateBrief = (brief: string) => {
     if (brief !== form.brief) hasUnsavedChanges.current = true;
     setForm((current) => {
@@ -1893,12 +1900,14 @@ export function Builder({
   function submit(event: FormEvent) {
     event.preventDefault();
     if (canSubmit) {
-      const appName = form.appName.trim();
+      const appName =
+        form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
       onCreate(
         {
           ...form,
           appName,
-          repository: form.repository.trim(),
+          repository:
+            form.repository.trim() || repositoryNameFromAppName(appName),
           ...(deploymentProvider === "vercel" && team
             ? { vercelInstallationId: team }
             : {}),
@@ -1916,8 +1925,13 @@ export function Builder({
     <main className={styles.authenticatedPage} id="main-content">
       <form className={styles.builderCard} onSubmit={submit}>
         <div className={styles.cardTitle}>
-          <h1>Build an app</h1>
-          <AutographMark compact />
+          <div>
+            <h1>Build an app</h1>
+            <p>
+              Describe what you want to build, then choose how it should be
+              created and delivered.
+            </p>
+          </div>
         </div>
         <ProviderNotices notices={visibleProviderNotices} />
         <AppDetailsSection
@@ -1943,57 +1957,6 @@ export function Builder({
               currentIndex < 0 ? 0 : (currentIndex + 1) % briefExamples.length;
             updateBrief(briefExamples[nextIndex]);
           }}
-        />
-        <DeployToSection
-          available={integrations.vercel.status !== "unavailable"}
-          comingSoonEnabled={comingSoonEnabled}
-          connected={integrations.vercel.status === "connected"}
-          selected={deploymentProvider}
-          team={team}
-          teamOptions={teamOptions}
-          onProviderChange={(provider) => {
-            hasUnsavedChanges.current = true;
-            setDeploymentProvider((current) =>
-              current === provider ? null : provider,
-            );
-          }}
-          onTeamChange={(value) => {
-            if (value !== team) hasUnsavedChanges.current = true;
-            setTeam(value);
-          }}
-          onConnect={() => beginProviderConnection("vercel")}
-        />
-        <StoreInSection
-          available={integrations.github.status !== "unavailable"}
-          comingSoonEnabled={comingSoonEnabled}
-          connected={integrations.github.status === "connected"}
-          selected={storageProvider}
-          gitScope={gitScope}
-          gitScopeOptions={gitScopeOptions}
-          repository={form.repository}
-          privateRepository={form.privateRepository}
-          onProviderChange={(provider) => {
-            hasUnsavedChanges.current = true;
-            setStorageProvider((current) =>
-              current === provider ? null : provider,
-            );
-          }}
-          onGitScopeChange={(value) => {
-            if (value !== gitScope) hasUnsavedChanges.current = true;
-            setGitScope(value);
-          }}
-          onRepositoryChange={(repository) => {
-            repositoryEditedByUser.current = true;
-            if (repository !== form.repository)
-              hasUnsavedChanges.current = true;
-            setForm((current) => ({ ...current, repository }));
-          }}
-          onPrivacyChange={(privateRepository) => {
-            if (privateRepository !== form.privateRepository)
-              hasUnsavedChanges.current = true;
-            setForm((current) => ({ ...current, privateRepository }));
-          }}
-          onConnect={() => beginProviderConnection("github")}
         />
         <BuildWithSection
           comingSoonEnabled={comingSoonEnabled}
@@ -2029,6 +1992,57 @@ export function Builder({
             />
           ) : null}
         </BuildWithSection>
+        <StoreInSection
+          available={integrations.github.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
+          connected={integrations.github.status === "connected"}
+          selected={storageProvider}
+          gitScope={gitScope}
+          gitScopeOptions={gitScopeOptions}
+          repository={form.repository}
+          privateRepository={form.privateRepository}
+          onProviderChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setStorageProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+          onGitScopeChange={(value) => {
+            if (value !== gitScope) hasUnsavedChanges.current = true;
+            setGitScope(value);
+          }}
+          onRepositoryChange={(repository) => {
+            repositoryEditedByUser.current = true;
+            if (repository !== form.repository)
+              hasUnsavedChanges.current = true;
+            setForm((current) => ({ ...current, repository }));
+          }}
+          onPrivacyChange={(privateRepository) => {
+            if (privateRepository !== form.privateRepository)
+              hasUnsavedChanges.current = true;
+            setForm((current) => ({ ...current, privateRepository }));
+          }}
+          onConnect={() => beginProviderConnection("github")}
+        />
+        <DeployToSection
+          available={integrations.vercel.status !== "unavailable"}
+          comingSoonEnabled={comingSoonEnabled}
+          connected={integrations.vercel.status === "connected"}
+          selected={deploymentProvider}
+          team={team}
+          teamOptions={teamOptions}
+          onProviderChange={(provider) => {
+            hasUnsavedChanges.current = true;
+            setDeploymentProvider((current) =>
+              current === provider ? null : provider,
+            );
+          }}
+          onTeamChange={(value) => {
+            if (value !== team) hasUnsavedChanges.current = true;
+            setTeam(value);
+          }}
+          onConnect={() => beginProviderConnection("vercel")}
+        />
         {connectionsEnabled ? (
           <ConnectionsSection
             connected={connectedConnections}

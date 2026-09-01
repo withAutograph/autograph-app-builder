@@ -1,12 +1,21 @@
 import type { StorybookConfig } from "@storybook/nextjs-vite";
 
-import { builderConnectionsFlag } from "../lib/feature-flags.ts";
+import {
+  builderComingSoonFlag,
+  builderConnectionsFlag,
+  builderResourceProvisioningFlag,
+} from "../lib/feature-flags.ts";
 
-export async function resolveBuilderConnectionsForStorybook() {
+async function resolveFlagForStorybook(flag: {
+  run: (context: {
+    identify: Record<string, never>;
+    request: Request;
+  }) => Promise<boolean>;
+}) {
   if (!process.env.FLAGS) return false;
   try {
     return (
-      (await builderConnectionsFlag.run({
+      (await flag.run({
         identify: {},
         request: new Request("https://storybook.local"),
       })) === true
@@ -14,6 +23,17 @@ export async function resolveBuilderConnectionsForStorybook() {
   } catch {
     return false;
   }
+}
+
+export async function resolveBuilderFlagsForStorybook() {
+  const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] =
+    await Promise.all([
+      resolveFlagForStorybook(builderConnectionsFlag),
+      resolveFlagForStorybook(builderComingSoonFlag),
+      resolveFlagForStorybook(builderResourceProvisioningFlag),
+    ]);
+
+  return { connectionsEnabled, comingSoonEnabled, provisioningEnabled };
 }
 
 const config: StorybookConfig = {
@@ -30,13 +50,20 @@ const config: StorybookConfig = {
   framework: "@storybook/nextjs-vite",
   staticDirs: ["../public"],
   async viteFinal(viteConfig) {
-    const connectionsEnabled = await resolveBuilderConnectionsForStorybook();
+    const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
+      await resolveBuilderFlagsForStorybook();
     viteConfig.define = {
       ...(viteConfig.define ?? {}),
       // This resolved Boolean is the only flag data included in the browser
       // bundle. The SDK key and discovery secret remain server-only.
       "process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED": JSON.stringify(
         String(connectionsEnabled),
+      ),
+      "process.env.STORYBOOK_BUILDER_COMING_SOON_ENABLED": JSON.stringify(
+        String(comingSoonEnabled),
+      ),
+      "process.env.STORYBOOK_BUILDER_PROVISIONING_ENABLED": JSON.stringify(
+        String(provisioningEnabled),
       ),
     };
     return viteConfig;
