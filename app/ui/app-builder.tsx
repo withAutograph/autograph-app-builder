@@ -66,19 +66,31 @@ import {
   persistActiveProvisioning,
   persistBuilderDraft,
   readBuilderDraft,
-  type BuilderDraft,
-  type BuilderForm,
-  type BuilderHandoffReference,
-  type BuildDestination,
-  type DeploymentProvider,
-  type ProviderField,
-  type StorageProvider,
 } from "./builder-session";
-export type { BuilderForm, BuilderHandoffReference } from "./builder-session";
+import type {
+  BuilderDraft,
+  BuilderForm,
+  BuilderHandoffReference,
+  BuildDestination,
+  ClipboardState,
+  DeploymentProvider,
+  HandoffAttempt,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
+export type {
+  BuilderDraft,
+  BuilderForm,
+  BuilderHandoffReference,
+  BuildDestination,
+  ClipboardState,
+  DeploymentProvider,
+  HandoffAttempt,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
 
 type Screen = "builder" | "handoff" | "ready";
-export type ClipboardState = "idle" | "copied" | "failed";
-export type HandoffAttempt = "attempted" | "blocked" | "too-long";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
