@@ -5,7 +5,6 @@ import { z } from "zod";
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   prepareOrReuseDependencies,
-  shouldPreferLiveTemplateDependencies,
   type DependencyReadyState,
 } from "@/lib/agent/target-dependency-preparation";
 import {
@@ -19,6 +18,7 @@ import {
 import {
   assertExactDependencyTargetBinding,
   inspectDependencyCache,
+  shouldPreferLiveTemplateDependencies,
   type ObservedDependencyCache,
 } from "@/lib/repository/dependency-cache";
 import {

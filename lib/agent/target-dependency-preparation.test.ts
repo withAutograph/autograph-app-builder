@@ -129,14 +129,44 @@ vi.mock("@/lib/repository/dependency-cache", () => ({
   ) => ({ sha: workspace.sourceSha, tree: workspace.sourceTree }),
   inspectDependencyCache: mocks.inspectDependencyCache,
   materializeOfflineDependencies: mocks.materializeOfflineDependencies,
+  shouldPreferLiveTemplateDependencies: (
+    sourceReceiptVersion: number,
+    environment: Readonly<Record<string, string | undefined>>,
+  ) =>
+    (sourceReceiptVersion === 3 || sourceReceiptVersion === 4) &&
+    environment.APP_BUILDER_EXECUTION_MODE !== "development",
 }));
 
 vi.mock("@/lib/repository/source-receipt", () => ({
+  LEGACY_SOURCE_RECEIPT_VERSION: 3,
   SOURCE_RECEIPT_VERSION: 4,
 }));
 
 vi.mock("@/lib/repository/arrusted-template", () => ({
   inspectSourceBoundSandboxWorkspace: mocks.inspectSourceBoundSandboxWorkspace,
+}));
+
+vi.mock("@/lib/sandbox/toolchain", () => ({
+  configuredToolchainImage: () => undefined,
+  requiredToolVersions: {
+    git: /^git version \d+\.\d+\.\d+/u,
+    mise: /^2026\.8\.12(?:\s|$)/u,
+    bun: /^1\.3\.14(?:\s|$)/u,
+  },
+  toolVersionMatches: (tool: "git" | "mise" | "bun", version: string) =>
+    ({
+      git: /^git version \d+\.\d+\.\d+/u,
+      mise: /^2026\.8\.12(?:\s|$)/u,
+      bun: /^1\.3\.14(?:\s|$)/u,
+    })[tool].test(version),
+}));
+
+vi.mock("@/lib/sandbox/backend", () => ({
+  sandboxBackendPlan: () => ({ kind: "fixture-just-bash", blockers: [] }),
+}));
+
+vi.mock("@/lib/testing/test-capability", () => ({
+  hasTestCapability: () => true,
 }));
 
 vi.mock("@/lib/repository/target-planning", () => ({
@@ -158,6 +188,7 @@ vi.mock(
 
 import planAppCreation from "../../agent/tools/plan_app_creation";
 import prepareTargetDependencies from "../../agent/tools/prepare_target_dependencies";
+import workspaceReadinessStatus from "../../agent/tools/workspace_readiness_status";
 
 const appSpecDigest = "e".repeat(64);
 const artifactRevision = "0".repeat(64);
@@ -211,6 +242,27 @@ function acceptedState(
   };
 }
 
+function existingRepositoryAcceptedState(): AppBuilderWorkflowState {
+  const current = acceptedState();
+  if (current.phase !== "app_spec_accepted")
+    throw new Error("invalid accepted-state fixture");
+  return {
+    ...current,
+    sourceReceipt: {
+      version: 3,
+      sourceKind: "existing-repository",
+      sourcePath: current.sourceReceipt.sourcePath,
+      sourceSha: current.sourceReceipt.sourceSha,
+      sourceTree: current.sourceReceipt.sourceTree,
+      adapter: current.sourceReceipt.adapter,
+      eligibilityDigest: current.sourceReceipt.eligibilityDigest,
+      contractDigest: current.sourceReceipt.contractDigest,
+      releaseEnabled: false,
+      digest: current.sourceReceipt.digest,
+    },
+  };
+}
+
 function toolContext(callId = "plan-call") {
   const sandbox = { id: "sandbox" };
   const getSandbox = vi.fn(async () => sandbox);
@@ -221,6 +273,23 @@ function toolContext(callId = "plan-call") {
       getSandbox,
     } as unknown as ToolContext,
     getSandbox,
+  };
+}
+
+function readinessSandbox(bunVersion = "1.3.14") {
+  return {
+    id: "sandbox",
+    run: vi.fn(async ({ command }: { command: string }) => {
+      if (command.startsWith("command -v "))
+        return { exitCode: 0, stdout: "/usr/bin/tool\n", stderr: "" };
+      if (command === "git --version")
+        return { exitCode: 0, stdout: "git version 2.51.0\n", stderr: "" };
+      if (command === "mise --version")
+        return { exitCode: 0, stdout: "2026.8.12 macos-arm64\n", stderr: "" };
+      if (command === "bun --version")
+        return { exitCode: 0, stdout: `${bunVersion}\n`, stderr: "" };
+      throw new Error(`unexpected command: ${command}`);
+    }),
   };
 }
 
@@ -397,6 +466,132 @@ describe("target dependency preparation", () => {
     );
 
     expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledTimes(1);
+  });
+
+  it("plans a hosted existing repository against its exact live dependency closure", async () => {
+    mocks.current = existingRepositoryAcceptedState();
+    mocks.inspectDependencyCache
+      .mockRejectedValueOnce(
+        new DependencyCacheMissingError("hosted cache missing"),
+      )
+      .mockResolvedValue(mocks.cache);
+    planningResult();
+
+    await expect(
+      planAppCreation.execute(
+        { expectedAppSpecDigest: appSpecDigest },
+        toolContext().context,
+      ),
+    ).resolves.toMatchObject({ reused: false });
+
+    expect(mocks.inspectDependencyCache).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.anything(),
+      mocks.workspace,
+      true,
+    );
+    expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledWith({
+      sandbox: expect.anything(),
+      target: mocks.workspace,
+    });
+    expect(mocks.current).toMatchObject({
+      phase: "planned",
+      sourceReceipt: { version: 3, sourceKind: "existing-repository" },
+      dependencyReceipt: {
+        sourceSha: mocks.workspace.sourceSha,
+        sourceTree: mocks.workspace.sourceTree,
+      },
+    });
+  });
+
+  it("routes a cold hosted existing-repository closure to planning without reporting source drift", async () => {
+    mocks.current = existingRepositoryAcceptedState();
+    mocks.inspectDependencyCache
+      .mockRejectedValueOnce(
+        new DependencyCacheMissingError("readiness cache missing"),
+      )
+      .mockRejectedValueOnce(
+        new DependencyCacheMissingError("planning cache missing"),
+      )
+      .mockResolvedValue(mocks.cache);
+    const sandbox = readinessSandbox();
+
+    await expect(
+      workspaceReadinessStatus.execute({}, {
+        callId: "readiness-call",
+        session: { id: "session-1" },
+        getSandbox: vi.fn(async () => sandbox),
+      } as unknown as ToolContext),
+    ).resolves.toMatchObject({
+      toolchainReady: false,
+      dependencyPreparation: "prepare-on-plan",
+      blockers: [],
+    });
+
+    expect(mocks.inspectDependencyCache).toHaveBeenCalledWith(
+      sandbox,
+      expect.anything(),
+      mocks.workspace,
+      true,
+    );
+    expect(mocks.bootstrapLiveTemplateDependencies).not.toHaveBeenCalled();
+
+    planningResult();
+    await expect(
+      planAppCreation.execute(
+        { expectedAppSpecDigest: appSpecDigest },
+        toolContext().context,
+      ),
+    ).resolves.toMatchObject({ reused: false });
+    expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledTimes(1);
+    expect(mocks.current).toMatchObject({ phase: "planned" });
+  });
+
+  it("keeps malformed hosted existing-repository dependency evidence fail-closed", async () => {
+    mocks.current = existingRepositoryAcceptedState();
+    mocks.inspectDependencyCache.mockRejectedValueOnce(
+      new Error("live dependency manifest drifted"),
+    );
+
+    await expect(
+      workspaceReadinessStatus.execute({}, {
+        callId: "readiness-call",
+        session: { id: "session-1" },
+        getSandbox: vi.fn(async () => readinessSandbox()),
+      } as unknown as ToolContext),
+    ).resolves.toMatchObject({
+      toolchainReady: false,
+      dependencyPreparation: "unavailable",
+      blockers: expect.arrayContaining([
+        "The prepared source does not match the immutable dependency target.",
+      ]),
+    });
+
+    expect(mocks.bootstrapLiveTemplateDependencies).not.toHaveBeenCalled();
+  });
+
+  it("keeps a wrong fixed tool version blocking when dependencies prepare on plan", async () => {
+    mocks.current = existingRepositoryAcceptedState();
+    mocks.inspectDependencyCache.mockRejectedValueOnce(
+      new DependencyCacheMissingError("hosted cache missing"),
+    );
+
+    await expect(
+      workspaceReadinessStatus.execute({}, {
+        callId: "readiness-call",
+        session: { id: "session-1" },
+        getSandbox: vi.fn(async () => readinessSandbox("1.3.13")),
+      } as unknown as ToolContext),
+    ).resolves.toMatchObject({
+      toolchainReady: false,
+      dependencyPreparation: "prepare-on-plan",
+      blockers: [
+        "The immutable sandbox image and exact Git, mise, and Bun receipt are not ready.",
+      ],
+    });
+
+    expect(mocks.bootstrapLiveTemplateDependencies).not.toHaveBeenCalled();
   });
 
   it("rejects stale source and cache bindings instead of repairing them", async () => {

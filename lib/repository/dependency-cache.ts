@@ -10,6 +10,10 @@ import {
   HOSTED_NODE_VERSION,
 } from "../sandbox/hosted-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
+import {
+  LEGACY_SOURCE_RECEIPT_VERSION,
+  SOURCE_RECEIPT_VERSION,
+} from "./source-receipt";
 
 export const ARRUSTED_TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 export const ARRUSTED_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
@@ -230,6 +234,17 @@ export class DependencyCacheMissingError extends Error {
     super(message);
     this.name = "DependencyCacheMissingError";
   }
+}
+
+export function shouldPreferLiveTemplateDependencies(
+  sourceReceiptVersion: number,
+  environment: Readonly<Record<string, string | undefined>>,
+) {
+  return (
+    (sourceReceiptVersion === SOURCE_RECEIPT_VERSION ||
+      sourceReceiptVersion === LEGACY_SOURCE_RECEIPT_VERSION) &&
+    environment.APP_BUILDER_EXECUTION_MODE !== "development"
+  );
 }
 
 type ExactSourceBinding = {

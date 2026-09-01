@@ -16,9 +16,9 @@ import {
   dependencyTargetForWorkspace,
   inspectDependencyCache,
   materializeOfflineDependencies,
+  shouldPreferLiveTemplateDependencies,
   type ObservedDependencyCache,
 } from "@/lib/repository/dependency-cache";
-import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import {
   materializePlanningOverlay,
   targetExecutionBinding,
@@ -42,16 +42,6 @@ export type TargetDependencyPreparationResult = {
   receipt: DependencyPreparationReceipt;
   reused: boolean;
 };
-
-export function shouldPreferLiveTemplateDependencies(
-  sourceReceiptVersion: number,
-  environment: Readonly<Record<string, string | undefined>>,
-) {
-  return (
-    sourceReceiptVersion === SOURCE_RECEIPT_VERSION &&
-    environment.APP_BUILDER_EXECUTION_MODE !== "development"
-  );
-}
 
 function assertReceiptMatchesCache(
   receipt: DependencyPreparationReceipt,
