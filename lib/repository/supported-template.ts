@@ -991,16 +991,63 @@ async function verifyPreparedSandboxWorkspace(
     throw new Error("A prepared workspace file drifted or is missing.");
 }
 
+const developmentWorkspaceInspectionProgram = [
+  'const fs=require("node:fs");',
+  'const path=require("node:path");',
+  'const workspaceRoot=fs.realpathSync(".");',
+  'const repositoryInput=path.resolve("repository");',
+  "const repositoryState=fs.lstatSync(repositoryInput);",
+  "if(!repositoryState.isDirectory()||repositoryState.isSymbolicLink())process.exit(1);",
+  "const repositoryRoot=fs.realpathSync(repositoryInput);",
+  "if(repositoryRoot!==repositoryInput)process.exit(1);",
+  "const contains=(root,candidate)=>{const relative=path.relative(root,candidate);return relative===''||(relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative));};",
+  "if(!contains(workspaceRoot,repositoryRoot))process.exit(1);",
+  "const pending=[repositoryRoot];",
+  "while(pending.length>0){const directory=pending.pop();for(const name of fs.readdirSync(directory)){const candidate=path.join(directory,name);const state=fs.lstatSync(candidate);if(state.isSymbolicLink()){const resolved=fs.realpathSync(candidate);if(!contains(repositoryRoot,resolved))process.exit(1);}else if(state.isDirectory()){pending.push(candidate);}}}",
+].join("");
+
+async function verifyDevelopmentSandboxWorkspace(
+  sandbox: SandboxSession,
+  record: PreparedSandboxWorkspace,
+): Promise<void> {
+  if (
+    record.workspaceId !== sandbox.id ||
+    record.workspacePath !== "/workspace/repository"
+  )
+    throw new Error(
+      "The prepared development workspace does not belong to this session.",
+    );
+  const node = fixtureSandboxEnabled()
+    ? JSON.stringify(process.execPath)
+    : "node";
+  const inspection = await sandbox.run({
+    command: `${node} -e ${JSON.stringify(developmentWorkspaceInspectionProgram)}`,
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
+  });
+  if (
+    Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
+    Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes ||
+    inspection.exitCode !== 0
+  )
+    throw new Error(
+      "The prepared development workspace escaped its sandbox boundary.",
+    );
+}
+
 export type PreparedSandboxWorkspaceStatus =
   | { state: "absent" }
   | { state: "prepared"; workspace: PreparedSandboxWorkspace };
 
 export async function inspectPreparedSandboxWorkspace(
   sandbox: SandboxSession,
+  mode: "exact" | "development-live" = "exact",
 ): Promise<PreparedSandboxWorkspaceStatus> {
   const record = await readPreparedSandboxWorkspaceRecord(sandbox);
   if (record === undefined) return { state: "absent" };
-  await verifyPreparedSandboxWorkspace(sandbox, record);
+  if (mode === "development-live")
+    await verifyDevelopmentSandboxWorkspace(sandbox, record);
+  else await verifyPreparedSandboxWorkspace(sandbox, record);
   return { state: "prepared", workspace: record };
 }
 

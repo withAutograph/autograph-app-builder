@@ -754,6 +754,36 @@ describe("supported-template adapter", () => {
     ).toThrow();
   });
 
+  it("accepts legitimate writes when inspecting a live development workspace", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const sandbox = fakeSandbox();
+
+    const eligibility = await inspectSupportedRepository(root);
+    const prepared = await prepareSupportedSandboxWorkspace(
+      root,
+      eligibility.sourceSha!,
+      eligibility.digest,
+      sandbox,
+      "first",
+    );
+    writeFileSync(
+      resolve(sandbox.resolvePath("repository"), "generated-plan.json"),
+      "generated\n",
+    );
+    writeFileSync(
+      resolve(sandbox.resolvePath("repository"), "microfrontends.json"),
+      "changed during planning\n",
+    );
+
+    await expect(
+      inspectPreparedSandboxWorkspace(sandbox, "development-live"),
+    ).resolves.toEqual({ state: "prepared", workspace: prepared });
+    await expect(inspectPreparedSandboxWorkspace(sandbox)).rejects.toThrow(
+      "A prepared workspace file drifted or is missing.",
+    );
+  });
+
   it("rejects reuse when the durable prepared source tree drifts", async () => {
     const root = fixture();
     process.env.REPOSITORY_LOCAL_ROOTS = root;

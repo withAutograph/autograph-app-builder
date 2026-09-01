@@ -555,15 +555,14 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   githubSource?: ImmutableGitHubSourceReceipt;
 }): Promise<PreparedSandboxWorkspace> {
   if (canAutoSelectDevelopmentSource()) {
-    const status = await inspectPreparedSandboxWorkspace(input.sandbox);
+    const status = await inspectPreparedSandboxWorkspace(
+      input.sandbox,
+      "development-live",
+    );
     if (status.state !== "prepared")
       throw new Error("The prepared development workspace is missing.");
     const observed = status.workspace;
-    if (
-      observed.workspaceId !== input.sandbox.id ||
-      (input.expectedWorkspace !== undefined &&
-        JSON.stringify(observed) !== JSON.stringify(input.expectedWorkspace))
-    )
+    if (observed.workspaceId !== input.sandbox.id)
       throw new Error(
         "The prepared development workspace does not match the active workflow.",
       );
