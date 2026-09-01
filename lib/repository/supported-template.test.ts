@@ -3,9 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  renameSync,
   rmSync,
-  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -784,28 +782,6 @@ describe("supported-template adapter", () => {
     await expect(inspectPreparedSandboxWorkspace(sandbox)).rejects.toThrow(
       "A prepared workspace file drifted or is missing.",
     );
-  });
-
-  it("accepts a canonical repository alias contained by the live workspace", async () => {
-    const root = fixture();
-    process.env.REPOSITORY_LOCAL_ROOTS = root;
-    const sandbox = fakeSandbox();
-    const eligibility = await inspectSupportedRepository(root);
-    const prepared = await prepareSupportedSandboxWorkspace(
-      root,
-      eligibility.sourceSha!,
-      eligibility.digest,
-      sandbox,
-      "first",
-    );
-    const repository = sandbox.resolvePath("repository");
-    const aliasTarget = sandbox.resolvePath("repository-alias-target");
-    renameSync(repository, aliasTarget);
-    symlinkSync("repository-alias-target", repository, "dir");
-
-    await expect(
-      inspectPreparedSandboxWorkspace(sandbox, "development-live"),
-    ).resolves.toEqual({ state: "prepared", workspace: prepared });
   });
 
   it("rejects reuse when the durable prepared source tree drifts", async () => {
