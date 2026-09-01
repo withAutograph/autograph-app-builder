@@ -45,18 +45,18 @@ export default defineTool({
       .optional(),
   }),
   async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
-    const observed = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(observed, "target identity and planning");
-    if (observed.phase === "empty" || observed.phase === "prepared")
+    const state = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(state, "target identity and planning");
+    if (state.phase === "empty" || state.phase === "prepared")
       throw new Error(
         "Accept a build-ready AppSpec before running target planning.",
       );
     let current: DependencyReadyState;
     let sandbox: SandboxSession;
     let cache: ObservedDependencyCache;
-    if (observed.phase === "app_spec_accepted") {
+    if (state.phase === "app_spec_accepted") {
       const prepared = await prepareOrReuseDependencies({
-        current: observed,
+        current: state,
         expectedAppSpecDigest,
         sessionId: ctx.session.id,
         callId: ctx.callId,
@@ -67,7 +67,7 @@ export default defineTool({
       sandbox = prepared.sandbox;
       cache = prepared.cache;
     } else {
-      current = observed;
+      current = state;
       if (current.appSpec.digest !== expectedAppSpecDigest)
         throw new Error("The accepted AppSpec changed before target planning.");
       exactPrototypeArtifact(current.artifacts, {
