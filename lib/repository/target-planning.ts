@@ -169,8 +169,6 @@ export function targetContractDigest(
 
 export const TARGET_COMMAND_TIMEOUT_MS = 30_000;
 export const TARGET_COMMAND_OUTPUT_BYTES = 1_048_576;
-export const TRACKED_SOURCE_ARCHIVE_COMMAND =
-  "git -C repository archive --format=tar HEAD";
 export const TARGET_PLANNING_MISE_PROFILE = `[settings]
 exec_auto_install = false
 not_found_auto_install = false
@@ -349,8 +347,6 @@ export function targetExecutionBinding(
 
 type SourceFile = { path: string };
 
-const fixturePlanningEnabled = () => hasTestCapability("simulated-target");
-
 export async function materializePlanningOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
@@ -377,25 +373,20 @@ export async function materializePlanningOverlay(input: {
     `${root}/prototype/${input.appId}`,
     `.app-builder/target-inputs/${input.artifactRevision}`,
   ]);
-  if (fixturePlanningEnabled()) {
-    for (const file of files) {
-      const content = await input.sandbox.readBinaryFile({
-        path: `repository/${file.path}`,
-      });
-      if (content === null) throw new Error("Prepared source file is missing.");
-      await input.sandbox.writeBinaryFile({
-        path: `${root}/${file.path}`,
-        content,
-      });
-    }
-  } else {
-    const copy = await input.sandbox.run({
-      command: `${TRACKED_SOURCE_ARCHIVE_COMMAND} | tar --extract --file - --directory ${root}`,
-      workingDirectory: "/workspace",
-      abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
+  // The prepared manifest is the contained source allowlist. Copying it from
+  // the workspace preserves current builder edits while excluding .git,
+  // ignored files, credentials, and provider state that were never prepared.
+  // Planning happens in a mutable execution workspace and must observe its
+  // current source bytes; release byte binding is a separate concern.
+  for (const file of files) {
+    const content = await input.sandbox.readBinaryFile({
+      path: `repository/${file.path}`,
     });
-    if (copy.exitCode !== 0)
-      throw new Error("The prepared source could not be copied for planning.");
+    if (content === null) throw new Error("Prepared source file is missing.");
+    await input.sandbox.writeBinaryFile({
+      path: `${root}/${file.path}`,
+      content,
+    });
   }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;
   await input.sandbox.writeTextFile({

@@ -16,7 +16,6 @@ import {
   materializePlanningOverlay,
   sandboxTargetCommandExecutor,
   TARGET_PLANNING_MISE_PROFILE,
-  TRACKED_SOURCE_ARCHIVE_COMMAND,
   targetContractDigest,
   targetExecutionBinding,
   targetProposalSchema,
@@ -307,14 +306,7 @@ describe("typed target identity and planning", () => {
     expect(onIdentity).toHaveBeenCalledTimes(1);
   });
 
-  it("materializes real planning overlays from tracked Git bytes only", () => {
-    expect(TRACKED_SOURCE_ARCHIVE_COMMAND).toBe(
-      "git -C repository archive --format=tar HEAD",
-    );
-    expect(TRACKED_SOURCE_ARCHIVE_COMMAND).not.toContain("tar -C repository");
-  });
-
-  it("executes a real tracked-only planning overlay without dirty or untracked bytes", async () => {
+  it("materializes planning overlays from the current prepared workspace without unlisted bytes", async () => {
     const temporaryRoot = await mkdtemp(
       join(tmpdir(), "app-builder-planning-overlay-"),
     );
@@ -439,7 +431,7 @@ describe("typed target identity and planning", () => {
       );
       await expect(
         readFile(join(overlayRoot, trackedPath), "utf8"),
-      ).resolves.toBe(committed);
+      ).resolves.toBe(dirty);
       await expect(
         readFile(join(overlayRoot, untrackedPath), "utf8"),
       ).rejects.toMatchObject({ code: "ENOENT" });
