@@ -15,7 +15,7 @@ const meta = {
     value: "autograph",
     options,
     onChange: fn(),
-    prefix: <span>●</span>,
+    presentation: { prefix: <span>●</span> },
   },
   decorators: [
     (Story) => (
@@ -28,9 +28,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
-export const Disabled: Story = { args: { disabled: true } };
+export const Disabled: Story = { args: { input: { disabled: true } } };
 export const Empty: Story = {
-  args: { value: "", options: [], placeholder: "No teams" },
+  args: { value: "", options: [], input: { placeholder: "No teams" } },
 };
 export const SelectOption: Story = {
   play: async ({ canvasElement, args }) => {
@@ -42,8 +42,10 @@ export const SelectOption: Story = {
 };
 export const FooterAction: Story = {
   args: {
-    menuFooter: { value: "create-team", label: "Connect another Vercel team" },
-    onFooterSelect: fn(),
+    footer: {
+      option: { value: "create-team", label: "Connect another Vercel team" },
+      onSelect: fn(),
+    },
   },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
@@ -51,6 +53,6 @@ export const FooterAction: Story = {
     await userEvent.click(
       canvas.getByRole("button", { name: "Connect another Vercel team" }),
     );
-    await expect(args.onFooterSelect).toHaveBeenCalledOnce();
+    await expect(args.footer?.onSelect).toHaveBeenCalledOnce();
   },
 };

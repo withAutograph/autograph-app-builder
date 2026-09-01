@@ -481,10 +481,14 @@ export function ModelControls({
         value={model}
         options={options}
         onChange={onModelChange}
-        prefix={<Search size={15} />}
-        showSelectedCheck={false}
-        placeholder={available ? "Select model" : "Models unavailable"}
-        disabled={!available}
+        input={{
+          placeholder: available ? "Select model" : "Models unavailable",
+          disabled: !available,
+        }}
+        presentation={{
+          prefix: <Search size={15} />,
+          showSelectedCheck: false,
+        }}
       />
       {!available ? (
         <button className={styles.retryModels} type="button" onClick={onRetry}>
@@ -544,21 +548,25 @@ export function DeployToSection({
             {connected ? (
               <SearchCombobox
                 label="Select a Vercel Team"
-                inputId="vercel-team"
                 value={team}
                 options={teamOptions}
                 onChange={onTeamChange}
-                prefix={<span className={styles.teamDot} data-team={team} />}
-                menuFooter={{
-                  value: "create-team",
-                  label: "Connect another Vercel team",
+                input={{ id: "vercel-team" }}
+                presentation={{
+                  prefix: <span className={styles.teamDot} data-team={team} />,
+                  optionIcon: (option) => (
+                    <span className={styles.teamDot} data-team={option.value} />
+                  ),
+                  footerIcon: <PlusCircle size={18} />,
+                  detailPills: true,
                 }}
-                onFooterSelect={onConnect}
-                optionIcon={(option) => (
-                  <span className={styles.teamDot} data-team={option.value} />
-                )}
-                footerIcon={<PlusCircle size={18} />}
-                detailPills
+                footer={{
+                  option: {
+                    value: "create-team",
+                    label: "Connect another Vercel team",
+                  },
+                  onSelect: onConnect,
+                }}
               />
             ) : (
               <button
@@ -646,18 +654,22 @@ export function StoreInSection({
                 {connected ? (
                   <SearchCombobox
                     label="Git Scope"
-                    inputId="git-scope"
                     value={gitScope}
                     options={gitScopeOptions}
                     onChange={onGitScopeChange}
-                    prefix={<FaGithub size={16} />}
-                    menuFooter={{
-                      value: "add-github",
-                      label: githubView.actionLabel,
+                    input={{ id: "git-scope" }}
+                    presentation={{
+                      prefix: <FaGithub size={16} />,
+                      optionIcon: () => <FaGithub size={16} />,
+                      footerIcon: <Plus size={21} />,
                     }}
-                    onFooterSelect={onConnect}
-                    optionIcon={() => <FaGithub size={16} />}
-                    footerIcon={<Plus size={21} />}
+                    footer={{
+                      option: {
+                        value: "add-github",
+                        label: githubView.actionLabel,
+                      },
+                      onSelect: onConnect,
+                    }}
                   />
                 ) : (
                   <button
