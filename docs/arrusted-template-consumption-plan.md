@@ -93,6 +93,107 @@ Fresh-repository publication still requires its own approval and provider
 read-back. Its result is a new parentless `main` commit containing the reviewed
 generated workspace, not Arrusted history or an upstream remote.
 
+## Possible improvement: visual inheritance
+
+The repository starter and the visual prototype are separate surfaces. App
+Builder currently consumes the complete Arrusted repository for eligibility,
+planning, generation, apply, and validation, but the first Browser preview is
+a self-contained HTML design artifact. It is not the rendered output of the
+generated Arrusted application and must not be presented as evidence that the
+production application already inherits Arrusted's visual system.
+
+The Arrusted app generator also provides a deliberately minimal Next.js
+workspace today. Its initial page contains only the generated application
+title, and its package manifest does not automatically depend on the Arrusted
+design-system package or install a shared application shell. Builder guidance
+directs the agent to inspect current semantic tokens, Storybook stories,
+package exports, and working applications, but that guidance alone does not
+structurally guarantee visual consistency. A visually unrelated prototype is
+therefore possible even when source selection and repository generation are
+correct.
+
+A future visual-inheritance improvement should preserve the fast, disposable
+HTML prototype for early product exploration while adding a later preview of
+the actual generated application. The bounded improvement should:
+
+1. define an Arrusted-owned route-app starter surface containing the supported
+   shell, semantic tokens, and public component dependencies;
+2. update the canonical Arrusted generator to consume that surface without
+   copying private app-specific workflow or stale token values;
+3. require planning to name the current target-owned tokens, exports, stories,
+   or reference application patterns used by the generated UI;
+4. render the applied generated app in the integrated Browser before the final
+   review boundary, while retaining the standalone HTML artifact as an earlier
+   and cheaper design tool; and
+5. add focused checks proving the generated app uses the declared public shell
+   and design-system entrypoints rather than merely approximating their look.
+
+Acceptance should distinguish three independent facts: the full Arrusted tree
+was selected, the repository-owned generator and validation commands ran, and
+the resulting application uses the supported Arrusted visual foundation. None
+of those facts should be inferred from either of the others.
+
+This section records a possible improvement only. It does not authorize an
+Arrusted generator change, a design-system API change, or an App Builder runtime
+change.
+
+## Possible improvement: composition-only application UI
+
+A stricter follow-up should require App Builder to construct application
+interfaces exclusively by composing components that already exist in the exact
+Arrusted source selected for the build. The builder must not design, generate,
+copy, fork, or restyle a custom UI component to fill a catalog gap. It must not
+treat a familiar component name, a screenshot, generated JSX, or a component
+available from an unrelated package as proof that Arrusted provides it.
+
+An eligible component must be verifiable from the selected Arrusted tree and
+must be exposed through a supported public package entrypoint or an explicitly
+documented application-composition surface. Existing private implementation
+files are not a reusable API. The builder may supply product-specific content,
+data bindings, routes, event handlers, permissions, and configuration through
+the public component contracts, but it must not create new visual primitives,
+component-local styling systems, replacement design tokens, or copied variants
+inside the generated application.
+
+The future composition-only workflow should:
+
+1. inventory current public component exports, supported compositions,
+   Storybook stories, required providers, and semantic tokens from the exact
+   selected Arrusted tree before producing the interface plan;
+2. express every visible interface region as a reference to one of those
+   verified components or compositions, including its public import path and
+   supported variant or properties;
+3. generate route and data-wiring code that imports the existing components
+   directly instead of emitting new component implementations;
+4. constrain the early Browser prototype to the same verified catalog, using an
+   Arrusted-owned preview harness or a faithful catalog-backed representation
+   rather than free-form invented HTML controls;
+5. fail closed when a requested interaction cannot be expressed with the
+   existing catalog, recommend the closest supported product composition, and
+   record any genuinely missing reusable component as separate Arrusted work;
+   and
+6. keep the missing-component work outside the generated app so a one-off local
+   component cannot silently become the workaround.
+
+Focused acceptance checks should prove that every application UI import resolves
+to an approved Arrusted public entrypoint, every declared component exists at
+the selected source tree, and the generated app adds no local React component
+definitions or app-owned visual CSS beyond explicitly allowlisted route-layout
+glue. The Browser preview and applied application should share the same
+component-composition manifest so the prototype cannot promise an interface the
+generated app implements differently.
+
+This policy intentionally favors consistency and reuse over unconstrained UI
+generation. If the existing Arrusted catalog cannot deliver a material product
+requirement, App Builder should explain the visible limitation and offer a
+supported alternative; it must not invent a component. Adding a reusable
+component to Arrusted is a separately reviewed prerequisite, after which a new
+build may consume it from the updated exact source.
+
+This section also records a possible improvement only. It does not authorize a
+component-catalog expansion, a generator change, or generated application
+mutation.
+
 ## Validation
 
 The source boundary is tested for exact requested reader permissions and
