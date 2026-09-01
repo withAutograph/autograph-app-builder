@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Run App Builder product-quality gates and CI evidence capture"
+set -eu
+
+exec mise run test:product-evals

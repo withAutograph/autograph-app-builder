@@ -29,6 +29,7 @@ describe("mise-owned repository operations", () => {
     const lanes = {
       repository: "ci-repository",
       "eve-general": "ci-eve-general",
+      "product-quality": "ci-product-quality",
       "eve-fresh-bootstrap": "ci-eve-fresh-bootstrap",
       "sandbox-toolchain": "ci-sandbox-toolchain",
       "package-build": "ci-package-build",
@@ -52,7 +53,7 @@ describe("mise-owned repository operations", () => {
       expect(job.steps).toContainEqual({
         run: "mise run dependencies:install",
       });
-      if (jobName === "repository")
+      if (jobName === "repository" || jobName === "product-quality")
         expect(job.steps).toContainEqual({
           run: "mise run storybook:install-browser",
         });
@@ -87,6 +88,7 @@ describe("mise-owned repository operations", () => {
     expect(general).toContain("mise run test:general-evals");
     const generalEvals = await read(".config/mise/tasks/test/general-evals");
     expect(generalEvals).toContain("--exclude-tag fresh-bootstrap-publication");
+    expect(generalEvals).toContain("--exclude-tag product-quality");
     expect(generalEvals).toContain("--exclude-tag sandbox-toolchain");
     const fresh = await read(".config/mise/tasks/ci-eve-fresh-bootstrap");
     expect(fresh).toContain("mise run test:fresh-bootstrap-evals");

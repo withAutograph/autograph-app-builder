@@ -447,6 +447,7 @@ export async function inspectFixtureApplyOverlay(
     ...sourceFiles,
     { path: `prototype/${appId}/app-spec.md`, mode: "644" },
     { path: `apps/${appId}/app.contract.json`, mode: "644" },
+    { path: `apps/${appId}/app/page.tsx`, mode: "644" },
     { path: `apps/${appId}/package.json`, mode: "644" },
   ];
   const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
@@ -640,6 +641,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     }
     await ensureSandboxDirectories(sandbox, [
       `${relativeRoot}/apps/${appId}`,
+      `${relativeRoot}/apps/${appId}/app`,
       `${relativeRoot}/apps/shell`,
     ]);
     await sandbox.writeTextFile({
@@ -649,6 +651,11 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     await sandbox.writeTextFile({
       path: `${relativeRoot}/apps/${appId}/package.json`,
       content: `${JSON.stringify({ name: `@autograph/${appId}` }, null, 2)}\n`,
+    });
+    await sandbox.writeTextFile({
+      path: `${relativeRoot}/apps/${appId}/app/page.tsx`,
+      content:
+        'import { ReviewQueue } from "@arrusted/ui/review-queue";\nimport "@arrusted/design-system/tokens.css";\n\nexport default function Page() {\n  return <ReviewQueue />;\n}\n',
     });
     await sandbox.writeTextFile({
       path: `${relativeRoot}/microfrontends.json`,

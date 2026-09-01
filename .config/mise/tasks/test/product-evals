@@ -1,0 +1,33 @@
+#!/bin/sh
+#MISE description="Run deterministic App Builder product-quality gates and emit review evidence"
+set -eu
+
+case "${1:-}" in
+  "") ;;
+  --update-visuals)
+    export APP_BUILDER_PRODUCT_EVAL_UPDATE_VISUAL=1
+    ;;
+  *)
+    echo "Usage: mise run test:product-evals [-- --update-visuals]" >&2
+    exit 2
+    ;;
+esac
+
+report_root="${APP_BUILDER_PRODUCT_EVAL_REPORT_DIR:-$PWD/.artifacts/product-quality}"
+mkdir -p "$report_root"
+node_bin="$(mise which node)"
+launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
+
+mise run test:unit -- \
+  lib/agent/component-composition-policy.test.ts \
+  evals/support/product-quality.test.ts
+
+"$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts \
+  --gate-a-profile general-enabled \
+  product-quality --strict --skip-report
+
+APP_BUILDER_PRODUCT_EVAL_REPORT_DIR="$report_root" \
+  "$launcher" "$node_bin" --import tsx scripts/write-product-quality-report.mts
+
+exec "$launcher" "$node_bin" node_modules/playwright/cli.js test \
+  --config playwright.product-quality.config.ts

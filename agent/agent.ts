@@ -4,7 +4,7 @@ import { mockModel } from "eve/evals";
 import { sha256 } from "@/lib/agent/workflow-state";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
-const vendorOnboardingPrototype = `<!doctype html>
+export const vendorOnboardingPrototype = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -80,7 +80,7 @@ const vendorOnboardingPrototype = `<!doctype html>
 </body>
 </html>`;
 
-const vendorOnboardingDecisions = `# Vendor Onboarding decisions
+export const vendorOnboardingDecisions = `# Vendor Onboarding decisions
 
 - \`agent_inferred\`: The product name is **Vendor Onboarding** and the app id is \`vendor-onboarding\`.
 - \`agent_inferred\`: Operations starts from a review queue because the job is to move multiple submissions through exceptions efficiently.
@@ -89,7 +89,7 @@ const vendorOnboardingDecisions = `# Vendor Onboarding decisions
 - \`deferred\`: Final tax rules, approval roles, and system-of-record integrations remain product-review decisions.
 `;
 
-const vendorOnboardingAppSpec = `## Status and prototype
+export const vendorOnboardingAppSpec = `## Status and prototype
 
 Exploring. The usable prototype is at prototype/vendor-onboarding/index.html.
 
@@ -142,7 +142,7 @@ The queue, detail panel, and conditional Finance step are revisable inferred def
 Review the queue, open each vendor, and confirm that tax verification appears only when required.
 `;
 
-const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
+export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 ## Build handoff
 
 \`\`\`json
@@ -164,6 +164,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return "These lead to meaningfully different products. Which outcome should lead the first version: getting each new vendor approved once (recommended, because it delivers the fastest operational value), or continuously monitoring vendors after approval (broader scope with recurring compliance work)?";
   if (message.includes("anonymous public vendor portal"))
     return "An anonymous public vendor portal is unavailable in this product path. The recommended alternative is an internal **Vendor Intake** experience with an operations review queue and vendor detail panel, paired with secure upload requests sent through your existing intake channel.";
+  if (message.includes("full-page step-by-step form"))
+    return "I’ll call this **Vendor Onboarding** and use the requested full-page step-by-step form for a single requester. The conditional Finance review appears only when tax information makes it relevant.";
   if (message.includes("internal vendor-onboarding workflow")) {
     const path = lastUserMessage?.match(
       /supported repository at (\/\S+)/iu,
