@@ -2,7 +2,10 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import { createDevelopmentApplication } from "../lib/development/application-root";
+import {
+  createDevelopmentApplication,
+  refreshDevelopmentApplication,
+} from "../lib/development/application-root";
 import {
   createDevelopmentPackage,
   developmentPackageFingerprint,
@@ -155,6 +158,11 @@ async function runEveCycle(input: {
 }) {
   input.signal.throwIfAborted();
   const cycleStartedAt = performance.now();
+  await refreshDevelopmentApplication({
+    repositoryRoot,
+    applicationRoot: input.applicationRoot,
+    runRoot: input.supervisorRoot,
+  });
   await rotateLocalEveCycleBinding(input.cycleFile);
   const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
   try {
@@ -330,7 +338,13 @@ try {
   await rotateLocalEveCycleBinding(cycleFile);
   const cacheRoot = await privateRoot(join(artifactRoot, "cache"));
   const runsRoot = await privateRoot(join(stateRoot, "runs"));
-  const supervisorRoot = await privateRoot(join(runsRoot, "supervisor"));
+  // A completed invocation leaves its Eve runtime behind for diagnosis.  Give
+  // every new `mise run dev` invocation a private supervisor root so starting
+  // again never collides with that finished application tree.  Eve restarts
+  // inside this invocation retain their own `.eve` state below this root.
+  const supervisorRoot = await privateRoot(
+    await realpath(await mkdtemp(join(runsRoot, "supervisor-"))),
+  );
   const application = await createDevelopmentApplication({
     repositoryRoot,
     runRoot: supervisorRoot,

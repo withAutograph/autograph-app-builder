@@ -1,9 +1,12 @@
 import {
   lstat,
   mkdir,
+  mkdtemp,
   realpath,
   readdir,
   chmod,
+  rename,
+  rm,
   symlink,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -14,13 +17,16 @@ import {
   type DevelopmentSnapshot,
 } from "./local-mode";
 
-async function makeWritable(path: string): Promise<void> {
+async function makeWritable(path: string, preserveRuntime = false): Promise<void> {
   const info = await lstat(path);
   if (info.isSymbolicLink()) return;
   if (info.isDirectory()) {
     await chmod(path, 0o700);
-    for (const entry of await readdir(path))
-      await makeWritable(join(path, entry));
+    for (const entry of await readdir(path)) {
+      if (preserveRuntime && (entry === ".eve" || entry === "node_modules"))
+        continue;
+      await makeWritable(join(path, entry), preserveRuntime);
+    }
     return;
   }
   await chmod(path, info.mode & 0o111 ? 0o700 : 0o600);
@@ -63,5 +69,44 @@ export async function createDevelopmentApplication(input: {
   } catch (error) {
     await removeDevelopmentSnapshot(materializationRoot);
     throw error;
+  }
+}
+
+/**
+ * Replaces only the application code that Eve executes for the current local
+ * cycle.  Eve's own `.eve` state and the checkout-owned dependency symlink are
+ * deliberately retained: they are runtime state, not live application code.
+ *
+ * The staging snapshot makes a runtime restart observe the current checkout
+ * without ever letting a watcher see a partially copied application tree.
+ */
+export async function refreshDevelopmentApplication(input: {
+  repositoryRoot: string;
+  applicationRoot: string;
+  runRoot: string;
+}): Promise<void> {
+  const applicationRoot = await realpath(input.applicationRoot);
+  const runRoot = await realpath(input.runRoot);
+  const stageRoot = await mkdtemp(join(runRoot, "eve-application-stage-"));
+  try {
+    const snapshot = await createDevelopmentSnapshot({
+      sourceRoot: input.repositoryRoot,
+      runRoot: await realpath(stageRoot),
+    });
+    try {
+      await lstat(join(snapshot.root, ".eve"));
+      throw new Error("A live development checkout cannot supply Eve state.");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await makeWritable(applicationRoot, true);
+    for (const entry of await readdir(applicationRoot)) {
+      if (entry === ".eve" || entry === "node_modules") continue;
+      await rm(join(applicationRoot, entry), { recursive: true, force: true });
+    }
+    for (const entry of await readdir(snapshot.root))
+      await rename(join(snapshot.root, entry), join(applicationRoot, entry));
+  } finally {
+    await removeDevelopmentSnapshot(stageRoot);
   }
 }
