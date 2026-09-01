@@ -220,5 +220,5 @@ jobs:
             .artifacts/promotion/promotion-receipt.json
       - name: Publish exact prerelease bytes
         env:
-          GH_TOKEN: ${{ github.token }}
+          APP_BUILDER_RELEASE_GITHUB_TOKEN: ${{ github.token }}
         run: mise run release:publish -- --candidate-root "$PWD/.artifacts/promotion"

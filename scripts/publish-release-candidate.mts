@@ -69,6 +69,9 @@ const tag = `v${promotion.package.version}`;
 const gh = process.env.APP_BUILDER_RELEASE_GH_BIN;
 if (!gh || !isAbsolute(gh))
   throw new Error("mise must supply the gh executable.");
+const githubToken = process.env.APP_BUILDER_RELEASE_GITHUB_TOKEN;
+if (!githubToken)
+  throw new Error("The release workflow must supply its scoped GitHub token.");
 execFileSync(
   gh,
   [
@@ -90,5 +93,8 @@ execFileSync(
     `Immutable promotion ${promotion.digest}`,
     "--prerelease",
   ],
-  { stdio: "inherit", env: process.env },
+  {
+    stdio: "inherit",
+    env: { ...process.env, GH_TOKEN: githubToken },
+  },
 );
