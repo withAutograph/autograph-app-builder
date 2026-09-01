@@ -11,10 +11,10 @@ import {
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactWorkflowState,
   assertUpstreamMutationAllowed,
   sha256,
   type TargetIdentityReceipt,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   assertExactDependencyTargetBinding,
@@ -182,13 +182,10 @@ export default defineTool({
           dependencyReceipt: current.dependencyReceipt,
           identityReceipt: identityReceipt!,
         } as const;
-        appBuilderWorkflowState.update((latest) => {
-          assertExactWorkflowState(
-            latest,
-            current,
-            "target identity receipt recording",
-          );
-          return identityState;
+        updateExactWorkflow({
+          expected: current,
+          operation: "target identity receipt recording",
+          transition: () => identityState,
         });
         workflowBeforeProposal = identityState;
       },
@@ -205,13 +202,10 @@ export default defineTool({
       plannedByCallId: ctx.callId,
     };
     const proposal = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(
-        latest,
-        workflowBeforeProposal,
-        "target proposal recording",
-      );
-      return {
+    updateExactWorkflow({
+      expected: workflowBeforeProposal,
+      operation: "target proposal recording",
+      transition: () => ({
         version: APP_BUILDER_WORKFLOW_VERSION,
         phase: "planned",
         preparedByCallId: current.preparedByCallId,
@@ -225,7 +219,7 @@ export default defineTool({
         dependencyReceipt: current.dependencyReceipt,
         identityReceipt: recordedIdentity,
         proposal,
-      };
+      }),
     });
     return { ...proposal, reused: false };
   },
