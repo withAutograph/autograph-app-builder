@@ -4,7 +4,7 @@ import { z } from "zod";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import {
   appBuilderWorkflowState,
-  assertExactWorkflowState,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import { sourceReceiptEvidence } from "@/lib/repository/source-receipt";
 
@@ -47,24 +47,23 @@ export default defineTool({
       throw new Error(
         "The sealed draft pull-request proposal is not bound to the current reviewed workflow.",
       );
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(
-        latest,
-        state,
-        "draft pull-request proposal sealing",
-      );
-      if (latest.phase !== "reviewed" || latest.githubSource === undefined)
-        throw new Error(
-          "The reviewed GitHub workflow changed before proposal sealing.",
-        );
-      return {
-        ...latest,
-        githubDraftProposal: {
-          proposal,
-          sourceReceiptDigest: latest.sourceReceipt.digest,
-          githubSourceDigest: latest.githubSource.digest,
-        },
-      };
+    updateExactWorkflow({
+      expected: state,
+      operation: "draft pull-request proposal sealing",
+      transition: (latest) => {
+        if (latest.phase !== "reviewed" || latest.githubSource === undefined)
+          throw new Error(
+            "The reviewed GitHub workflow changed before proposal sealing.",
+          );
+        return {
+          ...latest,
+          githubDraftProposal: {
+            proposal,
+            sourceReceiptDigest: latest.sourceReceipt.digest,
+            githubSourceDigest: latest.githubSource.digest,
+          },
+        };
+      },
     });
     return proposal;
   },
