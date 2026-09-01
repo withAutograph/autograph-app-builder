@@ -427,7 +427,7 @@ function checkpointForSnapshot(
     publicEventCount += 1;
   }
   const retainedCount = Math.min(publicEventCount, ring.length);
-  let events = Array.from({ length: retainedCount }, (_, index) => {
+  const events = Array.from({ length: retainedCount }, (_, index) => {
     const absoluteIndex = publicEventCount - retainedCount + index;
     return ring[absoluteIndex % ring.length]!;
   });
