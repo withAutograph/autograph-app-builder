@@ -4,8 +4,8 @@ import { z } from "zod";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactWorkflowState,
   assertUpstreamMutationAllowed,
+  updateExactWorkflow,
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
@@ -113,21 +113,23 @@ export default defineTool({
     }
     if (workspace.sourceTree !== expectedTree)
       throw new Error("The prepared source tree changed after review.");
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(latest, current, "workspace preparation");
-      return current.phase === "empty" || current.phase === "prepared"
-        ? {
-            version: APP_BUILDER_WORKFLOW_VERSION,
-            phase: "prepared",
-            preparedByCallId: ctx.callId,
-            workspace,
-            sourceReceipt: currentReceipt,
-            ...(source.githubSource === undefined
-              ? {}
-              : { githubSource: source.githubSource }),
-            artifacts: [],
-          }
-        : current;
+    updateExactWorkflow({
+      expected: current,
+      operation: "workspace preparation",
+      transition: (latest) =>
+        latest.phase === "empty" || latest.phase === "prepared"
+          ? {
+              version: APP_BUILDER_WORKFLOW_VERSION,
+              phase: "prepared",
+              preparedByCallId: ctx.callId,
+              workspace,
+              sourceReceipt: currentReceipt,
+              ...(source.githubSource === undefined
+                ? {}
+                : { githubSource: source.githubSource }),
+              artifacts: [],
+            }
+          : latest,
     });
     return workspace;
   },
