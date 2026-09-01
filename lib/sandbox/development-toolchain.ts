@@ -23,6 +23,9 @@ const dependencyInputs = [
 
 export const DEVELOPMENT_SOURCE_ARCHIVE_PATH =
   ".app-builder/development-source.tar.gz";
+/** Development cache state belongs to the local builder and remains writable. */
+export const DEVELOPMENT_DEPENDENCY_CACHE_ROOT =
+  "/workspace/.app-builder/dependency-cache";
 export const DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS = [
   ...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   "index.crates.io",
@@ -418,8 +421,8 @@ NODE
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
-sed -i "s#$work/cargo-closure/vendor#/opt/app-builder/cargo/vendor#g" "$work/cargo-closure/config.toml"
-grep -F 'directory = "/opt/app-builder/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
+sed -i "s#$work/cargo-closure/vendor#${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor#g" "$work/cargo-closure/config.toml"
+grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
 if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
 printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
 stage='archive'
@@ -430,17 +433,19 @@ archive_bytes="$(stat --format='%s' "$work/node-modules.tar.gz")"
 cargo_sha="$(sha256sum "$work/cargo-closure.tar.gz" | cut -d' ' -f1)"
 cargo_bytes="$(stat --format='%s' "$work/cargo-closure.tar.gz")"
 cat > "$work/manifest.json" <<'JSON'
-{"version":2,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${input.dependencyKey}","lockfiles":{".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","archivePath":"/opt/app-builder/dependency-cache/node-modules.tar.gz","archiveSha256":"ARCHIVE_SHA","archiveBytes":ARCHIVE_BYTES,"cargoArchivePath":"/opt/app-builder/dependency-cache/cargo-closure.tar.gz","cargoArchiveSha256":"CARGO_SHA","cargoArchiveBytes":CARGO_BYTES}}
+{"version":2,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${input.dependencyKey}","lockfiles":{".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","archivePath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/node-modules.tar.gz","archiveSha256":"ARCHIVE_SHA","archiveBytes":ARCHIVE_BYTES,"cargoArchivePath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz","cargoArchiveSha256":"CARGO_SHA","cargoArchiveBytes":CARGO_BYTES}}
 JSON
 sed -i "s/ARCHIVE_SHA/$archive_sha/g;s/ARCHIVE_BYTES/$archive_bytes/g;s/CARGO_SHA/$cargo_sha/g;s/CARGO_BYTES/$cargo_bytes/g" "$work/manifest.json"
 stage='cache-installation'
-sudo install -d -m 0755 /opt/app-builder/dependency-cache "/opt/app-builder/dependencies/$archive_sha" /opt/app-builder/cargo
-sudo install -m 0444 "$work/manifest.json" /opt/app-builder/dependency-cache/manifest.json
-sudo install -m 0444 "$work/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
-sudo install -m 0444 "$work/cargo-closure.tar.gz" /opt/app-builder/dependency-cache/cargo-closure.tar.gz
-sudo tar --extract --gzip --file "$work/node-modules.tar.gz" --directory "/opt/app-builder/dependencies/$archive_sha" --no-same-owner --no-same-permissions
-sudo tar --extract --gzip --file "$work/cargo-closure.tar.gz" --directory /opt/app-builder/cargo --no-same-owner --no-same-permissions
-sudo chmod -R a-w,a+rX /opt/app-builder/dependency-cache "/opt/app-builder/dependencies/$archive_sha" /opt/app-builder/cargo
+cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
+install -d -m 0755 "$cache_root" "$cache_root/dependencies/$archive_sha" "$cache_root/cargo"
+test "$(realpath "$cache_root")" = "$cache_root"
+install -m 0644 "$work/manifest.json" "$cache_root/manifest.json"
+install -m 0644 "$work/node-modules.tar.gz" "$cache_root/node-modules.tar.gz"
+install -m 0644 "$work/cargo-closure.tar.gz" "$cache_root/cargo-closure.tar.gz"
+tar --extract --gzip --file "$work/node-modules.tar.gz" --directory "$cache_root/dependencies/$archive_sha" --no-same-owner --no-same-permissions
+tar --extract --gzip --file "$work/cargo-closure.tar.gz" --directory "$cache_root/cargo" --no-same-owner --no-same-permissions
+if find "$cache_root" -perm /022 -print -quit | grep -q .; then exit 1; fi
 printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
 }
 

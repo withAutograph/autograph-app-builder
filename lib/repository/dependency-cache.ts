@@ -10,7 +10,10 @@ import {
   HOSTED_MISE_VERSION,
   HOSTED_NODE_VERSION,
 } from "../sandbox/hosted-toolchain";
-import { developmentDependencySymlinkScript } from "../sandbox/development-toolchain";
+import {
+  DEVELOPMENT_DEPENDENCY_CACHE_ROOT,
+  developmentDependencySymlinkScript,
+} from "../sandbox/development-toolchain";
 import { hasTestCapability } from "../testing/test-capability";
 import { safeSourcePath } from "./source-path";
 
@@ -47,7 +50,8 @@ export const LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION = 3;
 const DEVELOPMENT_TOOLCHAIN_PATH =
   "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin";
 const DEVELOPMENT_CARGO_HOME = "/workspace/.app-builder/toolchain/cargo-home";
-const DEVELOPMENT_CARGO_CONFIG = "/opt/app-builder/cargo/config.toml";
+const DEVELOPMENT_CARGO_CONFIG =
+  `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`;
 
 const REQUIRED_EXECUTION_PACKAGES = [
   ".bin/next",
@@ -186,7 +190,20 @@ export const developmentDependencyCacheManifestSchema = z.strictObject({
     mise: z.literal("2026.8.12"),
     rust: z.literal(ARRUSTED_RUST_VERSION),
   }),
-  closure: dependencyCacheManifestShapeSchema.shape.closure,
+  closure: z.strictObject({
+    package: z.literal("@vercel/microfrontends"),
+    version: z.literal(ARRUSTED_MICROFRONTENDS_VERSION),
+    archivePath: z.literal(
+      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/node-modules.tar.gz`,
+    ),
+    archiveSha256: sha256Digest,
+    archiveBytes: z.number().int().positive(),
+    cargoArchivePath: z.literal(
+      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz`,
+    ),
+    cargoArchiveSha256: sha256Digest,
+    cargoArchiveBytes: z.number().int().positive(),
+  }),
 });
 
 const requiredLiveTemplateDependencyInputs = [
@@ -283,7 +300,7 @@ const executionDependencyRootSchema = z.strictObject({
   cachePath: z
     .string()
     .regex(
-      /^(?:\/opt\/app-builder\/dependencies\/[0-9a-f]{64}\/node_modules|\/workspace\/\.app-builder\/hosted-dependencies\/[0-9a-f]{64}\/node_modules|\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/(?:arm64|x86_64)\/source\/(?:node_modules|.+\/node_modules))$/u,
+      /^(?:\/opt\/app-builder\/dependencies\/[0-9a-f]{64}\/node_modules|\/workspace\/\.app-builder\/dependency-cache\/dependencies\/[0-9a-f]{64}\/node_modules|\/workspace\/\.app-builder\/hosted-dependencies\/[0-9a-f]{64}\/node_modules|\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/(?:arm64|x86_64)\/source\/(?:node_modules|.+\/node_modules))$/u,
     ),
   digest: sha256Digest,
 });
@@ -460,6 +477,8 @@ export function materializedDependencyNodeModulesRoot(
   contentDigest: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
+  if (isDevelopmentExecution(environment))
+    return `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${contentDigest}/node_modules`;
   const immutableImageRoot = dependencyCacheNodeModulesRoot(contentDigest);
   if (hostedWorkspaceDependencyExtractionEnabled(environment))
     return `/workspace/.app-builder/hosted-dependencies/${contentDigest}/node_modules`;
@@ -639,10 +658,18 @@ export async function materializeExecutionDependencyView(input: {
     throw new Error("The dependency execution view could not be materialized.");
 }
 
+function isDevelopmentExecution(
+  environment: Readonly<Record<string, string | undefined>>,
+) {
+  return environment.APP_BUILDER_EXECUTION_MODE === "development";
+}
+
 function dependencyCachePaths(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
-  const root = hostedArtifactDependencyCacheEnabled(environment)
+  const root = isDevelopmentExecution(environment)
+    ? DEVELOPMENT_DEPENDENCY_CACHE_ROOT
+    : hostedArtifactDependencyCacheEnabled(environment)
     ? HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT
     : "/opt/app-builder/dependency-cache";
   return {
@@ -1287,6 +1314,16 @@ export async function inspectDependencyCache(
   ).safeParse(parsed);
   if (!validated.success)
     throw new Error("The fixed offline dependency cache manifest drifted.");
+  if (developmentExecution) {
+    const developmentManifest = developmentDependencyCacheManifestSchema.parse(
+      validated.data,
+    );
+    if (
+      developmentManifest.dependencyKey !==
+      environment.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY
+    )
+      throw new Error("The development dependency cache key drifted.");
+  }
 
   const archiveResult = await sandbox.run({
     command: hostedExecution
@@ -1382,7 +1419,7 @@ export async function materializeOfflineDependencies(input: {
       (path) => `test -e ${absoluteNodeModules}/${path}`,
     ).join(" && ");
     const extraction = await input.sandbox.run({
-      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && test ! -e /workspace/repository/node_modules && test ! -L /workspace/repository/node_modules`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${developmentExecution ? `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}" && test "$(realpath ${absoluteNodeModules})" = "${absoluteNodeModules}" && ` : ""}${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && ${developmentExecution ? `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi && ` : `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && `}test ! -e /workspace/repository/node_modules && test ! -L /workspace/repository/node_modules`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });

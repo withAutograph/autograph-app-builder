@@ -20,6 +20,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxSession } from "eve/sandbox";
 
+import { DEVELOPMENT_DEPENDENCY_CACHE_ROOT } from "../sandbox/development-toolchain";
+
 import {
   ARRUSTED_APP_VALIDATION_SHA256,
   ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
@@ -138,7 +140,11 @@ const developmentManifest = {
     mise: "2026.8.12",
     rust: "1.97.1",
   },
-  closure: manifest.closure,
+  closure: {
+    ...manifest.closure,
+    archivePath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/node-modules.tar.gz`,
+    cargoArchivePath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz`,
+  },
 } as const;
 
 function liveDependencySourceFixture(input?: {
@@ -1129,11 +1135,14 @@ describe("offline dependency cache", () => {
         sourceSha: "7".repeat(40),
         sourceTree: "8".repeat(40),
       },
-      environment: { APP_BUILDER_EXECUTION_MODE: "development" },
+      environment: {
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: developmentManifest.dependencyKey,
+      },
     });
 
     expect(run.mock.calls[1]?.[0].command).toContain(
-      DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
+      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo-closure.tar.gz`,
     );
     const developmentLinkCommand = run.mock.calls
       .map(([request]) => request.command as string)
@@ -1146,11 +1155,16 @@ describe("offline dependency cache", () => {
     expect(developmentLinkCommand).toContain(
       "test ! -e /workspace/repository/node_modules",
     );
+    expect(developmentLinkCommand).toContain(
+      `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}"`,
+    );
+    expect(developmentLinkCommand).toContain("-perm /022");
+    expect(developmentLinkCommand).not.toContain("-perm /222");
     expect(developmentLinkCommand).not.toContain("ln -s");
     expect(writeTextFile).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining(
-          `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
+          `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${archiveDigest}/node_modules`,
         ),
       }),
     );
@@ -1167,7 +1181,7 @@ describe("offline dependency cache", () => {
     );
     expect(rustCommand).toContain("CARGO_NET_OFFLINE=true");
     expect(rustCommand).toContain(
-      "cargo metadata --config /opt/app-builder/cargo/config.toml --offline",
+      `cargo metadata --config ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml --offline`,
     );
     expect(rustCommand).not.toContain("mise --env app-builder exec");
   });

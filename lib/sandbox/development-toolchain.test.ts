@@ -68,22 +68,28 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain('"scope":"development-execution"');
     expect(command).toContain('"version":2');
     expect(command).toContain(
-      "/opt/app-builder/dependency-cache/node-modules.tar.gz",
+      "/workspace/.app-builder/dependency-cache/node-modules.tar.gz",
     );
     expect(command).toContain(
-      "/opt/app-builder/dependency-cache/cargo-closure.tar.gz",
+      "/workspace/.app-builder/dependency-cache/cargo-closure.tar.gz",
     );
     expect(command).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
     expect(command).toContain('node - "$work/source"');
     expect(command).not.toContain('readlink -f -- "$link"');
-    expect(command).toContain('directory = "/opt/app-builder/cargo/vendor"');
+    expect(command).toContain(
+      'directory = "/workspace/.app-builder/dependency-cache/cargo/vendor"',
+    );
     expect(command).toContain(
       'if grep -F "$work" "$work/cargo-closure/config.toml"',
     );
     expect(command).not.toContain("docker");
     expect(command).not.toContain("microsandbox");
+    expect(command).not.toContain("sudo");
+    expect(command).not.toContain("chmod -R a-w");
+    expect(command).toContain('test "$(realpath "$cache_root")" = "$cache_root"');
+    expect(command).toContain('find "$cache_root" -perm /022');
     expect(DEVELOPMENT_SANDBOX_ENVIRONMENT).toMatchObject({
       CARGO_NET_OFFLINE: "true",
       MISE_AUTO_INSTALL: "false",
