@@ -62,6 +62,9 @@ import {
   readBuilderDraft,
 } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
+import { InfoTooltip } from "./builder-info-tooltip";
+
+export { InfoTooltip } from "./builder-info-tooltip";
 import type {
   BuilderDraft,
   BuilderForm,
@@ -424,21 +427,6 @@ export function AutographMark({ compact = false }: { compact?: boolean }) {
         alt=""
       />
       <span>Autograph</span>
-    </span>
-  );
-}
-
-export function InfoTooltip({ children }: { children: string }) {
-  const tooltipId = useId();
-
-  return (
-    <span className={styles.infoTooltip}>
-      <button type="button" aria-label={children} aria-describedby={tooltipId}>
-        <Info size={12} aria-hidden="true" />
-      </button>
-      <span id={tooltipId} role="tooltip">
-        {children}
-      </span>
     </span>
   );
 }
