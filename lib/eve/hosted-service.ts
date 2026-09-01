@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { EveSessionService } from "./service";
+import { canonical, digest, stableId } from "./hosted-operation-identifiers";
 import {
   hostedPrincipalSchema,
   requireHostedOperationScope,
@@ -116,24 +116,6 @@ function assertNever(value: never): never {
   throw new HostedSubmissionUnknownError();
 }
 
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function digest(value: unknown): string {
-  return `sha256:${createHash("sha256").update(canonical(value)).digest("hex")}`;
-}
-
-function stableId(prefix: string, value: unknown): string {
-  return `${prefix}_${digest(value).slice("sha256:".length)}`;
-}
 
 function titleFromPrompt(prompt: string): string {
   const firstLine = prompt.trim().split(/\r?\n/u, 1)[0]?.trim() ?? "";
