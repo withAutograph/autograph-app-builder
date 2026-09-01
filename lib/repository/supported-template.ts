@@ -999,7 +999,8 @@ const developmentWorkspaceInspectionProgram = [
   "const repositoryState=fs.lstatSync(repositoryInput);",
   "if(!repositoryState.isDirectory()||repositoryState.isSymbolicLink())process.exit(1);",
   "const repositoryRoot=fs.realpathSync(repositoryInput);",
-  "if(repositoryRoot!==repositoryInput)process.exit(1);",
+  'const expectedRepositoryRoot=path.join(workspaceRoot,"repository");',
+  "if(repositoryRoot!==expectedRepositoryRoot)process.exit(1);",
   "const contains=(root,candidate)=>{const relative=path.relative(root,candidate);return relative===''||(relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative));};",
   "if(!contains(workspaceRoot,repositoryRoot))process.exit(1);",
 ].join("");
