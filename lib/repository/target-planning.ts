@@ -18,6 +18,7 @@ import {
   isHostedVercelSandboxBackend,
   sandboxBackendPlan,
 } from "../sandbox/backend";
+import { developmentExecutionArtifactDigest } from "../sandbox/development-toolchain";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -184,6 +185,12 @@ export function targetExecutionBinding(
       fixture: false,
       localImageConfigured: false,
     });
+    if (backend.kind === "vercel-development" && backend.blockers.length === 0)
+      return {
+        imageDigest: developmentExecutionArtifactDigest(environment),
+        dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
+        fixture: false,
+      } as const;
     if (
       isHostedVercelSandboxBackend(backend.kind) &&
       backend.blockers.length === 0

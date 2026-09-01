@@ -35,6 +35,10 @@ export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 export const LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT =
   ".app-builder/template-dependency-cache";
 const LIVE_TEMPLATE_NODE_MODULES_PATH = "/workspace/repository/node_modules";
+const DEVELOPMENT_TOOLCHAIN_PATH =
+  "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin";
+const DEVELOPMENT_CARGO_HOME = "/workspace/.app-builder/toolchain/cargo-home";
+const DEVELOPMENT_CARGO_CONFIG = "/opt/app-builder/cargo/config.toml";
 
 const REQUIRED_EXECUTION_PACKAGES = [
   ".bin/next",
@@ -212,6 +216,15 @@ export type ObservedDependencyCache = {
   manifestDigest: string;
   contentDigest: string;
 };
+
+export class DependencyCacheMissingError extends Error {
+  readonly code = "dependency_cache_missing" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "DependencyCacheMissingError";
+  }
+}
 
 type ExactSourceBinding = {
   sourceSha: string;
@@ -547,35 +560,37 @@ export async function inspectDependencyCache(
     const liveManifest = await sandbox.readTextFile({
       path: liveTemplateManifestPath(fixtureTarget, platform),
     });
-    if (liveManifest !== null) {
-      let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
-      try {
-        manifest = liveTemplateDependencyCacheManifestSchema.parse(
-          JSON.parse(liveManifest) as unknown,
-        );
-      } catch {
-        throw new Error(
-          "The live template dependency cache manifest is invalid.",
-        );
-      }
-      if (
-        manifest.target.sha !== fixtureTarget.sourceSha ||
-        manifest.target.tree !== fixtureTarget.sourceTree ||
-        manifest.platform !== platform
-      )
-        throw new Error("The live template dependency cache source drifted.");
-      return {
-        manifest,
-        manifestDigest: sha256(liveManifest),
-        contentDigest: sha256(
-          JSON.stringify({
-            locks: manifest.locks,
-            closure: manifest.closure,
-            platform: manifest.platform,
-          }),
-        ),
-      };
+    if (liveManifest === null)
+      throw new DependencyCacheMissingError(
+        "The live template dependency cache is missing.",
+      );
+    let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
+    try {
+      manifest = liveTemplateDependencyCacheManifestSchema.parse(
+        JSON.parse(liveManifest) as unknown,
+      );
+    } catch {
+      throw new Error(
+        "The live template dependency cache manifest is invalid.",
+      );
     }
+    if (
+      manifest.target.sha !== fixtureTarget.sourceSha ||
+      manifest.target.tree !== fixtureTarget.sourceTree ||
+      manifest.platform !== platform
+    )
+      throw new Error("The live template dependency cache source drifted.");
+    return {
+      manifest,
+      manifestDigest: sha256(liveManifest),
+      contentDigest: sha256(
+        JSON.stringify({
+          locks: manifest.locks,
+          closure: manifest.closure,
+          platform: manifest.platform,
+        }),
+      ),
+    };
   }
 
   const cachePaths = dependencyCachePaths(environment);
@@ -681,6 +696,8 @@ export async function materializeOfflineDependencies(input: {
     sourceReceipt: input.target,
     cache: observed,
   });
+  const developmentExecution =
+    observed.manifest.scope === "development-execution";
   const root = planningOverlayRoot(input.artifactRevision);
   if (!fixtureDependencyCacheEnabled(environment)) {
     const liveTemplate = observed.manifest.scope === "live-template-execution";
@@ -693,6 +710,9 @@ export async function materializeOfflineDependencies(input: {
           observed.contentDigest,
           environment,
         );
+    const developmentWorkspaceDependencyLink = developmentExecution
+      ? `test -d /workspace/repository && test ! -L /workspace/repository && if [ -e /workspace/repository/node_modules ] || [ -L /workspace/repository/node_modules ]; then test -L /workspace/repository/node_modules && test "$(readlink -- /workspace/repository/node_modules)" = "${absoluteNodeModules}"; else ln -s ${absoluteNodeModules} /workspace/repository/node_modules; fi && test -L /workspace/repository/node_modules && test "$(readlink -- /workspace/repository/node_modules)" = "${absoluteNodeModules}" && `
+      : "";
     const installHostedClosure = hostedExecution
       ? `if [ ! -d ${absoluteNodeModules} ]; then rm -rf ${hostedDependencyRoot} && install -d -m 0755 ${hostedDependencyRoot} && tar --extract --gzip --file ${dependencyCachePaths(environment).archive} --directory ${hostedDependencyRoot} --no-same-owner --no-same-permissions && chmod -R a-w,a+rX ${hostedDependencyRoot}; fi && `
       : "";
@@ -701,7 +721,7 @@ export async function materializeOfflineDependencies(input: {
       (path) => `test -e ${absoluteNodeModules}/${path}`,
     ).join(" && ");
     const extraction = await input.sandbox.run({
-      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}" && cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
+      command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && ${developmentWorkspaceDependencyLink}rm -rf /workspace/${root}/node_modules && ln -s ${absoluteNodeModules} /workspace/${root}/node_modules && test -L /workspace/${root}/node_modules && test "$(readlink -- /workspace/${root}/node_modules)" = "${absoluteNodeModules}" && cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
@@ -754,7 +774,9 @@ export async function materializeOfflineDependencies(input: {
       throw new Error("The required offline dependency closure is incomplete.");
     if (!hostedSeedDependencyCacheEnabled(environment)) {
       const rustToolchain = await input.sandbox.run({
-        command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
+        command: developmentExecution
+          ? `PATH=${DEVELOPMENT_TOOLCHAIN_PATH} CARGO_HOME=${DEVELOPMENT_CARGO_HOME} CARGO_NET_OFFLINE=true sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test -r ${DEVELOPMENT_CARGO_CONFIG} && cargo metadata --config ${DEVELOPMENT_CARGO_CONFIG} --offline --format-version 1 --locked --all-features >/dev/null'`
+          : `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
         workingDirectory: `/workspace/${root}`,
         abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
       });

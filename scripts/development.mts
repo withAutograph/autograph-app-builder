@@ -1,21 +1,13 @@
-import { createHash, randomUUID } from "node:crypto";
-import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { createReadStream } from "node:fs";
-import {
-  chmod,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { arch, platform, tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
-import { promisify } from "node:util";
+import { spawn, type ChildProcess } from "node:child_process";
+import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
+import { createDevelopmentApplication } from "../lib/development/application-root";
+import {
+  createDevelopmentPackage,
+  developmentLaunchEnvironment,
+  registerDevelopmentPackage,
+} from "../lib/development/dev-package";
 import {
   createDevelopmentSnapshot,
   developmentDependencyKey,
@@ -23,29 +15,33 @@ import {
   removeDevelopmentSnapshot,
   waitForDevelopmentSourceChange,
 } from "../lib/development/local-mode";
-import {
-  createDevelopmentPackage,
-  developmentLaunchEnvironment,
-  registerDevelopmentPackage,
-} from "../lib/development/dev-package";
 import { waitForDevelopmentMcp } from "../lib/development/mcp-readiness";
+import {
+  createDevelopmentShutdown,
+  developmentChildExit,
+  stopDevelopmentChild,
+  waitForDevelopmentShutdown,
+} from "../lib/development/process-supervisor";
+import {
+  fingerprintDevelopmentRuntime,
+  waitForDevelopmentRuntimeChange,
+} from "../lib/development/runtime-watch";
 import {
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
   HOSTED_NODE_VERSION,
   HOSTED_RUST_VERSION,
 } from "../lib/sandbox/hosted-toolchain";
+import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
+import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
 
-const execFileAsync = promisify(execFile);
 const repositoryRoot = resolve(".");
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
-
-async function sha256File(path: string) {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk);
-  return hash.digest("hex");
-}
+const developmentTools = {
+  node: HOSTED_NODE_VERSION,
+  bun: HOSTED_BUN_VERSION,
+  mise: HOSTED_MISE_VERSION,
+  rust: HOSTED_RUST_VERSION,
+} as const;
 
 function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];
@@ -71,242 +67,96 @@ async function privateRoot(path: string) {
   return canonical;
 }
 
-async function digestOrAbsent(path: string) {
-  try {
-    return sha256(await readFile(path));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
-    throw error;
-  }
-}
-
-function hostPlatform() {
-  if (platform() !== "darwin" && platform() !== "linux")
-    throw new Error("Development mode supports macOS and Linux hosts only.");
-  if (arch() === "arm64") return { oci: "linux/arm64", tag: "linux-arm64" };
-  if (arch() === "x64") return { oci: "linux/amd64", tag: "linux-amd64" };
-  throw new Error("Development mode supports arm64 and amd64 hosts only.");
-}
-
-async function commandSucceeded(program: string, args: string[]) {
-  try {
-    await execFileAsync(program, args, { cwd: repositoryRoot });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function runInherited(
-  program: string,
-  args: string[],
-  environment: NodeJS.ProcessEnv = process.env,
-) {
-  const child = spawn(program, args, {
-    cwd: repositoryRoot,
-    env: environment,
-    stdio: "inherit",
-  });
-  const code = await childExit(child);
-  if (code !== 0)
-    throw new Error(`${basename(program)} exited with status ${code}.`);
-}
-
-async function prepareDevelopmentImage(input: {
-  sourceRoot: string;
-  runRoot: string;
-  stateRoot: string;
+function nextEnvironment(input: {
+  cycleFile: string;
+  evePort: number;
+  nextPort: number;
   runtimeHome: string;
-  dependencyKey: string;
-  ociPlatform: string;
-  tagPlatform: string;
 }) {
-  const docker = requiredEnvironment("APP_BUILDER_DEV_DOCKER_BIN");
-  const buildx = requiredEnvironment("APP_BUILDER_DEV_BUILDX_BIN");
-  const msb = requiredEnvironment("APP_BUILDER_DEV_MSB_BIN");
-  const toolchainDockerfile = join(
-    repositoryRoot,
-    "containers/eve-sandbox/dev-toolchain.Dockerfile",
-  );
-  const dependencyDockerfile = join(
-    repositoryRoot,
-    "containers/eve-sandbox/dev-dependencies.Dockerfile",
-  );
-  const toolchainDigest = sha256(await readFile(toolchainDockerfile));
-  const dependencyDockerfileDigest = sha256(
-    await readFile(dependencyDockerfile),
-  );
-  const toolchainTag = `app-builder-autograph-dev-toolchain:${toolchainDigest}-${input.tagPlatform}`;
-  if (!(await commandSucceeded(docker, ["image", "inspect", toolchainTag]))) {
-    await runInherited(buildx, [
-      "build",
-      "--platform",
-      input.ociPlatform,
-      "--file",
-      toolchainDockerfile,
-      "--tag",
-      toolchainTag,
-      "--load",
-      repositoryRoot,
-    ]);
-  }
-  const image = `app-builder-autograph-dev:${input.dependencyKey}-${dependencyDockerfileDigest.slice(0, 16)}-${input.tagPlatform}`;
-  const cacheRoot = await privateRoot(
-    join(input.stateRoot, "dependencies", input.dependencyKey),
-  );
-  const archive = join(cacheRoot, `${input.tagPlatform}.oci.tar`);
-  const receiptPath = join(cacheRoot, `${input.tagPlatform}.json`);
-  let reusable = false;
-  try {
-    const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as {
-      image?: string;
-      archiveSha256?: string;
-      toolchainDockerfileSha256?: string;
-      dependencyDockerfileSha256?: string;
-    };
-    reusable =
-      receipt.image === image &&
-      receipt.toolchainDockerfileSha256 === toolchainDigest &&
-      receipt.dependencyDockerfileSha256 === dependencyDockerfileDigest &&
-      receipt.archiveSha256 === (await sha256File(archive));
-  } catch {
-    reusable = false;
-  }
-  if (!reusable) {
-    await rm(archive, { force: true });
-    await rm(receiptPath, { force: true });
-    const temporary = join(
-      cacheRoot,
-      `.image-${process.pid}-${randomUUID()}.oci.tar`,
-    );
-    const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: input.sourceRoot,
-      runRoot: input.runRoot,
-    });
-    try {
-      const snapshotDependencyKey = await developmentDependencyKey({
-        sourceRoot: snapshot.root,
-        platform: input.ociPlatform,
-        tools: developmentTools,
-      });
-      if (snapshotDependencyKey !== input.dependencyKey)
-        throw new Error(
-          "Arrusted dependency inputs changed while the development image was prepared.",
-        );
-      const lockfiles = {
-        MISE_CONFIG_SHA256: await digestOrAbsent(
-          join(snapshot.root, ".config/mise/config.toml"),
-        ),
-        MISE_LOCK_SHA256: await digestOrAbsent(
-          join(snapshot.root, ".config/mise/mise.lock"),
-        ),
-        BUN_LOCK_SHA256: await digestOrAbsent(join(snapshot.root, "bun.lock")),
-        CARGO_LOCK_SHA256: await digestOrAbsent(
-          join(snapshot.root, "Cargo.lock"),
-        ),
-      };
-      const buildArgs = Object.entries(lockfiles).flatMap(([name, value]) => [
-        "--build-arg",
-        `${name}=${value}`,
-      ]);
-      await runInherited(buildx, [
-        "build",
-        "--platform",
-        input.ociPlatform,
-        "--build-context",
-        `arrusted-source=${snapshot.root}`,
-        "--build-arg",
-        `TOOLCHAIN_IMAGE=${toolchainTag}`,
-        "--build-arg",
-        `DEPENDENCY_KEY=${input.dependencyKey}`,
-        "--build-arg",
-        `PLATFORM=${input.ociPlatform}`,
-        ...buildArgs,
-        "--file",
-        dependencyDockerfile,
-        "--tag",
-        image,
-        "--output",
-        `type=oci,dest=${temporary}`,
-        repositoryRoot,
-      ]);
-      await chmod(temporary, 0o600);
-      await rename(temporary, archive);
-      const receipt = {
-        format: "autograph-development-dependency-image-v1",
-        image,
-        platform: input.ociPlatform,
-        dependencyKey: input.dependencyKey,
-        toolchainDockerfileSha256: toolchainDigest,
-        dependencyDockerfileSha256: dependencyDockerfileDigest,
-        archiveSha256: await sha256File(archive),
-        lockfiles,
-      };
-      await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, {
-        mode: 0o600,
-        flag: "wx",
-      });
-    } finally {
-      await rm(temporary, { force: true });
-      await removeDevelopmentSnapshot(input.runRoot);
-    }
-  }
-  await runInherited(
-    msb,
-    ["load", "--input", archive, "--tag", image, "--quiet"],
-    { ...process.env, HOME: input.runtimeHome },
-  );
-  return image;
+  return {
+    PATH: `${dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
+    HOME: input.runtimeHome,
+    TMPDIR: process.env.TMPDIR ?? "/tmp",
+    LANG: process.env.LANG ?? "C",
+    LC_ALL: process.env.LC_ALL ?? "C",
+    TZ: process.env.TZ ?? "UTC",
+    NODE_ENV: "development",
+    NEXT_TELEMETRY_DISABLED: "1",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
+    APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(input.nextPort),
+    EVE_HOSTED_ADAPTER: "0",
+    EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
+    // Next's env loader preserves explicitly supplied values. Empty values
+    // prevent .env.local from projecting provider credentials into this child.
+    VERCEL_OIDC_TOKEN: "",
+    VERCEL_TOKEN: "",
+    AI_GATEWAY_API_KEY: "",
+  } satisfies NodeJS.ProcessEnv;
 }
 
-function childExit(child: ChildProcess) {
-  return new Promise<number>((resolveExit, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolveExit(code ?? (signal ? 1 : 0)));
-  });
-}
-
-async function stop(child: ChildProcess) {
-  if (child.exitCode !== null || child.killed) return;
-  child.kill("SIGTERM");
-  await Promise.race([
-    childExit(child),
-    new Promise<void>((resolveWait) => setTimeout(resolveWait, 5_000)),
-  ]);
-  if (child.exitCode === null) child.kill("SIGKILL");
-}
-
-const developmentTools = {
-  node: HOSTED_NODE_VERSION,
-  bun: HOSTED_BUN_VERSION,
-  mise: HOSTED_MISE_VERSION,
-  rust: HOSTED_RUST_VERSION,
-} as const;
-
-async function supervise(input: {
-  sourceRoot: string;
-  runRoot: string;
-  codexRoot: string;
+function eveWrapperEnvironment(input: {
+  closed: Readonly<Record<string, string>>;
+  applicationRoot: string;
+  runsRoot: string;
   runtimeHome: string;
+  workflowData: string;
+}) {
+  return {
+    PATH: `${dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
+    HOME: input.runtimeHome,
+    TMPDIR: process.env.TMPDIR ?? "/tmp",
+    LANG: process.env.LANG ?? "C",
+    LC_ALL: process.env.LC_ALL ?? "C",
+    TZ: process.env.TZ ?? "UTC",
+    NODE_ENV: "production",
+    ...input.closed,
+    APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
+    APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
+    APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
+    APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
+    WORKFLOW_LOCAL_DATA_DIR: input.workflowData,
+    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
+  } satisfies NodeJS.ProcessEnv;
+}
+
+async function runEveCycle(input: {
+  cycleFile: string;
+  sourceRoot: string;
+  runsRoot: string;
+  codexRoot: string;
   destinationRoot: string;
-  image: string;
-  dependencyKey: string;
-  ociPlatform: string;
   nextPort: number;
   evePort: number;
+  signal: AbortSignal;
+  shutdownExitCode: () => number;
+  nextExited: Promise<{ kind: "next-exit"; code: number }>;
 }) {
-  const snapshot = await createDevelopmentSnapshot({
-    sourceRoot: input.sourceRoot,
-    runRoot: input.runRoot,
-  });
+  input.signal.throwIfAborted();
+  await rotateLocalEveCycleBinding(input.cycleFile);
+  const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
+  const runtimeHome = await privateRoot(join(activeRun, "home"));
+  const workflowData = await privateRoot(join(activeRun, "workflow-data"));
   try {
-    const snapshotDependencyKey = await developmentDependencyKey({
+    const snapshot = await createDevelopmentSnapshot({
+      sourceRoot: input.sourceRoot,
+      runRoot: activeRun,
+    });
+    const application = await createDevelopmentApplication({
+      repositoryRoot,
+      runRoot: activeRun,
+    });
+    const dependencyKey = await developmentDependencyKey({
       sourceRoot: snapshot.root,
-      platform: input.ociPlatform,
+      platform: "linux/amd64",
       tools: developmentTools,
     });
-    if (snapshotDependencyKey !== input.dependencyKey)
-      return { kind: "changed" as const, code: 0 };
+    const runtimeFingerprint =
+      await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageResult = await createDevelopmentPackage({
       repositoryRoot,
       outputRoot: input.codexRoot,
@@ -315,85 +165,64 @@ async function supervise(input: {
     const closed = developmentLaunchEnvironment({
       snapshotRoot: snapshot.root,
       destinationRoot: input.destinationRoot,
-      image: input.image,
+      sourceSha: snapshot.commit,
+      sourceTree: snapshot.tree,
       fingerprint: snapshot.fingerprint,
-      dependencyKey: input.dependencyKey,
+      dependencyKey,
       evePort: input.evePort,
     });
-    const baseEnvironment = {
-      NODE_ENV: "production" as const,
-      PATH: "/usr/bin:/bin",
-      HOME: input.runtimeHome,
-      TMPDIR: process.env.TMPDIR ?? tmpdir(),
-      LANG: process.env.LANG ?? "C",
-      LC_ALL: process.env.LC_ALL ?? "C",
-      ...closed,
-      APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
-      APP_BUILDER_EVE_PORT: String(input.evePort),
-    };
-    const node = requiredEnvironment("APP_BUILDER_DEV_NODE_BIN");
-    const launcher = join(
-      repositoryRoot,
-      ".config/mise/scripts/trusted-node-launcher",
-    );
     const eve = spawn(
-      launcher,
+      requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
       [
-        node,
-        join(repositoryRoot, "node_modules/eve/bin/eve.js"),
-        "dev",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(input.evePort),
-        "--no-ui",
+        "--import",
+        "tsx",
+        join(
+          repositoryRoot,
+          ".config/mise/scripts/repository/run-local-development-eve.mts",
+        ),
       ],
       {
         cwd: repositoryRoot,
-        env: baseEnvironment,
+        env: eveWrapperEnvironment({
+          closed,
+          applicationRoot: application.root,
+          runsRoot: input.runsRoot,
+          runtimeHome,
+          workflowData,
+        }),
         stdio: "inherit",
       },
     );
-    const next = spawn(
-      launcher,
-      [
-        node,
-        join(repositoryRoot, "node_modules/next/dist/bin/next"),
-        "dev",
-        "--hostname",
-        "127.0.0.1",
-        "--port",
-        String(input.nextPort),
-      ],
-      {
-        cwd: repositoryRoot,
-        env: { ...baseEnvironment, NODE_ENV: "development" },
-        stdio: "inherit",
-      },
-    );
-    const sourceAudit = new AbortController();
+    const watchers = new AbortController();
     const sourceChanged = waitForDevelopmentSourceChange({
       sourceRoot: input.sourceRoot,
       expectedFingerprint: snapshot.fingerprint,
-      signal: sourceAudit.signal,
-    }).then(() => ({ kind: "changed" as const, code: 0 }));
-    const eveExited = childExit(eve).then((code) => ({
-      kind: "exit" as const,
+      signal: watchers.signal,
+    }).then(() => ({ kind: "restart" as const, code: 0 }));
+    const runtimeChanged = waitForDevelopmentRuntimeChange({
+      repositoryRoot,
+      expectedFingerprint: runtimeFingerprint,
+      signal: watchers.signal,
+    }).then(() => ({ kind: "restart" as const, code: 0 }));
+    const eveExited = developmentChildExit(eve).then((code) => ({
+      kind: "eve-exit" as const,
       code,
     }));
-    const nextExited = childExit(next).then((code) => ({
-      kind: "exit" as const,
-      code,
-    }));
+    const stopping = waitForDevelopmentShutdown(
+      input.signal,
+      input.shutdownExitCode,
+    );
     try {
       const startup = await Promise.race([
         waitForDevelopmentMcp({
           endpoint: packageResult.receipt.endpoint,
-          signal: sourceAudit.signal,
+          signal: watchers.signal,
         }).then(() => ({ kind: "ready" as const, code: 0 })),
         sourceChanged,
+        runtimeChanged,
         eveExited,
-        nextExited,
+        input.nextExited,
+        stopping,
       ]);
       if (startup.kind !== "ready") return startup;
       await registerDevelopmentPackage({
@@ -409,66 +238,93 @@ async function supervise(input: {
         "Open a fresh Codex task and select Autograph App Builder (Development).",
       );
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
-      return await Promise.race([sourceChanged, eveExited, nextExited]);
+      return await Promise.race([
+        sourceChanged,
+        runtimeChanged,
+        eveExited,
+        input.nextExited,
+        stopping,
+      ]);
     } finally {
-      sourceAudit.abort();
-      await Promise.all([stop(eve), stop(next)]);
+      watchers.abort();
+      await stopDevelopmentChild(eve);
     }
   } finally {
-    await removeDevelopmentSnapshot(input.runRoot);
+    await removeDevelopmentSnapshot(activeRun);
   }
 }
 
-const args = parseDevelopmentArguments(process.argv.slice(2));
-const sourceRoot = await realpath(args.arrustedRoot);
-const artifactRoot = await privateRoot(
-  args.stateRoot ?? join(repositoryRoot, ".artifacts/development"),
-);
-const stateRoot = await privateRoot(join(artifactRoot, "state"));
-const runtimeHome = await privateRoot(join(stateRoot, "microsandbox-home"));
-const destinationRoot = await privateRoot(
-  args.destinationRoot ?? join(artifactRoot, "destination"),
-);
-const selectedPlatform = hostPlatform();
-while (true) {
-  const dependencyKey = await developmentDependencyKey({
-    sourceRoot,
-    platform: selectedPlatform.oci,
-    tools: developmentTools,
-  });
-  const runParent = await privateRoot(join(stateRoot, "runs"));
-  const buildRun = await realpath(await mkdtemp(join(runParent, "run-")));
-  await chmod(buildRun, 0o700);
-  let image: string;
-  try {
-    image = await prepareDevelopmentImage({
-      sourceRoot,
-      runRoot: buildRun,
-      stateRoot,
-      runtimeHome,
-      dependencyKey,
-      ociPlatform: selectedPlatform.oci,
-      tagPlatform: selectedPlatform.tag,
-    });
-  } finally {
-    await removeDevelopmentSnapshot(buildRun);
-  }
-  const activeRun = await realpath(await mkdtemp(join(runParent, "run-")));
-  await chmod(activeRun, 0o700);
-  const outcome = await supervise({
-    sourceRoot,
-    runRoot: activeRun,
-    codexRoot: await privateRoot(join(stateRoot, "codex")),
-    runtimeHome,
-    destinationRoot,
-    image,
-    dependencyKey,
-    ociPlatform: selectedPlatform.oci,
-    nextPort: args.nextPort,
-    evePort: args.evePort,
-  });
-  if (outcome.kind === "exit") process.exit(outcome.code);
-  console.log(
-    "Arrusted source changed; the prior snapshot was invalidated and development is restarting.",
+const shutdown = createDevelopmentShutdown();
+let next: ChildProcess | undefined;
+try {
+  const args = parseDevelopmentArguments(process.argv.slice(2));
+  const sourceRoot = await realpath(args.arrustedRoot);
+  const artifactRoot = await privateRoot(
+    args.stateRoot ?? join(repositoryRoot, ".artifacts/development"),
   );
+  const stateRoot = await privateRoot(join(artifactRoot, "state"));
+  const cycleFile = join(stateRoot, "eve-cycle");
+  await rotateLocalEveCycleBinding(cycleFile);
+  const cacheRoot = await privateRoot(join(artifactRoot, "cache"));
+  const runsRoot = await privateRoot(join(stateRoot, "runs"));
+  const nextHome = await privateRoot(join(stateRoot, "next-home"));
+  const destinationRoot = await privateRoot(
+    args.destinationRoot ?? join(artifactRoot, "destination"),
+  );
+  next = spawn(
+    requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+    [
+      join(repositoryRoot, "node_modules/next/dist/bin/next"),
+      "dev",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      String(args.nextPort),
+    ],
+    {
+      cwd: repositoryRoot,
+      env: nextEnvironment({
+        cycleFile,
+        evePort: args.evePort,
+        nextPort: args.nextPort,
+        runtimeHome: nextHome,
+      }),
+      stdio: "inherit",
+    },
+  );
+  const nextExited = developmentChildExit(next).then((code) => ({
+    kind: "next-exit" as const,
+    code,
+  }));
+  while (!shutdown.signal.aborted) {
+    const outcome = await runEveCycle({
+      cycleFile,
+      sourceRoot,
+      runsRoot,
+      codexRoot: await privateRoot(join(cacheRoot, "codex")),
+      destinationRoot,
+      nextPort: args.nextPort,
+      evePort: args.evePort,
+      signal: shutdown.signal,
+      shutdownExitCode: shutdown.exitCode,
+      nextExited,
+    });
+    if (
+      outcome.kind === "next-exit" ||
+      outcome.kind === "eve-exit" ||
+      outcome.kind === "stop"
+    ) {
+      process.exitCode = outcome.code;
+      break;
+    }
+    console.log(
+      "Development runtime changed; Eve and the local package are restarting while Next stays live.",
+    );
+  }
+} catch (error) {
+  if (!shutdown.signal.aborted) throw error;
+  process.exitCode = shutdown.exitCode();
+} finally {
+  if (next !== undefined) await stopDevelopmentChild(next);
+  shutdown.dispose();
 }

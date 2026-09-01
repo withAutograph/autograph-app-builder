@@ -44,7 +44,6 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     request: Request,
   ) => Promise<EveSessionService | undefined>;
 }) {
-  let localService: EveSessionService | undefined;
   let hosted:
     | {
         origin: string;
@@ -64,10 +63,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
   ): Promise<EveSessionService | undefined> => {
     const mode = adapterMode(input.environment);
     if (mode === "unavailable") return undefined;
-    if (mode === "local") {
-      localService ??= createEveSessionService(input.environment);
-      return localService;
-    }
+    if (mode === "local") return createEveSessionService(input.environment);
 
     if (hosted === undefined) {
       const config = readPreviewOAuthRuntimeConfig(input.environment);

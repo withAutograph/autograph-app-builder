@@ -35,6 +35,186 @@ describe("Eve input response mapping", () => {
 });
 
 describe("local Eve acceptance", () => {
+  it("recovers a durable waiting boundary after the response stream disconnects", async () => {
+    const durableEvents = [
+      {
+        type: "step.completed",
+        data: { turnId: "turn-recovery" },
+      },
+      { type: "session.waiting", data: {} },
+    ] as MessageStreamEvent[];
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        yield durableEvents[0]!;
+        throw new Error("connection lost before the durable tail");
+      },
+    };
+    const snapshot = vi.fn(async () => ({
+      events: durableEvents,
+      session: { sessionId: "wrun_stream_recovery", streamIndex: 2 },
+    }));
+    const session = {
+      state: { sessionId: "wrun_stream_recovery", streamIndex: 0 },
+      snapshot,
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const attach = vi.fn(() => session);
+    const service = createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach,
+        } as never,
+      },
+      { stateGeneration: "stream-recovery" },
+    );
+    const started = await service.start({
+      prompt: "Build",
+      clientRequestId: "stream-recovery-start",
+    });
+
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({
+          sessionId: started.sessionId,
+          cursor: 0,
+          limit: 100,
+        }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+    });
+    await expect(
+      service.get({ sessionId: started.sessionId, cursor: 2, limit: 100 }),
+    ).resolves.toMatchObject({ status: "waiting", cursor: 2, events: [] });
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(attach).toHaveBeenLastCalledWith(started.sessionId, {
+      streamIndex: 2,
+    });
+  });
+
+  it("preserves buffered settlement across a Next development module reload", async () => {
+    const settledEvents = [
+      {
+        type: "message.completed",
+        data: { turnId: "turn-reload", message: "Your plan is ready." },
+      },
+      { type: "session.waiting", data: {} },
+    ] as unknown as MessageStreamEvent[];
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        for (const event of settledEvents) yield event;
+      },
+    };
+    const session = {
+      state: { sessionId: "wrun_module_reload" },
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const firstService = createLocalEveSessionService({
+      sessions: {
+        create: vi.fn(async () => ({ session, response })),
+        attach: vi.fn(() => session),
+      } as never,
+    });
+    const started = await firstService.start({
+      prompt: "Build",
+      clientRequestId: "module-reload-start",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        firstService.get({
+          sessionId: started.sessionId,
+          cursor: 0,
+          limit: 100,
+        }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+    });
+
+    vi.resetModules();
+    const reloaded = await import("./service");
+    const reloadedService = reloaded.createLocalEveSessionService({
+      sessions: {
+        create: vi.fn(),
+        attach: vi.fn(() => session),
+      } as never,
+    });
+
+    await expect(
+      reloadedService.get({
+        sessionId: started.sessionId,
+        cursor: 0,
+        limit: 100,
+      }),
+    ).resolves.toMatchObject({
+      status: "waiting",
+      cursor: 2,
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "assistant_message",
+          text: "Your plan is ready.",
+        }),
+        expect.objectContaining({ type: "status", status: "waiting" }),
+      ]),
+    });
+  });
+
+  it("does not preserve sessions across fresh Eve cycle generations", async () => {
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        yield { type: "session.waiting", data: {} } as MessageStreamEvent;
+      },
+    };
+    const session = {
+      state: { sessionId: "wrun_previous_cycle" },
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const client = {
+      sessions: {
+        create: vi.fn(async () => ({ session, response })),
+        attach: vi.fn(() => session),
+      } as never,
+    };
+    const firstCycle = createLocalEveSessionService(client, {
+      stateGeneration: "cycle-one",
+    });
+    const started = await firstCycle.start({
+      prompt: "Build",
+      clientRequestId: "previous-cycle-start",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        firstCycle.get({
+          sessionId: started.sessionId,
+          cursor: 0,
+          limit: 100,
+        }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 1 });
+    });
+
+    const nextCycle = createLocalEveSessionService(client, {
+      stateGeneration: "cycle-two",
+    });
+    await expect(
+      nextCycle.get({
+        sessionId: started.sessionId,
+        cursor: 0,
+        limit: 100,
+      }),
+    ).resolves.toEqual({
+      sessionId: started.sessionId,
+      status: "working",
+      cursor: 0,
+      events: [],
+    });
+  });
+
   it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
     const content = "<!doctype html><html><body>Vendor queue</body></html>";
     const path = "prototype/vendor-onboarding/index.html";
@@ -207,7 +387,7 @@ describe("local Eve acceptance", () => {
     });
     await expect(
       service.get({ sessionId: start.sessionId, cursor: 0, limit: 100 }),
-    ).resolves.toMatchObject({ sessionId: start.sessionId, events: [] });
+    ).resolves.toMatchObject({ sessionId: start.sessionId });
     await expect(
       service.send({
         sessionId: start.sessionId,

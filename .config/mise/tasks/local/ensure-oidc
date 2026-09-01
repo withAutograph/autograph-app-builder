@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE hide=true
+#MISE description="Ensure one current project-scoped Vercel Development OIDC token"
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  echo "usage: mise run local:ensure-oidc" >&2
+  exit 64
+fi
+if [ "${VERCEL_TOKEN+x}" = x ] || [ "${AI_GATEWAY_API_KEY+x}" = x ]; then
+  echo "local:ensure-oidc refuses static provider credentials" >&2
+  exit 78
+fi
+
+vercel_bin="$(mise which vercel)"
+mise_bin="${MISE_BIN_PATH:-$(command -v mise)}"
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/ensure-local-development-oidc.ts \
+  "$vercel_bin" "$mise_bin"

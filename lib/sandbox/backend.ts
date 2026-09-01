@@ -7,8 +7,10 @@ export type SandboxBackendKind =
   | "fixture-just-bash"
   | "local-just-bash"
   | "local-microsandbox"
+  | "vercel-development"
   | "vercel-preview"
   | "vercel-production"
+  | "unsupported-development"
   | "unsupported-vercel";
 
 export type SandboxBackendPlan = {
@@ -50,6 +52,24 @@ export function sandboxBackendPlan(input: {
       blockers: [],
     };
   }
+  const developmentBinding = [
+    environment.APP_BUILDER_EXECUTION_MODE,
+    environment.APP_BUILDER_SANDBOX_PROVIDER,
+    environment.APP_BUILDER_EXECUTION_BUNDLE,
+  ];
+  if (
+    developmentBinding[0] === "development" &&
+    developmentBinding[1] === "vercel" &&
+    developmentBinding[2] === "local-development"
+  )
+    return { kind: "vercel-development", blockers: [] };
+  if (developmentBinding.some((value) => value !== undefined && value !== ""))
+    return {
+      kind: "unsupported-development",
+      blockers: [
+        "Development execution requires the exact local Vercel Sandbox binding.",
+      ],
+    };
   if (input.localImageConfigured)
     return { kind: "local-microsandbox", blockers: [] };
   return {
@@ -67,9 +87,23 @@ export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
     vercelHosted: () => Hosted;
   },
 ): Hosted | Local | NonExecuting {
-  if (isHostedVercelSandboxBackend(kind)) return factories.vercelHosted();
+  if (kind === "unsupported-development" || kind === "unsupported-vercel")
+    throw new Error(
+      "The App Builder sandbox environment binding is unsupported.",
+    );
+  if (isVercelSandboxBackend(kind)) return factories.vercelHosted();
   if (kind === "local-microsandbox") return factories.localMicrosandbox();
   return factories.nonExecuting();
+}
+
+export function isVercelSandboxBackend(
+  kind: SandboxBackendKind,
+): kind is "vercel-development" | "vercel-preview" | "vercel-production" {
+  return (
+    kind === "vercel-development" ||
+    kind === "vercel-preview" ||
+    kind === "vercel-production"
+  );
 }
 
 export function isHostedVercelSandboxBackend(

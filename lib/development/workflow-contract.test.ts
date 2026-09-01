@@ -5,11 +5,12 @@ import { describe, expect, it } from "vitest";
 describe("two-mode development workflow contract", () => {
   it("exposes one mise-owned non-release entrypoint and keeps its mechanics internal", () => {
     const task = readFileSync(".config/mise/tasks/dev", "utf8");
-    expect(task).toContain("scripts/development.mts");
-    expect(task).toContain("mise which docker");
-    expect(task).toContain("mise which msb");
+    expect(task).toContain("scripts/development-entry.mts");
+    expect(task).toContain("mise run local:ensure-oidc");
     expect(task).toContain("mise which codex");
     expect(task).toContain("CODEX_HOME");
+    expect(task).not.toContain("mise which docker");
+    expect(task).not.toContain("mise which msb");
     expect(
       statSync(".config/mise/tasks/dev").mode & constants.S_IXUSR,
     ).not.toBe(0);
@@ -18,12 +19,24 @@ describe("two-mode development workflow contract", () => {
     const runner = readFileSync("scripts/development.mts", "utf8");
     expect(runner).toContain("createDevelopmentSnapshot");
     expect(runner).toContain("waitForDevelopmentSourceChange");
-    expect(runner).toContain("Arrusted source changed");
+    expect(runner).toContain("createDevelopmentApplication");
+    expect(runner).toContain("waitForDevelopmentRuntimeChange");
     expect(runner).toContain("createDevelopmentPackage");
     expect(runner).toContain("waitForDevelopmentMcp");
     expect(runner).toContain("registerDevelopmentPackage");
-    expect(runner).toContain('join(stateRoot, "microsandbox-home")');
-    expect(runner).toContain("APP_BUILDER_DEV_RUNTIME_HOME");
+    expect(runner).toContain("node_modules/next/dist/bin/next");
+    expect(runner.match(/node_modules\/next\/dist\/bin\/next/gu)).toHaveLength(
+      1,
+    );
+    expect(runner).toContain('APP_BUILDER_SANDBOX_PROVIDER: "vercel"');
+    expect(runner).toContain("APP_BUILDER_LOCAL_EVE_CYCLE_FILE");
+    expect(runner.match(/await rotateLocalEveCycleBinding\(/gu)).toHaveLength(
+      2,
+    );
+    expect(runner).toContain('WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0"');
+    expect(runner).not.toContain("microsandbox");
+    expect(runner).not.toContain("docker");
+    expect(runner).not.toContain("APP_BUILDER_SANDBOX_IMAGE");
     expect(runner.indexOf("waitForDevelopmentMcp")).toBeLessThan(
       runner.indexOf("registerDevelopmentPackage({"),
     );
@@ -35,33 +48,16 @@ describe("two-mode development workflow contract", () => {
     expect(runner).not.toMatch(/gh\s+(?:pr|repo|release)/u);
   });
 
-  it("separates the stable toolchain from platform-specific reusable dependency state", () => {
+  it("keys the Vercel template by dependencies without binding release artifacts", () => {
     const toolchain = readFileSync(
-      "containers/eve-sandbox/dev-toolchain.Dockerfile",
+      "lib/sandbox/development-toolchain.ts",
       "utf8",
     );
-    const dependencies = readFileSync(
-      "containers/eve-sandbox/dev-dependencies.Dockerfile",
-      "utf8",
-    );
-    expect(toolchain).not.toContain("arrusted-source");
-    expect(toolchain).not.toContain("bun install --frozen-lockfile");
-    expect(toolchain).toContain(
-      'dev.autograph.scope="os-node-bun-mise-microsandbox"',
-    );
-    expect(dependencies).toContain("COPY --from=arrusted-source");
-    expect(dependencies).toContain(
-      "bun install --frozen-lockfile --ignore-scripts",
-    );
-    expect(dependencies).toContain(
-      'if ! dependency_target="$(readlink -f -- "${dependency_link}")"',
-    );
-    expect(dependencies).toContain(
-      "COPY --from=dependency-builder /opt/app-builder/cargo /opt/app-builder/cargo",
-    );
-    expect(dependencies).toContain('"scope": "development-execution"');
-    expect(dependencies).toContain("DEPENDENCY_KEY");
-    expect(dependencies).toContain("PLATFORM");
+    expect(toolchain).toContain('"scope":"development-execution"');
+    expect(toolchain).toContain("developmentVercelProviderTemplateKey");
+    expect(toolchain).toContain("developmentPinnedToolchainKey");
+    expect(toolchain).not.toContain("hostedToolchainBootstrapCommand");
+    expect(toolchain).not.toContain("hostedToolchainRevalidationKey");
   });
 
   it("exposes only prove and publish for release promotion and hides legacy helpers", () => {

@@ -32,6 +32,10 @@ missing operation with a raw shell command or generic file write.
 
 3. After an eligible exact source receipt is resolved, automatically inspect
    the source read-only and prepare its isolated builder-owned workspace. Use
+   the runtime's single preselected existing-repository snapshot during local
+   development without asking for or displaying its host path. Outside that
+   closed binding, retain the explicit allowlisted-path requirement.
+   Use
    `workspace_status` to verify preparation, then perform known file reads under
    the exact absolute `workspacePath` returned by preparation. Never pass that
    sandbox path or an internal hosted artifact path to `inspect_repository`.

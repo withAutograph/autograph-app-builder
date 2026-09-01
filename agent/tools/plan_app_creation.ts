@@ -1,7 +1,13 @@
 import { defineTool } from "eve/tools";
+import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
+import {
+  prepareOrReuseDependencies,
+  shouldPreferLiveTemplateDependencies,
+  type DependencyReadyState,
+} from "@/lib/agent/target-dependency-preparation";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -13,8 +19,8 @@ import {
 import {
   assertExactDependencyTargetBinding,
   inspectDependencyCache,
+  type ObservedDependencyCache,
 } from "@/lib/repository/dependency-cache";
-import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -25,7 +31,7 @@ import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-te
 
 export default defineTool({
   description:
-    "Required completion gate for every app creation or existing-app iteration. Run it only after dependency preparation. For an existing app, first call inspect_existing_app after workspace preparation, read the bounded app-owned files, and provide every exact replacement as existingAppChanges; never call this tool without those changes for an existing app. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
+    "Required completion gate for every app creation or existing-app iteration. It automatically prepares or reuses verified dependencies before planning. For an existing app, first call inspect_existing_app after workspace preparation, read the bounded app-owned files, and provide every exact replacement as existingAppChanges; never call this tool without those changes for an existing app. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, arbitrary shell, arguments, cwd, or caller-controlled environment are available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     existingAppChanges: z
@@ -40,36 +46,53 @@ export default defineTool({
       .optional(),
   }),
   async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
-    const current = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(current, "target identity and planning");
-    if (
-      current.phase === "empty" ||
-      current.phase === "prepared" ||
-      current.phase === "app_spec_accepted"
-    )
+    const state = appBuilderWorkflowState.get();
+    assertUpstreamMutationAllowed(state, "target identity and planning");
+    if (state.phase === "empty" || state.phase === "prepared")
       throw new Error(
-        "Prepare the approved offline dependency closure before running target planning.",
+        "Accept a build-ready AppSpec before running target planning.",
       );
-    if (current.appSpec.digest !== expectedAppSpecDigest)
-      throw new Error("The accepted AppSpec changed before target planning.");
-    exactPrototypeArtifact(current.artifacts, {
-      path: current.appSpec.artifactPath,
-      digest: current.appSpec.digest,
-      revision: current.appSpec.artifactRevision,
-      sessionId: ctx.session.id,
-    });
-    const sandbox = await ctx.getSandbox();
-    await inspectSourceBoundSandboxWorkspace({
-      sandbox,
-      receipt: current.sourceReceipt,
-      expectedWorkspace: current.workspace,
-    });
-    const cache = await inspectDependencyCache(
-      sandbox,
-      process.env,
-      current.workspace,
-      current.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
-    );
+    let current: DependencyReadyState;
+    let sandbox: SandboxSession;
+    let cache: ObservedDependencyCache;
+    if (state.phase === "app_spec_accepted") {
+      const prepared = await prepareOrReuseDependencies({
+        current: state,
+        expectedAppSpecDigest,
+        sessionId: ctx.session.id,
+        callId: ctx.callId,
+        environment: process.env,
+        getSandbox: () => ctx.getSandbox(),
+      });
+      current = prepared.state;
+      sandbox = prepared.sandbox;
+      cache = prepared.cache;
+    } else {
+      current = state;
+      if (current.appSpec.digest !== expectedAppSpecDigest)
+        throw new Error("The accepted AppSpec changed before target planning.");
+      exactPrototypeArtifact(current.artifacts, {
+        path: current.appSpec.artifactPath,
+        digest: current.appSpec.digest,
+        revision: current.appSpec.artifactRevision,
+        sessionId: ctx.session.id,
+      });
+      sandbox = await ctx.getSandbox();
+      await inspectSourceBoundSandboxWorkspace({
+        sandbox,
+        receipt: current.sourceReceipt,
+        expectedWorkspace: current.workspace,
+      });
+      cache = await inspectDependencyCache(
+        sandbox,
+        process.env,
+        current.workspace,
+        shouldPreferLiveTemplateDependencies(
+          current.sourceReceipt.version,
+          process.env,
+        ),
+      );
+    }
     assertExactDependencyTargetBinding({
       workspace: current.workspace,
       sourceReceipt: current.sourceReceipt,
@@ -108,7 +131,6 @@ export default defineTool({
       dependencyCacheDigest: execution.dependencyCacheDigest,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
-      existingAppChanges,
     };
     let identityReceipt: TargetIdentityReceipt | undefined =
       current.phase === "identity_resolved"
@@ -124,6 +146,7 @@ export default defineTool({
       appSpecContent: current.appSpec.content,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
+      existingAppChanges,
       onIdentity(identity) {
         if (identityReceipt !== undefined) {
           if (

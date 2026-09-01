@@ -12,6 +12,7 @@ import {
   outstandingInstalledEveRequests,
   projectInstalledEveEvents,
 } from "./public-events";
+import { readLocalEveCycleBinding } from "./local-cycle-binding";
 
 export class AdapterNotConfiguredError extends Error {
   constructor() {
@@ -81,13 +82,54 @@ export function toEveInputResponses(
   );
 }
 
-const localRequests = new Map<string, string>();
-const localSessionEvents = new Map<string, MessageStreamEvent[]>();
-const localSessionHandles = new Map<string, ClientSession>();
 type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
   cancel(): Promise<unknown>;
 };
-const localActiveResponses = new Map<string, CancellableResponse>();
+
+type LocalEveRuntimeState = {
+  generation: string;
+  requests: Map<string, string>;
+  sessionEvents: Map<string, MessageStreamEvent[]>;
+  sessionHandles: Map<string, ClientSession>;
+  activeResponses: Map<string, CancellableResponse>;
+  recoveryRequired: Set<string>;
+  recoveries: Map<string, Promise<void>>;
+};
+
+const localEveRuntimeStateKey =
+  "__AUTOGRAPH_APP_BUILDER_LOCAL_EVE_RUNTIME_STATE_V1__" as const;
+const localRuntimeGlobal = globalThis as typeof globalThis & {
+  [localEveRuntimeStateKey]?: LocalEveRuntimeState;
+};
+
+function localRuntimeState(generation: string): LocalEveRuntimeState {
+  const existing = localRuntimeGlobal[localEveRuntimeStateKey];
+  if (existing !== undefined && existing.generation === generation)
+    return existing;
+  return (localRuntimeGlobal[localEveRuntimeStateKey] = {
+    generation,
+    requests: new Map(),
+    sessionEvents: new Map(),
+    sessionHandles: new Map(),
+    activeResponses: new Map(),
+    recoveryRequired: new Set(),
+    recoveries: new Map(),
+  });
+}
+
+function localCycleGeneration(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+) {
+  if (
+    environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
+    environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
+  )
+    return `unbound:${environment.EVE_AGENT_HOST ?? "unknown"}`;
+  const path = environment.APP_BUILDER_LOCAL_EVE_CYCLE_FILE;
+  if (path === undefined)
+    throw new Error("The local Eve cycle binding was unavailable.");
+  return `cycle:${readLocalEveCycleBinding(path)}`;
+}
 
 function resultForEvents(
   sessionId: string,
@@ -128,21 +170,23 @@ function acceptedResult(
 }
 
 function consumeResponse(
+  state: LocalEveRuntimeState,
   sessionId: string,
   response: CancellableResponse,
 ): void {
-  const events = localSessionEvents.get(sessionId) ?? [];
-  localSessionEvents.set(sessionId, events);
-  localActiveResponses.set(sessionId, response);
+  const events = state.sessionEvents.get(sessionId) ?? [];
+  state.sessionEvents.set(sessionId, events);
+  state.activeResponses.set(sessionId, response);
   void (async () => {
     try {
       for await (const event of response) events.push(event);
     } catch {
-      // Acceptance is already durable in Eve. A later read or follow-up remains
-      // authoritative; a stream failure must never delay the public handle.
+      state.recoveryRequired.add(sessionId);
     } finally {
-      if (localActiveResponses.get(sessionId) === response) {
-        localActiveResponses.delete(sessionId);
+      if (deriveInstalledEveStatus(events) === "working")
+        state.recoveryRequired.add(sessionId);
+      if (state.activeResponses.get(sessionId) === response) {
+        state.activeResponses.delete(sessionId);
       }
     }
   })();
@@ -150,13 +194,41 @@ function consumeResponse(
 
 export function createLocalEveSessionService(
   client: Pick<Client, "sessions">,
+  options: { stateGeneration?: string } = {},
 ): EveSessionService {
+  const state = localRuntimeState(options.stateGeneration ?? "process");
+  const localRequests = state.requests;
+  const localSessionEvents = state.sessionEvents;
+  const localSessionHandles = state.sessionHandles;
+  const localActiveResponses = state.activeResponses;
+
   function sessionFor(sessionId: string): ClientSession {
     const existing = localSessionHandles.get(sessionId);
     if (existing !== undefined) return existing;
     const attached = client.sessions.attach(sessionId);
     localSessionHandles.set(sessionId, attached);
     return attached;
+  }
+
+  async function recoverDurableTail(sessionId: string) {
+    if (!state.recoveryRequired.has(sessionId)) return;
+    const existing = state.recoveries.get(sessionId);
+    if (existing !== undefined) return existing;
+    const recovery = (async () => {
+      const snapshot = await sessionFor(sessionId).snapshot();
+      if (snapshot.session.sessionId !== sessionId)
+        throw new Error("Eve changed the local session during recovery.");
+      localSessionEvents.set(sessionId, [...snapshot.events]);
+      localSessionHandles.set(
+        sessionId,
+        client.sessions.attach(sessionId, {
+          streamIndex: snapshot.session.streamIndex,
+        }),
+      );
+      state.recoveryRequired.delete(sessionId);
+    })().finally(() => state.recoveries.delete(sessionId));
+    state.recoveries.set(sessionId, recovery);
+    return recovery;
   }
 
   function sessionAtBufferedTail(sessionId: string): ClientSession {
@@ -179,10 +251,11 @@ export function createLocalEveSessionService(
       const sessionId = session.state.sessionId;
       localRequests.set(key, sessionId);
       localSessionHandles.set(sessionId, session);
-      consumeResponse(sessionId, response);
+      consumeResponse(state, sessionId, response);
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async get({ sessionId, cursor, limit }) {
+      await recoverDurableTail(sessionId);
       return resultForEvents(
         sessionId,
         localSessionEvents.get(sessionId) ?? [],
@@ -194,7 +267,7 @@ export function createLocalEveSessionService(
       const key = `send:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
         const response = await sessionAtBufferedTail(sessionId).send(message);
-        consumeResponse(sessionId, response);
+        consumeResponse(state, sessionId, response);
         localRequests.set(key, sessionId);
       }
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
@@ -217,7 +290,7 @@ export function createLocalEveSessionService(
         const result = await sessionAtBufferedTail(sessionId).respond(
           toEveInputResponses(responses),
         );
-        consumeResponse(sessionId, result);
+        consumeResponse(state, sessionId, result);
         localRequests.set(key, sessionId);
       }
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
@@ -258,6 +331,7 @@ export function createEveSessionService(
     }
     return createLocalEveSessionService(
       new Client({ host: url.origin, redirect: "error" }),
+      { stateGeneration: localCycleGeneration(environment) },
     );
   }
   return {

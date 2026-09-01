@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("generic sandbox tool boundaries", () => {
-  it.each(["bash", "read_file", "write_file"])(
+  it.each(["agent", "bash", "read_file", "write_file"])(
     "keeps %s unavailable",
     async (tool) => {
       const source = await readFile(

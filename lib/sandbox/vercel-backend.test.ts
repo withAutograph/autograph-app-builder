@@ -75,6 +75,72 @@ describe("hosted Vercel sandbox backend", () => {
     });
   });
 
+  it("uses the closed Development environment and dependency bootstrap hosts", () => {
+    let options: HostedVercelBackendOptions | undefined;
+    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
+      options = input;
+      return { name: "injected-vercel-backend" } as never;
+    }) satisfies HostedVercelBackendFactory);
+    createHostedVercelBackend({
+      factory,
+      bootstrapNetworkHosts: ["registry.npmjs.org"],
+      sandboxEnvironment: {
+        MISE_AUTO_INSTALL: "false",
+        CARGO_NET_OFFLINE: "true",
+      },
+      runtimeRecoveryPrewarmInput: recoveryInput(),
+    });
+    expect(options?.networkPolicy).toEqual({
+      allow: ["registry.npmjs.org"],
+    });
+    expect(options?.env).toEqual({
+      MISE_AUTO_INSTALL: "false",
+      CARGO_NET_OFFLINE: "true",
+    });
+  });
+
+  it("maps changing authored keys to one dependency-only provider template", async () => {
+    const providerKey = "development-dependencies";
+    const session = { id: "session-1" } as SandboxSession;
+    const handle = {
+      session,
+      useSessionFn: async () => session,
+      captureState: async () => ({
+        backendName: "vercel",
+        metadata: {},
+        sessionKey: "session-1",
+      }),
+      stop: async () => undefined,
+      shutdown: async () => undefined,
+    } satisfies SandboxBackendHandle;
+    const create = vi.fn(async () => handle);
+    const prewarm = vi.fn(async () => ({ reused: true }));
+    const backend = createHostedVercelBackend({
+      factory: backendFactory({ create, prewarm }),
+      providerTemplateKey: () => providerKey,
+      runtimeRecoveryPrewarmInput: recoveryInput(),
+    });
+
+    await backend.prewarm({
+      bootstrap: async () => undefined,
+      runtimeContext,
+      seedFiles: [],
+      templateKey: "authored-key-a",
+    });
+    await backend.create({
+      runtimeContext,
+      sessionKey: "session-1",
+      templateKey: "authored-key-b",
+    });
+
+    expect(prewarm).toHaveBeenCalledWith(
+      expect.objectContaining({ templateKey: providerKey }),
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ templateKey: providerKey }),
+    );
+  });
+
   it("replays the exact non-empty managed seeds and bootstrap, then retries once", async () => {
     const session = { id: "session-1" } as SandboxSession;
     const stop = vi.fn(async () => undefined);

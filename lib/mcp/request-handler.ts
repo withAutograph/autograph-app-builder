@@ -15,7 +15,10 @@ import {
 } from "../eve/service";
 import type { HostedEveStore } from "../eve/hosted-store";
 import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
-import { attachPrototypePreviewUrl } from "./browser-preview";
+import {
+  attachPrototypePreviewUrl,
+  prototypePreviewRequestUrl,
+} from "./browser-preview";
 import {
   eveCancelInputSchema,
   eveGetInputSchema,
@@ -305,7 +308,10 @@ export function createMcpRequestHandler(
     if (mode === "local") {
       try {
         return createAutographMcpHandler(createEveSessionService(environment), {
-          requestUrl: request.url,
+          requestUrl: prototypePreviewRequestUrl({
+            environment,
+            requestUrl: request.url,
+          }),
         })(request);
       } catch {
         return unavailableResponse();
