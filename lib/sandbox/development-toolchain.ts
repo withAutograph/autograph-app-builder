@@ -132,6 +132,79 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
     throw new Error("Development Vercel bootstrap identity was invalid.");
 }
 
+/**
+ * Makes Bun's installed dependency links portable before the closure is
+ * archived. Links into node_modules stay relative to that closure. Workspace
+ * links are rebound to the fixed sandbox repository path. Everything else is
+ * rejected rather than producing a cache that will fail later.
+ */
+export const developmentDependencySymlinkScript = String.raw`const fs = require("node:fs");
+const path = require("node:path");
+
+const sourceRoot = fs.realpathSync(process.argv[2]);
+const modulesRoot = fs.realpathSync(path.join(sourceRoot, "node_modules"));
+const contains = (root, candidate) => {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) &&
+      relative !== ".." &&
+      !relative.startsWith(".." + path.sep))
+  );
+};
+
+const directories = [modulesRoot];
+const links = [];
+while (directories.length > 0) {
+  const directory = directories.pop();
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const link = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      directories.push(link);
+      continue;
+    }
+    if (entry.isSymbolicLink()) links.push(link);
+  }
+}
+
+const replacements = [];
+for (const link of links) {
+  let target;
+  try {
+    target = fs.realpathSync(link);
+  } catch {
+    throw new Error(
+      "Unresolved development dependency link: " +
+        path.relative(modulesRoot, link),
+    );
+  }
+
+  let replacement;
+  if (contains(modulesRoot, target)) {
+    replacement = path.relative(path.dirname(link), target) || ".";
+    if (path.isAbsolute(replacement))
+      throw new Error("Development dependency link was not portable.");
+  } else if (contains(sourceRoot, target)) {
+    const sourceRelative = path.relative(sourceRoot, target);
+    replacement =
+      "/workspace/repository" +
+      (sourceRelative === ""
+        ? ""
+        : "/" + sourceRelative.split(path.sep).join("/"));
+  } else {
+    throw new Error(
+      "Development dependency link escaped the source: " +
+        path.relative(modulesRoot, link),
+    );
+  }
+
+  replacements.push({ link, replacement });
+}
+for (const { link, replacement } of replacements) {
+  fs.unlinkSync(link);
+  fs.symlinkSync(replacement, link);
+}`;
+
 const developmentToolchainCase = (
   architecture: keyof typeof hostedToolchainArtifacts,
 ) => {
@@ -331,7 +404,9 @@ stage='javascript-install'
 bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent
 test -d node_modules && test ! -L node_modules
 node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(p,"utf8")).version;if(read("node_modules/path-to-regexp/package.json")!=="8.4.2"||read("node_modules/@vercel/microfrontends/package.json")!=="2.4.0"||read("node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="6.3.0")process.exit(1)'
-find node_modules -type l -print0 | while IFS= read -r -d '' link; do target="$(readlink -f -- "$link")" || continue; case "$target" in "$work/source/"*) relative_target="$(printf '%s' "$target" | sed "s#^$work/source/##")"; rm "$link"; ln -s "/workspace/repository/$relative_target" "$link" ;; esac; done
+node - "$work/source" <<'NODE'
+${developmentDependencySymlinkScript}
+NODE
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"

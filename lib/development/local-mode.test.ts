@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION,
   createDevelopmentSnapshot,
   developmentDependencyKey,
   fingerprintDevelopmentSource,
@@ -173,6 +174,7 @@ describe("development source snapshots", () => {
 
 describe("development dependency key", () => {
   it("reuses code-only dependency state and refreshes on lock or platform changes", async () => {
+    expect(DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION).toBe(2);
     const source = await fixture();
     const tools = {
       node: "24.18.0",

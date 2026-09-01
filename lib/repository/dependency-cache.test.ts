@@ -468,6 +468,9 @@ describe("offline dependency cache", () => {
     );
     expect(run.mock.calls[3]?.[0]).not.toHaveProperty("env");
     const linkCommand = run.mock.calls[3]?.[0].command as string;
+    expect(linkCommand).not.toContain(
+      "test -d /workspace/repository && test ! -L /workspace/repository",
+    );
     expect(linkCommand).toContain(
       `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
     );
@@ -554,6 +557,16 @@ describe("offline dependency cache", () => {
     );
     expect(run.mock.calls[3]?.[0].command).toContain(
       `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
+    );
+    const developmentLinkCommand = run.mock.calls[3]?.[0].command as string;
+    expect(developmentLinkCommand).toContain(
+      `test -d /workspace/repository && test ! -L /workspace/repository`,
+    );
+    expect(developmentLinkCommand).toContain(
+      `test "$(readlink -- /workspace/repository/node_modules)" = "/opt/app-builder/dependencies/${archiveDigest}/node_modules"`,
+    );
+    expect(developmentLinkCommand).toContain(
+      `ln -s /opt/app-builder/dependencies/${archiveDigest}/node_modules /workspace/repository/node_modules`,
     );
     const rustCommand = run.mock.calls[5]?.[0].command as string;
     expect(rustCommand).toContain(

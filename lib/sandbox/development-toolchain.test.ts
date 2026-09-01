@@ -1,7 +1,21 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  mkdir,
+  mkdtemp,
+  readlink,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
   DEVELOPMENT_SANDBOX_ENVIRONMENT,
+  developmentDependencySymlinkScript,
   developmentPinnedToolchainCommand,
   developmentVercelDependencyCommand,
   developmentVercelProviderTemplateKey,
@@ -62,6 +76,8 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
+    expect(command).toContain('node - "$work/source"');
+    expect(command).not.toContain('readlink -f -- "$link"');
     expect(command).toContain('directory = "/opt/app-builder/cargo/vendor"');
     expect(command).toContain(
       'if grep -F "$work" "$work/cargo-closure/config.toml"',
@@ -72,6 +88,83 @@ describe("Development Vercel Sandbox dependency template", () => {
       CARGO_NET_OFFLINE: "true",
       MISE_AUTO_INSTALL: "false",
     });
+  });
+
+  it("keeps Bun links inside the closure and rebinds only workspace links", async () => {
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "app-builder-development-links-")),
+    );
+    try {
+      const source = join(root, "source");
+      const modules = join(source, "node_modules");
+      const packageRoot = join(
+        modules,
+        ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp",
+      );
+      const workspacePackage = join(source, "packages/shared");
+      const workspaceBin = join(workspacePackage, "bin/shared.mjs");
+      await mkdir(packageRoot, { recursive: true });
+      await mkdir(join(workspacePackage, "bin"), { recursive: true });
+      await mkdir(join(modules, ".bin"));
+      await writeFile(join(packageRoot, "package.json"), "{}\n");
+      await writeFile(join(workspacePackage, "package.json"), "{}\n");
+      await writeFile(workspaceBin, "export {};\n");
+      await symlink(packageRoot, join(modules, "path-to-regexp"));
+      await symlink(workspacePackage, join(modules, "workspace-shared"));
+      await symlink(
+        "../workspace-shared/bin/shared.mjs",
+        join(modules, ".bin/shared"),
+      );
+
+      execFileSync(process.execPath, ["-", source], {
+        input: developmentDependencySymlinkScript,
+      });
+
+      expect(await readlink(join(modules, "path-to-regexp"))).toBe(
+        ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp",
+      );
+      expect(await readlink(join(modules, "workspace-shared"))).toBe(
+        "/workspace/repository/packages/shared",
+      );
+      expect(await readlink(join(modules, ".bin/shared"))).toBe(
+        "/workspace/repository/packages/shared/bin/shared.mjs",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unresolved and outside dependency links", async () => {
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "app-builder-development-links-")),
+    );
+    try {
+      const source = join(root, "source");
+      const modules = join(source, "node_modules");
+      const outside = join(root, "outside");
+      await mkdir(modules, { recursive: true });
+      await mkdir(outside);
+      await symlink(join(source, "missing"), join(modules, "missing"));
+      const unresolved = spawnSync(process.execPath, ["-", source], {
+        input: developmentDependencySymlinkScript,
+      });
+      expect(unresolved.status).not.toBe(0);
+      expect(unresolved.stderr.toString()).toContain(
+        "Unresolved development dependency link: missing",
+      );
+
+      await rm(join(modules, "missing"));
+      await symlink(outside, join(modules, "outside"));
+      const escaped = spawnSync(process.execPath, ["-", source], {
+        input: developmentDependencySymlinkScript,
+      });
+      expect(escaped.status).not.toBe(0);
+      expect(escaped.stderr.toString()).toContain(
+        "Development dependency link escaped the source: outside",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("installs pinned tools only inside the disposable Vercel workspace", () => {

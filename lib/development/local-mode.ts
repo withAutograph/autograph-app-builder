@@ -29,7 +29,7 @@ const dependencyInputs = [
   "Cargo.lock",
 ] as const;
 
-export const DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION = 1 as const;
+export const DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION = 2 as const;
 
 export type DevelopmentTools = Readonly<{
   node: string;
