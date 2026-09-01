@@ -163,6 +163,7 @@ async function runEveCycle(input: {
       port: input.nextPort,
     });
     const closed = developmentLaunchEnvironment({
+      sourceRoot: input.sourceRoot,
       snapshotRoot: snapshot.root,
       destinationRoot: input.destinationRoot,
       sourceSha: snapshot.commit,

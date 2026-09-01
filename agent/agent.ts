@@ -2,6 +2,7 @@ import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
 import { sha256 } from "@/lib/agent/workflow-state";
+import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export const vendorOnboardingPrototype = `<!doctype html>
@@ -180,7 +181,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "inspect_source",
-            input: { path, sourceKind: "existing-repository" },
+            input: {
+              path: developmentInspectionPath({ requestedPath: path }),
+              sourceKind: "existing-repository",
+            },
           },
         ],
       };
@@ -1718,7 +1722,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
                       ? { path }
                       : {}),
                   }
-                : { path: path!, sourceKind },
+                : {
+                    path: developmentInspectionPath({ requestedPath: path! }),
+                    sourceKind,
+                  },
           },
         ],
       };

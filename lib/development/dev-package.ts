@@ -250,6 +250,7 @@ export async function registerDevelopmentPackage(input: {
 }
 
 export function developmentLaunchEnvironment(input: {
+  sourceRoot: string;
   snapshotRoot: string;
   destinationRoot: string;
   sourceSha: string;
@@ -266,6 +267,8 @@ export function developmentLaunchEnvironment(input: {
     APP_BUILDER_DEVELOPMENT_SOURCE_TREE: input.sourceTree,
     APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: input.fingerprint,
     APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,
+    APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: input.sourceRoot,
+    APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: input.snapshotRoot,
     APP_BUILDER_LOCAL_ADAPTER: "1",
     APP_BUILDER_LOCAL_PUBLICATION: "0",
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
