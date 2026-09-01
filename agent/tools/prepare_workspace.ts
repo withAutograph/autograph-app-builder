@@ -16,6 +16,7 @@ import {
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
 import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 
 export default defineTool({
   description:
@@ -54,13 +55,23 @@ export default defineTool({
             receipt: source.receipt,
           })
         : undefined;
+    const githubWorkspace =
+      source.githubSource === undefined
+        ? undefined
+        : await inspectGitHubSourceSandboxWorkspace({
+            sandbox,
+            receipt: source.receipt,
+            githubSource: source.githubSource,
+          });
     const currentReceipt =
       source.receipt.version === SOURCE_RECEIPT_VERSION
         ? source.receipt
-        : await inspectSourceReceipt(
-            source.receipt.sourceKind,
-            source.receipt.sourcePath,
-          );
+        : source.githubSource !== undefined
+          ? source.receipt
+          : await inspectSourceReceipt(
+              source.receipt.sourceKind,
+              source.receipt.sourcePath,
+            );
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review or approval.");
     const {
@@ -85,7 +96,9 @@ export default defineTool({
     )
       throw new Error("This app build already owns a different workspace.");
     let workspace;
-    if (currentReceipt.version === SOURCE_RECEIPT_VERSION) {
+    if (githubWorkspace !== undefined) {
+      workspace = githubWorkspace;
+    } else if (currentReceipt.version === SOURCE_RECEIPT_VERSION) {
       if (canonicalWorkspace === undefined)
         throw new Error("The canonical Arrusted workspace is missing.");
       workspace = canonicalWorkspace;

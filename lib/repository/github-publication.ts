@@ -317,7 +317,7 @@ export interface GitHubDraftPullRequestContentSource {
 export type GitHubPublicationContentSource =
   GitHubFreshRepositoryContentSource & GitHubDraftPullRequestContentSource;
 
-export interface GitHubPublicationAdapter {
+export interface GitHubSourceResolutionAdapter {
   inspectInstallation(
     operation: GitHubOperation,
   ): Promise<GitHubInstallationIdentity>;
@@ -326,6 +326,9 @@ export interface GitHubPublicationAdapter {
     repositoryId: string;
     ref: string;
   }): Promise<GitHubRepositoryObservation>;
+}
+
+export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
   inspectDestination(input: {
     owner: string;
     name: string;
@@ -1026,7 +1029,7 @@ export function assertExactRepositoryObservation(
 }
 
 export async function resolveImmutableExistingSource(input: {
-  adapter: GitHubPublicationAdapter;
+  adapter: GitHubSourceResolutionAdapter;
   expectedInstallationId: string;
   repositoryId: string;
   ref: string;

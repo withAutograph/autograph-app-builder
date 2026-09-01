@@ -127,6 +127,9 @@ export default defineTool({
       sandbox,
       receipt: current.sourceReceipt,
       expectedWorkspace: current.workspace,
+      ...(current.githubSource === undefined
+        ? {}
+        : { githubSource: current.githubSource }),
     });
     await assertAppliedComponentComposition({
       appId: current.appSpec.appId,

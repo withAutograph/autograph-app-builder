@@ -82,6 +82,9 @@ export default defineTool({
         sandbox,
         receipt: current.sourceReceipt,
         expectedWorkspace: current.workspace,
+        ...(current.githubSource === undefined
+          ? {}
+          : { githubSource: current.githubSource }),
       });
       cache = await inspectDependencyCache(
         sandbox,

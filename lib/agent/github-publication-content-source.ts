@@ -56,6 +56,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
         sandbox: input.sandbox,
         receipt: input.state.sourceReceipt,
         expectedWorkspace: input.state.workspace,
+        githubSource: input.state.githubSource,
       });
       const sourceFiles = await readPreparedSandboxSourceManifest(
         input.sandbox,
@@ -83,6 +84,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
         sandbox: input.sandbox,
         receipt: input.state.sourceReceipt,
         expectedWorkspace: input.state.workspace,
+        githubSource: input.state.githubSource,
       });
       return {
         version: 1 as const,

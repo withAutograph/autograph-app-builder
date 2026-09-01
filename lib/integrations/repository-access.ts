@@ -138,6 +138,10 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
 export type RepositoryAccessResult = z.infer<
   typeof repositoryAccessResultSchema
 >;
+export type ReadyRepositoryAccess = Extract<
+  RepositoryAccessResult,
+  { status: "ready" }
+>;
 
 export interface GitHubRepositoryAccessProvider {
   inspectInstallation(input: {

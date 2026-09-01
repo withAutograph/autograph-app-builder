@@ -18,12 +18,23 @@ describe("generic sandbox tool boundaries", () => {
   );
 
   it("routes existing application reads through the manifest-bound inspector", async () => {
-    const source = await readFile(
-      resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
-      "utf8",
-    );
+    const [router, inspector] = await Promise.all([
+      readFile(
+        resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
+        "utf8",
+      ),
+      readFile(
+        resolve(process.cwd(), "agent/tools/inspect_existing_app.ts"),
+        "utf8",
+      ),
+    ]);
 
-    expect(source).toContain("inspect_existing_app");
-    expect(source).not.toContain("and read_file respectively");
+    expect(router).toContain("inspect_existing_app");
+    expect(router).not.toContain("and read_file respectively");
+    expect(inspector).toContain("inspectSourceBoundSandboxWorkspace");
+    expect(inspector).toContain("githubSource: state.githubSource");
+    expect(
+      inspector.indexOf("inspectSourceBoundSandboxWorkspace"),
+    ).toBeLessThan(inspector.indexOf(".app-builder/source-files.json"));
   });
 });

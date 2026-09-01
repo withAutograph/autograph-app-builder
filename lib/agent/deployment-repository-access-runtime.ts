@@ -5,6 +5,7 @@ import {
   type ConnectionPrincipal,
   type InteractiveAuthorizationDefinition,
 } from "eve/connections";
+import type { SandboxSession } from "eve/sandbox";
 
 import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
@@ -12,15 +13,43 @@ import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createPostgresRepositoryAccessContinuationStore } from "../integrations/postgres-repository-access-continuation";
 import {
   classifyGitHubRepositoryAccess,
+  type GitHubRepositoryAccessProvider,
+  type ReadyRepositoryAccess,
   type RepositoryAccessResult,
 } from "../integrations/repository-access";
 import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
+  createGitHubAppSourceResolutionAdapter,
+  type GitHubAppSourceResolutionProvider,
+} from "../repository/github-app-adapter";
+import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderCredentials,
 } from "../repository/github-app-http-provider";
-import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
+import {
+  mergeHostedGitHubInstallationBindings,
+  createPostgresHostedGitHubInstallationStore,
+} from "../repository/postgres-github-installation-store";
+import {
+  assertExactImmutableGitHubSourceReceipt,
+  resolveImmutableExistingSource,
+  type ImmutableGitHubSourceReceipt,
+} from "../repository/github-publication";
+import { cloneGitHubSourceWorkspace } from "../repository/sandbox-github-source";
+import {
+  inspectExistingRepositorySnapshotReceipt,
+  type SourceReceipt,
+} from "../repository/source-receipt";
+import {
+  recordPreparedSandboxWorkspace,
+  type PreparedSandboxWorkspace,
+} from "../repository/supported-template";
+import {
+  assertResolvedSourceMatchesRepositoryAccess,
+  recordRepositoryAccessReceipt,
+  type RepositoryAccessReceipt,
+} from "./repository-access-state";
 
 const failed = (reason: string, message: string, retryable = false) =>
   new ConnectionAuthorizationFailedError("github-repository-access", {
@@ -60,6 +89,49 @@ export interface RepositoryAccessRuntime {
     sessionId: string;
     fetchImplementation?: typeof fetch;
   }): Promise<number>;
+  prepareExistingSource(input: {
+    repository: string;
+    selectedInstallationId?: string;
+    access: ReadyRepositoryAccess;
+    currentAccessReceipt: RepositoryAccessReceipt | undefined;
+    sessionId: string;
+    callId: string;
+    sandbox: SandboxSession;
+    currentGitHubSource?: ImmutableGitHubSourceReceipt;
+  }): Promise<{
+    accessReceipt: RepositoryAccessReceipt;
+    githubSource: ImmutableGitHubSourceReceipt;
+    sourceReceipt: SourceReceipt;
+    workspace: PreparedSandboxWorkspace;
+  }>;
+}
+
+type GitHubRepositorySourceProvider = GitHubRepositoryAccessProvider &
+  GitHubAppSourceResolutionProvider & {
+    acquireRepositoryReadCredential(input: {
+      repositoryId: string;
+    }): Promise<{ token: string }>;
+  };
+
+function repositorySourceProvider(
+  value: GitHubRepositoryAccessProvider,
+): value is GitHubRepositorySourceProvider {
+  const candidate = value as Partial<GitHubRepositorySourceProvider>;
+  return (
+    typeof candidate.inspectRepository === "function" &&
+    typeof candidate.acquireRepositoryReadCredential === "function"
+  );
+}
+
+function immutableSourceBinding(source: ImmutableGitHubSourceReceipt) {
+  return {
+    version: source.version,
+    repository: source.repository,
+    resolvedRef: source.resolvedRef,
+    resolvedSha: source.resolvedSha,
+    resolvedTree: source.resolvedTree,
+    installationIdentityDigest: source.installationIdentityDigest,
+  };
 }
 
 export function createRepositoryAccessRuntime(input: {
@@ -91,6 +163,120 @@ export function createRepositoryAccessRuntime(input: {
 
   return {
     classify,
+    async prepareExistingSource(value) {
+      const initialAccessReceipt = recordRepositoryAccessReceipt({
+        current: value.currentAccessReceipt,
+        sessionId: value.sessionId,
+        confirmedByCallId: value.callId,
+        access: value.access,
+      });
+      const listed = (await input.installations.list?.(input.authority)) ?? [];
+      const legacy = await input.installations.read(input.authority);
+      const binding = mergeHostedGitHubInstallationBindings(
+        listed,
+        legacy,
+      ).find(
+        (candidate) =>
+          candidate.active &&
+          candidate.installationId === value.access.scope.installationId &&
+          candidate.accountLogin === value.access.scope.accountLogin &&
+          candidate.accountType === value.access.scope.accountType,
+      );
+      if (binding === undefined)
+        throw new Error(
+          "The selected GitHub installation is no longer active.",
+        );
+      const provider = await input.providerFactory({
+        authority: input.authority,
+        installation: binding,
+      });
+      if (!repositorySourceProvider(provider))
+        throw new Error("GitHub source preparation is unavailable.");
+
+      const ref = `refs/heads/${value.access.repository.defaultBranch}`;
+      const observedGitHubSource = await resolveImmutableExistingSource({
+        adapter: createGitHubAppSourceResolutionAdapter(provider),
+        expectedInstallationId: binding.installationId,
+        repositoryId: value.access.repository.repositoryId,
+        ref,
+        expectedSha: value.access.repository.headSha,
+        expectedTree: value.access.repository.headTree,
+        resolvedByCallId: value.callId,
+      });
+      assertExactImmutableGitHubSourceReceipt(observedGitHubSource);
+      const currentGitHubSource = value.currentGitHubSource;
+      if (currentGitHubSource !== undefined)
+        assertExactImmutableGitHubSourceReceipt(currentGitHubSource);
+      const githubSource =
+        currentGitHubSource === undefined
+          ? observedGitHubSource
+          : (() => {
+              if (
+                JSON.stringify(immutableSourceBinding(observedGitHubSource)) !==
+                JSON.stringify(immutableSourceBinding(currentGitHubSource))
+              )
+                throw new Error(
+                  "The immutable GitHub source changed since it was recorded.",
+                );
+              return currentGitHubSource;
+            })();
+      const credential = await provider.acquireRepositoryReadCredential({
+        repositoryId: value.access.repository.repositoryId,
+      });
+      const cloned = await cloneGitHubSourceWorkspace({
+        sandbox: value.sandbox,
+        token: credential.token,
+        remote: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+        branch: value.access.repository.defaultBranch,
+        expectedSha: value.access.repository.headSha,
+        expectedTree: value.access.repository.headTree,
+      });
+      const sourceReceipt = inspectExistingRepositorySnapshotReceipt(
+        cloned.snapshot,
+      );
+      if (
+        sourceReceipt.sourceSha !== githubSource.resolvedSha ||
+        sourceReceipt.sourceTree !== githubSource.resolvedTree
+      )
+        throw new Error(
+          "The prepared GitHub source changed during inspection.",
+        );
+
+      const confirmed = await classify({
+        repository: value.repository,
+        ...(value.selectedInstallationId === undefined
+          ? {}
+          : { selectedInstallationId: value.selectedInstallationId }),
+      });
+      if (
+        confirmed.status !== "ready" ||
+        confirmed.accessDigest !== value.access.accessDigest ||
+        JSON.stringify(confirmed.repository) !==
+          JSON.stringify(value.access.repository) ||
+        JSON.stringify(confirmed.scope) !== JSON.stringify(value.access.scope)
+      )
+        throw new Error("GitHub repository access changed during preparation.");
+      const accessReceipt = recordRepositoryAccessReceipt({
+        current: initialAccessReceipt,
+        sessionId: value.sessionId,
+        confirmedByCallId: value.callId,
+        access: confirmed,
+      });
+      assertResolvedSourceMatchesRepositoryAccess({
+        access: accessReceipt,
+        source: githubSource,
+      });
+      const workspace = await recordPreparedSandboxWorkspace({
+        sandbox: value.sandbox,
+        callId: value.callId,
+        sourcePath: sourceReceipt.sourcePath,
+        sourceSha: sourceReceipt.sourceSha,
+        sourceTree: sourceReceipt.sourceTree,
+        eligibilityDigest: sourceReceipt.eligibilityDigest,
+        workspaceDigest: cloned.workspaceDigest,
+      });
+      return { accessReceipt, githubSource, sourceReceipt, workspace };
+    },
     async resumeAuthorizedForSession(value) {
       const candidates = await input.continuations.authorizedForSession({
         authority: input.authority,

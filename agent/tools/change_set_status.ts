@@ -28,6 +28,9 @@ export async function exactNormalizedChangeSet(input: {
     sandbox: input.sandbox,
     receipt: state.sourceReceipt,
     expectedWorkspace: state.workspace,
+    ...(state.githubSource === undefined
+      ? {}
+      : { githubSource: state.githubSource }),
   });
   if (
     state.proposal.digest !== state.applyReceipt.proposalDigest ||

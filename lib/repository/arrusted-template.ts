@@ -24,6 +24,8 @@ import {
   deploymentArrustedTemplateReader,
   type ArrustedTemplateReader,
 } from "./arrusted-template-reader";
+import { inspectGitHubSourceSandboxWorkspace } from "./sandbox-github-source";
+import type { ImmutableGitHubSourceReceipt } from "./github-publication";
 
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
@@ -550,19 +552,31 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   sandbox: SandboxSession;
   receipt: SourceReceipt;
   expectedWorkspace?: PreparedSandboxWorkspace;
+  githubSource?: ImmutableGitHubSourceReceipt;
 }): Promise<PreparedSandboxWorkspace> {
   const receipt = parseSourceReceipt(input.receipt);
   const observed =
-    receipt.version === SOURCE_RECEIPT_VERSION
-      ? await inspectCanonicalArrustedSandboxWorkspace({
+    input.githubSource !== undefined
+      ? await inspectGitHubSourceSandboxWorkspace({
           sandbox: input.sandbox,
           receipt,
+          githubSource: input.githubSource,
+          ...(input.expectedWorkspace === undefined
+            ? {}
+            : { expectedWorkspace: input.expectedWorkspace }),
         })
-      : await inspectPreparedSandboxWorkspace(input.sandbox).then((status) => {
-          if (status.state !== "prepared")
-            throw new Error("The prepared source workspace is missing.");
-          return status.workspace;
-        });
+      : receipt.version === SOURCE_RECEIPT_VERSION
+        ? await inspectCanonicalArrustedSandboxWorkspace({
+            sandbox: input.sandbox,
+            receipt,
+          })
+        : await inspectPreparedSandboxWorkspace(input.sandbox).then(
+            (status) => {
+              if (status.state !== "prepared")
+                throw new Error("The prepared source workspace is missing.");
+              return status.workspace;
+            },
+          );
   if (
     observed.workspaceId !== input.sandbox.id ||
     observed.sourcePath !== receipt.sourcePath ||

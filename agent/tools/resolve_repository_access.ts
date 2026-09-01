@@ -3,11 +3,7 @@ import { never } from "eve/tools/approval";
 import { z } from "zod";
 
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
-import {
-  recordRepositoryAccessReceipt,
-  type RepositoryAccessReceipt,
-  repositoryAccessReceiptState,
-} from "@/lib/agent/repository-access-state";
+import { resolveRepositoryAccessForTool } from "@/lib/agent/repository-access-tool";
 
 const inputSchema = z.strictObject({
   repository: z
@@ -28,47 +24,11 @@ export default defineTool({
   approval: never(),
   async execute(input, ctx) {
     const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
-    const access = await runtime.classify(input);
-    if (access.status === "scope-selection-required") return access;
-    const provider = runtime.authorization({
-      ...input,
-      sessionId: ctx.session.id,
-      requestId: ctx.callId,
-    });
-    const authOptions = {
-      authKey: `github-repository:${ctx.session.id}:${input.repository.toLowerCase().replace("/", ":")}`,
-      displayName:
-        access.status === "authorization-required" && access.action === "update"
-          ? "Update GitHub access"
-          : "Connect GitHub",
-    } as const;
-    await ctx.getToken(provider, authOptions);
-    const confirmed = await runtime.classify(input);
-    if (confirmed.status === "authorization-required") {
-      ctx.requireAuth(provider, authOptions);
-    }
-    if (confirmed.status !== "ready") {
-      throw new Error(
-        confirmed.status === "scope-selection-required"
-          ? "Choose which connected GitHub account Autograph should use."
-          : "GitHub could not confirm repository access.",
-      );
-    }
-    let recorded: RepositoryAccessReceipt | undefined;
-    repositoryAccessReceiptState.update((current) => {
-      recorded = recordRepositoryAccessReceipt({
-        current,
-        sessionId: ctx.session.id,
-        confirmedByCallId: ctx.callId,
-        access: confirmed,
-      });
-      return recorded;
-    });
-    if (recorded === undefined)
-      throw new Error("Confirmed repository access was not recorded.");
+    const result = await resolveRepositoryAccessForTool(input, ctx, runtime);
+    if (result.kind === "selection") return result.access;
     return {
-      ...confirmed,
-      repositoryAccessReceiptDigest: recorded.digest,
+      ...result.access,
+      repositoryAccessReceiptDigest: result.receipt.digest,
     };
   },
 });
