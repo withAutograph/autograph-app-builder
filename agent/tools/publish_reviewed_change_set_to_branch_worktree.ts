@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import {
   appBuilderWorkflowState,
-  assertExactWorkflowState,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   assertExactBranchWorktreeProposal,
@@ -65,22 +65,21 @@ export default defineTool({
               }
             : undefined,
         afterPendingJournal: () => {
-          appBuilderWorkflowState.update((current) => {
-            assertExactWorkflowState(
-              current,
-              workflow,
-              "branch publication pending recording",
-            );
-            if (current.phase !== "reviewed")
-              throw new Error(
-                "The reviewed workflow changed before publication.",
-              );
-            return {
-              ...current,
-              phase: "branch_publication_pending",
-              branchPublicationProposal: proposal,
-              branchPublicationCallId: ctx.callId,
-            };
+          updateExactWorkflow({
+            expected: workflow,
+            operation: "branch publication pending recording",
+            transition: (current) => {
+              if (current.phase !== "reviewed")
+                throw new Error(
+                  "The reviewed workflow changed before publication.",
+                );
+              return {
+                ...current,
+                phase: "branch_publication_pending",
+                branchPublicationProposal: proposal,
+                branchPublicationCallId: ctx.callId,
+              };
+            },
           });
           pendingWorkflow = appBuilderWorkflowState.get();
         },
@@ -113,34 +112,33 @@ export default defineTool({
         "The durable branch publication intent was not bound to workflow state.",
       );
     const exactPendingWorkflow = pendingWorkflow;
-    appBuilderWorkflowState.update((current) => {
-      assertExactWorkflowState(
-        current,
-        exactPendingWorkflow,
-        "branch publication terminal recording",
-      );
-      if (
-        current.phase !== "branch_publication_pending" ||
-        current.branchPublicationCallId !== ctx.callId ||
-        !exactBranchWorktreeProposalMatch(
-          current.branchPublicationProposal,
-          proposal,
+    updateExactWorkflow({
+      expected: exactPendingWorkflow,
+      operation: "branch publication terminal recording",
+      transition: (current) => {
+        if (
+          current.phase !== "branch_publication_pending" ||
+          current.branchPublicationCallId !== ctx.callId ||
+          !exactBranchWorktreeProposalMatch(
+            current.branchPublicationProposal,
+            proposal,
+          )
         )
-      )
-        throw new Error(
-          "The pending publication workflow changed before terminal recording.",
-        );
-      return result.status === "succeeded"
-        ? {
-            ...current,
-            phase: "published_branch_worktree",
-            branchPublicationReceipt: result,
-          }
-        : {
-            ...current,
-            phase: "branch_publication_failed",
-            branchPublicationReceipt: result,
-          };
+          throw new Error(
+            "The pending publication workflow changed before terminal recording.",
+          );
+        return result.status === "succeeded"
+          ? {
+              ...current,
+              phase: "published_branch_worktree",
+              branchPublicationReceipt: result,
+            }
+          : {
+              ...current,
+              phase: "branch_publication_failed",
+              branchPublicationReceipt: result,
+            };
+      },
     });
     return result;
   },
