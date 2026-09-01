@@ -1002,8 +1002,6 @@ const developmentWorkspaceInspectionProgram = [
   "if(repositoryRoot!==repositoryInput)process.exit(1);",
   "const contains=(root,candidate)=>{const relative=path.relative(root,candidate);return relative===''||(relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative));};",
   "if(!contains(workspaceRoot,repositoryRoot))process.exit(1);",
-  "const pending=[repositoryRoot];",
-  "while(pending.length>0){const directory=pending.pop();for(const name of fs.readdirSync(directory)){const candidate=path.join(directory,name);const state=fs.lstatSync(candidate);if(state.isSymbolicLink()){const resolved=fs.realpathSync(candidate);if(!contains(repositoryRoot,resolved))process.exit(1);}else if(state.isDirectory()){pending.push(candidate);}}}",
 ].join("");
 
 async function verifyDevelopmentSandboxWorkspace(

@@ -19,10 +19,12 @@ import {
   updateExactWorkflow,
   validAppId,
 } from "@/lib/agent/workflow-state";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 
 export default defineTool({
   description:
-    "Silently validate and record one complete build-ready AppSpec as internal planning state. The Markdown must contain each of the 14 exact level-two headings from the design-app AppSpec reference once and end with its closed build-ready JSON handoff. On rejection, use the structured app_spec_invalid issues and exact example to replace the complete artifact and retry without asking the user. It remains bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
+    "Silently validate and record one complete build-ready AppSpec as internal planning state. The Markdown must contain each of the 14 exact level-two headings from the design-app AppSpec reference once and end with its closed build-ready JSON handoff. On rejection, use the structured app_spec_invalid issues and exact example to replace the complete artifact and retry without asking the user. Hosted acceptance remains bound to the prepared workspace receipt; development uses the current live workspace. It does not write or execute anything in the target repository.",
   inputSchema: z.strictObject({
     appId: z.string().min(1),
     expectedArtifactDigest: z.string().regex(/^[0-9a-f]{64}$/u),
@@ -59,6 +61,13 @@ export default defineTool({
         "Prepare an eligible repository before accepting an AppSpec.",
       );
     const workspace = current.workspace;
+    const development = canAutoSelectDevelopmentSource();
+    const acceptedWorkspace = development
+      ? await inspectSourceBoundSandboxWorkspace({
+          sandbox: await ctx.getSandbox(),
+          receipt: current.sourceReceipt,
+        })
+      : workspace;
     const path = `prototype/${appId}/app-spec.md`;
     const artifact = exactPrototypeArtifact(current.artifacts, {
       path,
@@ -71,10 +80,11 @@ export default defineTool({
     const validation = validateBuildReadyAppSpec(artifact.content);
     if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
     if (
-      workspace.sourceSha !== expectedSourceSha ||
-      workspace.sourceTree !== expectedSourceTree ||
-      workspace.eligibilityDigest !== expectedEligibilityDigest ||
-      workspace.workspaceDigest !== expectedWorkspaceDigest
+      !development &&
+      (workspace.sourceSha !== expectedSourceSha ||
+        workspace.sourceTree !== expectedSourceTree ||
+        workspace.eligibilityDigest !== expectedEligibilityDigest ||
+        workspace.workspaceDigest !== expectedWorkspaceDigest)
     )
       throw new Error(
         "The prepared workspace receipt changed before AppSpec acceptance.",
@@ -132,7 +142,7 @@ export default defineTool({
         return {
           version: APP_BUILDER_WORKFLOW_VERSION,
           phase: "app_spec_accepted",
-          workspace,
+          workspace: acceptedWorkspace,
           sourceReceipt: current.sourceReceipt,
           ...(current.githubSource === undefined
             ? {}
