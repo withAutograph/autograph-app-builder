@@ -101,11 +101,14 @@ and likewise require no continuation credential. Adding any new credential
 field requires a new closed contract and migration rather than reusing `record`
 as an opaque secret container.
 
-Hosted session handles expire after 30 minutes without an observed request and
-after 24 hours regardless of activity. Both checks use the durable session's
-existing creation and update timestamps, run before Eve transport access, and
-also exclude expired active rows from new-start admission counts. Expiry does
-not delete history; the separately confirmed retention task remains the only
+Hosted session handles remain tenant-scoped and resumable until explicitly
+deleted. The 30-minute idle and 24-hour lifetime windows apply only to compute
+and admission accounting: expired active rows no longer consume a new-start
+slot, but their product history remains readable. Bounded checkpoints retain
+the latest public product events, outstanding input, prototype, and plan.
+Unchanged `working` observations cannot refresh an execution lease forever; the
+service marks the session checkpoint-resumable and fences any replacement
+adapter generation. The separately confirmed retention task remains the only
 age-based deletion path.
 
 ## Idempotency and uncertain submissions

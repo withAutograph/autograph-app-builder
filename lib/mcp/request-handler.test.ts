@@ -200,6 +200,10 @@ describe("branded public tool mapping", () => {
         calls.push({ operation: "start", input });
         return result;
       },
+      async list(input) {
+        calls.push({ operation: "list", input });
+        return { kind: "session_list", cursor: 0, sessions: [] };
+      },
       async get(input) {
         calls.push({ operation: "get", input });
         return result;
@@ -267,6 +271,46 @@ describe("branded public tool mapping", () => {
     ]);
   });
 
+  it("lists recent sessions when autograph_get omits sessionId", async () => {
+    const sessionResult = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 0,
+      events: [],
+    };
+    const listed = {
+      kind: "session_list" as const,
+      cursor: 1,
+      sessions: [
+        {
+          sessionId: "session-one",
+          title: "Vendor workspace",
+          stage: "prototype" as const,
+          status: "waiting" as const,
+          resumability: "live" as const,
+          updatedAt: "2026-09-01T12:00:00.000Z",
+        },
+      ],
+    };
+    const service = {
+      start: vi.fn(async () => sessionResult),
+      list: vi.fn(async () => listed),
+      get: vi.fn(async () => sessionResult),
+      send: vi.fn(async () => sessionResult),
+      respond: vi.fn(async () => sessionResult),
+      cancel: vi.fn(async () => sessionResult),
+    } satisfies EveSessionService;
+    const handler = createAutographMcpHandler(service);
+    const response = await handler(
+      mcpToolRequest("autograph_get", { cursor: 0, limit: 25 }),
+    );
+    const result = await mcpResult<{ structuredContent: unknown }>(response);
+
+    expect(result.structuredContent).toEqual(listed);
+    expect(service.list).toHaveBeenCalledWith({ cursor: 0, limit: 25 });
+    expect(service.get).not.toHaveBeenCalled();
+  });
+
   it("returns a Browser-openable URL without attaching prototype UI", async () => {
     const content = "<!doctype html><html><body>Vendor queue</body></html>";
     const result = {
@@ -285,6 +329,11 @@ describe("branded public tool mapping", () => {
     };
     const service = {
       start: vi.fn(async () => result),
+      list: vi.fn(async () => ({
+        kind: "session_list" as const,
+        cursor: 0,
+        sessions: [],
+      })),
       get: vi.fn(async () => result),
       send: vi.fn(async () => result),
       respond: vi.fn(async () => result),
@@ -534,7 +583,7 @@ describe("request-scoped MCP service selection", () => {
       autograph_start:
         "Start a durable app build and return immediately; check progress separately.",
       autograph_get:
-        "Read the next page of progress and requests for the current app build.",
+        "List recent app builds, or read the next page of one app build's progress and requests.",
       autograph_send:
         "Send additional direction while the current app build is waiting.",
       autograph_respond:

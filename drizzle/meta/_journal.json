@@ -120,6 +120,13 @@
       "when": 1788261600000,
       "tag": "0017_chat_repository_access",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788264000000,
+      "tag": "0018_durable_session_resume",
+      "breakpoints": true
     }
   ]
 }

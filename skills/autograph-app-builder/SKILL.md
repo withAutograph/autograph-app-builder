@@ -16,8 +16,14 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
 
 ## Workflow
 
-1. Start every new app build with `autograph_start`.
-2. Preserve the returned `sessionId` and `cursor`.
+1. When the user asks to continue, resume, or pick up prior work, call
+   `autograph_get` without a `sessionId` first and offer the relevant recent
+   product sessions. Resume the chosen session with
+   `autograph_start({ resumeSessionId, clientRequestId })`. Start genuinely new
+   work with `autograph_start({ prompt, clientRequestId })`.
+2. Preserve the returned `sessionId` and `cursor`. A healthy active resume keeps
+   the handle; recovery after a terminal or interrupted session may return a new
+   child handle.
 3. Use `autograph_get` to obtain evidence; accepted work is not completed work.
 4. Call `autograph_respond` once for the complete non-empty `inputRequests` batch,
    preserving every unique `requestId`. Never split one App Builder batch across calls.

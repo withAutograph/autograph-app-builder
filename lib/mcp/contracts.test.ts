@@ -1,11 +1,34 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  eveGetInputSchema,
   eveRespondInputSchema,
+  eveStartInputSchema,
   publicInputRequestSchema,
   publicImplementationPlanSchema,
   publicPrototypeSchema,
 } from "./contracts";
+
+describe("durable session discovery contracts", () => {
+  it("lists without a session and requires exactly one new-or-resume start", () => {
+    expect(eveGetInputSchema.parse({})).toEqual({ cursor: 0, limit: 100 });
+    expect(
+      eveStartInputSchema.parse({
+        resumeSessionId: "session-one",
+        clientRequestId: "resume-one",
+      }),
+    ).toMatchObject({ resumeSessionId: "session-one" });
+    for (const candidate of [
+      { clientRequestId: "missing" },
+      {
+        prompt: "Build",
+        resumeSessionId: "session-one",
+        clientRequestId: "both",
+      },
+    ])
+      expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);
+  });
+});
 
 describe("publicInputRequestSchema", () => {
   const authorization = {

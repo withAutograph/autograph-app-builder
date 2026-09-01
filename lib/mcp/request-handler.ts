@@ -22,10 +22,13 @@ import {
 import {
   eveCancelInputSchema,
   eveGetInputSchema,
+  eveGetResultSchema,
   eveRespondInputSchema,
   eveSendInputSchema,
   eveSessionResultSchema,
   eveStartInputSchema,
+  type EveSessionListResult,
+  type EveSessionResult,
 } from "./contracts";
 import {
   forbiddenResponse,
@@ -73,8 +76,8 @@ export function createAutographMcpHandler(
   service: EveSessionService,
   options: { requestUrl?: string } = {},
 ) {
-  const present = (result: Awaited<ReturnType<EveSessionService["get"]>>) =>
-    options.requestUrl === undefined
+  const present = (result: EveSessionListResult | EveSessionResult) =>
+    "kind" in result || options.requestUrl === undefined
       ? result
       : attachPrototypePreviewUrl(result, options.requestUrl);
   return createMcpHandler((server) => {
@@ -124,18 +127,26 @@ export function createAutographMcpHandler(
       {
         title: "Check App Builder progress",
         description:
-          "Read the next page of progress and requests for the current app build.",
+          "List recent app builds, or read the next page of one app build's progress and requests.",
         inputSchema: eveGetInputSchema,
-        outputSchema: eveSessionResultSchema,
+        outputSchema: eveGetResultSchema,
       },
       async (input) => {
         try {
+          const result =
+            input.sessionId === undefined
+              ? await service.list({ cursor: input.cursor, limit: input.limit })
+              : await service.get({
+                  sessionId: input.sessionId,
+                  cursor: input.cursor,
+                  limit: input.limit,
+                });
           return toolResult(
-            present(await service.get(input)),
+            present(result),
             "Autograph App Builder returned the latest progress.",
           );
         } catch (error) {
-          return safeToolError(error, input.sessionId);
+          return safeToolError(error, input.sessionId ?? "");
         }
       },
     );

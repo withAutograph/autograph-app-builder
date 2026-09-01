@@ -8,7 +8,9 @@ import {
 import {
   createHostedEveSessionService,
   hostedEveProjectionForTesting,
+  HostedAdapterSessionUnavailableError,
   HostedIdempotencyConflictError,
+  HostedSessionBusyError,
   HostedSessionNotFoundError,
   HostedSubmissionUnknownError,
   HostedRejectedOperationError,
@@ -92,6 +94,9 @@ function reservationStore(
     },
     async getSession() {
       return null;
+    },
+    async listSessions() {
+      return { sessions: [], cursor: 0 };
     },
   };
 }
@@ -367,7 +372,7 @@ describe("hosted Eve service core", () => {
     expect(adapter.start).toHaveBeenCalledTimes(1);
   });
 
-  it("fails an idle-expired session closed before transport access", async () => {
+  it("keeps user-visible handles readable beyond the compute idle lease", async () => {
     let now = 1_000;
     const adapter = transport();
     const first = await started({
@@ -386,18 +391,18 @@ describe("hosted Eve service core", () => {
         cursor: 0,
         limit: 1,
       }),
-    ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
+    ).resolves.toMatchObject({ sessionId: first.result.sessionId });
     await expect(
       first.service.start({
         prompt: "Build an app",
         clientRequestId: "request_1",
       }),
-    ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    ).resolves.toEqual(first.result);
     expect(adapter.start).toHaveBeenCalledTimes(1);
-    expect(adapter.get).not.toHaveBeenCalled();
+    expect(adapter.get).toHaveBeenCalledTimes(1);
   });
 
-  it("enforces maximum lifetime even when reads refresh idle activity", async () => {
+  it("keeps user-visible handles readable beyond the compute maximum lifetime", async () => {
     let now = 1_000;
     const adapter = transport();
     const first = await started({
@@ -421,8 +426,314 @@ describe("hosted Eve service core", () => {
         cursor: 0,
         limit: 1,
       }),
-    ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
-    expect(adapter.get).toHaveBeenCalledTimes(1);
+    ).resolves.toMatchObject({ sessionId: first.result.sessionId });
+    expect(adapter.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("lists recent sessions with tenant-scoped pagination", async () => {
+    const store = new InMemoryHostedEveStore();
+    const first = await started({ store });
+    const second = await first.service.start({
+      prompt: "Build a vendor workspace",
+      clientRequestId: "request_2",
+    });
+    const other = await started({
+      store,
+      principal: {
+        ...principal,
+        workspaceId: "workspace_other",
+        ownerUserId: "user_other",
+      },
+    });
+
+    const pageOne = await first.service.list({ cursor: 0, limit: 1 });
+    const pageTwo = await first.service.list({
+      cursor: pageOne.cursor,
+      limit: 10,
+    });
+    expect(
+      [...pageOne.sessions, ...pageTwo.sessions]
+        .map(({ sessionId }) => sessionId)
+        .sort(),
+    ).toEqual([first.result.sessionId, second.sessionId].sort());
+    expect(JSON.stringify([pageOne, pageTwo])).not.toContain(
+      other.result.sessionId,
+    );
+  });
+
+  it("lists legacy rows and lazily backfills a checkpoint on first read", async () => {
+    const store = new InMemoryHostedEveStore();
+    const candidate = hostedOperationRecordSchema.parse({
+      version: 1,
+      operationId: "op_legacy",
+      principal,
+      kind: "start",
+      clientRequestId: "start_legacy",
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      state: "reserved",
+      createdAtEpochMs: 1_000,
+      updatedAtEpochMs: 1_000,
+    });
+    expect(await store.reserveOperation(principal, candidate)).toMatchObject({
+      disposition: "reserved",
+    });
+    await store.settleSucceeded({
+      principal,
+      operationId: candidate.operationId,
+      requestDigest: candidate.requestDigest,
+      result: {
+        sessionId: "session_legacy",
+        status: "waiting",
+        cursor: 0,
+        events: [],
+      },
+      session: {
+        version: 1,
+        sessionId: "session_legacy",
+        principal,
+        adapterSessionId: "eve_legacy",
+        status: "waiting",
+        createdAtEpochMs: 1_000,
+        updatedAtEpochMs: 1_000,
+      },
+      nowEpochMs: 1_000,
+    });
+    const service = createHostedEveSessionService({
+      principal,
+      store,
+      transport: transport(),
+      now: () => 2_000,
+    });
+    await expect(service.list({ cursor: 0, limit: 10 })).resolves.toMatchObject(
+      {
+        sessions: [
+          {
+            sessionId: "session_legacy",
+            title: "Previous App Builder session",
+            resumability: "restart_required",
+          },
+        ],
+      },
+    );
+    await service.get({ sessionId: "session_legacy", cursor: 0, limit: 100 });
+    const upgraded = await store.getSession(principal, "session_legacy");
+    expect(upgraded).toMatchObject({
+      version: 2,
+      adapterGeneration: 1,
+      resumability: "live",
+    });
+    if (upgraded?.version !== 2)
+      throw new Error("Expected lazy durable-session upgrade.");
+    expect(upgraded.checkpoint).toBeDefined();
+  });
+
+  it("preserves outstanding input at a checkpoint boundary", async () => {
+    const adapter = transport({
+      start: vi.fn(async () => ({
+        adapterSessionId: "eve_input",
+        snapshot: approvalSnapshot(["approve_one", "approve_two"]),
+      })),
+    });
+    const first = await started({ transport: adapter });
+    vi.mocked(adapter.get).mockRejectedValueOnce(
+      new HostedAdapterSessionUnavailableError(),
+    );
+
+    await expect(
+      first.service.get({
+        sessionId: first.result.sessionId,
+        cursor: first.result.cursor,
+        limit: 100,
+      }),
+    ).resolves.toMatchObject({
+      status: "input_required",
+      inputRequests: [
+        { requestId: "approve_one" },
+        { requestId: "approve_two" },
+      ],
+    });
+  });
+
+  it("bounds durable checkpoints by event count and encoded bytes", async () => {
+    const largeSnapshot: HostedEngineSnapshot = {
+      status: "waiting",
+      events: Array.from({ length: 600 }, (_, index) => ({
+        type: "assistant.message",
+        index,
+        turnId: `turn_${index}`,
+        text: `${index}:`.padEnd(10_000, "x"),
+      })),
+    };
+    const store = new InMemoryHostedEveStore();
+    const first = await started({
+      store,
+      transport: transport({
+        start: vi.fn(async () => ({
+          adapterSessionId: "eve_large",
+          snapshot: largeSnapshot,
+        })),
+      }),
+    });
+    const record = await store.getSession(principal, first.result.sessionId);
+    expect(record?.version).toBe(2);
+    if (record?.version !== 2) throw new Error("Expected durable session.");
+    expect(record.checkpoint?.events.length).toBeLessThanOrEqual(512);
+    expect(
+      new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
+    ).toBeLessThanOrEqual(512 * 1_024);
+    expect(record.checkpoint?.truncatedBeforeIndex).toBeGreaterThan(0);
+  });
+
+  it("stops refreshing an abandoned working lease and resumes as a child", async () => {
+    let now = 1_000;
+    const working: HostedEngineSnapshot = {
+      status: "working",
+      events: [{ type: "status", index: 0, status: "working" }],
+    };
+    const adapter = transport({
+      start: vi
+        .fn()
+        .mockResolvedValueOnce({
+          adapterSessionId: "eve_working",
+          snapshot: working,
+        })
+        .mockResolvedValueOnce({
+          adapterSessionId: "eve_child",
+          snapshot,
+        }),
+      get: vi.fn(async () => working),
+    });
+    const first = await started({
+      transport: adapter,
+      now: () => now,
+      sessionTimeoutPolicy: {
+        idleTimeoutMs: 60_000,
+        maxLifetimeMs: 120_000,
+      },
+    });
+    now = 61_001;
+    await expect(
+      first.service.get({
+        sessionId: first.result.sessionId,
+        cursor: 0,
+        limit: 100,
+      }),
+    ).resolves.toMatchObject({ status: "waiting" });
+
+    const resumed = await first.service.start({
+      resumeSessionId: first.result.sessionId,
+      clientRequestId: "resume_stuck",
+    });
+    expect(resumed.sessionId).not.toBe(first.result.sessionId);
+    const child = await first.store.getSession(principal, resumed.sessionId);
+    expect(child).toMatchObject({
+      version: 2,
+      parentSessionId: first.result.sessionId,
+    });
+  });
+
+  it("keeps a healthy handle and fences missing-adapter recovery", async () => {
+    const store = new InMemoryHostedEveStore();
+    const healthyAdapter = transport();
+    const healthy = await started({ store, transport: healthyAdapter });
+    const same = await healthy.service.start({
+      resumeSessionId: healthy.result.sessionId,
+      clientRequestId: "resume_healthy",
+    });
+    expect(same.sessionId).toBe(healthy.result.sessionId);
+    expect(healthyAdapter.start).toHaveBeenCalledTimes(1);
+
+    const missingAdapter = transport({
+      start: vi
+        .fn()
+        .mockResolvedValueOnce({ adapterSessionId: "eve_old", snapshot })
+        .mockResolvedValueOnce({ adapterSessionId: "eve_new", snapshot }),
+      get: vi.fn(async () => {
+        throw new HostedAdapterSessionUnavailableError();
+      }),
+    });
+    const recovering = await started({ transport: missingAdapter });
+    const recovered = await recovering.service.start({
+      resumeSessionId: recovering.result.sessionId,
+      clientRequestId: "resume_missing",
+    });
+    expect(recovered.sessionId).toBe(recovering.result.sessionId);
+    const record = await recovering.store.getSession(
+      principal,
+      recovering.result.sessionId,
+    );
+    expect(record).toMatchObject({
+      version: 2,
+      adapterSessionId: "eve_new",
+      adapterGeneration: 2,
+    });
+  });
+
+  it("allows only one mutating continuation for a session", async () => {
+    let resolveSend!: (value: HostedEngineSnapshot) => void;
+    const adapter = transport({
+      send: vi.fn(
+        () =>
+          new Promise<HostedEngineSnapshot>((resolve) => {
+            resolveSend = resolve;
+          }),
+      ),
+    });
+    const first = await started({ transport: adapter });
+    const active = first.service.send({
+      sessionId: first.result.sessionId,
+      message: "First",
+      clientRequestId: "send_active",
+    });
+    await vi.waitFor(() => expect(adapter.send).toHaveBeenCalledTimes(1));
+    await expect(
+      first.service.send({
+        sessionId: first.result.sessionId,
+        message: "Second",
+        clientRequestId: "send_competing",
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionBusyError);
+    resolveSend(snapshot);
+    await expect(active).resolves.toMatchObject({ status: "waiting" });
+  });
+
+  it("serializes competing child resumes from one terminal session", async () => {
+    let resolveResume!: (value: {
+      adapterSessionId: string;
+      snapshot: HostedEngineSnapshot;
+    }) => void;
+    const terminalSnapshot: HostedEngineSnapshot = {
+      status: "completed",
+      events: [{ type: "status", index: 0, status: "completed" }],
+    };
+    const adapter = transport({
+      start: vi
+        .fn()
+        .mockResolvedValueOnce({
+          adapterSessionId: "eve_terminal",
+          snapshot: terminalSnapshot,
+        })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveResume = resolve;
+            }),
+        ),
+    });
+    const first = await started({ transport: adapter });
+    const active = first.service.start({
+      resumeSessionId: first.result.sessionId,
+      clientRequestId: "resume_active",
+    });
+    await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledTimes(2));
+    await expect(
+      first.service.start({
+        resumeSessionId: first.result.sessionId,
+        clientRequestId: "resume_competing",
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionBusyError);
+    resolveResume({ adapterSessionId: "eve_child", snapshot });
+    await expect(active).resolves.toMatchObject({ status: "waiting" });
   });
 
   it.each(["missing", "mismatched"] as const)(
@@ -442,6 +753,7 @@ describe("hosted Eve service core", () => {
             ? null
             : { ...session, adapterSessionId: "eve_mismatched" };
         },
+        listSessions: (request) => base.listSessions(request),
       };
       const retry = createHostedEveSessionService({
         principal,
@@ -634,6 +946,7 @@ describe("hosted Eve service core", () => {
         },
         getSession: (requestPrincipal, sessionId) =>
           base.getSession(requestPrincipal, sessionId),
+        listSessions: (request) => base.listSessions(request),
       };
       const start = vi.fn(async () => {
         throw new SubmissionRejectedBeforeDispatchError("credential_expired");
@@ -706,6 +1019,7 @@ describe("hosted Eve service core", () => {
             ? { ...session, adapterSessionId: "eve_substituted" }
             : session;
         },
+        listSessions: (request) => base.listSessions(request),
       };
       const adapter = transport();
       const service = createHostedEveSessionService({

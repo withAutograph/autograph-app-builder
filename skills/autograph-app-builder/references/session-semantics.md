@@ -1,6 +1,13 @@
 # Session semantics
 
 - `sessionId` is the public durable session handle. Never expose a continuation credential.
+- `autograph_get` without `sessionId` lists the caller's recent sessions. Use it
+  before starting duplicate work when the user asks to continue or resume.
+- User-facing handles do not expire because a compute lease elapsed. Active
+  execution leases and start-admission windows remain bounded independently.
+- Resume a selected session with `autograph_start` and `resumeSessionId`.
+  Healthy active work keeps its handle. Terminal or interrupted work may resume
+  as a child from its last durable checkpoint.
 - `cursor` is the next unread absolute event index. Pass it back to `autograph_get`.
 - `input_required` means the exact outstanding request must be answered before an unrelated follow-up.
 - `waiting` means the current turn settled and the session may accept a follow-up.
