@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { EveSessionService } from "./service";
@@ -45,6 +44,7 @@ import {
   type PublicInputRequest,
 } from "../mcp/contracts";
 import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
+import { hostedValueDigest, stableHostedId } from "./hosted-session-identity";
 
 const hostedSnapshotSchema = z
   .object({
@@ -182,25 +182,6 @@ export class SubmissionRejectedBeforeDispatchError extends Error {
 function assertNever(value: never): never {
   void value;
   throw new HostedSubmissionUnknownError();
-}
-
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function digest(value: unknown): string {
-  return `sha256:${createHash("sha256").update(canonical(value)).digest("hex")}`;
-}
-
-function stableId(prefix: string, value: unknown): string {
-  return `${prefix}_${digest(value).slice("sha256:".length)}`;
 }
 
 function projectSnapshot(
@@ -697,12 +678,12 @@ export function createHostedEveSessionService(input: {
       newSession?: z.infer<typeof hostedSessionRecordSchema>;
     }>;
   }): Promise<EveSessionResult> {
-    const requestDigest = digest({
+    const requestDigest = hostedValueDigest({
       kind: options.kind,
       request: options.request,
       sessionId: options.sessionId,
     });
-    const operationId = stableId("op", {
+    const operationId = stableHostedId("op", {
       tenant: [
         principal.issuer,
         principal.audience,
@@ -878,7 +859,8 @@ export function createHostedEveSessionService(input: {
       }
       const verifiedResult = eveSessionResultSchema.parse(verified.result);
       if (
-        digest(verifiedResult) !== digest(dispatchedResult) ||
+        hostedValueDigest(verifiedResult) !==
+          hostedValueDigest(dispatchedResult) ||
         canonical(verifiedResult) !== canonical(dispatchedResult)
       ) {
         throw new HostedSubmissionUnknownError();
@@ -1046,7 +1028,7 @@ export function createHostedEveSessionService(input: {
                 operationId,
                 prompt: recoveryPrompt(existing),
               });
-              const sessionId = stableId("ses", {
+              const sessionId = stableHostedId("ses", {
                 operationId,
                 adapterSessionId: response.adapterSessionId,
               });
@@ -1174,7 +1156,7 @@ export function createHostedEveSessionService(input: {
             operationId,
             prompt,
           });
-          const sessionId = stableId("ses", {
+          const sessionId = stableHostedId("ses", {
             operationId,
             adapterSessionId: response.adapterSessionId,
           });
