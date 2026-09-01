@@ -815,6 +815,32 @@ function preparedSourceChecksums(files: readonly PreparedSourceFile[]): string {
     .join("\n")}\n`;
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+/**
+ * Development is deliberately a live working-tree transport.  The archive is
+ * only a one-shot upload envelope for the first transfer; it is neither a
+ * release artifact nor a source authority.  Subsequent transfers use the
+ * manifest delta below, so ordinary edits do not rebuild or replace the
+ * sandbox workspace.
+ */
+function developmentWorkingTreeArchive(
+  sourcePath: string,
+  paths: readonly string[],
+): Buffer {
+  return execFileSync(
+    "tar",
+    ["--create", "--gzip", "--file=-", "--null", "--files-from=-"],
+    {
+      cwd: sourcePath,
+      input: `${paths.join("\0")}\0`,
+      maxBuffer: 256 * 1024 * 1024,
+    },
+  );
+}
+
 function parsePreparedWorkspace(input: unknown): PreparedSandboxWorkspace {
   if (
     typeof input !== "object" ||
@@ -1338,13 +1364,20 @@ export async function prepareDevelopmentSandboxWorkspace(
     .toString("utf8")
     .split("\0")
     .filter(Boolean)
-    .toSorted();
+    .toSorted()
+    .filter((path) => {
+      if (!safeSourcePath(path))
+        throw new Error("The development source contains an unsafe path.");
+      const absolutePath = resolve(eligibility.sourcePath, path);
+      if (!within(eligibility.sourcePath, absolutePath))
+        throw new Error("The development source escapes its root.");
+      // `git ls-files --cached` keeps a deleted tracked path until it is
+      // staged. Development follows the working tree, so that path is a
+      // managed deletion rather than a failed source snapshot.
+      return existsSync(absolutePath);
+    });
   const sourceFiles: PreparedSourceFile[] = names.map((path) => {
-    if (!safeSourcePath(path))
-      throw new Error("The development source contains an unsafe path.");
     const absolutePath = resolve(eligibility.sourcePath, path);
-    if (!within(eligibility.sourcePath, absolutePath))
-      throw new Error("The development source escapes its root.");
     const info = lstatSync(absolutePath);
     if (!info.isFile() || info.isSymbolicLink())
       throw new Error("The development source contains a non-regular file.");
@@ -1363,6 +1396,40 @@ export async function prepareDevelopmentSandboxWorkspace(
   const workspaceDigest = sha256(JSON.stringify(sourceFiles));
   const generation = workspaceDigest.slice(0, 40);
 
+  // The previous manifest describes only files managed by the live source
+  // transport.  It must not turn sandbox-generated plans, caches, or other
+  // builder-owned state into source files.  A missing/corrupt previous
+  // manifest simply receives a complete first transfer.
+  let previousFiles: PreparedSourceFile[] = [];
+  const previousManifest = await sandbox.readTextFile({
+    path: sandboxSourceFilesPath,
+  });
+  if (previousManifest !== null) {
+    try {
+      previousFiles = parsePreparedSourceFiles(
+        JSON.parse(previousManifest) as unknown,
+      );
+    } catch {
+      previousFiles = [];
+    }
+  }
+  const previousByPath = new Map(
+    previousFiles.map((file) => [file.path, file]),
+  );
+  const currentByPath = new Map(sourceFiles.map((file) => [file.path, file]));
+  const deletedPaths = previousFiles
+    .filter((file) => !currentByPath.has(file.path))
+    .map((file) => file.path);
+  const changedFiles = sourceFiles.filter((file) => {
+    const previous = previousByPath.get(file.path);
+    return (
+      previous === undefined ||
+      previous.sha256 !== file.sha256 ||
+      previous.mode !== file.mode
+    );
+  });
+  const firstTransfer = previousManifest === null || previousFiles.length === 0;
+
   await ensureSandboxDirectories(sandbox, [".app-builder"]);
   await sandbox.writeTextFile({
     path: ".app-builder/prepare-intent.json",
@@ -1379,40 +1446,66 @@ export async function prepareDevelopmentSandboxWorkspace(
       2,
     )}\n`,
   });
-  await sandbox.removePath({
-    path: "repository",
-    recursive: true,
-    force: true,
-  });
-  await ensureSandboxDirectories(
-    sandbox,
-    sourceFiles.map(({ path }) => {
-      const parent = path.split("/").slice(0, -1).join("/");
-      return parent === "" ? "repository" : `repository/${parent}`;
-    }),
-  );
-  for (const file of sourceFiles) {
+  if (firstTransfer) {
+    await sandbox.removePath({ path: "repository", recursive: true, force: true });
+    const archive = developmentWorkingTreeArchive(
+      eligibility.sourcePath,
+      sourceFiles.map(({ path }) => path),
+    );
     await sandbox.writeBinaryFile({
-      path: `repository/${file.path}`,
-      content: readFileSync(resolve(eligibility.sourcePath, file.path)),
+      path: sandboxSourceArchivePath,
+      content: archive,
     });
+    try {
+      const extraction = await sandbox.run({
+        command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
+        workingDirectory: "/workspace",
+        abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
+      });
+      if (
+        Buffer.byteLength(extraction.stdout) > sandboxOperationOutputBytes ||
+        Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
+        extraction.exitCode !== 0
+      )
+        throw new Error("The development source could not be materialized.");
+    } finally {
+      await sandbox.removePath({ path: sandboxSourceArchivePath, force: true });
+    }
+  } else {
+    await ensureSandboxDirectories(
+      sandbox,
+      changedFiles.map(({ path }) => {
+        const parent = path.split("/").slice(0, -1).join("/");
+        return parent === "" ? "repository" : `repository/${parent}`;
+      }),
+    );
+    for (const path of deletedPaths)
+      await sandbox.removePath({ path: `repository/${path}`, force: true });
+    for (const file of changedFiles) {
+      await sandbox.writeBinaryFile({
+        path: `repository/${file.path}`,
+        content: readFileSync(resolve(eligibility.sourcePath, file.path)),
+      });
+    }
   }
-  const executablePaths = sourceFiles
-    .filter(({ mode }) => mode === "100755")
-    .map(({ path }) => `repository/${path}`);
-  if (executablePaths.length > 0) {
-    // Keep the path list out of the shell command.  Large working trees can
-    // exceed argv limits, and a generated shell fragment makes quoting and
-    // path containment unnecessarily hard to audit.  The helper validates
-    // each declared path again inside the sandbox before changing its mode.
-    const executableListPath = ".app-builder/development-executables.json";
+  const modeUpdates = firstTransfer ? sourceFiles : changedFiles;
+  if (modeUpdates.length > 0) {
+    // Keep the path list out of the shell command. Large working trees can
+    // exceed argv limits, and source paths must be revalidated inside the
+    // sandbox before their modes are changed.
+    const modeListPath = ".app-builder/development-source-modes.json";
     await sandbox.writeTextFile({
-      path: executableListPath,
-      content: `${JSON.stringify(executablePaths)}\n`,
+      path: modeListPath,
+      content: `${JSON.stringify(
+        modeUpdates.map(({ mode, path }) => ({
+          mode,
+          path: `repository/${path}`,
+        })),
+      )}\n`,
     });
     const chmod = await sandbox.run({
       command: `node -e ${JSON.stringify(
-        `const fs=require("node:fs");const path=require("node:path");const root=path.resolve("/workspace/repository");const entries=JSON.parse(fs.readFileSync("/workspace/${executableListPath}","utf8"));if(!Array.isArray(entries))throw new Error("invalid executable list");for(const entry of entries){if(typeof entry!=="string"||!entry.startsWith("repository/")||entry.includes("\\0"))throw new Error("invalid executable path");const target=path.resolve("/workspace",entry);if(target!==root&&!target.startsWith(root+path.sep))throw new Error("executable path escapes repository");const info=fs.lstatSync(target);if(!info.isFile()||info.isSymbolicLink())throw new Error("executable path is not a regular file");fs.chmodSync(target,0o755);}`,
+        `const fs=require("node:fs");const path=require("node:path");const root=path.resolve("/workspace/repository");const entries=JSON.parse(fs.readFileSync("/workspace/${modeListPath}","utf8"));if(!Array.isArray(entries))throw new Error("invalid mode list");for(const entry of entries){if(!entry||typeof entry.path!=="string"||!entry.path.startsWith("repository/")||entry.path.includes("\\0")||(entry.mode!=="100644"&&entry.mode!=="100755"))throw new Error("invalid source mode");const target=path.resolve("/workspace",entry.path);if(target!==root&&!target.startsWith(root+path.sep))throw new Error("source path escapes repository");const info=fs.lstatSync(target);if(!info.isFile()||info.isSymbolicLink())throw new Error("source path is not a regular file");fs.chmodSync(target,entry.mode==="100755"?0o755:0o644);}`,
       )}`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),

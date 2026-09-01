@@ -19,6 +19,7 @@ import {
   inspectSupportedTemplateDependencyClosure,
   inspectPreparedSandboxWorkspace,
   inspectSupportedRepository,
+  prepareDevelopmentSandboxWorkspace,
   prepareSupportedSandboxWorkspace,
   SUPPORTED_REPOSITORY_CONTRACT,
   SUPPORTED_TEMPLATE_DEPENDENCY_PATHS,
@@ -717,6 +718,40 @@ describe("supported-template adapter", () => {
       state: "prepared",
       workspace: prepared,
     });
+  });
+
+  it("updates only the live development source delta and preserves sandbox-owned files", async () => {
+    const root = fixture();
+    writeFileSync(join(root, "notes.md"), "first\n");
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const sandbox = fakeSandbox();
+
+    await prepareDevelopmentSandboxWorkspace(root, sandbox, "first");
+    await sandbox.writeTextFile({
+      path: "repository/.app-builder/generated-plan.json",
+      content: "generated\n",
+    });
+    writeFileSync(join(root, "notes.md"), "updated\n");
+    unlinkSync(join(root, ".github/workflows/cd.yml"));
+    // The release workflow is optional for planning compatibility, while this
+    // removal proves that only a previously managed path is deleted.
+
+    await prepareDevelopmentSandboxWorkspace(root, sandbox, "second", "planning");
+
+    expect(
+      readFileSync(resolve(sandbox.resolvePath("repository"), "notes.md"), "utf8"),
+    ).toBe("updated\n");
+    expect(
+      readFileSync(
+        resolve(sandbox.resolvePath("repository"), ".app-builder/generated-plan.json"),
+        "utf8",
+      ),
+    ).toBe("generated\n");
+    expect(() =>
+      readFileSync(
+        resolve(sandbox.resolvePath("repository"), ".github/workflows/cd.yml"),
+      ),
+    ).toThrow();
   });
 
   it("rejects reuse when the durable prepared source tree drifts", async () => {
