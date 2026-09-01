@@ -89,6 +89,17 @@ vi.mock("@/lib/agent/workflow-state", () => ({
   ) => {
     expect(latest).toEqual(expected);
   },
+  updateExactWorkflow: ({
+    expected,
+    transition,
+  }: {
+    expected: AppBuilderWorkflowState;
+    transition: (current: AppBuilderWorkflowState) => AppBuilderWorkflowState;
+  }) => {
+    if (mocks.current === undefined) throw new Error("missing test state");
+    expect(mocks.current).toEqual(expected);
+    mocks.current = transition(mocks.current);
+  },
   assertUpstreamMutationAllowed: mocks.assertUpstreamMutationAllowed,
   sha256: () => "f".repeat(64),
 }));
