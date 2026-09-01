@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import {
   appBuilderWorkflowState,
-  assertExactWorkflowState,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   readLocalPublicationJournal,
@@ -126,25 +126,24 @@ export default defineTool({
         review: workflow.reviewReceipt,
       });
       if (workflow.phase === "publication_pending") {
-        appBuilderWorkflowState.update((current) => {
-          assertExactWorkflowState(
-            current,
-            workflow,
-            "local-publication success recovery",
-          );
-          if (
-            current.phase !== "publication_pending" ||
-            current.publicationCallId !== workflow.publicationCallId ||
-            !exactProposalMatch(current.publicationProposal, expected)
-          )
-            throw new Error(
-              "The publication workflow changed before success recovery.",
-            );
-          return {
-            ...current,
-            phase: "published_local",
-            publicationReceipt: stored,
-          };
+        updateExactWorkflow({
+          expected: workflow,
+          operation: "local-publication success recovery",
+          transition: (current) => {
+            if (
+              current.phase !== "publication_pending" ||
+              current.publicationCallId !== workflow.publicationCallId ||
+              !exactProposalMatch(current.publicationProposal, expected)
+            )
+              throw new Error(
+                "The publication workflow changed before success recovery.",
+              );
+            return {
+              ...current,
+              phase: "published_local",
+              publicationReceipt: stored,
+            };
+          },
         });
       } else if (workflow.phase !== "published_local") {
         throw new Error(
@@ -168,25 +167,24 @@ export default defineTool({
         throw new Error(
           "The durable failed publication does not exactly bind the pending workflow.",
         );
-      appBuilderWorkflowState.update((current) => {
-        assertExactWorkflowState(
-          current,
-          workflow,
-          "local-publication failure recovery",
-        );
-        if (
-          current.phase !== "publication_pending" ||
-          current.publicationCallId !== workflow.publicationCallId ||
-          !exactProposalMatch(current.publicationProposal, expected)
-        )
-          throw new Error(
-            "The publication workflow changed before failure recovery.",
-          );
-        return {
-          ...current,
-          phase: "publication_failed",
-          publicationReceipt: stored,
-        };
+      updateExactWorkflow({
+        expected: workflow,
+        operation: "local-publication failure recovery",
+        transition: (current) => {
+          if (
+            current.phase !== "publication_pending" ||
+            current.publicationCallId !== workflow.publicationCallId ||
+            !exactProposalMatch(current.publicationProposal, expected)
+          )
+            throw new Error(
+              "The publication workflow changed before failure recovery.",
+            );
+          return {
+            ...current,
+            phase: "publication_failed",
+            publicationReceipt: stored,
+          };
+        },
       });
       return {
         ...stored,
@@ -213,27 +211,26 @@ export default defineTool({
       );
     // The workflow aggregate owns publication authority. Persist pending before
     // reading the canonical overlay or touching the destination.
-    appBuilderWorkflowState.update((current) => {
-      assertExactWorkflowState(
-        current,
-        workflow,
-        "local-publication pending recording",
-      );
-      if (
-        current.phase !== "reviewed" ||
-        current.sourceReceipt.digest !== workflow.sourceReceipt.digest ||
-        current.reviewReceipt.digest !== workflow.reviewReceipt.digest ||
-        !exactProposalMatch(proposal, expected)
-      )
-        throw new Error(
-          "The reviewed workflow changed before publication pending could be recorded.",
-        );
-      return {
-        ...current,
-        phase: "publication_pending",
-        publicationProposal: proposal,
-        publicationCallId: ctx.callId,
-      };
+    updateExactWorkflow({
+      expected: workflow,
+      operation: "local-publication pending recording",
+      transition: (current) => {
+        if (
+          current.phase !== "reviewed" ||
+          current.sourceReceipt.digest !== workflow.sourceReceipt.digest ||
+          current.reviewReceipt.digest !== workflow.reviewReceipt.digest ||
+          !exactProposalMatch(proposal, expected)
+        )
+          throw new Error(
+            "The reviewed workflow changed before publication pending could be recorded.",
+          );
+        return {
+          ...current,
+          phase: "publication_pending",
+          publicationProposal: proposal,
+          publicationCallId: ctx.callId,
+        };
+      },
     });
     if (
       hasTestCapability("simulated-publication") &&
@@ -317,39 +314,38 @@ export default defineTool({
       throw new Error(
         "Fixture interruption after durable terminal publication journal and before workflow terminal CAS.",
       );
-    appBuilderWorkflowState.update((current) => {
-      const expectedPending = {
-        ...workflow,
-        phase: "publication_pending" as const,
-        publicationProposal: proposal,
-        publicationCallId: ctx.callId,
-      };
-      assertExactWorkflowState(
-        current,
-        expectedPending,
-        "local-publication terminal recording",
-      );
-      if (
-        current.phase !== "publication_pending" ||
-        current.publicationCallId !== ctx.callId ||
-        current.publicationProposal.digest !== proposal.digest ||
-        current.sourceReceipt.digest !== workflow.sourceReceipt.digest ||
-        current.reviewReceipt.digest !== workflow.reviewReceipt.digest
-      )
-        throw new Error(
-          "The pending publication workflow changed before terminal recording.",
-        );
-      return result.ok
-        ? {
-            ...current,
-            phase: "published_local",
-            publicationReceipt: result.receipt,
-          }
-        : {
-            ...current,
-            phase: "publication_failed",
-            publicationReceipt: result.receipt,
-          };
+    const expectedPending = {
+      ...workflow,
+      phase: "publication_pending" as const,
+      publicationProposal: proposal,
+      publicationCallId: ctx.callId,
+    };
+    updateExactWorkflow({
+      expected: expectedPending,
+      operation: "local-publication terminal recording",
+      transition: (current) => {
+        if (
+          current.phase !== "publication_pending" ||
+          current.publicationCallId !== ctx.callId ||
+          current.publicationProposal.digest !== proposal.digest ||
+          current.sourceReceipt.digest !== workflow.sourceReceipt.digest ||
+          current.reviewReceipt.digest !== workflow.reviewReceipt.digest
+        )
+          throw new Error(
+            "The pending publication workflow changed before terminal recording.",
+          );
+        return result.ok
+          ? {
+              ...current,
+              phase: "published_local",
+              publicationReceipt: result.receipt,
+            }
+          : {
+              ...current,
+              phase: "publication_failed",
+              publicationReceipt: result.receipt,
+            };
+      },
     });
     if (!result.ok)
       throw new Error(
