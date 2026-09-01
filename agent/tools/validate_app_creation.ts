@@ -9,6 +9,7 @@ import {
   appBuilderWorkflowState,
   assertExactWorkflowState,
   assertUpstreamMutationAllowed,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   assertCurrentTargetApplyReceipt,
@@ -160,26 +161,25 @@ export default defineTool({
       applyReceipt: current.applyReceipt,
     } as const;
     if (attempt !== undefined)
-      appBuilderWorkflowState.update((latest) => {
-        assertExactWorkflowState(
-          latest,
-          current,
-          "target validation attempt recording",
-        );
-        if (
-          latest.phase !== "applied" ||
-          latest.applyReceipt.digest !== current.applyReceipt.digest ||
-          latest.proposal.digest !== current.proposal.digest ||
-          latest.appSpec.artifactRevision !== current.appSpec.artifactRevision
-        )
-          throw new Error(
-            "The workflow changed concurrently before target validation started.",
-          );
-        return {
-          ...base,
-          phase: "validation_pending",
-          validationAttempt: attempt,
-        };
+      updateExactWorkflow({
+        expected: current,
+        operation: "target validation attempt recording",
+        transition: (latest) => {
+          if (
+            latest.phase !== "applied" ||
+            latest.applyReceipt.digest !== current.applyReceipt.digest ||
+            latest.proposal.digest !== current.proposal.digest ||
+            latest.appSpec.artifactRevision !== current.appSpec.artifactRevision
+          )
+            throw new Error(
+              "The workflow changed concurrently before target validation started.",
+            );
+          return {
+            ...base,
+            phase: "validation_pending",
+            validationAttempt: attempt,
+          };
+        },
       });
     if (current.phase === "validation_pending")
       throw new Error(
@@ -332,57 +332,55 @@ export default defineTool({
         }),
       };
     if (!result.ok) {
-      appBuilderWorkflowState.update((latest) => {
-        const expectedPending = {
-          ...base,
-          phase: "validation_pending" as const,
-          validationAttempt: attempt,
-        };
-        assertExactWorkflowState(
-          latest,
-          expectedPending,
-          "target validation failure recording",
-        );
-        if (
-          latest.phase !== "validation_pending" ||
-          latest.validationAttempt.digest !== attempt.digest
-        )
-          throw new Error(
-            "The workflow changed before target-validation failure could be recorded.",
-          );
-        return {
-          ...base,
-          phase: "validation_failed",
-          validationFailure: result.receipt,
-        };
-      });
-      throw new Error(
-        `Target validation entered recovery-required failure ${result.receipt.digest}.`,
-      );
-    }
-    appBuilderWorkflowState.update((latest) => {
       const expectedPending = {
         ...base,
         phase: "validation_pending" as const,
         validationAttempt: attempt,
       };
-      assertExactWorkflowState(
-        latest,
-        expectedPending,
-        "target validation success recording",
+      updateExactWorkflow({
+        expected: expectedPending,
+        operation: "target validation failure recording",
+        transition: (latest) => {
+          if (
+            latest.phase !== "validation_pending" ||
+            latest.validationAttempt.digest !== attempt.digest
+          )
+            throw new Error(
+              "The workflow changed before target-validation failure could be recorded.",
+            );
+          return {
+            ...base,
+            phase: "validation_failed",
+            validationFailure: result.receipt,
+          };
+        },
+      });
+      throw new Error(
+        `Target validation entered recovery-required failure ${result.receipt.digest}.`,
       );
-      if (
-        latest.phase !== "validation_pending" ||
-        latest.validationAttempt.digest !== attempt.digest
-      )
-        throw new Error(
-          "The workflow changed before target-validation success could be recorded.",
-        );
-      return {
-        ...base,
-        phase: "validated",
-        validationReceipt: result.receipt,
-      };
+    }
+    const expectedPending = {
+      ...base,
+      phase: "validation_pending" as const,
+      validationAttempt: attempt,
+    };
+    updateExactWorkflow({
+      expected: expectedPending,
+      operation: "target validation success recording",
+      transition: (latest) => {
+        if (
+          latest.phase !== "validation_pending" ||
+          latest.validationAttempt.digest !== attempt.digest
+        )
+          throw new Error(
+            "The workflow changed before target-validation success could be recorded.",
+          );
+        return {
+          ...base,
+          phase: "validated",
+          validationReceipt: result.receipt,
+        };
+      },
     });
     return { ...result.receipt, reused: false };
   },
