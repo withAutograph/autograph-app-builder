@@ -137,7 +137,15 @@ function plannedEvents() {
         before: { mode: "644", digest: hash(`before:${path}`) },
         after: { mode: "644", digest: hash(content), content },
       })),
-      digest: hash(JSON.stringify(existingAppChanges)),
+      digest: hash(
+        JSON.stringify(
+          existingAppChanges.map(({ path, content }) => ({
+            path,
+            before: { mode: "644", digest: hash(`before:${path}`) },
+            after: { mode: "644", digest: hash(content), content },
+          })),
+        ),
+      ),
     },
   };
   const unsigned = {

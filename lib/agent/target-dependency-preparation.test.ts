@@ -65,6 +65,20 @@ const mocks = vi.hoisted(() => {
     MissingDependencyCache,
     exactPrototypeArtifact: vi.fn(),
     assertUpstreamMutationAllowed: vi.fn(),
+    assertExactDependencyPreparationReceipt: vi.fn(
+      (receipt: {
+        version: number;
+        dependencyLayout?: unknown;
+        digest: string;
+      }) => {
+        if (
+          receipt.version !== 2 ||
+          receipt.dependencyLayout === undefined ||
+          receipt.digest !== "f".repeat(64)
+        )
+          throw new Error("The dependency preparation receipt is malformed.");
+      },
+    ),
     bootstrapLiveTemplateDependencies: vi.fn(async () => cache),
     inspectDependencyCache: vi.fn(async () => cache),
     materializeOfflineDependencies: vi.fn(async () => cache),
@@ -107,6 +121,8 @@ vi.mock("@/lib/agent/workflow-state", () => ({
     mocks.current = transition(mocks.current);
   },
   assertUpstreamMutationAllowed: mocks.assertUpstreamMutationAllowed,
+  assertExactDependencyPreparationReceipt:
+    mocks.assertExactDependencyPreparationReceipt,
   sha256: () => "f".repeat(64),
 }));
 
@@ -520,6 +536,12 @@ describe("target dependency preparation", () => {
 
     expect(first).toMatchObject({ reused: false });
     expect(retry).toMatchObject({ reused: true });
+    expect(mocks.assertExactDependencyPreparationReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 2,
+        dependencyLayout: mocks.cache.dependencyLayout,
+      }),
+    );
     expect(mocks.materializePlanningOverlay).toHaveBeenCalledTimes(1);
     expect(mocks.materializeOfflineDependencies).toHaveBeenCalledTimes(1);
   });
@@ -699,6 +721,12 @@ describe("target dependency preparation", () => {
         toolContext("retry-call").context,
       ),
     ).rejects.toThrow("changed after its durable receipt");
+    expect(mocks.assertExactDependencyPreparationReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 2,
+        dependencyLayout: mocks.cache.dependencyLayout,
+      }),
+    );
     expect(mocks.materializeOfflineDependencies).toHaveBeenCalledTimes(1);
   });
 
