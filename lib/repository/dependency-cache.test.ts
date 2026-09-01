@@ -24,6 +24,7 @@ import {
   inspectDependencyCache,
   materializedDependencyNodeModulesRoot,
   materializeOfflineDependencies,
+  shouldPreferLiveTemplateDependencies,
 } from "./dependency-cache";
 
 const archiveDigest = "a".repeat(64);
@@ -162,6 +163,17 @@ function hostedExecutionSandbox(
 }
 
 describe("offline dependency cache", () => {
+  it("uses workspace-bound dependencies for both supported hosted source receipts", () => {
+    expect(shouldPreferLiveTemplateDependencies(3, {})).toBe(true);
+    expect(shouldPreferLiveTemplateDependencies(4, {})).toBe(true);
+    expect(
+      shouldPreferLiveTemplateDependencies(3, {
+        APP_BUILDER_EXECUTION_MODE: "development",
+      }),
+    ).toBe(false);
+    expect(shouldPreferLiveTemplateDependencies(2, {})).toBe(false);
+  });
+
   it("keeps cold dependency preparation bounded below the sandbox session ceiling", () => {
     expect(DEPENDENCY_PREPARATION_TIMEOUT_MS).toBe(600_000);
     expect(DEPENDENCY_PREPARATION_TIMEOUT_MS).toBeLessThan(900_000);

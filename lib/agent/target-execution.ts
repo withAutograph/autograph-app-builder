@@ -10,10 +10,10 @@ import {
   dependencyCacheReceiptDigest,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
+  shouldPreferLiveTemplateDependencies,
   type ObservedDependencyCache,
 } from "../repository/dependency-cache";
 import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
-import { SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import {
   targetExecutionBinding,
   targetProposalSchema,
@@ -216,7 +216,10 @@ export async function inspectTargetExecutionReadiness(input: {
         input.sandbox,
         environment,
         input.state.workspace,
-        input.state.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
+        shouldPreferLiveTemplateDependencies(
+          input.state.sourceReceipt.version,
+          environment,
+        ),
       ).catch(() => undefined)
     : undefined;
   const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({

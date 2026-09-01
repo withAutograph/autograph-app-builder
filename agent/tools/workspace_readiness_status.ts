@@ -7,12 +7,13 @@ import {
   assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
-import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import {
   assertExactDependencyTargetBinding,
+  DependencyCacheMissingError,
   dependencyCacheReceiptDigest,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
+  shouldPreferLiveTemplateDependencies,
 } from "@/lib/repository/dependency-cache";
 import {
   configuredToolchainImage,
@@ -27,7 +28,7 @@ const commands = ["git", "mise", "bun"] as const;
 
 export default defineTool({
   description:
-    "Verify the exact prepared workspace and fixed immutable toolchain before planning. It only inspects receipts and fixed command versions; it never executes a target-owned command.",
+    "Verify the exact prepared workspace and fixed immutable toolchain before planning. A typed missing workspace-bound dependency closure is reported as prepare-on-plan so planning can prepare and verify it automatically; it is not reported as source drift. This tool only inspects receipts and fixed command versions and never executes a target-owned command.",
   inputSchema: z.object({}),
   async execute(_input, ctx) {
     const current = appBuilderWorkflowState.get();
@@ -65,15 +66,25 @@ export default defineTool({
       fixture: hasTestCapability("simulated-target"),
       localImageConfigured: image !== undefined,
     });
-    const cache =
-      backend.blockers.length === 0
-        ? await inspectDependencyCache(
-            sandbox,
-            process.env,
-            current.workspace,
-            current.sourceReceipt.version === SOURCE_RECEIPT_VERSION,
-          ).catch(() => undefined)
-        : undefined;
+    const preferLiveTemplate = shouldPreferLiveTemplateDependencies(
+      current.sourceReceipt.version,
+      process.env,
+    );
+    let prepareOnPlan = false;
+    let cache;
+    if (backend.blockers.length === 0) {
+      try {
+        cache = await inspectDependencyCache(
+          sandbox,
+          process.env,
+          current.workspace,
+          preferLiveTemplate,
+        );
+      } catch (error) {
+        if (preferLiveTemplate && error instanceof DependencyCacheMissingError)
+          prepareOnPlan = true;
+      }
+    }
     let sourceTargetReady = false;
     if (cache !== undefined) {
       try {
@@ -131,12 +142,13 @@ export default defineTool({
               return undefined;
             }
           })();
+    const requiredToolsReady = required.every((tool) => tool.matches);
     const toolchainReady =
       backend.blockers.length === 0 &&
       execution !== undefined &&
       cache !== undefined &&
       sourceTargetReady &&
-      required.every((tool) => tool.matches);
+      requiredToolsReady;
     const dependencyTarget =
       cache === undefined
         ? undefined
@@ -160,16 +172,26 @@ export default defineTool({
       ...receipt,
       workspaceReadinessDigest: sha256(JSON.stringify(receipt)),
       toolchainReady,
+      dependencyPreparation:
+        cache !== undefined
+          ? "ready"
+          : prepareOnPlan
+            ? "prepare-on-plan"
+            : "unavailable",
       blockers: toolchainReady
         ? []
         : [
             ...backend.blockers,
-            ...(sourceTargetReady
+            ...(sourceTargetReady || prepareOnPlan
               ? []
               : [
                   "The prepared source does not match the immutable dependency target.",
                 ]),
-            "The immutable sandbox image and exact Git, mise, and Bun receipt are not ready.",
+            ...(prepareOnPlan && requiredToolsReady
+              ? []
+              : [
+                  "The immutable sandbox image and exact Git, mise, and Bun receipt are not ready.",
+                ]),
           ],
     };
   },
