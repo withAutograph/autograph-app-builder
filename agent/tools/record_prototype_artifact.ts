@@ -10,8 +10,8 @@ import {
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactWorkflowState,
   assertUpstreamMutationAllowed,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 
 export default defineTool({
@@ -55,19 +55,22 @@ export default defineTool({
     });
     if (recorded.reused)
       return { ...prototypeArtifactReceipt(recorded.artifact), reused: true };
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(latest, current, "prototype artifact recording");
-      return {
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "prepared",
-        preparedByCallId: current.preparedByCallId,
-        workspace: current.workspace,
-        sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
-        artifacts: recorded.artifacts,
-      };
+    updateExactWorkflow({
+      expected: current,
+      operation: "prototype artifact recording",
+      transition: () => {
+        return {
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          phase: "prepared",
+          preparedByCallId: current.preparedByCallId,
+          workspace: current.workspace,
+          sourceReceipt: current.sourceReceipt,
+          ...(current.githubSource === undefined
+            ? {}
+            : { githubSource: current.githubSource }),
+          artifacts: recorded.artifacts,
+        };
+      },
     });
     return {
       ...prototypeArtifactReceipt(recorded.artifact),
