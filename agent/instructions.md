@@ -124,6 +124,13 @@ isolated workspace.
    artifact bytes but is not GitHub publication authority. If an optional closed
    approval object is already present, validate it exactly; never invent or
    prose-match one.
+   Local App Builder work MUST use live Next.js code and HMR. When an Arrusted
+   edit needs Eve, restart the targeted Eve cycle and use its fresh transient
+   working-tree snapshot. Local prototype and planning work MUST NOT require a
+   rebase or published `main` as a prerequisite. Dependency-cache identity MUST
+   use only dependency inputs, platform, toolchain, and bootstrap identity.
+   Release-candidate byte immutability applies only during promotion; it does
+   not change any runtime-enforced source, tenant, path, or publication gate.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
    shell command or retry with altered inputs. Use only `apply_app_creation` to
@@ -178,6 +185,10 @@ isolated workspace.
    durably save the exact proposal without mutation. Publication approval must
    bind its receipt subject to that sealed proposal digest, not only the change
    set.
+   Describe a draft PR in product language as provisional. Final merge is a
+   separately approved current-base reconciliation; follow
+   [the local development lifecycle](../docs/local-development-lifecycle.md)
+   while preserving every runtime-enforced publication safety gate.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.
 
