@@ -497,6 +497,7 @@ describe("closed GitHub publication contract", () => {
     const adapter = new Adapter();
     const result = await resolveImmutableExistingSource({
       adapter,
+      expectedInstallationId: "10",
       repositoryId: "100",
       ref: "refs/heads/main",
       expectedSha: sha,
@@ -504,6 +505,17 @@ describe("closed GitHub publication contract", () => {
       resolvedByCallId: "resolve-call",
     });
     expect(result.repository.repositoryId).toBe("100");
+    await expect(
+      resolveImmutableExistingSource({
+        adapter,
+        expectedInstallationId: "11",
+        repositoryId: "100",
+        ref: "refs/heads/main",
+        expectedSha: sha,
+        expectedTree: tree,
+        resolvedByCallId: "resolve-call",
+      }),
+    ).rejects.toThrow(/installation is not selected/u);
     for (const ref of [
       "main",
       "refs/tags/v1",
@@ -513,6 +525,7 @@ describe("closed GitHub publication contract", () => {
       await expect(
         resolveImmutableExistingSource({
           adapter,
+          expectedInstallationId: "10",
           repositoryId: "100",
           ref,
           expectedSha: sha,

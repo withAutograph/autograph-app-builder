@@ -51,6 +51,7 @@ export type GitHubPublicationRuntimeStatus = {
 export interface GitHubPublicationRuntime {
   status(): Promise<GitHubPublicationRuntimeStatus>;
   resolveImmutableSource(input: {
+    expectedInstallationId: string;
     repositoryId: string;
     ref: string;
     expectedSha: string;
@@ -155,6 +156,7 @@ export function composeGitHubPublicationRuntime(input: {
     async resolveImmutableSource(request) {
       return resolveImmutableExistingSource({
         adapter,
+        expectedInstallationId: request.expectedInstallationId,
         repositoryId: request.repositoryId,
         ref: request.ref,
         expectedSha: request.expectedSha,

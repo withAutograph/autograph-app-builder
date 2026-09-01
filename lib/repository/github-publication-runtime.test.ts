@@ -484,6 +484,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     });
 
     const resolved = await runtime.resolveImmutableSource({
+      expectedInstallationId: "10",
       repositoryId: "100",
       ref: "refs/heads/main",
       expectedSha: sourceSha,
@@ -549,6 +550,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
       receipts: stores.receiptStore,
     });
     const githubSource = await runtime.resolveImmutableSource({
+      expectedInstallationId: "10",
       repositoryId: "100",
       ref: "refs/heads/main",
       expectedSha: sourceSha,
@@ -586,6 +588,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
       receipts: stores.receiptStore,
     });
     const githubSource = await runtime.resolveImmutableSource({
+      expectedInstallationId: "10",
       repositoryId: "100",
       ref: "refs/heads/feature",
       expectedSha: sourceSha,
@@ -616,6 +619,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
       receipts: stores.receiptStore,
     });
     const githubSource = await runtime.resolveImmutableSource({
+      expectedInstallationId: "10",
       repositoryId: "100",
       ref: "refs/heads/main",
       expectedSha: sourceSha,
