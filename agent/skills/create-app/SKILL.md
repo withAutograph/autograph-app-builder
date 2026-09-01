@@ -34,7 +34,10 @@ missing operation with a raw shell command or generic file write.
    the source read-only and prepare its isolated builder-owned workspace. Use
    the runtime's single preselected existing-repository snapshot during local
    development without asking for or displaying its host path. Outside that
-   closed binding, retain the explicit allowlisted-path requirement.
+   closed binding, retain the explicit allowlisted-path requirement. In hosted
+   execution, an inspection or iteration of an app already present in canonical
+   Arrusted uses the builder-owned canonical clone as the `fresh-template`
+   transport. Do not ask the user for a local checkout path in that case.
    Use
    `workspace_status` to verify preparation, then perform known file reads under
    the exact absolute `workspacePath` returned by preparation. Never pass that

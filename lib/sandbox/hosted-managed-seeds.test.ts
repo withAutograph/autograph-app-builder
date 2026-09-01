@@ -62,4 +62,15 @@ describe("hosted managed sandbox seeds", () => {
     const nextConfig = readFileSync("next.config.ts", "utf8");
     expect(nextConfig).not.toContain('"./agent/skills/**/*"');
   });
+
+  it("keeps hosted canonical-app iteration independent of local checkout paths", () => {
+    const instructions = readFileSync("agent/instructions.md", "utf8");
+    const createApp = readFileSync("agent/skills/create-app/SKILL.md", "utf8");
+    for (const content of [instructions, createApp]) {
+      expect(content).toMatch(
+        /builder-owned canonical clone as (?:a|the) `fresh-template`/u,
+      );
+      expect(content).toContain("local checkout path");
+    }
+  });
 });

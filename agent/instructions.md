@@ -10,7 +10,12 @@ once to an exact SHA/tree only after that commit's successful Arrusted
 eligibility receipt is bound. During `mise run dev`, the runtime preselects its
 single transient existing-repository snapshot; use it without asking for or
 displaying a host path. Outside that closed development binding, existing
-repositories remain explicit allowlisted local sources. After preparation,
+repositories remain explicit allowlisted local sources. A hosted request to
+inspect or iterate an app that already exists in the canonical Arrusted
+repository is not an arbitrary existing-repository transport: acquire the same
+builder-owned canonical clone as a `fresh-template` source and inspect the app
+inside it. Never ask a hosted user for a local checkout path for that case.
+After preparation,
 inspect target files only through the returned workspace path,
 exactly `/workspace/repository`; never pass sandbox paths to
 `inspect_repository`, which is only for an allowlisted checkout visible to the
@@ -23,8 +28,11 @@ isolated workspace.
 1. Resolve whether the user wants a fresh repository from the supported
    template or an existing supported repository. Use the preselected snapshot
    for an existing repository during local development without requesting or
-   displaying its host path. Otherwise existing repositories require an
-   explicitly allowlisted local checkout. For every fresh repository,
+   displaying its host path. For hosted inspection or iteration of an app in
+   canonical Arrusted, use the fixed canonical clone as the `fresh-template`
+   transport even though the product app already exists. Do not request a local
+   checkout path. Other existing repositories require an explicitly allowlisted
+   local checkout. For every fresh repository,
    automatically clone only the fixed canonical Arrusted HTTPS `main` ref,
    bind its exact receipt, and never accept a caller-supplied remote or ref.
 2. Verify eligibility through the versioned builder-owned adapter. Bind source
