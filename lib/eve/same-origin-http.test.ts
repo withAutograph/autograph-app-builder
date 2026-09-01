@@ -57,6 +57,34 @@ function stream(
   );
 }
 
+function pendingApprovalEvents(requestId: string) {
+  return [
+    {
+      type: "input.requested",
+      data: {
+        requests: [
+          {
+            requestId,
+            kind: "tool-approval",
+            prompt: "Approve tool call: resolve_github_source",
+            action: {
+              kind: "tool-call",
+              toolName: "resolve_github_source",
+              input: { repository: "withAutograph/arrusted-development" },
+            },
+          },
+        ],
+      },
+      meta: { at: 1, id: "evt_input" },
+    },
+    {
+      type: "session.waiting",
+      data: {},
+      meta: { at: 2, id: "evt_waiting" },
+    },
+  ];
+}
+
 function plannedEvents() {
   const callId = "call_plan";
   const appSpecDigest = "a".repeat(64);
@@ -351,6 +379,70 @@ describe("same-origin canonical Eve transport", () => {
     );
   });
 
+  it("waits for the exact accepted input response to settle", async () => {
+    const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
+    const pending = pendingApprovalEvents(requestId);
+    const settled = [
+      ...pending,
+      {
+        type: "input.resolved",
+        data: { resolutions: [{ requestId }] },
+        meta: { at: 3, id: "evt_resolved" },
+      },
+    ];
+    let streamReads = 0;
+    const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).includes("/stream?")) {
+        streamReads += 1;
+        return stream(streamReads < 3 ? pending : settled);
+      }
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        inputResponses: [{ requestId, optionId: "cancel" }],
+      });
+      return accepted();
+    });
+
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation,
+      }).respond({
+        principal,
+        operationId: "op_respond_settlement",
+        adapterSessionId: "wrun_1",
+        responses: [{ requestId, response: { kind: "deny" } }],
+      }),
+    ).resolves.toMatchObject({ status: "waiting" });
+    expect(streamReads).toBe(3);
+  });
+
+  it("keeps an accepted but unsettled input response non-replayable", async () => {
+    const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
+    let streamReads = 0;
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).includes("/stream?")) {
+        streamReads += 1;
+        return stream(pendingApprovalEvents(requestId));
+      }
+      return accepted();
+    });
+
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation,
+      }).respond({
+        principal,
+        operationId: "op_respond_unsettled",
+        adapterSessionId: "wrun_1",
+        responses: [{ requestId, response: { kind: "deny" } }],
+      }),
+    ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
+    expect(streamReads).toBe(8);
+  });
+
   it("waits for a new guarded cancel and waiting boundary", async () => {
     const active = [{ type: "step.started", data: { turnId: "turn_1" } }];
     const settled = [
@@ -419,6 +511,20 @@ describe("same-origin canonical Eve transport", () => {
     expect(staleGuardFetch).toHaveBeenCalledTimes(1);
 
     const waiting = [{ type: "session.waiting", data: {} }];
+    const noActiveGuardFetch = vi.fn<typeof fetch>(async () => stream(waiting));
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation: noActiveGuardFetch,
+      }).cancel({
+        principal,
+        adapterSessionId: "wrun_1",
+        turnId: "turn_0",
+      }),
+    ).rejects.toMatchObject({ code: "turn_changed" });
+    expect(noActiveGuardFetch).toHaveBeenCalledTimes(1);
+
     const noActiveFetch = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" })
