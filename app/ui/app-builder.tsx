@@ -6,7 +6,14 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+<<<<<<< HEAD
   Copy,
+||||||| parent of fa8ed4a (refactor: extract builder install instructions)
+  Copy,
+  DollarSign,
+=======
+  DollarSign,
+>>>>>>> fa8ed4a (refactor: extract builder install instructions)
   ExternalLink,
   Globe,
   Info,
@@ -62,6 +69,7 @@ import {
 import { Header, ProviderNotices } from "./builder-shell";
 import { BuilderNextSteps } from "./builder-next-steps";
 import { BuilderProvisionedResources } from "./builder-provisioned-resources";
+import { BuilderInstallInstructions } from "./builder-install-instructions";
 import type {
   BuilderDraft,
   BuilderForm,
@@ -2194,9 +2202,6 @@ codex plugin add app-builder@autograph`;
   const [showInstall, setShowInstall] = useState(true);
   const [retryClipboardState, setRetryClipboardState] =
     useState<ClipboardState>("idle");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle",
-  );
   const [handoffAttempt, setHandoffAttempt] =
     useState<HandoffAttempt>(initialAttempt);
   const [provisioning, setProvisioning] = useState(initialProvisioning);
@@ -2322,45 +2327,10 @@ codex plugin add app-builder@autograph`;
             : null}
         </p>
         {showInstall ? (
-          <section className={styles.installCard}>
-            <div>
-              <h2>Install App Builder Plugin</h2>
-              <button
-                type="button"
-                aria-label="Dismiss install instructions"
-                onClick={() => setShowInstall(false)}
-              >
-                <X size={17} aria-hidden="true" />
-              </button>
-            </div>
-            <p>
-              Run this once in Codex&apos;s terminal. Then open a fresh task and
-              describe the app you want to create.
-            </p>
-            <div className={styles.command}>
-              <code>{command}</code>
-              <button
-                type="button"
-                aria-label="Copy install command"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(command);
-                    setCopyState("copied");
-                  } catch {
-                    setCopyState("failed");
-                  }
-                }}
-              >
-                <Copy size={17} aria-hidden="true" />
-              </button>
-            </div>
-            <span role="status" aria-live="polite">
-              {copyState === "copied" ? "Install command copied." : null}
-              {copyState === "failed"
-                ? "Copy failed. Select and copy the command manually."
-                : null}
-            </span>
-          </section>
+          <BuilderInstallInstructions
+            command={command}
+            onDismiss={() => setShowInstall(false)}
+          />
         ) : null}
         <BuilderNextSteps onReset={onReset} />
       </section>
