@@ -51,6 +51,11 @@ export type DevelopmentSnapshot = Readonly<{
   fingerprint: string;
   commit: string;
   tree: string;
+  entries: readonly Readonly<{
+    path: string;
+    digest: string;
+    bytes: number;
+  }>[];
 }>;
 
 function argumentValue(args: readonly string[], index: number, name: string) {
@@ -483,7 +488,17 @@ export async function createDevelopmentSnapshot(input: {
       env: gitEnvironment(),
     }).trim();
     await makeReadOnly(root);
-    return { root, fingerprint, commit, tree };
+    return {
+      root,
+      fingerprint,
+      commit,
+      tree,
+      entries: entries.map((entry) => ({
+        path: entry.path,
+        digest: sha256(entry.content),
+        bytes: entry.content.byteLength,
+      })),
+    };
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;

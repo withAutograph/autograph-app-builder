@@ -75,15 +75,22 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development Eve application root",
     true,
   );
-  const activeRun = resolve(applicationRoot, "../..");
-  if (!contained(runsRoot, activeRun) || dirname(activeRun) !== runsRoot)
-    throw new Error("Development Eve application was outside the active run.");
-  if (applicationRoot !== join(activeRun, "eve-application/source"))
-    throw new Error("Development Eve application root was not fresh.");
+  const supervisorRoot = ownerDirectory(
+    required(environment, "APP_BUILDER_DEV_SUPERVISOR_ROOT"),
+    "Development Eve supervisor root",
+    true,
+  );
+  if (!contained(runsRoot, supervisorRoot) || dirname(supervisorRoot) !== runsRoot)
+    throw new Error("Development Eve supervisor was outside the runs root.");
+  if (applicationRoot !== join(supervisorRoot, "eve-application/source"))
+    throw new Error("Development Eve application root was not supervisor-bound.");
   const sourceRoot = ownerDirectory(
     required(environment, "REPOSITORY_LOCAL_ROOTS"),
     "Development Arrusted source root",
   );
+  const activeRun = dirname(sourceRoot);
+  if (!contained(runsRoot, activeRun) || dirname(activeRun) !== runsRoot)
+    throw new Error("Development Arrusted source was outside the active run.");
   if (sourceRoot !== join(activeRun, "source"))
     throw new Error("Development Arrusted source was outside the active run.");
   const runtimeHome = ownerDirectory(
@@ -91,15 +98,15 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development runtime home",
     true,
   );
-  if (runtimeHome !== join(activeRun, "home"))
-    throw new Error("Development runtime home was outside the active run.");
+  if (runtimeHome !== join(supervisorRoot, "home"))
+    throw new Error("Development runtime home was not supervisor-bound.");
   const workflowData = ownerDirectory(
     required(environment, "WORKFLOW_LOCAL_DATA_DIR"),
     "Development workflow data root",
     true,
   );
-  if (workflowData !== join(activeRun, "workflow-data"))
-    throw new Error("Development workflow data was outside the active run.");
+  if (workflowData !== join(supervisorRoot, "workflow-data"))
+    throw new Error("Development workflow data was not supervisor-bound.");
   const destinationRoot = ownerDirectory(
     required(environment, "REPOSITORY_WORKSPACE_ROOT"),
     "Development destination root",
@@ -113,6 +120,7 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     destinationRoot,
     runtimeHome,
     sourceRoot,
+    supervisorRoot,
     workflowData,
   };
 }

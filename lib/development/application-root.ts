@@ -27,9 +27,9 @@ async function makeWritable(path: string): Promise<void> {
 }
 
 /**
- * Materializes the App Builder code used by exactly one local Eve process.
- * Eve persists workflow state beneath its application root, so reusing this
- * directory across cycles would let a new proof resume stale sessions.
+ * Materializes the App Builder code used by one local development supervisor.
+ * The supervisor deliberately retains this directory across Eve restarts so
+ * Eve can resume its supported local session state without recovering turns.
  */
 export async function createDevelopmentApplication(input: {
   repositoryRoot: string;

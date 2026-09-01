@@ -3,6 +3,7 @@ import {
   cp,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rename,
   rm,
@@ -28,6 +29,52 @@ export type DevelopmentCodexCommandRunner = (
   args: readonly string[],
   options: { allowFailure?: boolean },
 ) => Promise<{ stdout: string; stderr: string }>;
+
+async function packageInputDigest(path: string): Promise<string> {
+  const entries = await readdir(path, { withFileTypes: true });
+  const contents = await Promise.all(
+    entries
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(async (entry) => {
+        const entryPath = join(path, entry.name);
+        if (entry.isDirectory())
+          return [entry.name, await packageInputDigest(entryPath)] as const;
+        if (!entry.isFile())
+          throw new Error(
+            `Development package input was not a regular file: ${entryPath}`,
+          );
+        return [entry.name, sha256(await readFile(entryPath))] as const;
+      }),
+  );
+  return sha256(JSON.stringify(contents));
+}
+
+/**
+ * Only bytes that are installed into Codex or define its MCP registration
+ * require a package rebuild.  Keeping this separate from the App Builder
+ * runtime lets UI-only changes retain the existing local installation.
+ */
+export async function developmentPackageFingerprint(input: {
+  repositoryRoot: string;
+  port: number;
+}) {
+  const repositoryRoot = resolve(input.repositoryRoot);
+  return sha256(
+    JSON.stringify({
+      skills: await packageInputDigest(join(repositoryRoot, "skills")),
+      icon: sha256(
+        await readFile(join(repositoryRoot, "assets/autograph-icon.png")),
+      ),
+      plugin: sha256(
+        await readFile(join(repositoryRoot, ".codex-plugin/plugin.json")),
+      ),
+      mcpHandler: sha256(
+        await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts")),
+      ),
+      port: input.port,
+    }),
+  );
+}
 
 export async function createDevelopmentPackage(input: {
   repositoryRoot: string;
