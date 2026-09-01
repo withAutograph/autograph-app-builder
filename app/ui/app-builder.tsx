@@ -6,14 +6,8 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-<<<<<<< HEAD
-  Copy,
-||||||| parent of fa8ed4a (refactor: extract builder install instructions)
   Copy,
   DollarSign,
-=======
-  DollarSign,
->>>>>>> fa8ed4a (refactor: extract builder install instructions)
   ExternalLink,
   Globe,
   Info,
