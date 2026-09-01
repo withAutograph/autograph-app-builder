@@ -134,6 +134,37 @@ describe("typed target identity and planning", () => {
     );
   });
 
+  it("binds only the exact closed Vercel Development execution identity", async () => {
+    const { sandbox } = sandboxFixture();
+    const cache = await inspectDependencyCache(sandbox, process.env);
+    const environment = {
+      APP_BUILDER_EXECUTION_MODE: "development",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "2".repeat(64),
+      APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "3".repeat(64),
+    };
+
+    expect(targetExecutionBinding(cache, environment)).toEqual({
+      imageDigest:
+        "vercel-sandbox-development@sha256:b67c32f494ac7dd5431a255f57dc6cbf04a12033cf65c25d6e2e8076b51b80c6",
+      dependencyCacheDigest: `sha256:${cache.manifestDigest}`,
+      fixture: false,
+    });
+    expect(() =>
+      targetExecutionBinding(cache, {
+        ...environment,
+        APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "not-a-digest",
+      }),
+    ).toThrow("Development execution identity was invalid.");
+    expect(() =>
+      targetExecutionBinding(cache, {
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      }),
+    ).toThrow("offline dependency cache");
+  });
+
   it("uses only fixed commands, cwd, and an abort signal", async () => {
     const { run, sandbox } = sandboxFixture();
     const executor = sandboxTargetCommandExecutor(sandbox);
