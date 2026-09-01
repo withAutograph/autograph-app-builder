@@ -995,6 +995,66 @@ export const githubInstallationAuthorizationStates = pgTable(
   ],
 );
 
+/**
+ * One-time bridge from the existing GitHub installation callback back to the
+ * exact Eve authorization callback that parked a repository-access tool call.
+ * The public continuation id is stored only as a SHA-256 digest.
+ */
+export const githubRepositoryAccessContinuations = pgTable(
+  "github_repository_access_continuation",
+  {
+    continuationDigest: text("continuation_digest").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    sessionId: text("session_id").notNull(),
+    requestId: text("request_id").notNull(),
+    repositoryOwner: text("repository_owner").notNull(),
+    repositoryName: text("repository_name").notNull(),
+    selectedInstallationId: text("selected_installation_id"),
+    callbackUrl: text("callback_url").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("github_repository_access_continuation_expiry_idx").on(
+      table.expiresAt,
+    ),
+    check(
+      "github_repository_access_continuation_digest_check",
+      sql`${table.continuationDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "github_repository_access_continuation_session_check",
+      sql`length(${table.sessionId}) BETWEEN 1 AND 255`,
+    ),
+    check(
+      "github_repository_access_continuation_request_check",
+      sql`length(${table.requestId}) BETWEEN 1 AND 255`,
+    ),
+    check(
+      "github_repository_access_continuation_repository_check",
+      sql`length(${table.repositoryOwner}) BETWEEN 1 AND 100 AND length(${table.repositoryName}) BETWEEN 1 AND 100`,
+    ),
+    check(
+      "github_repository_access_continuation_installation_check",
+      sql`${table.selectedInstallationId} IS NULL OR ${table.selectedInstallationId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "github_repository_access_continuation_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "github_repository_access_continuation_authorized_check",
+      sql`${table.authorizedAt} IS NULL OR (${table.authorizedAt} >= ${table.createdAt} AND ${table.authorizedAt} <= ${table.expiresAt})`,
+    ),
+    check(
+      "github_repository_access_continuation_consumed_check",
+      sql`${table.consumedAt} IS NULL OR (${table.authorizedAt} IS NOT NULL AND ${table.consumedAt} >= ${table.authorizedAt})`,
+    ),
+  ],
+);
+
 export const hostedGitHubPublicationProposals = pgTable(
   "hosted_github_publication_proposal",
   {

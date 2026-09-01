@@ -24,6 +24,7 @@ export const hostedStorageMigrationTags = [
   "0014_tenant_github_installation_uniqueness",
   "0015_builder_resource_provisioning",
   "0016_emulate_preview_state",
+  "0017_chat_repository_access",
 ] as const;
 
 const contractSourcePaths = [
@@ -43,6 +44,7 @@ const contractSourcePaths = [
   "lib/provisioning/postgres-journal.ts",
   "lib/provisioning/postgres-github-user-credential.ts",
   "lib/integrations/preview-emulate-persistence.ts",
+  "lib/integrations/postgres-repository-access-continuation.ts",
 ] as const;
 
 export const hostedStorageExpectedColumns = [
@@ -161,6 +163,51 @@ export const hostedStorageExpectedColumns = [
   ["github_publication_proposal", "kind", "text", true],
   ["github_publication_proposal", "proposal", "jsonb", true],
   ["github_publication_proposal", "proposal_digest", "text", true],
+  ["github_repository_access_continuation", "audience", "text", true],
+  [
+    "github_repository_access_continuation",
+    "authorized_at",
+    "timestamp with time zone",
+    false,
+  ],
+  ["github_repository_access_continuation", "callback_url", "text", true],
+  [
+    "github_repository_access_continuation",
+    "consumed_at",
+    "timestamp with time zone",
+    false,
+  ],
+  [
+    "github_repository_access_continuation",
+    "continuation_digest",
+    "text",
+    true,
+  ],
+  [
+    "github_repository_access_continuation",
+    "created_at",
+    "timestamp with time zone",
+    true,
+  ],
+  [
+    "github_repository_access_continuation",
+    "expires_at",
+    "timestamp with time zone",
+    true,
+  ],
+  ["github_repository_access_continuation", "issuer", "text", true],
+  ["github_repository_access_continuation", "owner_user_id", "text", true],
+  ["github_repository_access_continuation", "repository_name", "text", true],
+  ["github_repository_access_continuation", "repository_owner", "text", true],
+  ["github_repository_access_continuation", "request_id", "text", true],
+  [
+    "github_repository_access_continuation",
+    "selected_installation_id",
+    "text",
+    false,
+  ],
+  ["github_repository_access_continuation", "session_id", "text", true],
+  ["github_repository_access_continuation", "workspace_id", "text", true],
   ["hosted_github_installation", "account_id", "text", true],
   ["hosted_github_installation", "account_login", "text", true],
   ["hosted_github_installation", "account_type", "text", true],
@@ -513,6 +560,14 @@ export const hostedStorageExpectedIndexes = [
     "github_publication_proposal_idempotency_idx",
   ],
   ["github_publication_proposal", "github_publication_proposal_pk"],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_expiry_idx",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_pkey",
+  ],
   ["hosted_github_installation", "hosted_github_installation_id_tenant_uidx"],
   ["hosted_github_installation", "hosted_github_installation_pk"],
   [
@@ -671,6 +726,42 @@ export const hostedStorageExpectedConstraints = [
   ["github_publication_proposal", "github_publication_proposal_kind_check"],
   ["github_publication_proposal", "github_publication_proposal_pk"],
   ["github_publication_proposal", "github_publication_proposal_record_check"],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_authorized_check",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_consumed_check",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_digest_check",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_installation_check",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_pkey",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_repository_check",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_request_check",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_session_check",
+  ],
+  [
+    "github_repository_access_continuation",
+    "github_repository_access_continuation_time_check",
+  ],
   ["hosted_github_installation", "hosted_github_installation_account_id_check"],
   [
     "hosted_github_installation",

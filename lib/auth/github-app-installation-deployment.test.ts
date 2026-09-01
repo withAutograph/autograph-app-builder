@@ -198,4 +198,51 @@ describe("GitHub App installation routes", () => {
       `https://builder.example/?github=connected&resume=${resumeKey}`,
     );
   });
+
+  it("redirects a connected repository-access continuation back to its parked Eve turn", async () => {
+    const complete = vi.fn(async () => ({
+      version: 1 as const,
+      action: "github-app.installation.complete" as const,
+      status: "bound" as const,
+      authorityDigest: "a".repeat(64),
+      stateDigest: "b".repeat(64),
+      installationDigest: "c".repeat(64),
+      providerUserDigest: "d".repeat(64),
+      accountType: "Organization" as const,
+      repositorySelection: "selected" as const,
+      setupAction: "install" as const,
+      appliedAt: "2026-08-28T12:00:00.000Z",
+      returnState: {
+        returnTo: "/" as const,
+        resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+      },
+    }));
+    const onConnected = vi.fn(
+      async () =>
+        "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token?provider=github&status=connected",
+    );
+    const route = createGitHubAppInstallationRouteHandlers({
+      origin: "https://builder.example",
+      authorityForRequest: async () => authority,
+      authorization: {
+        begin: vi.fn(),
+        complete,
+      } as never,
+      onConnected,
+    });
+    const response = await route.callback(
+      new Request(
+        "https://builder.example/github/installations/callback?state=opaque",
+      ),
+    );
+    expect(response.headers.get("location")).toContain(
+      "/eve/v1/connections/github-repository-access/callback/",
+    );
+    expect(onConnected).toHaveBeenCalledWith({
+      authority,
+      returnState: expect.objectContaining({
+        resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+      }),
+    });
+  });
 });
