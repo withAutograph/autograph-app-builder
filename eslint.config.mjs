@@ -43,6 +43,23 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    files: ["lib/**/*.{js,jsx,ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/app/**", "@/components/**", "@/agent/**"],
+              message:
+                "Library modules are UI- and runtime-agnostic; compose them from app, components, or agent entry points instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   ...storybook.configs["flat/recommended"],
 ]);
 

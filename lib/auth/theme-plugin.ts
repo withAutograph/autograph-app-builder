@@ -4,9 +4,6 @@ import {
   type ThemeLocalization,
 } from "@better-auth-ui/core/plugins/theme";
 
-import { Appearance } from "@/components/auth/theme/appearance";
-import { ThemeToggleItem } from "@/components/auth/theme/theme-toggle-item";
-
 /**
  * Hook shape compatible with `next-themes`' `useTheme` and similar APIs. The
  * hook is invoked inside the plugin factory so consumers can register the
@@ -84,8 +81,6 @@ export const themePlugin = createAuthPlugin(
           setTheme: base.setTheme,
           themes: base.themes,
         })),
-      userMenuItems: [ThemeToggleItem],
-      accountCards: [Appearance],
     };
   },
 );
