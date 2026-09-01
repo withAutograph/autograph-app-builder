@@ -11,7 +11,6 @@ import {
   realpath,
   readdir,
   rm,
-  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -393,24 +392,6 @@ export function waitForDevelopmentSourceChange(input: {
   });
 }
 
-async function makeReadOnly(root: string) {
-  async function visit(path: string) {
-    const entries = await readdir(path, { withFileTypes: true });
-    for (const entry of entries) {
-      const child = join(path, entry.name);
-      if (entry.isDirectory()) {
-        await visit(child);
-        await chmod(child, 0o500);
-      } else if (entry.isFile()) {
-        const info = await stat(child);
-        await chmod(child, info.mode & 0o111 ? 0o500 : 0o400);
-      }
-    }
-  }
-  await visit(root);
-  await chmod(root, 0o500);
-}
-
 export async function createDevelopmentSnapshot(input: {
   sourceRoot: string;
   runRoot: string;
@@ -487,7 +468,11 @@ export async function createDevelopmentSnapshot(input: {
       encoding: "utf8",
       env: gitEnvironment(),
     }).trim();
-    await makeReadOnly(root);
+    // The recorded commit/tree/fingerprint are the immutable development
+    // baseline.  The local materialization itself stays owner-writable: Eve
+    // installs runtime overlays and generated planning files beside this
+    // source.  It is removed after the cycle and never crosses into hosted or
+    // release execution.
     return {
       root,
       fingerprint,

@@ -86,7 +86,7 @@ async function fixture() {
 }
 
 describe("development source snapshots", () => {
-  it("captures dirty and untracked source in an owner-only read-only Git snapshot", async () => {
+  it("captures dirty and untracked source in an owner-writable Git snapshot", async () => {
     const source = await fixture();
     await writeFile(join(source, "README.md"), "dirty\n");
     await writeFile(
@@ -110,9 +110,9 @@ describe("development source snapshots", () => {
     expect(
       await readFile(join(snapshot.root, "new-file.ts"), "utf8"),
     ).toContain("fresh");
-    expect((await stat(snapshot.root)).mode & 0o777).toBe(0o500);
+    expect((await stat(snapshot.root)).mode & 0o777).toBe(0o700);
     expect((await stat(join(snapshot.root, "README.md"))).mode & 0o777).toBe(
-      0o400,
+      0o600,
     );
     expect(snapshot.fingerprint).toBe(
       await fingerprintDevelopmentSource(source),

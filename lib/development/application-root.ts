@@ -17,15 +17,30 @@ import {
   type DevelopmentSnapshot,
 } from "./local-mode";
 
-async function makeWritable(path: string, preserveRuntime = false): Promise<void> {
+/**
+ * A development snapshot records an immutable baseline commit/tree/fingerprint
+ * but intentionally has a mutable filesystem.  `eve-application` is the
+ * owner-only work area where Eve creates generated files and execution
+ * overlays between targeted restarts.  Do not use this for hosted or release
+ * paths.
+ */
+async function makeDevelopmentWorkAreaWritable(
+  path: string,
+  preserveRuntime = false,
+): Promise<void> {
   const info = await lstat(path);
   if (info.isSymbolicLink()) return;
+  if (info.uid !== process.getuid?.())
+    throw new Error("A local Eve application entry was not owner-bound.");
   if (info.isDirectory()) {
     await chmod(path, 0o700);
     for (const entry of await readdir(path)) {
       if (preserveRuntime && (entry === ".eve" || entry === "node_modules"))
         continue;
-      await makeWritable(join(path, entry), preserveRuntime);
+      await makeDevelopmentWorkAreaWritable(
+        join(path, entry),
+        preserveRuntime,
+      );
     }
     return;
   }
@@ -48,7 +63,7 @@ export async function createDevelopmentApplication(input: {
       sourceRoot: input.repositoryRoot,
       runRoot: await realpath(materializationRoot),
     });
-    await makeWritable(application.root);
+    await makeDevelopmentWorkAreaWritable(application.root);
     const modules = await realpath(join(input.repositoryRoot, "node_modules"));
     const modulesInfo = await lstat(modules);
     if (
@@ -99,13 +114,22 @@ export async function refreshDevelopmentApplication(input: {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    await makeWritable(applicationRoot, true);
+    // The stage's baseline identity is immutable, but its filesystem is a
+    // mutable local work area. Normalize the whole incoming tree before
+    // moving it. `.eve` and `node_modules` remain retained runtime state in
+    // the destination.
+    await makeDevelopmentWorkAreaWritable(snapshot.root);
+    await makeDevelopmentWorkAreaWritable(applicationRoot, true);
     for (const entry of await readdir(applicationRoot)) {
       if (entry === ".eve" || entry === "node_modules") continue;
       await rm(join(applicationRoot, entry), { recursive: true, force: true });
     }
     for (const entry of await readdir(snapshot.root))
       await rename(join(snapshot.root, entry), join(applicationRoot, entry));
+    // `rename` preserves modes.  Reassert the work-area contract after the
+    // refresh so every installed application file remains writable for live
+    // generation and overlays, not merely the staging parent used by rename.
+    await makeDevelopmentWorkAreaWritable(applicationRoot, true);
   } finally {
     await removeDevelopmentSnapshot(stageRoot);
   }
