@@ -1035,11 +1035,7 @@ async function verifyDevelopmentSandboxWorkspace(
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
     Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes ||
     inspection.stdout !== developmentWorkspaceInspectionReceipt ||
-    (inspection.exitCode !== 0 &&
-      !(
-        inspection.exitCode === 125 &&
-        inspection.stderr === "sandbox_workspace_quota_exceeded\n"
-      ))
+    inspection.exitCode !== 0
   )
     throw new Error(
       "The prepared development workspace escaped its sandbox boundary.",

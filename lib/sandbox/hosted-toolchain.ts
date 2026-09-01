@@ -9,7 +9,6 @@ import {
   HOSTED_DEPENDENCY_ARCHIVE_SHA256,
   HOSTED_DEPENDENCY_MANIFEST_SHA256,
 } from "./hosted-artifact";
-import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 
 export const HOSTED_MISE_VERSION = "2026.8.12";
 export const HOSTED_BUN_VERSION = "1.3.14";
@@ -95,11 +94,6 @@ export const HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS = [
 export const HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT =
   "/workspace/.app-builder/hosted-dependency-cache";
 
-export const HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES = Math.max(
-  HOSTED_ARTIFACT_BYTES,
-  HOSTED_DEPENDENCY_ARCHIVE_BYTES,
-);
-
 const artifactCase = (
   architecture: keyof typeof hostedToolchainArtifacts,
 ): string => {
@@ -155,14 +149,7 @@ PY
 }`;
 }
 
-export function hostedToolchainBootstrapCommand(
-  maximumFileBytes: number = SANDBOX_EXECUTION_POLICY.command.maximumFileBytes,
-): string {
-  if (maximumFileBytes < HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES) {
-    throw new Error(
-      "The sandbox file-size limit cannot hold the hosted artifact.",
-    );
-  }
+export function hostedToolchainBootstrapCommand(): string {
   return `set -euo pipefail
 case "$(uname -m)" in
   ${artifactCase("aarch64")}

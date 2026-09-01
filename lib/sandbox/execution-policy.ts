@@ -23,11 +23,6 @@ export const sandboxExecutionPolicySchema = z
       maximumNoOutputTimeMs: z.literal(60_000),
       maximumOutputBytes: z.literal(1_048_576),
       maximumKillCleanupTimeMs: z.literal(2_000),
-      maximumProcesses: z.literal(128),
-      maximumOpenFiles: z.literal(256),
-      maximumFileBytes: z.literal(268_435_456),
-      maximumWorkspaceBytes: z.literal(2_147_483_648),
-      maximumWorkspaceFiles: z.literal(100_000),
     }),
   })
   .strict();
@@ -56,11 +51,6 @@ export const SANDBOX_EXECUTION_POLICY = sandboxExecutionPolicySchema.parse({
     maximumNoOutputTimeMs: 60_000,
     maximumOutputBytes: 1_048_576,
     maximumKillCleanupTimeMs: 2_000,
-    maximumProcesses: 128,
-    maximumOpenFiles: 256,
-    maximumFileBytes: 268_435_456,
-    maximumWorkspaceBytes: 2_147_483_648,
-    maximumWorkspaceFiles: 100_000,
   },
 });
 
