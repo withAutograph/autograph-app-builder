@@ -251,48 +251,54 @@ function ComboboxFooter({
 export function SearchCombobox(props: SearchComboboxProps) {
   const { input = {}, label, presentation, footer, value } = props;
   const controller = useComboboxController(props);
+  const {
+    close,
+    id,
+    input: inputController,
+    isOpen,
+    menu,
+    rootRef,
+    selected,
+    toggle,
+  } = controller;
   const { disabled = false, id: inputId, placeholder = "Select…" } = input;
 
   return (
     <div
       className={styles.combobox}
-      ref={controller.rootRef}
-      data-open={controller.isOpen || undefined}
+      ref={rootRef}
+      data-open={isOpen || undefined}
       data-label={label}
       role="combobox"
-      aria-expanded={controller.isOpen}
+      aria-expanded={isOpen}
       aria-haspopup="listbox"
-      aria-controls={`${controller.id}-listbox`}
+      aria-controls={`${id}-listbox`}
     >
       <div className={styles.comboPrefix} aria-hidden="true">
         {presentation.prefix}
       </div>
       <ComboboxInput
         disabled={disabled}
-        id={controller.id}
+        id={id}
         inputId={inputId}
         label={label}
         placeholder={placeholder}
-        controller={controller.input}
+        controller={inputController}
       />
-      {controller.selected?.detail ? (
-        <span className={styles.comboDetail}>{controller.selected.detail}</span>
+      {selected?.detail ? (
+        <span className={styles.comboDetail}>{selected.detail}</span>
       ) : null}
       <button
         type="button"
-        aria-label={controller.isOpen ? "Close menu" : "Open menu"}
-        onClick={controller.toggle}
+        aria-label={isOpen ? "Close menu" : "Open menu"}
+        onClick={toggle}
       >
         <ChevronDown size={16} aria-hidden="true" />
       </button>
-      <div
-        className={styles.comboMenu}
-        role="dialog"
-        hidden={!controller.isOpen}
-      >
-        <div id={`${controller.id}-listbox`} role="listbox">
+      <div className={styles.comboMenu} role="dialog" hidden={!isOpen}>
+        <div id={`${id}-listbox`} role="listbox">
           <ComboboxOptions
-            controller={controller.menu}
+            controller={menu}
             presentation={presentation}
             value={value}
           />
@@ -301,7 +307,7 @@ export function SearchCombobox(props: SearchComboboxProps) {
           footer={footer}
           presentation={presentation}
           onSelect={() => {
-            controller.close();
+            close();
             footer?.onSelect?.();
           }}
         />
