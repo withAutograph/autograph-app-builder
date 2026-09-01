@@ -1,5 +1,25 @@
 # Implementation gates
 
+## Moving-source policy
+
+Design and planning operate on the current live repository, including normal
+working-tree edits in local development and the current branch state in hosted
+environments. A newly observed SHA, tree, or baseline is diagnostic context; it
+MUST NOT block planning, dependency-cache reuse, or creation of a provisional
+draft PR. Draft PRs are allowed to become stale or conflict.
+
+The coordinator reconciles only at merge: re-read the current default branch,
+rebase or regenerate the proposal, run the relevant validation, show the actual
+diff, and obtain final effect-based approval. This is the point at which the
+current source matters for the merge outcome. Only release-candidate bytes
+selected for publication require immutable identity and byte/digest equality.
+
+The boundaries that remain strict are the ones that protect a concrete effect:
+tenant and provider authority, path containment, dependency-input/cache
+integrity, reviewed content, and outward-effect approvals. Source observations,
+process state, timestamps, package-manager layout, and ordinary source edits
+are not authority gates.
+
 The public execution contract has exactly two modes: non-release
 `mise run dev`, and immutable promotion through `mise run release:prove`
 followed by separately authorized `mise run release:publish`. All task names
@@ -117,20 +137,22 @@ planning metadata under deny-all runtime networking. It precreates the
 archive's directories and preserves their metadata during extraction so the
 verified cache remains reliable on the sandbox overlay filesystem. Its durable receipt is
 internally observed; `APP_BUILDER_DEPENDENCY_CACHE_DIGEST` is not accepted.
-The cache target, durable source receipt, and prepared workspace must agree
-on both the exact source commit and tree. That binding is carried through
-dependency, identity, proposal, apply, validation, review, and publication
-receipts; a SHA match with a different tree fails closed.
-Source receipt V3 hashes only this immutable logical binding; its absolute
-local checkout path is diagnostic and deliberately excluded. Generate the
-strict path-independent evidence with:
+The cache target is keyed by dependency inputs, platform, toolchain, and
+bootstrap identity. The selected source commit/tree may move during design and
+planning; source observations are diagnostic context and are not a drift gate.
+Planning and draft proposals may be regenerated from the latest live source.
+Source receipt V3 may record a source observation for diagnostics, but it is not
+long-lived mutation authority. Generate the path-independent observation with:
 
 ```sh
 mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
 ```
 
-The command emits no local path, rejects the V2
-schema and unknown arguments, and does not prepare or mutate the source.
+The command emits no local path, rejects the V2 schema and unknown arguments,
+and does not prepare or mutate the source. It does not freeze the source for
+ordinary planning. Merge-time reconciliation re-reads the current default
+branch, rebases or regenerates, validates the actual diff, and obtains final
+effect-based approval. Only release-candidate bytes require immutable identity.
 The implemented fixed target identity and planning operation then uses a
 builder-owned overlay, bounded execution, strict output schemas, and durable
 receipts. Real execution still requires both the immutable image and a
