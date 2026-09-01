@@ -15,8 +15,8 @@ import {
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactWorkflowState,
   assertUpstreamMutationAllowed,
+  updateExactWorkflow,
   validAppId,
 } from "@/lib/agent/workflow-state";
 
@@ -125,20 +125,23 @@ export default defineTool({
         );
       return { ...current.appSpec, reused: true };
     }
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(latest, current, "AppSpec acceptance");
-      return {
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "app_spec_accepted",
-        workspace,
-        sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
-        preparedByCallId: current.preparedByCallId,
-        artifacts: current.artifacts,
-        appSpec: accepted,
-      };
+    updateExactWorkflow({
+      expected: current,
+      operation: "AppSpec acceptance",
+      transition: () => {
+        return {
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          phase: "app_spec_accepted",
+          workspace,
+          sourceReceipt: current.sourceReceipt,
+          ...(current.githubSource === undefined
+            ? {}
+            : { githubSource: current.githubSource }),
+          preparedByCallId: current.preparedByCallId,
+          artifacts: current.artifacts,
+          appSpec: accepted,
+        };
+      },
     });
     return { ...accepted, reused: false };
   },
