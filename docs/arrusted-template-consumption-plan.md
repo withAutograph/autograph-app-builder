@@ -137,6 +137,63 @@ This section records a possible improvement only. It does not authorize an
 Arrusted generator change, a design-system API change, or an App Builder runtime
 change.
 
+## Possible improvement: composition-only application UI
+
+A stricter follow-up should require App Builder to construct application
+interfaces exclusively by composing components that already exist in the exact
+Arrusted source selected for the build. The builder must not design, generate,
+copy, fork, or restyle a custom UI component to fill a catalog gap. It must not
+treat a familiar component name, a screenshot, generated JSX, or a component
+available from an unrelated package as proof that Arrusted provides it.
+
+An eligible component must be verifiable from the selected Arrusted tree and
+must be exposed through a supported public package entrypoint or an explicitly
+documented application-composition surface. Existing private implementation
+files are not a reusable API. The builder may supply product-specific content,
+data bindings, routes, event handlers, permissions, and configuration through
+the public component contracts, but it must not create new visual primitives,
+component-local styling systems, replacement design tokens, or copied variants
+inside the generated application.
+
+The future composition-only workflow should:
+
+1. inventory current public component exports, supported compositions,
+   Storybook stories, required providers, and semantic tokens from the exact
+   selected Arrusted tree before producing the interface plan;
+2. express every visible interface region as a reference to one of those
+   verified components or compositions, including its public import path and
+   supported variant or properties;
+3. generate route and data-wiring code that imports the existing components
+   directly instead of emitting new component implementations;
+4. constrain the early Browser prototype to the same verified catalog, using an
+   Arrusted-owned preview harness or a faithful catalog-backed representation
+   rather than free-form invented HTML controls;
+5. fail closed when a requested interaction cannot be expressed with the
+   existing catalog, recommend the closest supported product composition, and
+   record any genuinely missing reusable component as separate Arrusted work;
+   and
+6. keep the missing-component work outside the generated app so a one-off local
+   component cannot silently become the workaround.
+
+Focused acceptance checks should prove that every application UI import resolves
+to an approved Arrusted public entrypoint, every declared component exists at
+the selected source tree, and the generated app adds no local React component
+definitions or app-owned visual CSS beyond explicitly allowlisted route-layout
+glue. The Browser preview and applied application should share the same
+component-composition manifest so the prototype cannot promise an interface the
+generated app implements differently.
+
+This policy intentionally favors consistency and reuse over unconstrained UI
+generation. If the existing Arrusted catalog cannot deliver a material product
+requirement, App Builder should explain the visible limitation and offer a
+supported alternative; it must not invent a component. Adding a reusable
+component to Arrusted is a separately reviewed prerequisite, after which a new
+build may consume it from the updated exact source.
+
+This section also records a possible improvement only. It does not authorize a
+component-catalog expansion, a generator change, or generated application
+mutation.
+
 ## Validation
 
 The source boundary is tested for exact requested reader permissions and
