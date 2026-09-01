@@ -40,6 +40,15 @@ MUST NOT leak into this loop.
   preview MUST NOT be used.
 - Publication and all outward effects MUST remain disabled in local development.
 
+The same source policy applies when design or planning is hosted: use the
+current writable checkout or branch as live input and re-observe it when
+needed. Normal source movement is not a quota, a failure, or a long-lived drift
+gate. Only a release candidate selected for publication becomes immutable.
+Provider resource constraints may be surfaced honestly, but App Builder MUST
+NOT invent workspace-, file-, process-, or cache-size quotas as planning
+authority. Execution timeouts and cancellation remain operational controls, not
+product limits on a repository or planning session.
+
 ## Fast loop
 
 - Development MUST keep one long-lived Next.js HMR process. Eve, MCP, or agent

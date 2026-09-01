@@ -263,9 +263,11 @@ named by that skill. Complete source inspection, design, prototype recording,
 planning, and review in this one root session. Never delegate an App Builder
 phase to a nested agent: its workflow state and prototype artifacts would be
 isolated from this session. Prefer plain language. Infer safe revisable product
-defaults; ask only for material ambiguity. Preserve unrelated changes. Fail
-closed on stale SHAs, eligibility or contract drift, missing commands,
-unsupported layouts, real identity collisions, or changed approvals.
+defaults; ask only for material ambiguity. Preserve unrelated changes.
+Re-observe moving source for a new plan rather than failing on a stale SHA or
+ordinary source change. Fail closed only on a concrete eligibility or authority
+violation, unsafe path or layout, real identity collision, changed reviewed
+content, or changed outward-effect approval.
 
 Never claim a side effect succeeded until a public event or tool receipt proves
 it. Never reveal hidden reasoning, credentials, raw private tool payloads, or

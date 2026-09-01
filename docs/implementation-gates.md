@@ -20,6 +20,14 @@ integrity, reviewed content, and outward-effect approvals. Source observations,
 process state, timestamps, package-manager layout, and ordinary source edits
 are not authority gates.
 
+App Builder MUST NOT impose arbitrary workspace, filesystem, process, cache,
+or source-size quotas on design or planning. A provider may reject a request for
+its own documented capacity or policy constraint; that outcome is external
+diagnostic information, not a reason to redefine a normal repository change as
+drift. Bounded command timeouts, cancellation, and output handling remain
+operational recovery controls. They protect a running command and MUST NOT be
+used to limit the repository the user is planning against.
+
 The public execution contract has exactly two modes: non-release
 `mise run dev`, and immutable promotion through `mise run release:prove`
 followed by separately authorized `mise run release:publish`. All task names
@@ -110,9 +118,11 @@ route or static asset. The hosted backend can run only the fixed read-only
 identity and planning commands; missing, Development, or mismatched Vercel
 environments use the non-executing backend.
 The bounded command backend is active for every hosted template and live
-session command. It shares one stdout/stderr byte budget, rejects direct
-authored process spawning, enforces wall and no-output deadlines, actively
-kills the process, cancels stream readers, and bounds kill cleanup. Eve
+session command. It bounds command output and execution time to make an
+individual command cancellable and recoverable, rejects direct authored process
+spawning, actively kills the process, cancels stream readers, and bounds kill
+cleanup. These are operational controls, not workspace or repository quotas.
+Eve
 0.43 exposes no provider-native per-command timeout on its public sandbox
 session surface, so no such timeout is claimed.
 Durable per-turn execution leasing remains dormant unless a deployment sets
@@ -121,7 +131,7 @@ the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` gate. The awaited
 its PostgreSQL epoch; terminal turn hooks stop compute before releasing.
 `session.waiting` is deliberately not a release boundary because it may be
 an in-turn authorization park. `mise run test:postgres-sandbox-leases`
-proves same-subject serialization, the workspace cap, idempotent replay,
+proves same-subject serialization, idempotent replay,
 rollback, expiry, heartbeat, and recovery/reacquisition races against an
 ephemeral digest-pinned PostgreSQL container. A provider stop failure keeps
 the fenced lease orphaned and admission-blocking; only a successful stop may
