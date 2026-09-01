@@ -44,7 +44,10 @@ describe("Autograph App Builder contextual MCP App", () => {
     expect(sessionUiHtml).toContain("autograph_respond");
     expect(sessionUiHtml).toContain("autograph_get");
     expect(sessionUiHtml).toContain("ui/open-link");
-    expect(sessionUiHtml).toContain("Check connection");
+    expect(sessionUiHtml).toContain("Check access");
+    expect(sessionUiHtml).toContain("addEventListener(`focus`");
+    expect(sessionUiHtml).toContain("addEventListener(`visibilitychange`");
+    expect(sessionUiHtml).toContain("Update GitHub access");
   });
 
   it("never embeds generated app previews", () => {

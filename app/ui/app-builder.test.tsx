@@ -477,7 +477,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector('a[href="/vercel/installations"]')).toBeNull();
     expect(
       [...view.querySelectorAll('a[href="/github/installations"]')].some(
-        (link) => link.textContent === "Connect to GitHub",
+        (link) => link.textContent === "Connect GitHub",
       ),
     ).toBe(false);
 

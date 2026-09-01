@@ -57,6 +57,7 @@ import {
   providerConnectionFailureMessage,
   type ProviderConnectionNotice,
 } from "../../lib/integrations/provider-connection-status";
+import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
 
 type Screen = "builder" | "handoff" | "ready";
 export type BuildDestination = "web" | "codex" | "cursor";
@@ -1182,6 +1183,14 @@ export function StoreInSection({
   repository: string;
   selected: StorageProvider | null;
 }) {
+  const githubView = githubStoreInViewModel({
+    action: connected ? "update" : "connect",
+    scopes: gitScopeOptions.map((scope) => ({
+      id: scope.value,
+      label: scope.label,
+      ...(scope.detail === undefined ? {} : { detail: scope.detail }),
+    })),
+  });
   return (
     <ProviderChoiceSection
       className={`${styles.sectionField} ${styles.storeSection}`}
@@ -1221,7 +1230,7 @@ export function StoreInSection({
                     prefix={<FaGithub size={16} />}
                     menuFooter={{
                       value: "add-github",
-                      label: "Add GitHub Scope",
+                      label: githubView.actionLabel,
                     }}
                     onFooterSelect={onConnect}
                     optionIcon={() => <FaGithub size={16} />}
@@ -1234,7 +1243,7 @@ export function StoreInSection({
                     id="git-scope"
                     onClick={onConnect}
                   >
-                    Connect to GitHub
+                    {githubView.actionLabel}
                   </button>
                 )}
               </div>

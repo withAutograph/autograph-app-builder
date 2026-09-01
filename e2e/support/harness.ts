@@ -23,7 +23,7 @@ const providerDescriptors = {
     seededScopes: ["autograph-local/demo-app"],
     selectedControl: "Git Scope",
     selectedValue: "autograph-local",
-    reconnectButton: "Add GitHub Scope",
+    reconnectButton: "Update GitHub access",
     emulatorOrigin: githubEmulatorOrigin,
     callbackPath: "/github/installations/callback",
     authorizationStateTable: "github_installation_authorization_state",
@@ -168,7 +168,11 @@ export async function openProviderConnection(
 ) {
   const descriptor = providerDescriptor(provider);
   await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
-  await page.getByRole("button", { name: `Connect to ${provider}` }).click();
+  await page
+    .getByRole("button", {
+      name: provider === "GitHub" ? "Connect GitHub" : `Connect to ${provider}`,
+    })
+    .click();
   await expect(page).toHaveURL(
     new RegExp(`/${descriptor.slug}/installations`, "u"),
     { timeout: 30_000 },

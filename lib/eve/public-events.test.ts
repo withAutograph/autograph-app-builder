@@ -698,6 +698,77 @@ describe("installed Eve 0.43 projection", () => {
     ).toEqual([]);
   });
 
+  it("projects a GitHub repository authorization as a Store In request", () => {
+    expect(
+      projectInstalledEveEvent(
+        installedEvent({
+          type: "authorization.required",
+          data: {
+            turnId: "turn_1",
+            attemptId: "attempt_1",
+            name: "github-repository-access",
+            description: "Internal connection description.",
+            authorization: {
+              url: "https://builder.example.test/github/installations?continuation=opaque",
+              displayName: "GitHub",
+              repositoryAccess: {
+                provider: "github",
+                action: "update",
+                repository: {
+                  owner: "withAutograph",
+                  name: "app-builder-dogfood",
+                  fullName: "withAutograph/app-builder-dogfood",
+                },
+                scopes: [
+                  {
+                    installationId: "123",
+                    accountLogin: "withAutograph",
+                    accountType: "Organization",
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        5,
+      ),
+    ).toEqual([
+      {
+        type: "input.requested",
+        index: 5,
+        request: {
+          requestId: "attempt_1",
+          kind: "authorization",
+          title: "Update GitHub access",
+          description:
+            "Update GitHub access to include withAutograph/app-builder-dogfood.",
+          presentation: { section: "store-in", control: "provider" },
+          authorization: {
+            url: "https://builder.example.test/github/installations?continuation=opaque",
+            displayName: "GitHub",
+            repositoryAccess: {
+              provider: "github",
+              action: "update",
+              repository: {
+                owner: "withAutograph",
+                name: "app-builder-dogfood",
+                fullName: "withAutograph/app-builder-dogfood",
+              },
+              scopes: [
+                {
+                  installationId: "123",
+                  accountLogin: "withAutograph",
+                  accountType: "Organization",
+                },
+              ],
+            },
+          },
+          allowFreeform: false,
+        },
+      },
+    ]);
+  });
+
   it("keeps a multi-request batch input-required until every id resolves", () => {
     const requested = installedEvent({
       type: "input.requested",

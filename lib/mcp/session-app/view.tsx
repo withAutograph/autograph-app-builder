@@ -4,6 +4,7 @@ import {
   ChoiceCard,
   SectionShell,
 } from "../../../components/create-app/choice-card";
+import { githubRepositoryAccessViewModel } from "../../integrations/store-in-view-model";
 import type { EveSessionResult, PublicInputRequest } from "../contracts";
 import "./styles.css";
 
@@ -114,9 +115,13 @@ export function AuthorizationControl({
   request: PublicInputRequest;
 }) {
   const [opened, setOpened] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const challenge = request.authorization;
-  const provider = challenge?.displayName || request.title;
+  const storeIn = challenge?.repositoryAccess
+    ? githubRepositoryAccessViewModel(challenge.repositoryAccess)
+    : undefined;
+  const provider = storeIn?.title || challenge?.displayName || request.title;
 
   async function connect() {
     if (!challenge?.url || !canOpen) return;
@@ -129,6 +134,19 @@ export function AuthorizationControl({
     }
   }
 
+  async function refresh() {
+    if (!canRefresh || refreshing) return;
+    setRefreshing(true);
+    setError("");
+    try {
+      await onRefresh();
+    } catch {
+      setError("GitHub access could not be checked. Try again in a moment.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   return (
     <div className="authorization-card">
       <span className="provider-icon" aria-hidden="true">
@@ -136,25 +154,55 @@ export function AuthorizationControl({
       </span>
       <div>
         <strong>{provider}</strong>
-        <p>{challenge?.instructions || request.description}</p>
+        <p>
+          {storeIn?.description ||
+            challenge?.instructions ||
+            request.description}
+        </p>
+        {storeIn?.desiredRepository ? (
+          <p className="repository-name">
+            <span>Repository</span>
+            <code>{storeIn.desiredRepository}</code>
+          </p>
+        ) : null}
+        {storeIn ? (
+          <div className="scope-summary">
+            <span>{storeIn.scopeSummary}</span>
+            {storeIn.scopes.length ? (
+              <ul aria-label="Connected GitHub scopes">
+                {storeIn.scopes.map((scope) => (
+                  <li key={scope.id}>
+                    {scope.label}
+                    {scope.detail ? <small>{scope.detail}</small> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         {challenge?.userCode ? (
           <code aria-label="Authorization code">{challenge.userCode}</code>
         ) : null}
       </div>
       {challenge?.url ? (
         <button type="button" onClick={connect} disabled={!canOpen}>
-          Connect
+          {storeIn?.actionLabel || "Connect"}
         </button>
       ) : null}
-      {opened ? (
+      {canRefresh ? (
         <button
           type="button"
           className="secondary"
-          onClick={onRefresh}
-          disabled={!canRefresh}
+          onClick={refresh}
+          disabled={refreshing}
         >
-          Check connection
+          {refreshing ? "Checking…" : "Check access"}
         </button>
+      ) : null}
+      {opened && storeIn ? (
+        <p className="refresh-guidance">
+          Return here after GitHub closes. Autograph will check automatically.
+        </p>
       ) : null}
       {!canOpen && challenge?.url ? (
         <p className="fallback">Open the authorization link from chat.</p>

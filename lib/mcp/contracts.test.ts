@@ -63,6 +63,44 @@ describe("publicInputRequestSchema", () => {
       ).toBe(false);
   });
 
+  it("accepts closed GitHub repository-access presentation metadata", () => {
+    const repositoryAccess = {
+      provider: "github" as const,
+      action: "update" as const,
+      repository: {
+        owner: "withAutograph",
+        name: "app-builder-dogfood",
+        fullName: "withAutograph/app-builder-dogfood",
+      },
+      scopes: [
+        {
+          installationId: "123",
+          accountLogin: "withAutograph",
+          accountType: "Organization" as const,
+        },
+      ],
+    };
+    expect(
+      publicInputRequestSchema.safeParse({
+        ...authorization,
+        title: "Update GitHub access",
+        authorization: {
+          url: "https://builder.example.test/github/installations?continuation=opaque",
+          displayName: "GitHub",
+          repositoryAccess,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      publicInputRequestSchema.safeParse({
+        ...authorization,
+        authorization: {
+          repositoryAccess: { ...repositoryAccess, accessToken: "secret" },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps presentation metadata closed and authorization-specific", () => {
     expect(
       publicInputRequestSchema.safeParse({

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { githubRepositoryAccessSchema } from "../integrations/store-in-view-model";
+
 export const sessionStatusSchema = z.enum([
   "working",
   "input_required",
@@ -48,6 +50,7 @@ export const publicAuthorizationChallengeSchema = z
     expiresAt: z.iso.datetime().optional(),
     instructions: z.string().min(1).max(2_000).optional(),
     displayName: z.string().min(1).max(200).optional(),
+    repositoryAccess: githubRepositoryAccessSchema.optional(),
   })
   .strict();
 

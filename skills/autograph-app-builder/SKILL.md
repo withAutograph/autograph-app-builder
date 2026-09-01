@@ -27,6 +27,13 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
 3. Use `autograph_get` to obtain evidence; accepted work is not completed work.
 4. Call `autograph_respond` once for the complete non-empty `inputRequests` batch,
    preserving every unique `requestId`. Never split one App Builder batch across calls.
+   Authorization requests are not response-batch questions. Let the MCP App's
+   Store In control open the server-provided GitHub connection or access-update
+   page, then continue polling the same session. Never ask the user to reply
+   “Repository selected” or treat that reply as proof of repository access.
+   A separate choice between already connected GitHub accounts is a normal
+   product question: submit its exact option id in the full response batch.
+   Repository scopes shown on an authorization card are read-only.
 5. Send unrelated follow-ups with `autograph_send` only while the app build is `waiting` and no input is unresolved.
 6. Treat cancellation as cooperative. Poll until events prove the resulting state.
 7. Treat the MCP App as an optional progress and input-control surface only. Never
