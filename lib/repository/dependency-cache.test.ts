@@ -16,6 +16,7 @@ import {
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
   DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
+  DEPENDENCY_PREPARATION_TIMEOUT_MS,
   DependencyCacheMissingError,
   assertExactDependencyTargetBinding,
   bootstrapLiveTemplateDependencies,
@@ -161,6 +162,11 @@ function hostedExecutionSandbox(
 }
 
 describe("offline dependency cache", () => {
+  it("keeps cold dependency preparation bounded below the sandbox session ceiling", () => {
+    expect(DEPENDENCY_PREPARATION_TIMEOUT_MS).toBe(600_000);
+    expect(DEPENDENCY_PREPARATION_TIMEOUT_MS).toBeLessThan(900_000);
+  });
+
   it("builds the hosted seed as an execution-complete Linux closure", () => {
     const producer = readFileSync(
       ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",

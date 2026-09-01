@@ -76,6 +76,13 @@ describe("mise-owned repository operations", () => {
       expect(aggregate).toContain(`needs.${lane}.result`);
     expect(aggregate).toContain("needs.vercel-preview.result");
 
+    const promotion = await read(".github/workflows/ci.yml");
+    expect(promotion).toContain("Publish only an unreleased package version");
+    expect(promotion).toContain('tag="v$(jq -r .version package.json)"');
+    expect(promotion).toContain(
+      "if: steps.release_state.outputs.publish == 'true'",
+    );
+
     const general = await read(".config/mise/tasks/ci-eve-general");
     expect(general).toContain("mise run test:general-evals");
     const generalEvals = await read(".config/mise/tasks/test/general-evals");

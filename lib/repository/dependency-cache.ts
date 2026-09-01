@@ -30,7 +30,10 @@ export const DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/cargo-closure.tar.gz";
 export const DEPENDENCY_CACHE_EXTRACTED_ROOT = "/opt/app-builder/dependencies";
 export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
-export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 120_000;
+// A cold, frozen Bun + Cargo closure can exceed two minutes in Vercel
+// Sandbox. Keep this below the backend's 15-minute session ceiling while
+// preserving a hard bound for the one-time preparation path.
+export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 600_000;
 export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 export const LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT =
   ".app-builder/template-dependency-cache";
