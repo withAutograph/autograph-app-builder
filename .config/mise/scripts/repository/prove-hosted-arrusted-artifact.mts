@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 
 import { extract } from "tar";
 
@@ -19,6 +19,14 @@ import { BUILD_READY_APP_SPEC } from "../../../../evals/support/app-spec.ts";
 
 const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
+const APP_BUILDER_MISE_PROFILE = `[settings]
+exec_auto_install = false
+not_found_auto_install = false
+task.run_auto_install = false
+
+[deps]
+disable = ["bun"]
+`;
 const sha256 = (value: Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
@@ -103,6 +111,10 @@ try {
     { stdio: "inherit" },
   );
   extract({ cwd: repository, file: sourceTar, sync: true });
+  writeFileSync(
+    join(repository, ".config", "mise", "config.app-builder.toml"),
+    APP_BUILDER_MISE_PROFILE,
+  );
   extract({
     cwd: repository,
     file: join(seed, "dependency-cache", "node-modules.tar.gz"),
@@ -135,12 +147,22 @@ try {
     JSON.parse(
       execFileSync(
         input.miseBin,
-        ["run", "--skip-tools", "repository:exec", "--", ...args],
+        [
+          "--env",
+          "app-builder",
+          "run",
+          "--no-deps",
+          "--skip-tools",
+          "repository:exec",
+          "--",
+          ...args,
+        ],
         {
           cwd: repository,
           encoding: "utf8",
           env: {
             ...process.env,
+            PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,
             MISE_AUTO_INSTALL: "false",
             MISE_EXEC_AUTO_INSTALL: "false",
             MISE_TASK_RUN_AUTO_INSTALL: "false",
