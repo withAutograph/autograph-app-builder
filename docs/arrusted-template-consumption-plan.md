@@ -93,6 +93,50 @@ Fresh-repository publication still requires its own approval and provider
 read-back. Its result is a new parentless `main` commit containing the reviewed
 generated workspace, not Arrusted history or an upstream remote.
 
+## Possible improvement: visual inheritance
+
+The repository starter and the visual prototype are separate surfaces. App
+Builder currently consumes the complete Arrusted repository for eligibility,
+planning, generation, apply, and validation, but the first Browser preview is
+a self-contained HTML design artifact. It is not the rendered output of the
+generated Arrusted application and must not be presented as evidence that the
+production application already inherits Arrusted's visual system.
+
+The Arrusted app generator also provides a deliberately minimal Next.js
+workspace today. Its initial page contains only the generated application
+title, and its package manifest does not automatically depend on the Arrusted
+design-system package or install a shared application shell. Builder guidance
+directs the agent to inspect current semantic tokens, Storybook stories,
+package exports, and working applications, but that guidance alone does not
+structurally guarantee visual consistency. A visually unrelated prototype is
+therefore possible even when source selection and repository generation are
+correct.
+
+A future visual-inheritance improvement should preserve the fast, disposable
+HTML prototype for early product exploration while adding a later preview of
+the actual generated application. The bounded improvement should:
+
+1. define an Arrusted-owned route-app starter surface containing the supported
+   shell, semantic tokens, and public component dependencies;
+2. update the canonical Arrusted generator to consume that surface without
+   copying private app-specific workflow or stale token values;
+3. require planning to name the current target-owned tokens, exports, stories,
+   or reference application patterns used by the generated UI;
+4. render the applied generated app in the integrated Browser before the final
+   review boundary, while retaining the standalone HTML artifact as an earlier
+   and cheaper design tool; and
+5. add focused checks proving the generated app uses the declared public shell
+   and design-system entrypoints rather than merely approximating their look.
+
+Acceptance should distinguish three independent facts: the full Arrusted tree
+was selected, the repository-owned generator and validation commands ran, and
+the resulting application uses the supported Arrusted visual foundation. None
+of those facts should be inferred from either of the others.
+
+This section records a possible improvement only. It does not authorize an
+Arrusted generator change, a design-system API change, or an App Builder runtime
+change.
+
 ## Validation
 
 The source boundary is tested for exact requested reader permissions and
