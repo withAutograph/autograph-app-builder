@@ -999,7 +999,18 @@ const developmentWorkspaceInspectionProgram = [
   'if(repositoryInput!==path.join(workspaceRoot,"repository"))process.exit(1);',
   "const repositoryState=fs.lstatSync(repositoryInput);",
   "if(!repositoryState.isDirectory()||repositoryState.isSymbolicLink())process.exit(1);",
+  'const realWorkspace=fs.realpathSync(".");',
+  "const realRepository=fs.realpathSync(repositoryInput);",
+  'if(realWorkspace!=="/workspace"||realRepository!=="/workspace/repository")process.exit(1);',
+  'process.stdout.write(JSON.stringify({repositoryInput,realRepository,realWorkspace,workspaceRoot}));',
 ].join("");
+
+const developmentWorkspaceInspectionReceipt = JSON.stringify({
+  repositoryInput: "/workspace/repository",
+  realRepository: "/workspace/repository",
+  realWorkspace: "/workspace",
+  workspaceRoot: "/workspace",
+});
 
 async function verifyDevelopmentSandboxWorkspace(
   sandbox: SandboxSession,
@@ -1023,7 +1034,12 @@ async function verifyDevelopmentSandboxWorkspace(
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
     Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes ||
-    inspection.exitCode !== 0
+    inspection.stdout !== developmentWorkspaceInspectionReceipt ||
+    (inspection.exitCode !== 0 &&
+      !(
+        inspection.exitCode === 125 &&
+        inspection.stderr === "sandbox_workspace_quota_exceeded\n"
+      ))
   )
     throw new Error(
       "The prepared development workspace escaped its sandbox boundary.",
