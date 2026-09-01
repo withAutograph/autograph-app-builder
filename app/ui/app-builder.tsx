@@ -9,7 +9,6 @@ import {
   DollarSign,
   ExternalLink,
   Globe,
-  Info,
   Plus,
   PlusCircle,
   RefreshCw,
@@ -64,9 +63,11 @@ import { BuilderInstallInstructions } from "./builder-install-instructions";
 import { BuilderHandoffProgress } from "./builder-handoff-progress";
 import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
+import { InfoTooltip } from "./builder-info-tooltip";
 
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
+export { InfoTooltip } from "./builder-info-tooltip";
 import type {
   BuilderDraft,
   BuilderForm,
@@ -410,21 +411,6 @@ export function AutographMark({ compact = false }: { compact?: boolean }) {
         alt=""
       />
       <span>Autograph</span>
-    </span>
-  );
-}
-
-export function InfoTooltip({ children }: { children: string }) {
-  const tooltipId = useId();
-
-  return (
-    <span className={styles.infoTooltip}>
-      <button type="button" aria-label={children} aria-describedby={tooltipId}>
-        <Info size={12} aria-hidden="true" />
-      </button>
-      <span id={tooltipId} role="tooltip">
-        {children}
-      </span>
     </span>
   );
 }
