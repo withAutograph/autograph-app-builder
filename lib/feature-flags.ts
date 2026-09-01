@@ -79,3 +79,11 @@ export const selfServiceSignupFlag = flag<boolean>({
   description: "Allow verified users to create a personal workspace.",
   options: booleanOptions,
 });
+
+export const passkeysFlag = flag<boolean>({
+  key: "passkeys",
+  adapter: managedVercelAdapter,
+  defaultValue: false,
+  description: "Show passkey authentication and account-management controls.",
+  options: booleanOptions,
+});

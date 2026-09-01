@@ -265,6 +265,8 @@ describe("Preview OAuth deployment handlers", () => {
     expect(providers).toContain(
       'import { passkeyPlugin } from "@/lib/auth/passkey-plugin"',
     );
+    expect(providers).toContain("passkeysEnabled");
+    expect(providers).toContain("passkeyUiPlugins(passkeysEnabled");
     expect(passkeyPlugin).toContain("authButtons: [PasskeyButton]");
     expect(passkeyPlugin).toContain("securityCards: [Passkeys]");
     expect(signIn).toContain("plugin.authButtons");

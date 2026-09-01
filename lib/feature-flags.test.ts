@@ -4,6 +4,7 @@ import {
   builderComingSoonFlag,
   builderConnectionsFlag,
   builderResourceProvisioningFlag,
+  passkeysFlag,
   selfServiceSignupFlag,
 } from "./feature-flags";
 
@@ -31,6 +32,12 @@ describe("Vercel feature flags", () => {
       "builder-resource-provisioning",
     );
     expect(builderResourceProvisioningFlag.defaultValue).toBe(false);
+    expect(passkeysFlag.key).toBe("passkeys");
+    expect(passkeysFlag.defaultValue).toBe(false);
+    expect(passkeysFlag.options).toEqual([
+      { value: false, label: "Disabled" },
+      { value: true, label: "Enabled" },
+    ]);
   });
 
   it("falls closed when Vercel does not provide an SDK key", async () => {

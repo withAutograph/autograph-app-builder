@@ -85,6 +85,7 @@ export EVE_HOSTED_ADAPTER=1
 export BETTER_AUTH_URL="$app_origin/api/auth"
 export MCP_RESOURCE_URL="$app_origin/mcp"
 export BETTER_AUTH_SECRET="$(tr -d '\n' < .emulate/better-auth-secret)"
+export FLAGS_SECRET="$(tr -d '\n' < .emulate/flags-secret)"
 export GITHUB_CLIENT_ID=Iv1_local_app_client
 export GITHUB_CLIENT_SECRET=local-github-client-secret-value
 export GITHUB_APP_ID=12345
