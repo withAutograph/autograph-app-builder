@@ -36,7 +36,7 @@ describe("mise-owned repository operations", () => {
     } as const;
 
     expect(Object.keys(parsed.jobs).sort()).toEqual(
-      [...Object.keys(lanes), "check"].sort(),
+      [...Object.keys(lanes), "vercel-preview", "check", "promote"].sort(),
     );
     for (const [jobName, taskName] of Object.entries(lanes)) {
       const job = parsed.jobs[jobName];
@@ -65,12 +65,16 @@ describe("mise-owned repository operations", () => {
     }
 
     expect(parsed.jobs.check.if).toBe("${{ always() }}");
-    expect(parsed.jobs.check.needs).toEqual(Object.keys(lanes));
+    expect(parsed.jobs.check.needs).toEqual([
+      ...Object.keys(lanes),
+      "vercel-preview",
+    ]);
     const aggregate = parsed.jobs.check.steps
       .map(({ run }) => run ?? "")
       .join("\n");
     for (const lane of Object.keys(lanes))
       expect(aggregate).toContain(`needs.${lane}.result`);
+    expect(aggregate).toContain("needs.vercel-preview.result");
 
     const general = await read(".config/mise/tasks/ci-eve-general");
     expect(general).toContain("mise run test:general-evals");

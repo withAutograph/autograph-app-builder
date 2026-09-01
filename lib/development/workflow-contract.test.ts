@@ -63,8 +63,8 @@ describe("two-mode development workflow contract", () => {
   it("exposes only prove and publish for release promotion and hides legacy helpers", () => {
     const prove = readFileSync(".config/mise/tasks/release/prove", "utf8");
     const publish = readFileSync(".config/mise/tasks/release/publish", "utf8");
-    expect(prove).toContain("scripts/release-prove.mts");
-    expect(publish).toContain("scripts/release-publish.mts");
+    expect(prove).toContain("scripts/build-release-promotion.mts");
+    expect(publish).toContain("scripts/publish-release-candidate.mts");
     expect(
       statSync(".config/mise/tasks/release/prove").mode & constants.S_IXUSR,
     ).not.toBe(0);

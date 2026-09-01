@@ -2,24 +2,24 @@
 
 ## Install before shared marketplace publication
 
-Once the pre-release `v0.2.3` GitHub release is published, use its public
+Once the pre-release `v0.2.4` GitHub release is published, use its public
 [release assets](https://github.com/withAutograph/autograph-app-builder/releases)
 until the shared marketplace is available. The release contains:
 
-- `app-builder-0.2.3.tar.gz`
-- `app-builder-codex-marketplace-0.2.3.tar.gz`
+- `app-builder-0.2.4.tar.gz`
+- `app-builder-codex-marketplace-0.2.4.tar.gz`
 - `release-receipt.json`
 - `promotion-receipt.json`
 - `SHA256SUMS`
 
 Download the complete asset set, verify both archive checksums and GitHub's
 immutable release state, install, and open a new Codex task. These
-commands fail closed until `v0.2.3` exists:
+commands fail closed until `v0.2.4` exists:
 
 ```sh
 (
   set -eu
-  release_version=0.2.3
+  release_version=0.2.4
   release_dir="$PWD/app-builder-release-$release_version"
   marketplace_dir="$PWD/app-builder-marketplace-$release_version"
   mkdir "$release_dir" "$marketplace_dir"
@@ -113,14 +113,14 @@ doesn't offer a catalog listing.
 
 Every release contains:
 
-- `app-builder-0.2.3.tar.gz`, the portable Agent Plugins package
-- `app-builder-codex-marketplace-0.2.3.tar.gz`, a self-contained
+- `app-builder-0.2.4.tar.gz`, the portable Agent Plugins package
+- `app-builder-codex-marketplace-0.2.4.tar.gz`, a self-contained
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
   origin, archive digests, and exact five Autograph tools
-- `promotion-receipt.json`, which binds those package bytes to the proven image,
-  deployment output, platform closure, release endpoint, and local proofs
+- `promotion-receipt.json`, which binds those package bytes to the exact
+  Vercel Git deployment, canonical endpoint, project, source SHA, and health
 
 ### Portable archive
 
@@ -130,7 +130,7 @@ then extract the portable archive:
 ```sh
 (
   set -eu
-  release_version=0.2.3
+  release_version=0.2.4
   release_dir="$PWD/app-builder-release-$release_version"
   mkdir "$release_dir"
   gh release download "v$release_version" \
@@ -169,10 +169,10 @@ marketplace directory:
   set -eu
   codex plugin remove app-builder@autograph
   codex plugin marketplace remove autograph
-  mkdir app-builder-marketplace-0.2.3
-  tar -xzf app-builder-codex-marketplace-0.2.3.tar.gz \
-    -C app-builder-marketplace-0.2.3
-  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.3"
+  mkdir app-builder-marketplace-0.2.4
+  tar -xzf app-builder-codex-marketplace-0.2.4.tar.gz \
+    -C app-builder-marketplace-0.2.4
+  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.4"
   codex plugin add app-builder@autograph
 )
 ```
@@ -199,19 +199,16 @@ redistribute development package bytes as an endpoint-bound release.
 
 ## Maintainer release flow
 
-From clean exact Builder and Arrusted commits, run `mise run release:prove`
-with the approved deployed origin and an owner-controlled output root. Review
-its `promotion-receipt.json`. After separate publication authorization, run
-`mise run release:publish -- --candidate-root <same-root> --token-file
-<owner-only-hosted-oauth-token>`. The publish command
-creates the versioned prerelease from the proven package and marketplace
-archives, pushes the proven OCI image, and deploys the proven Vercel prebuilt
-output. It never invokes a build command and accepts no replacement bytes or
-bindings.
+Exact-main CI waits for Vercel Git to deploy the same SHA, then runs
+`release:prove` once with that provider-owned URL and the canonical endpoint.
+It records `promotion-receipt.json` and attests every asset. The protected
+`release:publish` step creates the prerelease from those exact package and
+marketplace bytes. It never rebuilds, invokes Vercel CLI, pushes an image, or
+accepts replacement bytes or bindings.
 
 Protected-environment policy, exact-current-main CI, immutable GitHub release
 verification, and marketplace import readback remain required release
-gates. They verify the local promotion receipt and uploaded digests rather than
+gates. They verify the CI promotion receipt and uploaded digests rather than
 rebuilding the candidate.
 
 The archives are the immutable distribution payload behind marketplace and

@@ -74,106 +74,91 @@ durable and cannot retry automatically. The recovery tool has its own approval,
 is bound to the exact pending/failed journal digest, resumes only preimage or
 already-applied postimage states, and refuses conflicts.
 
-Before enabling GitHub or hosted repository publication:
+Before enabling GitHub or hosted repository publication, require Eve 0.44.4's
+native Vercel Sandbox backend. Its exact Development, Preview, or Production
+binding must agree with `VERCEL_ENV`, and authentication must come from the App
+Builder project's short-lived Vercel OIDC identity. No static key, local
+container runtime, image registry, or silent execution fallback is an active
+execution authority. The reusable Vercel template installs the
+exact checksum-pinned mise and Bun binaries for `aarch64` or `x86_64` with a
+two-host bootstrap allowlist. A server-only traced artifact supplies the
+exact Arrusted Git tree and a platform-portable, planning-only dependency
+closure; its source, cache, and artifact digests are part of the template
+revalidation key. The bootstrap installs those bytes before every live
+session changes to deny-all networking. The artifact is never a public
+route or static asset. The hosted backend can run only the fixed read-only
+identity and planning commands; missing, Development, or mismatched Vercel
+environments use the non-executing backend.
+The bounded command backend is active for every hosted template and live
+session command. It shares one stdout/stderr byte budget, rejects direct
+authored process spawning, enforces wall and no-output deadlines, actively
+kills the process, cancels stream readers, and bounds kill cleanup. Eve
+0.43 exposes no provider-native per-command timeout on its public sandbox
+session surface, so no such timeout is claimed.
+Durable per-turn execution leasing remains dormant unless a deployment sets
+the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` gate. The awaited
+`turn.started` hook acquires before dynamic tools and each command reasserts
+its PostgreSQL epoch; terminal turn hooks stop compute before releasing.
+`session.waiting` is deliberately not a release boundary because it may be
+an in-turn authorization park. `mise run test:postgres-sandbox-leases`
+proves same-subject serialization, the workspace cap, idempotent replay,
+rollback, expiry, heartbeat, and recovery/reacquisition races against an
+ephemeral digest-pinned PostgreSQL container. A provider stop failure keeps
+the fenced lease orphaned and admission-blocking; only a successful stop may
+settle it as released, and one failed stop does not abort the remaining
+recovery batch. This source proof does not activate the gate or prove
+provider-side orphan lookup and stop.
+The combined `hosted:artifact-prove-typed` gate first proves those exact
+artifact commands offline, then exercises the silent Eve tool flow
+to terminal `planned` and emits its asserted called/forbidden tool trace. 2. The implemented automatic dependency preparation verifies the fixed
+image-internal manifest and archive bytes, binds Arrusted commit/tree and
+contract/lock hashes, and extracts `node_modules` only into builder-owned
+planning metadata under deny-all runtime networking. It precreates the
+archive's directories and preserves their metadata during extraction so the
+verified cache remains reliable on the sandbox overlay filesystem. Its durable receipt is
+internally observed; `APP_BUILDER_DEPENDENCY_CACHE_DIGEST` is not accepted.
+The cache target, durable source receipt, and prepared workspace must agree
+on both the exact source commit and tree. That binding is carried through
+dependency, identity, proposal, apply, validation, review, and publication
+receipts; a SHA match with a different tree fails closed.
+Source receipt V3 hashes only this immutable logical binding; its absolute
+local checkout path is diagnostic and deliberately excluded. Generate the
+strict path-independent evidence with:
 
-1. Build and pre-load an externally approved OCI image pinned by manifest
-   digest, containing Git, `mise 2026.8.12`, `bun 1.3.14`, and the exact
-   target-bound external dependency closure. The committed `linux/arm64` build
-   definition and digest-resolution procedure are in
-   [`containers/eve-sandbox`](../containers/eve-sandbox/README.md). This
-   repository accepts an image only through `APP_BUILDER_SANDBOX_IMAGE` as an `@sha256` digest,
-   with the microsandbox backend's `pullPolicy: "never"`, deny-all networking,
-   and an image-bound template revalidation key. Image build, publication, and
-   acquisition remain separate authority. Require the typed toolchain receipt
-   to match every pinned version before any target-owned command can run. With
-   no configured image, the agent selects just-bash and is deliberately not
-   toolchain-ready.
-   A supported Vercel hosted deployment instead selects Eve 0.44.4's native
-   Vercel Sandbox backend only when its exact Preview or Production binding
-   agrees with `VERCEL_ENV`.
-   That backend fixes its sandbox to Eve's Vercel Container Registry image and
-   strips author image/runtime fields, so the approved private GHCR image is
-   not hosted execution authority. The reusable Vercel template installs the
-   exact checksum-pinned mise and Bun binaries for `aarch64` or `x86_64` with a
-   two-host bootstrap allowlist. A server-only traced artifact supplies the
-   exact Arrusted Git tree and a platform-portable, planning-only dependency
-   closure; its source, cache, and artifact digests are part of the template
-   revalidation key. The bootstrap installs those bytes before every live
-   session changes to deny-all networking. The artifact is never a public
-   route or static asset. The hosted backend can run only the fixed read-only
-   identity and planning commands; missing, Development, or mismatched Vercel
-   environments use the non-executing backend.
-   The bounded command backend is active for every hosted template and live
-   session command. It shares one stdout/stderr byte budget, rejects direct
-   authored process spawning, enforces wall and no-output deadlines, actively
-   kills the process, cancels stream readers, and bounds kill cleanup. Eve
-   0.43 exposes no provider-native per-command timeout on its public sandbox
-   session surface, so no such timeout is claimed.
-   Durable per-turn execution leasing remains dormant unless a deployment sets
-   the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` gate. The awaited
-   `turn.started` hook acquires before dynamic tools and each command reasserts
-   its PostgreSQL epoch; terminal turn hooks stop compute before releasing.
-   `session.waiting` is deliberately not a release boundary because it may be
-   an in-turn authorization park. `mise run test:postgres-sandbox-leases`
-   proves same-subject serialization, the workspace cap, idempotent replay,
-   rollback, expiry, heartbeat, and recovery/reacquisition races against an
-   ephemeral digest-pinned PostgreSQL container. A provider stop failure keeps
-   the fenced lease orphaned and admission-blocking; only a successful stop may
-   settle it as released, and one failed stop does not abort the remaining
-   recovery batch. This source proof does not activate the gate or prove
-   provider-side orphan lookup and stop.
-   The combined `hosted:artifact-prove-typed` gate first proves those exact
-   artifact commands offline, then exercises the silent Eve tool flow
-   to terminal `planned` and emits its asserted called/forbidden tool trace.
-2. The implemented automatic dependency preparation verifies the fixed
-   image-internal manifest and archive bytes, binds Arrusted commit/tree and
-   contract/lock hashes, and extracts `node_modules` only into builder-owned
-   planning metadata under deny-all runtime networking. It precreates the
-   archive's directories and preserves their metadata during extraction so the
-   verified cache remains reliable on the sandbox overlay filesystem. Its durable receipt is
-   internally observed; `APP_BUILDER_DEPENDENCY_CACHE_DIGEST` is not accepted.
-   The cache target, durable source receipt, and prepared workspace must agree
-   on both the exact source commit and tree. That binding is carried through
-   dependency, identity, proposal, apply, validation, review, and publication
-   receipts; a SHA match with a different tree fails closed.
-   Source receipt V3 hashes only this immutable logical binding; its absolute
-   local checkout path is diagnostic and deliberately excluded. Generate the
-   strict path-independent evidence with:
+```sh
+mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
+```
 
-   ```sh
-   mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
-   ```
-
-   The command emits no local path, rejects the V2
-   schema and unknown arguments, and does not prepare or mutate the source.
-   The implemented fixed target identity and planning operation then uses a
-   builder-owned overlay, bounded execution, strict output schemas, and durable
-   receipts. Real execution still requires both the immutable image and a
-   matching durable dependency-preparation receipt. Named mise test tasks inject
-   a process-scoped structural capability for fixture execution only after a
-   non-Node launcher rejects ambient `NODE_OPTIONS`, replaces the Node child
-   environment with an explicit allowlist, and a wrapper-owned root key plus
-   one-shot private IPC challenge succeeds. Pre-exec dynamic-loader influence on
-   the launcher itself remains an operating-system/parent-process trust boundary.
-   The non-Node launcher remains the wrapper parent. The wrapper verifies exact
-   launcher executable, source digest, cwd, and tokenized argv before creating a
-   key; the registry separately accepts only exact launcher-root wrapper argv
-   tokens and binds the inherited key. No test protocol fixture is an accepted
-   authority parent. A non-authorizing pure harness verifies bounded complete
-   frames, exact counts, backpressure, and terminal closure. The registry brands
-   only that authorized capability for the process lifetime after the signed
-   proof is consumed. Linux uses `/proc`; macOS exact process inspection requires
-   the approved local boundary and fails closed in an ordinary Codex sandbox.
-   Exact supported workers
-   derive fresh one-shot proofs from that authorized parent broker;
-   arbitrary Node, shell, and worker descendants do not. An ambient tracked
-   preload, copied flags, a self-created channel, or a forged public symbol cannot select simulated
-   target or publication behavior. Vitest and Eve use the same broker. The real
-   sandbox proof is structurally denied those capabilities. Fixture tests
-   execute no Arrusted command. The read-only pre-plan workspace readiness receipt binds the
-   prepared source/workspace receipts to the immutable toolchain observation.
-   The implemented proposal-bound apply-readiness receipt adds the exact
-   proposal digest. Neither executes a target command or authorizes apply.
+The command emits no local path, rejects the V2
+schema and unknown arguments, and does not prepare or mutate the source.
+The implemented fixed target identity and planning operation then uses a
+builder-owned overlay, bounded execution, strict output schemas, and durable
+receipts. Real execution still requires both the immutable image and a
+matching durable dependency-preparation receipt. Named mise test tasks inject
+a process-scoped structural capability for fixture execution only after a
+non-Node launcher rejects ambient `NODE_OPTIONS`, replaces the Node child
+environment with an explicit allowlist, and a wrapper-owned root key plus
+one-shot private IPC challenge succeeds. Pre-exec dynamic-loader influence on
+the launcher itself remains an operating-system/parent-process trust boundary.
+The non-Node launcher remains the wrapper parent. The wrapper verifies exact
+launcher executable, source digest, cwd, and tokenized argv before creating a
+key; the registry separately accepts only exact launcher-root wrapper argv
+tokens and binds the inherited key. No test protocol fixture is an accepted
+authority parent. A non-authorizing pure harness verifies bounded complete
+frames, exact counts, backpressure, and terminal closure. The registry brands
+only that authorized capability for the process lifetime after the signed
+proof is consumed. Linux uses `/proc`; macOS exact process inspection requires
+the approved local boundary and fails closed in an ordinary Codex sandbox.
+Exact supported workers
+derive fresh one-shot proofs from that authorized parent broker;
+arbitrary Node, shell, and worker descendants do not. An ambient tracked
+preload, copied flags, a self-created channel, or a forged public symbol cannot select simulated
+target or publication behavior. Vitest and Eve use the same broker. The real
+sandbox proof is structurally denied those capabilities. Fixture tests
+execute no Arrusted command. The read-only pre-plan workspace readiness receipt binds the
+prepared source/workspace receipts to the immutable toolchain observation.
+The implemented proposal-bound apply-readiness receipt adds the exact
+proposal digest. Neither executes a target command or authorizes apply.
 
 3. The implemented prototype-artifact tools allow only the three conventional
    files, bind AppSpec acceptance to an exact recorded revision, and invalidate
@@ -265,35 +250,16 @@ local:start -- <owner-only-state-root> <owner-only-destination-root>
 <canonical-local-source-root>`; direct
    environment configuration is not a supported interface.
 
-Re-run the observational real-backend receipt with:
+Re-run the observational sandbox contract with:
 
 ```bash
 mise run test:sandbox-toolchain
 ```
 
 This command does not install missing tools or authorize target command
-execution. It requires a host supported by Eve's microsandbox backend. The
-2026-08-24 proof passed every eval gate; Eve also emitted a non-fatal cleanup
-diagnostic (`configure is not a function`) after the sandbox had been stopped.
-
-GHCR publication has its own closed authentication gate. `mise run image:login`
-accepts the operator-approved token once on bounded standard input and compares
-it directly with the existing keyring credential read by pinned GitHub CLI
-2.98.0. GitHub CLI status, exact HTTPS Git protocol, keyring source,
-`write:packages` scope, account, and namespace membership must all match; login,
-OAuth, refresh, and credential-store operations are not available. Push and
-remote inspection later re-read only that same digest-bound keyring credential
-through the lifecycle-owned Docker `get` helper. The lifecycle derives GitHub
-CLI's `XDG_STATE_HOME` internally as an owned mode-0700 `github-cli-state`
-directory beneath the approved external
-state root. Its closed `gh/device-id` state is digest-bound in the versioned
-login receipt; links, unsafe modes, unexpected files, or later byte drift stop
-reuse. Every receipt-backed credential-helper invocation verifies that approved
-digest before and after each GitHub CLI subprocess and once more immediately
-before credential output; initial login alone may initialize the state before
-the parent binds its final digest. Ambient state paths are ignored, and GitHub
-CLI cannot write mutable state into the immutable Builder checkout. Tokens
-never enter argv, environment, receipts, or persistent files.
+execution. Provider-backed Preview and Production proofs execute on Vercel,
+where project-scoped OIDC is present; GitHub CI verifies the exact Vercel Git
+deployment and its public contract.
 
 Before enabling real MCP mutations:
 

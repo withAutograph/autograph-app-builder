@@ -42,17 +42,18 @@ jobs:
           const { basename, join } = require("node:path");
 
           const root = ".artifacts/promoted-release";
-          const digest = (path) => `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+          const digestBytes = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+          const digest = (path) => digestBytes(readFileSync(path));
           const promotion = JSON.parse(readFileSync(join(root, "promotion-receipt.json"), "utf8"));
           const packageReceipt = JSON.parse(readFileSync(join(root, "release-receipt.json"), "utf8"));
           const tagCommit = execFileSync("git", ["rev-parse", "HEAD^{commit}"], { encoding: "utf8" }).trim();
 
-          if (promotion.format !== "autograph-release-promotion-v1") throw new Error("unexpected promotion receipt format");
-          if (promotion.builder.commit !== tagCommit) throw new Error("promotion is not bound to the release commit");
-          if (promotion.bindings.execution !== "release" || promotion.bindings.oauth !== "hosted" || promotion.bindings.endpoint !== "deployed" || promotion.bindings.marketplace !== "release" || promotion.bindings.deployment !== "production") {
+          if (promotion.format !== "autograph-release-promotion-v2") throw new Error("unexpected promotion receipt format");
+          if (promotion.source.sha !== tagCommit) throw new Error("promotion is not bound to the release commit");
+          if (promotion.bindings.execution !== "vercel-sandbox" || promotion.bindings.authentication !== "vercel-project-oidc" || promotion.bindings.deployment !== "vercel-git" || promotion.bindings.marketplace !== "immutable-release") {
             throw new Error("non-release bindings are forbidden");
           }
-          if (packageReceipt.source.sha !== promotion.builder.commit || packageReceipt.source.tree !== promotion.builder.tree) {
+          if (packageReceipt.source.sha !== promotion.source.sha || packageReceipt.source.tree !== promotion.source.tree) {
             throw new Error("package receipt source does not match the promotion receipt");
           }
           if (packageReceipt.endpoint !== promotion.endpoint) throw new Error("package endpoint does not match deployment binding");
@@ -78,6 +79,11 @@ jobs:
             [promotion.package.receipt, promotion.package.receiptSha256],
           ]) {
             if (digest(join(root, basename(file))) !== `sha256:${expectedDigest}`) throw new Error(`digest mismatch for ${file}`);
+          }
+          const { digest: promotionDigest, ...unsigned } = promotion;
+          if (digestBytes(Buffer.from(JSON.stringify(unsigned))) !== `sha256:${promotionDigest}`) throw new Error("promotion digest drifted");
+          if (promotion.deployment.provider !== "vercel-git" || promotion.deployment.sourceSha !== tagCommit || promotion.deployment.canonicalOrigin !== "https://new.autograph.so") {
+            throw new Error("deployment binding drifted");
           }
           NODE
       - name: Verify immutable release state

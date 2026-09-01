@@ -87,10 +87,10 @@ describe("public plugin installation documentation", () => {
 
     const auditLog = await runInstall(script, "none");
     expect(auditLog).toContain(
-      "tar -xzf app-builder-codex-marketplace-0.2.3.tar.gz",
+      "tar -xzf app-builder-codex-marketplace-0.2.4.tar.gz",
     );
     expect(auditLog).toMatch(
-      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.3/u,
+      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.4/u,
     );
     expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
@@ -111,23 +111,22 @@ describe("public plugin installation documentation", () => {
     const documentation = await readDocumentation("docs/installing.md");
 
     expect(documentation).toContain(
-      "Once the pre-release `v0.2.3` GitHub release is published",
+      "Once the pre-release `v0.2.4` GitHub release is published",
     );
     expect(documentation).toMatch(
-      /These\s+commands fail closed until `v0\.2\.3` exists/u,
+      /These\s+commands fail closed until `v0\.2\.4` exists/u,
     );
-    expect(documentation).toContain("app-builder-0.2.3.tar.gz");
+    expect(documentation).toContain("app-builder-0.2.4.tar.gz");
     expect(documentation).toContain(
-      "app-builder-codex-marketplace-0.2.3.tar.gz",
+      "app-builder-codex-marketplace-0.2.4.tar.gz",
+    );
+    expect(documentation).toContain("Exact-main CI waits for Vercel Git");
+    expect(documentation).toMatch(
+      /The protected\s+`release:publish` step creates the prerelease/u,
     );
     expect(documentation).toMatch(
-      /`mise run release:publish -- --candidate-root <same-root> --token-file\s+<owner-only-hosted-oauth-token>`/u,
+      /It never rebuilds, invokes Vercel CLI, pushes an image, or\s+accepts replacement bytes or bindings\./u,
     );
-    expect(documentation).toMatch(
-      /The publish command\s+creates the versioned prerelease from the proven package and marketplace\s+archives/u,
-    );
-    expect(documentation).toMatch(
-      /It never invokes a build command and accepts no replacement bytes or\s+bindings\./u,
-    );
+    expect(documentation).not.toContain("owner-only-hosted-oauth-token");
   });
 });
