@@ -2,7 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -21,7 +20,6 @@ import {
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import {
@@ -50,13 +48,9 @@ import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts"
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
 import { SectionShell } from "../../components/create-app/choice-card";
 import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
-import { UserButton } from "../../components/auth/user/user-button";
 import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
-import {
-  providerConnectionFailureMessage,
-  type ProviderConnectionNotice,
-} from "../../lib/integrations/provider-connection-status";
+import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
 import {
   activeProvisioningStorageKey,
@@ -67,6 +61,7 @@ import {
   persistBuilderDraft,
   readBuilderDraft,
 } from "./builder-session";
+import { Header, ProviderNotices } from "./builder-shell";
 import type {
   BuilderDraft,
   BuilderForm,
@@ -669,57 +664,6 @@ export function SearchCombobox({
           </button>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-export function Header() {
-  return (
-    <header className={styles.header}>
-      <a className={styles.skipLink} href="#main-content">
-        Skip to content
-      </a>
-      <Link href="/" className={styles.back}>
-        <ArrowLeft size={17} aria-hidden="true" /> Back
-      </Link>
-      <span>New App</span>
-      <div className={styles.headerActions}>
-        <UserButton align="end" sideOffset={8} size="icon" />
-      </div>
-    </header>
-  );
-}
-
-export function ProviderNotices({
-  notices,
-}: {
-  notices: ProviderConnectionNotice[];
-}) {
-  if (!notices.length) return null;
-  return (
-    <div className={styles.providerNotices} aria-live="polite">
-      {notices.map((notice) => {
-        const provider = notice.provider === "vercel" ? "Vercel" : "GitHub";
-        return (
-          <p
-            key={`${notice.provider}-${notice.status}`}
-            role={notice.status === "failed" ? "alert" : "status"}
-            data-status={notice.status}
-          >
-            {notice.status === "connected" ? (
-              <>
-                <Check size={15} aria-hidden="true" />
-                {provider} connected successfully.
-              </>
-            ) : (
-              <>
-                <Info size={15} aria-hidden="true" />
-                {providerConnectionFailureMessage(provider, notice.reason)}
-              </>
-            )}
-          </p>
-        );
-      })}
     </div>
   );
 }
