@@ -136,8 +136,7 @@ vi.mock("@/lib/repository/source-receipt", () => ({
 }));
 
 vi.mock("@/lib/repository/arrusted-template", () => ({
-  inspectSourceBoundSandboxWorkspace:
-    mocks.inspectSourceBoundSandboxWorkspace,
+  inspectSourceBoundSandboxWorkspace: mocks.inspectSourceBoundSandboxWorkspace,
 }));
 
 vi.mock("@/lib/repository/target-planning", () => ({

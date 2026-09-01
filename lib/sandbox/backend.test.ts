@@ -79,6 +79,23 @@ describe("sandbox backend selection", () => {
     ).toThrow("unsupported");
   });
 
+  it("treats launcher-projected empty bindings as absent for inspection", () => {
+    expect(
+      sandboxBackendPlan({
+        environment: {
+          APP_BUILDER_EXECUTION_MODE: "",
+          APP_BUILDER_EXECUTION_BUNDLE: "",
+          APP_BUILDER_SANDBOX_PROVIDER: "",
+        },
+        fixture: false,
+        localImageConfigured: false,
+      }),
+    ).toEqual({
+      kind: "local-just-bash",
+      blockers: ["No immutable local sandbox image is configured."],
+    });
+  });
+
   it("constructs only Vercel Sandbox for Development", () => {
     const localMicrosandbox = vi.fn(() => "microsandbox");
     const nonExecuting = vi.fn(() => "just-bash");

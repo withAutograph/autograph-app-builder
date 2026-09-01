@@ -63,7 +63,7 @@ export function sandboxBackendPlan(input: {
     developmentBinding[2] === "local-development"
   )
     return { kind: "vercel-development", blockers: [] };
-  if (developmentBinding.some((value) => value !== undefined))
+  if (developmentBinding.some((value) => value !== undefined && value !== ""))
     return {
       kind: "unsupported-development",
       blockers: [
