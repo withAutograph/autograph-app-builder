@@ -3,6 +3,11 @@ import { never } from "eve/tools/approval";
 import { z } from "zod";
 
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
+import {
+  recordRepositoryAccessReceipt,
+  type RepositoryAccessReceipt,
+  repositoryAccessReceiptState,
+} from "@/lib/agent/repository-access-state";
 
 const inputSchema = z.strictObject({
   repository: z
@@ -49,6 +54,21 @@ export default defineTool({
           : "GitHub could not confirm repository access.",
       );
     }
-    return confirmed;
+    let recorded: RepositoryAccessReceipt | undefined;
+    repositoryAccessReceiptState.update((current) => {
+      recorded = recordRepositoryAccessReceipt({
+        current,
+        sessionId: ctx.session.id,
+        confirmedByCallId: ctx.callId,
+        access: confirmed,
+      });
+      return recorded;
+    });
+    if (recorded === undefined)
+      throw new Error("Confirmed repository access was not recorded.");
+    return {
+      ...confirmed,
+      repositoryAccessReceiptDigest: recorded.digest,
+    };
   },
 });

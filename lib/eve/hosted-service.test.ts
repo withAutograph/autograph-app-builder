@@ -432,6 +432,24 @@ describe("hosted Eve service core", () => {
     expect(adapter.cancel).toHaveBeenCalledTimes(1);
   });
 
+  it("returns an honest typed rejection when cancel has no matching active turn", async () => {
+    const adapter = transport({
+      cancel: vi.fn(async () => {
+        throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      }),
+    });
+    const { service, result } = await started({ transport: adapter });
+
+    await expect(
+      service.cancel({ sessionId: result.sessionId, turnId: "turn_0" }),
+    ).rejects.toMatchObject({
+      name: HostedRejectedOperationError.name,
+      code: "turn_changed",
+      message: "The hosted Eve operation was rejected before a durable result.",
+    });
+    expect(adapter.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("returns the durable result when a start response was lost to the caller", async () => {
     const adapter = transport();
     const { service, result } = await started({ transport: adapter });
@@ -1087,6 +1105,30 @@ describe("hosted Eve service core", () => {
     await expect(
       service.respond({ ...request, responses: [...responses].reverse() }),
     ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
+    expect(adapter.respond).toHaveBeenCalledTimes(1);
+  });
+
+  it("never redispatches an accepted response whose settlement is unknown", async () => {
+    const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
+    const adapter = transport({
+      get: vi.fn(async () => approvalSnapshot([requestId])),
+      respond: vi.fn(async () => {
+        throw new SubmissionOutcomeUnknownError();
+      }),
+    });
+    const { service, result } = await started({ transport: adapter });
+    const request = {
+      sessionId: result.sessionId,
+      clientRequestId: "respond_unsettled",
+      responses: [{ requestId, response: { kind: "deny" as const } }],
+    };
+
+    await expect(service.respond(request)).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    await expect(service.respond(request)).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
     expect(adapter.respond).toHaveBeenCalledTimes(1);
   });
 

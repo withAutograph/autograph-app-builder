@@ -61,6 +61,11 @@ isolated workspace.
    the option id. Retry `resolve_repository_access` with the selected
    `selectedInstallationId`; the selection only narrows server-read access and
    never establishes authority. Authorization cards list scopes read-only.
+   After a ready result, pass its exact `repositoryAccessReceiptDigest` to
+   `resolve_github_source` with the returned repository id, default-branch ref,
+   SHA, and tree. This internal read is automatic: it requires the current
+   session-bound Store In receipt and independently re-reads GitHub before
+   recording the immutable source. Never ask the user to approve it.
 3. Infer a concise user-facing app name and deterministic lowercase kebab-case
    app id when the product brief omits them. Briefly tell the user what was
    inferred and continue without confirmation. Preserve an explicitly supplied

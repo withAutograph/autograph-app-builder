@@ -1301,11 +1301,18 @@ export function createHostedEveSessionService(input: {
     async cancel({ sessionId, turnId }) {
       requireHostedOperationScope(principal, "cancel");
       const session = await requireSession(sessionId);
-      const snapshot = await input.transport.cancel({
-        principal,
-        adapterSessionId: session.adapterSessionId,
-        ...(turnId === undefined ? {} : { turnId }),
-      });
+      let snapshot: HostedEngineSnapshot;
+      try {
+        snapshot = await input.transport.cancel({
+          principal,
+          adapterSessionId: session.adapterSessionId,
+          ...(turnId === undefined ? {} : { turnId }),
+        });
+      } catch (error) {
+        if (error instanceof SubmissionRejectedBeforeDispatchError)
+          throw new HostedRejectedOperationError(error.code);
+        throw error;
+      }
       const result = projectSnapshot(sessionId, snapshot);
       await observeSnapshot(sessionId, snapshot);
       return result;

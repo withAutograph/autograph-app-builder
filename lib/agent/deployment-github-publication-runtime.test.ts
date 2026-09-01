@@ -185,4 +185,38 @@ describe("deployment GitHub publication composition", () => {
       expect(source).not.toContain("githubPublicationRuntime.");
     }
   });
+
+  it("requires a session-bound access receipt for automatic source resolution while mutations stay approval-bound", async () => {
+    const [resolveSource, resolveAccess, createRepository, publishDraft] =
+      await Promise.all([
+        readFile("agent/tools/resolve_github_source.ts", "utf8"),
+        readFile("agent/tools/resolve_repository_access.ts", "utf8"),
+        readFile("agent/tools/create_github_repository.ts", "utf8"),
+        readFile("agent/tools/publish_github_draft_pr.ts", "utf8"),
+      ]);
+
+    expect(resolveAccess).toContain("recordRepositoryAccessReceipt");
+    expect(resolveAccess).toContain("repositoryAccessReceiptDigest");
+    expect(resolveSource).toContain(
+      'import { never } from "eve/tools/approval";',
+    );
+    expect(resolveSource).toContain("approval: never()");
+    expect(resolveSource).toContain("expectedRepositoryAccessDigest");
+    expect(resolveSource).toContain("assertRepositoryAccessReceiptForSource");
+    expect(resolveSource).toContain(
+      "assertResolvedSourceMatchesRepositoryAccess",
+    );
+    expect(resolveSource).toContain("runtime.resolveImmutableSource");
+    expect(resolveSource).toContain(
+      "expectedInstallationId: access.scope.installationId",
+    );
+    expect(resolveSource).not.toContain("approval: always()");
+
+    for (const mutationTool of [createRepository, publishDraft]) {
+      expect(mutationTool).toContain(
+        'import { always } from "eve/tools/approval";',
+      );
+      expect(mutationTool).toContain("approval: always()");
+    }
+  });
 });

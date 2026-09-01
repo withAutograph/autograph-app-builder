@@ -1027,6 +1027,7 @@ export function assertExactRepositoryObservation(
 
 export async function resolveImmutableExistingSource(input: {
   adapter: GitHubPublicationAdapter;
+  expectedInstallationId: string;
   repositoryId: string;
   ref: string;
   expectedSha: ObjectId;
@@ -1034,6 +1035,7 @@ export async function resolveImmutableExistingSource(input: {
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
   if (
+    !isDecimal(input.expectedInstallationId) ||
     !isDecimal(input.repositoryId) ||
     !safeHeadRef(input.ref) ||
     !isObjectId(input.expectedSha) ||
@@ -1046,6 +1048,7 @@ export async function resolveImmutableExistingSource(input: {
   assertExactInstallationIdentity(installation);
   if (
     installation.operation !== "resolve-existing-source" ||
+    installation.installationId !== input.expectedInstallationId ||
     !installation.selectedRepositoryIds.includes(input.repositoryId)
   )
     throw new Error("The installation is not selected for source resolution.");

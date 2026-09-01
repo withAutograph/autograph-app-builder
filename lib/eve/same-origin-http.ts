@@ -385,6 +385,42 @@ function cancellationSettled(
   );
 }
 
+function outstandingRequestIds(
+  events: readonly MessageStreamEvent[],
+): ReadonlySet<string> {
+  const outstanding = new Set<string>();
+  for (const event of events) {
+    if (event.type === "input.requested")
+      for (const request of event.data.requests)
+        outstanding.add(request.requestId);
+    if (event.type === "input.resolved")
+      for (const resolution of event.data.resolutions)
+        outstanding.delete(resolution.requestId);
+    if (event.type === "approval.settled")
+      outstanding.delete(event.data.requestId);
+  }
+  return outstanding;
+}
+
+async function readRespondSettlement(input: {
+  config: z.infer<typeof sameOriginConfigSchema>;
+  workloadIdentity: HostedWorkloadIdentity;
+  fetchImplementation: typeof fetch;
+  sessionId: string;
+  requestIds: readonly string[];
+}): Promise<HostedEngineSnapshot> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const observed = await readInstalledSnapshot(input);
+    const outstanding = outstandingRequestIds(observed.installed);
+    if (
+      observed.snapshot.status !== "input_required" ||
+      input.requestIds.every((requestId) => !outstanding.has(requestId))
+    )
+      return observed.snapshot;
+  }
+  throw new SubmissionOutcomeUnknownError();
+}
+
 export function createSameOriginEveTransport(input: {
   config: unknown;
   workloadIdentity: HostedWorkloadIdentity;
@@ -450,7 +486,11 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== request.adapterSessionId) {
         throw new SubmissionOutcomeUnknownError();
       }
-      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+      return readRespondSettlement({
+        ...common,
+        sessionId: request.adapterSessionId,
+        requestIds: request.responses.map(({ requestId }) => requestId),
+      });
     },
     async cancel(request) {
       const before = await readInstalledSnapshot({
