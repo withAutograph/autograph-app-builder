@@ -124,7 +124,6 @@ export default defineTool({
       dependencyCacheDigest: execution.dependencyCacheDigest,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
-      existingAppChanges,
     };
     let identityReceipt: TargetIdentityReceipt | undefined =
       current.phase === "identity_resolved"
@@ -140,6 +139,7 @@ export default defineTool({
       appSpecContent: current.appSpec.content,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
+      existingAppChanges,
       onIdentity(identity) {
         if (identityReceipt !== undefined) {
           if (

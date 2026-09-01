@@ -275,6 +275,40 @@ describe("target dependency preparation", () => {
     expect(mocks.executeTargetIdentityAndPlanning).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards ordered existing-app replacements without binding them to identity", async () => {
+    mocks.current = acceptedState();
+    planningResult();
+    const existingAppChanges = [
+      {
+        path: "apps/expense-review/app/page.tsx",
+        content: "export default function Page() { return 'updated'; }\n",
+      },
+      {
+        path: "apps/expense-review/components/empty-state.tsx",
+        content: "export function EmptyState() { return 'ready'; }\n",
+      },
+    ];
+
+    await planAppCreation.execute(
+      { expectedAppSpecDigest: appSpecDigest, existingAppChanges },
+      toolContext().context,
+    );
+
+    expect(mocks.executeTargetIdentityAndPlanning).toHaveBeenCalledWith(
+      expect.objectContaining({ existingAppChanges }),
+    );
+    expect(
+      mocks.executeTargetIdentityAndPlanning.mock.calls[0]?.[0]
+        .existingAppChanges,
+    ).toEqual(existingAppChanges);
+    expect(mocks.current).toMatchObject({ phase: "planned" });
+    if (mocks.current?.phase !== "planned")
+      throw new Error("planning fixture did not settle");
+    expect(mocks.current.identityReceipt).not.toHaveProperty(
+      "existingAppChanges",
+    );
+  });
+
   it("reuses one development closure for code-only source changes", async () => {
     vi.stubEnv("APP_BUILDER_EXECUTION_MODE", "development");
     const firstContext = toolContext("first-call");
