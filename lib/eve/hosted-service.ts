@@ -44,7 +44,11 @@ import {
   type PublicInputRequest,
 } from "../mcp/contracts";
 import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
-import { hostedValueDigest, stableHostedId } from "./hosted-session-identity";
+import {
+  canonicalHostedValue,
+  hostedValueDigest,
+  stableHostedId,
+} from "./hosted-session-identity";
 
 const hostedSnapshotSchema = z
   .object({
@@ -861,7 +865,8 @@ export function createHostedEveSessionService(input: {
       if (
         hostedValueDigest(verifiedResult) !==
           hostedValueDigest(dispatchedResult) ||
-        canonical(verifiedResult) !== canonical(dispatchedResult)
+        canonicalHostedValue(verifiedResult) !==
+          canonicalHostedValue(dispatchedResult)
       ) {
         throw new HostedSubmissionUnknownError();
       }
@@ -880,7 +885,8 @@ export function createHostedEveSessionService(input: {
         if (
           hostedSessionRecordDigest(verifiedSession) !==
             hostedSessionRecordDigest(dispatchedSession) ||
-          canonical(verifiedSession) !== canonical(dispatchedSession)
+          canonicalHostedValue(verifiedSession) !==
+            canonicalHostedValue(dispatchedSession)
         ) {
           throw new HostedSubmissionUnknownError();
         }
