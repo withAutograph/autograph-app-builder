@@ -1,9 +1,10 @@
 import { App } from "@modelcontextprotocol/ext-apps";
-import { useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 
 import packageManifest from "../../../package.json";
 import type { EveSessionResult } from "../contracts";
+import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
 import { SessionAppView, type SessionResponse } from "./view";
 
 const app = new App(
@@ -33,8 +34,15 @@ function SessionAppContainer() {
     () => latestResult,
   );
   const capabilities = app.getHostCapabilities();
+  const automaticRefresh = useRef(createBoundedAuthorizationRefresh());
+  const authorizationRequestKey =
+    result?.inputRequests
+      ?.filter((request) => request.kind === "authorization")
+      .map((request) => request.requestId)
+      .sort()
+      .join(":") ?? "";
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     if (!result || !capabilities?.serverTools) return;
     const response = await app.callServerTool({
       name: "autograph_get",
@@ -46,7 +54,27 @@ function SessionAppContainer() {
     });
     if (response.structuredContent)
       publishResult(response.structuredContent as EveSessionResult);
-  }
+  }, [capabilities?.serverTools, result]);
+
+  useEffect(() => {
+    automaticRefresh.current.reset(authorizationRequestKey);
+  }, [authorizationRequestKey]);
+
+  useEffect(() => {
+    if (!authorizationRequestKey || !capabilities?.serverTools) return;
+    const checkAfterReturn = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (!automaticRefresh.current.claim(authorizationRequestKey, now)) return;
+      void refresh().catch(() => undefined);
+    };
+    window.addEventListener("focus", checkAfterReturn);
+    document.addEventListener("visibilitychange", checkAfterReturn);
+    return () => {
+      window.removeEventListener("focus", checkAfterReturn);
+      document.removeEventListener("visibilitychange", checkAfterReturn);
+    };
+  }, [authorizationRequestKey, capabilities?.serverTools, refresh]);
 
   async function respond(responses: SessionResponse[]) {
     if (!result || !capabilities?.serverTools) return;

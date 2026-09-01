@@ -205,6 +205,54 @@
   font-size: 12px;
 }
 
+.mcpApp .authorization-card .repository-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mcpApp .authorization-card .repository-name > span {
+  color: var(--muted);
+}
+
+.mcpApp .authorization-card .repository-name code {
+  margin-top: 0;
+  color: var(--text);
+}
+
+.mcpApp .scope-summary {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mcpApp .scope-summary ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mcpApp .scope-summary li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--soft);
+  color: var(--text);
+}
+
+.mcpApp .scope-summary small {
+  color: var(--muted);
+}
+
 .mcpApp .authorization-card code {
   display: inline-block;
   margin-top: 5px;
@@ -219,7 +267,8 @@
 }
 
 .mcpApp .authorization-card .fallback,
-.mcpApp .authorization-card .error {
+.mcpApp .authorization-card .error,
+.mcpApp .authorization-card .refresh-guidance {
   grid-column: 2 / -1;
 }
 
@@ -355,7 +404,8 @@ html[data-theme="dark"] .mcpApp {
   .mcpApp .authorization-card button,
   .mcpApp .authorization-card .secondary,
   .mcpApp .authorization-card .fallback,
-  .mcpApp .authorization-card .error {
+  .mcpApp .authorization-card .error,
+  .mcpApp .authorization-card .refresh-guidance {
     grid-column: 1 / -1;
   }
 }

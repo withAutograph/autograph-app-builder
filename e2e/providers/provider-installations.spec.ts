@@ -200,7 +200,7 @@ test("GitHub installation update accepts OAuth provider extensions and retains t
   ]);
 
   await page.getByLabel("Git Scope").click();
-  await page.getByText("Add GitHub Scope").click();
+  await page.getByText("Update GitHub access").click();
   await setGitHubCallbackFixture(page, "extensions");
   await completeGitHubConnection(page);
 
@@ -249,7 +249,7 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await finishOAuth(page, "GitHub");
   await page.goto("/");
   await page.getByRole("checkbox", { name: /GitHub/u }).check();
-  await page.getByRole("button", { name: "Connect to GitHub" }).click();
+  await page.getByRole("button", { name: "Connect GitHub" }).click();
   await page
     .getByRole("button", { name: "Install or update GitHub access" })
     .click();

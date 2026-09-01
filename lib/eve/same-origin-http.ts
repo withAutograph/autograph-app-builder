@@ -5,6 +5,7 @@ import { sessionStatusSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema, type HostedPrincipal } from "./hosted-auth";
 import {
   HostedCancellationUnsettledError,
+  HostedAdapterSessionUnavailableError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
   type HostedEngineSnapshot,
@@ -234,6 +235,7 @@ async function readInstalledSnapshot(input: {
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
+  if (response.status === 404) throw new HostedAdapterSessionUnavailableError();
   if (response.status !== 200 || response.body === null) {
     throw new Error("Canonical Eve stream was unavailable.");
   }

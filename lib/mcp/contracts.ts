@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { githubRepositoryAccessSchema } from "../integrations/store-in-view-model";
+
 export const sessionStatusSchema = z.enum([
   "working",
   "input_required",
@@ -48,6 +50,7 @@ export const publicAuthorizationChallengeSchema = z
     expiresAt: z.iso.datetime().optional(),
     instructions: z.string().min(1).max(2_000).optional(),
     displayName: z.string().min(1).max(200).optional(),
+    repositoryAccess: githubRepositoryAccessSchema.optional(),
   })
   .strict();
 
@@ -200,15 +203,81 @@ export const eveSessionResultSchema = z
 
 export type EveSessionResult = z.infer<typeof eveSessionResultSchema>;
 
-export const eveStartInputSchema = z.object({
-  prompt: z.string().trim().min(1).max(32_000),
-  clientRequestId: z.string().min(1).max(200),
-});
-export const eveGetInputSchema = z.object({
-  sessionId: z.string().min(1),
-  cursor: z.number().int().nonnegative().default(0),
-  limit: z.number().int().min(1).max(250).default(100),
-});
+export const publicSessionStageSchema = z.enum([
+  "starting",
+  "designing",
+  "prototype",
+  "planning",
+  "ready",
+  "complete",
+  "needs_attention",
+]);
+
+export const publicSessionResumabilitySchema = z.enum([
+  "live",
+  "checkpoint",
+  "restart_required",
+  "terminal",
+]);
+
+export const publicSessionSummarySchema = z
+  .object({
+    sessionId: z.string().min(1),
+    title: z.string().min(1).max(200),
+    appId: z
+      .string()
+      .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
+      .optional(),
+    stage: publicSessionStageSchema,
+    status: sessionStatusSchema,
+    resumability: publicSessionResumabilitySchema,
+    updatedAt: z.iso.datetime(),
+  })
+  .strict();
+
+export const eveSessionListResultSchema = z
+  .object({
+    kind: z.literal("session_list"),
+    cursor: z.number().int().nonnegative(),
+    sessions: z.array(publicSessionSummarySchema).max(250),
+  })
+  .strict();
+
+export type EveSessionListResult = z.infer<typeof eveSessionListResultSchema>;
+export type PublicSessionSummary = z.infer<typeof publicSessionSummarySchema>;
+
+export const eveGetResultSchema = z.union([
+  eveSessionResultSchema,
+  eveSessionListResultSchema,
+]);
+
+export const eveStartInputSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(32_000).optional(),
+    handoffId: z.string().uuid().optional(),
+    resumeSessionId: z.string().min(1).max(200).optional(),
+    clientRequestId: z.string().min(1).max(200),
+  })
+  .strict()
+  .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
+    if (
+      [prompt, handoffId, resumeSessionId].filter(
+        (value) => value !== undefined,
+      ).length !== 1
+    )
+      context.addIssue({
+        code: "custom",
+        message:
+          "Provide exactly one of prompt, handoffId, or resumeSessionId.",
+      });
+  });
+export const eveGetInputSchema = z
+  .object({
+    sessionId: z.string().min(1).max(200).optional(),
+    cursor: z.number().int().nonnegative().default(0),
+    limit: z.number().int().min(1).max(250).default(100),
+  })
+  .strict();
 export const eveSendInputSchema = z.object({
   sessionId: z.string().min(1),
   message: z.string().trim().min(1).max(32_000),

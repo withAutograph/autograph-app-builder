@@ -46,6 +46,16 @@ missing operation with a raw shell command or generic file write.
    `prototype/<app-id>/app-spec.md`. Do not request approval for supported-source
    inspection, workspace preparation, or non-published prototype artifacts.
    Preserve unrelated changes.
+   For a hosted existing repository named as `owner/name`, first use
+   `resolve_repository_access`. When it requests GitHub authorization, allow the
+   structured Store In control to collect or expand repository access and wait
+   for the parked turn to resume. Never ask “Repository selected?”, treat the
+   user's answer as provider authority, or request installation/repository ids,
+   SHAs, trees, settings changes, or other access mechanics in chat.
+   When the tool returns `scope-selection-required`, present its one
+   product-facing GitHub-account choice using the exact installation ids as
+   option ids, then retry with the selected `selectedInstallationId`. Do not
+   make scopes selectable inside an authorization request.
 4. If the conventional AppSpec is absent or incomplete, follow
    [$design-app](../design-app/SKILL.md) in this same task. Synthesize its
    build-ready handoff from stated decisions and safe revisable defaults, then

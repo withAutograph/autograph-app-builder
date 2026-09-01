@@ -15,6 +15,8 @@ import {
 } from "../integrations/local-provider-emulation";
 import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
+import { createPostgresRepositoryAccessContinuationStore } from "../integrations/postgres-repository-access-continuation";
+import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
 import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "../provisioning/postgres-github-user-credential";
@@ -49,6 +51,10 @@ export function createGitHubAppInstallationRouteHandlers(input: {
   origin: string;
   authorityForRequest(request: Request): Promise<Authority | undefined>;
   authorization: InstallationAuthorization;
+  onConnected?(input: {
+    authority: Authority;
+    returnState: ProviderConnectionReturn;
+  }): Promise<string | undefined>;
 }) {
   const origin = new URL(input.origin).origin;
   const redirect = (
@@ -192,6 +198,16 @@ export function createGitHubAppInstallationRouteHandlers(input: {
             headers: { ...noStoreHeaders, Location: result.redirectUrl },
           });
         }
+        const continuationRedirect = await input.onConnected?.({
+          authority,
+          returnState: result.returnState,
+        });
+        if (continuationRedirect) {
+          return new Response(null, {
+            status: 303,
+            headers: { ...noStoreHeaders, Location: continuationRedirect },
+          });
+        }
         return redirect("connected", undefined, result.returnState);
       } catch (error) {
         return fail(
@@ -245,9 +261,20 @@ export function getGitHubAppInstallationDeploymentHandlers(
           providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
   });
+  const repositoryAccessContinuations =
+    createRepositoryAccessContinuationService({
+      store: createPostgresRepositoryAccessContinuationStore(database),
+    });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     origin: new URL(config.issuer).origin,
     authorization,
+    async onConnected({ authority, returnState }) {
+      if (!returnState.resumeKey) return undefined;
+      return repositoryAccessContinuations.authorize({
+        authority,
+        continuationId: returnState.resumeKey,
+      });
+    },
     async authorityForRequest(request) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
         environment: resolvedEnvironment,

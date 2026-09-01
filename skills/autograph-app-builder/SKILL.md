@@ -16,11 +16,27 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
 
 ## Workflow
 
-1. Start every new app build with `autograph_start`.
-2. Preserve the returned `sessionId` and `cursor`.
+1. When the user asks to continue, resume, or pick up prior work, call
+   `autograph_get` without a `sessionId` first and offer the relevant recent
+   product sessions. Resume the chosen session with
+   `autograph_start({ resumeSessionId, clientRequestId })`. Start genuinely new
+   work with `autograph_start({ prompt, clientRequestId })`. When the web App
+   Builder supplies an opaque handoff ID, redeem it with
+   `autograph_start({ handoffId, clientRequestId })`; never decode it or ask the
+   user to paste the underlying brief, provider IDs, or repository authority.
+2. Preserve the returned `sessionId` and `cursor`. A healthy active resume keeps
+   the handle; recovery after a terminal or interrupted session may return a new
+   child handle.
 3. Use `autograph_get` to obtain evidence; accepted work is not completed work.
 4. Call `autograph_respond` once for the complete non-empty `inputRequests` batch,
    preserving every unique `requestId`. Never split one App Builder batch across calls.
+   Authorization requests are not response-batch questions. Let the MCP App's
+   Store In control open the server-provided GitHub connection or access-update
+   page, then continue polling the same session. Never ask the user to reply
+   “Repository selected” or treat that reply as proof of repository access.
+   A separate choice between already connected GitHub accounts is a normal
+   product question: submit its exact option id in the full response batch.
+   Repository scopes shown on an authorization card are read-only.
 5. Send unrelated follow-ups with `autograph_send` only while the app build is `waiting` and no input is unresolved.
 6. Treat cancellation as cooperative. Poll until events prove the resulting state.
 7. Treat the MCP App as an optional progress and input-control surface only. Never

@@ -4,7 +4,10 @@ import {
   type MessageStreamEvent,
 } from "eve/client";
 
-import type { EveSessionResult } from "@/lib/mcp/contracts";
+import type {
+  EveSessionListResult,
+  EveSessionResult,
+} from "@/lib/mcp/contracts";
 import {
   deriveInstalledEveStatus,
   latestInstalledImplementationPlan,
@@ -25,9 +28,18 @@ export class AdapterNotConfiguredError extends Error {
 
 export interface EveSessionService {
   start(input: {
-    prompt: string;
+    prompt?: string;
+    handoffId?: string;
+    resumeSessionId?: string;
     clientRequestId: string;
   }): Promise<EveSessionResult>;
+  /** Internal lost-response recovery for an already-bound start operation. */
+  recoverStart?(input: {
+    sessionId: string;
+    cursor: number;
+    limit: number;
+  }): Promise<EveSessionResult>;
+  list(input: { cursor: number; limit: number }): Promise<EveSessionListResult>;
   get(input: {
     sessionId: string;
     cursor: number;
@@ -94,6 +106,10 @@ type LocalEveRuntimeState = {
   activeResponses: Map<string, CancellableResponse>;
   recoveryRequired: Set<string>;
   recoveries: Map<string, Promise<void>>;
+  metadata: Map<
+    string,
+    { title: string; createdAtEpochMs: number; updatedAtEpochMs: number }
+  >;
 };
 
 const localEveRuntimeStateKey =
@@ -114,7 +130,13 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     activeResponses: new Map(),
     recoveryRequired: new Set(),
     recoveries: new Map(),
+    metadata: new Map(),
   });
+}
+
+function localSessionTitle(prompt: string): string {
+  const title = prompt.trim().split(/\r?\n/u, 1)[0]?.trim() ?? "";
+  return title.slice(0, 200) || "Untitled app";
 }
 
 function localCycleGeneration(
@@ -239,8 +261,27 @@ export function createLocalEveSessionService(
     return attached;
   }
 
+  function touchSession(sessionId: string) {
+    const metadata = state.metadata.get(sessionId);
+    if (metadata !== undefined)
+      state.metadata.set(sessionId, {
+        ...metadata,
+        updatedAtEpochMs: Date.now(),
+      });
+  }
+
   return {
-    async start({ prompt, clientRequestId }) {
+    async start({ prompt, resumeSessionId, clientRequestId }) {
+      if (resumeSessionId !== undefined) {
+        const snapshot = await sessionFor(resumeSessionId).snapshot();
+        if (snapshot.session.sessionId !== resumeSessionId)
+          throw new Error("Eve changed the local session during resume.");
+        localSessionEvents.set(resumeSessionId, [...snapshot.events]);
+        touchSession(resumeSessionId);
+        return resultForEvents(resumeSessionId, snapshot.events);
+      }
+      if (prompt === undefined)
+        throw new Error("A new App Builder session requires a prompt.");
       const key = `start:${clientRequestId}`;
       const existing = localRequests.get(key);
       if (existing !== undefined)
@@ -251,11 +292,60 @@ export function createLocalEveSessionService(
       const sessionId = session.state.sessionId;
       localRequests.set(key, sessionId);
       localSessionHandles.set(sessionId, session);
+      const timestamp = Date.now();
+      state.metadata.set(sessionId, {
+        title: localSessionTitle(prompt),
+        createdAtEpochMs: timestamp,
+        updatedAtEpochMs: timestamp,
+      });
       consumeResponse(state, sessionId, response);
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
+    async list({ cursor, limit }) {
+      const sessions = [...state.metadata.entries()]
+        .toSorted(
+          ([leftId, left], [rightId, right]) =>
+            right.updatedAtEpochMs - left.updatedAtEpochMs ||
+            rightId.localeCompare(leftId),
+        )
+        .slice(cursor, cursor + limit)
+        .map(([sessionId, metadata]) => {
+          const result = resultForEvents(
+            sessionId,
+            localSessionEvents.get(sessionId) ?? [],
+          );
+          return {
+            sessionId,
+            title: metadata.title,
+            ...(result.implementationPlan?.appId === undefined
+              ? {}
+              : { appId: result.implementationPlan.appId }),
+            stage:
+              result.status === "completed"
+                ? ("complete" as const)
+                : result.implementationPlan !== undefined
+                  ? ("ready" as const)
+                  : result.prototype !== undefined
+                    ? ("prototype" as const)
+                    : ("designing" as const),
+            status: result.status,
+            resumability: ["completed", "failed", "cancelled"].includes(
+              result.status,
+            )
+              ? ("terminal" as const)
+              : ("live" as const),
+            updatedAt: new Date(metadata.updatedAtEpochMs).toISOString(),
+          };
+        });
+      return {
+        kind: "session_list",
+        sessions,
+        cursor: cursor + sessions.length,
+      };
+    },
     async get({ sessionId, cursor, limit }) {
       await recoverDurableTail(sessionId);
+      touchSession(sessionId);
       return resultForEvents(
         sessionId,
         localSessionEvents.get(sessionId) ?? [],
@@ -270,6 +360,7 @@ export function createLocalEveSessionService(
         consumeResponse(state, sessionId, response);
         localRequests.set(key, sessionId);
       }
+      touchSession(sessionId);
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async respond({ sessionId, responses, clientRequestId }) {
@@ -293,6 +384,7 @@ export function createLocalEveSessionService(
         consumeResponse(state, sessionId, result);
         localRequests.set(key, sessionId);
       }
+      touchSession(sessionId);
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async cancel({ sessionId, turnId }) {
@@ -304,6 +396,7 @@ export function createLocalEveSessionService(
           turnId === undefined ? undefined : { turnId },
         );
       }
+      touchSession(sessionId);
       return resultForEvents(
         sessionId,
         localSessionEvents.get(sessionId) ?? [],
@@ -336,6 +429,7 @@ export function createEveSessionService(
   }
   return {
     start: notConfigured,
+    list: notConfigured,
     get: notConfigured,
     send: notConfigured,
     respond: notConfigured,

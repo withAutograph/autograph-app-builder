@@ -58,7 +58,12 @@ describe("Codex adapter", () => {
     expect(skill).toContain("edit the target repository directly");
     expect(skill).toContain("# Autograph App Builder orchestration");
     expect(skill).toContain("Before starting an app build");
-    expect(skill).toContain("Start every new app build with `autograph_start`");
+    expect(skill).toMatch(
+      /Start genuinely new\s+work with `autograph_start\(\{ prompt, clientRequestId \}\)`/u,
+    );
+    expect(skill).toMatch(
+      /call\s+`autograph_get` without a `sessionId` first/u,
+    );
     expect(skill).toContain("Never split one App Builder batch across calls");
     expect(skill).toContain("Treat tool-only progress as silent");
     expect(skill).toContain("continue without a user-facing progress message");

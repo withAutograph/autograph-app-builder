@@ -4,7 +4,9 @@ import { HostedAuthorizationError } from "../eve/hosted-auth";
 import {
   HostedIdempotencyConflictError,
   HostedRejectedOperationError,
+  HostedSessionBusyError,
   HostedSessionNotFoundError,
+  HostedSessionRecoveryUnavailableError,
   HostedSubmissionUnknownError,
 } from "../eve/hosted-service";
 import { AdapterNotConfiguredError } from "../eve/service";
@@ -18,6 +20,8 @@ describe("safe MCP tool errors", () => {
     [new HostedIdempotencyConflictError(), "request_conflict"],
     [new HostedSubmissionUnknownError(), "submission_unknown"],
     [new HostedRejectedOperationError(), "operation_rejected"],
+    [new HostedSessionBusyError(), "already_continuing"],
+    [new HostedSessionRecoveryUnavailableError(), "restart_required"],
     [new Error("secret provider detail"), "internal_error"],
   ])("projects %s without exposing internal details", (error, code) => {
     const result = safeToolError(error, "session-one");

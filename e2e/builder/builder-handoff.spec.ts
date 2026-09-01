@@ -42,7 +42,7 @@ test("builder keeps generated fields user-owned and feature-gated", async ({
   await expect(createApp).toBeEnabled();
 });
 
-test("Codex handoff includes connected provider choices and supports reset", async ({
+test("Codex handoff carries only opaque server-owned state and supports reset", async ({
   context,
   page,
 }) => {
@@ -61,13 +61,14 @@ test("Codex handoff includes connected provider choices and supports reset", asy
   const state = await browserBoundaryState(page);
   expect(state.clipboard).toHaveLength(1);
   expect(state.opened).toHaveLength(1);
-  expect(state.clipboard[0]).toContain("App Name:\nSupport Console");
-  expect(state.clipboard[0]).toContain("Repository:\nsupport-console");
-  expect(state.clipboard[0]).toContain(
-    "Setup Still Needed:\n- GitHub: resource provisioning is not active for this environment.\n- Vercel: resource provisioning is not active for this environment.",
+  expect(state.clipboard[0]).toMatch(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/u,
   );
-  expect(state.clipboard[0]).not.toContain("GitHub Resource:");
-  expect(state.clipboard[0]).not.toContain("Vercel Resource:");
+  expect(state.clipboard[0]).not.toContain("Support Console");
+  expect(state.clipboard[0]).not.toContain("support-console");
+  expect(state.clipboard[0]).not.toMatch(
+    /GitHub Resource|Vercel Resource|Installation|Repository ID|Head SHA|digest/iu,
+  );
   expect(state.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
   expect(new URL(state.opened[0]!).searchParams.get("prompt")).toBe(
     state.clipboard[0],
@@ -111,10 +112,7 @@ test("Cursor handoff carries the exact copied prompt", async ({
   ).toBeVisible();
 });
 
-test("blocked and oversized handoffs expose actionable fallbacks", async ({
-  context,
-  page,
-}) => {
+test("blocked handoffs remain actionable", async ({ context, page }) => {
   await installBrowserBoundaries(context, "blocked");
   await finishOAuth(page, "GitHub");
   await page.goto("/");
@@ -124,11 +122,20 @@ test("blocked and oversized handoffs expose actionable fallbacks", async ({
     page.getByText("The browser blocked ChatGPT / Codex."),
   ).toBeVisible();
   await expect(page.getByText("Clipboard access was blocked.")).toBeVisible();
+});
 
-  await page.getByRole("button", { name: "Create Another App" }).click();
+test("large briefs use fixed-size opaque handoff links", async ({
+  context,
+  page,
+}) => {
+  await installBrowserBoundaries(context);
+  await finishOAuth(page, "GitHub");
+  await page.goto("/");
   await page.locator("#app-brief").fill("x".repeat(8_100));
   await completeHandoff(page);
-  await expect(
-    page.getByText("This brief is too long to open automatically"),
-  ).toBeVisible();
+  const state = await browserBoundaryState(page);
+  expect(state.opened.at(-1)?.length).toBeLessThan(8_000);
+  expect(decodeURIComponent(state.opened.at(-1) ?? "")).not.toContain(
+    "x".repeat(100),
+  );
 });

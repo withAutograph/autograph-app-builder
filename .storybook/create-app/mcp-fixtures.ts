@@ -17,6 +17,20 @@ export const semanticChoiceRequest: PublicInputRequest = {
   presentation: { section: "build-with", control: "choice" },
 };
 
+export const repositoryScopeRequest: PublicInputRequest = {
+  requestId: "github-installation-scope",
+  kind: "question",
+  title: "Which GitHub account should Autograph use?",
+  description:
+    "Choose the account that owns the repository you want Autograph to use.",
+  options: [
+    { id: "123", label: "withAutograph (Organization)" },
+    { id: "456", label: "jasonmorganson (User)" },
+  ],
+  allowFreeform: false,
+  presentation: { section: "store-in", control: "choice" },
+};
+
 export const freeformRequest: PublicInputRequest = {
   requestId: "audience",
   kind: "question",
@@ -42,10 +56,25 @@ export const authorizationRequest: PublicInputRequest = {
   allowFreeform: false,
   presentation: { section: "store-in", control: "provider" },
   authorization: {
-    url: "https://github.com/login/device",
-    userCode: "ABCD-1234",
-    instructions: "Open GitHub and enter this one-time code.",
+    url: "https://builder.example.test/github/installations?continuation=opaque",
+    instructions: "Choose the repositories Autograph may access.",
     displayName: "GitHub",
+    repositoryAccess: {
+      provider: "github",
+      action: "update",
+      repository: {
+        owner: "withAutograph",
+        name: "app-builder-dogfood",
+        fullName: "withAutograph/app-builder-dogfood",
+      },
+      scopes: [
+        {
+          installationId: "123",
+          accountLogin: "withAutograph",
+          accountType: "Organization",
+        },
+      ],
+    },
   },
 };
 

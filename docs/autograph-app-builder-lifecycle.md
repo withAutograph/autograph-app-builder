@@ -65,10 +65,13 @@ authorize another.
 
 ## Durable session behavior
 
-Every build is a durable session:
+Every build is a tenant-scoped durable session that remains resumable until it
+is explicitly deleted:
 
-- `autograph_start` begins a build.
-- `autograph_get` reads new progress and evidence.
+- `autograph_start` begins a build, redeems an opaque web handoff, or resumes a
+  selected durable session.
+- `autograph_get` lists recent sessions when no ID is supplied and reads new
+  progress and evidence when a session ID is supplied.
 - `autograph_respond` answers the complete current batch of input requests.
 - `autograph_send` sends an unrelated follow-up while the session is waiting.
 - `autograph_cancel` requests cooperative cancellation.
@@ -76,6 +79,8 @@ Every build is a durable session:
 `waiting` means the current turn has settled and the session can continue.
 `input_required` means the exact outstanding request must be answered first.
 Cancellation is complete only after a public event proves the resulting state.
+User-facing sessions remain discoverable until explicitly deleted; compute and
+active-turn leases remain short-lived implementation boundaries.
 
 ## What counts as completion
 

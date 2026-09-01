@@ -35,6 +35,59 @@ describe("Eve input response mapping", () => {
 });
 
 describe("local Eve acceptance", () => {
+  it("lists recent work and resumes the selected local session", async () => {
+    const events = [
+      { type: "session.waiting", data: {} },
+    ] as MessageStreamEvent[];
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        for (const event of events) yield event;
+      },
+    };
+    const session = {
+      state: { sessionId: "wrun_recent" },
+      snapshot: vi.fn(async () => ({
+        events,
+        session: { sessionId: "wrun_recent", streamIndex: events.length },
+      })),
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const service = createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach: vi.fn(() => session),
+        } as never,
+      },
+      { stateGeneration: "recent-list" },
+    );
+    const started = await service.start({
+      prompt: "Build a vendor workspace",
+      clientRequestId: "recent-start",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        service.list({ cursor: 0, limit: 10 }),
+      ).resolves.toMatchObject({
+        sessions: [
+          {
+            sessionId: started.sessionId,
+            title: "Build a vendor workspace",
+          },
+        ],
+      });
+    });
+    await expect(
+      service.start({
+        resumeSessionId: started.sessionId,
+        clientRequestId: "recent-resume",
+      }),
+    ).resolves.toMatchObject({ sessionId: started.sessionId });
+  });
+
   it("recovers a durable waiting boundary after the response stream disconnects", async () => {
     const durableEvents = [
       {

@@ -5,6 +5,7 @@ import {
   authorizationRequest,
   choiceRequest,
   freeformRequest,
+  repositoryScopeRequest,
   sessionResult,
 } from "@/.storybook/create-app/mcp-fixtures";
 import { SessionAppView } from "./view";
@@ -62,6 +63,37 @@ export const CompleteBatchAction: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
     await expect(args.onRespond).toHaveBeenCalledOnce();
     await expect(await canvas.findByText("Response received")).toBeVisible();
+  },
+};
+export const RepositoryScopeKeyboardSelection: Story = {
+  args: {
+    result: sessionResult([repositoryScopeRequest]),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const organization = canvas.getByRole("radio", {
+      name: "withAutograph (Organization)",
+    });
+    const personal = canvas.getByRole("radio", {
+      name: "jasonmorganson (User)",
+    });
+
+    await userEvent.tab();
+    await expect(organization).toHaveFocus();
+    await userEvent.keyboard("[ArrowDown]");
+    await expect(personal).toBeChecked();
+    await userEvent.tab();
+    await userEvent.keyboard("[Enter]");
+    await expect(args.onRespond).toHaveBeenCalledWith([
+      {
+        requestId: "github-installation-scope",
+        response: {
+          kind: "answer",
+          optionId: "456",
+          value: "jasonmorganson (User)",
+        },
+      },
+    ]);
   },
 };
 export const SubmittingAndDuplicateProtection: Story = {

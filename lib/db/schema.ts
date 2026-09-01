@@ -475,6 +475,14 @@ export const agentSessions = pgTable(
     ownerUserId: text("owner_user_id").notNull(),
     sessionId: text("session_id").notNull(),
     adapterSessionId: text("adapter_session_id").notNull(),
+    adapterGeneration: integer("adapter_generation"),
+    title: text("title"),
+    stage: text("stage"),
+    resumabilityState: text("resumability_state"),
+    checkpointDigest: text("checkpoint_digest"),
+    checkpointProgressDigest: text("checkpoint_progress_digest"),
+    parentSessionId: text("parent_session_id"),
+    lastProgressAt: timestamp("last_progress_at", { withTimezone: true }),
     record: jsonb("record").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
@@ -503,12 +511,40 @@ export const agentSessions = pgTable(
       table.ownerUserId,
       table.updatedAt,
     ),
+    index("agent_session_recent_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.updatedAt.desc(),
+      table.sessionId.desc(),
+    ),
     uniqueIndex("agent_session_adapter_id_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.ownerUserId,
       table.adapterSessionId,
+    ),
+    check(
+      "agent_session_adapter_generation_check",
+      sql`${table.adapterGeneration} IS NULL OR ${table.adapterGeneration} > 0`,
+    ),
+    check(
+      "agent_session_stage_check",
+      sql`${table.stage} IS NULL OR ${table.stage} IN ('starting', 'designing', 'prototype', 'planning', 'ready', 'complete', 'needs_attention')`,
+    ),
+    check(
+      "agent_session_resumability_check",
+      sql`${table.resumabilityState} IS NULL OR ${table.resumabilityState} IN ('live', 'checkpoint', 'restart_required', 'terminal')`,
+    ),
+    check(
+      "agent_session_checkpoint_digest_check",
+      sql`${table.checkpointDigest} IS NULL OR ${table.checkpointDigest} ~ '^sha256:[a-f0-9]{64}$'`,
+    ),
+    check(
+      "agent_session_checkpoint_progress_digest_check",
+      sql`${table.checkpointProgressDigest} IS NULL OR ${table.checkpointProgressDigest} ~ '^sha256:[a-f0-9]{64}$'`,
     ),
   ],
 );
@@ -925,6 +961,55 @@ export const builderProvisioningJournals = pgTable(
   ],
 );
 
+export const builderHandoffs = pgTable(
+  "builder_handoff",
+  {
+    handoffId: text("handoff_id").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    creationRequestId: text("creation_request_id").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    intent: jsonb("intent").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    sessionId: text("session_id"),
+  },
+  (table) => [
+    uniqueIndex("builder_handoff_creation_uidx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.creationRequestId,
+    ),
+    index("builder_handoff_expiry_idx").on(table.expiresAt),
+    check(
+      "builder_handoff_id_check",
+      sql`${table.handoffId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_handoff_creation_request_id_check",
+      sql`${table.creationRequestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_handoff_request_digest_check",
+      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "builder_handoff_intent_check",
+      sql`jsonb_typeof(${table.intent}) = 'object'`,
+    ),
+    check(
+      "builder_handoff_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "builder_handoff_redemption_check",
+      sql`(${table.redeemedAt} IS NULL AND ${table.sessionId} IS NULL) OR (${table.redeemedAt} BETWEEN ${table.createdAt} AND ${table.expiresAt} AND ${table.sessionId} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export const vercelInstallationAuthorizationStates = pgTable(
   "vercel_installation_authorization_state",
   {
@@ -991,6 +1076,66 @@ export const githubInstallationAuthorizationStates = pgTable(
     check(
       "github_installation_authorization_state_consumed_check",
       sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
+    ),
+  ],
+);
+
+/**
+ * One-time bridge from the existing GitHub installation callback back to the
+ * exact Eve authorization callback that parked a repository-access tool call.
+ * The public continuation id is stored only as a SHA-256 digest.
+ */
+export const githubRepositoryAccessContinuations = pgTable(
+  "github_repository_access_continuation",
+  {
+    continuationDigest: text("continuation_digest").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    sessionId: text("session_id").notNull(),
+    requestId: text("request_id").notNull(),
+    repositoryOwner: text("repository_owner").notNull(),
+    repositoryName: text("repository_name").notNull(),
+    selectedInstallationId: text("selected_installation_id"),
+    callbackUrl: text("callback_url").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("github_repository_access_continuation_expiry_idx").on(
+      table.expiresAt,
+    ),
+    check(
+      "github_repository_access_continuation_digest_check",
+      sql`${table.continuationDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "github_repository_access_continuation_session_check",
+      sql`length(${table.sessionId}) BETWEEN 1 AND 255`,
+    ),
+    check(
+      "github_repository_access_continuation_request_check",
+      sql`length(${table.requestId}) BETWEEN 1 AND 255`,
+    ),
+    check(
+      "github_repository_access_continuation_repository_check",
+      sql`length(${table.repositoryOwner}) BETWEEN 1 AND 100 AND length(${table.repositoryName}) BETWEEN 1 AND 100`,
+    ),
+    check(
+      "github_repository_access_continuation_installation_check",
+      sql`${table.selectedInstallationId} IS NULL OR ${table.selectedInstallationId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "github_repository_access_continuation_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "github_repository_access_continuation_authorized_check",
+      sql`${table.authorizedAt} IS NULL OR (${table.authorizedAt} >= ${table.createdAt} AND ${table.authorizedAt} <= ${table.expiresAt})`,
+    ),
+    check(
+      "github_repository_access_continuation_consumed_check",
+      sql`${table.consumedAt} IS NULL OR (${table.authorizedAt} IS NOT NULL AND ${table.consumedAt} >= ${table.authorizedAt})`,
     ),
   ],
 );

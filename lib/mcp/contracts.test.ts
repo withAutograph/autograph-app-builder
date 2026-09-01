@@ -1,11 +1,47 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  eveGetInputSchema,
   eveRespondInputSchema,
+  eveStartInputSchema,
   publicInputRequestSchema,
   publicImplementationPlanSchema,
   publicPrototypeSchema,
 } from "./contracts";
+
+describe("durable session discovery contracts", () => {
+  it("lists without a session and requires exactly one new, handoff, or resume start", () => {
+    expect(eveGetInputSchema.parse({})).toEqual({ cursor: 0, limit: 100 });
+    expect(
+      eveStartInputSchema.parse({
+        resumeSessionId: "session-one",
+        clientRequestId: "resume-one",
+      }),
+    ).toMatchObject({ resumeSessionId: "session-one" });
+    expect(
+      eveStartInputSchema.parse({
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "handoff-one",
+      }),
+    ).toMatchObject({
+      handoffId: "123e4567-e89b-42d3-a456-426614174000",
+    });
+    for (const candidate of [
+      { clientRequestId: "missing" },
+      {
+        prompt: "Build",
+        resumeSessionId: "session-one",
+        clientRequestId: "both",
+      },
+      {
+        prompt: "Build",
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "prompt-and-handoff",
+      },
+    ])
+      expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);
+  });
+});
 
 describe("publicInputRequestSchema", () => {
   const authorization = {
@@ -38,6 +74,44 @@ describe("publicInputRequestSchema", () => {
           authorization: { url },
         }).success,
       ).toBe(false);
+  });
+
+  it("accepts closed GitHub repository-access presentation metadata", () => {
+    const repositoryAccess = {
+      provider: "github" as const,
+      action: "update" as const,
+      repository: {
+        owner: "withAutograph",
+        name: "app-builder-dogfood",
+        fullName: "withAutograph/app-builder-dogfood",
+      },
+      scopes: [
+        {
+          installationId: "123",
+          accountLogin: "withAutograph",
+          accountType: "Organization" as const,
+        },
+      ],
+    };
+    expect(
+      publicInputRequestSchema.safeParse({
+        ...authorization,
+        title: "Update GitHub access",
+        authorization: {
+          url: "https://builder.example.test/github/installations?continuation=opaque",
+          displayName: "GitHub",
+          repositoryAccess,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      publicInputRequestSchema.safeParse({
+        ...authorization,
+        authorization: {
+          repositoryAccess: { ...repositoryAccess, accessToken: "secret" },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps presentation metadata closed and authorization-specific", () => {

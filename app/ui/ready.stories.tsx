@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import {
   storyForm,
+  storyHandoff,
   storyProvisioning,
 } from "@/.storybook/create-app/app-builder-fixtures";
 import { Ready } from "./app-builder";
@@ -12,6 +13,7 @@ const meta = {
   args: {
     form: storyForm,
     requestId: storyProvisioning.requestId,
+    initialHandoff: storyHandoff,
     initialProvisioning: storyProvisioning,
     provisioningEnabled: true,
     initialAttempt: "attempted",
@@ -26,11 +28,11 @@ export const LaunchRequested: Story = {};
 export const ClipboardFailed: Story = {
   args: { initialAttempt: "blocked", initialClipboardState: "failed" },
 };
-export const BriefTooLong: Story = {
+export const LargeBriefUsesOpaqueHandoff: Story = {
   args: {
     form: { ...storyForm, brief: "x".repeat(8_100) },
-    initialAttempt: "too-long",
-    initialClipboardState: "failed",
+    initialAttempt: "attempted",
+    initialClipboardState: "copied",
   },
 };
 export const GitHubOnly: Story = {

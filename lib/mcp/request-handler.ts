@@ -22,10 +22,13 @@ import {
 import {
   eveCancelInputSchema,
   eveGetInputSchema,
+  eveGetResultSchema,
   eveRespondInputSchema,
   eveSendInputSchema,
   eveSessionResultSchema,
   eveStartInputSchema,
+  type EveSessionListResult,
+  type EveSessionResult,
 } from "./contracts";
 import {
   forbiddenResponse,
@@ -59,22 +62,124 @@ export interface HostedWorkspaceMembership {
   }): Promise<boolean>;
 }
 
+type HostedHandoffAuthority = Pick<
+  HostedPrincipal,
+  "issuer" | "audience" | "workspaceId" | "ownerUserId"
+>;
+
+export interface HostedBuilderHandoffRuntime {
+  resolve(input: {
+    authority: HostedHandoffAuthority;
+    handoffId: string;
+  }): Promise<
+    | { status: "redeemed"; sessionId: string }
+    | {
+        status: "unredeemed";
+        prompt: string;
+        deterministicClientRequestId: string;
+        record: {
+          requestDigest: string;
+          intent: {
+            repository: {
+              requestedName: string;
+              resolvedFullName?: string;
+            };
+          };
+        };
+      }
+  >;
+  bindSession(input: {
+    authority: HostedHandoffAuthority;
+    handoffId: string;
+    requestDigest: string;
+    sessionId: string;
+  }): Promise<unknown>;
+  recheckRepositoryAccess(input: {
+    principal: HostedPrincipal;
+    repository: string;
+  }): Promise<
+    | { status: "ready" }
+    | {
+        status: "authorization-required";
+        action: "connect" | "update";
+      }
+    | { status: "scope-selection-required" }
+    | { status: "provider-unavailable" }
+  >;
+}
+
 export interface HostedMcpRuntime {
   auth: HostedMcpAuthConfig;
   verifier: HostedAccessTokenVerifier;
   membership: HostedWorkspaceMembership;
   store: HostedEveStore;
   transport: HostedEveTransport;
+  handoffs?: HostedBuilderHandoffRuntime;
   admissionControl?: HostedPreviewAdmissionControlBinding;
+  beforeRead?: Parameters<
+    typeof createHostedEveSessionService
+  >[0]["beforeRead"];
   now?: () => number;
+}
+
+export function withHostedBuilderHandoffs(input: {
+  service: EveSessionService;
+  principal: HostedPrincipal;
+  handoffs: HostedBuilderHandoffRuntime;
+}): EveSessionService {
+  const authority = {
+    issuer: input.principal.issuer,
+    audience: input.principal.audience,
+    workspaceId: input.principal.workspaceId,
+    ownerUserId: input.principal.ownerUserId,
+  };
+  return {
+    ...input.service,
+    async start(request) {
+      if (request.handoffId === undefined) return input.service.start(request);
+      const resolved = await input.handoffs.resolve({
+        authority,
+        handoffId: request.handoffId,
+      });
+      if (resolved.status === "redeemed")
+        return input.service.recoverStart === undefined
+          ? Promise.reject(new Error("handoff-start-recovery-unavailable"))
+          : input.service.recoverStart({
+              sessionId: resolved.sessionId,
+              cursor: 0,
+              limit: 100,
+            });
+      const resolvedRepository =
+        resolved.record.intent.repository.resolvedFullName;
+      if (resolvedRepository !== undefined) {
+        const access = await input.handoffs.recheckRepositoryAccess({
+          principal: input.principal,
+          repository: resolvedRepository,
+        });
+        if (access.status === "provider-unavailable")
+          throw new Error("handoff-repository-access-unavailable");
+      }
+      const result = await input.service.start({
+        prompt: resolved.prompt,
+        clientRequestId: resolved.deterministicClientRequestId,
+      });
+      await input.handoffs.bindSession({
+        authority,
+        handoffId: request.handoffId,
+        requestDigest: resolved.record.requestDigest,
+        sessionId: result.sessionId,
+      });
+      return result;
+    },
+  };
 }
 
 export function createAutographMcpHandler(
   service: EveSessionService,
   options: { requestUrl?: string } = {},
 ) {
-  const present = (result: Awaited<ReturnType<EveSessionService["get"]>>) =>
-    options.requestUrl === undefined
+  const present = (result: EveSessionListResult | EveSessionResult) =>
+    "kind" in result || options.requestUrl === undefined
       ? result
       : attachPrototypePreviewUrl(result, options.requestUrl);
   return createMcpHandler((server) => {
@@ -124,18 +229,26 @@ export function createAutographMcpHandler(
       {
         title: "Check App Builder progress",
         description:
-          "Read the next page of progress and requests for the current app build.",
+          "List recent app builds, or read the next page of one app build's progress and requests.",
         inputSchema: eveGetInputSchema,
-        outputSchema: eveSessionResultSchema,
+        outputSchema: eveGetResultSchema,
       },
       async (input) => {
         try {
+          const result =
+            input.sessionId === undefined
+              ? await service.list({ cursor: input.cursor, limit: input.limit })
+              : await service.get({
+                  sessionId: input.sessionId,
+                  cursor: input.cursor,
+                  limit: input.limit,
+                });
           return toolResult(
-            present(await service.get(input)),
+            present(result),
             "Autograph App Builder returned the latest progress.",
           );
         } catch (error) {
-          return safeToolError(error, input.sessionId);
+          return safeToolError(error, input.sessionId ?? "");
         }
       },
     );
@@ -275,13 +388,23 @@ async function hostedServiceForRequest(
     return notFoundResponse();
   }
 
-  return createHostedEveSessionService({
+  const service = createHostedEveSessionService({
     principal,
     store: runtime.store,
     transport: runtime.transport,
     admissionControl: runtime.admissionControl,
+    ...(runtime.beforeRead === undefined
+      ? {}
+      : { beforeRead: runtime.beforeRead }),
     now: runtime.now,
   });
+  return runtime.handoffs === undefined
+    ? service
+    : withHostedBuilderHandoffs({
+        service,
+        principal,
+        handoffs: runtime.handoffs,
+      });
 }
 
 export function createMcpRequestHandler(

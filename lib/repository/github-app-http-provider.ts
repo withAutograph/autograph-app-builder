@@ -72,6 +72,13 @@ export type GitHubPublicationFile = {
   content: Uint8Array;
 };
 
+export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
+  inspectRepositoryByName(input: {
+    owner: string;
+    name: string;
+  }): Promise<unknown | undefined>;
+}
+
 type Fetch = typeof fetch;
 type PermissionSnapshot = {
   metadata: "read";
@@ -236,7 +243,7 @@ export function createGitHubAppHttpProvider(input: {
   config: GitHubAppHttpProviderConfig;
   fetch?: Fetch;
   now?: () => number;
-}): GitHubAppInstallationProvider {
+}): GitHubAppHttpProvider {
   const config = parseGitHubAppHttpProviderConfig(input.config);
   const request = input.fetch ?? fetch;
   const app = createGitHubApp({
@@ -560,6 +567,32 @@ export function createGitHubAppHttpProvider(input: {
       };
       const snapshot = await repositoryById(repositoryId, ref, permissions);
       return publicRepositorySnapshot(snapshot);
+    },
+
+    async inspectRepositoryByName({ owner, name: repositoryName }) {
+      const permissions: PermissionSnapshot = {
+        metadata: "read",
+        contents: "read",
+        workflows: "none",
+        pullRequests: "none",
+        administration: "none",
+        variables: "read",
+      };
+      const snapshot = await repositoryByName(
+        owner,
+        repositoryName,
+        permissions,
+      );
+      if (snapshot === undefined) return undefined;
+      const response = await github({
+        path: `/repositories/${snapshot.repositoryId}`,
+        authorization: snapshot.accessToken,
+        expected: [200],
+      });
+      return {
+        ...publicRepositorySnapshot(snapshot),
+        archived: booleanProperty(response.body, "archived"),
+      };
     },
 
     async inspectDestination({ owner, name: repositoryName }) {

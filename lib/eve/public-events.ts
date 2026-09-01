@@ -13,6 +13,10 @@ import { targetProposalSchema } from "../repository/target-planning";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
+import {
+  githubRepositoryAccessSchema,
+  githubRepositoryAccessViewModel,
+} from "../integrations/store-in-view-model";
 
 export type InternalEveEvent = {
   type: string;
@@ -401,6 +405,14 @@ export function projectInstalledEveEvent(
       ];
     case "authorization.required":
       const authorization = event.data.authorization;
+      const repositoryAccess = githubRepositoryAccessSchema.safeParse(
+        authorization === undefined
+          ? undefined
+          : Reflect.get(authorization, "repositoryAccess"),
+      );
+      const storeIn = repositoryAccess.success
+        ? githubRepositoryAccessViewModel(repositoryAccess.data)
+        : undefined;
       return [
         {
           type: "input.requested",
@@ -411,8 +423,16 @@ export function projectInstalledEveEvent(
               event.data.candidateId ??
               `${event.data.turnId}:${event.data.name}`,
             kind: "authorization",
-            title: event.data.name,
-            description: event.data.description,
+            title: storeIn?.title ?? event.data.name,
+            description: storeIn?.description ?? event.data.description,
+            ...(storeIn === undefined
+              ? {}
+              : {
+                  presentation: {
+                    section: "store-in" as const,
+                    control: "provider" as const,
+                  },
+                }),
             ...(authorization === undefined
               ? {}
               : {
@@ -432,6 +452,9 @@ export function projectInstalledEveEvent(
                     ...(authorization.displayName === undefined
                       ? {}
                       : { displayName: authorization.displayName }),
+                    ...(repositoryAccess.success
+                      ? { repositoryAccess: repositoryAccess.data }
+                      : {}),
                   },
                 }),
             allowFreeform: false,
