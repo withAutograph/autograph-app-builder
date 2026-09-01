@@ -37,7 +37,8 @@ Source and release authority remain independent:
   the selected commit's Git blobs. Mutable working-tree bytes are reported as
   dirty paths but MUST NOT redefine the selected snapshot's compatibility.
 - Dependency reuse MUST be decided from dependency inputs, toolchain,
-  bootstrap, and platform, not repository identity.
+  bootstrap, and platform, not repository identity, source SHA/tree,
+  source-receipt version, planning receipt, or draft-PR identity.
 - A repository may be read and planned when its CD workflow is absent or
   different. Any outward mutation, publication, deployment, or release MUST
   still pass its own effect-based approval and MUST re-read the full release
@@ -52,3 +53,10 @@ planning-compatibility result, and the separate full release-policy result.
 contract. Future contributors should add or remove a required capability in
 that contract and its focused tests rather than inspecting another incidental
 implementation string.
+
+This compatibility contract is not merge authority. A draft PR MUST be treated
+as provisional from provider-read current-base information and MUST NOT claim
+merge readiness. At merge, the coordinator MUST re-read the default branch,
+rebase or regenerate, rerun relevant validation, present the reconciled diff,
+and obtain final effect-based approval before a clean-current-base merge.
+Release-candidate byte immutability applies only to build/publish promotion.

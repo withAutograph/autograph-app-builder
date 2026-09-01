@@ -27,6 +27,14 @@ MUST NOT leak into this loop.
   existing-repository iterate walkthrough.
 - Dirty App Builder and Arrusted working-tree code MAY be used only through the
   explicit local-development binding. Hosted and release modes MUST reject it.
+- Local App Builder development MUST use live HMR. An Arrusted working-tree
+  snapshot is transient input to one targeted Eve cycle; it MUST NOT be a
+  prerequisite for rebasing, freezing, or advancing `main`.
+- Local prototypes and planning results MAY become stale. They MUST be treated
+  as cheap, retryable local work, never as merge or release authority.
+- Dependency-cache identity MUST contain only dependency inputs plus the
+  platform, toolchain, and bootstrap identity. It MUST NOT contain a source
+  SHA, source tree, source-receipt version, planning receipt, or draft PR.
 - Browser previews MUST use loopback URLs in the integrated Browser. An MCP App
   preview MUST NOT be used.
 - Publication and all outward effects MUST remain disabled in local development.
@@ -43,3 +51,19 @@ MUST NOT leak into this loop.
 
 The PR CI and main CD rows describe later stages only; they are not additional
 local-development commands or permissions.
+
+## Drafts, reconciliation, and promotion
+
+A draft pull request is provisional. It MUST be based on provider-read current
+base information, MAY later conflict, and MUST NOT claim merge readiness.
+
+Reconciliation occurs at merge time. The coordinator MUST re-read the current
+default branch, rebase or regenerate the draft, rerun relevant validation,
+show the actual reconciled diff, and request final effect-based merge approval.
+It MUST merge only when that reconciled result is clean against the current
+base. Tenant, provider, path, approval, and default-branch safety checks remain
+required throughout this process.
+
+Release-candidate byte immutability is a separate build/publish-promotion rule.
+It MUST NOT be imposed on live local development, transient snapshots, local
+prototypes, or draft planning.
