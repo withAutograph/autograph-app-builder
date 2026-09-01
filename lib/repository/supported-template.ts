@@ -1379,7 +1379,11 @@ export async function prepareDevelopmentSandboxWorkspace(
       2,
     )}\n`,
   });
-  await sandbox.removePath({ path: "repository", recursive: true, force: true });
+  await sandbox.removePath({
+    path: "repository",
+    recursive: true,
+    force: true,
+  });
   await ensureSandboxDirectories(
     sandbox,
     sourceFiles.map(({ path }) => {
@@ -1397,15 +1401,26 @@ export async function prepareDevelopmentSandboxWorkspace(
     .filter(({ mode }) => mode === "100755")
     .map(({ path }) => `repository/${path}`);
   if (executablePaths.length > 0) {
+    // Keep the path list out of the shell command.  Large working trees can
+    // exceed argv limits, and a generated shell fragment makes quoting and
+    // path containment unnecessarily hard to audit.  The helper validates
+    // each declared path again inside the sandbox before changing its mode.
+    const executableListPath = ".app-builder/development-executables.json";
+    await sandbox.writeTextFile({
+      path: executableListPath,
+      content: `${JSON.stringify(executablePaths)}\n`,
+    });
     const chmod = await sandbox.run({
-      command: `chmod 755 ${executablePaths
-        .map((path) => `'${path.replaceAll("'", `'\"'\"'`)}'`)
-        .join(" ")}`,
+      command: `node -e ${JSON.stringify(
+        `const fs=require("node:fs");const path=require("node:path");const root=path.resolve("/workspace/repository");const entries=JSON.parse(fs.readFileSync("/workspace/${executableListPath}","utf8"));if(!Array.isArray(entries))throw new Error("invalid executable list");for(const entry of entries){if(typeof entry!=="string"||!entry.startsWith("repository/")||entry.includes("\\0"))throw new Error("invalid executable path");const target=path.resolve("/workspace",entry);if(target!==root&&!target.startsWith(root+path.sep))throw new Error("executable path escapes repository");const info=fs.lstatSync(target);if(!info.isFile()||info.isSymbolicLink())throw new Error("executable path is not a regular file");fs.chmodSync(target,0o755);}`,
+      )}`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
     });
     if (chmod.exitCode !== 0)
-      throw new Error("The development source permissions could not be prepared.");
+      throw new Error(
+        "The development source permissions could not be prepared.",
+      );
   }
   await sandbox.writeTextFile({
     path: sandboxSourceFilesPath,
