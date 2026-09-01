@@ -405,3 +405,18 @@ export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
   APP_BUILDER_WORKFLOW_STATE_KEY,
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );
+
+/**
+ * The only write gateway for agent tools. It preserves the optimistic-concurrency
+ * guard while making transition ownership explicit at the workflow boundary.
+ */
+export function updateExactWorkflow(input: {
+  expected: AppBuilderWorkflowState;
+  operation: string;
+  transition: (current: AppBuilderWorkflowState) => AppBuilderWorkflowState;
+}): void {
+  appBuilderWorkflowState.update((current) => {
+    assertExactWorkflowState(current, input.expected, input.operation);
+    return input.transition(current);
+  });
+}
