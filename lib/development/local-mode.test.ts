@@ -127,6 +127,33 @@ describe("development source snapshots", () => {
     expect(await fingerprintDevelopmentSource(source)).not.toBe(before);
   });
 
+  it("refreshes the reviewed snapshot after a live Arrusted edit", async () => {
+    const source = await fixture();
+    const firstRunRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")),
+    );
+    const secondRunRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")),
+    );
+    roots.push(firstRunRoot, secondRunRoot);
+    await chmod(firstRunRoot, 0o700);
+    await chmod(secondRunRoot, 0o700);
+    const first = await createDevelopmentSnapshot({
+      sourceRoot: source,
+      runRoot: firstRunRoot,
+    });
+    await writeFile(join(source, "README.md"), "changed after first plan\n");
+    const second = await createDevelopmentSnapshot({
+      sourceRoot: source,
+      runRoot: secondRunRoot,
+    });
+
+    expect(second.fingerprint).not.toBe(first.fingerprint);
+    expect(await readFile(join(second.root, "README.md"), "utf8")).toBe(
+      "changed after first plan\n",
+    );
+  });
+
   it("rejects a tracked file whose parent was replaced by an escaping symlink", async () => {
     const source = await fixture();
     const outside = await realpath(
