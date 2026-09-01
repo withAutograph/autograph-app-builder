@@ -63,6 +63,8 @@ import {
 } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
 import { AppDetailsSection } from "./builder-app-details";
+
+export { AppDetailsSection } from "./builder-app-details";
 import type {
   BuilderDraft,
   BuilderForm,
