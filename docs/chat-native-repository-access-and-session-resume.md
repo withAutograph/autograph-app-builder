@@ -85,8 +85,9 @@ Resume follows these rules:
 1. Reuse a healthy Eve session.
 2. Otherwise fence the prior adapter generation, create a new generation, and
    rehydrate from the last durable checkpoint.
-3. Recreate repository state only after live access and immutable source
-   identity have been revalidated.
+3. Recreate repository state only after live access has been revalidated and
+   the current source state has been re-observed. Normal source movement
+   refreshes planning input; it is not a session-resume authority failure.
 4. Recover an abandoned `working` turn from the last settled checkpoint.
 5. Permit concurrent reads but only one mutating continuation. A competing
    continuation receives a retryable product-facing result.

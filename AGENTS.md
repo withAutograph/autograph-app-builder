@@ -18,17 +18,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Vercel OIDC as its credential boundary. Reuse the development sandbox and its
   builder-owned mutable overlay. Do not introduce or fall back to Microsandbox,
   OCI, Docker, GHCR, static provider keys, or a host-shell execution path.
-- Treat the selected Git snapshot as immutable source input, not the entire
-  sandbox filesystem. Keep dependencies, caches, generated planning files, and
-  execution overlays outside the source tree and allow runtime setup to mutate
-  them. Ordinary App Builder or Arrusted source edits create a new inexpensive
-  development snapshot; they do not rebuild the sandbox or dependency closure.
-- Assert only facts that protect a concrete boundary: tenant authority, source
-  identity, path containment, dependency identity, reviewed content, or an
-  outward effect. Do not promote package-manager layout, process restarts,
-  timestamps, cache metadata, or normal source edits into authority gates.
-  Re-observe cheap mutable facts instead of rejecting harmless development
-  changes.
+- Treat repository content as live, writable, moving planning input. Keep
+  dependencies, caches, generated planning files, and execution overlays
+  outside the source tree so runtime setup never redefines source content.
+  Ordinary App Builder or Arrusted source edits create a new inexpensive
+  planning input; they do not rebuild the sandbox or dependency closure and
+  are never a drift error by themselves.
+- Assert only facts that protect a concrete boundary: tenant authority, path
+  containment, dependency identity, reviewed content, or an outward effect.
+  Do not promote source observations, package-manager layout, process
+  restarts, timestamps, cache metadata, or normal source edits into authority
+  gates. Re-observe cheap mutable facts and refresh planning input instead of
+  rejecting harmless development changes.
 
 ## Iteration and validation
 
