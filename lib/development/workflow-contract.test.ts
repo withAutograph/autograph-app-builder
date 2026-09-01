@@ -30,9 +30,9 @@ describe("two-mode development workflow contract", () => {
     );
     expect(runner).toContain('APP_BUILDER_SANDBOX_PROVIDER: "vercel"');
     expect(runner).toContain("APP_BUILDER_LOCAL_EVE_CYCLE_FILE");
-    expect(
-      runner.match(/await rotateLocalEveCycleBinding\(/gu),
-    ).toHaveLength(2);
+    expect(runner.match(/await rotateLocalEveCycleBinding\(/gu)).toHaveLength(
+      2,
+    );
     expect(runner).toContain('WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0"');
     expect(runner).not.toContain("microsandbox");
     expect(runner).not.toContain("docker");

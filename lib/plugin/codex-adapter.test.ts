@@ -61,9 +61,7 @@ describe("Codex adapter", () => {
     expect(skill).toContain("Start every new app build with `autograph_start`");
     expect(skill).toContain("Never split one App Builder batch across calls");
     expect(skill).toContain("Treat tool-only progress as silent");
-    expect(skill).toContain(
-      "continue without a user-facing progress message",
-    );
+    expect(skill).toContain("continue without a user-facing progress message");
     expect(skill).toMatch(
       /The\s+prototype and implementation plan are ready to review/u,
     );
