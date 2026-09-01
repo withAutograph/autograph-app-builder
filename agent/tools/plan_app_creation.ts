@@ -1,8 +1,6 @@
 import { defineTool } from "eve/tools";
-import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
-import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   prepareOrReuseDependencies,
   type DependencyReadyState,
@@ -15,19 +13,13 @@ import {
   type TargetIdentityReceipt,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-import {
-  assertExactDependencyTargetBinding,
-  inspectDependencyCache,
-  shouldPreferLiveTemplateDependencies,
-  type ObservedDependencyCache,
-} from "@/lib/repository/dependency-cache";
+import { assertExactDependencyTargetBinding } from "@/lib/repository/dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
   sandboxTargetCommandExecutor,
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
-import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
@@ -52,50 +44,17 @@ export default defineTool({
       throw new Error(
         "Accept a build-ready AppSpec before running target planning.",
       );
-    let current: DependencyReadyState;
-    let sandbox: SandboxSession;
-    let cache: ObservedDependencyCache;
-    if (state.phase === "app_spec_accepted") {
-      const prepared = await prepareOrReuseDependencies({
-        current: state,
-        expectedAppSpecDigest,
-        sessionId: ctx.session.id,
-        callId: ctx.callId,
-        environment: process.env,
-        getSandbox: () => ctx.getSandbox(),
-      });
-      current = prepared.state;
-      sandbox = prepared.sandbox;
-      cache = prepared.cache;
-    } else {
-      current = state;
-      if (current.appSpec.digest !== expectedAppSpecDigest)
-        throw new Error("The accepted AppSpec changed before target planning.");
-      exactPrototypeArtifact(current.artifacts, {
-        path: current.appSpec.artifactPath,
-        digest: current.appSpec.digest,
-        revision: current.appSpec.artifactRevision,
-        sessionId: ctx.session.id,
-      });
-      sandbox = await ctx.getSandbox();
-      await inspectSourceBoundSandboxWorkspace({
-        sandbox,
-        receipt: current.sourceReceipt,
-        expectedWorkspace: current.workspace,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
-      });
-      cache = await inspectDependencyCache(
-        sandbox,
-        process.env,
-        current.workspace,
-        shouldPreferLiveTemplateDependencies(
-          current.sourceReceipt.version,
-          process.env,
-        ),
-      );
-    }
+    const prepared = await prepareOrReuseDependencies({
+      current: state,
+      expectedAppSpecDigest,
+      sessionId: ctx.session.id,
+      callId: ctx.callId,
+      environment: process.env,
+      getSandbox: () => ctx.getSandbox(),
+    });
+    const current: DependencyReadyState = prepared.state;
+    const sandbox = prepared.sandbox;
+    const cache = prepared.cache;
     assertExactDependencyTargetBinding({
       workspace: current.workspace,
       sourceReceipt: current.sourceReceipt,

@@ -30,6 +30,10 @@ import {
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import {
+  canAutoSelectDevelopmentSource,
+  developmentSourceReceipt,
+} from "@/lib/repository/development-source";
 
 type DependencyPreparationState = Exclude<
   AppBuilderWorkflowState,
@@ -53,7 +57,8 @@ async function repairDevelopmentDependencyCache(input: {
   sandbox: SandboxSession;
   environment: Readonly<Record<string, string | undefined>>;
 }) {
-  const dependencyKey = input.environment.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY;
+  const dependencyKey =
+    input.environment.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY;
   if (
     input.environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
     dependencyKey === undefined
@@ -118,7 +123,7 @@ export async function prepareOrReuseDependencies(input: {
   environment: Readonly<Record<string, string | undefined>>;
   getSandbox: () => Promise<SandboxSession>;
 }): Promise<TargetDependencyPreparationResult> {
-  const { current } = input;
+  let { current } = input;
   if (current.appSpec.digest !== input.expectedAppSpecDigest)
     throw new Error(
       "The accepted AppSpec changed before dependency preparation.",
@@ -130,7 +135,7 @@ export async function prepareOrReuseDependencies(input: {
     sessionId: input.sessionId,
   });
   const sandbox = await input.getSandbox();
-  await inspectSourceBoundSandboxWorkspace({
+  const observedWorkspace = await inspectSourceBoundSandboxWorkspace({
     sandbox,
     receipt: current.sourceReceipt,
     expectedWorkspace: current.workspace,
@@ -138,6 +143,39 @@ export async function prepareOrReuseDependencies(input: {
       ? {}
       : { githubSource: current.githubSource }),
   });
+  if (
+    canAutoSelectDevelopmentSource(input.environment) &&
+    JSON.stringify(observedWorkspace) !== JSON.stringify(current.workspace)
+  ) {
+    const observedSource = await developmentSourceReceipt(
+      current.sourceReceipt.sourceKind,
+      undefined,
+      input.environment,
+    );
+    if (observedSource === undefined)
+      throw new Error("The current development source is unavailable.");
+    const refreshed: DependencyPreparationState = {
+      version: APP_BUILDER_WORKFLOW_VERSION,
+      phase: "app_spec_accepted",
+      preparedByCallId: current.preparedByCallId,
+      workspace: observedWorkspace,
+      sourceReceipt: observedSource,
+      ...(current.githubSource === undefined
+        ? {}
+        : { githubSource: current.githubSource }),
+      artifacts: current.artifacts,
+      appSpec: current.appSpec,
+    };
+    appBuilderWorkflowState.update((latest) => {
+      assertExactWorkflowState(
+        latest,
+        current,
+        "development planning generation refresh",
+      );
+      return refreshed;
+    });
+    current = refreshed;
+  }
   const preferLiveTemplate = shouldPreferLiveTemplateDependencies(
     current.sourceReceipt.version,
     input.environment,

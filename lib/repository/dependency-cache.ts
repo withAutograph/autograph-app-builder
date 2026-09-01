@@ -355,6 +355,15 @@ export function assertExactDependencyTargetBinding(input: {
   cache: ObservedDependencyCache;
   dependencyReceipt?: ExactDependencyReceiptBinding;
 }): void {
+  // Development and live-template caches are keyed by dependency inputs,
+  // platform, toolchain, and bootstrap logic rather than by application-source
+  // bytes. A moving source tree is normal planning input for those caches and
+  // must not invalidate an otherwise intact dependency closure.
+  if (
+    input.cache.manifest.scope === "development-execution" ||
+    input.cache.manifest.scope === "live-template-execution"
+  )
+    return;
   const target = dependencyTargetForWorkspace(input.cache, input.workspace);
   if (
     input.workspace.sourceSha !== input.sourceReceipt.sourceSha ||

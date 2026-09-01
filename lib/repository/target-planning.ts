@@ -99,23 +99,25 @@ const iterationChangeSchema = z.strictObject({
 });
 
 const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
-  targetCreationProposalSchemaForTopology(topologyOwner).extend({
-    operation: z.literal("iterate-existing-app"),
-    iteration: z.strictObject({
-      changes: z.array(iterationChangeSchema).min(1).max(32),
-      digest,
-    }),
-  }).superRefine((proposal, context) => {
-    if (
-      sha256(JSON.stringify(proposal.iteration.changes)) !==
-      proposal.iteration.digest
-    )
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["iteration", "digest"],
-        message: "The iteration digest does not bind its changes.",
-      });
-  });
+  targetCreationProposalSchemaForTopology(topologyOwner)
+    .extend({
+      operation: z.literal("iterate-existing-app"),
+      iteration: z.strictObject({
+        changes: z.array(iterationChangeSchema).min(1).max(32),
+        digest,
+      }),
+    })
+    .superRefine((proposal, context) => {
+      if (
+        sha256(JSON.stringify(proposal.iteration.changes)) !==
+        proposal.iteration.digest
+      )
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["iteration", "digest"],
+          message: "The iteration digest does not bind its changes.",
+        });
+    });
 
 export const targetIterationProposalSchema =
   targetIterationProposalSchemaForTopology("microfrontends.json");
@@ -236,12 +238,6 @@ async function observeLocalPlanningCapability(input: {
     input.environment,
   );
   if (selected === undefined) return undefined;
-  if (
-    selected.digest !== input.sourceReceipt.digest ||
-    selected.sourceSha !== input.sourceReceipt.sourceSha ||
-    selected.sourceTree !== input.sourceReceipt.sourceTree
-  )
-    throw new Error("Local planning source binding drifted.");
 
   const result = await input.sandbox.run({
     command:
@@ -368,6 +364,10 @@ export async function materializePlanningOverlay(input: {
     if (typeof file.path !== "string" || !safeSourcePath(file.path))
       throw new Error("Prepared source manifest is invalid.");
   }
+  // The overlay is builder-owned scratch state. Recreate it from the current
+  // source allowlist so files removed or renamed in the live checkout cannot
+  // survive from an earlier planning generation.
+  await input.sandbox.removePath({ path: root, recursive: true, force: true });
   await ensureSandboxDirectories(input.sandbox, [
     root,
     `${root}/prototype/${input.appId}`,
