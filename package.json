@@ -17,6 +17,7 @@
     "typecheck": "mise run typecheck",
     "test": "mise run test:unit",
     "test:agent": "mise run test:agent",
+    "test:product-evals": "mise run test:product-evals",
     "test:sandbox-toolchain": "mise run test:sandbox-toolchain",
     "test:hosted-sandbox": "mise run test:hosted-sandbox --",
     "test:auth-e2e": "mise run auth-e2e:test",

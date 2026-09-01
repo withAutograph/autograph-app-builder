@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
@@ -27,6 +28,62 @@ import {
 } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import {
+  ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH,
+  auditAppliedAppComposition,
+  bindArrustedComponentCompositionPolicy,
+} from "@/lib/agent/component-composition-policy";
+
+const appliedSourceExtension = /\.(?:[cm]?[jt]sx?|css|scss|sass|less)$/u;
+
+async function assertAppliedComponentComposition(input: {
+  appId: string;
+  applyRoot: string;
+  postTree: readonly { path: string }[];
+  sourceSha: string;
+  sourceTree: string;
+  sandbox: SandboxSession;
+}): Promise<void> {
+  const relativeRoot = input.applyRoot.replace(/^\/workspace\//u, "");
+  const content = await input.sandbox.readTextFile({
+    path: `${relativeRoot}/${ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH}`,
+  });
+  const policy = bindArrustedComponentCompositionPolicy({
+    content,
+    sourceSha: input.sourceSha,
+    sourceTree: input.sourceTree,
+  });
+  if (policy.status === "unavailable")
+    throw new Error(
+      `Applied app composition policy is unavailable: ${policy.reasons.join(" ")}`,
+    );
+  const prefix = `apps/${input.appId}/`;
+  const files = await Promise.all(
+    input.postTree
+      .map(({ path }) => path)
+      .filter(
+        (path) => path.startsWith(prefix) && appliedSourceExtension.test(path),
+      )
+      .map(async (path) => ({
+        path,
+        content:
+          (await input.sandbox.readTextFile({
+            path: `${relativeRoot}/${path}`,
+          })) ?? "",
+      })),
+  );
+  const audit = auditAppliedAppComposition({
+    appId: input.appId,
+    binding: policy.binding,
+    files,
+  });
+  if (audit.status === "failed")
+    throw new Error(
+      `Applied app composition violates the Arrusted policy: ${audit.violations
+        .map(({ message }) => message)
+        .join(" ")}`,
+    );
+}
 
 export default defineTool({
   description:
@@ -70,6 +127,14 @@ export default defineTool({
       sandbox,
       receipt: current.sourceReceipt,
       expectedWorkspace: current.workspace,
+    });
+    await assertAppliedComponentComposition({
+      appId: current.appSpec.appId,
+      applyRoot: current.applyReceipt.applyRoot,
+      postTree: current.applyReceipt.postTree,
+      sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
+      sandbox,
     });
     const fixture = hasTestCapability("simulated-target");
     const attempt =

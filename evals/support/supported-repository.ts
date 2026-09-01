@@ -28,6 +28,27 @@ export const SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE = [
   "    if: needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository",
 ].join("\n");
 
+/**
+ * A target-owned composition policy fixture. The builder binds these bytes to
+ * the source receipt selected for each evaluation rather than trusting a
+ * component name from a prompt or a screenshot.
+ */
+export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
+  {
+    version: 1,
+    kind: "arrusted-component-composition-v1",
+    publicImports: ["@arrusted/ui/review-queue"],
+    tokenEntrypoints: ["@arrusted/design-system/tokens.css"],
+    providers: ["@arrusted/ui/provider"],
+    routeGlue: {
+      allowedFiles: ["app/layout.tsx", "app/page.tsx"],
+      allowedStyleFiles: [],
+    },
+  },
+  null,
+  2,
+)}\n`;
+
 function fixtureGit(root: string, args: string[]): void {
   execFileSync(
     "git",
@@ -87,6 +108,7 @@ export function createSupportedRepositoryFixture(): string {
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":
       "export default {};\n",
+    "docs/component-composition.json": ARRUSTED_COMPONENT_COMPOSITION_MANIFEST,
   };
   for (const [path, content] of Object.entries(files)) {
     const absolute = join(root, path);
