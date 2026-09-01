@@ -150,6 +150,8 @@ export default defineTool({
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
       existingAppChanges,
+      sourceReceipt: current.sourceReceipt,
+      environment: process.env,
       onIdentity(identity) {
         if (identityReceipt !== undefined) {
           if (

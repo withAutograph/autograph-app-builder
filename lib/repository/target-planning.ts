@@ -20,6 +20,8 @@ import {
 } from "../sandbox/backend";
 import { developmentExecutionArtifactDigest } from "../sandbox/development-toolchain";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
+import { developmentSourceReceipt } from "./development-source";
+import type { SourceReceipt } from "./source-receipt";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -43,44 +45,48 @@ const appSpecBindingSchema = z.strictObject({
   sha256: digest,
 });
 
-const targetCreationProposalSchema = z.strictObject({
-  contract: z.strictObject({
-    version: z.literal(1),
-    appId,
-    appSpec: appSpecBindingSchema,
-  }),
-  futurePath: repositoryPath,
-  plan: z.strictObject({
-    source: z.strictObject({
-      workspacePath: repositoryPath,
-      runtime: z.literal("nextjs"),
-      packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
-      schema: z.discriminatedUnion("kind", [
-        z.strictObject({ kind: z.literal("none") }),
-        z.strictObject({ kind: z.literal("kernel"), path: repositoryPath }),
-      ]),
-    }),
-    product: z.strictObject({
-      owner: z.string().min(1),
+const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
+  z.strictObject({
+    contract: z.strictObject({
+      version: z.literal(1),
+      appId,
       appSpec: appSpecBindingSchema,
-      optionalCapabilities: z.strictObject({
-        integrations: z.array(appId),
-        hostedResources: z.array(appId),
+    }),
+    futurePath: repositoryPath,
+    plan: z.strictObject({
+      source: z.strictObject({
+        workspacePath: repositoryPath,
+        runtime: z.literal("nextjs"),
+        packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
+        schema: z.discriminatedUnion("kind", [
+          z.strictObject({ kind: z.literal("none") }),
+          z.strictObject({ kind: z.literal("kernel"), path: repositoryPath }),
+        ]),
+      }),
+      product: z.strictObject({
+        owner: z.string().min(1),
+        appSpec: appSpecBindingSchema,
+        optionalCapabilities: z.strictObject({
+          integrations: z.array(appId),
+          hostedResources: z.array(appId),
+        }),
+      }),
+      topology: z.strictObject({
+        configPath: z.literal(topologyOwner),
+        projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
+        packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
+        routes: z.array(z.string().startsWith("/")),
+        assetRoute: z.string().startsWith("/").optional(),
+        currentDigest: digest.optional(),
+        proposedDigest: digest.optional(),
       }),
     }),
-    topology: z.strictObject({
-      configPath: z.literal("microfrontends.json"),
-      projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
-      packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
-      routes: z.array(z.string().startsWith("/")),
-      assetRoute: z.string().startsWith("/").optional(),
-      currentDigest: digest.optional(),
-      proposedDigest: digest.optional(),
-    }),
-  }),
-  blockers: z.array(z.string()),
-  mutations: z.tuple([]),
-});
+    blockers: z.array(z.string()),
+    mutations: z.tuple([]),
+  });
+
+export const targetCreationProposalSchema =
+  targetCreationProposalSchemaForTopology("microfrontends.json");
 
 const iterationChangeSchema = z.strictObject({
   path: repositoryPath,
@@ -92,8 +98,8 @@ const iterationChangeSchema = z.strictObject({
   }),
 });
 
-export const targetIterationProposalSchema =
-  targetCreationProposalSchema.extend({
+const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
+  targetCreationProposalSchemaForTopology(topologyOwner).extend({
     operation: z.literal("iterate-existing-app"),
     iteration: z.strictObject({
       changes: z.array(iterationChangeSchema).min(1).max(32),
@@ -111,10 +117,21 @@ export const targetIterationProposalSchema =
       });
   });
 
+export const targetIterationProposalSchema =
+  targetIterationProposalSchemaForTopology("microfrontends.json");
+
 export const targetProposalSchema = z.union([
   targetCreationProposalSchema,
   targetIterationProposalSchema,
 ]);
+
+function targetProposalSchemaForTopology(topologyOwner: string) {
+  if (topologyOwner === "microfrontends.json") return targetProposalSchema;
+  return z.union([
+    targetCreationProposalSchemaForTopology(topologyOwner),
+    targetIterationProposalSchemaForTopology(topologyOwner),
+  ]);
+}
 
 export type TargetIdentity = z.infer<typeof targetIdentitySchema>;
 export type TargetProposal = z.infer<typeof targetProposalSchema>;
@@ -179,6 +196,89 @@ export type TargetCommandExecutor = (input: {
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
+
+/**
+ * A development-only observation of the repository's preflight contract.
+ * This is deliberately bound to the source receipt selected by the trusted
+ * local invocation, rather than to a caller-provided execution-mode flag.
+ * Hosted planning keeps the literal V0 topology contract.
+ */
+const localPlanningCapabilitySchema = z.strictObject({
+  contractVersion: z.literal(1),
+  runtime: z.literal("nextjs"),
+  packageScope: z.literal("@autograph"),
+  requiredPaths: z.array(repositoryPath).min(1).max(64),
+  commands: z.strictObject({
+    appIdentity: z.literal(
+      "mise run repository:exec -- app-identity.ts --app <app-id>",
+    ),
+    appPlan: z.literal(
+      "mise run repository:exec -- app-contract.ts --contract <contract-file>",
+    ),
+    appApply: z.literal("mise run create:app -- --proposal <proposal-file>"),
+    repositoryPreflight: z.literal("mise run repository:preflight"),
+  }),
+  topologyOwner: z.literal("apps/shell/microfrontends.json"),
+  validationCommands: z.array(z.string()).min(1).max(16),
+  releaseGate: z.literal("REPOSITORY_RELEASE_ENABLED"),
+  digest,
+});
+
+type LocalPlanningCapability = z.infer<typeof localPlanningCapabilitySchema>;
+
+async function observeLocalPlanningCapability(input: {
+  sandbox: SandboxSession;
+  planningRoot: string;
+  sourceReceipt: SourceReceipt;
+  environment: Readonly<Record<string, string | undefined>>;
+}): Promise<LocalPlanningCapability | undefined> {
+  const selected = await developmentSourceReceipt(
+    input.sourceReceipt.sourceKind,
+    undefined,
+    input.environment,
+  );
+  if (selected === undefined) return undefined;
+  if (
+    selected.digest !== input.sourceReceipt.digest ||
+    selected.sourceSha !== input.sourceReceipt.sourceSha ||
+    selected.sourceTree !== input.sourceReceipt.sourceTree
+  )
+    throw new Error("Local planning source binding drifted.");
+
+  const result = await input.sandbox.run({
+    command:
+      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise run repository:preflight",
+    workingDirectory: input.planningRoot,
+    abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
+  });
+  if (
+    result.exitCode !== 0 ||
+    Buffer.byteLength(result.stdout) > TARGET_COMMAND_OUTPUT_BYTES ||
+    Buffer.byteLength(result.stderr) > TARGET_COMMAND_OUTPUT_BYTES
+  )
+    throw new Error("Local planning capability was unavailable.");
+  let value: unknown;
+  try {
+    value = JSON.parse(result.stdout) as unknown;
+  } catch {
+    throw new Error("Local planning capability was invalid.");
+  }
+  const parsed = localPlanningCapabilitySchema.safeParse(value);
+  if (!parsed.success)
+    throw new Error("Local planning capability was invalid.");
+  const { digest: observedDigest, ...unsigned } = parsed.data;
+  if (sha256(JSON.stringify(unsigned)) !== observedDigest)
+    throw new Error("Local planning capability was invalid.");
+  const owner = await input.sandbox.readBinaryFile({
+    path: `${input.planningRoot.replace(/^\/workspace\//u, "")}/${parsed.data.topologyOwner}`,
+  });
+  if (
+    owner === null ||
+    !parsed.data.requiredPaths.includes(parsed.data.topologyOwner)
+  )
+    throw new Error("Local planning topology was unavailable.");
+  return parsed.data;
+}
 
 function parseOutput<T>(
   result: TargetCommandResult,
@@ -404,9 +504,20 @@ export async function executeTargetIdentityAndPlanning(input: {
   appSpecDigest: string;
   artifactRevision: string;
   existingAppChanges?: readonly { path: string; content: string }[];
+  sourceReceipt?: SourceReceipt;
+  environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
 }) {
   const overlay = await materializePlanningOverlay(input);
+  const capability =
+    input.sourceReceipt === undefined
+      ? undefined
+      : await observeLocalPlanningCapability({
+          sandbox: input.sandbox,
+          planningRoot: overlay.planningRoot,
+          sourceReceipt: input.sourceReceipt,
+          environment: input.environment ?? process.env,
+        });
   const identity = parseOutput(
     await input.executor({
       command: "identity",
@@ -515,7 +626,7 @@ export async function executeTargetIdentityAndPlanning(input: {
     if (changes.length === 0)
       throw new Error("At least one existing-app change is required.");
     const topologyBytes = await input.sandbox.readBinaryFile({
-      path: `repository/microfrontends.json`,
+      path: `repository/${capability?.topologyOwner ?? "microfrontends.json"}`,
     });
     if (topologyBytes === null)
       throw new Error("The existing application topology is missing.");
@@ -530,7 +641,9 @@ export async function executeTargetIdentityAndPlanning(input: {
     };
     const iterationDigest = sha256(JSON.stringify(changes));
     await input.onIdentity?.(identity);
-    const proposal = targetIterationProposalSchema.parse({
+    const proposal = targetIterationProposalSchemaForTopology(
+      capability?.topologyOwner ?? "microfrontends.json",
+    ).parse({
       operation: "iterate-existing-app",
       contract,
       futurePath: identity.contractPath,
@@ -547,7 +660,7 @@ export async function executeTargetIdentityAndPlanning(input: {
           optionalCapabilities: { integrations: [], hostedResources: [] },
         },
         topology: {
-          configPath: "microfrontends.json",
+          configPath: capability?.topologyOwner ?? "microfrontends.json",
           projectName: identity.projectName,
           packageName: identity.packageName,
           routes: identity.baseRoutes,
@@ -558,18 +671,20 @@ export async function executeTargetIdentityAndPlanning(input: {
       blockers: [],
       mutations: [],
       iteration: { changes, digest: iterationDigest },
-    });
+    }) as unknown as TargetProposal;
     return { identity, proposal, ...overlay };
   }
   await input.onIdentity?.(identity);
-  const proposal = parseOutput(
+  const proposal = parseOutput<TargetProposal>(
     await input.executor({
       command: "planning",
       appId: input.appId,
       appSpecDigest: input.appSpecDigest,
       ...overlay,
     }),
-    targetProposalSchema,
+    targetProposalSchemaForTopology(
+      capability?.topologyOwner ?? "microfrontends.json",
+    ) as unknown as z.ZodType<TargetProposal>,
     "Target planning command",
   );
   if (
@@ -583,5 +698,10 @@ export async function executeTargetIdentityAndPlanning(input: {
     proposal.plan.topology.packageName !== identity.packageName
   )
     throw new Error("Target proposal did not match the resolved identity.");
+  if (
+    capability !== undefined &&
+    proposal.plan.topology.configPath !== capability.topologyOwner
+  )
+    throw new Error("Target proposal did not use the observed local topology.");
   return { identity, proposal, ...overlay };
 }
