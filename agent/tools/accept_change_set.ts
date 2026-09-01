@@ -8,6 +8,7 @@ import {
   appBuilderWorkflowState,
   assertExactWorkflowState,
   assertUpstreamMutationAllowed,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 
@@ -60,55 +61,61 @@ export default defineTool({
         changeSet,
         state.reviewReceipt.reviewedByCallId,
       );
-      appBuilderWorkflowState.update((latest) => {
-        assertExactWorkflowState(latest, state, "reviewed change-set reuse");
-        assertAtomicReviewedChangeSetReuse({
-          latest:
-            latest.phase === "reviewed"
-              ? {
-                  phase: latest.phase,
-                  applyDigest: latest.applyReceipt.digest,
-                  validationDigest: latest.validationReceipt.digest,
-                  reviewReceipt: latest.reviewReceipt,
-                }
-              : { phase: latest.phase },
-          expectedApplyDigest: state.applyReceipt.digest,
-          expectedValidationDigest: state.validationReceipt.digest,
-          expectedReviewReceipt: expectedReceipt,
-        });
-        return latest;
+      updateExactWorkflow({
+        expected: state,
+        operation: "reviewed change-set reuse",
+        transition: (latest) => {
+          assertAtomicReviewedChangeSetReuse({
+            latest:
+              latest.phase === "reviewed"
+                ? {
+                    phase: latest.phase,
+                    applyDigest: latest.applyReceipt.digest,
+                    validationDigest: latest.validationReceipt.digest,
+                    reviewReceipt: latest.reviewReceipt,
+                  }
+                : { phase: latest.phase },
+            expectedApplyDigest: state.applyReceipt.digest,
+            expectedValidationDigest: state.validationReceipt.digest,
+            expectedReviewReceipt: expectedReceipt,
+          });
+          return latest;
+        },
       });
       return { ...expectedReceipt, reused: true };
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(latest, state, "reviewed change-set acceptance");
-      if (
-        latest.phase !== "validated" ||
-        latest.validationReceipt.digest !== state.validationReceipt.digest ||
-        latest.applyReceipt.digest !== state.applyReceipt.digest
-      )
-        throw new Error(
-          "The workflow changed concurrently before change-set acceptance.",
-        );
-      return {
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "reviewed",
-        preparedByCallId: latest.preparedByCallId,
-        workspace: latest.workspace,
-        sourceReceipt: latest.sourceReceipt,
-        ...(latest.githubSource === undefined
-          ? {}
-          : { githubSource: latest.githubSource }),
-        artifacts: latest.artifacts,
-        appSpec: latest.appSpec,
-        dependencyReceipt: latest.dependencyReceipt,
-        identityReceipt: latest.identityReceipt,
-        proposal: latest.proposal,
-        applyReceipt: latest.applyReceipt,
-        validationReceipt: latest.validationReceipt,
-        reviewReceipt: receipt,
-      };
+    updateExactWorkflow({
+      expected: state,
+      operation: "reviewed change-set acceptance",
+      transition: (latest) => {
+        if (
+          latest.phase !== "validated" ||
+          latest.validationReceipt.digest !== state.validationReceipt.digest ||
+          latest.applyReceipt.digest !== state.applyReceipt.digest
+        )
+          throw new Error(
+            "The workflow changed concurrently before change-set acceptance.",
+          );
+        return {
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          phase: "reviewed",
+          preparedByCallId: latest.preparedByCallId,
+          workspace: latest.workspace,
+          sourceReceipt: latest.sourceReceipt,
+          ...(latest.githubSource === undefined
+            ? {}
+            : { githubSource: latest.githubSource }),
+          artifacts: latest.artifacts,
+          appSpec: latest.appSpec,
+          dependencyReceipt: latest.dependencyReceipt,
+          identityReceipt: latest.identityReceipt,
+          proposal: latest.proposal,
+          applyReceipt: latest.applyReceipt,
+          validationReceipt: latest.validationReceipt,
+          reviewReceipt: receipt,
+        };
+      },
     });
     return { ...receipt, reused: false };
   },
