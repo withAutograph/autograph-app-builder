@@ -18,6 +18,7 @@ import {
   developmentDependencySymlinkScript,
   developmentPinnedToolchainCommand,
   developmentVercelDependencyCommand,
+  developmentVercelDependencyRepairCommand,
   developmentVercelProviderTemplateKey,
   developmentVercelRevalidationKey,
   type DevelopmentVercelBootstrapInput,
@@ -91,11 +92,24 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain(
       'test "$(realpath "$cache_root")" = "$cache_root"',
     );
-    expect(command).toContain('find "$cache_root" -perm /022');
+    expect(command).toContain(
+      'find "$cache_root" \\( -type f -o -type d \\) -perm /022',
+    );
     expect(DEVELOPMENT_SANDBOX_ENVIRONMENT).toMatchObject({
       CARGO_NET_OFFLINE: "true",
       MISE_AUTO_INSTALL: "false",
     });
+  });
+
+  it("accepts validated Bun symlinks while rejecting writable cache entries", () => {
+    const command = developmentVercelDependencyRepairCommand(
+      input().dependencyKey,
+    );
+    expect(command).toContain(
+      'find "$cache_root" \\( -type f -o -type d \\) -perm /022',
+    );
+    expect(command).not.toContain('find "$cache_root" -perm /022');
+    expect(command).toContain(developmentDependencySymlinkScript);
   });
 
   it("keeps Bun links inside the closure and rebinds only workspace links", async () => {

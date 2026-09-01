@@ -440,7 +440,7 @@ cat > "$work/manifest.json" <<'JSON'
 {"version":3,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${input.dependencyKey}","lockfiles":{".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","contentDigest":"${input.dependencyKey}","nodeModulesPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${input.dependencyKey}/node_modules","cargoConfigPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"}}
 JSON
 install -m 0644 "$work/manifest.json" "$cache_root/manifest.json"
-if find "$cache_root" -perm /022 -print -quit | grep -q .; then exit 1; fi
+if find "$cache_root" \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi
 printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
 }
 
@@ -521,7 +521,7 @@ chmod -R u+rwX,go-w "$cache_dependencies" "$cache_root/cargo"
 cat > "$work/manifest.json" <<JSON
 {"version":3,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${dependencyKey}","lockfiles":$lockfiles,"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","contentDigest":"${dependencyKey}","nodeModulesPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${dependencyKey}/node_modules","cargoConfigPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"}}
 JSON
-if find "$cache_root" -perm /022 -print -quit | grep -q .; then exit 1; fi
+if find "$cache_root" \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi
 install -m 0644 "$work/manifest.json" "$cache_root/manifest.json"
 printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;
 }
