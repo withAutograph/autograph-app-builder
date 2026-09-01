@@ -8,6 +8,11 @@ import type { ReactNode } from "react";
 import { SiVercel } from "react-icons/si";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { OAuthConsent } from "@/components/auth/oauth-provider/oauth-consent";
+import { PasskeyButton } from "@/components/auth/passkey/passkey-button";
+import { Passkeys } from "@/components/auth/passkey/passkeys";
+import { Appearance } from "@/components/auth/theme/appearance";
+import { ThemeToggleItem } from "@/components/auth/theme/theme-toggle-item";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
@@ -23,11 +28,24 @@ export function authPlugins(
   themeHook: typeof useTheme,
 ) {
   return [
-    oauthProviderPlugin(),
-    ...passkeyUiPlugins(passkeysEnabled, () =>
-      passkeyPlugin({ autoFill: false }),
-    ),
-    themePlugin({ useTheme: themeHook }),
+    {
+      ...oauthProviderPlugin(),
+      views: {
+        auth: {
+          oauthConsent: OAuthConsent,
+        },
+      },
+    },
+    ...passkeyUiPlugins(passkeysEnabled, () => ({
+      ...passkeyPlugin({ autoFill: false }),
+      authButtons: [PasskeyButton],
+      securityCards: [Passkeys],
+    })),
+    {
+      ...themePlugin({ useTheme: themeHook }),
+      userMenuItems: [ThemeToggleItem],
+      accountCards: [Appearance],
+    },
   ];
 }
 

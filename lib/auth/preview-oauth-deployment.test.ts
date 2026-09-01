@@ -246,29 +246,25 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("uses the Better Auth UI passkey registry surfaces", async () => {
-    const [
-      providers,
-      passkeyPlugin,
-      signIn,
-      signUp,
-      accountSettings,
-      passkeyButton,
-    ] = await Promise.all([
-      readFile("components/providers.tsx", "utf8"),
-      readFile("lib/auth/passkey-plugin.ts", "utf8"),
-      readFile("components/auth/sign-in.tsx", "utf8"),
-      readFile("components/auth/sign-up.tsx", "utf8"),
-      readFile("components/auth/settings/account/account-settings.tsx", "utf8"),
-      readFile("components/auth/passkey/passkey-button.tsx", "utf8"),
-    ]);
+    const [providers, signIn, signUp, accountSettings, passkeyButton] =
+      await Promise.all([
+        readFile("components/providers.tsx", "utf8"),
+        readFile("components/auth/sign-in.tsx", "utf8"),
+        readFile("components/auth/sign-up.tsx", "utf8"),
+        readFile(
+          "components/auth/settings/account/account-settings.tsx",
+          "utf8",
+        ),
+        readFile("components/auth/passkey/passkey-button.tsx", "utf8"),
+      ]);
 
     expect(providers).toContain(
       'import { passkeyPlugin } from "@/lib/auth/passkey-plugin"',
     );
     expect(providers).toContain("passkeysEnabled");
     expect(providers).toContain("passkeyUiPlugins(passkeysEnabled");
-    expect(passkeyPlugin).toContain("authButtons: [PasskeyButton]");
-    expect(passkeyPlugin).toContain("securityCards: [Passkeys]");
+    expect(providers).toContain("authButtons: [PasskeyButton]");
+    expect(providers).toContain("securityCards: [Passkeys]");
     expect(signIn).toContain("plugin.authButtons");
     expect(signIn).toContain('className="flex flex-col gap-3"');
     expect(signIn).not.toContain('className="flex flex-col gap-6"');
