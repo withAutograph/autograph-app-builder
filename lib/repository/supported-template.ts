@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -1294,6 +1294,141 @@ export async function prepareSupportedSandboxWorkspace(
     content: `${JSON.stringify(record, null, 2)}\n`,
   });
   await verifyPreparedSandboxWorkspace(sandbox, record);
+  return record;
+}
+
+/**
+ * Synchronizes the tracked and non-ignored working tree for an explicit local
+ * development run.  This is intentionally separate from the reviewed Git
+ * snapshot transport above: normal edits are live planning input, while the
+ * sandbox-owned repository remains the mutable execution overlay.
+ */
+export async function prepareDevelopmentSandboxWorkspace(
+  sourcePathInput: string,
+  sandbox: SandboxSession,
+  callId: string,
+  compatibility: "full" | "planning" = "full",
+): Promise<PreparedSandboxWorkspace> {
+  const eligibility = await inspectSupportedRepository(sourcePathInput);
+  const eligible =
+    compatibility === "planning"
+      ? eligibility.planningEligible
+      : eligibility.eligible;
+  const eligibilityDigest =
+    compatibility === "planning"
+      ? eligibility.compatibilityDigest
+      : eligibility.digest;
+  const failures =
+    compatibility === "planning"
+      ? eligibility.planningFailures
+      : eligibility.failures;
+  if (!eligible || eligibility.sourceSha === undefined) {
+    throw new Error(
+      `Repository is not ${compatibility === "planning" ? "planning-compatible" : "eligible"}: ${failures.join("; ")}`,
+    );
+  }
+
+  const names = gitBytes(eligibility.sourcePath, [
+    "ls-files",
+    "-z",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+  ])
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean)
+    .toSorted();
+  const sourceFiles: PreparedSourceFile[] = names.map((path) => {
+    if (!safeSourcePath(path))
+      throw new Error("The development source contains an unsafe path.");
+    const absolutePath = resolve(eligibility.sourcePath, path);
+    if (!within(eligibility.sourcePath, absolutePath))
+      throw new Error("The development source escapes its root.");
+    const info = lstatSync(absolutePath);
+    if (!info.isFile() || info.isSymbolicLink())
+      throw new Error("The development source contains a non-regular file.");
+    const content = readFileSync(absolutePath);
+    return {
+      mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
+      // The live working tree has no stable Git object for edited/untracked
+      // files. Its byte digest is the development-generation identity.
+      objectId: sha256(content).slice(0, 40),
+      path,
+      sha256: sha256(content),
+    };
+  });
+  if (sourceFiles.length === 0)
+    throw new Error("The development source contains no files.");
+  const workspaceDigest = sha256(JSON.stringify(sourceFiles));
+  const generation = workspaceDigest.slice(0, 40);
+
+  await ensureSandboxDirectories(sandbox, [".app-builder"]);
+  await sandbox.writeTextFile({
+    path: ".app-builder/prepare-intent.json",
+    content: `${JSON.stringify(
+      {
+        callId,
+        sourcePath: eligibility.sourcePath,
+        sourceSha: eligibility.sourceSha,
+        sourceTree: generation,
+        eligibilityDigest,
+        mode: "development-live",
+      },
+      null,
+      2,
+    )}\n`,
+  });
+  await sandbox.removePath({ path: "repository", recursive: true, force: true });
+  await ensureSandboxDirectories(
+    sandbox,
+    sourceFiles.map(({ path }) => {
+      const parent = path.split("/").slice(0, -1).join("/");
+      return parent === "" ? "repository" : `repository/${parent}`;
+    }),
+  );
+  for (const file of sourceFiles) {
+    await sandbox.writeBinaryFile({
+      path: `repository/${file.path}`,
+      content: readFileSync(resolve(eligibility.sourcePath, file.path)),
+    });
+  }
+  const executablePaths = sourceFiles
+    .filter(({ mode }) => mode === "100755")
+    .map(({ path }) => `repository/${path}`);
+  if (executablePaths.length > 0) {
+    const chmod = await sandbox.run({
+      command: `chmod 755 ${executablePaths
+        .map((path) => `'${path.replaceAll("'", `'\"'\"'`)}'`)
+        .join(" ")}`,
+      workingDirectory: "/workspace",
+      abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
+    });
+    if (chmod.exitCode !== 0)
+      throw new Error("The development source permissions could not be prepared.");
+  }
+  await sandbox.writeTextFile({
+    path: sandboxSourceFilesPath,
+    content: `${JSON.stringify(sourceFiles, null, 2)}\n`,
+  });
+  await sandbox.writeTextFile({
+    path: sandboxSourceChecksumsPath,
+    content: preparedSourceChecksums(sourceFiles),
+  });
+  const record: PreparedSandboxWorkspace = {
+    workspaceId: sandbox.id,
+    workspacePath: "/workspace/repository",
+    sourcePath: eligibility.sourcePath,
+    sourceSha: eligibility.sourceSha,
+    sourceTree: generation,
+    workspaceDigest,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER,
+    eligibilityDigest,
+  };
+  await sandbox.writeTextFile({
+    path: sandboxRecordPath,
+    content: `${JSON.stringify(record, null, 2)}\n`,
+  });
   return record;
 }
 

@@ -13,8 +13,12 @@ import {
   SOURCE_RECEIPT_VERSION,
   inspectSourceReceipt,
 } from "@/lib/repository/source-receipt";
+import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
-import { prepareSupportedSandboxWorkspace } from "@/lib/repository/supported-template";
+import {
+  prepareDevelopmentSandboxWorkspace,
+  prepareSupportedSandboxWorkspace,
+} from "@/lib/repository/supported-template";
 import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 
@@ -25,13 +29,14 @@ export default defineTool({
     expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
   async execute({ expectedSourceReceiptDigest }, ctx) {
+    const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");
     const source = sourceWorkflowState.get();
     if (source.phase === "empty") throw new Error("No source was reviewed.");
-    if (source.receipt.digest !== expectedSourceReceiptDigest)
+    if (!development && source.receipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source receipt does not match the reviewed source.");
-    if (source.githubSource !== undefined) {
+    if (!development && source.githubSource !== undefined) {
       assertExactImmutableGitHubSourceReceipt(source.githubSource);
       if (
         source.receipt.sourceKind !== "existing-repository" ||
@@ -43,36 +48,46 @@ export default defineTool({
         );
     }
     if (
+      !development &&
       source.receipt.sourceKind === "fresh-template" &&
       source.phase !== "acquisition_approved"
     )
       throw new Error("Fresh-template acquisition was not approved.");
     const sandbox = await ctx.getSandbox();
     const canonicalWorkspace =
-      source.receipt.version === SOURCE_RECEIPT_VERSION
-        ? await inspectCanonicalArrustedSandboxWorkspace({
-            sandbox,
-            receipt: source.receipt,
-          })
-        : undefined;
-    const githubWorkspace =
-      source.githubSource === undefined
+      development
         ? undefined
-        : await inspectGitHubSourceSandboxWorkspace({
-            sandbox,
-            receipt: source.receipt,
-            githubSource: source.githubSource,
-          });
+        : source.receipt.version === SOURCE_RECEIPT_VERSION
+          ? await inspectCanonicalArrustedSandboxWorkspace({
+              sandbox,
+              receipt: source.receipt,
+            })
+          : undefined;
+    const githubWorkspace =
+      development
+        ? undefined
+        : source.githubSource === undefined
+          ? undefined
+          : await inspectGitHubSourceSandboxWorkspace({
+              sandbox,
+              receipt: source.receipt,
+              githubSource: source.githubSource,
+            });
     const currentReceipt =
-      source.receipt.version === SOURCE_RECEIPT_VERSION
-        ? source.receipt
-        : source.githubSource !== undefined
+      development
+        ? await inspectSourceReceipt(
+            source.receipt.sourceKind,
+            source.receipt.sourcePath,
+          )
+        : source.receipt.version === SOURCE_RECEIPT_VERSION
           ? source.receipt
-          : await inspectSourceReceipt(
-              source.receipt.sourceKind,
-              source.receipt.sourcePath,
-            );
-    if (currentReceipt.digest !== expectedSourceReceiptDigest)
+          : source.githubSource !== undefined
+            ? source.receipt
+            : await inspectSourceReceipt(
+                source.receipt.sourceKind,
+                source.receipt.sourcePath,
+              );
+    if (!development && currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review or approval.");
     const {
       sourcePath: path,
@@ -82,6 +97,7 @@ export default defineTool({
     } = currentReceipt;
     const currentWorkspace = workflowWorkspace(current);
     if (
+      !development &&
       current.phase !== "empty" &&
       current.githubSource?.digest !== source.githubSource?.digest
     )
@@ -89,6 +105,7 @@ export default defineTool({
         "This app build already owns a different GitHub source binding.",
       );
     if (
+      !development &&
       currentWorkspace !== undefined &&
       (currentWorkspace.sourceSha !== expectedSha ||
         currentWorkspace.sourceTree !== expectedTree ||
@@ -96,7 +113,16 @@ export default defineTool({
     )
       throw new Error("This app build already owns a different workspace.");
     let workspace;
-    if (githubWorkspace !== undefined) {
+    if (development) {
+      workspace = await prepareDevelopmentSandboxWorkspace(
+        path,
+        sandbox,
+        ctx.callId,
+        source.receipt.sourceKind === "existing-repository"
+          ? "planning"
+          : "full",
+      );
+    } else if (githubWorkspace !== undefined) {
       workspace = githubWorkspace;
     } else if (currentReceipt.version === SOURCE_RECEIPT_VERSION) {
       if (canonicalWorkspace === undefined)
@@ -115,7 +141,7 @@ export default defineTool({
           : "full",
       );
     }
-    if (workspace.sourceTree !== expectedTree)
+    if (!development && workspace.sourceTree !== expectedTree)
       throw new Error("The prepared source tree changed after review.");
     updateExactWorkflow({
       expected: current,
