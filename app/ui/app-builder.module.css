@@ -302,11 +302,6 @@
   cursor: not-allowed;
   opacity: 0.5;
 }
-.integrationHelp {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
 .integrationUnavailable {
   padding: 8px 10px;
 }

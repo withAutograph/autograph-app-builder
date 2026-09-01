@@ -252,6 +252,9 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).not.toContain("Vercel Team (Optional)");
+    expect(view.textContent).not.toContain(
+      "Connect Vercel and Autograph can create and deploy the project for you.",
+    );
     expect(view.textContent).toContain("Git Scope");
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");

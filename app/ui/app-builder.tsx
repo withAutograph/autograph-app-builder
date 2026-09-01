@@ -1114,7 +1114,9 @@ export function DeployToSection({
       {selected === "vercel" && available ? (
         <div className={styles.providerPanel} id="deployment-provider-vercel">
           <div className={styles.integrationField}>
-            <span>Vercel Team (Optional)</span>
+            <span className={styles.fieldLabel}>
+              Vercel Team <small aria-hidden="true">Optional</small>
+            </span>
             {connected ? (
               <SearchCombobox
                 label="Select a Vercel Team"
@@ -1144,10 +1146,6 @@ export function DeployToSection({
                 Connect to Vercel
               </button>
             )}
-            <small className={styles.integrationHelp}>
-              Connect Vercel and Autograph can create and deploy the project for
-              you. You can also skip this and deploy later.
-            </small>
           </div>
         </div>
       ) : null}
