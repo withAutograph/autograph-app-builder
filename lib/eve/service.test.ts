@@ -308,6 +308,15 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_restart_interrupted" },
+      snapshot: vi.fn(async () => ({
+        events: [
+          {
+            type: "step.started",
+            data: { turnId: "turn-before-restart" },
+          },
+        ] as MessageStreamEvent[],
+        session: { sessionId: "wrun_restart_interrupted", streamIndex: 1 },
+      })),
       send: vi.fn(async () => resumedResponse),
       respond: vi.fn(async () => resumedResponse),
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -361,6 +370,7 @@ describe("local Eve acceptance", () => {
     expect(client.sessions.attach).toHaveBeenCalledWith(started.sessionId, {
       streamIndex: 1,
     });
+    expect(session.snapshot).toHaveBeenCalledTimes(1);
     keepOldResponseOpen();
   });
 
@@ -568,6 +578,48 @@ describe("local Eve acceptance", () => {
     expect(session.respond).not.toHaveBeenCalled();
     expect(response.cancel).toHaveBeenCalledTimes(1);
     expect(session.cancel).not.toHaveBeenCalled();
+  });
+
+  it("bounds a local cancel when the current Eve response cannot settle", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<void>(() => undefined);
+      const response = {
+        cancel: vi.fn(() => never),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-cancel-timeout" },
+          } as MessageStreamEvent;
+          await never;
+        },
+      };
+      const session = {
+        state: { sessionId: "wrun_cancel_timeout" },
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService({
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach: vi.fn(() => session),
+        } as never,
+      });
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "cancel-timeout-start",
+      });
+
+      const cancellation = service.cancel({ sessionId: started.sessionId });
+      const expectedCancellation = expect(cancellation).rejects.toThrow(
+        "Cancellation was accepted",
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expectedCancellation;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("uses the retained session for an explicit turn cancellation", async () => {

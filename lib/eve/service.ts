@@ -16,6 +16,7 @@ import {
   projectInstalledEveEvents,
 } from "./public-events";
 import { readLocalEveCycleBinding } from "./local-cycle-binding";
+import { HostedCancellationUnsettledError } from "./hosted-errors";
 
 export class AdapterNotConfiguredError extends Error {
   constructor() {
@@ -119,6 +120,25 @@ type LocalEveRuntimeState = {
     { title: string; createdAtEpochMs: number; updatedAtEpochMs: number }
   >;
 };
+
+const localCancellationTimeoutMs = 5_000;
+
+async function settleLocalCancellation(operation: Promise<unknown>) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new HostedCancellationUnsettledError()),
+          localCancellationTimeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
 
 const localEveRuntimeStateKey =
   "__AUTOGRAPH_APP_BUILDER_LOCAL_EVE_RUNTIME_STATE_V1__" as const;
@@ -264,7 +284,11 @@ export function createLocalEveSessionService(
   ) {
     for (const sessionId of localActiveResponses.keys()) {
       localActiveResponses.delete(sessionId);
+      // This handle belongs to the child being replaced. The next operation
+      // must attach from a fresh durable snapshot, not its buffered tail.
+      localSessionHandles.delete(sessionId);
       state.restartInterrupted.add(sessionId);
+      state.recoveryRequired.add(sessionId);
     }
   }
   if (options.restartGeneration !== undefined)
@@ -408,6 +432,7 @@ export function createLocalEveSessionService(
     async send({ sessionId, message, clientRequestId }) {
       const key = `send:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
+        await recoverDurableTail(sessionId);
         const response = await sessionAtBufferedTail(sessionId).send(message);
         state.restartInterrupted.delete(sessionId);
         consumeResponse(state, sessionId, response);
@@ -419,6 +444,7 @@ export function createLocalEveSessionService(
     async respond({ sessionId, responses, clientRequestId }) {
       const key = `respond:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
+        await recoverDurableTail(sessionId);
         const expected = outstandingInstalledEveRequests(
           localSessionEvents.get(sessionId) ?? [],
         ).map(({ requestId }) => requestId);
@@ -454,11 +480,27 @@ export function createLocalEveSessionService(
       }
       const active = localActiveResponses.get(sessionId);
       if (turnId === undefined && active !== undefined) {
-        await active.cancel();
+        try {
+          await settleLocalCancellation(active.cancel());
+        } catch (error) {
+          if (error instanceof HostedCancellationUnsettledError) {
+            localActiveResponses.delete(sessionId);
+            state.recoveryRequired.add(sessionId);
+          }
+          throw error;
+        }
       } else {
-        await sessionFor(sessionId).cancel(
-          turnId === undefined ? undefined : { turnId },
-        );
+        try {
+          await settleLocalCancellation(
+            sessionFor(sessionId).cancel(
+              turnId === undefined ? undefined : { turnId },
+            ),
+          );
+        } catch (error) {
+          if (error instanceof HostedCancellationUnsettledError)
+            state.recoveryRequired.add(sessionId);
+          throw error;
+        }
       }
       touchSession(sessionId);
       return resultForEvents(
