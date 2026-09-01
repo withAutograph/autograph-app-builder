@@ -23,13 +23,14 @@ function fixture() {
   mkdirSync(repositoryRoot, { mode: 0o700 });
   mkdirSync(runsRoot, { mode: 0o700 });
   const activeRun = realpathSync(mkdtempSync(join(runsRoot, "run-")));
-  const applicationRoot = join(activeRun, "eve-application/source");
+  const supervisorRoot = realpathSync(mkdtempSync(join(runsRoot, "supervisor-")));
+  const applicationRoot = join(supervisorRoot, "eve-application/source");
   const sourceRoot = join(activeRun, "source");
-  const runtimeHome = join(activeRun, "home");
-  const workflowData = join(activeRun, "workflow-data");
+  const runtimeHome = join(supervisorRoot, "home");
+  const workflowData = join(supervisorRoot, "workflow-data");
   const destinationRoot = join(stateRoot, "destination");
   for (const path of [
-    join(activeRun, "eve-application"),
+    join(supervisorRoot, "eve-application"),
     applicationRoot,
     runtimeHome,
     workflowData,
@@ -39,9 +40,11 @@ function fixture() {
   mkdirSync(sourceRoot, { mode: 0o500 });
   const environment: Record<string, string> = {
     APP_BUILDER_DEV_RUNS_ROOT: realpathSync(runsRoot),
+    APP_BUILDER_DEV_SUPERVISOR_ROOT: supervisorRoot,
     APP_BUILDER_DEV_RUNTIME_HOME: realpathSync(runtimeHome),
     APP_BUILDER_DEV_EVE_ROOT: realpathSync(applicationRoot),
     APP_BUILDER_EVE_PORT: "2000",
+    WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:2000",
     WORKFLOW_LOCAL_DATA_DIR: realpathSync(workflowData),
     WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
     APP_BUILDER_EXECUTION_MODE: "development",
@@ -116,12 +119,31 @@ describe("closed local Eve launch", () => {
       "local-development",
     );
     expect(invocation.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");
+    expect(invocation.environment.WORKFLOW_LOCAL_BASE_URL).toBe(
+      "http://127.0.0.1:2000",
+    );
     expect(invocation.environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
     expect(invocation.environment.MSB_HOME).toBeUndefined();
     const receipt = JSON.stringify(localEveLaunchReceipt(invocation));
     expect(receipt).not.toContain(sentinel);
     expect(receipt).not.toContain("team_example");
     expect(receipt).not.toContain("prj_example");
+  });
+
+  it("rejects a workflow queue endpoint that differs from the Eve adapter", () => {
+    const input = fixture();
+    input.environment.WORKFLOW_LOCAL_BASE_URL = "http://127.0.0.1:2001";
+
+    expect(() =>
+      createLocalEveInvocation({
+        repositoryRoot: input.repositoryRoot,
+        pinnedNode: "/mise/node/24.18.0/bin/node",
+        eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
+        oidcToken: "local-oidc-token",
+        vercelProject: { orgId: "team_example", projectId: "prj_example" },
+        environment: input.environment,
+      }),
+    ).toThrow("Local Eve workflow queue binding was invalid.");
   });
 
   it.each([

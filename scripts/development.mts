@@ -134,6 +134,11 @@ function eveWrapperEnvironment(input: {
     APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
     APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
     APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
+    // Eve's world-local queue must use the same explicitly selected loopback
+    // endpoint as the public adapter.  Leaving this unset makes world-local
+    // probe arbitrary ports, which can route a redelivery to Next instead of
+    // the Eve worker and replay a turn without durable progress.
+    WORKFLOW_LOCAL_BASE_URL: input.closed.EVE_AGENT_HOST,
     WORKFLOW_LOCAL_DATA_DIR: input.workflowData,
     WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
   } satisfies NodeJS.ProcessEnv;

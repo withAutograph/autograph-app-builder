@@ -152,6 +152,8 @@ function exactBinding(environment: Environment) {
     throw new Error("Local Eve port was invalid.");
   if (environment.EVE_AGENT_HOST !== `http://127.0.0.1:${port}`)
     throw new Error("Local Eve loopback binding was invalid.");
+  if (environment.WORKFLOW_LOCAL_BASE_URL !== `http://127.0.0.1:${port}`)
+    throw new Error("Local Eve workflow queue binding was invalid.");
   const sourceSha = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA");
   const sourceTree = required(
     environment,
@@ -224,6 +226,7 @@ export function createLocalEveInvocation(input: {
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
       EVE_HOSTED_ADAPTER: "0",
       EVE_AGENT_HOST: `http://127.0.0.1:${binding.port}`,
+      WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${binding.port}`,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_DATA_DIR: roots.workflowData,
