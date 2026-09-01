@@ -250,6 +250,9 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).toContain(
       "core.hooksPath=/dev/null",
     );
+    expect(run.mock.calls[0]?.[0].command).toContain(
+      "PATH=/usr/local/bin:/usr/bin:/bin",
+    );
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
@@ -257,6 +260,7 @@ describe("canonical Arrusted template readiness", () => {
       call.command.includes("symbolic-ref"),
     )?.[0].command;
     expect(reinspection).toContain("symbolic-ref");
+    expect(reinspection).toContain("PATH=/usr/local/bin:/usr/bin:/bin");
     expect(reinspection).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
