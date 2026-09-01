@@ -131,6 +131,17 @@ isolated workspace.
    use only dependency inputs, platform, toolchain, and bootstrap identity.
    Release-candidate byte immutability applies only during promotion; it does
    not change any runtime-enforced source, tenant, path, or publication gate.
+   Keep one long-lived Next HMR process; restart Eve, MCP, or the agent only
+   when the relevant change requires it. UI work MUST NOT reinstall the dev
+   plugin. Reuse the Vercel Sandbox and builder-owned mutable overlay, syncing
+   only changed tracked, nonignored files; ordinary edits MUST NOT rebuild the
+   sandbox or dependency closure. Treat each planning snapshot as a new input
+   separate from reusable sandbox/dependency state, not as an error. Debug
+   local tools and evals directly; use fresh Codex discovery only for milestone
+   or acceptance checks. Keep one fast new-app and one existing-app fixture,
+   run full walkthroughs once at local acceptance, and keep artifacts, package
+   builds, deploys, publication, and broad suites out of the hot loop. Record
+   concise HMR/restart time, sandbox reuse, snapshot delta, and cache hit/miss.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
    shell command or retry with altered inputs. Use only `apply_app_creation` to

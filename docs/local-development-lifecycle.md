@@ -39,6 +39,25 @@ MUST NOT leak into this loop.
   preview MUST NOT be used.
 - Publication and all outward effects MUST remain disabled in local development.
 
+## Fast loop
+
+- Development MUST keep one long-lived Next.js HMR process. Eve, MCP, or agent
+  processes MUST restart only when the relevant change requires it.
+- UI work MUST NOT reinstall the development plugin. Ordinary edits MUST NOT
+  rebuild the sandbox or dependency closure.
+- The builder MUST reuse its Vercel Sandbox and mutable overlay, synchronizing
+  only changed tracked, nonignored files. A per-planning source snapshot is a
+  separate input to that reusable sandbox and dependency state; a source change
+  MUST create a new input, not an error.
+- Local tool and eval debugging MUST be direct. Fresh Codex discovery is for a
+  milestone or acceptance check, not ordinary iteration.
+- Maintain one fast new-app fixture and one fast existing-app fixture. Run each
+  complete walkthrough once at local acceptance.
+- The hot loop MUST NOT build artifacts or packages, deploy, publish, or run a
+  broad suite. CI/CD begins after local acceptance.
+- Local telemetry MUST concisely record HMR/restart time, sandbox reuse,
+  snapshot delta, and dependency-cache hit or miss.
+
 ## Decision table
 
 | Stage           | Trigger                 | Required action                                                         | Prohibited scope                      |
