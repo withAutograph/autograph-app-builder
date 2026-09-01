@@ -101,6 +101,7 @@ function plannedEvents() {
     version: 1,
     sourceSha: "1".repeat(40),
     sourceTree: "2".repeat(40),
+    sourceReceiptDigest: "0".repeat(64),
     eligibilityDigest: "3".repeat(64),
     workspaceDigest: "4".repeat(64),
     imageDigest: `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,

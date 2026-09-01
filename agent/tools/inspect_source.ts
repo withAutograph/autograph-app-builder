@@ -7,7 +7,6 @@ import {
 } from "@/lib/agent/source-state";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
-import { hostedSourceReceipt } from "@/lib/repository/hosted-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
@@ -48,9 +47,7 @@ export default defineTool({
             sandbox: await ctx.getSandbox(),
             callId: ctx.callId,
           })
-        : undefined) ??
-      hostedSourceReceipt(sourceKind, path!) ??
-      (await inspectSourceReceipt(sourceKind, path!));
+        : undefined) ?? (await inspectSourceReceipt(sourceKind, path!));
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",

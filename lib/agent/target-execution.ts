@@ -12,7 +12,7 @@ import {
   inspectDependencyCache,
   type ObservedDependencyCache,
 } from "../repository/dependency-cache";
-import { inspectPreparedSandboxWorkspace } from "../repository/supported-template";
+import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
 import { SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import {
   targetExecutionBinding,
@@ -81,6 +81,7 @@ export function assertProposalExecutionBindings(
   const expected = {
     sourceSha: state.workspace.sourceSha,
     sourceTree: state.workspace.sourceTree,
+    sourceReceiptDigest: state.sourceReceipt.digest,
     eligibilityDigest: state.workspace.eligibilityDigest,
     workspaceDigest: state.workspace.workspaceDigest,
     imageDigest: state.dependencyReceipt.imageDigest,
@@ -92,6 +93,7 @@ export function assertProposalExecutionBindings(
   const actual = {
     sourceSha: state.proposal.sourceSha,
     sourceTree: state.proposal.sourceTree,
+    sourceReceiptDigest: state.proposal.sourceReceiptDigest,
     eligibilityDigest: state.proposal.eligibilityDigest,
     workspaceDigest: state.proposal.workspaceDigest,
     imageDigest: state.proposal.imageDigest,
@@ -168,14 +170,11 @@ export async function inspectTargetExecutionReadiness(input: {
     input.expectedProposalDigest,
   );
   assertProposalExecutionBindings(input.state);
-  const observed = await inspectPreparedSandboxWorkspace(input.sandbox);
-  if (
-    observed.state !== "prepared" ||
-    JSON.stringify(observed.workspace) !== JSON.stringify(input.state.workspace)
-  )
-    throw new Error(
-      "The prepared workspace receipt changed before execution readiness.",
-    );
+  await inspectSourceBoundSandboxWorkspace({
+    sandbox: input.sandbox,
+    receipt: input.state.sourceReceipt,
+    expectedWorkspace: input.state.workspace,
+  });
   const fixture = hasTestCapability("simulated-target", environment);
   const tools = fixture
     ? commands.map((command) => ({
@@ -269,6 +268,7 @@ export async function inspectTargetExecutionReadiness(input: {
   const readiness = {
     sourceSha: input.state.workspace.sourceSha,
     sourceTree: input.state.workspace.sourceTree,
+    sourceReceiptDigest: input.state.sourceReceipt.digest,
     eligibilityDigest: input.state.workspace.eligibilityDigest,
     workspaceDigest: input.state.workspace.workspaceDigest,
     appSpecDigest: input.state.appSpec.digest,

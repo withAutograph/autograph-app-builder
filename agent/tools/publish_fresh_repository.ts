@@ -20,6 +20,7 @@ import {
   deriveFreshBootstrapProposal,
   publishFreshBootstrap,
 } from "@/lib/repository/node-fresh-bootstrap";
+import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 export default defineTool({
   description:
@@ -41,12 +42,14 @@ export default defineTool({
       /^\/workspace\//u,
       "",
     );
-    const readOverlayFile = (path: string) =>
-      ctx
-        .getSandbox()
-        .then((sandbox) =>
-          sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
-        );
+    const sandbox = await ctx.getSandbox();
+    const readOverlayFile = async (path: string) =>
+      await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
+    const sourceWorkspace = await freshBootstrapSourceWorkspace({
+      sandbox,
+      receipt: workflow.sourceReceipt,
+      workspace: workflow.workspace,
+    });
     const proposal = await deriveFreshBootstrapProposal({
       capability,
       destinationPath: expected.destinationPath,
@@ -56,6 +59,7 @@ export default defineTool({
       review: workflow.reviewReceipt,
       protectedPaths: [process.cwd()],
       readOverlayFile,
+      sourceWorkspace,
     });
     if (!exactFreshBootstrapProposalMatch(proposal, expected))
       throw new Error("Fresh-bootstrap preconditions changed after approval.");
@@ -68,6 +72,7 @@ export default defineTool({
       review: workflow.reviewReceipt,
       publishedByCallId: ctx.callId,
       readOverlayFile,
+      sourceWorkspace,
       hooks: {
         ...configuredFreshBootstrapEvalHooks(),
         ...currentFreshBootstrapTestHooks(),

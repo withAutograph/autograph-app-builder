@@ -57,6 +57,7 @@ function unicodeDraftMaterial() {
     repositoryContractDigest: "7".repeat(64),
     sourceSha,
     sourceTree,
+    sourceReceiptDigest: "7".repeat(64),
     eligibilityDigest: "8".repeat(64),
     workspaceDigest: "9".repeat(64),
     appSpecDigest: "a".repeat(64),

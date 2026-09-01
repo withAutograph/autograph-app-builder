@@ -13,6 +13,7 @@ import {
   proposalFromFreshBootstrapJournal,
 } from "@/lib/repository/fresh-bootstrap";
 import { recoverFreshBootstrap } from "@/lib/repository/node-fresh-bootstrap";
+import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 export default defineTool({
   description:
@@ -52,6 +53,12 @@ export default defineTool({
       /^\/workspace\//u,
       "",
     );
+    const sandbox = await ctx.getSandbox();
+    const sourceWorkspace = await freshBootstrapSourceWorkspace({
+      sandbox,
+      receipt: workflow.sourceReceipt,
+      workspace: workflow.workspace,
+    });
     const result = await recoverFreshBootstrap({
       capability,
       proposal,
@@ -59,12 +66,9 @@ export default defineTool({
       review: workflow.reviewReceipt,
       publishedByCallId: ctx.callId,
       expectedJournalDigest: input.expectedJournalDigest,
-      readOverlayFile: (path) =>
-        ctx
-          .getSandbox()
-          .then((sandbox) =>
-            sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
-          ),
+      readOverlayFile: async (path) =>
+        await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
+      sourceWorkspace,
     });
     appBuilderWorkflowState.update((current) => {
       assertExactWorkflowState(

@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Build the immutable hosted Arrusted planning artifact"
+#MISE description="Build the immutable hosted Arrusted dependency artifact"
 set -eu
 
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \

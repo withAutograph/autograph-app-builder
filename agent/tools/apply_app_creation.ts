@@ -85,6 +85,7 @@ export default defineTool({
     const binding = {
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
+      sourceReceiptDigest: current.sourceReceipt.digest,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       appSpecDigest: current.appSpec.digest,

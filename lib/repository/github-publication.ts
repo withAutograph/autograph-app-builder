@@ -882,6 +882,7 @@ function assertReviewedBinding(
   assertCanonicalReview(review);
   if (
     source.releaseEnabled !== false ||
+    source.digest !== review.sourceReceiptDigest ||
     source.sourceSha !== review.sourceSha ||
     source.sourceTree !== review.sourceTree ||
     source.contractDigest !== review.repositoryContractDigest ||

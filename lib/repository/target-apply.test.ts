@@ -77,6 +77,7 @@ const proposal: TargetProposal = {
 const binding: TargetApplyBinding = {
   sourceSha: "1".repeat(40),
   sourceTree: "0".repeat(40),
+  sourceReceiptDigest: "f".repeat(64),
   eligibilityDigest: "2".repeat(64),
   workspaceDigest: "3".repeat(64),
   appSpecDigest: acceptedAppSpecDigest,

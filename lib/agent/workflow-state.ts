@@ -39,9 +39,9 @@ import type {
 } from "@/lib/repository/github-publication";
 import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 15 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 16 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v15" as const;
+  "autograph-app-builder.workflow.v16" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -67,6 +67,7 @@ export type PrototypeArtifact = {
 type TargetExecutionBinding = {
   sourceSha: string;
   sourceTree: string;
+  sourceReceiptDigest: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   imageDigest: string;

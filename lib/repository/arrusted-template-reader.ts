@@ -35,7 +35,7 @@ function privateTemplateRepository(value: unknown) {
   return (
     typeof value.id === "number" &&
     Number.isSafeInteger(value.id) &&
-    value.id > 0 &&
+    value.id === ARRUSTED_TEMPLATE_REPOSITORY_ID &&
     value.full_name === ARRUSTED_TEMPLATE_FULL_NAME &&
     value.private === true
   );
