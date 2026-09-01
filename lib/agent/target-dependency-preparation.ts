@@ -73,8 +73,14 @@ async function repairDevelopmentDependencyCache(input: {
       await input.sandbox.setNetworkPolicy("deny-all");
     }
   })();
-  if (result.exitCode !== 0)
-    throw new Error("The development dependency cache could not be prepared.");
+  if (result.exitCode !== 0) {
+    const stage = result.stderr.match(
+      /development_vercel_repair_failed:([a-z-]+)/u,
+    )?.[1];
+    throw new Error(
+      `The development dependency cache could not be prepared (${stage ?? "unknown-stage"}).`,
+    );
+  }
 }
 
 function assertReceiptMatchesCache(
