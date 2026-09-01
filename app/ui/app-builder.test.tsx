@@ -252,7 +252,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).not.toContain("Vercel Team (Optional)");
-    expect(view.textContent).toContain("Git Scope (Optional)");
+    expect(view.textContent).toContain("Git Scope");
     expect(view.textContent).toContain("App Name");
     expect(view.textContent).toContain("App Brief");
     expect(view.textContent).toContain("Build with");
@@ -514,7 +514,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector("#repository-name")).toBeNull();
     expect(view.querySelector('[aria-label="Private repository"]')).toBeNull();
     expect(view.textContent).not.toContain("Private Repository Name");
-    expect(view.textContent).toContain(
+    expect(view.textContent).not.toContain(
       "Connect GitHub and Autograph can create and configure the repository for you.",
     );
   });

@@ -1210,7 +1210,9 @@ export function StoreInSection({
               className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}
             >
               <div className={styles.integrationField}>
-                <span>Git Scope (Optional)</span>
+                <span className={styles.fieldLabel}>
+                  Git Scope <small aria-hidden="true">Optional</small>
+                </span>
                 {connected ? (
                   <SearchCombobox
                     label="Git Scope"
@@ -1244,7 +1246,10 @@ export function StoreInSection({
                     /
                   </span>
                   <div className={styles.repoLabel}>
-                    {privateRepository ? "Private" : "Public"} Repository Name
+                    <span className={styles.fieldLabel}>
+                      {privateRepository ? "Private" : "Public"} Repository Name{" "}
+                      <small aria-hidden="true">Optional</small>
+                    </span>
                     <div className={styles.lockedInput}>
                       <input
                         id="repository-name"
@@ -1287,11 +1292,6 @@ export function StoreInSection({
                 </>
               ) : null}
             </div>
-            <small className={styles.integrationHelp}>
-              Connect GitHub and Autograph can create and configure the
-              repository for you. You can also skip this and connect a
-              repository later.
-            </small>
           </div>
         </div>
       ) : null}
@@ -1934,7 +1934,6 @@ export function Builder({
               created and delivered.
             </p>
           </div>
-          <AutographMark compact />
         </div>
         <ProviderNotices notices={visibleProviderNotices} />
         <AppDetailsSection
