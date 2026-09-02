@@ -468,10 +468,11 @@ export async function createDevelopmentSnapshot(input: {
       encoding: "utf8",
       env: gitEnvironment(),
     }).trim();
-    // The recorded commit/tree/fingerprint are the immutable development
-    // baseline.  The local materialization itself stays owner-writable: Eve
+    // The recorded commit/tree/fingerprint identify this one per-cycle copy.
+    // They do not require a current or clean checkout and must not become a
+    // freshness gate. The local materialization stays owner-writable: Eve
     // installs runtime overlays and generated planning files beside this
-    // source.  It is removed after the cycle and never crosses into hosted or
+    // source. It is removed after the cycle and never crosses into hosted or
     // release execution.
     return {
       root,
