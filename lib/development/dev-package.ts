@@ -130,7 +130,11 @@ export async function createDevelopmentPackage(input: {
     delete (manifest as { apps?: unknown }).apps;
     const mcp = {
       mcpServers: {
-        [DEVELOPMENT_MCP_SERVER_NAME]: { type: "http", url: endpoint },
+        [DEVELOPMENT_MCP_SERVER_NAME]: {
+          type: "http",
+          url: endpoint,
+          oauth_resource: endpoint,
+        },
       },
     };
     const handler = await readFile(

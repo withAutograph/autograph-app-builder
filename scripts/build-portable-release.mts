@@ -202,7 +202,11 @@ await writeFile(
   `${JSON.stringify(
     {
       mcpServers: {
-        [portable.name]: { type: "http", url: `${endpoint}/mcp` },
+        [portable.name]: {
+          type: "http",
+          url: `${endpoint}/mcp`,
+          oauth_resource: `${endpoint}/mcp`,
+        },
       },
     },
     null,

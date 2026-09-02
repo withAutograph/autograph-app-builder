@@ -43,7 +43,7 @@ function request() {
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
-      params: {},
+      params: { name: "autograph_get", arguments: {} },
     }),
   });
 }
@@ -74,8 +74,8 @@ describe("hosted route composition", () => {
     const first = await handler(request());
     const second = await handler(request());
 
-    expect(first.status).toBe(401);
-    expect(second.status).toBe(401);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
     expect(openDatabase).toHaveBeenCalledTimes(1);
     expect(openDatabase).toHaveBeenCalledWith(environment.DATABASE_URL);
   });
@@ -115,13 +115,18 @@ describe("hosted route composition", () => {
       new Request("https://other.example.test/mcp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "autograph_get", arguments: {} },
+        }),
       }),
     );
     expect(wrongOrigin.status).toBe(503);
     expect(openDatabase).not.toHaveBeenCalled();
 
-    expect((await handler(request())).status).toBe(401);
+    expect((await handler(request())).status).toBe(200);
     expect(openDatabase).toHaveBeenCalledTimes(1);
     expect(
       (
