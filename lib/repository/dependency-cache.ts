@@ -1462,18 +1462,6 @@ export async function materializeOfflineDependencies(input: {
       overlayRoot: root,
       viewKey: input.artifactRevision,
     });
-    const resolution = await input.sandbox.run({
-      command: `cd /workspace/${root} && bun --eval 'await import("@autograph/vite-config")'`,
-      workingDirectory: "/workspace",
-      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
-    });
-    boundedOutput(
-      resolution.stdout,
-      resolution.stderr,
-      "Dependency view resolution",
-    );
-    if (resolution.exitCode !== 0)
-      throw new Error("The dependency execution view is incomplete.");
   }
   const packageContent = fixtureDependencyCacheEnabled(environment)
     ? JSON.stringify({ version: ARRUSTED_MICROFRONTENDS_VERSION })

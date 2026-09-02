@@ -1099,6 +1099,12 @@ describe("offline dependency cache", () => {
         ),
       }),
     );
+    expect(
+      run.mock.calls.some(([request]) =>
+        (request.command as string).includes('@autograph/vite-config') &&
+        (request.command as string).includes("await import"),
+      ),
+    ).toBe(false);
     const resolutionCommand = run.mock.calls
       .map(([request]) => request.command as string)
       .find((command) =>
