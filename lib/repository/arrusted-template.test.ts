@@ -259,6 +259,15 @@ describe("canonical Arrusted template readiness", () => {
       "core.hooksPath=/dev/null",
     );
     expect(run.mock.calls[0]?.[0].command).toContain(
+      "credential.helper=store --file=/workspace/.app-builder/arrusted-template-reader-token",
+    );
+    expect(run.mock.calls[0]?.[0].command).toContain(
+      "GIT_ASKPASS=/usr/bin/false",
+    );
+    expect(run.mock.calls[0]?.[0].command).not.toContain(
+      "APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE",
+    );
+    expect(run.mock.calls[0]?.[0].command).toContain(
       "PATH=/usr/local/bin:/usr/bin:/bin",
     );
     expect(run.mock.calls[0]?.[0].command).not.toContain(
@@ -273,9 +282,6 @@ describe("canonical Arrusted template readiness", () => {
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
-      false,
-    );
-    expect(files.has(".app-builder/arrusted-template-reader-askpass")).toBe(
       false,
     );
     expect(reader.acquire).toHaveBeenCalledOnce();
@@ -359,14 +365,11 @@ describe("canonical Arrusted template readiness", () => {
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
       false,
     );
-    expect(files.has(".app-builder/arrusted-template-reader-askpass")).toBe(
-      false,
-    );
-    expect(removePath).toHaveBeenCalledTimes(2);
+    expect(removePath).toHaveBeenCalledOnce();
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
 
-  it.each(["askpass-write", "network-enable"] as const)(
+  it.each(["credential-write", "network-enable"] as const)(
     "removes staged credentials and restores deny-all when %s fails",
     async (failure) => {
       const files = new Map<string, string>();
@@ -383,10 +386,10 @@ describe("canonical Arrusted template readiness", () => {
         writeTextFile: vi.fn(
           async ({ path, content }: { path: string; content: string }) => {
             if (
-              failure === "askpass-write" &&
-              path === ".app-builder/arrusted-template-reader-askpass"
+              failure === "credential-write" &&
+              path === ".app-builder/arrusted-template-reader-token"
             )
-              throw new Error("askpass unavailable");
+              throw new Error("credential unavailable");
             files.set(path, content);
           },
         ),
@@ -410,10 +413,7 @@ describe("canonical Arrusted template readiness", () => {
       expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
         false,
       );
-      expect(files.has(".app-builder/arrusted-template-reader-askpass")).toBe(
-        false,
-      );
-      expect(removePath).toHaveBeenCalledTimes(2);
+      expect(removePath).toHaveBeenCalledOnce();
       expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
       expect(sandbox.run).not.toHaveBeenCalled();
     },
