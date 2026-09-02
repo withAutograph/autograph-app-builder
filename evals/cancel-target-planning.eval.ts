@@ -19,7 +19,7 @@ export default defineEval({
     await t.send("Run target identity and planning.");
     t.succeeded();
     t.notEvent("input.requested");
-    t.calledTool("plan_app_creation", { count: 1 });
+    t.notCalledTool("plan_app_creation");
     t.check(t.reply, includes("private preview"));
     t.check(
       t.reply,

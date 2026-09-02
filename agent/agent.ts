@@ -606,6 +606,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase === "planned") {
+      if (stale)
+        return "Stale offline dependency preparation was rejected; the completed product plan was preserved.";
+      return lostResponse
+        ? "The lost-response retry reused the exact durable dependency-preparation receipt."
+        : "The target-bound offline dependency closure is already available in builder-owned planning metadata.";
+    }
     if (
       status?.phase !== "app_spec_accepted" &&
       status?.phase !== "dependencies_prepared"
@@ -655,6 +662,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase === "planned")
+      return "The app is ready in the private preview.";
     if (
       status?.phase !== "dependencies_prepared" ||
       status.appSpec?.digest === undefined
