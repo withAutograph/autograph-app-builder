@@ -101,6 +101,27 @@ describe("Development Vercel Sandbox dependency template", () => {
     });
   });
 
+  it("reuses a matching dependency cache before staging or installing source dependencies", () => {
+    const command = developmentVercelDependencyCommand(input());
+    const cacheHit = command.indexOf("development_vercel_dependency_cache_hit");
+    const staging = command.indexOf('work="$(mktemp -d');
+    const install = command.indexOf(
+      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent",
+    );
+
+    expect(cacheHit).toBeGreaterThan(-1);
+    expect(cacheHit).toBeLessThan(staging);
+    expect(cacheHit).toBeLessThan(install);
+    expect(command).toContain('"scope":"development-execution"');
+    expect(command).toContain('"dependencyKey":"' + input().dependencyKey);
+    expect(command).toContain('node_modules/path-to-regexp/package.json');
+    expect(command).toContain(
+      "node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json",
+    );
+    expect(command).toContain('"$cache_root/cargo/config.toml"');
+    expect(command).toContain('unlink "$source_archive"');
+  });
+
   it("accepts validated Bun symlinks while rejecting writable cache entries", () => {
     const command = developmentVercelDependencyRepairCommand(
       input().dependencyKey,

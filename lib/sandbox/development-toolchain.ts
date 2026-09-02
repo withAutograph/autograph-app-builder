@@ -403,6 +403,44 @@ export function developmentVercelDependencyCommand(
 test "$(uname -m)" = x86_64
 source_archive='/workspace/${DEVELOPMENT_SOURCE_ARCHIVE_PATH}'
 printf '%s  %s\n' '${input.sourceArchiveSha256}' "$source_archive" | sha256sum --check --strict
+cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
+cache_dependencies="$cache_root/dependencies/${input.dependencyKey}"
+if node - "$cache_root/manifest.json" "$cache_dependencies" "$cache_root" <<'NODE'
+const fs = require("node:fs");
+const [manifestPath, dependencies, cacheRoot] = process.argv.slice(2);
+const expected = {
+  version: 3,
+  scope: "development-execution",
+  platform: "linux/amd64",
+  dependencyKey: "${input.dependencyKey}",
+  lockfiles: {".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},
+  runtime: {node:"${HOSTED_NODE_VERSION}",bun:"${HOSTED_BUN_VERSION}",mise:"${HOSTED_MISE_VERSION}",rust:"${HOSTED_RUST_VERSION}"},
+  closure: {package:"@vercel/microfrontends",version:"2.4.0",contentDigest:"${input.dependencyKey}",nodeModulesPath:"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${input.dependencyKey}/node_modules",cargoConfigPath:"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"},
+};
+const safe = (path, kind) => {
+  const entry = fs.lstatSync(path);
+  return !entry.isSymbolicLink() && (kind === "directory" ? entry.isDirectory() : entry.isFile()) && (entry.mode & 0o022) === 0;
+};
+try {
+  const actual = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const required = [
+    [manifestPath, "file"],
+    [dependencies, "directory"],
+    [dependencies + "/node_modules", "directory"],
+    [dependencies + "/node_modules/path-to-regexp/package.json", "file"],
+    [dependencies + "/node_modules/@vercel/microfrontends/package.json", "file"],
+    [dependencies + "/node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json", "file"],
+    [cacheRoot + "/cargo/vendor", "directory"],
+    [cacheRoot + "/cargo/config.toml", "file"],
+  ];
+  if (JSON.stringify(actual) !== JSON.stringify(expected) || !required.every(([path, kind]) => safe(path, kind))) process.exit(1);
+} catch { process.exit(1); }
+NODE
+then
+  unlink "$source_archive"
+  printf '%s\n' 'development_vercel_dependency_cache_hit:${input.dependencyKey}'
+  exit 0
+fi
 work="$(mktemp -d /tmp/app-builder-development.XXXXXX)"
 stage='source-staging'
 cleanup() { status=$?; if [ "$status" -ne 0 ]; then printf 'development_vercel_bootstrap_failed:%s\n' "$stage" >&2; fi; find "$work" -depth -delete 2>/dev/null || true; exit "$status"; }
@@ -426,8 +464,6 @@ grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work
 if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
 printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
 stage='cache-installation'
-cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
-cache_dependencies="$cache_root/dependencies/${input.dependencyKey}"
 install -d -m 0755 "$cache_root"
 test "$(realpath "$cache_root")" = "$cache_root"
 rm -rf "$cache_dependencies" "$cache_root/cargo"
