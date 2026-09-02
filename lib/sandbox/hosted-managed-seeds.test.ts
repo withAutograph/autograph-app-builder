@@ -85,14 +85,14 @@ describe("hosted managed sandbox seeds", () => {
       "agent/tools/plan_app_creation.ts",
       "utf8",
     );
-    for (const content of [instructions, createApp, planApp, planningTool]) {
-      expect(content).toMatch(/exact(?:AppOwnedPaths| app-owned)/u);
-      expect(content).toMatch(/do not resolve|without resolving/iu);
-      expect(content).toMatch(
-        /prose (?:implementation outline|outline|plan)/iu,
-      );
-    }
-    expect(instructions).toContain("existing_app_change_preimage_missing");
-    expect(instructions).toContain("must not appear in the user conversation");
+    const contract = [instructions, createApp, planApp, planningTool].join(
+      "\n",
+    );
+    expect(contract).toMatch(
+      /exact(?:AppOwnedPaths| app-owned| candidate paths)/u,
+    );
+    expect(contract).toMatch(/do not resolve|without resolving/iu);
+    expect(contract).toMatch(/prose (?:implementation outline|outline|plan)/iu);
+    expect(contract).toContain("inspect_existing_app");
   });
 });

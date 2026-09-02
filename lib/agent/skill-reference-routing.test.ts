@@ -73,17 +73,15 @@ describe("skill reference routing", () => {
     expect(text).toHaveBeenCalledOnce();
   });
 
-  it("teaches top-level skill loading and separate reference reads", async () => {
+  it("keeps ordinary creation self-contained while skills retain reference routing", async () => {
     const [instructions, design, planning] = await Promise.all([
       readFile("agent/instructions.md", "utf8"),
       readFile("agent/skills/design-app/SKILL.md", "utf8"),
       readFile("agent/skills/plan-app-creation/SKILL.md", "utf8"),
     ]);
 
-    expect(instructions).toContain(
-      "`load_skill` accepts only an exact top-level skill name",
-    );
-    expect(instructions).toContain("use `read_skill_reference`");
+    expect(instructions).toMatch(/do not call `load_skill`/u);
+    expect(instructions).toMatch(/or\s+`read_skill_reference`/u);
     expect(design).toMatch(/Never pass a reference path to\s+`load_skill`/u);
     expect(design).toContain("`design-app` and `references/app-spec.md`");
     expect(planning).toContain(

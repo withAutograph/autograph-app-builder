@@ -654,14 +654,15 @@ describe("GitHub runtime adapter and durable-store composition", () => {
       };
     };
 
-    const proposal = await runtime.sealDraftPullRequestProposal({
-      githubSource,
-      source: source("existing-repository"),
-      review: review(),
-      title: "Add demo",
-    });
-    expect(proposal.baseSha).toBe(branchSha);
-    expect(stores.proposals.size).toBe(1);
+    await expect(
+      runtime.sealDraftPullRequestProposal({
+        githubSource,
+        source: source("existing-repository"),
+        review: review(),
+        title: "Add demo",
+      }),
+    ).rejects.toThrow(/stale, overlapping, or unauthorized/u);
+    expect(stores.proposals.size).toBe(0);
     expect(provider.draftMutations).toBe(0);
   });
 

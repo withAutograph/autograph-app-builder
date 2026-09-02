@@ -19,7 +19,7 @@ describe("two-mode development workflow contract", () => {
     const runner = readFileSync("scripts/development.mts", "utf8");
     expect(runner).toContain("createDevelopmentSnapshot");
     expect(runner).toContain("waitForDevelopmentSourceChange");
-    expect(runner).toContain("createDevelopmentApplication");
+    expect(runner).toContain("createDevelopmentCycle");
     expect(runner).toContain("waitForDevelopmentRuntimeChange");
     expect(runner).toContain("createDevelopmentPackage");
     expect(runner).toContain("waitForDevelopmentMcp");

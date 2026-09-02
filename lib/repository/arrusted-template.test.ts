@@ -10,19 +10,9 @@ import {
   templateReadinessAttestationDigest,
 } from "./arrusted-template";
 import type { ArrustedTemplateReader } from "./arrusted-template-reader";
+import { SUPPORTED_TEMPLATE_INPUT_PATHS } from "./supported-template";
 
-const contractPaths = [
-  ".config/mise/config.toml",
-  ".github/workflows/cd.yml",
-  "microfrontends.json",
-  ".config/mise/scripts/repository/app-contract.ts",
-  ".config/mise/scripts/repository/app-identity.ts",
-  ".config/mise/scripts/repository/app-validation.ts",
-  ".config/mise/scripts/repository/repository-preflight.ts",
-  ".config/turbo/generators/config.ts",
-  ".config/turbo/generators/create-app.ts",
-  ".config/turbo/generators/templates/app/next.config.ts.hbs",
-] as const;
+const contractPaths = SUPPORTED_TEMPLATE_INPUT_PATHS;
 
 function eligibleContents() {
   return {
@@ -36,6 +26,8 @@ function eligibleContents() {
       '[tasks."generate:app"]',
       "turbo gen --config .config/turbo/generators/config.ts app --args",
     ].join("\n"),
+    ".config/mise/tasks/repository/exec":
+      '#!/usr/bin/env bash\nset -euo pipefail\nexec mise exec -- bun ".config/mise/scripts/repository/$1" "${@:2}"\n',
     ".github/workflows/cd.yml": [
       "jobs:",
       "  template-safety:",
@@ -61,6 +53,8 @@ function eligibleContents() {
       "    if: needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository",
     ].join("\n"),
     "microfrontends.json": "{}\n",
+    "package.json":
+      '{"name":"arrusted-template-fixture","private":true,"devDependencies":{"next":"16.3.3"}}\n',
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts": "export {};\n",
@@ -135,7 +129,8 @@ describe("canonical Arrusted template readiness", () => {
       contents,
       contract: contractPaths.map((path) => ({
         path,
-        mode: "100644",
+        mode:
+          path === ".config/mise/tasks/repository/exec" ? "100755" : "100644",
         objectId: "d".repeat(40),
         sha256: createHash("sha256").update(contents[path]).digest("hex"),
       })),

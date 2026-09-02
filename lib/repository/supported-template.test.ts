@@ -244,6 +244,19 @@ function fakeSandbox({
       rmSync(resolve(root, path), { recursive: true, force: true });
     },
     run: async ({ command }: { command: string }) => {
+      if (command.includes("development-source-modes.json"))
+        return { exitCode: 0, stdout: "", stderr: "" };
+      if (command.includes("realWorkspace"))
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            repositoryInput: "/workspace/repository",
+            realRepository: "/workspace/repository",
+            realWorkspace: "/workspace",
+            workspaceRoot: "/workspace",
+          }),
+          stderr: "",
+        };
       try {
         return {
           exitCode: 0,

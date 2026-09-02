@@ -90,16 +90,22 @@ async function createTestSource(): Promise<string> {
     ".config/mise/scripts/repository/app-validation.ts": "export {};\n",
     ".config/mise/scripts/repository/repository-preflight.ts":
       'const observed = { runtime: "nextjs" };\nconst a = "mise run repository:exec -- app-identity.ts --app <app-id>";\nconst b = "mise run repository:exec -- app-contract.ts --contract <contract-file>";\nconst c = "mise run create:app -- --proposal <proposal-file>";\nconst d = "mise run repository:preflight";\nconst e = ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"];\n',
+    ".config/mise/tasks/repository/exec":
+      '#!/usr/bin/env bash\nset -euo pipefail\nexec mise exec -- bun ".config/mise/scripts/repository/$1" "${@:2}"\n',
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":
       "export default {};\n",
     "microfrontends.json": "{}\n",
+    "package.json":
+      '{"name":"fresh-bootstrap-fixture","private":true,"devDependencies":{"next":"16.3.3"}}\n',
   };
   for (const [path, content] of Object.entries(files)) {
     const target = join(root, path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, content);
+    if (path === ".config/mise/tasks/repository/exec")
+      await chmod(target, 0o755);
   }
   const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
   const env: NodeJS.ProcessEnv = {
