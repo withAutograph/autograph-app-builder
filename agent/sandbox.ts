@@ -19,7 +19,6 @@ import {
 import {
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedArtifactWorkspaceInstallCommand,
-  hostedToolchainBootstrapCommand,
   hostedToolchainRevalidationKey,
 } from "@/lib/sandbox/hosted-toolchain";
 import {
@@ -48,19 +47,7 @@ const bootstrapHostedVercelSandbox: NonNullable<
   SandboxBackendPrewarmInput["bootstrap"]
 > = async ({ use }) => {
   // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-  const sandbox = await use();
-  const result = await sandbox.run({
-    command: hostedToolchainBootstrapCommand(),
-    abortSignal: AbortSignal.timeout(120_000),
-  });
-  if (result.exitCode !== 0) {
-    const stage = result.stderr.match(
-      /hosted_toolchain_bootstrap_failed:[a-z-]+/u,
-    )?.[0];
-    throw new Error(
-      `The pinned Vercel Sandbox toolchain failed to install (${stage ?? "unknown-stage"}).`,
-    );
-  }
+  await use();
 };
 
 const bootstrapDevelopmentVercelSandbox: NonNullable<
@@ -132,7 +119,7 @@ function createVercelDefinition() {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       await use({ networkPolicy: "deny-all" });
     },
-    revalidationKey: hostedToolchainRevalidationKey,
+    revalidationKey: () => sandboxRevalidationKey(undefined, plan.kind),
   });
 }
 
