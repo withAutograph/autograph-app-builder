@@ -79,6 +79,14 @@ isolated workspace.
    `record_prototype_bundle` once. It records the bounded session-scoped
    artifacts and continues through planning in the same operation. Do not split
    that normal path into three sequential `record_prototype_artifact` calls.
+   Before calling, make the internal design complete in one pass: include each
+   required heading exactly once (Status and prototype, User and outcome,
+   Interfaces and navigation, Controls and behavior, Data model, Integrations
+   and reconciliation, Temporal semantics, Writes, review, and authority,
+   Access and tenancy, Agent behavior, Operational states, Defaults, non-goals,
+   and risks, Acceptance walkthrough, and Build handoff). End Build handoff in
+   one closed `json` block with `status` set to `build-ready`; do not send a
+   partial outline and rely on a repair turn to fill these sections.
    Keep `record_prototype_artifact` only for diagnosing or replacing an
    incomplete artifact. Neither operation writes the source or target
    repository.
