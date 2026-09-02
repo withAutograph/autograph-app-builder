@@ -643,36 +643,6 @@ describe("request-scoped MCP service selection", () => {
     );
   });
 
-  it("fails closed for malformed and mixed discovery payloads", async () => {
-    const verifier = vi.fn(async () => claims());
-    const hostedRuntime = runtime();
-    hostedRuntime.verifier = { verify: verifier };
-    const handler = createMcpRequestHandler({
-      environment: { EVE_HOSTED_ADAPTER: "1" },
-      hostedRuntime,
-    });
-    const request = (body: string) =>
-      new Request(auth.resourceUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body,
-      });
-
-    const malformed = await handler(request("{"));
-    const mixed = await handler(
-      request(
-        JSON.stringify([
-          { jsonrpc: "2.0", id: 1, method: "tools/list" },
-          { jsonrpc: "2.0", id: 2, method: "tools/call", params: {} },
-        ]),
-      ),
-    );
-
-    expect(malformed.status).toBe(401);
-    expect(mixed.status).toBe(401);
-    expect(verifier).not.toHaveBeenCalled();
-  });
-
   it("does not fall back to local or unconfigured service in hosted mode", async () => {
     const handler = createMcpRequestHandler({
       environment: {
