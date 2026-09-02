@@ -72,6 +72,23 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
+export function classifySandboxCloneFailure(stderr: string) {
+  if (
+    /authentication failed|could not read username|repository not found/u.test(
+      stderr,
+    )
+  )
+    return "github-auth" as const;
+  if (
+    /could not resolve host|failed to connect|network is unreachable/u.test(
+      stderr,
+    )
+  )
+    return "network" as const;
+  if (/timed? out|operation timeout/u.test(stderr)) return "timeout" as const;
+  return "git-command" as const;
+}
+
 const sandboxCloneInspectionProgram = String.raw`
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
@@ -306,7 +323,7 @@ function sandboxCloneCommand() {
     'chmod 600 "$credential"',
     'chmod 700 "$askpass"',
     `rm -rf ${SANDBOX_WORKSPACE}`,
-    `git -c protocol.allow=never -c protocol.https.allow=always -c credential.helper= -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --no-checkout --no-recurse-submodules --single-branch --branch main ${remote} ${SANDBOX_WORKSPACE}`,
+    `git -c protocol.allow=never -c protocol.https.allow=always -c credential.helper= -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main ${remote} ${SANDBOX_WORKSPACE}`,
     "cleanup",
     `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = ${remote}`,
     `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse refs/remotes/origin/main)"`,
@@ -391,10 +408,21 @@ async function cloneCanonicalArrustedWorkspace(input: {
     Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
     Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
     result.exitCode !== 0
-  )
+  ) {
+    console.warn(
+      JSON.stringify({
+        event: "autograph.template-clone-command.failed",
+        category: classifySandboxCloneFailure(result.stderr.toLowerCase()),
+        exitCode: result.exitCode,
+        outputWithinLimit:
+          Buffer.byteLength(result.stdout) <= SANDBOX_OPERATION_OUTPUT_BYTES &&
+          Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
+      }),
+    );
     throw new Error(
       "The canonical Arrusted workspace clone could not be prepared.",
     );
+  }
   let observation: {
     sourceSha?: unknown;
     sourceTree?: unknown;
