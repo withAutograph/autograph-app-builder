@@ -338,7 +338,7 @@ const publicDiscoveryMethods = new Set([
 
 async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
   try {
-    const body: unknown = await request.clone().json();
+    const body: unknown = JSON.parse(await request.clone().text());
     const messages = Array.isArray(body) ? body : [body];
     return (
       messages.length > 0 &&
