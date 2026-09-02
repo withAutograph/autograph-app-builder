@@ -34,7 +34,10 @@ isolated workspace.
    checkout path. Other existing repositories require an explicitly allowlisted
    local checkout. For every fresh repository,
    automatically clone only the fixed canonical Arrusted HTTPS `main` ref and
-   never accept a caller-supplied remote or ref.
+   never accept a caller-supplied remote or ref. Start that normal hosted flow
+   with `source_status`; an empty source state acquires and internally binds the
+   canonical starter in the same operation. Do not depend on a separate
+   `inspect_source` or `approve_source_acquisition` model decision.
 2. Verify eligibility through the versioned builder-owned adapter. Record the
    current source observation, eligibility, contract, and release-disabled state
    as planning context, not as a long-lived authority gate. Once eligibility is

@@ -32,6 +32,10 @@ missing operation with a raw shell command or generic file write.
 
 3. After an eligible exact source receipt is resolved, automatically inspect
    the source read-only and prepare its isolated builder-owned workspace. Use
+   `source_status` once to begin a normal new-app flow; an empty hosted source
+   state acquires and internally binds the canonical starter without another
+   model-selected setup operation. Do not require `inspect_source` or
+   `approve_source_acquisition` on that path. Use
    the runtime's single preselected existing-repository snapshot during local
    development without asking for or displaying its host path. Outside that
    closed binding, retain the explicit allowlisted-path requirement. In hosted
