@@ -325,7 +325,11 @@ export function latestInstalledPrototype(
     }
     if (event.data.result.toolName === "record_ui_preview") {
       const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-      if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
+      if (
+        !preview.success ||
+        sha256(preview.data.content) !== preview.data.digest
+      )
+        continue;
       latest = publicPrototypeSchema.parse({
         path: `prototype/${preview.data.appId}/index.html`,
         mediaType: "text/html",
@@ -391,7 +395,11 @@ export function latestInstalledUiPreview(
     )
       continue;
     const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-    if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
+    if (
+      !preview.success ||
+      sha256(preview.data.content) !== preview.data.digest
+    )
+      continue;
     latest = publicUiPreviewSchema.parse({
       appId: preview.data.appId,
       revision: preview.data.revision,

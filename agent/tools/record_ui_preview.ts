@@ -23,11 +23,20 @@ export default defineTool({
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "UI preview recording");
     if (current.phase === "empty")
-      throw new Error("Prepare the Arrusted source before creating a UI preview.");
-    if (current.phase !== "prepared" && current.phase !== "ui_previewed" && current.phase !== "ui_accepted")
+      throw new Error(
+        "Prepare the Arrusted source before creating a UI preview.",
+      );
+    if (
+      current.phase !== "prepared" &&
+      current.phase !== "ui_previewed" &&
+      current.phase !== "ui_accepted"
+    )
       throw new Error("The current workflow cannot return to UI preview work.");
     const prior = "uiPreview" in current ? current.uiPreview : undefined;
-    if (input.baseRevision !== undefined && input.baseRevision !== prior?.revision)
+    if (
+      input.baseRevision !== undefined &&
+      input.baseRevision !== prior?.revision
+    )
       throw new Error("The UI preview revision is stale.");
     const sourceDigest = uiPreviewSourceDigest(input);
     const revision = sourceDigest;
@@ -40,8 +49,12 @@ export default defineTool({
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
       routes: [...input.routes].toSorted(),
-      files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
-      catalogGaps: [...input.catalogGaps].toSorted((left, right) => left.path.localeCompare(right.path)),
+      files: [...input.files].toSorted((left, right) =>
+        left.path.localeCompare(right.path),
+      ),
+      catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
+        left.path.localeCompare(right.path),
+      ),
       previewHtml,
       createdByCallId: ctx.callId,
     } as const;
@@ -54,7 +67,9 @@ export default defineTool({
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        ...(current.githubSource === undefined
+          ? {}
+          : { githubSource: current.githubSource }),
         artifacts: current.artifacts,
         uiPreview,
       }),

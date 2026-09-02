@@ -191,7 +191,9 @@ export default defineTool({
           "The AppSpec approval receipt changed after acceptance.",
         );
       if (current.appSpec.uiRevision !== accepted.uiRevision)
-        throw new Error("The accepted UI revision changed before functional planning.");
+        throw new Error(
+          "The accepted UI revision changed before functional planning.",
+        );
       await planAcceptedAppSpec(
         current.appSpec.digest,
         ctx,

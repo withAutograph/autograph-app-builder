@@ -417,7 +417,8 @@ describe("installed Eve 0.43 projection", () => {
   });
 
   it("projects a receipt-bound component-backed UI preview and its Browser transport", () => {
-    const content = "<!doctype html><html><body>Component preview</body></html>";
+    const content =
+      "<!doctype html><html><body>Component preview</body></html>";
     const revision = "a".repeat(64);
     const events = [
       installedEvent({
@@ -441,8 +442,14 @@ describe("installed Eve 0.43 projection", () => {
         },
       }),
     ];
-    expect(latestInstalledUiPreview(events)).toMatchObject({ revision, routes: ["/", "/vendors"] });
-    expect(latestInstalledPrototype(events)).toMatchObject({ content, digest: digest(content) });
+    expect(latestInstalledUiPreview(events)).toMatchObject({
+      revision,
+      routes: ["/", "/vendors"],
+    });
+    expect(latestInstalledPrototype(events)).toMatchObject({
+      content,
+      digest: digest(content),
+    });
   });
 
   it("fails closed if internal specification recording requests approval", () => {

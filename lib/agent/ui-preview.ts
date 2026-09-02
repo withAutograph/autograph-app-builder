@@ -7,15 +7,20 @@ const previewPath = z
   .regex(/^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:tsx?|css)$/u);
 const route = z.string().regex(/^\/[a-z0-9-]*(?:\/[a-z0-9-]+)*$/u);
 
-export const uiPreviewFileSchema = z
-  .strictObject({ path: previewPath, content: z.string().min(1).max(262_144) });
+export const uiPreviewFileSchema = z.strictObject({
+  path: previewPath,
+  content: z.string().min(1).max(262_144),
+});
 export const uiPreviewGapSchema = z.strictObject({
   path: z.string().regex(/^src\/components\/[A-Za-z0-9_-]+\.tsx$/u),
   reason: z.string().min(8).max(500),
 });
 export const uiPreviewInputSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  baseRevision: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  baseRevision: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .optional(),
   routes: z.array(route).min(1).max(16),
   files: z.array(uiPreviewFileSchema).min(1).max(32),
   catalogGaps: z.array(uiPreviewGapSchema).max(16).default([]),
@@ -36,7 +41,11 @@ function digest(value: unknown) {
 }
 
 function imports(content: string) {
-  return [...content.matchAll(/(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu)]
+  return [
+    ...content.matchAll(
+      /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu,
+    ),
+  ]
     .map((match) => match[1]!)
     .toSorted();
 }
@@ -48,31 +57,44 @@ function imports(content: string) {
 export function validateUiPreview(input: UiPreviewInput): void {
   const parsed = uiPreviewInputSchema.parse(input);
   const paths = new Set(parsed.files.map(({ path }) => path));
-  if (paths.size !== parsed.files.length) throw new Error("UI preview paths must be unique.");
+  if (paths.size !== parsed.files.length)
+    throw new Error("UI preview paths must be unique.");
   if (new Set(parsed.routes).size !== parsed.routes.length)
     throw new Error("UI preview routes must be unique.");
   const gapPaths = new Set(parsed.catalogGaps.map(({ path }) => path));
 
   for (const file of parsed.files) {
-    if (/\/(?:api|schema|server)\//u.test(file.path) || /(?:^|\/)route\.ts$/u.test(file.path))
-      throw new Error("UI previews cannot contain backend, schema, or API files.");
-    if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content))
+    if (
+      /\/(?:api|schema|server)\//u.test(file.path) ||
+      /(?:^|\/)route\.ts$/u.test(file.path)
+    )
+      throw new Error(
+        "UI previews cannot contain backend, schema, or API files.",
+      );
+    if (
+      /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content)
+    )
       throw new Error("UI previews cannot contact a network service.");
     if (/\b(?:use server|server action|next\/server)\b/u.test(file.content))
       throw new Error("UI previews cannot define server behavior.");
     if (/--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content))
       throw new Error("UI previews cannot define replacement design tokens.");
     if (file.path.startsWith("src/components/") && !gapPaths.has(file.path))
-      throw new Error("Each local UI component needs a documented catalog gap.");
+      throw new Error(
+        "Each local UI component needs a documented catalog gap.",
+      );
     for (const specifier of imports(file.content)) {
       if (specifier.startsWith("@autograph/") && !publicImports.has(specifier))
         throw new Error(`UI preview import is not public: ${specifier}`);
       if (specifier.startsWith("../") || specifier.startsWith("../../"))
-        throw new Error("UI preview imports must remain inside its source bundle.");
+        throw new Error(
+          "UI preview imports must remain inside its source bundle.",
+        );
     }
   }
   for (const gap of parsed.catalogGaps)
-    if (!paths.has(gap.path)) throw new Error("A UI catalog gap refers to a missing local component.");
+    if (!paths.has(gap.path))
+      throw new Error("A UI catalog gap refers to a missing local component.");
 }
 
 /**
@@ -85,7 +107,10 @@ export function fallbackUiPreviewHtml(input: UiPreviewInput): string {
   validateUiPreview(input);
   const initial = input.routes[0]!;
   const links = input.routes
-    .map((value) => `<a href="#${value}" data-route="${value}">${value === "/" ? "Overview" : value.slice(1)}</a>`)
+    .map(
+      (value) =>
+        `<a href="#${value}" data-route="${value}">${value === "/" ? "Overview" : value.slice(1)}</a>`,
+    )
     .join("");
   const pages = input.routes
     .map(
@@ -100,7 +125,11 @@ export function uiPreviewSourceDigest(input: UiPreviewInput) {
   return digest({
     appId: input.appId,
     routes: [...input.routes].toSorted(),
-    files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
-    catalogGaps: [...input.catalogGaps].toSorted((left, right) => left.path.localeCompare(right.path)),
+    files: [...input.files].toSorted((left, right) =>
+      left.path.localeCompare(right.path),
+    ),
+    catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
+      left.path.localeCompare(right.path),
+    ),
   });
 }

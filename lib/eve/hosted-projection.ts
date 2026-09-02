@@ -59,7 +59,9 @@ export function projectHostedSnapshot(
     ...(snapshot.prototype === undefined
       ? {}
       : { prototype: snapshot.prototype }),
-    ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
+    ...(snapshot.uiPreview === undefined
+      ? {}
+      : { uiPreview: snapshot.uiPreview }),
     ...(snapshot.implementationPlan === undefined
       ? {}
       : { implementationPlan: snapshot.implementationPlan }),

@@ -10,7 +10,9 @@ import {
 export default defineTool({
   description:
     "Accept the exact reviewed UI direction before functional planning may begin. Call this only after the user explicitly asks to finalize functionality.",
-  inputSchema: z.strictObject({ expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u) }),
+  inputSchema: z.strictObject({
+    expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+  }),
   async execute({ expectedRevision }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase !== "ui_previewed")
@@ -27,6 +29,10 @@ export default defineTool({
         uiAcceptedByCallId: ctx.callId,
       }),
     });
-    return { appId: current.uiPreview.appId, revision: expectedRevision, accepted: true };
+    return {
+      appId: current.uiPreview.appId,
+      revision: expectedRevision,
+      accepted: true,
+    };
   },
 });

@@ -52,7 +52,10 @@ describe("component-backed UI preview policy", () => {
         ...preview,
         files: [
           ...preview.files,
-          { path: "src/components/ReviewRail.tsx", content: "export const ReviewRail = () => null;" },
+          {
+            path: "src/components/ReviewRail.tsx",
+            content: "export const ReviewRail = () => null;",
+          },
         ],
       }),
     ).toThrow(/catalog gap/u);

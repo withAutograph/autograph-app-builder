@@ -32,7 +32,12 @@ export default defineTool({
   async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
     const state = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(state, "target identity and planning");
-    if (state.phase === "empty" || state.phase === "prepared" || state.phase === "ui_previewed" || state.phase === "ui_accepted")
+    if (
+      state.phase === "empty" ||
+      state.phase === "prepared" ||
+      state.phase === "ui_previewed" ||
+      state.phase === "ui_accepted"
+    )
       throw new Error(
         "Finalize the UI and accept a build-ready AppSpec before running target planning.",
       );
