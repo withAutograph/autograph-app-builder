@@ -670,6 +670,9 @@ describe("request-scoped MCP service selection", () => {
     expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
       'error_description="Sign in to Autograph App Builder to continue"',
     );
+    expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
+      'scope="autograph:session autograph:get"',
+    );
   });
 
   it("does not fall back to local or unconfigured service in hosted mode", async () => {
@@ -737,6 +740,9 @@ describe("request-scoped MCP service selection", () => {
       expect(result._meta["mcp/www_authenticate"][0]).toContain(
         'error="invalid_token"',
       );
+      expect(result._meta["mcp/www_authenticate"][0]).toContain(
+        'scope="autograph:session autograph:get"',
+      );
     }
   });
 
@@ -763,7 +769,7 @@ describe("request-scoped MCP service selection", () => {
     const insufficient = createMcpRequestHandler({
       environment: { EVE_HOSTED_ADAPTER: "1" },
       hostedRuntime: runtime({
-        verifiedClaims: claims({ scopes: ["autograph:get"] }),
+        verifiedClaims: claims({ scopes: ["autograph:session"] }),
       }),
     });
     const insufficientResponse = await insufficient(
@@ -773,13 +779,15 @@ describe("request-scoped MCP service selection", () => {
       }),
     );
     expect(insufficientResponse.status).toBe(200);
-    expect(
-      (
-        await mcpResult<{
-          _meta: { "mcp/www_authenticate": string[] };
-        }>(insufficientResponse)
-      )._meta["mcp/www_authenticate"][0],
-    ).toContain('error="insufficient_scope"');
+    const insufficientResult = await mcpResult<{
+      _meta: { "mcp/www_authenticate": string[] };
+    }>(insufficientResponse);
+    expect(insufficientResult._meta["mcp/www_authenticate"][0]).toContain(
+      'error="insufficient_scope"',
+    );
+    expect(insufficientResult._meta["mcp/www_authenticate"][0]).toContain(
+      'scope="autograph:session autograph:get"',
+    );
   });
 
   it("makes denied and membership-error workspaces indistinguishable", async () => {
