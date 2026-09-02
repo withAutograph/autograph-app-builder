@@ -254,6 +254,10 @@ async function runEveCycle(input: {
           runtimeHome: input.runtimeHome,
           workflowData: input.workflowData,
         }),
+        // Eve starts a local server child of its own.  Put this wrapper and
+        // every descendant in a separate process group so Ctrl+C cleans up
+        // the whole Eve cycle instead of leaving its listener on the port.
+        detached: process.platform !== "win32",
         stdio: "inherit",
       },
     );
@@ -326,7 +330,7 @@ async function runEveCycle(input: {
       ]);
     } finally {
       watchers.abort();
-      await stopDevelopmentChild(eve);
+      await stopDevelopmentChild(eve, { processGroup: true });
     }
   } finally {
     await removeDevelopmentSnapshot(activeRun);

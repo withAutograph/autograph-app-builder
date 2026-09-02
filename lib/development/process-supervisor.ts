@@ -60,10 +60,29 @@ export function developmentChildExit(child: ChildProcess) {
   });
 }
 
-export async function stopDevelopmentChild(child: ChildProcess) {
+export async function stopDevelopmentChild(
+  child: ChildProcess,
+  options: Readonly<{ processGroup?: boolean }> = {},
+) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = developmentChildExit(child);
-  child.kill("SIGTERM");
+  const signal = (value: NodeJS.Signals) => {
+    if (
+      options.processGroup &&
+      child.pid !== undefined &&
+      process.platform !== "win32"
+    ) {
+      try {
+        process.kill(-child.pid, value);
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+        throw error;
+      }
+    }
+    child.kill(value);
+  };
+  signal("SIGTERM");
   const graceful = await Promise.race([
     exited.then(() => true),
     new Promise<false>((resolveWait) =>
@@ -71,7 +90,7 @@ export async function stopDevelopmentChild(child: ChildProcess) {
     ),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
-    child.kill("SIGKILL");
+    signal("SIGKILL");
     await exited;
   }
 }

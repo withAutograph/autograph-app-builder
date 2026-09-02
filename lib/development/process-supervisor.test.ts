@@ -43,4 +43,23 @@ describe("development process supervision", () => {
     expect(await stopping).toEqual({ kind: "stop", code: 130 });
     shutdown.dispose();
   });
+
+  it("stops a detached Eve-style process group as one local cycle", async () => {
+    if (process.platform === "win32") return;
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        [
+          'require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });',
+          "setInterval(() => {}, 1000);",
+        ].join(""),
+      ],
+      { detached: true, stdio: "ignore" },
+    );
+    const exited = developmentChildExit(child);
+
+    await stopDevelopmentChild(child, { processGroup: true });
+    expect(await exited).toBe(1);
+  });
 });
