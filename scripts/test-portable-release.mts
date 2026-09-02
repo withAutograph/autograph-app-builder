@@ -154,7 +154,8 @@ try {
   );
   if (
     marketplaceManifest.name !== "autograph" ||
-    marketplaceManifest.plugins?.[0]?.source?.path !== "./plugins/app-builder" ||
+    marketplaceManifest.plugins?.[0]?.source?.path !==
+      "./plugins/app-builder" ||
     marketplaceManifest.plugins?.[0]?.policy?.authentication !== "ON_USE"
   )
     throw new Error(

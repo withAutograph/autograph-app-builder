@@ -681,9 +681,7 @@ describe("request-scoped MCP service selection", () => {
     });
     const responses = await Promise.all([
       handler(mcpRequest({}, "tools/call")),
-      handler(
-        mcpRequest({ authorization: "Bearer two tokens" }, "tools/call"),
-      ),
+      handler(mcpRequest({ authorization: "Bearer two tokens" }, "tools/call")),
       handler(mcpRequest({ authorization: "Basic token" }, "tools/call")),
     ]);
     expect(verifier).not.toHaveBeenCalled();
