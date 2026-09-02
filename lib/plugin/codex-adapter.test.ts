@@ -17,6 +17,7 @@ describe("Codex adapter", () => {
         "app-builder": {
           type: "http",
           url: "http://127.0.0.1:3000/mcp",
+          oauth_resource: "http://127.0.0.1:3000/mcp",
         },
       },
     });
