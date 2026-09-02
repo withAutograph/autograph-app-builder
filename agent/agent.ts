@@ -1804,10 +1804,17 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   return "Tell me what you want the app to help someone accomplish. I will infer a sensible starting experience and show you something reviewable.";
 });
 
+const localDevelopmentAgent =
+  process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+
 export default defineAgent({
-  model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-sol",
+  model: hasTestCapability("mock-model")
+    ? testModel
+    : localDevelopmentAgent
+      ? "openai/gpt-5.6-luna"
+      : "openai/gpt-5.6-sol",
   modelContextWindowTokens: 128_000,
-  reasoning: "high",
+  reasoning: localDevelopmentAgent ? "medium" : "high",
   limits: {
     maxInputTokensPerSession: 2_000_000,
     maxOutputTokensPerSession: 200_000,
