@@ -168,3 +168,57 @@ export function completeBuildReadyPrototypeAppSpec(input: {
     return undefined;
   return appSpec;
 }
+
+export function recordPrototypeArtifactBundle(input: {
+  artifacts: readonly PrototypeArtifact[];
+  appId: string;
+  indexHtml: string;
+  decisionsMarkdown: string;
+  appSpecMarkdown: string;
+  sessionId: string;
+  callId: string;
+  expectedAppId?: string;
+}): {
+  artifacts: readonly PrototypeArtifact[];
+  appSpec: PrototypeArtifact;
+  reused: boolean;
+} {
+  let artifacts = input.artifacts;
+  let reused = true;
+  for (const artifact of [
+    {
+      path: `prototype/${input.appId}/index.html`,
+      mediaType: "text/html" as const,
+      content: input.indexHtml,
+    },
+    {
+      path: `prototype/${input.appId}/decisions.md`,
+      mediaType: "text/markdown" as const,
+      content: input.decisionsMarkdown,
+    },
+    {
+      path: `prototype/${input.appId}/app-spec.md`,
+      mediaType: "text/markdown" as const,
+      content: input.appSpecMarkdown,
+    },
+  ]) {
+    const recorded = recordPrototypeArtifactRevision({
+      artifacts,
+      ...artifact,
+      sessionId: input.sessionId,
+      callId: input.callId,
+      expectedAppId: input.expectedAppId,
+    });
+    artifacts = recorded.artifacts;
+    reused &&= recorded.reused;
+  }
+  const appSpec = completeBuildReadyPrototypeAppSpec({
+    artifacts,
+    appId: input.appId,
+  });
+  if (appSpec === undefined)
+    throw new Error(
+      "The prototype bundle must contain a complete build-ready AppSpec.",
+    );
+  return { artifacts, appSpec, reused };
+}

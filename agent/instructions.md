@@ -74,8 +74,14 @@ isolated workspace.
    none is stated, choose a reasonable revisable default, explain it briefly in
    product language, and proceed quickly to a usable visual prototype. Do not
    ask the user to select queue, form, or dashboard when the brief supports a
-   good default. Record bounded, session-scoped prototype artifacts
-   automatically; they never write the source or target repository.
+   good default. For normal new-app creation, produce the usable HTML,
+   decisions, and complete build-ready internal design together and call
+   `record_prototype_bundle` once. It records the bounded session-scoped
+   artifacts and continues through planning in the same operation. Do not split
+   that normal path into three sequential `record_prototype_artifact` calls.
+   Keep `record_prototype_artifact` only for diagnosing or replacing an
+   incomplete artifact. Neither operation writes the source or target
+   repository.
    Synthesize a complete AppSpec from stated decisions and safe revisable
    defaults, then use `accept_app_spec` silently as internal validation and
    durable planning state. If validation fails, interpret the schema or

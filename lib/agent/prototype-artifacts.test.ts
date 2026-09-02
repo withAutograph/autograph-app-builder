@@ -5,6 +5,7 @@ import {
   exactPrototypeArtifact,
   expectedPrototypeArtifactMediaType,
   parsePrototypeArtifactPath,
+  recordPrototypeArtifactBundle,
   recordPrototypeArtifactRevision,
 } from "./prototype-artifacts";
 
@@ -145,5 +146,45 @@ describe("prototype artifact receipts", () => {
         appId: "expense-review",
       }),
     ).toMatchObject({ path: "prototype/expense-review/app-spec.md" });
+
+    const bundle = recordPrototypeArtifactBundle({
+      artifacts: [],
+      appId: "expense-review",
+      indexHtml: "<!doctype html><title>Expense review</title>",
+      decisionsMarkdown: "# Decisions\n",
+      appSpecMarkdown: content,
+      sessionId,
+      callId: "call-bundle",
+    });
+    expect(bundle.artifacts.map(({ path }) => path)).toEqual([
+      "prototype/expense-review/app-spec.md",
+      "prototype/expense-review/decisions.md",
+      "prototype/expense-review/index.html",
+    ]);
+    expect(bundle.appSpec.path).toBe(
+      "prototype/expense-review/app-spec.md",
+    );
+    expect(
+      recordPrototypeArtifactBundle({
+        artifacts: bundle.artifacts,
+        appId: "expense-review",
+        indexHtml: "<!doctype html><title>Expense review</title>",
+        decisionsMarkdown: "# Decisions\n",
+        appSpecMarkdown: content,
+        sessionId,
+        callId: "call-bundle-retry",
+      }).reused,
+    ).toBe(true);
+    expect(() =>
+      recordPrototypeArtifactBundle({
+        artifacts: [],
+        appId: "expense-review",
+        indexHtml: "<!doctype html><title>Expense review</title>",
+        decisionsMarkdown: "# Decisions\n",
+        appSpecMarkdown: "Still exploring.",
+        sessionId,
+        callId: "call-incomplete-bundle",
+      }),
+    ).toThrow("complete build-ready AppSpec");
   });
 });
