@@ -69,11 +69,12 @@ export async function stopDevelopmentChild(
   }> = {},
 ) {
   const childExited = child.exitCode !== null || child.signalCode !== null;
-  // The wrapper can exit before an Eve descendant does (for example when the
-  // wrapper observes a launch error).  Still signal its task-owned process
-  // group so a listener inherited by that group cannot survive a restart.
+  // The wrapper can exit before Eve's local server finishes its shutdown
+  // handshake. Still signal this task-owned process group on restart; Eve's
+  // separately detached server receives its shutdown request from the CLI.
   if (childExited && !options.processGroup) return;
-  const gracefulTimeoutMs = options.gracefulTimeoutMs ?? 5_000;
+  const gracefulTimeoutMs =
+    options.gracefulTimeoutMs ?? (options.processGroup ? 1_100 : 5_000);
   const exited = developmentChildExit(child);
   const signal = (value: NodeJS.Signals) => {
     if (
@@ -97,16 +98,14 @@ export async function stopDevelopmentChild(
     child.pid !== undefined &&
     process.platform !== "win32"
   ) {
-    // Eve may allow its wrapper to exit while its local listener finishes (or
-    // ignores) shutdown. The child PID is also the task-owned detached process
-    // group ID, so wait for the *whole* cycle rather than treating wrapper exit
-    // as evidence that port 2000 is available for the next cycle.
-    // Process-group liveness probing is not portable (macOS can return EPERM
-    // after the wrapper is reaped even though a descendant remains). Give the
-    // task-owned group a short grace window, then ensure it cannot retain the
-    // loopback listener into the next development cycle.
+    // `eve dev` uses a separately detached local-server child. Its CLI sends
+    // that child an IPC shutdown request and has a 900ms shutdown backstop.
+    // Do not cut that handshake short: a premature group kill leaves the
+    // detached listener on port 2000 even after the wrapper is gone. The group
+    // still belongs solely to this development cycle, so force it only after
+    // a window longer than Eve's own backstop.
     await new Promise((resolveWait) =>
-      setTimeout(resolveWait, options.gracefulTimeoutMs ?? 250),
+      setTimeout(resolveWait, gracefulTimeoutMs),
     );
     signal("SIGKILL");
     if (!childExited) await exited;
