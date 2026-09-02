@@ -1,6 +1,8 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
+import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
+
 import { sha256 } from "@/lib/agent/workflow-state";
 import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
@@ -181,6 +183,56 @@ export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("component-backed renewal review ui")) {
+    const path = lastUserMessage?.match(
+      /supported repository at (\/\S+)/iu,
+    )?.[1];
+    if (path === undefined)
+      return "I need the supported project location before I can shape the renewal review.";
+    const inspection = toolResults.find(
+      ({ name }) => name === "inspect_source",
+    );
+    if (inspection === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "inspect_source",
+            input: {
+              path: developmentInspectionPath({ requestedPath: path }),
+              sourceKind: "existing-repository",
+            },
+          },
+        ],
+      };
+    const source = inspection.output as { digest?: string } | undefined;
+    const preparation = toolResults.find(
+      ({ name }) => name === "prepare_workspace",
+    );
+    if (preparation === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "prepare_workspace",
+            input: { expectedSourceReceiptDigest: source?.digest },
+          },
+        ],
+      };
+    const preview = toolResults.find(
+      ({ name }) => name === "record_ui_preview",
+    );
+    if (preview === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "record_ui_preview",
+            input: renewalReviewUiPreview,
+          },
+        ],
+      };
+    if (preview.isError)
+      return "I couldn't produce a reliable renewal review preview.";
+    return "I shaped **Renewal Review** around a prioritized 90-day queue using the existing table and review components. The preview is ready to explore; the intervention-owner choice remains open, and no functionality or live data has been planned yet.";
+  }
   if (message.includes("uncertain vendor workflow brief"))
     return "These lead to meaningfully different products. Which outcome should lead the first version: getting each new vendor approved once (recommended, because it delivers the fastest operational value), or continuously monitoring vendors after approval (broader scope with recurring compliance work)?";
   if (message.includes("anonymous public vendor portal"))

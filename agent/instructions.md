@@ -84,11 +84,16 @@ isolated workspace.
    Never ask for a product name, rule, threshold, workflow choice, or other
    decision that the user already supplied in the current brief or conversation.
    UI-preview rule (this supersedes the legacy prototype-bundle path for new
-   sessions): after preparation, inspect the exact Arrusted catalog and its
-   examples, then call `record_ui_preview` with bounded React UI source,
-   routes, fixture data, and any documented catalog gap. Use public
+   sessions): after preparation, inspect public Arrusted components, public
+   compositions, relevant stories/examples, and representative production
+   consumers, in that order. Then call `record_ui_preview` with bounded React
+   UI source, routes, fixture data, the synchronized design manifest, and any
+   documented catalog gap. Inventory every imported public element; keep
+   fixture facts, accepted decisions, provisional assumptions, visible-product
+   questions, and future production meaning synchronized with the source. Use public
    `@autograph/components`, `@autograph/compositions`, `@autograph/icons`, and
-   semantic tokens; do not author HTML as the design source. Keep all controls
+   semantic tokens; prefer a fitting public composition before documenting a
+   local capability gap, and do not author HTML as the design source. Keep all controls
    fixture-backed and in-memory. Do not ask about providers, persistence,
    schemas, tenancy, or backend work unless it visibly changes this review.
    Show the UI preview and remain waiting for design feedback. “Looks good” is

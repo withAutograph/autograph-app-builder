@@ -75,6 +75,12 @@ describe("hosted Vercel Sandbox toolchain", () => {
       command.indexOf("install -d -m 0755 /workspace/.app-builder"),
     ).toBeLessThan(command.indexOf("curl --fail"));
     expect(command).toContain("hosted_toolchain_bootstrap_failed:%s");
+    expect(command).toContain("artifact_download=$!");
+    expect(command).toContain("mise_download=$!");
+    expect(command).toContain("rust_std_download=$!");
+    expect(command.indexOf("rust_std_download=$!")).toBeLessThan(
+      command.indexOf('wait "$artifact_download"'),
+    );
     for (const stage of [
       "artifact-verification",
       "mise-download-verification",

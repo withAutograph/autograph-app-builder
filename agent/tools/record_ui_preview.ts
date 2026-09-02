@@ -16,7 +16,7 @@ import {
 
 export default defineTool({
   description:
-    "Create or revise a fixture-backed UI preview from React source composed with the prepared Arrusted component catalog. This writes only builder-owned preview state. It must not plan, scaffold, validate, or implement backend behavior.",
+    "Create or revise a fixture-backed UI preview from React source composed with the prepared Arrusted component catalog. The synchronized internal manifest inventories screens, public components and compositions, fixtures, decisions, assumptions, visible questions, and production meaning. This writes only builder-owned preview state and keeps Browser transport product-only. It must not plan, scaffold, validate, or implement backend behavior.",
   inputSchema: uiPreviewInputSchema,
   async execute(input, ctx) {
     validateUiPreview(input);
@@ -52,6 +52,7 @@ export default defineTool({
       files: [...input.files].toSorted((left, right) =>
         left.path.localeCompare(right.path),
       ),
+      manifest: input.manifest,
       catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
         left.path.localeCompare(right.path),
       ),
