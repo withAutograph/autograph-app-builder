@@ -108,7 +108,11 @@ if (endpoint) {
     await format(
       JSON.stringify({
         mcpServers: {
-          [AUTOGRAPH_MCP_SERVER_NAME]: { type: "http", url: endpoint },
+          [AUTOGRAPH_MCP_SERVER_NAME]: {
+            type: "http",
+            url: endpoint,
+            oauth_resource: endpoint,
+          },
         },
       }),
       { parser: "json" },

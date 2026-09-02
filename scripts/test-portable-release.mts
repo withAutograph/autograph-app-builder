@@ -174,6 +174,11 @@ try {
   );
   if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`)
     throw new Error("Codex marketplace did not bind the release endpoint.");
+  if (
+    codexAdapter.mcpServers?.["app-builder"]?.oauth_resource !==
+    `${endpoint}/mcp`
+  )
+    throw new Error("Codex marketplace did not bind the OAuth resource.");
   const codexManifest = JSON.parse(
     await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf8"),
   );

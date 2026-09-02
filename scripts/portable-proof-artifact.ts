@@ -25,7 +25,7 @@ export const portableReleaseReceiptSchema = z
     format: z.literal("autograph-portable-plugin-release-v3"),
     specification: z.literal("1.0.0"),
     name: z.literal("app-builder"),
-    version: z.literal("0.2.5"),
+    version: z.literal("0.2.6"),
     source: z
       .object({
         repository: z.literal(
@@ -221,6 +221,7 @@ export async function verifyPortableProofArtifact(input: {
         "app-builder": {
           type: "http",
           url: receipt.endpoint,
+          oauth_resource: receipt.endpoint,
         },
       },
     })
@@ -234,11 +235,11 @@ export async function verifyPortableProofArtifact(input: {
   );
   if (
     codexManifest.name !== receipt.name ||
-    codexManifest.version !== "0.2.5" ||
+    codexManifest.version !== "0.2.6" ||
     codexManifest.mcpServers !== "./.mcp.json"
   )
     throw new Error(
-      "Codex marketplace manifest was not bound to package 0.2.5 and its sole MCP adapter.",
+      "Codex marketplace manifest was not bound to package 0.2.6 and its sole MCP adapter.",
     );
   const codexMarketplaceAssetPaths: string[] = [];
   for (const reference of new Set([

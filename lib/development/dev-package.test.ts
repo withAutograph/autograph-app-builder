@@ -65,6 +65,7 @@ describe("development Codex package", () => {
           "app-builder-dev": {
             type: "http",
             url: "http://127.0.0.1:3210/mcp",
+            oauth_resource: "http://127.0.0.1:3210/mcp",
           },
         },
       });
