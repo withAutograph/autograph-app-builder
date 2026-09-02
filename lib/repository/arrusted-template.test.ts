@@ -365,7 +365,7 @@ describe("canonical Arrusted template readiness", () => {
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
       false,
     );
-    expect(removePath).toHaveBeenCalledOnce();
+    expect(removePath).toHaveBeenCalledTimes(2);
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
 
