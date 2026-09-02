@@ -108,6 +108,15 @@ type LocalEveRuntimeState = {
   sessionHandles: Map<string, ClientSession>;
   activeResponses: Map<string, CancellableResponse>;
   /**
+   * A model stream stopped making progress and its turn was cancelled. Keep a
+   * product-facing interruption until the durable session confirms the cancel
+   * boundary; callers must not race a fresh continuation into that turn.
+   */
+  modelInterruptions: Map<
+    string,
+    { response: CancellableResponse; message: string }
+  >;
+  /**
    * A local Eve child was replaced while this session still had an in-flight
    * response. The old transport cannot settle it, but the durable session can
    * accept the next continuation from its last buffered boundary.
@@ -122,6 +131,9 @@ type LocalEveRuntimeState = {
 };
 
 const localCancellationTimeoutMs = 5_000;
+const localModelTurnTimeoutMs = 120_000;
+const localModelTurnInterruptedMessage =
+  "Autograph paused because a response took too long. Your progress is saved; try again in a moment.";
 
 async function settleLocalCancellation(operation: Promise<unknown>) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -156,6 +168,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     sessionEvents: new Map(),
     sessionHandles: new Map(),
     activeResponses: new Map(),
+    modelInterruptions: new Map(),
     restartInterrupted: new Set(),
     recoveryRequired: new Set(),
     recoveries: new Map(),
@@ -205,7 +218,10 @@ function resultForEvents(
   snapshotEvents: readonly MessageStreamEvent[],
   cursor = 0,
   limit = 100,
-  options: { status?: EveSessionResult["status"] } = {},
+  options: {
+    status?: EveSessionResult["status"];
+    error?: EveSessionResult["error"];
+  } = {},
 ): EveSessionResult {
   const projected = projectInstalledEveEvents(snapshotEvents);
   const events = projected.slice(cursor, cursor + limit);
@@ -220,6 +236,7 @@ function resultForEvents(
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(prototype === undefined ? {} : { prototype }),
     ...(implementationPlan === undefined ? {} : { implementationPlan }),
+    ...(options.error === undefined ? {} : { error: options.error }),
   };
 }
 
@@ -243,18 +260,78 @@ function consumeResponse(
   state: LocalEveRuntimeState,
   sessionId: string,
   response: CancellableResponse,
+  modelTurnTimeoutMs: number,
 ): void {
   const events = state.sessionEvents.get(sessionId) ?? [];
   state.sessionEvents.set(sessionId, events);
   state.activeResponses.set(sessionId, response);
+  let modelTurnTimer: ReturnType<typeof setTimeout> | undefined;
+  let modelTurnActive = false;
+  let timedOut = false;
+
+  const clearModelTurnTimer = () => {
+    if (modelTurnTimer !== undefined) clearTimeout(modelTurnTimer);
+    modelTurnTimer = undefined;
+  };
+  const armModelTurnTimer = () => {
+    clearModelTurnTimer();
+    modelTurnTimer = setTimeout(() => {
+      if (
+        !modelTurnActive ||
+        timedOut ||
+        state.activeResponses.get(sessionId) !== response
+      )
+        return;
+      timedOut = true;
+      state.modelInterruptions.set(sessionId, {
+        response,
+        message: localModelTurnInterruptedMessage,
+      });
+      // A cancellation request is idempotent at Eve's durable session
+      // boundary. We deliberately do not start another turn here: first wait
+      // for the original turn's cancellation boundary to become observable.
+      state.recoveryRequired.add(sessionId);
+      void settleLocalCancellation(response.cancel()).catch(() => undefined);
+    }, modelTurnTimeoutMs);
+    modelTurnTimer.unref?.();
+  };
+  const observeEvent = (event: MessageStreamEvent) => {
+    switch (event.type) {
+      case "step.started":
+        modelTurnActive = true;
+        armModelTurnTimer();
+        return;
+      case "actions.requested":
+      case "input.requested":
+      case "session.waiting":
+      case "session.completed":
+      case "session.failed":
+      case "turn.cancelled":
+        modelTurnActive = false;
+        clearModelTurnTimer();
+        return;
+      default:
+        if (modelTurnActive) armModelTurnTimer();
+    }
+  };
   void (async () => {
     try {
-      for await (const event of response) events.push(event);
+      for await (const event of response) {
+        events.push(event);
+        observeEvent(event);
+      }
     } catch {
       state.recoveryRequired.add(sessionId);
     } finally {
+      clearModelTurnTimer();
       if (deriveInstalledEveStatus(events) === "working")
         state.recoveryRequired.add(sessionId);
+      const interruption = state.modelInterruptions.get(sessionId);
+      if (
+        interruption?.response === response &&
+        deriveInstalledEveStatus(events) !== "working"
+      )
+        state.modelInterruptions.delete(sessionId);
       if (state.activeResponses.get(sessionId) === response) {
         state.activeResponses.delete(sessionId);
       }
@@ -264,13 +341,19 @@ function consumeResponse(
 
 export function createLocalEveSessionService(
   client: Pick<Client, "sessions">,
-  options: { stateGeneration?: string; restartGeneration?: string } = {},
+  options: {
+    stateGeneration?: string;
+    restartGeneration?: string;
+    modelTurnTimeoutMs?: number;
+  } = {},
 ): EveSessionService {
   const state = localRuntimeState(options.stateGeneration ?? "process");
   const localRequests = state.requests;
   const localSessionEvents = state.sessionEvents;
   const localSessionHandles = state.sessionHandles;
   const localActiveResponses = state.activeResponses;
+  const modelTurnTimeoutMs =
+    options.modelTurnTimeoutMs ?? localModelTurnTimeoutMs;
 
   // A targeted local restart ends the old HTTP stream without giving it a
   // reliable terminal Eve event. Preserve its buffered product progress, but
@@ -317,7 +400,14 @@ export function createLocalEveSessionService(
           streamIndex: snapshot.session.streamIndex,
         }),
       );
-      state.recoveryRequired.delete(sessionId);
+      const interruption = state.modelInterruptions.get(sessionId);
+      if (
+        interruption === undefined ||
+        deriveInstalledEveStatus(snapshot.events) !== "working"
+      ) {
+        state.modelInterruptions.delete(sessionId);
+        state.recoveryRequired.delete(sessionId);
+      }
     })().finally(() => state.recoveries.delete(sessionId));
     state.recoveries.set(sessionId, recovery);
     return recovery;
@@ -338,6 +428,32 @@ export function createLocalEveSessionService(
         ...metadata,
         updatedAtEpochMs: Date.now(),
       });
+  }
+
+  function localResultOptions(sessionId: string) {
+    const interruption = state.modelInterruptions.get(sessionId);
+    return {
+      status:
+        interruption !== undefined || state.restartInterrupted.has(sessionId)
+          ? ("waiting" as const)
+          : undefined,
+      ...(interruption === undefined
+        ? {}
+        : {
+            error: {
+              code: "model_turn_interrupted",
+              message: interruption.message,
+            },
+          }),
+    };
+  }
+
+  async function requireSettledModelTurn(sessionId: string) {
+    await recoverDurableTail(sessionId);
+    if (state.modelInterruptions.has(sessionId))
+      throw new Error(
+        "The previous Autograph response is still settling. Try again in a moment.",
+      );
   }
 
   return {
@@ -371,7 +487,7 @@ export function createLocalEveSessionService(
         createdAtEpochMs: timestamp,
         updatedAtEpochMs: timestamp,
       });
-      consumeResponse(state, sessionId, response);
+      consumeResponse(state, sessionId, response, modelTurnTimeoutMs);
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async list({ cursor, limit }) {
@@ -424,18 +540,16 @@ export function createLocalEveSessionService(
         localSessionEvents.get(sessionId) ?? [],
         cursor,
         limit,
-        {
-          status: state.restartInterrupted.has(sessionId) ? "waiting" : undefined,
-        },
+        localResultOptions(sessionId),
       );
     },
     async send({ sessionId, message, clientRequestId }) {
       const key = `send:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
-        await recoverDurableTail(sessionId);
+        await requireSettledModelTurn(sessionId);
         const response = await sessionAtBufferedTail(sessionId).send(message);
         state.restartInterrupted.delete(sessionId);
-        consumeResponse(state, sessionId, response);
+        consumeResponse(state, sessionId, response, modelTurnTimeoutMs);
         localRequests.set(key, sessionId);
       }
       touchSession(sessionId);
@@ -444,7 +558,7 @@ export function createLocalEveSessionService(
     async respond({ sessionId, responses, clientRequestId }) {
       const key = `respond:${sessionId}:${clientRequestId}`;
       if (!localRequests.has(key)) {
-        await recoverDurableTail(sessionId);
+        await requireSettledModelTurn(sessionId);
         const expected = outstandingInstalledEveRequests(
           localSessionEvents.get(sessionId) ?? [],
         ).map(({ requestId }) => requestId);
@@ -461,7 +575,7 @@ export function createLocalEveSessionService(
           toEveInputResponses(responses),
         );
         state.restartInterrupted.delete(sessionId);
-        consumeResponse(state, sessionId, result);
+        consumeResponse(state, sessionId, result, modelTurnTimeoutMs);
         localRequests.set(key, sessionId);
       }
       touchSession(sessionId);

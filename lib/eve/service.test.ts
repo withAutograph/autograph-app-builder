@@ -506,6 +506,123 @@ describe("local Eve acceptance", () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
+  it("cancels one stalled model turn and exposes a retryable paused result", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<void>(() => undefined);
+      const response = {
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-model-stalled" },
+          } as MessageStreamEvent;
+          await never;
+        },
+      };
+      const durableEvents = [
+        {
+          type: "step.started",
+          data: { turnId: "turn-model-stalled" },
+        },
+      ] as MessageStreamEvent[];
+      const session = {
+        state: { sessionId: "wrun_model_stalled" },
+        snapshot: vi.fn(async () => ({
+          events: durableEvents,
+          session: {
+            sessionId: "wrun_model_stalled",
+            streamIndex: durableEvents.length,
+          },
+        })),
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService(
+        {
+          sessions: {
+            create: vi.fn(async () => ({ session, response })),
+            attach: vi.fn(() => session),
+          } as never,
+        },
+        { stateGeneration: "model-turn-timeout", modelTurnTimeoutMs: 10 },
+      );
+
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "model-turn-timeout-start",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      await Promise.resolve();
+
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({
+        status: "waiting",
+        error: {
+          code: "model_turn_interrupted",
+          message:
+            "Autograph paused because a response took too long. Your progress is saved; try again in a moment.",
+        },
+      });
+      await expect(
+        service.send({
+          sessionId: started.sessionId,
+          message: "Continue",
+          clientRequestId: "model-turn-timeout-retry",
+        }),
+      ).rejects.toThrow("previous Autograph response is still settling");
+      expect(response.cancel).toHaveBeenCalledTimes(1);
+      expect(session.send).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not cancel a model turn that reaches its normal waiting boundary", async () => {
+    vi.useFakeTimers();
+    try {
+      const response = {
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-model-healthy" },
+          } as MessageStreamEvent;
+          yield { type: "session.waiting", data: {} } as MessageStreamEvent;
+        },
+      };
+      const session = {
+        state: { sessionId: "wrun_model_healthy" },
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService(
+        {
+          sessions: {
+            create: vi.fn(async () => ({ session, response })),
+            attach: vi.fn(() => session),
+          } as never,
+        },
+        { stateGeneration: "model-turn-healthy", modelTurnTimeoutMs: 10 },
+      );
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "model-turn-healthy-start",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "waiting" });
+      expect(response.cancel).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps get, send, and cancel independent while rejecting a non-outstanding response", async () => {
     let publishCancellation!: () => void;
     const cancelled = new Promise<void>((resolve) => {
