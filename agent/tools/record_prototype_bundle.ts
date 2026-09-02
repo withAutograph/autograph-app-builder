@@ -5,6 +5,7 @@ import {
   prototypeArtifactReceipt,
   recordPrototypeArtifactBundle,
 } from "@/lib/agent/prototype-artifacts";
+import { developmentPrototypeBundle } from "@/lib/agent/development-prototype";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -15,19 +16,46 @@ import {
 
 import acceptAppSpec from "./accept_app_spec";
 
-export default defineTool({
-  description:
-    "Record one complete, usable new-app prototype bundle and continue silently through implementation planning in one internal operation. Prefer this normal creation path over three record_prototype_artifact calls. Before calling, provide a complete build-ready internal design with each heading exactly once: ## Status and prototype; ## User and outcome; ## Interfaces and navigation; ## Controls and behavior; ## Data model; ## Integrations and reconciliation; ## Temporal semantics; ## Writes, review, and authority; ## Access and tenancy; ## Agent behavior; ## Operational states; ## Defaults, non-goals, and risks; ## Acceptance walkthrough; ## Build handoff. End Build handoff with one closed json block using status build-ready. It never writes the target repository.",
-  inputSchema: z.strictObject({
+const localDevelopment =
+  process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+
+const bundleInputSchema = z
+  .object({
     appId: z.string().min(1),
-    indexHtml: z.string().min(1).max(262_144),
-    decisionsMarkdown: z.string().min(1).max(262_144),
-    appSpecMarkdown: z.string().min(1).max(262_144),
-  }),
-  async execute(
-    { appId, indexHtml, decisionsMarkdown, appSpecMarkdown },
-    ctx,
-  ) {
+    indexHtml: z.string().min(1).max(262_144).optional(),
+    decisionsMarkdown: z.string().min(1).max(262_144).optional(),
+    appSpecMarkdown: z.string().min(1).max(262_144).optional(),
+    brief: z.string().min(1).max(8_000).optional(),
+    productName: z.string().min(1).max(120).optional(),
+    interfacePattern: z.enum(["queue", "dashboard", "form"]).optional(),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    const authored = [
+      input.indexHtml,
+      input.decisionsMarkdown,
+      input.appSpecMarkdown,
+    ];
+    if (authored.every((value) => value !== undefined)) return;
+    if (
+      authored.every((value) => value === undefined) &&
+      input.brief !== undefined
+    )
+      return;
+    context.addIssue({
+      code: "custom",
+      message:
+        "Provide either the complete authored bundle or one concise development brief.",
+    });
+  });
+
+export default defineTool({
+  description: localDevelopment
+    ? "Local development fast path: provide appId, brief, an optional productName, and an optional interfacePattern. This tool deterministically expands the concise product choices into a usable Browser prototype and build-ready internal design, then continues planning. Do not author HTML, decisions, or an internal design payload in local development. It never writes the target repository."
+    : "Record one complete, usable new-app prototype bundle and continue silently through implementation planning in one internal operation. Prefer this normal creation path over three record_prototype_artifact calls. Before calling, provide a complete build-ready internal design with each heading exactly once: ## Status and prototype; ## User and outcome; ## Interfaces and navigation; ## Controls and behavior; ## Data model; ## Integrations and reconciliation; ## Temporal semantics; ## Writes, review, and authority; ## Access and tenancy; ## Agent behavior; ## Operational states; ## Defaults, non-goals, and risks; ## Acceptance walkthrough; ## Build handoff. End Build handoff with one closed json block using status build-ready. It never writes the target repository.",
+  inputSchema: bundleInputSchema,
+  async execute(input, ctx) {
+    const { appId } = input;
     if (!validAppId(appId))
       throw new Error("App id must be one lowercase kebab-case segment.");
     const current = appBuilderWorkflowState.get();
@@ -40,12 +68,32 @@ export default defineTool({
       throw new Error(
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
       );
+    const compactBundle =
+      input.brief === undefined
+        ? undefined
+        : localDevelopment
+          ? developmentPrototypeBundle({
+              appId,
+              brief: input.brief,
+              ...(input.productName === undefined
+                ? {}
+                : { productName: input.productName }),
+              ...(input.interfacePattern === undefined
+                ? {}
+                : { interfacePattern: input.interfacePattern }),
+            })
+          : undefined;
+    if (input.brief !== undefined && compactBundle === undefined)
+      throw new Error(
+        "Concise prototype generation is available only in local development.",
+      );
     const recorded = recordPrototypeArtifactBundle({
       artifacts: current.artifacts,
       appId,
-      indexHtml,
-      decisionsMarkdown,
-      appSpecMarkdown,
+      indexHtml: compactBundle?.indexHtml ?? input.indexHtml!,
+      decisionsMarkdown:
+        compactBundle?.decisionsMarkdown ?? input.decisionsMarkdown!,
+      appSpecMarkdown: compactBundle?.appSpecMarkdown ?? input.appSpecMarkdown!,
       sessionId: ctx.session.id,
       callId: ctx.callId,
       expectedAppId:
