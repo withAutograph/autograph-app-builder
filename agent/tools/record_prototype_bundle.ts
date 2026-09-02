@@ -28,6 +28,28 @@ const bundleInputSchema = z
     brief: z.string().min(1).max(8_000).optional(),
     productName: z.string().min(1).max(120).optional(),
     interfacePattern: z.enum(["queue", "dashboard", "form"]).optional(),
+    product: z
+      .object({
+        outcome: z.string().min(1).max(240).optional(),
+        itemLabels: z.array(z.string().min(1).max(80)).min(1).max(3).optional(),
+        filters: z.array(z.string().min(1).max(80)).min(1).max(4).optional(),
+        keyFacts: z
+          .array(
+            z
+              .object({
+                label: z.string().min(1).max(60),
+                value: z.string().min(1).max(100),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(4)
+          .optional(),
+        primaryAction: z.string().min(1).max(80).optional(),
+        states: z.array(z.string().min(1).max(80)).min(1).max(4).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((input, context) => {
@@ -51,7 +73,7 @@ const bundleInputSchema = z
 
 export default defineTool({
   description: localDevelopment
-    ? "Local development fast path: provide appId, brief, an optional productName, and an optional interfacePattern. This tool deterministically expands the concise product choices into a usable Browser prototype and build-ready internal design, then continues planning. Do not author HTML, decisions, or an internal design payload in local development. It never writes the target repository."
+    ? "Local development fast path: provide appId, brief, an optional productName, optional interfacePattern, and optional small product object (outcome, itemLabels, filters, keyFacts, primaryAction, states). This tool deterministically expands those concise product choices into a usable Browser prototype and build-ready internal design, then continues planning. Do not author HTML, decisions, or an internal design payload in local development. It never writes the target repository."
     : "Record one complete, usable new-app prototype bundle and continue silently through implementation planning in one internal operation. Prefer this normal creation path over three record_prototype_artifact calls. Before calling, provide a complete build-ready internal design with each heading exactly once: ## Status and prototype; ## User and outcome; ## Interfaces and navigation; ## Controls and behavior; ## Data model; ## Integrations and reconciliation; ## Temporal semantics; ## Writes, review, and authority; ## Access and tenancy; ## Agent behavior; ## Operational states; ## Defaults, non-goals, and risks; ## Acceptance walkthrough; ## Build handoff. End Build handoff with one closed json block using status build-ready. It never writes the target repository.",
   inputSchema: bundleInputSchema,
   async execute(input, ctx) {
@@ -81,6 +103,9 @@ export default defineTool({
               ...(input.interfacePattern === undefined
                 ? {}
                 : { interfacePattern: input.interfacePattern }),
+              ...(input.product === undefined
+                ? {}
+                : { product: input.product }),
             })
           : undefined;
     if (input.brief !== undefined && compactBundle === undefined)

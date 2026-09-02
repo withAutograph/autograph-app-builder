@@ -81,10 +81,12 @@ isolated workspace.
    that normal path into three sequential `record_prototype_artifact` calls.
    In the local development runtime only, use the compact
    `record_prototype_bundle` input instead: provide the inferred `appId`, the
-   concise product `brief`, optional `productName`, and optional
-   `interfacePattern`. The local builder expands those product choices into the
-   same usable Browser prototype and internal design. Do not generate or send
-   large HTML, decisions, or internal-design payloads in that local path.
+   concise product `brief`, optional `productName`, optional `interfacePattern`,
+   and, when it improves the result, a small `product` object containing only
+   outcome, item labels, filters, key facts, primary action, and states. The
+   local builder expands those product choices into the same usable Browser
+   prototype and internal design. Do not generate or send large HTML, decisions,
+   or internal-design payloads in that local path.
    Before calling, make the internal design complete in one pass: include each
    required heading exactly once (Status and prototype, User and outcome,
    Interfaces and navigation, Controls and behavior, Data model, Integrations

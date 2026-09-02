@@ -9,9 +9,23 @@ describe("development prototype bundle", () => {
       appId: "stock-exceptions",
       productName: "Stock Exceptions",
       brief: "Help operations analysts resolve stock exceptions.",
+      product: {
+        outcome: "Investigate stock exceptions before they delay fulfillment.",
+        itemLabels: ["Low inventory: A-104", "Transfer delayed: B-210"],
+        filters: ["My queue", "Critical"],
+        keyFacts: [
+          { label: "Warehouse", value: "Austin" },
+          { label: "Impact", value: "12 orders" },
+        ],
+        primaryAction: "Assign resolution",
+        states: ["Critical", "Investigating", "Resolved"],
+      },
     });
     expect(bundle.indexHtml).toContain("Stock Exceptions");
     expect(bundle.indexHtml).toContain("review queue");
+    expect(bundle.indexHtml).toContain("Low inventory: A-104");
+    expect(bundle.indexHtml).toContain("Austin");
+    expect(bundle.indexHtml).toContain("Assign resolution");
     expect(bundle.indexHtml.length).toBeLessThan(8_000);
     expect(bundle.decisionsMarkdown).toContain("Help operations analysts");
     expect(validateBuildReadyAppSpec(bundle.appSpecMarkdown)).toEqual({
