@@ -39,7 +39,12 @@ import {
   type HostedAccessTokenVerifier,
   type HostedMcpAuthConfig,
 } from "./request-auth";
-import { safeToolError, SESSION_RESOURCE_URI, toolResult } from "./result";
+import {
+  McpToolAuthenticationRequiredError,
+  safeToolError,
+  SESSION_RESOURCE_URI,
+  toolResult,
+} from "./result";
 import { MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
 
 const sessionResourceMeta = {
@@ -174,8 +179,27 @@ export function withHostedBuilderHandoffs(input: {
 
 export function createAutographMcpHandler(
   service: EveSessionService,
-  options: { requestUrl?: string } = {},
+  options: { requestUrl?: string; advertiseOauth?: boolean } = {},
 ) {
+  const toolAuthMeta = (
+    operation: string,
+    meta: Record<string, unknown> = {},
+  ) =>
+    options.advertiseOauth
+      ? {
+          _meta: {
+            ...meta,
+            securitySchemes: [
+              {
+                type: "oauth2" as const,
+                scopes: ["autograph:session", `autograph:${operation}`],
+              },
+            ],
+          },
+        }
+      : Object.keys(meta).length > 0
+        ? { _meta: meta }
+        : {};
   const present = (result: EveSessionListResult | EveSessionResult) =>
     "kind" in result || options.requestUrl === undefined
       ? result
@@ -210,6 +234,7 @@ export function createAutographMcpHandler(
           "Start a durable app build and return immediately; check progress separately.",
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
+        ...toolAuthMeta("start"),
       },
       async (input) => {
         try {
@@ -230,6 +255,7 @@ export function createAutographMcpHandler(
           "List recent app builds, or read the next page of one app build's progress and requests.",
         inputSchema: eveGetInputSchema,
         outputSchema: eveGetResultSchema,
+        ...toolAuthMeta("get"),
       },
       async (input) => {
         try {
@@ -258,6 +284,7 @@ export function createAutographMcpHandler(
           "Send additional direction while the current app build is waiting.",
         inputSchema: eveSendInputSchema,
         outputSchema: eveSessionResultSchema,
+        ...toolAuthMeta("send"),
       },
       async (input) => {
         try {
@@ -278,7 +305,9 @@ export function createAutographMcpHandler(
           "Answer the complete outstanding set of App Builder questions in one response.",
         inputSchema: eveRespondInputSchema,
         outputSchema: eveSessionResultSchema,
-        _meta: { ui: { visibility: ["model", "app"] } },
+        ...toolAuthMeta("respond", {
+          ui: { visibility: ["model", "app"] },
+        }),
       },
       async (input) => {
         try {
@@ -298,6 +327,7 @@ export function createAutographMcpHandler(
         description: "Request cancellation of the active app build.",
         inputSchema: eveCancelInputSchema,
         outputSchema: eveSessionResultSchema,
+        ...toolAuthMeta("cancel"),
       },
       async (input) => {
         try {
@@ -363,6 +393,30 @@ const discoveryOnlyService = new Proxy({} as EveSessionService, {
     };
   },
 });
+
+function authenticationRequiredService(challenge: string) {
+  return new Proxy({} as EveSessionService, {
+    get() {
+      return async () => {
+        throw new McpToolAuthenticationRequiredError(challenge);
+      };
+    },
+  });
+}
+
+async function isToolCallRequest(request: Request): Promise<boolean> {
+  try {
+    const body: unknown = await request.clone().json();
+    return (
+      typeof body === "object" &&
+      body !== null &&
+      "method" in body &&
+      body.method === "tools/call"
+    );
+  } catch {
+    return false;
+  }
+}
 
 async function hostedServiceForRequest(
   request: Request,
@@ -456,16 +510,31 @@ export function createMcpRequestHandler(
       if (await isPublicDiscoveryRequest(request)) {
         return createAutographMcpHandler(discoveryOnlyService, {
           requestUrl: request.url,
+          advertiseOauth: true,
         })(request);
       }
       const selected = await hostedServiceForRequest(
         request,
         input.hostedRuntime,
       );
-      if (selected instanceof Response) return selected;
-      return createAutographMcpHandler(selected, { requestUrl: request.url })(
-        request,
-      );
+      if (selected instanceof Response) {
+        const challenge = selected.headers.get("www-authenticate");
+        if (
+          challenge !== null &&
+          (selected.status === 401 || selected.status === 403) &&
+          (await isToolCallRequest(request))
+        ) {
+          return createAutographMcpHandler(
+            authenticationRequiredService(challenge),
+            { requestUrl: request.url, advertiseOauth: true },
+          )(request);
+        }
+        return selected;
+      }
+      return createAutographMcpHandler(selected, {
+        requestUrl: request.url,
+        advertiseOauth: true,
+      })(request);
     }
     if (mode === "local") {
       try {

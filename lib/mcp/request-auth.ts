@@ -240,7 +240,11 @@ export function unauthorizedResponse(config: HostedMcpAuthConfig): Response {
       status: 401,
       headers: {
         "Cache-Control": "no-store",
-        "WWW-Authenticate": challenge(config, ['error="invalid_token"']),
+        "WWW-Authenticate": challenge(config, [
+          'error="invalid_token"',
+          'error_description="Sign in to Autograph App Builder to continue"',
+          'scope="autograph:session"',
+        ]),
       },
     },
   );
@@ -255,6 +259,7 @@ export function forbiddenResponse(config: HostedMcpAuthConfig): Response {
         "Cache-Control": "no-store",
         "WWW-Authenticate": challenge(config, [
           'error="insufficient_scope"',
+          'error_description="Reconnect Autograph App Builder to grant the required permissions"',
           'scope="autograph:session"',
         ]),
       },

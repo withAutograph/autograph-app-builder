@@ -135,7 +135,8 @@ async function mcpResult<T>(response: Response): Promise<T> {
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
   const payload = JSON.parse(data ?? body) as { result?: T };
-  if (payload.result === undefined) throw new Error("MCP result was missing.");
+  if (payload.result === undefined)
+    throw new Error(`MCP result was missing: ${body}`);
   return payload.result;
 }
 
@@ -624,10 +625,26 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime,
     });
 
-    const discovery = await mcpResult<{ tools: Array<{ name: string }> }>(
-      await handler(mcpRequest({}, "tools/list")),
-    );
+    const discovery = await mcpResult<{
+      tools: Array<{
+        name: string;
+        _meta?: {
+          securitySchemes?: Array<{ type: string; scopes?: string[] }>;
+        };
+      }>;
+    }>(await handler(mcpRequest({}, "tools/list")));
     expect(discovery.tools.map(({ name }) => name).sort()).toEqual(exactTools);
+    for (const tool of discovery.tools) {
+      expect(tool._meta?.securitySchemes).toEqual([
+        {
+          type: "oauth2",
+          scopes: [
+            "autograph:session",
+            `autograph:${tool.name.replace("autograph_", "")}`,
+          ],
+        },
+      ]);
+    }
     expect(verifier).not.toHaveBeenCalled();
     expect(membership).not.toHaveBeenCalled();
 
@@ -637,9 +654,21 @@ describe("request-scoped MCP service selection", () => {
         arguments: { cursor: 0, limit: 20 },
       }),
     );
-    expect(protectedCall.status).toBe(401);
-    expect(protectedCall.headers.get("www-authenticate")).toContain(
+    expect(protectedCall.status).toBe(200);
+    const authResult = await mcpResult<{
+      isError: boolean;
+      _meta: { "mcp/www_authenticate": string[] };
+      structuredContent: { error: { code: string } };
+    }>(protectedCall);
+    expect(authResult.isError).toBe(true);
+    expect(authResult.structuredContent.error.code).toBe(
+      "authentication_required",
+    );
+    expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
       'error="invalid_token"',
+    );
+    expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
+      'error_description="Sign in to Autograph App Builder to continue"',
     );
   });
 
@@ -671,7 +700,7 @@ describe("request-scoped MCP service selection", () => {
     expect(response.status).toBe(503);
   });
 
-  it("rejects missing and malformed credentials with the same 401 challenge", async () => {
+  it("returns the same tool-level auth challenge for missing and malformed credentials", async () => {
     const verifier = vi.fn(async () => claims());
     const hostedRuntime = runtime();
     hostedRuntime.verifier = { verify: verifier };
@@ -680,17 +709,34 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime,
     });
     const responses = await Promise.all([
-      handler(mcpRequest({}, "tools/call")),
-      handler(mcpRequest({ authorization: "Bearer two tokens" }, "tools/call")),
-      handler(mcpRequest({ authorization: "Basic token" }, "tools/call")),
+      handler(
+        mcpRequest({}, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
+        }),
+      ),
+      handler(
+        mcpRequest({ authorization: "Bearer two tokens" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
+        }),
+      ),
+      handler(
+        mcpRequest({ authorization: "Basic token" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
+        }),
+      ),
     ]);
     expect(verifier).not.toHaveBeenCalled();
     for (const response of responses) {
-      expect(response.status).toBe(401);
-      expect(response.headers.get("www-authenticate")).toContain(
+      expect(response.status).toBe(200);
+      const result = await mcpResult<{
+        _meta: { "mcp/www_authenticate": string[] };
+      }>(response);
+      expect(result._meta["mcp/www_authenticate"][0]).toContain(
         'error="invalid_token"',
       );
-      await expect(response.json()).resolves.toEqual({ error: "unauthorized" });
     }
   });
 
@@ -700,9 +746,19 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime: runtime({ verifierError: new Error("bad token") }),
     });
     const invalidResponse = await invalid(
-      mcpRequest({ authorization: "Bearer token" }, "tools/call"),
+      mcpRequest({ authorization: "Bearer token" }, "tools/call", {
+        name: "autograph_get",
+        arguments: { cursor: 0, limit: 20 },
+      }),
     );
-    expect(invalidResponse.status).toBe(401);
+    expect(invalidResponse.status).toBe(200);
+    expect(
+      (
+        await mcpResult<{
+          _meta: { "mcp/www_authenticate": string[] };
+        }>(invalidResponse)
+      )._meta["mcp/www_authenticate"][0],
+    ).toContain('error="invalid_token"');
 
     const insufficient = createMcpRequestHandler({
       environment: { EVE_HOSTED_ADAPTER: "1" },
@@ -711,12 +767,19 @@ describe("request-scoped MCP service selection", () => {
       }),
     });
     const insufficientResponse = await insufficient(
-      mcpRequest({ authorization: "Bearer token" }, "tools/call"),
+      mcpRequest({ authorization: "Bearer token" }, "tools/call", {
+        name: "autograph_get",
+        arguments: { cursor: 0, limit: 20 },
+      }),
     );
-    expect(insufficientResponse.status).toBe(403);
-    expect(insufficientResponse.headers.get("www-authenticate")).toContain(
-      'error="insufficient_scope"',
-    );
+    expect(insufficientResponse.status).toBe(200);
+    expect(
+      (
+        await mcpResult<{
+          _meta: { "mcp/www_authenticate": string[] };
+        }>(insufficientResponse)
+      )._meta["mcp/www_authenticate"][0],
+    ).toContain('error="insufficient_scope"');
   });
 
   it("makes denied and membership-error workspaces indistinguishable", async () => {
