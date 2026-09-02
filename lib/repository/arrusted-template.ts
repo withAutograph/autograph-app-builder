@@ -38,7 +38,6 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_HOSTS = ["github.com"] as const;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_CREDENTIAL = ".app-builder/arrusted-template-reader-token";
-const SANDBOX_CLONE_ASKPASS = ".app-builder/arrusted-template-reader-askpass";
 
 export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
 
@@ -315,15 +314,12 @@ function sandboxCloneCommand() {
   const script = [
     "set -eu",
     `credential=/workspace/${SANDBOX_CLONE_CREDENTIAL}`,
-    `askpass=/workspace/${SANDBOX_CLONE_ASKPASS}`,
-    'cleanup() { rm -f "$askpass" "$credential"; }',
+    'cleanup() { rm -f "$credential"; }',
     "trap cleanup EXIT HUP INT TERM",
     'test -f "$credential"',
-    'test -f "$askpass"',
     'chmod 600 "$credential"',
-    'chmod 700 "$askpass"',
     `rm -rf ${SANDBOX_WORKSPACE}`,
-    `git -c protocol.allow=never -c protocol.https.allow=always -c credential.helper= -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main ${remote} ${SANDBOX_WORKSPACE}`,
+    `git -c protocol.allow=never -c protocol.https.allow=always -c 'credential.helper=store --file=/workspace/${SANDBOX_CLONE_CREDENTIAL}' -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main ${remote} ${SANDBOX_WORKSPACE}`,
     "cleanup",
     `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = ${remote}`,
     `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse refs/remotes/origin/main)"`,
@@ -333,7 +329,7 @@ function sandboxCloneCommand() {
     `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
     `node -e ${shellQuote(sandboxCloneInspectionProgram)}`,
   ].join("\n");
-  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/workspace/${SANDBOX_CLONE_ASKPASS} APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE=/workspace/${SANDBOX_CLONE_CREDENTIAL} SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
+  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
 }
 
 function sandboxCloneReinspectionCommand() {
@@ -371,19 +367,7 @@ async function cloneCanonicalArrustedWorkspace(input: {
   try {
     await input.sandbox.writeTextFile({
       path: SANDBOX_CLONE_CREDENTIAL,
-      content: `${input.token}\n`,
-    });
-    await input.sandbox.writeTextFile({
-      path: SANDBOX_CLONE_ASKPASS,
-      content: [
-        "#!/bin/sh",
-        'case "$1" in',
-        '  Username*) printf "%s\\n" "x-access-token" ;;',
-        '  Password*) sed -n "1p" "$APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE" ;;',
-        "  *) exit 1 ;;",
-        "esac",
-        "",
-      ].join("\n"),
+      content: `https://x-access-token:${encodeURIComponent(input.token)}@github.com\n`,
     });
     await input.sandbox.setNetworkPolicy({ allow: [...SANDBOX_CLONE_HOSTS] });
     result = await input.sandbox.run({
@@ -393,13 +377,10 @@ async function cloneCanonicalArrustedWorkspace(input: {
     });
   } finally {
     try {
-      await Promise.all([
-        input.sandbox.removePath({ path: SANDBOX_CLONE_ASKPASS, force: true }),
-        input.sandbox.removePath({
-          path: SANDBOX_CLONE_CREDENTIAL,
-          force: true,
-        }),
-      ]);
+      await input.sandbox.removePath({
+        path: SANDBOX_CLONE_CREDENTIAL,
+        force: true,
+      });
     } finally {
       await input.sandbox.setNetworkPolicy("deny-all");
     }
