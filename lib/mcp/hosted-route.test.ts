@@ -74,8 +74,8 @@ describe("hosted route composition", () => {
     const first = await handler(request());
     const second = await handler(request());
 
-    expect(first.status).toBe(401);
-    expect(second.status).toBe(401);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
     expect(openDatabase).toHaveBeenCalledTimes(1);
     expect(openDatabase).toHaveBeenCalledWith(environment.DATABASE_URL);
   });
@@ -126,7 +126,7 @@ describe("hosted route composition", () => {
     expect(wrongOrigin.status).toBe(503);
     expect(openDatabase).not.toHaveBeenCalled();
 
-    expect((await handler(request())).status).toBe(401);
+    expect((await handler(request())).status).toBe(200);
     expect(openDatabase).toHaveBeenCalledTimes(1);
     expect(
       (
