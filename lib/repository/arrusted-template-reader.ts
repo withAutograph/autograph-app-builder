@@ -41,7 +41,7 @@ function privateTemplateRepository(value: unknown) {
   );
 }
 
-function exactReaderPermissions(value: unknown) {
+function readOnlyReaderPermissions(value: unknown) {
   if (!record(value)) return false;
   if (
     value.contents !== "read" ||
@@ -49,11 +49,7 @@ function exactReaderPermissions(value: unknown) {
     (value.metadata !== undefined && value.metadata !== "read")
   )
     return false;
-  return Object.entries(value).every(
-    ([key, permission]) =>
-      (key === "metadata" || key === "contents" || key === "checks") &&
-      permission === "read",
-  );
+  return Object.values(value).every((permission) => permission === "read");
 }
 
 function exactTemplateRepositoryIds(value: unknown) {
@@ -129,7 +125,7 @@ export function createArrustedTemplateReader(input: {
           (authentication.repositorySelection !== "all" &&
             authentication.repositorySelection !== "selected") ||
           !exactTemplateRepositoryIds(authentication.repositoryIds) ||
-          !exactReaderPermissions(authentication.permissions)
+          !readOnlyReaderPermissions(authentication.permissions)
         )
           unavailable();
         const token = parsedToken.data;
