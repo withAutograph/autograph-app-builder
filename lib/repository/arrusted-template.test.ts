@@ -6,6 +6,7 @@ import type { SandboxSession } from "eve/sandbox";
 
 import {
   acquireCanonicalArrustedTemplate,
+  classifySandboxCloneFailure,
   inspectCanonicalArrustedSandboxWorkspace,
   templateReadinessAttestationDigest,
 } from "./arrusted-template";
@@ -13,6 +14,18 @@ import type { ArrustedTemplateReader } from "./arrusted-template-reader";
 import { SUPPORTED_TEMPLATE_INPUT_PATHS } from "./supported-template";
 
 const contractPaths = SUPPORTED_TEMPLATE_INPUT_PATHS;
+
+describe("sandbox clone failure classification", () => {
+  it.each([
+    ["fatal: Authentication failed", "github-auth"],
+    ["fatal: repository not found", "github-auth"],
+    ["fatal: could not resolve host: github.com", "network"],
+    ["operation timed out", "timeout"],
+    ["fatal: unexpected git failure", "git-command"],
+  ])("classifies a sanitized provider failure", (stderr, expected) => {
+    expect(classifySandboxCloneFailure(stderr.toLowerCase())).toBe(expected);
+  });
+});
 
 function eligibleContents() {
   return {
@@ -239,7 +252,7 @@ describe("canonical Arrusted template readiness", () => {
       ),
     ).toHaveLength(1);
     expect(run.mock.calls[0]?.[0].command).toContain(
-      "clone --no-checkout --no-recurse-submodules --single-branch --branch main",
+      "clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main",
     );
     expect(run.mock.calls[0]?.[0].command).toContain("checkout --detach");
     expect(run.mock.calls[0]?.[0].command).toContain(
