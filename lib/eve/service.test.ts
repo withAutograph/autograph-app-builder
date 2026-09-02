@@ -210,6 +210,58 @@ describe("local Eve acceptance", () => {
     expect(snapshot).not.toHaveBeenCalled();
   });
 
+  it("still bounds a model turn after its response iterator closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<void>(() => undefined);
+      const response = {
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-closed-response" },
+          } as MessageStreamEvent;
+        },
+      };
+      const session = {
+        state: { sessionId: "wrun_closed_response", streamIndex: 0 },
+        stream: vi.fn(async function* () {
+          await never;
+        }),
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService(
+        {
+          sessions: {
+            create: vi.fn(async () => ({ session, response })),
+            attach: vi.fn(() => session),
+          } as never,
+        },
+        { stateGeneration: "closed-response-timeout", modelTurnTimeoutMs: 10 },
+      );
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "closed-response-timeout-start",
+      });
+
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({
+        status: "waiting",
+        error: { code: "model_turn_interrupted" },
+      });
+      expect(session.cancel).toHaveBeenCalledWith({
+        turnId: "turn-closed-response",
+      });
+      expect(response.cancel).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("preserves buffered settlement across a Next development module reload", async () => {
     const settledEvents = [
       {

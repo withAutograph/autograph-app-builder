@@ -283,6 +283,15 @@ function consumeResponse(
     if (modelTurnTimer !== undefined) clearTimeout(modelTurnTimer);
     modelTurnTimer = undefined;
   };
+  const settleResponseBoundary = () => {
+    modelTurnActive = false;
+    clearModelTurnTimer();
+    if (state.activeResponses.get(sessionId) === response)
+      state.activeResponses.delete(sessionId);
+    if (state.modelInterruptions.get(sessionId)?.response === response)
+      state.modelInterruptions.delete(sessionId);
+    state.recoveryRequired.delete(sessionId);
+  };
   const armModelTurnTimer = () => {
     clearModelTurnTimer();
     modelTurnTimer = setTimeout(() => {
@@ -320,8 +329,7 @@ function consumeResponse(
       case "session.completed":
       case "session.failed":
       case "turn.cancelled":
-        modelTurnActive = false;
-        clearModelTurnTimer();
+        settleResponseBoundary();
         return;
       default:
         if (modelTurnActive) armModelTurnTimer();
@@ -343,16 +351,7 @@ function consumeResponse(
       if (deriveInstalledEveStatus(events) === "working") {
         state.recoveryRequired.add(sessionId);
         options.consumeDurableTail(observeEvent);
-      } else clearModelTurnTimer();
-      const interruption = state.modelInterruptions.get(sessionId);
-      if (
-        interruption?.response === response &&
-        deriveInstalledEveStatus(events) !== "working"
-      )
-        state.modelInterruptions.delete(sessionId);
-      if (state.activeResponses.get(sessionId) === response) {
-        state.activeResponses.delete(sessionId);
-      }
+      } else settleResponseBoundary();
     }
   })();
 }
