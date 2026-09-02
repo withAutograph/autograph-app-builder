@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appSpecRepairDiagnostic,
   BUILD_READY_HANDOFF_EXAMPLE,
+  normalizeBuildReadyAppSpec,
   REQUIRED_APP_SPEC_HEADINGS,
   validateBuildReadyAppSpec,
 } from "./app-spec-validation";
@@ -49,6 +50,28 @@ describe("build-ready AppSpec validation", () => {
         `${completeAppSpec().replaceAll("\n", "\r\n")}\r\n  `,
       ),
     ).toEqual({ valid: true });
+  });
+
+  it("normalizes mechanical handoff drift before validation", () => {
+    const normalized = normalizeBuildReadyAppSpec(
+      completeAppSpec({
+        status: "ready",
+        owner: " operations ",
+        schema: { kind: "operational", entities: ["exception"] },
+        additionalPublicRoutes: ["/z", "/bad/[id]", "/a", "/a"],
+        optionalCapabilities: {
+          integrations: ["inventory-sync", "inventory-sync", "Bad"],
+          hostedResources: ["relational-database"],
+        },
+        ignored: true,
+      }),
+    );
+
+    expect(validateBuildReadyAppSpec(normalized)).toEqual({ valid: true });
+    expect(normalized).toContain('"kind": "kernel"');
+    expect(normalized).not.toContain("entities");
+    expect(normalized).not.toContain("/bad/[id]");
+    expect(normalized.indexOf('"/a"')).toBeLessThan(normalized.indexOf('"/z"'));
   });
 
   it.each([

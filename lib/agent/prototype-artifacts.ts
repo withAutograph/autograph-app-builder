@@ -1,6 +1,7 @@
 import type { PrototypeArtifact } from "./workflow-state";
 import {
   appSpecRepairDiagnostic,
+  normalizeBuildReadyAppSpec,
   validateBuildReadyAppSpec,
 } from "./app-spec-validation";
 import { sha256, validAppId } from "./workflow-state";
@@ -186,6 +187,7 @@ export function recordPrototypeArtifactBundle(input: {
   appSpec: PrototypeArtifact;
   reused: boolean;
 } {
+  const appSpecMarkdown = normalizeBuildReadyAppSpec(input.appSpecMarkdown);
   let artifacts = input.artifacts;
   let reused = true;
   for (const artifact of [
@@ -202,7 +204,7 @@ export function recordPrototypeArtifactBundle(input: {
     {
       path: `prototype/${input.appId}/app-spec.md`,
       mediaType: "text/markdown" as const,
-      content: input.appSpecMarkdown,
+      content: appSpecMarkdown,
     },
   ]) {
     const recorded = recordPrototypeArtifactRevision({
@@ -220,7 +222,7 @@ export function recordPrototypeArtifactBundle(input: {
     appId: input.appId,
   });
   if (appSpec === undefined) {
-    const validation = validateBuildReadyAppSpec(input.appSpecMarkdown);
+    const validation = validateBuildReadyAppSpec(appSpecMarkdown);
     if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
     throw new Error(
       "The prototype bundle must contain a complete build-ready AppSpec.",
