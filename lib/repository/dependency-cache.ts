@@ -47,11 +47,6 @@ export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 export const LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT =
   ".app-builder/template-dependency-cache";
 export const LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION = 3;
-const DEVELOPMENT_TOOLCHAIN_PATH =
-  "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin";
-const DEVELOPMENT_CARGO_HOME = "/workspace/.app-builder/toolchain/cargo-home";
-const DEVELOPMENT_CARGO_CONFIG = `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`;
-
 const REQUIRED_EXECUTION_PACKAGES = [
   ".bin/next",
   ".bin/turbo",
@@ -1500,22 +1495,10 @@ export async function materializeOfflineDependencies(input: {
     );
     if (resolution.exitCode !== 0)
       throw new Error("The required offline dependency closure is incomplete.");
-    if (!hostedSeedDependencyCacheEnabled(environment)) {
-      const rustToolchain = await input.sandbox.run({
-        command: developmentExecution
-          ? `PATH=${DEVELOPMENT_TOOLCHAIN_PATH} CARGO_HOME=${DEVELOPMENT_CARGO_HOME} CARGO_NET_OFFLINE=true sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test -r ${DEVELOPMENT_CARGO_CONFIG} && cargo metadata --config ${DEVELOPMENT_CARGO_CONFIG} --offline --format-version 1 --locked --all-features >/dev/null'`
-          : `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder exec --no-deps -- sh -c 'test "$(rustc --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && test "$(cargo --version | cut -d" " -f2)" = "${ARRUSTED_RUST_VERSION}" && CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --locked --all-features >/dev/null'`,
-        workingDirectory: `/workspace/${root}`,
-        abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
-      });
-      boundedOutput(
-        rustToolchain.stdout,
-        rustToolchain.stderr,
-        "Offline Rust toolchain inspection",
-      );
-      if (rustToolchain.exitCode !== 0)
-        throw new Error("The required offline Rust toolchain is incomplete.");
-    }
+    // Identity and planning invoke only the fixed Node/Bun commands above.
+    // Rust belongs to unrelated target capabilities and must not turn a
+    // planning walkthrough into a toolchain gate. A future Rust-backed
+    // command must opt into its own explicit capability check.
   }
   return {
     ...observed,

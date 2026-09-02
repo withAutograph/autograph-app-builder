@@ -1119,22 +1119,14 @@ describe("offline dependency cache", () => {
       ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
     );
     expect(resolutionCommand).toContain('result?.path!=="/vendor"');
-    const rustCommand = run.mock.calls
-      .map(([request]) => request.command as string)
-      .find((command) => command.includes("cargo metadata --format-version 1"));
-    expect(rustCommand).toBeDefined();
-    if (rustCommand === undefined) throw new Error("missing Cargo check");
-    expect(rustCommand).toContain("MISE_AUTO_INSTALL=false");
-    expect(rustCommand).toContain("MISE_EXEC_AUTO_INSTALL=false");
-    expect(rustCommand).toContain("MISE_TASK_RUN_AUTO_INSTALL=false");
-    expect(rustCommand).toContain("mise --env app-builder exec --no-deps");
-    expect(rustCommand).toContain("CARGO_NET_OFFLINE=true");
-    expect(rustCommand).toContain(
-      "cargo metadata --format-version 1 --locked --all-features",
-    );
+    expect(
+      run.mock.calls.some(([request]) =>
+        (request.command as string).includes("cargo metadata"),
+      ),
+    ).toBe(false);
   });
 
-  it("uses the pinned Vercel Development toolchain and offline Cargo closure", async () => {
+  it("does not require Rust for the pinned Vercel Development planning closure", async () => {
     const { run, sandbox, writeTextFile } = sandboxFixture(developmentManifest);
     await materializeOfflineDependencies({
       sandbox,
@@ -1150,9 +1142,7 @@ describe("offline dependency cache", () => {
       },
     });
 
-    expect(run.mock.calls[1]?.[0].command).toContain(
-      `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`,
-    );
+    expect(run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata"))).toBe(false);
     const developmentLinkCommand = run.mock.calls
       .map(([request]) => request.command as string)
       .find(
@@ -1172,27 +1162,9 @@ describe("offline dependency cache", () => {
     expect(developmentLinkCommand).not.toContain("ln -s");
     expect(writeTextFile).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.stringContaining(
-          `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${archiveDigest}/node_modules`,
-        ),
+        path: expect.stringContaining(".app-builder/dependency-layouts/"),
       }),
     );
-    const rustCommand = run.mock.calls
-      .map(([request]) => request.command as string)
-      .find((command) => command.includes("cargo metadata --config"));
-    expect(rustCommand).toBeDefined();
-    if (rustCommand === undefined) throw new Error("missing Cargo check");
-    expect(rustCommand).toContain(
-      "PATH=/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",
-    );
-    expect(rustCommand).toContain(
-      "CARGO_HOME=/workspace/.app-builder/toolchain/cargo-home",
-    );
-    expect(rustCommand).toContain("CARGO_NET_OFFLINE=true");
-    expect(rustCommand).toContain(
-      `cargo metadata --config ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml --offline`,
-    );
-    expect(rustCommand).not.toContain("mise --env app-builder exec");
   });
 
   it("rejects target drift and does not extract", async () => {
