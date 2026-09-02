@@ -37,9 +37,13 @@ export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
   {
     version: 1,
     kind: "arrusted-component-composition-v1",
-    publicImports: ["@arrusted/ui/review-queue"],
-    tokenEntrypoints: ["@arrusted/design-system/tokens.css"],
-    providers: ["@arrusted/ui/provider"],
+    publicImports: [
+      "@autograph/components",
+      "@autograph/compositions",
+      "@autograph/icons",
+    ],
+    tokenEntrypoints: ["@autograph/design-system/tokens.css"],
+    providers: ["@autograph/components/providers"],
     routeGlue: {
       allowedFiles: ["app/layout.tsx", "app/page.tsx"],
       allowedStyleFiles: [],

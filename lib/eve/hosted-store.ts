@@ -8,6 +8,7 @@ import {
   publicInputRequestSchema,
   publicImplementationPlanSchema,
   publicPrototypeSchema,
+  publicUiPreviewSchema,
   publicSessionResumabilitySchema,
   publicSessionStageSchema,
   publicSessionSummarySchema,
@@ -87,6 +88,7 @@ export const hostedSessionCheckpointSchema = z
     truncatedBeforeIndex: z.number().int().nonnegative().optional(),
     inputRequests: z.array(publicInputRequestSchema).max(32).optional(),
     prototype: publicPrototypeSchema.optional(),
+    uiPreview: publicUiPreviewSchema.optional(),
     implementationPlan: publicImplementationPlanSchema.optional(),
     capturedAtEpochMs: z.number().int().nonnegative(),
   })

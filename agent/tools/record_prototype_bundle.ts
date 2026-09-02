@@ -87,6 +87,10 @@ export default defineTool({
       throw new Error(
         "Prepare a workspace before recording a prototype bundle.",
       );
+    if (current.phase === "ui_previewed" || current.phase === "ui_accepted")
+      throw new Error(
+        "This session is using component-backed UI review; revise or finalize that UI instead of recording an HTML bundle.",
+      );
     if (current.phase === "validation_pending")
       throw new Error(
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,

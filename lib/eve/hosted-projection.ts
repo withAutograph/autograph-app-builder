@@ -5,6 +5,7 @@ import {
   publicEveEventSchema,
   publicImplementationPlanSchema,
   publicPrototypeSchema,
+  publicUiPreviewSchema,
   sessionStatusSchema,
   type EveSessionResult,
 } from "../mcp/contracts";
@@ -19,6 +20,7 @@ const hostedSnapshotSchema = z
     status: sessionStatusSchema,
     events: z.array(z.unknown()).max(100_000),
     prototype: publicPrototypeSchema.optional(),
+    uiPreview: publicUiPreviewSchema.optional(),
     implementationPlan: publicImplementationPlanSchema.optional(),
   })
   .strict();
@@ -57,6 +59,9 @@ export function projectHostedSnapshot(
     ...(snapshot.prototype === undefined
       ? {}
       : { prototype: snapshot.prototype }),
+    ...(snapshot.uiPreview === undefined
+      ? {}
+      : { uiPreview: snapshot.uiPreview }),
     ...(snapshot.implementationPlan === undefined
       ? {}
       : { implementationPlan: snapshot.implementationPlan }),

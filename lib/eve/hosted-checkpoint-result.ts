@@ -28,6 +28,9 @@ export function resultFromHostedCheckpoint(
     ...(checkpoint.prototype === undefined
       ? {}
       : { prototype: checkpoint.prototype }),
+    ...(checkpoint.uiPreview === undefined
+      ? {}
+      : { uiPreview: checkpoint.uiPreview }),
     ...(checkpoint.implementationPlan === undefined
       ? {}
       : { implementationPlan: checkpoint.implementationPlan }),

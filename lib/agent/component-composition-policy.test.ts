@@ -8,9 +8,13 @@ import {
 const manifest = JSON.stringify({
   version: 1,
   kind: "arrusted-component-composition-v1",
-  publicImports: ["@arrusted/ui/review-queue"],
-  tokenEntrypoints: ["@arrusted/design-system/tokens.css"],
-  providers: ["@arrusted/ui/provider"],
+  publicImports: [
+    "@autograph/components",
+    "@autograph/compositions",
+    "@autograph/icons",
+  ],
+  tokenEntrypoints: ["@autograph/design-system/tokens.css"],
+  providers: ["@autograph/components/providers"],
   routeGlue: {
     allowedFiles: ["app/layout.tsx", "app/page.tsx"],
     allowedStyleFiles: [],
@@ -63,7 +67,7 @@ describe("Arrusted component composition policy", () => {
           {
             path: "apps/vendor-onboarding/app/page.tsx",
             content:
-              'import { ReviewQueue } from "@arrusted/ui/review-queue";\nimport "@arrusted/design-system/tokens.css";\nexport default function Page() { return <ReviewQueue />; }\n',
+              'import { KpiCard } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\nexport default function Page() { return <KpiCard icon={Check} title="Ready" value={3} />; }\n',
           },
         ],
       }),
@@ -74,7 +78,7 @@ describe("Arrusted component composition policy", () => {
     [
       "unapproved import",
       "apps/vendor-onboarding/app/page.tsx",
-      'import { Card } from "@arrusted/ui/card";\nexport default function Page() { return <Card />; }\n',
+      'import { Card } from "@autograph/private";\nexport default function Page() { return <Card />; }\n',
       "unapproved-public-import",
     ],
     [

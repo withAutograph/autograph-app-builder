@@ -108,6 +108,10 @@ export default defineTool({
       throw new Error(
         "Prepare an eligible repository before accepting an AppSpec.",
       );
+    if (current.phase === "ui_previewed")
+      throw new Error(
+        "Finalize the reviewed UI explicitly before beginning functional planning.",
+      );
     const workspace = current.workspace;
     const development = canAutoSelectDevelopmentSource();
     planningMarker("source-bound-workspace-inspection", "start");
@@ -159,6 +163,9 @@ export default defineTool({
       digest: artifact.digest,
       acceptedByCallId: ctx.callId,
       artifactRevision: artifact.revision,
+      ...(current.phase === "ui_accepted"
+        ? { uiRevision: current.uiPreview.revision }
+        : {}),
       ...(exactApprovalReceipt === undefined
         ? {}
         : { approvalReceipt: exactApprovalReceipt }),
@@ -182,6 +189,10 @@ export default defineTool({
       )
         throw new Error(
           "The AppSpec approval receipt changed after acceptance.",
+        );
+      if (current.appSpec.uiRevision !== accepted.uiRevision)
+        throw new Error(
+          "The accepted UI revision changed before functional planning.",
         );
       await planAcceptedAppSpec(
         current.appSpec.digest,

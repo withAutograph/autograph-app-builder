@@ -74,7 +74,7 @@ Confirmed.
 }
 \`\`\``;
 
-const completePrototype = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width"></head><body><main><section aria-labelledby="detail-title"><h1 id="detail-title">Northstar Logistics</h1><p>Operations review queue</p><p>Finance: verify tax information</p><div class="queue button"></div><div id="tax-step"></div></section></main><script>document.addEventListener('click', () => {});</script><style>@media (max-width: 700px) { main { display: block; } }</style></body></html>`;
+const completePrototype = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width"></head><body><main><section aria-labelledby="detail-title"><h1 id="detail-title">Northstar Logistics</h1><p>Operations review queue</p><p>Finance: verify tax information</p><div class="queue button"></div><div id="tax-step"></div></section></main><script>document.addEventListener('click', () => {});</script><style>:root { color: #292929; background: #fafaf9; accent-color: #8192ff; --success-reference: #17b196; } @media (max-width: 700px) { main { display: block; } }</style></body></html>`;
 
 describe("product-quality scenarios", () => {
   it("defines the four supported product flows", () => {

@@ -85,7 +85,7 @@ async function loadPrototype(page: Page) {
   });
   expect(accessibility.violations).toEqual([]);
   await expect(
-    page.getByRole("heading", { name: "Vendor Onboarding" }),
+    page.getByRole("heading", { name: "Vendor Review" }),
   ).toBeVisible();
 }
 
@@ -114,7 +114,7 @@ test.describe("recorded Vendor Onboarding prototype", () => {
   test("supports the desktop review flow and reports visual drift", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setViewportSize({ width: 1592, height: 902 });
     await loadPrototype(page);
     await page.getByRole("button", { name: "Kiteworks GmbH" }).click();
     await expect(

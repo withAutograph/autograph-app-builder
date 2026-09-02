@@ -46,7 +46,7 @@ const composition = auditAppliedAppComposition({
     {
       path: "apps/vendor-onboarding/app/page.tsx",
       content:
-        'import { ReviewQueue } from "@arrusted/ui/review-queue";\nimport "@arrusted/design-system/tokens.css";\n\nexport default function Page() {\n  return <ReviewQueue />;\n}\n',
+        'import { Button, KpiCard, PageHeader } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\n\nexport default function Page() {\n  return <><PageHeader title="Vendor Review" /><KpiCard icon={Check} title="Ready" value={3} /><Button>Start Guided Review</Button></>;\n}\n',
     },
   ],
 });
@@ -110,6 +110,8 @@ await writeFile(
   `${JSON.stringify(
     {
       status: composition.status,
+      requiredPublicImports: policy.binding.policy.publicImports,
+      tokenEntrypoints: policy.binding.policy.tokenEntrypoints,
       policyPath: "docs/component-composition.json",
       policyDigest: policy.binding.policyDigest,
       fixtureSourceSha: policy.binding.sourceSha,

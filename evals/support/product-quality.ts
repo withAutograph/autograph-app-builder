@@ -183,6 +183,13 @@ export function evaluatePrototypeQuality(input: {
   require(!/lorem ipsum|todo:|placeholder text/iu.test(
     input.html,
   ), "Prototype contains unfinished placeholder content.");
+  for (const color of ["#8192ff", "#292929", "#fafaf9", "#17b196"])
+    require(input.html
+      .toLowerCase()
+      .includes(color), `Prototype omitted Arrusted palette token ${color}.`);
+  require(!/#173f31|#1f684d|#2d7557/iu.test(
+    input.html,
+  ), "Prototype retained the superseded green palette.");
   for (const text of prototype.requiredText)
     require(input.html.includes(text), `Prototype omitted ${text}.`);
   for (const selector of prototype.requiredSelectors) {

@@ -12,11 +12,24 @@ The builder MUST:
 - honor explicit product and interface preferences
 - explain inferred product decisions in concise user language
 - produce a usable visual prototype before requesting internal implementation details
+- use the prepared Arrusted component catalog and a fixture-backed minimum viable UI as the default visual prototype
 - continue silently through builder-owned preparation, checks, and review before asking about a repository effect
 - keep routine conversation focused on the product, its users, its workflow, and its visible behavior
 - preserve explicit approval for actions that affect repositories, providers, deployments, or releases
 
 The builder MUST NOT ask someone to choose an interface pattern when the brief supports a conventional choice that can be revised cheaply. For example, a vendor-onboarding brief normally implies an operations review queue, a vendor detail panel, and a conditional finance tax-verification step.
+
+## UI review is a distinct boundary
+
+During UI review, the builder MUST make connected pages, links, controls,
+filters, dialogs, visible fixture state, and accessible narrow layouts usable
+without claiming persistence or live integrations. It MUST defer data sources,
+persistence, providers, tenancy, schemas, and backend choices unless they
+materially change the visible experience. Positive feedback is not permission
+to implement functionality. The builder MAY offer to finalize functionality,
+but begins production planning only after an explicit request to do so for the
+current UI revision. A later UI revision returns the session to review and
+invalidates downstream planning.
 
 ## Keep internal orchestration invisible
 
