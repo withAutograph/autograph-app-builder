@@ -42,8 +42,10 @@ commands fail closed until `v0.2.5` exists:
 ```
 
 The release package defines the Model Context Protocol (MCP) origin and contains
-no credential. Codex completes OAuth against that origin's protected-resource
-and authorization-server metadata. Its creation and publication capabilities
+no credential. On first use, Codex automatically starts OAuth against that
+origin's protected-resource and authorization-server metadata, then resumes the
+protected connection after consent. Users do not run a separate MCP login
+command. Its creation and publication capabilities
 apply only to repositories that satisfy the App Builder's explicit supported
 repository contract; it does not claim support for arbitrary repositories.
 

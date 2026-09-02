@@ -231,7 +231,7 @@ await writeFile(
           },
           policy: {
             installation: "AVAILABLE",
-            authentication: "ON_INSTALL",
+            authentication: "ON_USE",
           },
           category: "Developer Tools",
         },

@@ -154,9 +154,12 @@ try {
   );
   if (
     marketplaceManifest.name !== "autograph" ||
-    marketplaceManifest.plugins?.[0]?.source?.path !== "./plugins/app-builder"
+    marketplaceManifest.plugins?.[0]?.source?.path !== "./plugins/app-builder" ||
+    marketplaceManifest.plugins?.[0]?.policy?.authentication !== "ON_USE"
   )
-    throw new Error("Codex marketplace manifest was invalid.");
+    throw new Error(
+      "Codex marketplace manifest must authenticate App Builder on first use.",
+    );
   const codexPluginRoot = join(
     marketplace,
     marketplaceManifest.plugins[0].source.path,
