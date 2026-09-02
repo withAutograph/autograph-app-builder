@@ -640,7 +640,11 @@ describe("request-scoped MCP service selection", () => {
           type: "oauth2",
           scopes: [
             "autograph:session",
-            `autograph:${tool.name.replace("autograph_", "")}`,
+            "autograph:start",
+            "autograph:get",
+            "autograph:send",
+            "autograph:respond",
+            "autograph:cancel",
           ],
         },
       ]);
@@ -671,7 +675,7 @@ describe("request-scoped MCP service selection", () => {
       'error_description="Sign in to Autograph App Builder to continue"',
     );
     expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
-      'scope="autograph:session autograph:get"',
+      'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
     );
   });
 
@@ -741,7 +745,7 @@ describe("request-scoped MCP service selection", () => {
         'error="invalid_token"',
       );
       expect(result._meta["mcp/www_authenticate"][0]).toContain(
-        'scope="autograph:session autograph:get"',
+        'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
       );
     }
   });
@@ -786,7 +790,7 @@ describe("request-scoped MCP service selection", () => {
       'error="insufficient_scope"',
     );
     expect(insufficientResult._meta["mcp/www_authenticate"][0]).toContain(
-      'scope="autograph:session autograph:get"',
+      'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
     );
   });
 

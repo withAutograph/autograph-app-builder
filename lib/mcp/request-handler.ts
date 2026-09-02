@@ -59,6 +59,15 @@ const sessionResourceMeta = {
   },
 } as const;
 
+const autographToolScopes = [
+  "autograph:session",
+  "autograph:start",
+  "autograph:get",
+  "autograph:send",
+  "autograph:respond",
+  "autograph:cancel",
+] as const;
+
 export interface HostedWorkspaceMembership {
   isMember(input: {
     principal: HostedPrincipal;
@@ -182,7 +191,7 @@ export function createAutographMcpHandler(
   options: { requestUrl?: string; advertiseOauth?: boolean } = {},
 ) {
   const toolAuthMeta = (
-    operation: string,
+    _operation: string,
     meta: Record<string, unknown> = {},
   ) =>
     options.advertiseOauth
@@ -192,7 +201,7 @@ export function createAutographMcpHandler(
             securitySchemes: [
               {
                 type: "oauth2" as const,
-                scopes: ["autograph:session", `autograph:${operation}`],
+                scopes: [...autographToolScopes],
               },
             ],
           },
@@ -418,12 +427,12 @@ async function isToolCallRequest(request: Request): Promise<boolean> {
   }
 }
 
-const hostedToolScopes = new Map([
-  ["autograph_start", "autograph:start"],
-  ["autograph_get", "autograph:get"],
-  ["autograph_send", "autograph:send"],
-  ["autograph_respond", "autograph:respond"],
-  ["autograph_cancel", "autograph:cancel"],
+const hostedToolNames = new Set([
+  "autograph_start",
+  "autograph_get",
+  "autograph_send",
+  "autograph_respond",
+  "autograph_cancel",
 ]);
 
 async function requiredScopesForRequest(request: Request): Promise<string[]> {
@@ -440,9 +449,8 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
       "name" in body.params &&
       typeof body.params.name === "string"
     ) {
-      const operationScope = hostedToolScopes.get(body.params.name);
-      if (operationScope !== undefined)
-        return ["autograph:session", operationScope];
+      if (hostedToolNames.has(body.params.name))
+        return [...autographToolScopes];
     }
   } catch {
     // Malformed requests remain subject to the session scope and MCP parsing.
