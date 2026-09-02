@@ -124,6 +124,8 @@ type LocalEveRuntimeState = {
   restartInterrupted: Set<string>;
   recoveryRequired: Set<string>;
   recoveries: Map<string, Promise<void>>;
+  /** One durable tail reader per locally active public session. */
+  tailPumps: Map<string, Promise<void>>;
   metadata: Map<
     string,
     { title: string; createdAtEpochMs: number; updatedAtEpochMs: number }
@@ -172,6 +174,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     restartInterrupted: new Set(),
     recoveryRequired: new Set(),
     recoveries: new Map(),
+    tailPumps: new Map(),
     metadata: new Map(),
   });
 }
@@ -261,12 +264,19 @@ function consumeResponse(
   sessionId: string,
   response: CancellableResponse,
   modelTurnTimeoutMs: number,
+  options: {
+    cancelTurn: (turnId: string | undefined) => Promise<unknown>;
+    consumeDurableTail: (
+      observeEvent: (event: MessageStreamEvent) => void,
+    ) => void;
+  },
 ): void {
   const events = state.sessionEvents.get(sessionId) ?? [];
   state.sessionEvents.set(sessionId, events);
   state.activeResponses.set(sessionId, response);
   let modelTurnTimer: ReturnType<typeof setTimeout> | undefined;
   let modelTurnActive = false;
+  let modelTurnId: string | undefined;
   let timedOut = false;
 
   const clearModelTurnTimer = () => {
@@ -291,7 +301,9 @@ function consumeResponse(
       // boundary. We deliberately do not start another turn here: first wait
       // for the original turn's cancellation boundary to become observable.
       state.recoveryRequired.add(sessionId);
-      void settleLocalCancellation(response.cancel()).catch(() => undefined);
+      void settleLocalCancellation(options.cancelTurn(modelTurnId)).catch(
+        () => undefined,
+      );
     }, modelTurnTimeoutMs);
     modelTurnTimer.unref?.();
   };
@@ -299,6 +311,7 @@ function consumeResponse(
     switch (event.type) {
       case "step.started":
         modelTurnActive = true;
+        modelTurnId = event.data.turnId;
         armModelTurnTimer();
         return;
       case "actions.requested":
@@ -323,9 +336,14 @@ function consumeResponse(
     } catch {
       state.recoveryRequired.add(sessionId);
     } finally {
-      clearModelTurnTimer();
-      if (deriveInstalledEveStatus(events) === "working")
+      // Eve's response iterator can close after its transport reconnect budget
+      // while the durable turn is still running. Keep the turn timer alive and
+      // continue from the raw durable tail instead of treating that close as a
+      // settled boundary.
+      if (deriveInstalledEveStatus(events) === "working") {
         state.recoveryRequired.add(sessionId);
+        options.consumeDurableTail(observeEvent);
+      } else clearModelTurnTimer();
       const interruption = state.modelInterruptions.get(sessionId);
       if (
         interruption?.response === response &&
@@ -421,6 +439,59 @@ export function createLocalEveSessionService(
     return attached;
   }
 
+  function consumeDurableTail(
+    sessionId: string,
+    observeEvent: (event: MessageStreamEvent) => void,
+  ) {
+    if (state.tailPumps.has(sessionId)) return;
+    const pump = (async () => {
+      // MessageResponse has a bounded reconnect policy. A durable session may
+      // outlive that HTTP response, so continue from the raw event cursor until
+      // it reports a real boundary.
+      while (
+        deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) ===
+        "working"
+      ) {
+        try {
+          const events = localSessionEvents.get(sessionId) ?? [];
+          const session = client.sessions.attach(sessionId, {
+            streamIndex: events.length,
+          });
+          localSessionHandles.set(sessionId, session);
+          for await (const event of session.stream()) {
+            events.push(event);
+            observeEvent(event);
+            if (deriveInstalledEveStatus(events) !== "working") return;
+          }
+        } catch {
+          // HMR can briefly interrupt the local child. Buffered public events
+          // remain readable while the durable tail is retried.
+        }
+        if (
+          deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) !==
+          "working"
+        )
+          return;
+        await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      }
+    })().finally(() => state.tailPumps.delete(sessionId));
+    state.tailPumps.set(sessionId, pump);
+  }
+
+  function consumeSessionResponse(
+    sessionId: string,
+    response: CancellableResponse,
+  ) {
+    consumeResponse(state, sessionId, response, modelTurnTimeoutMs, {
+      cancelTurn: async (turnId) =>
+        await sessionFor(sessionId).cancel(
+          turnId === undefined ? undefined : { turnId },
+        ),
+      consumeDurableTail: (observeEvent) =>
+        consumeDurableTail(sessionId, observeEvent),
+    });
+  }
+
   function touchSession(sessionId: string) {
     const metadata = state.metadata.get(sessionId);
     if (metadata !== undefined)
@@ -449,7 +520,8 @@ export function createLocalEveSessionService(
   }
 
   async function requireSettledModelTurn(sessionId: string) {
-    await recoverDurableTail(sessionId);
+    if (state.restartInterrupted.has(sessionId))
+      await recoverDurableTail(sessionId);
     if (state.modelInterruptions.has(sessionId))
       throw new Error(
         "The previous Autograph response is still settling. Try again in a moment.",
@@ -487,7 +559,7 @@ export function createLocalEveSessionService(
         createdAtEpochMs: timestamp,
         updatedAtEpochMs: timestamp,
       });
-      consumeResponse(state, sessionId, response, modelTurnTimeoutMs);
+      consumeSessionResponse(sessionId, response);
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
     async list({ cursor, limit }) {
@@ -533,7 +605,8 @@ export function createLocalEveSessionService(
       };
     },
     async get({ sessionId, cursor, limit }) {
-      await recoverDurableTail(sessionId);
+      if (state.restartInterrupted.has(sessionId))
+        await recoverDurableTail(sessionId);
       touchSession(sessionId);
       return resultForEvents(
         sessionId,
@@ -549,7 +622,7 @@ export function createLocalEveSessionService(
         await requireSettledModelTurn(sessionId);
         const response = await sessionAtBufferedTail(sessionId).send(message);
         state.restartInterrupted.delete(sessionId);
-        consumeResponse(state, sessionId, response, modelTurnTimeoutMs);
+        consumeSessionResponse(sessionId, response);
         localRequests.set(key, sessionId);
       }
       touchSession(sessionId);
@@ -575,7 +648,7 @@ export function createLocalEveSessionService(
           toEveInputResponses(responses),
         );
         state.restartInterrupted.delete(sessionId);
-        consumeResponse(state, sessionId, result, modelTurnTimeoutMs);
+        consumeSessionResponse(sessionId, result);
         localRequests.set(key, sessionId);
       }
       touchSession(sessionId);

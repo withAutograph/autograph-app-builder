@@ -88,7 +88,7 @@ describe("local Eve acceptance", () => {
     ).resolves.toMatchObject({ sessionId: started.sessionId });
   });
 
-  it("recovers a durable waiting boundary after the response stream disconnects", async () => {
+  it("continues at the durable tail after the response stream disconnects", async () => {
     const durableEvents = [
       {
         type: "step.completed",
@@ -110,6 +110,9 @@ describe("local Eve acceptance", () => {
     const session = {
       state: { sessionId: "wrun_stream_recovery", streamIndex: 0 },
       snapshot,
+      stream: vi.fn(async function* () {
+        yield durableEvents[1]!;
+      }),
       send: vi.fn(async () => response),
       respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -141,10 +144,70 @@ describe("local Eve acceptance", () => {
     await expect(
       service.get({ sessionId: started.sessionId, cursor: 2, limit: 100 }),
     ).resolves.toMatchObject({ status: "waiting", cursor: 2, events: [] });
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(snapshot).not.toHaveBeenCalled();
     expect(attach).toHaveBeenLastCalledWith(started.sessionId, {
-      streamIndex: 2,
+      streamIndex: 1,
     });
+  });
+
+  it("keeps buffered progress readable while a clean response close tails a live turn", async () => {
+    let releaseTail!: () => void;
+    const tailReady = new Promise<void>((resolve) => {
+      releaseTail = resolve;
+    });
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: "step.started",
+          data: { turnId: "turn-clean-close" },
+        } as MessageStreamEvent;
+      },
+    };
+    const snapshot = vi.fn(async () => {
+      throw new Error("snapshot must not run for a live tail");
+    });
+    const session = {
+      state: { sessionId: "wrun_clean_close", streamIndex: 0 },
+      snapshot,
+      stream: vi.fn(async function* () {
+        await tailReady;
+        yield { type: "session.waiting", data: {} } as MessageStreamEvent;
+      }),
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const attach = vi.fn(() => session);
+    const service = createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach,
+        } as never,
+      },
+      { stateGeneration: "clean-response-tail" },
+    );
+    const started = await service.start({
+      prompt: "Build",
+      clientRequestId: "clean-response-tail-start",
+    });
+
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "working", cursor: 1 });
+    });
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(attach).toHaveBeenCalledWith(started.sessionId, { streamIndex: 1 });
+
+    releaseTail();
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+    });
+    expect(snapshot).not.toHaveBeenCalled();
   });
 
   it("preserves buffered settlement across a Next development module reload", async () => {
@@ -573,7 +636,10 @@ describe("local Eve acceptance", () => {
           clientRequestId: "model-turn-timeout-retry",
         }),
       ).rejects.toThrow("previous Autograph response is still settling");
-      expect(response.cancel).toHaveBeenCalledTimes(1);
+      expect(session.cancel).toHaveBeenCalledWith({
+        turnId: "turn-model-stalled",
+      });
+      expect(response.cancel).not.toHaveBeenCalled();
       expect(session.send).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
