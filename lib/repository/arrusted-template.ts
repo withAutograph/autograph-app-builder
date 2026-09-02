@@ -44,6 +44,26 @@ export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
 
 type ClonedTemplateReceipt = Extract<SourceReceipt, { version: 4 }>;
 
+type TemplateAcquisitionFailureStage =
+  "reader" | "sandbox_clone" | "readiness" | "workspace_record";
+
+async function acquisitionStage<T>(
+  stage: TemplateAcquisitionFailureStage,
+  operation: () => Promise<T>,
+) {
+  try {
+    return await operation();
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "autograph.template-acquisition.failed",
+        stage,
+      }),
+    );
+    throw error;
+  }
+}
+
 function receiptReadinessDigest(input: Record<string, unknown>) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
@@ -421,16 +441,20 @@ export async function acquireCanonicalArrustedTemplate(input: {
   reader?: ArrustedTemplateReader;
 }): Promise<SourceReceipt> {
   const reader = input.reader ?? deploymentArrustedTemplateReader();
-  const access = await reader.acquire();
-  const cloned = await cloneCanonicalArrustedWorkspace({
-    sandbox: input.sandbox,
-    token: access.token,
-  });
-  const readinessDigest = await templateReadinessAttestationDigest({
-    sha: cloned.snapshot.sourceSha,
-    tree: cloned.snapshot.sourceTree,
-    token: access.token,
-  });
+  const access = await acquisitionStage("reader", () => reader.acquire());
+  const cloned = await acquisitionStage("sandbox_clone", () =>
+    cloneCanonicalArrustedWorkspace({
+      sandbox: input.sandbox,
+      token: access.token,
+    }),
+  );
+  const readinessDigest = await acquisitionStage("readiness", () =>
+    templateReadinessAttestationDigest({
+      sha: cloned.snapshot.sourceSha,
+      tree: cloned.snapshot.sourceTree,
+      token: access.token,
+    }),
+  );
   const receipt = inspectCanonicalTemplateSnapshotReceipt({
     snapshot: cloned.snapshot,
     readinessDigest,
@@ -441,15 +465,17 @@ export async function acquireCanonicalArrustedTemplate(input: {
     receipt.sourceTree !== cloned.snapshot.sourceTree
   )
     throw new Error("Canonical Arrusted workspace receipt drifted.");
-  await recordPreparedSandboxWorkspace({
-    sandbox: input.sandbox,
-    callId: input.callId,
-    sourcePath: SANDBOX_WORKSPACE,
-    sourceSha: receipt.sourceSha,
-    sourceTree: receipt.sourceTree,
-    eligibilityDigest: receipt.eligibilityDigest,
-    workspaceDigest: cloned.workspaceDigest,
-  });
+  await acquisitionStage("workspace_record", () =>
+    recordPreparedSandboxWorkspace({
+      sandbox: input.sandbox,
+      callId: input.callId,
+      sourcePath: SANDBOX_WORKSPACE,
+      sourceSha: receipt.sourceSha,
+      sourceTree: receipt.sourceTree,
+      eligibilityDigest: receipt.eligibilityDigest,
+      workspaceDigest: cloned.workspaceDigest,
+    }),
+  );
   return receipt;
 }
 

@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ARRUSTED_TEMPLATE_REPOSITORY_ID,
@@ -12,6 +12,10 @@ const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey
   .export({ type: "pkcs8", format: "pem" })
   .toString();
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function json(value: unknown, status = 200) {
   return Response.json(value, { status });
@@ -107,6 +111,24 @@ describe("Arrusted private template reader", () => {
     await expect(reader(mock.implementation).acquire()).resolves.toEqual({
       token: "ghs_reader_token_that_is_only_for_this_acquisition",
     });
+  });
+
+  it("records only a sanitized failure stage when token minting fails", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mock = readerFetch({ status: 403 });
+
+    await expect(reader(mock.implementation).acquire()).rejects.toThrow(
+      "template reader is unavailable",
+    );
+
+    expect(warning).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "autograph.template-reader.failed",
+        stage: "token_mint",
+      }),
+    );
+    expect(JSON.stringify(warning.mock.calls)).not.toContain(privateKeyPem);
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("ghs_");
   });
 
   it.each([

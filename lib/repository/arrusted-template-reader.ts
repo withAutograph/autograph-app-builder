@@ -60,7 +60,21 @@ function exactTemplateRepositoryIds(value: unknown) {
   );
 }
 
-function unavailable(): never {
+type TemplateReaderFailureStage =
+  | "configuration"
+  | "token_mint"
+  | "token_shape"
+  | "repository_inventory"
+  | "repository_shape";
+
+function unavailable(stage?: TemplateReaderFailureStage): never {
+  if (stage !== undefined)
+    console.warn(
+      JSON.stringify({
+        event: "autograph.template-reader.failed",
+        stage,
+      }),
+    );
   throw new Error("The Arrusted template reader is unavailable.");
 }
 
@@ -78,12 +92,12 @@ export function readDeploymentArrustedTemplateReaderConfig(
       privateKey: environment.GITHUB_APP_PRIVATE_KEY,
     });
   } catch {
-    unavailable();
+    unavailable("configuration");
   }
   const installation = installationIdSchema.safeParse(
     environment.APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID,
   );
-  if (!installation.success) unavailable();
+  if (!installation.success) unavailable("configuration");
   return { ...credentials, installationId: installation.data };
 }
 
@@ -106,50 +120,56 @@ export function createArrustedTemplateReader(input: {
 
   return {
     async acquire() {
+      let authentication: unknown;
       try {
-        const authentication: unknown = await app.octokit.auth({
+        authentication = await app.octokit.auth({
           type: "installation",
           installationId: installation.data,
           permissions: requestedPermissions,
           repositoryIds: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
           refresh: true,
         });
-        const parsedToken = record(authentication)
-          ? tokenSchema.safeParse(authentication.token)
-          : undefined;
-        if (
-          !record(authentication) ||
-          authentication.type !== "token" ||
-          parsedToken === undefined ||
-          !parsedToken.success ||
-          (authentication.repositorySelection !== "all" &&
-            authentication.repositorySelection !== "selected") ||
-          !exactTemplateRepositoryIds(authentication.repositoryIds) ||
-          !readOnlyReaderPermissions(authentication.permissions)
-        )
-          unavailable();
-        const token = parsedToken.data;
+      } catch {
+        unavailable("token_mint");
+      }
+      const parsedToken = record(authentication)
+        ? tokenSchema.safeParse(authentication.token)
+        : undefined;
+      if (
+        !record(authentication) ||
+        authentication.type !== "token" ||
+        parsedToken === undefined ||
+        !parsedToken.success ||
+        (authentication.repositorySelection !== "all" &&
+          authentication.repositorySelection !== "selected") ||
+        !exactTemplateRepositoryIds(authentication.repositoryIds) ||
+        !readOnlyReaderPermissions(authentication.permissions)
+      )
+        unavailable("token_shape");
+      const token = parsedToken.data;
 
-        const inventory = await createGitHubTokenOctokit({
+      let inventory;
+      try {
+        inventory = await createGitHubTokenOctokit({
           token,
           fetch: input.fetch,
         }).request("GET /installation/repositories", {
           per_page: 100,
           page: 1,
         });
-        const data: unknown = inventory.data;
-        if (
-          !record(data) ||
-          data.total_count !== 1 ||
-          !Array.isArray(data.repositories) ||
-          data.repositories.length !== 1 ||
-          !privateTemplateRepository(data.repositories[0])
-        )
-          unavailable();
-        return { token };
       } catch {
-        unavailable();
+        unavailable("repository_inventory");
       }
+      const data: unknown = inventory.data;
+      if (
+        !record(data) ||
+        data.total_count !== 1 ||
+        !Array.isArray(data.repositories) ||
+        data.repositories.length !== 1 ||
+        !privateTemplateRepository(data.repositories[0])
+      )
+        unavailable("repository_shape");
+      return { token };
     },
   };
 }
