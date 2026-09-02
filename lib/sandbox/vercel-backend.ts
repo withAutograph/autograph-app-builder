@@ -78,6 +78,7 @@ type ProviderFetch = (
 
 export function createProviderFetch(
   fetchImpl: typeof fetch = fetch,
+  requestTimeoutMs = PROVIDER_REQUEST_TIMEOUT_MS,
 ): ProviderFetch {
   return async (input, init) => {
     const original = new Request(input, init);
@@ -85,7 +86,7 @@ export function createProviderFetch(
       const timeout = new AbortController();
       const timer = setTimeout(
         () => timeout.abort(),
-        PROVIDER_REQUEST_TIMEOUT_MS,
+        requestTimeoutMs,
       );
       const signal = original.signal.aborted
         ? original.signal
@@ -107,9 +108,19 @@ export function createProviderFetch(
         }
         return response;
       } catch (error) {
-        if (attempt === 0 && retryableProviderFailure(error)) {
+        const callerCancelled = original.signal.aborted;
+        const providerRequestTimedOut =
+          timeout.signal.aborted && !callerCancelled;
+        if (
+          attempt === 0 &&
+          !callerCancelled &&
+          (providerRequestTimedOut || retryableProviderFailure(error))
+        ) {
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS),
           );
           continue;
         }

@@ -66,6 +66,44 @@ describe("hosted Vercel sandbox backend", () => {
     expect(fetch.mock.calls[0]![0]).toBeInstanceOf(Request);
   });
 
+  it("retries one provider timeout without retrying caller cancellation", async () => {
+    const timedOutFetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementationOnce(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(init.signal?.reason),
+              { once: true },
+            );
+          }),
+      )
+      .mockResolvedValueOnce(new Response("ok"));
+    await expect(
+      createProviderFetch(timedOutFetch, 1)(
+        new Request("https://sandbox.example.test/fs/write", {
+          method: "POST",
+        }),
+      ),
+    ).resolves.toMatchObject({ status: 200 });
+    expect(timedOutFetch).toHaveBeenCalledTimes(2);
+
+    const controller = new AbortController();
+    controller.abort();
+    const cancelledFetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockRejectedValue(new DOMException("cancelled", "AbortError"));
+    await expect(
+      createProviderFetch(cancelledFetch, 1)(
+        new Request("https://sandbox.example.test/fs/read", {
+          signal: controller.signal,
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(cancelledFetch).toHaveBeenCalledOnce();
+  });
+
   it("allows bootstrap hosts only for prewarm and denies every fresh live session", () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {

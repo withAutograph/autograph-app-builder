@@ -1814,5 +1814,5 @@ export default defineAgent({
       ? "openai/gpt-5.6-luna"
       : "openai/gpt-5.6-sol",
   modelContextWindowTokens: 128_000,
-  reasoning: localDevelopmentAgent ? "medium" : "high",
+  reasoning: localDevelopmentAgent ? "low" : "high",
 });
