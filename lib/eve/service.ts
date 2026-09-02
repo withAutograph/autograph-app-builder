@@ -12,6 +12,7 @@ import {
   deriveInstalledEveStatus,
   latestInstalledImplementationPlan,
   latestInstalledPrototype,
+  latestInstalledUiPreview,
   outstandingInstalledEveRequests,
   projectInstalledEveEvents,
 } from "./public-events";
@@ -230,6 +231,7 @@ function resultForEvents(
   const events = projected.slice(cursor, cursor + limit);
   const inputRequests = outstandingInstalledEveRequests(snapshotEvents);
   const prototype = latestInstalledPrototype(snapshotEvents);
+  const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
     sessionId,
@@ -238,6 +240,7 @@ function resultForEvents(
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(prototype === undefined ? {} : { prototype }),
+    ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(implementationPlan === undefined ? {} : { implementationPlan }),
     ...(options.error === undefined ? {} : { error: options.error }),
   };
@@ -248,6 +251,7 @@ function acceptedResult(
   snapshotEvents: readonly MessageStreamEvent[] = [],
 ): EveSessionResult {
   const prototype = latestInstalledPrototype(snapshotEvents);
+  const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
     sessionId,
@@ -255,6 +259,7 @@ function acceptedResult(
     cursor: 0,
     events: [],
     ...(prototype === undefined ? {} : { prototype }),
+    ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(implementationPlan === undefined ? {} : { implementationPlan }),
   };
 }

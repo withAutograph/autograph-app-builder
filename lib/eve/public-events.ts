@@ -3,11 +3,13 @@ import { createHash } from "node:crypto";
 import {
   publicImplementationPlanSchema,
   publicPrototypeSchema,
+  publicUiPreviewSchema,
   type EveSessionStatus,
   type PublicEveEvent,
   type PublicImplementationPlan,
   type PublicInputRequest,
   type PublicPrototype,
+  type PublicUiPreview,
 } from "../mcp/contracts";
 import { targetProposalSchema } from "../repository/target-planning";
 import type { MessageStreamEvent } from "eve/client";
@@ -80,6 +82,17 @@ const prototypeBundleResultSchema = z
   .passthrough();
 const prototypeBundlePlanResultSchema = z
   .object({ implementationPlan: publicImplementationPlanSchema })
+  .passthrough();
+const uiPreviewResultSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    revision: lowercaseSha256Schema,
+    routes: z.array(z.string().startsWith("/")).min(1).max(16),
+    fidelity: z.literal("arrusted-component-catalog"),
+    functionality: z.literal("fixtures-only"),
+    content: z.string().min(1).max(maximumPrototypeBytes),
+    digest: lowercaseSha256Schema,
+  })
   .passthrough();
 const planRequestSchema = z
   .object({
@@ -310,6 +323,18 @@ export function latestInstalledPrototype(
       if (output.success) latest = output.data.prototype;
       continue;
     }
+    if (event.data.result.toolName === "record_ui_preview") {
+      const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
+      if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
+      latest = publicPrototypeSchema.parse({
+        path: `prototype/${preview.data.appId}/index.html`,
+        mediaType: "text/html",
+        content: preview.data.content,
+        digest: preview.data.digest,
+        revision: preview.data.digest,
+      });
+      continue;
+    }
     if (event.data.result.toolName !== "record_prototype_artifact") continue;
 
     const callId = event.data.result.callId;
@@ -348,6 +373,33 @@ export function latestInstalledPrototype(
     });
   }
 
+  return latest;
+}
+
+/** Projects component-backed preview metadata only from a completed tool receipt. */
+export function latestInstalledUiPreview(
+  events: readonly MessageStreamEvent[],
+): PublicUiPreview | undefined {
+  let latest: PublicUiPreview | undefined;
+  for (const event of events) {
+    if (
+      event.type !== "action.result" ||
+      event.data.status !== "completed" ||
+      event.data.result.kind !== "tool-result" ||
+      event.data.result.isError === true ||
+      event.data.result.toolName !== "record_ui_preview"
+    )
+      continue;
+    const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
+    if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
+    latest = publicUiPreviewSchema.parse({
+      appId: preview.data.appId,
+      revision: preview.data.revision,
+      routes: preview.data.routes,
+      fidelity: preview.data.fidelity,
+      functionality: preview.data.functionality,
+    });
+  }
   return latest;
 }
 

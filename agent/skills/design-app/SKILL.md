@@ -1,14 +1,39 @@
 ---
 name: design-app
-description: Turn a product idea into a rapidly iterated self-contained HTML prototype and a user-approved, build-ready AppSpec for a supported Autograph repository. Use for product discovery, app design, prototyping, or specification when requirements, integrations, or data objects are not yet fully known. Generic app-creation requests belong to $create-app.
+description: Turn a product idea into a rapidly iterated, component-backed minimum viable UI for a supported Arrusted repository. Use for product discovery, app design, prototyping, or specification when requirements, integrations, or data objects are not yet fully known. Generic app-creation requests belong to $create-app.
 ---
 
 # Design App
 
-Use HTML as the discovery surface and a structured AppSpec as the production
-handoff. Do not require a complete data model before showing the user something
-useful. Do not let provisional prototype assumptions silently become production
-decisions.
+Use the prepared Arrusted public component catalog as the discovery surface.
+The design source is bounded React UI source in the builder-owned overlay;
+compiled Browser assets are transport, never model-authored HTML. Do not require
+a complete data model before showing the user something useful. Do not let
+provisional UI assumptions silently become production decisions.
+
+## Minimum viable UI gate
+
+Prepare the canonical Arrusted source and inspect its current catalog, tokens,
+providers, examples, and stories before the first preview. Reuse public
+`@autograph/components`, `@autograph/compositions`, and `@autograph/icons`
+before adding a small `src/components/` workflow composition. A local component
+needs a recorded catalog gap and may compose only public primitives and semantic
+tokens. Never copy private components, define replacement tokens, or introduce
+another styling system.
+
+The preview is fixture-backed and in-memory: pages, navigation, filters,
+dialogs, controls, keyboard actions, and visible empty/loading/error states
+work, but it has no persistence, network, provider, schema, API, server action,
+or backend files. Revise only the disposable overlay and show the UI early.
+Defer backend questions unless the answer changes what the person sees.
+
+Stay in UI review after a preview. Praise such as “looks good” prompts an offer
+to finalize functionality but does not authorize it. Only an explicit request
+to finalize functionality accepts the exact revision; then bind production
+decisions to that revision and begin the existing planning flow. Any later UI
+revision invalidates acceptance and returns to UI review. Legacy HTML previews
+may be read, but must be re-rendered through this component path before
+finalization.
 
 Prototype files and previews require a discovered builder-owned artifact tool.
 If it is unavailable, stop after product discovery and report that prototype

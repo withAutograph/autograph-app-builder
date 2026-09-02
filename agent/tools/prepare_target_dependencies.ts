@@ -16,9 +16,14 @@ export default defineTool({
   async execute({ expectedAppSpecDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target dependency preparation");
-    if (current.phase === "empty" || current.phase === "prepared")
+    if (
+      current.phase === "empty" ||
+      current.phase === "prepared" ||
+      current.phase === "ui_previewed" ||
+      current.phase === "ui_accepted"
+    )
       throw new Error(
-        "Accept a build-ready AppSpec before preparing target dependencies.",
+        "Finalize the UI and accept a build-ready AppSpec before preparing target dependencies.",
       );
     const prepared = await prepareOrReuseDependencies({
       current,

@@ -45,7 +45,7 @@ function planningMarker(
 
 type DependencyPreparationState = Exclude<
   AppBuilderWorkflowState,
-  { phase: "empty" | "prepared" }
+  { phase: "empty" | "prepared" | "ui_previewed" | "ui_accepted" }
 >;
 
 export type DependencyReadyState = Exclude<

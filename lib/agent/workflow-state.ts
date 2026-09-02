@@ -40,9 +40,9 @@ import type {
 import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 16 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v16" as const;
+  "autograph-app-builder.workflow.v17" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -52,6 +52,8 @@ export type AcceptedAppSpec = {
   acceptedByCallId: string;
   artifactRevision: string;
   approvalReceipt?: ApprovalReceipt;
+  /** Exact UI revision accepted before this functional handoff, if any. */
+  uiRevision?: string;
 };
 
 export type PrototypeArtifact = {
@@ -63,6 +65,25 @@ export type PrototypeArtifact = {
   revision: string;
   sessionId: string;
   recordedByCallId: string;
+};
+
+/**
+ * A UI preview is source-first. The Browser HTML is a renderer output, never
+ * the authored design input.  Keeping the small source set in durable state
+ * lets a later functionality pass promote the exact reviewed UI.
+ */
+export type UiPreviewRevision = {
+  appId: string;
+  revision: string;
+  sourceDigest: string;
+  catalogDigest: string;
+  sourceSha: string;
+  sourceTree: string;
+  routes: readonly string[];
+  files: readonly { path: string; content: string }[];
+  catalogGaps: readonly { path: string; reason: string }[];
+  previewHtml: string;
+  createdByCallId: string;
 };
 
 type TargetExecutionBinding = {
@@ -126,6 +147,8 @@ type WorkspacePhase = {
   artifacts: readonly PrototypeArtifact[];
 };
 
+type UiPreviewPhase = WorkspacePhase & { uiPreview: UiPreviewRevision };
+
 export type GitHubDraftProposalBinding = {
   proposal: DraftPullRequestProposal;
   sourceReceiptDigest: string;
@@ -149,6 +172,15 @@ export type AppBuilderWorkflowState =
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "prepared";
     } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "ui_previewed";
+    } & UiPreviewPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "ui_accepted";
+      uiAcceptedByCallId: string;
+    } & UiPreviewPhase)
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "app_spec_accepted";

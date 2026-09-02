@@ -166,6 +166,20 @@ export const publicPrototypeSchema = z
 
 export type PublicPrototype = z.infer<typeof publicPrototypeSchema>;
 
+/** A fixture-backed revision compiled from the prepared Arrusted catalog. */
+export const publicUiPreviewSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    revision: sha256DigestSchema,
+    routes: z.array(z.string().startsWith("/")).min(1).max(16),
+    fidelity: z.literal("arrusted-component-catalog"),
+    functionality: z.literal("fixtures-only"),
+    previewUrl: publicPrototypePreviewUrlSchema.optional(),
+  })
+  .strict();
+
+export type PublicUiPreview = z.infer<typeof publicUiPreviewSchema>;
+
 export const publicImplementationPlanSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -193,6 +207,7 @@ export const eveSessionResultSchema = z
     events: z.array(publicEveEventSchema),
     inputRequests: z.array(publicInputRequestSchema).optional(),
     prototype: publicPrototypeSchema.optional(),
+    uiPreview: publicUiPreviewSchema.optional(),
     implementationPlan: publicImplementationPlanSchema.optional(),
     error: z
       .object({ code: z.string(), message: z.string() })

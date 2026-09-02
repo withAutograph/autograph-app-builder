@@ -148,6 +148,9 @@ export function attachPrototypePreviewUrl(
   return eveSessionResultSchema.parse({
     ...result,
     prototype: { ...result.prototype, previewUrl: url },
+    ...(result.uiPreview === undefined
+      ? {}
+      : { uiPreview: { ...result.uiPreview, previewUrl: url } }),
   });
 }
 

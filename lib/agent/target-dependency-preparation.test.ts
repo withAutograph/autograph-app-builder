@@ -250,7 +250,7 @@ function acceptedState(
   workspace: typeof mocks.workspace = mocks.workspace,
 ): AppBuilderWorkflowState {
   return {
-    version: 16,
+    version: 17,
     phase: "app_spec_accepted",
     preparedByCallId: "prepare-call",
     workspace,

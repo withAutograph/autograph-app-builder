@@ -6,6 +6,7 @@ import {
   deriveInstalledEveStatus,
   latestInstalledImplementationPlan,
   latestInstalledPrototype,
+  latestInstalledUiPreview,
   projectInstalledEveEvents,
   projectInstalledEveEvent,
   toPublicEvent,
@@ -413,6 +414,35 @@ describe("installed Eve 0.43 projection", () => {
     requested.data.actions[0].input.path =
       "prototype/vendor-onboarding/app-spec.md";
     expect(latestInstalledPrototype(malformedRequest)).toBeUndefined();
+  });
+
+  it("projects a receipt-bound component-backed UI preview and its Browser transport", () => {
+    const content = "<!doctype html><html><body>Component preview</body></html>";
+    const revision = "a".repeat(64);
+    const events = [
+      installedEvent({
+        type: "action.result",
+        data: {
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            callId: "ui-preview",
+            toolName: "record_ui_preview",
+            output: {
+              appId: "vendor-onboarding",
+              revision,
+              routes: ["/", "/vendors"],
+              fidelity: "arrusted-component-catalog",
+              functionality: "fixtures-only",
+              content,
+              digest: digest(content),
+            },
+          },
+        },
+      }),
+    ];
+    expect(latestInstalledUiPreview(events)).toMatchObject({ revision, routes: ["/", "/vendors"] });
+    expect(latestInstalledPrototype(events)).toMatchObject({ content, digest: digest(content) });
   });
 
   it("fails closed if internal specification recording requests approval", () => {
