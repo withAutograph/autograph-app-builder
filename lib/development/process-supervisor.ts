@@ -63,13 +63,17 @@ export function developmentChildExit(child: ChildProcess) {
 
 export async function stopDevelopmentChild(
   child: ChildProcess,
-  options: Readonly<{ processGroup?: boolean }> = {},
+  options: Readonly<{
+    processGroup?: boolean;
+    gracefulTimeoutMs?: number;
+  }> = {},
 ) {
   const childExited = child.exitCode !== null || child.signalCode !== null;
   // The wrapper can exit before an Eve descendant does (for example when the
   // wrapper observes a launch error).  Still signal its task-owned process
   // group so a listener inherited by that group cannot survive a restart.
   if (childExited && !options.processGroup) return;
+  const gracefulTimeoutMs = options.gracefulTimeoutMs ?? 5_000;
   const exited = developmentChildExit(child);
   const signal = (value: NodeJS.Signals) => {
     if (
@@ -88,11 +92,31 @@ export async function stopDevelopmentChild(
     child.kill(value);
   };
   signal("SIGTERM");
+  if (
+    options.processGroup &&
+    child.pid !== undefined &&
+    process.platform !== "win32"
+  ) {
+    // Eve may allow its wrapper to exit while its local listener finishes (or
+    // ignores) shutdown. The child PID is also the task-owned detached process
+    // group ID, so wait for the *whole* cycle rather than treating wrapper exit
+    // as evidence that port 2000 is available for the next cycle.
+    // Process-group liveness probing is not portable (macOS can return EPERM
+    // after the wrapper is reaped even though a descendant remains). Give the
+    // task-owned group a short grace window, then ensure it cannot retain the
+    // loopback listener into the next development cycle.
+    await new Promise((resolveWait) =>
+      setTimeout(resolveWait, options.gracefulTimeoutMs ?? 250),
+    );
+    signal("SIGKILL");
+    if (!childExited) await exited;
+    return;
+  }
   if (childExited) return;
   const graceful = await Promise.race([
     exited.then(() => true),
     new Promise<false>((resolveWait) =>
-      setTimeout(() => resolveWait(false), 5_000),
+      setTimeout(() => resolveWait(false), gracefulTimeoutMs),
     ),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
@@ -121,5 +145,7 @@ export async function waitForDevelopmentPortRelease(
     if (!occupied) return;
     await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
   }
-  throw new Error(`Development Eve port ${port} was not released after shutdown.`);
+  throw new Error(
+    `Development Eve port ${port} was not released after shutdown.`,
+  );
 }

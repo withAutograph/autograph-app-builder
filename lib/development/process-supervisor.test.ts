@@ -71,13 +71,33 @@ describe("development process supervision", () => {
       process.execPath,
       [
         "-e",
-        `require("node:child_process").spawn(process.execPath, ["-e", "require('node:net').createServer().listen(${port}); setInterval(() => {}, 1000)"], { stdio: "ignore" });`,
+        `const child = require("node:child_process").spawn(process.execPath, ["-e", "require('node:net').createServer().listen(${port}); setInterval(() => {}, 1000)"], { stdio: "ignore" }); child.unref();`,
       ],
       { detached: true, stdio: "ignore" },
     );
     await developmentChildExit(child);
 
     await stopDevelopmentChild(child, { processGroup: true });
+    await waitForDevelopmentPortRelease(port, { timeoutMs: 2_000 });
+  });
+
+  it("forces out an Eve descendant that outlives its wrapper and ignores SIGTERM", async () => {
+    if (process.platform === "win32") return;
+    const port = 43988;
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const child = require("node:child_process").spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); require('node:net').createServer().listen(${port}); setInterval(() => {}, 1000)"], { stdio: "ignore" }); child.unref();`,
+      ],
+      { detached: true, stdio: "ignore" },
+    );
+    await developmentChildExit(child);
+
+    await stopDevelopmentChild(child, {
+      processGroup: true,
+      gracefulTimeoutMs: 25,
+    });
     await waitForDevelopmentPortRelease(port, { timeoutMs: 2_000 });
   });
 });
