@@ -4,6 +4,7 @@ import {
   builderModelSchema,
   type BuilderIntegrationState,
 } from "./builder-state";
+import { activeBuilderModelId } from "./active-model";
 
 const GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1/models";
 const CACHE_MS = 5 * 60_000;
@@ -45,7 +46,9 @@ export async function loadGatewayModels(input?: {
     if (!response.ok) throw new Error("gateway-models-unavailable");
     const parsed = responseSchema.parse(await response.json());
     const entries = parsed.data
-      .filter((model) => model.type === "language")
+      .filter(
+        (model) => model.type === "language" && model.owned_by === "openai",
+      )
       .map((model) =>
         builderModelSchema.parse({
           id: model.id,
@@ -58,9 +61,9 @@ export async function loadGatewayModels(input?: {
       .sort((left, right) => left.name.localeCompare(right.name));
     if (entries.length === 0) throw new Error("gateway-models-empty");
     const defaultModelId = entries.some(
-      (entry) => entry.id === input?.defaultModelId,
+      (entry) => entry.id === activeBuilderModelId,
     )
-      ? input?.defaultModelId
+      ? activeBuilderModelId
       : undefined;
     const value: ModelState = {
       status: "ready",

@@ -23,6 +23,12 @@ export type LocalOidcStartupCommandRunner = (
   invocation: LocalOidcStartupInvocation,
 ) => void;
 
+export class LocalOidcRefreshFailedError extends Error {
+  constructor() {
+    super("Project Development OIDC refresh could not complete.");
+  }
+}
+
 function requiredEnvironmentValue(
   environment: NodeJS.ProcessEnv,
   name: "HOME" | "PATH",
@@ -77,29 +83,43 @@ function readLinkedProject(repositoryRoot: string) {
   );
 }
 
-function validateInstalledOidc(input: {
+function installedOidcNeedsRefresh(input: {
   repositoryRoot: string;
   nowEpochSeconds: number;
   expectedProject: ReturnType<typeof parseLinkedVercelProject>;
-}): void {
+}): boolean {
   const project = readLinkedProject(input.repositoryRoot);
   if (!sameProject(project, input.expectedProject)) {
     throw new Error("The linked Vercel project changed during OIDC startup.");
   }
-  const environment = readOwnerBoundLocalFile(
-    resolve(input.repositoryRoot, ".env.local"),
-    { confidential: true },
-  );
+  let environment: string;
+  try {
+    environment = readOwnerBoundLocalFile(
+      resolve(input.repositoryRoot, ".env.local"),
+      { confidential: true },
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw error;
+  }
   const token = parseLocalVercelOidcToken(environment);
   const claims = validateLocalVercelOidcClaims({
     token,
     project,
     nowEpochSeconds: input.nowEpochSeconds,
+    allowExpired: true,
   });
-  if (
-    claims.expiresAt <=
-    input.nowEpochSeconds + MINIMUM_TOKEN_LIFETIME_SECONDS
-  ) {
+  return (
+    claims.expiresAt <= input.nowEpochSeconds + MINIMUM_TOKEN_LIFETIME_SECONDS
+  );
+}
+
+function validateInstalledOidc(input: {
+  repositoryRoot: string;
+  nowEpochSeconds: number;
+  expectedProject: ReturnType<typeof parseLinkedVercelProject>;
+}): void {
+  if (installedOidcNeedsRefresh(input)) {
     throw new Error("OIDC token would expire during Development startup.");
   }
 }
@@ -138,33 +158,36 @@ export function ensureLocalDevelopmentOidc(input: {
   const nowEpochSeconds =
     input.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
 
-  try {
-    validateInstalledOidc({
+  if (
+    !installedOidcNeedsRefresh({
       repositoryRoot,
       nowEpochSeconds,
       expectedProject,
-    });
+    })
+  ) {
     return { refreshed: false };
-  } catch {
-    // A missing, permissive, malformed, or expiring local token is replaced once.
   }
 
   const runCommand = input.runCommand ?? runLocalOidcStartupCommand;
   const childEnvironment = commandEnvironment(environment);
-  runCommand({
-    executable: input.vercelExecutable,
-    args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
-    cwd: repositoryRoot,
-    environment: childEnvironment,
-    operation: "development-env-pull",
-  });
-  runCommand({
-    executable: input.miseExecutable,
-    args: ["run", "local:install-oidc"],
-    cwd: repositoryRoot,
-    environment: childEnvironment,
-    operation: "owner-bind",
-  });
+  try {
+    runCommand({
+      executable: input.vercelExecutable,
+      args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
+      cwd: repositoryRoot,
+      environment: childEnvironment,
+      operation: "development-env-pull",
+    });
+    runCommand({
+      executable: input.miseExecutable,
+      args: ["run", "local:install-oidc"],
+      cwd: repositoryRoot,
+      environment: childEnvironment,
+      operation: "owner-bind",
+    });
+  } catch {
+    throw new LocalOidcRefreshFailedError();
+  }
 
   validateInstalledOidc({
     repositoryRoot,

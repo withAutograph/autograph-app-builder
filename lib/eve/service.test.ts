@@ -579,6 +579,85 @@ describe("local Eve acceptance", () => {
     });
   });
 
+  it("hydrates a route-local preview from the durable Eve session", async () => {
+    const content = "<!doctype html><html><body>Stock exceptions</body></html>";
+    const path = "prototype/stock-exceptions/index.html";
+    const mediaType = "text/html";
+    const digest = createHash("sha256").update(content).digest("hex");
+    const revision = createHash("sha256")
+      .update(JSON.stringify({ path, mediaType, digest }))
+      .digest("hex");
+    const events = [
+      {
+        type: "actions.requested",
+        data: {
+          actions: [
+            {
+              kind: "tool-call",
+              callId: "call_route_prototype",
+              toolName: "record_prototype_artifact",
+              input: { path, mediaType, content },
+            },
+          ],
+        },
+      },
+      {
+        type: "action.result",
+        data: {
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            callId: "call_route_prototype",
+            toolName: "record_prototype_artifact",
+            output: {
+              appId: "stock-exceptions",
+              path,
+              mediaType,
+              digest,
+              revision,
+              sessionId: "wrun_route_prototype",
+              recordedByCallId: "call_route_prototype",
+              size: Buffer.byteLength(content),
+              reused: false,
+            },
+          },
+        },
+      },
+      { type: "session.waiting", data: {} },
+    ] as unknown as MessageStreamEvent[];
+    const snapshot = vi.fn(async () => ({
+      events,
+      session: {
+        sessionId: "wrun_route_prototype",
+        streamIndex: events.length,
+      },
+    }));
+    const session = {
+      state: { sessionId: "wrun_route_prototype" },
+      snapshot,
+    };
+    const attach = vi.fn(() => session);
+    const service = createLocalEveSessionService(
+      { sessions: { attach } as never },
+      { stateGeneration: "route-local-preview" },
+    );
+
+    await expect(
+      service.get({
+        sessionId: "wrun_route_prototype",
+        cursor: 0,
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({
+      status: "waiting",
+      prototype: { path, mediaType, content, digest, revision },
+    });
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(attach).toHaveBeenLastCalledWith("wrun_route_prototype", {
+      streamIndex: events.length,
+    });
+  });
+
   it("returns one stable public handle without waiting for the active turn", async () => {
     const never = new Promise<void>(() => undefined);
     const response = {

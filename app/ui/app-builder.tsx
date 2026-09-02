@@ -37,6 +37,7 @@ import {
 } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
 import { SectionShell } from "../../components/create-app/choice-card";
@@ -189,7 +190,7 @@ async function createBuilderHandoff(input: {
         private: input.form.privateRepository,
       },
       brief: input.form.brief,
-      modelId: input.form.modelId,
+      modelId: activeBuilderModelId,
       connections: input.form.connections,
     }),
   });
@@ -338,7 +339,7 @@ const randomNameNouns = [
   "Waypoint",
   "Workshop",
 ] as const;
-const preferredModelId = "openai/gpt-5.6-sol";
+const preferredModelId = activeBuilderModelId;
 
 export function repositoryNameFromAppName(appName: string) {
   return appName
@@ -1134,16 +1135,14 @@ export function Builder({
     label: scope.accountLogin,
     detail: scope.accountType,
   }));
-  const allModelOptions = integrations.models.entries.map((model) => ({
-    value: model.id,
-    label: model.name,
-    detail: model.id,
-  }));
-  const defaultModel = integrations.models.entries.some(
-    (entry) => entry.id === preferredModelId,
-  )
-    ? preferredModelId
-    : (integrations.models.defaultModelId ?? allModelOptions[0]?.value ?? "");
+  const allModelOptions = integrations.models.entries
+    .filter((model) => model.id === preferredModelId)
+    .map((model) => ({
+      value: model.id,
+      label: model.name,
+      detail: model.id,
+    }));
+  const defaultModel = allModelOptions[0]?.value ?? "";
   const effectiveInitialBrief = initialBrief.trim()
     ? initialBrief
     : defaultBrief;
@@ -1189,7 +1188,7 @@ export function Builder({
       ? (gitScopeOptions[0]?.value ?? "")
       : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
   );
-  const [model, setModel] = useState(initialDraft?.model ?? defaultModel);
+  const [model, setModel] = useState(defaultModel);
   const [zdrOnly, setZdrOnly] = useState(initialDraft?.zdrOnly ?? false);
   const [showMoreConnections, setShowMoreConnections] = useState(
     initialDraft?.showMoreConnections ?? false,
@@ -1346,7 +1345,7 @@ export function Builder({
           ...(storageProvider === "github" && gitScope
             ? { githubInstallationId: gitScope }
             : {}),
-          modelId: model,
+          modelId: preferredModelId,
         },
         resumeKey,
       );

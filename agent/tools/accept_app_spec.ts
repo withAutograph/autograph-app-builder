@@ -22,8 +22,14 @@ import {
 import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
+import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 
 import planAppCreation from "./plan_app_creation";
+
+function planningMarker(marker: string, phase: "start" | "finish") {
+  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
+    console.info(`[app-builder planning] ${marker} ${phase}`);
+}
 
 /**
  * Planning is the deterministic continuation of a successfully accepted
@@ -37,6 +43,7 @@ import planAppCreation from "./plan_app_creation";
 async function planAcceptedAppSpec(
   digest: string,
   ctx: Parameters<typeof planAppCreation.execute>[1],
+  existingAppChanges?: readonly { path: string; content: string }[],
 ) {
   const latest = appBuilderWorkflowState.get();
   await continueAcceptedAppSpec({
@@ -50,7 +57,13 @@ async function planAcceptedAppSpec(
       latest.phase === "validated" ||
       latest.phase === "reviewed",
     plan: () =>
-      planAppCreation.execute({ expectedAppSpecDigest: digest }, ctx),
+      planAppCreation.execute(
+        {
+          expectedAppSpecDigest: digest,
+          ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
+        },
+        ctx,
+      ),
   });
 }
 
@@ -65,6 +78,7 @@ export default defineTool({
     expectedSourceTree: gitObjectIdSchema,
     expectedEligibilityDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     expectedWorkspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    existingAppChanges: existingAppChangesSchema.optional(),
     approvalReceipt: approvalReceiptSchema.optional(),
   }),
   async execute(
@@ -76,6 +90,7 @@ export default defineTool({
       expectedSourceTree,
       expectedEligibilityDigest,
       expectedWorkspaceDigest,
+      existingAppChanges,
       approvalReceipt,
     },
     ctx,
@@ -94,12 +109,14 @@ export default defineTool({
       );
     const workspace = current.workspace;
     const development = canAutoSelectDevelopmentSource();
+    planningMarker("source-bound-workspace-inspection", "start");
     const acceptedWorkspace = development
       ? await inspectSourceBoundSandboxWorkspace({
           sandbox: await ctx.getSandbox(),
           receipt: current.sourceReceipt,
         })
       : workspace;
+    planningMarker("source-bound-workspace-inspection", "finish");
     const path = `prototype/${appId}/app-spec.md`;
     const artifact = exactPrototypeArtifact(current.artifacts, {
       path,
@@ -165,7 +182,11 @@ export default defineTool({
         throw new Error(
           "The AppSpec approval receipt changed after acceptance.",
         );
-      await planAcceptedAppSpec(current.appSpec.digest, ctx);
+      await planAcceptedAppSpec(
+        current.appSpec.digest,
+        ctx,
+        existingAppChanges,
+      );
       return { ...current.appSpec, reused: true };
     }
     updateExactWorkflow({
@@ -186,7 +207,7 @@ export default defineTool({
         };
       },
     });
-    await planAcceptedAppSpec(accepted.digest, ctx);
+    await planAcceptedAppSpec(accepted.digest, ctx, existingAppChanges);
     return { ...accepted, reused: false };
   },
 });

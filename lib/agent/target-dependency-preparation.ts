@@ -35,6 +35,14 @@ import {
   developmentSourceReceipt,
 } from "@/lib/repository/development-source";
 
+function planningMarker(
+  marker: string,
+  phase: "start" | "finish" | "hit" | "miss" | "repair",
+) {
+  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
+    console.info(`[app-builder planning] ${marker} ${phase}`);
+}
+
 type DependencyPreparationState = Exclude<
   AppBuilderWorkflowState,
   { phase: "empty" | "prepared" }
@@ -135,6 +143,7 @@ export async function prepareOrReuseDependencies(input: {
     sessionId: input.sessionId,
   });
   const sandbox = await input.getSandbox();
+  planningMarker("source-bound-workspace-inspection", "start");
   const observedWorkspace = await inspectSourceBoundSandboxWorkspace({
     sandbox,
     receipt: current.sourceReceipt,
@@ -143,6 +152,7 @@ export async function prepareOrReuseDependencies(input: {
       ? {}
       : { githubSource: current.githubSource }),
   });
+  planningMarker("source-bound-workspace-inspection", "finish");
   if (
     canAutoSelectDevelopmentSource(input.environment) &&
     JSON.stringify(observedWorkspace) !== JSON.stringify(current.workspace)
@@ -182,12 +192,15 @@ export async function prepareOrReuseDependencies(input: {
   );
 
   if (current.phase !== "app_spec_accepted") {
+    planningMarker("dependency-cache-inspection", "start");
     const cache = await inspectDependencyCache(
       sandbox,
       input.environment,
       current.workspace,
       preferLiveTemplate,
     );
+    planningMarker("dependency-cache-inspection", "finish");
+    planningMarker("dependency-cache", "hit");
     assertExactDependencyTargetBinding({
       workspace: current.workspace,
       sourceReceipt: current.sourceReceipt,
@@ -209,6 +222,7 @@ export async function prepareOrReuseDependencies(input: {
   }
 
   let observedCache: ObservedDependencyCache;
+  planningMarker("dependency-cache-inspection", "start");
   try {
     observedCache = await inspectDependencyCache(
       sandbox,
@@ -218,12 +232,16 @@ export async function prepareOrReuseDependencies(input: {
     );
   } catch (error) {
     if (!(error instanceof DependencyCacheMissingError)) throw error;
+    planningMarker("dependency-cache-inspection", "finish");
+    planningMarker("dependency-cache", "miss");
     if (input.environment.APP_BUILDER_EXECUTION_MODE === "development") {
+      planningMarker("dependency-cache-repair", "repair");
       await repairDevelopmentDependencyCache({
         sandbox,
         environment: input.environment,
       });
     } else if (preferLiveTemplate) {
+      planningMarker("dependency-cache-repair", "repair");
       await bootstrapLiveTemplateDependencies({
         sandbox,
       });
@@ -244,12 +262,14 @@ export async function prepareOrReuseDependencies(input: {
       current.workspace,
       preferLiveTemplate,
     );
+    planningMarker("dependency-cache-inspection", "finish");
   }
   assertExactDependencyTargetBinding({
     workspace: current.workspace,
     sourceReceipt: current.sourceReceipt,
     cache: observedCache,
   });
+  planningMarker("planning-overlay", "start");
   await materializePlanningOverlay({
     sandbox,
     artifactRevision: current.appSpec.artifactRevision,
@@ -257,6 +277,8 @@ export async function prepareOrReuseDependencies(input: {
     appSpecContent: current.appSpec.content,
     appSpecDigest: current.appSpec.digest,
   });
+  planningMarker("planning-overlay", "finish");
+  planningMarker("offline-dependency-materialization", "start");
   const cache = await materializeOfflineDependencies({
     sandbox,
     artifactRevision: current.appSpec.artifactRevision,
@@ -264,6 +286,7 @@ export async function prepareOrReuseDependencies(input: {
     environment: input.environment,
     preferLiveTemplate,
   });
+  planningMarker("offline-dependency-materialization", "finish");
   assertExactDependencyTargetBinding({
     workspace: current.workspace,
     sourceReceipt: current.sourceReceipt,

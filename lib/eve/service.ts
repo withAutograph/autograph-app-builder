@@ -606,6 +606,23 @@ export function createLocalEveSessionService(
     async get({ sessionId, cursor, limit }) {
       if (state.restartInterrupted.has(sessionId))
         await recoverDurableTail(sessionId);
+      if (!localSessionEvents.has(sessionId)) {
+        try {
+          const snapshot = await sessionFor(sessionId).snapshot();
+          if (snapshot.session.sessionId !== sessionId)
+            throw new Error("Eve changed the local session during recovery.");
+          localSessionEvents.set(sessionId, [...snapshot.events]);
+          localSessionHandles.set(
+            sessionId,
+            client.sessions.attach(sessionId, {
+              streamIndex: snapshot.session.streamIndex,
+            }),
+          );
+        } catch {
+          // A fresh development invocation intentionally cannot recover an
+          // older application's local Eve session. Keep that lookup empty.
+        }
+      }
       touchSession(sessionId);
       return resultForEvents(
         sessionId,

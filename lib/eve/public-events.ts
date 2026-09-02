@@ -73,6 +73,14 @@ const prototypeResultSchema = z
     invalidated: z.boolean().optional(),
   })
   .strict();
+const prototypeBundleResultSchema = z
+  .object({
+    prototype: publicPrototypeSchema,
+  })
+  .passthrough();
+const prototypeBundlePlanResultSchema = z
+  .object({ implementationPlan: publicImplementationPlanSchema })
+  .passthrough();
 const planRequestSchema = z
   .object({
     expectedAppSpecDigest: lowercaseSha256Schema,
@@ -190,12 +198,17 @@ export function latestInstalledImplementationPlan(
   events: readonly MessageStreamEvent[],
 ): PublicImplementationPlan | undefined {
   const requested = new Map<string, z.infer<typeof planRequestSchema>>();
+  const requestedBundles = new Set<string>();
   let latest: PublicImplementationPlan | undefined;
 
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") continue;
+        if (action.toolName === "record_prototype_bundle") {
+          requestedBundles.add(action.callId);
+          continue;
+        }
         if (action.toolName !== "plan_app_creation") {
           requested.delete(action.callId);
           continue;
@@ -215,6 +228,14 @@ export function latestInstalledImplementationPlan(
     )
       continue;
 
+    if (event.data.result.toolName === "record_prototype_bundle") {
+      if (!requestedBundles.has(event.data.result.callId)) continue;
+      const output = prototypeBundlePlanResultSchema.safeParse(
+        event.data.result.output,
+      );
+      if (output.success) latest = output.data.implementationPlan;
+      continue;
+    }
     if (event.data.result.toolName === "record_prototype_artifact") {
       const output = event.data.result.output;
       if (
@@ -251,12 +272,17 @@ export function latestInstalledPrototype(
   events: readonly MessageStreamEvent[],
 ): PublicPrototype | undefined {
   const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+  const requestedBundles = new Set<string>();
   let latest: PublicPrototype | undefined;
 
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") continue;
+        if (action.toolName === "record_prototype_bundle") {
+          requestedBundles.add(action.callId);
+          continue;
+        }
         if (action.toolName !== "record_prototype_artifact") {
           requested.delete(action.callId);
           continue;
@@ -272,10 +298,19 @@ export function latestInstalledPrototype(
       event.type !== "action.result" ||
       event.data.status !== "completed" ||
       event.data.result.kind !== "tool-result" ||
-      event.data.result.toolName !== "record_prototype_artifact" ||
       event.data.result.isError === true
     )
       continue;
+
+    if (event.data.result.toolName === "record_prototype_bundle") {
+      if (!requestedBundles.has(event.data.result.callId)) continue;
+      const output = prototypeBundleResultSchema.safeParse(
+        event.data.result.output,
+      );
+      if (output.success) latest = output.data.prototype;
+      continue;
+    }
+    if (event.data.result.toolName !== "record_prototype_artifact") continue;
 
     const callId = event.data.result.callId;
     const input = requested.get(callId);

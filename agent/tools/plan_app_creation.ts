@@ -5,6 +5,7 @@ import {
   prepareOrReuseDependencies,
   type DependencyReadyState,
 } from "@/lib/agent/target-dependency-preparation";
+import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -23,19 +24,10 @@ import {
 
 export default defineTool({
   description:
-    "Required completion gate for every app creation or existing-app iteration. It automatically prepares or reuses verified dependencies before planning. For an existing app, first call inspect_existing_app after workspace preparation, read the bounded app-owned files, and provide every exact replacement as existingAppChanges; never call this tool without those changes for an existing app. If it reports existing_app_change_preimage_missing, inspect only the returned exactAppOwnedPaths and retry with replacements based on those contents; do not resolve or prepare the source again. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, arbitrary shell, arguments, cwd, or caller-controlled environment are available.",
+    "Required completion gate for every app creation or existing-app iteration. It automatically prepares or reuses verified dependencies before planning. For an existing app, first call inspect_existing_app after workspace preparation, read the app-owned files being replaced, and provide the complete app-owned change set as existingAppChanges. New app-owned files are allowed; replacements remain bound to their observed contents. Never call this tool without the intended changes for an existing app. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, arbitrary shell, arguments, cwd, or caller-controlled environment are available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    existingAppChanges: z
-      .array(
-        z.strictObject({
-          path: z.string().min(1).max(512),
-          content: z.string().max(262_144),
-        }),
-      )
-      .min(1)
-      .max(32)
-      .optional(),
+    existingAppChanges: existingAppChangesSchema.optional(),
   }),
   async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
     const state = appBuilderWorkflowState.get();

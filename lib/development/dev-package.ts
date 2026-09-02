@@ -325,6 +325,8 @@ export function developmentLaunchEnvironment(input: {
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
     EVE_HOSTED_ADAPTER: "0",
     WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
+    WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+    WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
     REPOSITORY_LOCAL_ROOTS: input.snapshotRoot,
     REPOSITORY_WORKSPACE_ROOT: input.destinationRoot,

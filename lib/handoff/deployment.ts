@@ -8,6 +8,7 @@ import { deriveBuilderAppId } from "../provisioning/names";
 import { createPostgresBuilderProvisionJournalStore } from "../provisioning/postgres-journal";
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
+import { activeBuilderModelIdSchema } from "../integrations/active-model";
 import {
   BuilderHandoffConflictError,
   createBuilderHandoffService,
@@ -74,7 +75,7 @@ export const builderHandoffCreateRequestSchema = z
       })
       .strict(),
     brief: z.string().trim().min(1).max(32_000),
-    modelId: z.string().trim().min(1).max(200),
+    modelId: activeBuilderModelIdSchema,
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
   })
   .strict();

@@ -76,28 +76,28 @@ export async function stopDevelopmentChild(
   const gracefulTimeoutMs =
     options.gracefulTimeoutMs ?? (options.processGroup ? 1_100 : 5_000);
   const exited = developmentChildExit(child);
-  const signal = (value: NodeJS.Signals) => {
-    if (
-      options.processGroup &&
-      child.pid !== undefined &&
-      process.platform !== "win32"
-    ) {
-      try {
-        process.kill(-child.pid, value);
-        return;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
-        throw error;
-      }
+  const signalProcessGroup = (value: NodeJS.Signals) => {
+    if (child.pid === undefined || process.platform === "win32") {
+      child.kill(value);
+      return;
     }
-    child.kill(value);
+    try {
+      process.kill(-child.pid, value);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    }
   };
-  signal("SIGTERM");
   if (
     options.processGroup &&
     child.pid !== undefined &&
     process.platform !== "win32"
   ) {
+    // Signal the wrapper only while it is alive. It forwards this signal once
+    // to Eve. Signalling the whole group here would also hit Eve directly,
+    // making the wrapper's forward a second signal that bypasses Eve's orderly
+    // shutdown and can orphan its separately detached local server.
+    if (childExited) signalProcessGroup("SIGTERM");
+    else child.kill("SIGTERM");
     // `eve dev` uses a separately detached local-server child. Its CLI sends
     // that child an IPC shutdown request and has a 900ms shutdown backstop.
     // Do not cut that handshake short: a premature group kill leaves the
@@ -107,10 +107,11 @@ export async function stopDevelopmentChild(
     await new Promise((resolveWait) =>
       setTimeout(resolveWait, gracefulTimeoutMs),
     );
-    signal("SIGKILL");
+    signalProcessGroup("SIGKILL");
     if (!childExited) await exited;
     return;
   }
+  child.kill("SIGTERM");
   if (childExited) return;
   const graceful = await Promise.race([
     exited.then(() => true),
@@ -119,7 +120,7 @@ export async function stopDevelopmentChild(
     ),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
-    signal("SIGKILL");
+    child.kill("SIGKILL");
     await exited;
   }
 }

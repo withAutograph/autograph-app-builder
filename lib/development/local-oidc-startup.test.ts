@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ensureLocalDevelopmentOidc,
+  LocalOidcRefreshFailedError,
   runLocalOidcStartupCommand,
   type LocalOidcStartupInvocation,
 } from "./local-oidc-startup";
@@ -135,6 +136,38 @@ describe("local Development OIDC startup", () => {
         operation: "owner-bind",
       },
     ]);
+  });
+
+  it("does not refresh malformed or unsafe installed OIDC", () => {
+    const repositoryRoot = fixture();
+    writeFileSync(
+      join(repositoryRoot, ".env.local"),
+      "VERCEL_OIDC_TOKEN=not-a-jwt\n",
+      { mode: 0o600 },
+    );
+    const runCommand = () => {
+      throw new Error("command must not run");
+    };
+
+    expect(() =>
+      ensureLocalDevelopmentOidc({
+        ...baseInput(repositoryRoot),
+        runCommand,
+      }),
+    ).toThrow("VERCEL_OIDC_TOKEN was not a bounded JWT");
+  });
+
+  it("reports one safe error when a required refresh cannot run", () => {
+    const repositoryRoot = fixture({ expiresAt: NOW + 60 });
+
+    expect(() =>
+      ensureLocalDevelopmentOidc({
+        ...baseInput(repositoryRoot),
+        runCommand: () => {
+          throw new Error("network access denied");
+        },
+      }),
+    ).toThrow(LocalOidcRefreshFailedError);
   });
 
   it.each(["VERCEL_TOKEN", "AI_GATEWAY_API_KEY"] as const)(

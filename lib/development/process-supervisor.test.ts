@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createDevelopmentShutdown,
@@ -62,6 +62,38 @@ describe("development process supervision", () => {
 
     await stopDevelopmentChild(child, { processGroup: true });
     expect(await exited).toBe(1);
+  });
+
+  it("signals the Eve wrapper once before forcing its task-owned group", async () => {
+    if (process.platform === "win32") return;
+    const child = new EventEmitter() as ChildProcess;
+    const directSignals: (NodeJS.Signals | number | undefined)[] = [];
+    const groupSignals: (NodeJS.Signals | number | undefined)[] = [];
+    Object.defineProperties(child, {
+      exitCode: { value: null, writable: true },
+      signalCode: { value: null, writable: true },
+      pid: { value: 43_210 },
+    });
+    child.kill = ((signal?: NodeJS.Signals | number) => {
+      directSignals.push(signal);
+      return true;
+    }) as ChildProcess["kill"];
+    const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
+      groupSignals.push(signal);
+      if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
+      return true;
+    });
+
+    try {
+      await stopDevelopmentChild(child, {
+        processGroup: true,
+        gracefulTimeoutMs: 1,
+      });
+      expect(directSignals).toEqual(["SIGTERM"]);
+      expect(groupSignals).toEqual(["SIGKILL"]);
+    } finally {
+      kill.mockRestore();
+    }
   });
 
   it("cleans up a listener when the Eve wrapper exits before its descendant", async () => {

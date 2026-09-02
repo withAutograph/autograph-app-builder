@@ -19,7 +19,7 @@ export default defineDynamic({
         return null;
       return defineTool({
         description:
-          "After source and workspace preparation, read a bounded set of regular text files from one existing application in the immutable prepared source. First call with no paths to list app-owned files, then call with the selected paths to obtain exact preimages for replacement drafting. This is a read-only implementation-planning operation and never writes or publishes.",
+          "After source and workspace preparation, read regular text files from one existing application. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
         inputSchema: z.strictObject({
           appId: z.string().min(1),
           paths: z.array(z.string().min(1).max(512)).max(32).default([]),
@@ -77,27 +77,35 @@ export default defineDynamic({
             );
           let total = 0;
           const files = [];
+          const missingPaths = [];
+          const omittedPaths = [];
           for (const path of paths) {
-            if (!allowed.has(path))
-              throw new Error(
-                "An existing application source file is unavailable.",
-              );
+            if (!allowed.has(path)) {
+              missingPaths.push(path);
+              continue;
+            }
             const content = await sandbox.readTextFile({
               path: `repository/${path}`,
             });
-            if (content === null)
-              throw new Error(
-                "An existing application source file is unavailable.",
-              );
+            if (content === null) {
+              missingPaths.push(path);
+              continue;
+            }
             const size = Buffer.byteLength(content);
+            if (size > maximumFileBytes || total + size > maximumTotalBytes) {
+              omittedPaths.push(path);
+              continue;
+            }
             total += size;
-            if (size > maximumFileBytes || total > maximumTotalBytes)
-              throw new Error(
-                "The existing application inspection exceeded its bounded size.",
-              );
             files.push({ path, content });
           }
-          return { appId, availablePaths, files };
+          return {
+            appId,
+            availablePaths,
+            files,
+            ...(missingPaths.length === 0 ? {} : { missingPaths }),
+            ...(omittedPaths.length === 0 ? {} : { omittedPaths }),
+          };
         },
       });
     },

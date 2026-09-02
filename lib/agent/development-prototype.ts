@@ -51,13 +51,11 @@ function displayName(appId: string) {
 function values(
   input: readonly string[] | undefined,
   fallback: readonly string[],
-  maximum: number,
 ) {
   const result = (input ?? fallback)
     .map((value) => text(value, 80))
-    .filter((value) => value.length > 0)
-    .slice(0, maximum);
-  return result.length > 0 ? result : [...fallback].slice(0, maximum);
+    .filter((value) => value.length > 0);
+  return result.length > 0 ? result : [...fallback];
 }
 
 /**
@@ -92,17 +90,14 @@ export function developmentPrototypeBundle(
   const items = values(
     input.product?.itemLabels,
     ["Needs attention", "In progress", "Ready to complete"],
-    3,
   );
   const filters = values(
     input.product?.filters,
     ["All work", "Assigned to me"],
-    4,
   );
   const states = values(
     input.product?.states,
     ["Needs review", "In progress", "Ready"],
-    4,
   );
   const facts = (
     input.product?.keyFacts ?? [
@@ -114,8 +109,7 @@ export function developmentPrototypeBundle(
       label: text(label, 60),
       value: text(value, 100),
     }))
-    .filter(({ label, value }) => label.length > 0 && value.length > 0)
-    .slice(0, 4);
+    .filter(({ label, value }) => label.length > 0 && value.length > 0);
   const safeFacts =
     facts.length > 0 ? facts : [{ label: "Owner", value: "Operations" }];
   const primaryAction = text(

@@ -13,6 +13,7 @@ import {
 import { createPostgresVercelInstallationStore } from "./postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "./vercel-installation";
 import { providerEmulationEnvironment } from "./local-provider-emulation";
+import { activeBuilderModelId } from "./active-model";
 
 type BuilderIntegrationRequest = {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
@@ -45,7 +46,7 @@ export async function loadBuilderIntegrationState(
 ): Promise<BuilderIntegrationState> {
   const environment = providerEmulationEnvironment(input.environment);
   const modelsPromise = loadGatewayModels({
-    defaultModelId: environment.EVE_MODEL,
+    defaultModelId: activeBuilderModelId,
     force: input.forceModels,
   });
   if (!input.authenticated) {

@@ -594,8 +594,9 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
           path: `${relativeRoot}/${change.path}`,
         });
         if (
-          current === null ||
-          sha256(current) !== change.before.digest ||
+          (change.before === undefined
+            ? current !== null
+            : current === null || sha256(current) !== change.before.digest) ||
           change.after.digest !== sha256(change.after.content)
         )
           return {
@@ -852,10 +853,13 @@ export async function executeProposalBoundApply(input: {
     (iterationProposal !== undefined
       ? iterationProposal.iteration.changes.some(
           ({ path, after }) =>
-            after.digest ===
-              iterationProposal.iteration.changes.find(
-                (candidate) => candidate.path === path,
-              )?.before.digest ||
+            (iterationProposal.iteration.changes.find(
+              (candidate) => candidate.path === path,
+            )?.before?.digest !== undefined &&
+              after.digest ===
+                iterationProposal.iteration.changes.find(
+                  (candidate) => candidate.path === path,
+                )?.before?.digest) ||
             !changes.some(
               (change) =>
                 change.path === path && change.after?.digest === after.digest,

@@ -29,6 +29,15 @@ const repositoryPath = z
   .string()
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
 
+export class ExistingApplicationChangesRequiredError extends Error {
+  constructor() {
+    super(
+      "The requested application already exists. Inspect its app-owned source files, then retry target planning with exact replacement contents.",
+    );
+    this.name = "ExistingApplicationChangesRequiredError";
+  }
+}
+
 export const targetIdentitySchema = z.strictObject({
   appId,
   workspacePath: repositoryPath,
@@ -90,7 +99,9 @@ export const targetCreationProposalSchema =
 
 const iterationChangeSchema = z.strictObject({
   path: repositoryPath,
-  before: z.strictObject({ mode: z.string().regex(/^[0-7]{3,4}$/u), digest }),
+  before: z
+    .strictObject({ mode: z.string().regex(/^[0-7]{3,4}$/u), digest })
+    .optional(),
   after: z.strictObject({
     mode: z.string().regex(/^[0-7]{3,4}$/u),
     digest,
@@ -197,6 +208,11 @@ export type TargetCommandExecutor = (input: {
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
+function planningMarker(marker: string, phase: "start" | "finish") {
+  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
+    console.info(`[app-builder planning] ${marker} ${phase}`);
+}
+
 /**
  * A development-only observation of the repository's preflight contract.
  * This is deliberately bound to the source receipt selected by the trusted
@@ -232,12 +248,16 @@ async function observeLocalPlanningCapability(input: {
   sourceReceipt: SourceReceipt;
   environment: Readonly<Record<string, string | undefined>>;
 }): Promise<LocalPlanningCapability | undefined> {
+  planningMarker("local-planning-preflight", "start");
   const selected = await developmentSourceReceipt(
     input.sourceReceipt.sourceKind,
     undefined,
     input.environment,
   );
-  if (selected === undefined) return undefined;
+  if (selected === undefined) {
+    planningMarker("local-planning-preflight", "finish");
+    return undefined;
+  }
 
   const result = await input.sandbox.run({
     command:
@@ -271,6 +291,7 @@ async function observeLocalPlanningCapability(input: {
     !parsed.data.requiredPaths.includes(parsed.data.topologyOwner)
   )
     throw new Error("Local planning topology was unavailable.");
+  planningMarker("local-planning-preflight", "finish");
   return parsed.data;
 }
 
@@ -350,6 +371,7 @@ export async function materializePlanningOverlay(input: {
   appSpecContent: string;
   appSpecDigest: string;
 }) {
+  planningMarker("planning-overlay", "start");
   const manifest = await input.sandbox.readTextFile({
     path: ".app-builder/source-files.json",
   });
@@ -373,20 +395,18 @@ export async function materializePlanningOverlay(input: {
     `${root}/prototype/${input.appId}`,
     `.app-builder/target-inputs/${input.artifactRevision}`,
   ]);
-  // The prepared manifest is the contained source allowlist. Copying it from
-  // the workspace preserves current builder edits while excluding .git,
-  // ignored files, credentials, and provider state that were never prepared.
-  // Planning happens in a mutable execution workspace and must observe its
-  // current source bytes; release byte binding is a separate concern.
-  for (const file of files) {
-    const content = await input.sandbox.readBinaryFile({
-      path: `repository/${file.path}`,
-    });
-    if (content === null) throw new Error("Prepared source file is missing.");
-    await input.sandbox.writeBinaryFile({
-      path: `${root}/${file.path}`,
-      content,
-    });
+  // `repository/` is already the contained, sanitized source tree produced by
+  // workspace preparation. Copy it inside the sandbox in one operation so a
+  // large repository does not require one remote read and write per file. The
+  // validated manifest remains the closed description of the prepared tree.
+  const copy = await input.sandbox.run({
+    command: `cp -R /workspace/repository/. /workspace/${root}/`,
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
+  });
+  if (copy.exitCode !== 0) {
+    await input.sandbox.removePath({ path: root, recursive: true, force: true });
+    throw new Error("Prepared source copy into the planning overlay failed.");
   }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;
   await input.sandbox.writeTextFile({
@@ -407,11 +427,13 @@ export async function materializePlanningOverlay(input: {
     path: `${root}/.config/mise/config.app-builder.toml`,
     content: TARGET_PLANNING_MISE_PROFILE,
   });
-  return {
+  const result = {
     planningRoot: `/workspace/${root}`,
     contractPath: `/workspace/${contractPath}`,
     contractDigest: targetContractDigest(contract),
   };
+  planningMarker("planning-overlay", "finish");
+  return result;
 }
 
 export function sandboxTargetCommandExecutor(
@@ -499,6 +521,7 @@ export async function executeTargetIdentityAndPlanning(input: {
   environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
 }) {
+  planningMarker("target-identity-and-planning", "start");
   const overlay = await materializePlanningOverlay(input);
   const capability =
     input.sourceReceipt === undefined
@@ -557,9 +580,7 @@ export async function executeTargetIdentityAndPlanning(input: {
     path.startsWith(`${identity.workspacePath}/`),
   );
   if (existingApplication && input.existingAppChanges === undefined)
-    throw new Error(
-      "The requested application already exists. Inspect its app-owned source files, then retry target planning with exact replacement contents.",
-    );
+    throw new ExistingApplicationChangesRequiredError();
   if (input.existingAppChanges !== undefined) {
     if (!existingApplication)
       throw new Error("The requested existing application does not exist.");
@@ -575,40 +596,21 @@ export async function executeTargetIdentityAndPlanning(input: {
         throw new Error("An existing-app change path is not allowed.");
       seen.add(requested.path);
       const entry = files.get(requested.path);
-      if (entry === undefined) {
-        const rejectedPaths = input.existingAppChanges
-          .map(({ path }) => path)
-          .filter((path) => !files.has(path));
-        const basenames = new Set(
-          rejectedPaths.map((path) => path.split("/").at(-1)),
-        );
-        const appOwned = [...files.keys()]
-          .filter(
-            (path) =>
-              path.startsWith(`${identity.workspacePath}/`) &&
-              path !== identity.contractPath,
-          )
-          .sort();
-        const matching = appOwned.filter((path) =>
-          basenames.has(path.split("/").at(-1)),
-        );
-        throw new ExistingAppChangePreimageError({
-          rejectedPaths,
-          exactAppOwnedPaths: [...matching, ...appOwned]
-            .filter((path, index, values) => values.indexOf(path) === index)
-            .slice(0, 32),
-        });
-      }
-      const before = await input.sandbox.readBinaryFile({
-        path: `repository/${requested.path}`,
-      });
-      if (before === null)
-        throw new Error("An existing-app source preimage is missing.");
+      const before =
+        entry === undefined
+          ? null
+          : await input.sandbox.readBinaryFile({
+              path: `repository/${requested.path}`,
+            });
+      if (entry !== undefined && before === null)
+        throw new Error("An existing-app source file became unavailable.");
       changes.push({
         path: requested.path,
-        before: { mode: entry.mode, digest: sha256(before) },
+        ...(entry === undefined
+          ? {}
+          : { before: { mode: entry.mode, digest: sha256(before!) } }),
         after: {
-          mode: entry.mode,
+          mode: entry?.mode ?? "644",
           digest: sha256(requested.content),
           content: requested.content,
         },
@@ -663,7 +665,9 @@ export async function executeTargetIdentityAndPlanning(input: {
       mutations: [],
       iteration: { changes, digest: iterationDigest },
     }) as unknown as TargetProposal;
-    return { identity, proposal, ...overlay };
+    const result = { identity, proposal, ...overlay };
+    planningMarker("target-identity-and-planning", "finish");
+    return result;
   }
   await input.onIdentity?.(identity);
   const proposal = parseOutput<TargetProposal>(
@@ -694,5 +698,7 @@ export async function executeTargetIdentityAndPlanning(input: {
     proposal.plan.topology.configPath !== capability.topologyOwner
   )
     throw new Error("Target proposal did not use the observed local topology.");
-  return { identity, proposal, ...overlay };
+  const result = { identity, proposal, ...overlay };
+  planningMarker("target-identity-and-planning", "finish");
+  return result;
 }

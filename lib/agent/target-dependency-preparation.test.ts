@@ -176,6 +176,25 @@ vi.mock("@/lib/repository/arrusted-template", () => ({
   inspectSourceBoundSandboxWorkspace: mocks.inspectSourceBoundSandboxWorkspace,
 }));
 
+vi.mock("@/lib/repository/development-source", () => ({
+  canAutoSelectDevelopmentSource: () => false,
+  developmentSourceReceipt: vi.fn(),
+}));
+
+vi.mock("@/lib/agent/existing-app-changes", async () => {
+  const { z } = await import("zod");
+  return {
+    existingAppChangesSchema: z
+      .array(
+        z
+          .object({ path: z.string().min(1), content: z.string() })
+          .strict(),
+      )
+      .min(1)
+      .max(32),
+  };
+});
+
 vi.mock("@/lib/sandbox/toolchain", () => ({
   configuredToolchainImage: () => undefined,
   requiredToolVersions: {
@@ -193,6 +212,12 @@ vi.mock("@/lib/sandbox/toolchain", () => ({
 
 vi.mock("@/lib/sandbox/backend", () => ({
   sandboxBackendPlan: () => ({ kind: "fixture-just-bash", blockers: [] }),
+}));
+
+vi.mock("@/lib/sandbox/development-toolchain", () => ({
+  DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS: ["registry.npmjs.org"],
+  developmentVercelDependencyRepairCommand: (dependencyKey: string) =>
+    `repair ${dependencyKey}`,
 }));
 
 vi.mock("@/lib/testing/test-capability", () => ({

@@ -1810,9 +1810,19 @@ const localDevelopmentAgent =
 export default defineAgent({
   model: hasTestCapability("mock-model")
     ? testModel
-    : localDevelopmentAgent
-      ? "openai/gpt-5.6-luna"
-      : "openai/gpt-5.6-sol",
+    : "openai/gpt-5.6-sol",
+  ...(!hasTestCapability("mock-model")
+    ? {
+        modelOptions: {
+          providerOptions: {
+            gateway: {
+              only: ["openai"],
+              order: ["openai"],
+            },
+          },
+        },
+      }
+    : {}),
   modelContextWindowTokens: 128_000,
   reasoning: localDevelopmentAgent ? "low" : "high",
 });
