@@ -17,32 +17,30 @@ import {
 import type { ObservedDependencyCache } from "../repository/dependency-cache";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
-const dependencyReceiptUnsigned: Omit<
-  DependencyPreparationReceipt,
-  "digest"
-> = {
-  version: 2 as const,
-  sourceSha: "a".repeat(40),
-  sourceTree: "b".repeat(40),
-  sourceReceiptDigest: "f".repeat(64),
-  eligibilityDigest: "d".repeat(64),
-  workspaceDigest: "c".repeat(64),
-  imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-  dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
-  appSpecDigest: "e".repeat(64),
-  artifactRevision: "a".repeat(64),
-  targetSha: "a".repeat(40),
-  targetTree: "b".repeat(40),
-  cacheManifestDigest: "2".repeat(64),
-  cacheContentDigest: "3".repeat(64),
-  dependencyLayout: {
-    version: 1 as const,
-    kind: "fixture" as const,
-    roots: [],
-    workspaceLinks: [],
-  },
-  preparedByCallId: "dependency-call",
-};
+const dependencyReceiptUnsigned: Omit<DependencyPreparationReceipt, "digest"> =
+  {
+    version: 2 as const,
+    sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
+    sourceReceiptDigest: "f".repeat(64),
+    eligibilityDigest: "d".repeat(64),
+    workspaceDigest: "c".repeat(64),
+    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
+    appSpecDigest: "e".repeat(64),
+    artifactRevision: "a".repeat(64),
+    targetSha: "a".repeat(40),
+    targetTree: "b".repeat(40),
+    cacheManifestDigest: "2".repeat(64),
+    cacheContentDigest: "3".repeat(64),
+    dependencyLayout: {
+      version: 1 as const,
+      kind: "fixture" as const,
+      roots: [],
+      workspaceLinks: [],
+    },
+    preparedByCallId: "dependency-call",
+  };
 
 const state = {
   version: APP_BUILDER_WORKFLOW_VERSION,

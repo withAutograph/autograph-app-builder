@@ -186,9 +186,7 @@ vi.mock("@/lib/agent/existing-app-changes", async () => {
   return {
     existingAppChangesSchema: z
       .array(
-        z
-          .object({ path: z.string().min(1), content: z.string() })
-          .strict(),
+        z.object({ path: z.string().min(1), content: z.string() }).strict(),
       )
       .min(1)
       .max(32),

@@ -54,39 +54,36 @@ export default defineTool({
     )
       throw new Error("Fresh-template acquisition was not approved.");
     const sandbox = await ctx.getSandbox();
-    const canonicalWorkspace =
-      development
+    const canonicalWorkspace = development
+      ? undefined
+      : source.receipt.version === SOURCE_RECEIPT_VERSION
+        ? await inspectCanonicalArrustedSandboxWorkspace({
+            sandbox,
+            receipt: source.receipt,
+          })
+        : undefined;
+    const githubWorkspace = development
+      ? undefined
+      : source.githubSource === undefined
         ? undefined
-        : source.receipt.version === SOURCE_RECEIPT_VERSION
-          ? await inspectCanonicalArrustedSandboxWorkspace({
-              sandbox,
-              receipt: source.receipt,
-            })
-          : undefined;
-    const githubWorkspace =
-      development
-        ? undefined
-        : source.githubSource === undefined
-          ? undefined
-          : await inspectGitHubSourceSandboxWorkspace({
-              sandbox,
-              receipt: source.receipt,
-              githubSource: source.githubSource,
-            });
-    const currentReceipt =
-      development
-        ? await inspectSourceReceipt(
-            source.receipt.sourceKind,
-            source.receipt.sourcePath,
-          )
-        : source.receipt.version === SOURCE_RECEIPT_VERSION
+        : await inspectGitHubSourceSandboxWorkspace({
+            sandbox,
+            receipt: source.receipt,
+            githubSource: source.githubSource,
+          });
+    const currentReceipt = development
+      ? await inspectSourceReceipt(
+          source.receipt.sourceKind,
+          source.receipt.sourcePath,
+        )
+      : source.receipt.version === SOURCE_RECEIPT_VERSION
+        ? source.receipt
+        : source.githubSource !== undefined
           ? source.receipt
-          : source.githubSource !== undefined
-            ? source.receipt
-            : await inspectSourceReceipt(
-                source.receipt.sourceKind,
-                source.receipt.sourcePath,
-              );
+          : await inspectSourceReceipt(
+              source.receipt.sourceKind,
+              source.receipt.sourcePath,
+            );
     if (!development && currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review or approval.");
     const {

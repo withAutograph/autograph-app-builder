@@ -289,5 +289,4 @@ describe("PostgreSQL hosted Eve row authority", () => {
       expect(migration).toContain(required);
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
-
 });

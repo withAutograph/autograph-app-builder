@@ -536,8 +536,9 @@ export function createLocalEveSessionService(
         localSessionEvents.set(resumeSessionId, [...snapshot.events]);
         touchSession(resumeSessionId);
         return resultForEvents(resumeSessionId, snapshot.events, 0, 100, {
-          status:
-            state.restartInterrupted.has(resumeSessionId) ? "waiting" : undefined,
+          status: state.restartInterrupted.has(resumeSessionId)
+            ? "waiting"
+            : undefined,
         });
       }
       if (prompt === undefined)

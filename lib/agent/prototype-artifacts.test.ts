@@ -161,9 +161,7 @@ describe("prototype artifact receipts", () => {
       "prototype/expense-review/decisions.md",
       "prototype/expense-review/index.html",
     ]);
-    expect(bundle.appSpec.path).toBe(
-      "prototype/expense-review/app-spec.md",
-    );
+    expect(bundle.appSpec.path).toBe("prototype/expense-review/app-spec.md");
     expect(
       recordPrototypeArtifactBundle({
         artifacts: bundle.artifacts,
@@ -191,7 +189,9 @@ describe("prototype artifact receipts", () => {
     }
     expect(diagnostic).toMatchObject({
       code: "app_spec_invalid",
-      instruction: expect.stringContaining("replace the complete Markdown artifact"),
+      instruction: expect.stringContaining(
+        "replace the complete Markdown artifact",
+      ),
       issues: expect.arrayContaining([
         expect.objectContaining({ code: "missing_heading" }),
       ]),

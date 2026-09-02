@@ -23,7 +23,9 @@ function fixture() {
   mkdirSync(repositoryRoot, { mode: 0o700 });
   mkdirSync(runsRoot, { mode: 0o700 });
   const activeRun = realpathSync(mkdtempSync(join(runsRoot, "run-")));
-  const supervisorRoot = realpathSync(mkdtempSync(join(runsRoot, "supervisor-")));
+  const supervisorRoot = realpathSync(
+    mkdtempSync(join(runsRoot, "supervisor-")),
+  );
   const cycleRoot = realpathSync(mkdtempSync(join(supervisorRoot, "cycle-")));
   const applicationRoot = join(cycleRoot, "eve-application/source");
   const sourceRoot = join(activeRun, "source");

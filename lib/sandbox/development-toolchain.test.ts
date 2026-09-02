@@ -114,7 +114,7 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(cacheHit).toBeLessThan(install);
     expect(command).toContain('"scope":"development-execution"');
     expect(command).toContain('"dependencyKey":"' + input().dependencyKey);
-    expect(command).toContain('node_modules/path-to-regexp/package.json');
+    expect(command).toContain("node_modules/path-to-regexp/package.json");
     expect(command).toContain(
       "node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json",
     );

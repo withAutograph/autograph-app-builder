@@ -772,7 +772,7 @@ describe("offline dependency cache", () => {
     };
     const cache = {
       manifest: {
-        version: 2,
+        version: 3,
         scope: "development-execution",
         platform: "linux/arm64",
         dependencyKey: "9".repeat(64),
@@ -788,7 +788,14 @@ describe("offline dependency cache", () => {
           mise: "2026.8.12",
           rust: "1.97.1",
         },
-        closure: manifest.closure,
+        closure: {
+          package: "@vercel/microfrontends",
+          version: "2.4.0",
+          contentDigest: archiveDigest,
+          nodeModulesPath: `/workspace/.app-builder/dependency-cache/dependencies/${"9".repeat(64)}/node_modules`,
+          cargoConfigPath:
+            "/workspace/.app-builder/dependency-cache/cargo/config.toml",
+        },
       },
       manifestDigest: "a".repeat(64),
       contentDigest: archiveDigest,
@@ -1100,9 +1107,10 @@ describe("offline dependency cache", () => {
       }),
     );
     expect(
-      run.mock.calls.some(([request]) =>
-        (request.command as string).includes('@autograph/vite-config') &&
-        (request.command as string).includes("await import"),
+      run.mock.calls.some(
+        ([request]) =>
+          (request.command as string).includes("@autograph/vite-config") &&
+          (request.command as string).includes("await import"),
       ),
     ).toBe(false);
     const resolutionCommand = run.mock.calls
@@ -1142,7 +1150,11 @@ describe("offline dependency cache", () => {
       },
     });
 
-    expect(run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata"))).toBe(false);
+    expect(
+      run.mock.calls.some(([request]) =>
+        (request.command as string).includes("cargo metadata"),
+      ),
+    ).toBe(false);
     const developmentLinkCommand = run.mock.calls
       .map(([request]) => request.command as string)
       .find(

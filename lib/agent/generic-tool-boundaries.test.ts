@@ -44,7 +44,9 @@ describe("generic sandbox tool boundaries", () => {
       "utf8",
     );
 
-    expect(router).toContain('const developmentWorkspacePath = "/workspace/repository"');
+    expect(router).toContain(
+      'const developmentWorkspacePath = "/workspace/repository"',
+    );
     expect(router).toContain("canAutoSelectDevelopmentSource()");
     expect(router).toContain("prepareDevelopmentSandboxWorkspace(");
     expect(router).toContain('"planning",');

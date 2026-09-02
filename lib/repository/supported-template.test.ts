@@ -734,14 +734,25 @@ describe("supported-template adapter", () => {
     // The release workflow is optional for planning compatibility, while this
     // removal proves that only a previously managed path is deleted.
 
-    await prepareDevelopmentSandboxWorkspace(root, sandbox, "second", "planning");
+    await prepareDevelopmentSandboxWorkspace(
+      root,
+      sandbox,
+      "second",
+      "planning",
+    );
 
     expect(
-      readFileSync(resolve(sandbox.resolvePath("repository"), "notes.md"), "utf8"),
+      readFileSync(
+        resolve(sandbox.resolvePath("repository"), "notes.md"),
+        "utf8",
+      ),
     ).toBe("updated\n");
     expect(
       readFileSync(
-        resolve(sandbox.resolvePath("repository"), ".app-builder/generated-plan.json"),
+        resolve(
+          sandbox.resolvePath("repository"),
+          ".app-builder/generated-plan.json",
+        ),
         "utf8",
       ),
     ).toBe("generated\n");

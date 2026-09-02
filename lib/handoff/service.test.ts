@@ -68,7 +68,7 @@ const intent = {
     private: true,
     resolvedFullName: "withAutograph/vendor-onboarding",
   },
-  modelId: "openai/gpt-5.6-sol",
+  modelId: "openai/gpt-5.6-sol" as const,
   connections: ["Ramp"],
 };
 

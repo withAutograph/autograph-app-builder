@@ -152,9 +152,9 @@ describe("hosted route composition", () => {
   });
 
   it("accepts only a bounded PostgreSQL deployment URL", () => {
-    expect(
-      readHostedDeploymentConfig(environment).databaseUrl,
-    ).toBe(environment.DATABASE_URL);
+    expect(readHostedDeploymentConfig(environment).databaseUrl).toBe(
+      environment.DATABASE_URL,
+    );
     for (const databaseUrl of [
       "mysql://database.example.test/eve",
       "postgresql://database.example.test/eve\n",
@@ -170,9 +170,7 @@ describe("hosted route composition", () => {
     expect(readHostedDeploymentConfig(environment).eve).toEqual({
       baseUrl: "https://builder.example.test",
     });
-    expect(
-      readHostedDeploymentConfig(environment).forwarderSubject,
-    ).toBe(
+    expect(readHostedDeploymentConfig(environment).forwarderSubject).toBe(
       "owner:withautograph:project:autograph-app-builder:environment:preview",
     );
     expect(() =>

@@ -80,7 +80,10 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development Eve supervisor root",
     true,
   );
-  if (!contained(runsRoot, supervisorRoot) || dirname(supervisorRoot) !== runsRoot)
+  if (
+    !contained(runsRoot, supervisorRoot) ||
+    dirname(supervisorRoot) !== runsRoot
+  )
     throw new Error("Development Eve supervisor was outside the runs root.");
   const cycleRoot = ownerDirectory(
     dirname(dirname(applicationRoot)),
@@ -93,7 +96,9 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
   )
     throw new Error("Development Eve cycle was outside the supervisor root.");
   if (applicationRoot !== join(cycleRoot, "eve-application/source"))
-    throw new Error("Development Eve application root was not supervisor-bound.");
+    throw new Error(
+      "Development Eve application root was not supervisor-bound.",
+    );
   const sourceRoot = ownerDirectory(
     required(environment, "REPOSITORY_LOCAL_ROOTS"),
     "Development Arrusted source root",

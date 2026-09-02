@@ -7,9 +7,7 @@ import type {
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 
 export class SandboxCommandLimitError extends Error {
-  constructor(
-    readonly code: "timeout" | "no-output-timeout" | "output-limit",
-  ) {
+  constructor(readonly code: "timeout" | "no-output-timeout" | "output-limit") {
     super("The sandbox command exceeded its execution envelope.");
     this.name = "SandboxCommandLimitError";
   }

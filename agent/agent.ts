@@ -1808,9 +1808,7 @@ const localDevelopmentAgent =
   process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
 
 export default defineAgent({
-  model: hasTestCapability("mock-model")
-    ? testModel
-    : "openai/gpt-5.6-sol",
+  model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-sol",
   ...(!hasTestCapability("mock-model")
     ? {
         modelOptions: {

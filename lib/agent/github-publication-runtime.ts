@@ -209,7 +209,8 @@ export function composeGitHubPublicationRuntime(input: {
           request.githubSource.repository.repositoryId ||
         repository.owner !== request.githubSource.repository.owner ||
         repository.name !== request.githubSource.repository.name ||
-        repository.defaultBranch !== request.githubSource.repository.defaultBranch
+        repository.defaultBranch !==
+          request.githubSource.repository.defaultBranch
       )
         throw new Error(
           "The GitHub repository identity changed after source review.",

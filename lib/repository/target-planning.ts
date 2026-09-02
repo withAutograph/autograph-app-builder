@@ -405,7 +405,11 @@ export async function materializePlanningOverlay(input: {
     abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
   });
   if (copy.exitCode !== 0) {
-    await input.sandbox.removePath({ path: root, recursive: true, force: true });
+    await input.sandbox.removePath({
+      path: root,
+      recursive: true,
+      force: true,
+    });
     throw new Error("Prepared source copy into the planning overlay failed.");
   }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;

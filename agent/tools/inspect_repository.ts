@@ -33,10 +33,7 @@ export default defineTool({
     // only, materialize the writable sandbox overlay, and inspect the live
     // checkout. This keeps setup out of the conversation without granting any
     // other path special treatment.
-    if (
-      path === developmentWorkspacePath &&
-      canAutoSelectDevelopmentSource()
-    ) {
+    if (path === developmentWorkspacePath && canAutoSelectDevelopmentSource()) {
       const receipt = await developmentSourceReceipt("existing-repository");
       if (receipt === undefined)
         throw new Error("The configured development source was unavailable.");

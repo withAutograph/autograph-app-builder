@@ -970,7 +970,7 @@ const developmentWorkspaceInspectionProgram = [
   'const realWorkspace=fs.realpathSync(".");',
   "const realRepository=fs.realpathSync(repositoryInput);",
   'if(realWorkspace!=="/workspace"||realRepository!=="/workspace/repository")process.exit(1);',
-  'process.stdout.write(JSON.stringify({repositoryInput,realRepository,realWorkspace,workspaceRoot}));',
+  "process.stdout.write(JSON.stringify({repositoryInput,realRepository,realWorkspace,workspaceRoot}));",
 ].join("");
 
 const developmentWorkspaceInspectionReceipt = JSON.stringify({
@@ -1469,7 +1469,11 @@ export async function prepareDevelopmentSandboxWorkspace(
     )}\n`,
   });
   if (firstTransfer) {
-    await sandbox.removePath({ path: "repository", recursive: true, force: true });
+    await sandbox.removePath({
+      path: "repository",
+      recursive: true,
+      force: true,
+    });
     const archive = developmentWorkingTreeArchive(
       eligibility.sourcePath,
       sourceFiles.map(({ path }) => path),

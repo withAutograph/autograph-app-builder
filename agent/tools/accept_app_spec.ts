@@ -43,7 +43,7 @@ function planningMarker(marker: string, phase: "start" | "finish") {
 async function planAcceptedAppSpec(
   digest: string,
   ctx: Parameters<typeof planAppCreation.execute>[1],
-  existingAppChanges?: readonly { path: string; content: string }[],
+  existingAppChanges?: { path: string; content: string }[],
 ) {
   const latest = appBuilderWorkflowState.get();
   await continueAcceptedAppSpec({
@@ -56,14 +56,15 @@ async function planAcceptedAppSpec(
       latest.phase === "validation_failed" ||
       latest.phase === "validated" ||
       latest.phase === "reviewed",
-    plan: () =>
-      planAppCreation.execute(
+    plan: async () => {
+      await planAppCreation.execute(
         {
           expectedAppSpecDigest: digest,
           ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
         },
         ctx,
-      ),
+      );
+    },
   });
 }
 

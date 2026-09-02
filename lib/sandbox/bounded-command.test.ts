@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxProcess } from "eve/sandbox";
-import { boundedSandboxCommand, runBoundedSandboxCommand } from "./bounded-command";
+import {
+  boundedSandboxCommand,
+  runBoundedSandboxCommand,
+} from "./bounded-command";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
 const stream = (...chunks: string[]) =>

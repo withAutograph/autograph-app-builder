@@ -81,7 +81,10 @@ describe("hosted Vercel sandbox backend", () => {
       )
       .mockResolvedValueOnce(new Response("ok"));
     await expect(
-      createProviderFetch(timedOutFetch, 1)(
+      createProviderFetch(
+        timedOutFetch,
+        1,
+      )(
         new Request("https://sandbox.example.test/fs/write", {
           method: "POST",
         }),
@@ -95,7 +98,10 @@ describe("hosted Vercel sandbox backend", () => {
       .fn<typeof globalThis.fetch>()
       .mockRejectedValue(new DOMException("cancelled", "AbortError"));
     await expect(
-      createProviderFetch(cancelledFetch, 1)(
+      createProviderFetch(
+        cancelledFetch,
+        1,
+      )(
         new Request("https://sandbox.example.test/fs/read", {
           signal: controller.signal,
         }),

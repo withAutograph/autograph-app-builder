@@ -37,10 +37,7 @@ async function makeDevelopmentWorkAreaWritable(
     for (const entry of await readdir(path)) {
       if (preserveRuntime && (entry === ".eve" || entry === "node_modules"))
         continue;
-      await makeDevelopmentWorkAreaWritable(
-        join(path, entry),
-        preserveRuntime,
-      );
+      await makeDevelopmentWorkAreaWritable(join(path, entry), preserveRuntime);
     }
     return;
   }
@@ -102,9 +99,7 @@ export async function createDevelopmentCycle(input: {
   workflowData: string;
 }> {
   const supervisorRoot = await realpath(input.supervisorRoot);
-  const root = await realpath(
-    await mkdtemp(join(supervisorRoot, "cycle-")),
-  );
+  const root = await realpath(await mkdtemp(join(supervisorRoot, "cycle-")));
   try {
     const application = await createDevelopmentApplication({
       repositoryRoot: input.repositoryRoot,

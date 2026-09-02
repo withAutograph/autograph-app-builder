@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import { describe, expect, it, vi } from "vitest";
@@ -68,7 +68,7 @@ describe("development process supervision", () => {
     if (process.platform === "win32") return;
     const child = new EventEmitter() as ChildProcess;
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
-    const groupSignals: (NodeJS.Signals | number | undefined)[] = [];
+    const groupSignals: Array<Parameters<typeof process.kill>[1]> = [];
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
       signalCode: { value: null, writable: true },
@@ -78,11 +78,13 @@ describe("development process supervision", () => {
       directSignals.push(signal);
       return true;
     }) as ChildProcess["kill"];
-    const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
-      groupSignals.push(signal);
-      if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
-      return true;
-    });
+    const kill = vi
+      .spyOn(process, "kill")
+      .mockImplementation((_pid, signal) => {
+        groupSignals.push(signal);
+        if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
+        return true;
+      });
 
     try {
       await stopDevelopmentChild(child, {

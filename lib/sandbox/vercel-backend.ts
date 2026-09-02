@@ -84,10 +84,7 @@ export function createProviderFetch(
     const original = new Request(input, init);
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const timeout = new AbortController();
-      const timer = setTimeout(
-        () => timeout.abort(),
-        requestTimeoutMs,
-      );
+      const timer = setTimeout(() => timeout.abort(), requestTimeoutMs);
       const signal = original.signal.aborted
         ? original.signal
         : AbortSignal.any([original.signal, timeout.signal]);
@@ -221,8 +218,7 @@ function createProcessSessionReusingBackend<BO, SO>(
         }),
       );
 
-      let pending: Promise<SandboxBackendHandle<SO>>;
-      pending = backend
+      const pending: Promise<SandboxBackendHandle<SO>> = backend
         .create(input)
         .then((handle) => {
           let closed = false;
@@ -293,7 +289,9 @@ export function createHostedVercelBackend(
     providerTemplateKey: input.providerTemplateKey,
     resolvePrewarmInput: input.runtimeRecoveryPrewarmInput,
   });
-  return (input.reuseProcessSessionHandles
-    ? createProcessSessionReusingBackend(recovering)
-    : recovering) as ReturnType<typeof vercel>;
+  return (
+    input.reuseProcessSessionHandles
+      ? createProcessSessionReusingBackend(recovering)
+      : recovering
+  ) as ReturnType<typeof vercel>;
 }

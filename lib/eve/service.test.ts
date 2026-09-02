@@ -436,10 +436,11 @@ describe("local Eve acceptance", () => {
       respond: vi.fn(async () => resumedResponse),
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
+    const attach = vi.fn(() => session);
     const client = {
       sessions: {
         create: vi.fn(async () => ({ session, response: oldResponse })),
-        attach: vi.fn(() => session),
+        attach,
       } as never,
     };
     const first = createLocalEveSessionService(client, {
@@ -463,7 +464,9 @@ describe("local Eve acceptance", () => {
     await expect(
       restarted.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
     ).resolves.toMatchObject({ status: "waiting", cursor: 1 });
-    await expect(restarted.cancel({ sessionId: started.sessionId })).resolves.toMatchObject({
+    await expect(
+      restarted.cancel({ sessionId: started.sessionId }),
+    ).resolves.toMatchObject({
       status: "waiting",
     });
     expect(session.cancel).not.toHaveBeenCalled();
@@ -482,7 +485,7 @@ describe("local Eve acceptance", () => {
         }),
       ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
     });
-    expect(client.sessions.attach).toHaveBeenCalledWith(started.sessionId, {
+    expect(attach).toHaveBeenCalledWith(started.sessionId, {
       streamIndex: 1,
     });
     expect(session.snapshot).toHaveBeenCalledTimes(1);

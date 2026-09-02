@@ -87,18 +87,20 @@ export function developmentPrototypeBundle(
     input.product?.outcome ??
       "Prioritize the next item, review its context, and move work forward.",
   );
-  const items = values(
-    input.product?.itemLabels,
-    ["Needs attention", "In progress", "Ready to complete"],
-  );
-  const filters = values(
-    input.product?.filters,
-    ["All work", "Assigned to me"],
-  );
-  const states = values(
-    input.product?.states,
-    ["Needs review", "In progress", "Ready"],
-  );
+  const items = values(input.product?.itemLabels, [
+    "Needs attention",
+    "In progress",
+    "Ready to complete",
+  ]);
+  const filters = values(input.product?.filters, [
+    "All work",
+    "Assigned to me",
+  ]);
+  const states = values(input.product?.states, [
+    "Needs review",
+    "In progress",
+    "Ready",
+  ]);
   const facts = (
     input.product?.keyFacts ?? [
       { label: "Owner", value: "Operations" },
