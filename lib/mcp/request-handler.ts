@@ -326,6 +326,44 @@ function adapterMode(
   return "unconfigured";
 }
 
+const publicDiscoveryMethods = new Set([
+  "initialize",
+  "notifications/initialized",
+  "ping",
+  "tools/list",
+  "resources/list",
+  "resources/templates/list",
+  "prompts/list",
+]);
+
+async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
+  try {
+    const body: unknown = await request.clone().json();
+    const messages = Array.isArray(body) ? body : [body];
+    return (
+      messages.length > 0 &&
+      messages.every(
+        (message) =>
+          typeof message === "object" &&
+          message !== null &&
+          "method" in message &&
+          typeof message.method === "string" &&
+          publicDiscoveryMethods.has(message.method),
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+const discoveryOnlyService = new Proxy({} as EveSessionService, {
+  get() {
+    return async () => {
+      throw new Error("Authentication is required before calling a tool.");
+    };
+  },
+});
+
 async function hostedServiceForRequest(
   request: Request,
   runtime: HostedMcpRuntime,
@@ -415,6 +453,11 @@ export function createMcpRequestHandler(
     if (mode === "invalid") return unavailableResponse();
     if (mode === "hosted") {
       if (input.hostedRuntime === undefined) return unavailableResponse();
+      if (await isPublicDiscoveryRequest(request)) {
+        return createAutographMcpHandler(discoveryOnlyService, {
+          requestUrl: request.url,
+        })(request);
+      }
       const selected = await hostedServiceForRequest(
         request,
         input.hostedRuntime,
