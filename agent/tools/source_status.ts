@@ -8,23 +8,37 @@ import {
   canAutoSelectDevelopmentSource,
   developmentSourceReceipt,
 } from "@/lib/repository/development-source";
+import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
-    "Return the durable source-review phase, automatically binding the configured local development source when one is available.",
+    "Return the durable source-review phase. An empty local development flow binds its configured source, while an empty hosted new-app flow automatically acquires the canonical Arrusted starter.",
   inputSchema: z.object({}),
-  async execute() {
+  async execute(_input, ctx) {
     let state = sourceWorkflowState.get();
-    if (state.phase === "empty" && canAutoSelectDevelopmentSource()) {
-      const receipt = await developmentSourceReceipt("existing-repository");
-      if (receipt !== undefined) {
+    if (state.phase === "empty") {
+      if (canAutoSelectDevelopmentSource()) {
+        const receipt = await developmentSourceReceipt("existing-repository");
+        if (receipt !== undefined) {
+          sourceWorkflowState.update(() => ({
+            version: APP_BUILDER_SOURCE_VERSION,
+            phase: "reviewed",
+            receipt,
+          }));
+        }
+      } else {
+        const receipt = await acquireCanonicalArrustedTemplate({
+          sandbox: await ctx.getSandbox(),
+          callId: ctx.callId,
+        });
         sourceWorkflowState.update(() => ({
           version: APP_BUILDER_SOURCE_VERSION,
-          phase: "reviewed",
+          phase: "acquisition_approved",
           receipt,
+          approvedByCallId: ctx.callId,
         }));
-        state = sourceWorkflowState.get();
       }
+      state = sourceWorkflowState.get();
     }
     return state.phase === "empty"
       ? state
