@@ -9,6 +9,7 @@ import {
 
 import {
   createHostedVercelBackend,
+  createProviderFetch,
   type HostedVercelBackendFactory,
   type HostedVercelBackendOptions,
 } from "./vercel-backend";
@@ -45,24 +46,24 @@ function backendFactory(input: {
 }
 
 describe("hosted Vercel sandbox backend", () => {
-  it("retries a replayable transient provider request once", async () => {
-    const session = { id: "session-1" } as SandboxSession;
-    const handle = {
-      session,
-      useSessionFn: async () => session,
-      captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: "session-1" }),
-      stop: async () => undefined,
-      shutdown: async () => undefined,
-    } satisfies SandboxBackendHandle;
-    const transient = new Error("fetch failed");
-    const create = vi.fn().mockRejectedValueOnce(transient).mockResolvedValueOnce(handle);
-    const backend = createHostedVercelBackend({
-      factory: backendFactory({ create, prewarm: vi.fn() }),
-      runtimeRecoveryPrewarmInput: recoveryInput(),
+  it("retries transport failures at the cancellable fetch boundary", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockRejectedValueOnce(new Error("fetch failed"))
+      .mockResolvedValueOnce(new Response("ok"));
+    const request = new Request(
+      "https://sandbox.example.test/v1/create?secret=hidden",
+      {
+        method: "POST",
+        headers: { authorization: "Bearer hidden", "x-private": "hidden" },
+        body: "hidden",
+      },
+    );
+    await expect(createProviderFetch(fetch)(request)).resolves.toMatchObject({
+      status: 200,
     });
-
-    await expect(backend.create({ runtimeContext, sessionKey: "session-1", templateKey: null })).resolves.toMatchObject({ session });
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0]![0]).toBeInstanceOf(Request);
   });
 
   it("allows bootstrap hosts only for prewarm and denies every fresh live session", () => {
