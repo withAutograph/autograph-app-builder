@@ -613,6 +613,36 @@ describe("branded public tool mapping", () => {
 });
 
 describe("request-scoped MCP service selection", () => {
+  it("allows public tool discovery before OAuth but protects tool calls", async () => {
+    const verifier = vi.fn(async () => claims());
+    const membership = vi.fn(async () => true);
+    const hostedRuntime = runtime();
+    hostedRuntime.verifier = { verify: verifier };
+    hostedRuntime.membership = { isMember: membership };
+    const handler = createMcpRequestHandler({
+      environment: { EVE_HOSTED_ADAPTER: "1" },
+      hostedRuntime,
+    });
+
+    const discovery = await mcpResult<{ tools: Array<{ name: string }> }>(
+      await handler(mcpRequest({}, "tools/list")),
+    );
+    expect(discovery.tools.map(({ name }) => name).sort()).toEqual(exactTools);
+    expect(verifier).not.toHaveBeenCalled();
+    expect(membership).not.toHaveBeenCalled();
+
+    const protectedCall = await handler(
+      mcpRequest({}, "tools/call", {
+        name: "autograph_get",
+        arguments: { cursor: 0, limit: 20 },
+      }),
+    );
+    expect(protectedCall.status).toBe(401);
+    expect(protectedCall.headers.get("www-authenticate")).toContain(
+      'error="invalid_token"',
+    );
+  });
+
   it("does not fall back to local or unconfigured service in hosted mode", async () => {
     const handler = createMcpRequestHandler({
       environment: {
@@ -636,9 +666,7 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime,
     });
     const response = await handler(
-      mcpRequest({
-        authorization: "Bearer token",
-      }),
+      mcpRequest({ authorization: "Bearer token" }, "tools/call"),
     );
     expect(response.status).toBe(503);
   });
@@ -652,9 +680,11 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime,
     });
     const responses = await Promise.all([
-      handler(mcpRequest()),
-      handler(mcpRequest({ authorization: "Bearer two tokens" })),
-      handler(mcpRequest({ authorization: "Basic token" })),
+      handler(mcpRequest({}, "tools/call")),
+      handler(
+        mcpRequest({ authorization: "Bearer two tokens" }, "tools/call"),
+      ),
+      handler(mcpRequest({ authorization: "Basic token" }, "tools/call")),
     ]);
     expect(verifier).not.toHaveBeenCalled();
     for (const response of responses) {
@@ -672,9 +702,7 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime: runtime({ verifierError: new Error("bad token") }),
     });
     const invalidResponse = await invalid(
-      mcpRequest({
-        authorization: "Bearer token",
-      }),
+      mcpRequest({ authorization: "Bearer token" }, "tools/call"),
     );
     expect(invalidResponse.status).toBe(401);
 
@@ -685,9 +713,7 @@ describe("request-scoped MCP service selection", () => {
       }),
     });
     const insufficientResponse = await insufficient(
-      mcpRequest({
-        authorization: "Bearer token",
-      }),
+      mcpRequest({ authorization: "Bearer token" }, "tools/call"),
     );
     expect(insufficientResponse.status).toBe(403);
     expect(insufficientResponse.headers.get("www-authenticate")).toContain(
@@ -716,8 +742,8 @@ describe("request-scoped MCP service selection", () => {
       }),
     ];
     const responses = [
-      await handlers[0]!(mcpRequest(requestHeaders)),
-      await handlers[1]!(mcpRequest(requestHeaders)),
+      await handlers[0]!(mcpRequest(requestHeaders, "tools/call")),
+      await handlers[1]!(mcpRequest(requestHeaders, "tools/call")),
     ];
     const projections = await Promise.all(
       responses.map(async (response) => ({
@@ -736,7 +762,7 @@ describe("request-scoped MCP service selection", () => {
     });
   });
 
-  it("binds each hosted request to its own principal and membership check", async () => {
+  it("binds each protected hosted request to its own principal and membership check", async () => {
     const seen: string[] = [];
     const hostedRuntime = runtime({
       membership: async (workspaceId) => {
@@ -758,20 +784,20 @@ describe("request-scoped MCP service selection", () => {
     });
     const [one, two] = await Promise.all([
       handler(
-        mcpRequest({
-          authorization: "Bearer one",
+        mcpRequest({ authorization: "Bearer one" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
         }),
       ),
       handler(
-        mcpRequest({
-          authorization: "Bearer two",
+        mcpRequest({ authorization: "Bearer two" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
         }),
       ),
     ]);
     expect(one.status).toBe(200);
     expect(two.status).toBe(200);
-    expect(await toolNames(one)).toEqual(exactTools);
-    expect(await toolNames(two)).toEqual(exactTools);
     expect(seen.sort()).toEqual(["workspace-one", "workspace-two"]);
   });
 
