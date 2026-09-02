@@ -2,10 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import {
-  createDevelopmentApplication,
-  refreshDevelopmentApplication,
-} from "../lib/development/application-root";
+import { createDevelopmentCycle } from "../lib/development/application-root";
 import {
   createDevelopmentPackage,
   developmentPackageFingerprint,
@@ -52,7 +49,6 @@ type DevelopmentSupervisorState = {
   fingerprint?: string;
   result?: Awaited<ReturnType<typeof createDevelopmentPackage>>;
   dependencyKey?: string;
-  eveStarted?: boolean;
   snapshot?: DevelopmentSnapshot;
 };
 
@@ -149,9 +145,6 @@ async function runEveCycle(input: {
   sourceRoot: string;
   runsRoot: string;
   codexRoot: string;
-  applicationRoot: string;
-  runtimeHome: string;
-  workflowData: string;
   supervisorRoot: string;
   packageState: DevelopmentSupervisorState;
   destinationRoot: string;
@@ -167,10 +160,9 @@ async function runEveCycle(input: {
   // any response stream owned by the child we are replacing.
   await rotateLocalEveCycleBinding(input.cycleFile);
   const cycleStartedAt = performance.now();
-  await refreshDevelopmentApplication({
+  const cycle = await createDevelopmentCycle({
     repositoryRoot,
-    applicationRoot: input.applicationRoot,
-    runRoot: input.supervisorRoot,
+    supervisorRoot: input.supervisorRoot,
   });
   const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
   try {
@@ -248,11 +240,11 @@ async function runEveCycle(input: {
         cwd: repositoryRoot,
         env: eveWrapperEnvironment({
           closed,
-          applicationRoot: input.applicationRoot,
+          applicationRoot: cycle.application.root,
           runsRoot: input.runsRoot,
           supervisorRoot: input.supervisorRoot,
-          runtimeHome: input.runtimeHome,
-          workflowData: input.workflowData,
+          runtimeHome: cycle.runtimeHome,
+          workflowData: cycle.workflowData,
         }),
         // Eve starts a local server child of its own.  Put this wrapper and
         // every descendant in a separate process group so Ctrl+C cleans up
@@ -306,7 +298,8 @@ async function runEveCycle(input: {
         JSON.stringify({
           event: "autograph.local.eve-cycle",
           eveRestartMs: Math.round(performance.now() - cycleStartedAt),
-          persistentEveStateReused: input.packageState.eveStarted === true,
+          persistentEveStateReused: false,
+          cycleRoot: cycle.root,
           packageReused,
           snapshotDeltaFiles,
           snapshotDeltaBytes,
@@ -314,7 +307,6 @@ async function runEveCycle(input: {
         }),
       );
       input.packageState.dependencyKey = dependencyKey;
-      input.packageState.eveStarted = true;
       input.packageState.snapshot = snapshot;
       console.log("Autograph App Builder development is ready.");
       console.log(
@@ -352,17 +344,11 @@ try {
   const runsRoot = await privateRoot(join(stateRoot, "runs"));
   // A completed invocation leaves its Eve runtime behind for diagnosis.  Give
   // every new `mise run dev` invocation a private supervisor root so starting
-  // again never collides with that finished application tree.  Eve restarts
-  // inside this invocation retain their own `.eve` state below this root.
+  // again never collides with that finished application tree. Each targeted
+  // Eve restart receives a separate cycle root below this supervisor.
   const supervisorRoot = await privateRoot(
     await realpath(await mkdtemp(join(runsRoot, "supervisor-"))),
   );
-  const application = await createDevelopmentApplication({
-    repositoryRoot,
-    runRoot: supervisorRoot,
-  });
-  const runtimeHome = await privateRoot(join(supervisorRoot, "home"));
-  const workflowData = await privateRoot(join(supervisorRoot, "workflow-data"));
   const packageState: DevelopmentSupervisorState = {};
   const nextHome = await privateRoot(join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(
@@ -399,9 +385,6 @@ try {
       sourceRoot,
       runsRoot,
       codexRoot: await privateRoot(join(cacheRoot, "codex")),
-      applicationRoot: application.root,
-      runtimeHome,
-      workflowData,
       supervisorRoot,
       packageState,
       destinationRoot,

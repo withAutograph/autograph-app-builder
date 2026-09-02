@@ -48,9 +48,9 @@ async function makeDevelopmentWorkAreaWritable(
 }
 
 /**
- * Materializes the App Builder code used by one local development supervisor.
- * The supervisor deliberately retains this directory across Eve restarts so
- * Eve can resume its supported local session state without recovering turns.
+ * Materializes the App Builder code used by one local Eve cycle. The parent
+ * supervisor keeps reusable caches separately and creates a new application
+ * for the next targeted restart.
  */
 export async function createDevelopmentApplication(input: {
   repositoryRoot: string;
@@ -83,6 +83,45 @@ export async function createDevelopmentApplication(input: {
     return application;
   } catch (error) {
     await removeDevelopmentSnapshot(materializationRoot);
+    throw error;
+  }
+}
+
+/**
+ * Creates the private runtime roots for exactly one Eve/package cycle.
+ * Reusable package and dependency caches deliberately live outside this tree;
+ * workflow queues and application-local Eve state never do.
+ */
+export async function createDevelopmentCycle(input: {
+  repositoryRoot: string;
+  supervisorRoot: string;
+}): Promise<{
+  root: string;
+  application: DevelopmentSnapshot;
+  runtimeHome: string;
+  workflowData: string;
+}> {
+  const supervisorRoot = await realpath(input.supervisorRoot);
+  const root = await realpath(
+    await mkdtemp(join(supervisorRoot, "cycle-")),
+  );
+  try {
+    const application = await createDevelopmentApplication({
+      repositoryRoot: input.repositoryRoot,
+      runRoot: root,
+    });
+    const runtimeHome = join(root, "home");
+    const workflowData = join(root, "workflow-data");
+    await mkdir(runtimeHome, { mode: 0o700 });
+    await mkdir(workflowData, { mode: 0o700 });
+    return {
+      root,
+      application,
+      runtimeHome: await realpath(runtimeHome),
+      workflowData: await realpath(workflowData),
+    };
+  } catch (error) {
+    await removeDevelopmentSnapshot(root);
     throw error;
   }
 }

@@ -13,7 +13,10 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createDevelopmentApplication } from "./application-root";
+import {
+  createDevelopmentApplication,
+  createDevelopmentCycle,
+} from "./application-root";
 import { removeDevelopmentSnapshot } from "./local-mode";
 
 const roots: string[] = [];
@@ -78,5 +81,31 @@ describe("development Eve application roots", () => {
 
     await removeDevelopmentSnapshot(firstRun);
     await removeDevelopmentSnapshot(secondRun);
+  });
+
+  it("creates fresh application and workflow state for every watcher cycle", async () => {
+    const input = await fixture();
+    const first = await createDevelopmentCycle({
+      repositoryRoot: input.repositoryRoot,
+      supervisorRoot: input.runsRoot,
+    });
+    await writeFile(join(first.workflowData, "stuck-run.json"), "{}\n");
+    await mkdir(join(first.application.root, ".eve"), { mode: 0o700 });
+    await writeFile(join(first.application.root, ".eve/queue.json"), "{}\n");
+
+    const second = await createDevelopmentCycle({
+      repositoryRoot: input.repositoryRoot,
+      supervisorRoot: input.runsRoot,
+    });
+
+    expect(second.root).not.toBe(first.root);
+    expect(second.application.root).not.toBe(first.application.root);
+    expect(second.workflowData).not.toBe(first.workflowData);
+    await expect(
+      lstat(join(second.workflowData, "stuck-run.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      lstat(join(second.application.root, ".eve")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
