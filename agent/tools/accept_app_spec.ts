@@ -19,8 +19,40 @@ import {
   updateExactWorkflow,
   validAppId,
 } from "@/lib/agent/workflow-state";
+import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
+
+import planAppCreation from "./plan_app_creation";
+
+/**
+ * Planning is the deterministic continuation of a successfully accepted
+ * design.  Keeping it here prevents a live model turn from becoming a
+ * required orchestration hop between a complete design and its plan.
+ *
+ * `plan_app_creation` remains independently callable for diagnostics and its
+ * own state transition makes retries safe.  This guard avoids even invoking
+ * it again once the accepted design has already produced a proposal.
+ */
+async function planAcceptedAppSpec(
+  digest: string,
+  ctx: Parameters<typeof planAppCreation.execute>[1],
+) {
+  const latest = appBuilderWorkflowState.get();
+  await continueAcceptedAppSpec({
+    phase: latest.phase,
+    planComplete:
+      latest.phase === "planned" ||
+      latest.phase === "apply_failed" ||
+      latest.phase === "applied" ||
+      latest.phase === "validation_pending" ||
+      latest.phase === "validation_failed" ||
+      latest.phase === "validated" ||
+      latest.phase === "reviewed",
+    plan: () =>
+      planAppCreation.execute({ expectedAppSpecDigest: digest }, ctx),
+  });
+}
 
 export default defineTool({
   description:
@@ -133,6 +165,7 @@ export default defineTool({
         throw new Error(
           "The AppSpec approval receipt changed after acceptance.",
         );
+      await planAcceptedAppSpec(current.appSpec.digest, ctx);
       return { ...current.appSpec, reused: true };
     }
     updateExactWorkflow({
@@ -153,6 +186,7 @@ export default defineTool({
         };
       },
     });
+    await planAcceptedAppSpec(accepted.digest, ctx);
     return { ...accepted, reused: false };
   },
 });
