@@ -82,7 +82,17 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
   );
   if (!contained(runsRoot, supervisorRoot) || dirname(supervisorRoot) !== runsRoot)
     throw new Error("Development Eve supervisor was outside the runs root.");
-  if (applicationRoot !== join(supervisorRoot, "eve-application/source"))
+  const cycleRoot = ownerDirectory(
+    dirname(dirname(applicationRoot)),
+    "Development Eve cycle root",
+    true,
+  );
+  if (
+    !contained(supervisorRoot, cycleRoot) ||
+    dirname(cycleRoot) !== supervisorRoot
+  )
+    throw new Error("Development Eve cycle was outside the supervisor root.");
+  if (applicationRoot !== join(cycleRoot, "eve-application/source"))
     throw new Error("Development Eve application root was not supervisor-bound.");
   const sourceRoot = ownerDirectory(
     required(environment, "REPOSITORY_LOCAL_ROOTS"),
@@ -98,14 +108,14 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development runtime home",
     true,
   );
-  if (runtimeHome !== join(supervisorRoot, "home"))
+  if (runtimeHome !== join(cycleRoot, "home"))
     throw new Error("Development runtime home was not supervisor-bound.");
   const workflowData = ownerDirectory(
     required(environment, "WORKFLOW_LOCAL_DATA_DIR"),
     "Development workflow data root",
     true,
   );
-  if (workflowData !== join(supervisorRoot, "workflow-data"))
+  if (workflowData !== join(cycleRoot, "workflow-data"))
     throw new Error("Development workflow data was not supervisor-bound.");
   const destinationRoot = ownerDirectory(
     required(environment, "REPOSITORY_WORKSPACE_ROOT"),

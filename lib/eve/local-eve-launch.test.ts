@@ -24,13 +24,14 @@ function fixture() {
   mkdirSync(runsRoot, { mode: 0o700 });
   const activeRun = realpathSync(mkdtempSync(join(runsRoot, "run-")));
   const supervisorRoot = realpathSync(mkdtempSync(join(runsRoot, "supervisor-")));
-  const applicationRoot = join(supervisorRoot, "eve-application/source");
+  const cycleRoot = realpathSync(mkdtempSync(join(supervisorRoot, "cycle-")));
+  const applicationRoot = join(cycleRoot, "eve-application/source");
   const sourceRoot = join(activeRun, "source");
-  const runtimeHome = join(supervisorRoot, "home");
-  const workflowData = join(supervisorRoot, "workflow-data");
+  const runtimeHome = join(cycleRoot, "home");
+  const workflowData = join(cycleRoot, "workflow-data");
   const destinationRoot = join(stateRoot, "destination");
   for (const path of [
-    join(supervisorRoot, "eve-application"),
+    join(cycleRoot, "eve-application"),
     applicationRoot,
     runtimeHome,
     workflowData,
