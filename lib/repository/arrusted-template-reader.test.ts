@@ -94,13 +94,28 @@ describe("Arrusted private template reader", () => {
     ).toHaveLength(1);
   });
 
+  it("accepts additional read-only permissions on a repository-scoped token", async () => {
+    const mock = readerFetch({
+      permissions: {
+        metadata: "read",
+        contents: "read",
+        checks: "read",
+        issues: "read",
+      },
+    });
+
+    await expect(reader(mock.implementation).acquire()).resolves.toEqual({
+      token: "ghs_reader_token_that_is_only_for_this_acquisition",
+    });
+  });
+
   it.each([
     {
       permissions: {
         metadata: "read",
         contents: "read",
         checks: "read",
-        issues: "read",
+        issues: "write",
       },
     },
     { tokenRepositoryIds: [101] },
@@ -119,12 +134,15 @@ describe("Arrusted private template reader", () => {
       },
     },
     { totalCount: 2 },
-  ])("rejects a broader token or mismatched repository %#", async (input) => {
-    const mock = readerFetch(input);
-    await expect(reader(mock.implementation).acquire()).rejects.toThrow(
-      "template reader is unavailable",
-    );
-  });
+  ])(
+    "rejects a write-capable token or mismatched repository %#",
+    async (input) => {
+      const mock = readerFetch(input);
+      await expect(reader(mock.implementation).acquire()).rejects.toThrow(
+        "template reader is unavailable",
+      );
+    },
+  );
 
   it("fails closed when the deployment-owned reader configuration is absent", () => {
     expect(() => readDeploymentArrustedTemplateReaderConfig({})).toThrow(

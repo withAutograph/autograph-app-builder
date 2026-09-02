@@ -37,10 +37,12 @@ reader token restriction is defense in depth, not a replacement for a dedicated
 reader App.
 
 The token request is constrained to `Contents: read` and `Checks: read`.
-App Builder validates both the token permissions and the installation’s live
-repository inventory before cloning. It uses the token only to validate that
-inventory, make the one direct workspace clone, and read Check Runs for the
-resolved SHA. The source transport writes it only to a temporary owner-only
+App Builder validates that those capabilities are present and that every
+returned capability is read-only; an additional read-only permission does not
+invalidate an otherwise repository-scoped token. It also validates the
+installation’s live repository inventory before cloning. It uses the token only
+to validate that inventory, make the one direct workspace clone, and read Check
+Runs for the resolved SHA. The source transport writes it only to a temporary owner-only
 askpass credential file, removes the file on every success or failure path,
 and restores `deny-all` networking after cloning. It disables prompts,
 inherited Git configuration, hooks, SSH/file protocols, and submodules, and
@@ -196,11 +198,11 @@ mutation.
 
 ## Validation
 
-The source boundary is tested for exact requested reader permissions and
-repository scope, rejection of unavailable, broader, or mismatched reader
-tokens, canonical origin/ref resolution, detached checkout state, immutable V4
-receipt validation, clone drift rejection, and token cleanup on success and
-failure. Explicit existing repository behavior remains unchanged. Local and
+The source boundary is tested for required read-only reader permissions and
+exact repository scope, rejection of unavailable, write-capable, or mismatched
+reader tokens, canonical origin/ref resolution, detached checkout state,
+immutable V4 receipt validation, clone drift rejection, and token cleanup on
+success and failure. Explicit existing repository behavior remains unchanged. Local and
 hosted runtime paths use the same clone provenance contract and fail closed
 before bootstrap when reader configuration, token minting, cloning, or readiness
 evidence is unavailable.
