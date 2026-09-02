@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-const identifier = z.string().regex(/^@arrusted\/[A-Za-z0-9_./-]+$/u);
+const identifier = z.string().regex(/^@autograph\/[A-Za-z0-9_./-]+$/u);
 const relativePath = z
   .string()
   .regex(/^[A-Za-z0-9_./-]+(?:\.[A-Za-z0-9_-]+)?$/u)
@@ -223,7 +223,7 @@ export function auditAppliedAppComposition(input: {
       });
 
     for (const specifier of importsFrom(file.content)) {
-      if (specifier.startsWith("@arrusted/") && !allowedImports.has(specifier))
+      if (specifier.startsWith("@autograph/") && !allowedImports.has(specifier))
         violations.push({
           code: "unapproved-public-import",
           path: file.path,

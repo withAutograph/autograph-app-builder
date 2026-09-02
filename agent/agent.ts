@@ -10,46 +10,67 @@ export const vendorOnboardingPrototype = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vendor Onboarding</title>
+  <title>Vendor Review · Autograph</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #17211b; background: #f4f7f4; }
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #292929; background: #fafaf9; }
     * { box-sizing: border-box; }
-    body { margin: 0; }
-    header { padding: 24px 32px 18px; background: #173f31; color: white; }
-    header p { margin: 6px 0 0; color: #c8ddd4; }
-    main { display: grid; grid-template-columns: minmax(320px, 0.9fr) minmax(380px, 1.1fr); gap: 20px; padding: 24px 32px; }
-    section { background: white; border: 1px solid #dce5df; border-radius: 16px; box-shadow: 0 8px 24px #163b2d12; }
-    .section-heading { padding: 18px 20px; border-bottom: 1px solid #e6ece8; }
+    body { margin: 0; background: #fafaf9; }
+    .topnav { min-height: 52px; display: flex; align-items: stretch; gap: 4px; padding: 0 16px; border-bottom: 1px solid rgba(41,41,41,.08); background: #fefefe; }
+    .brand { align-self: center; display: flex; align-items: center; gap: 8px; height: 32px; margin-right: 12px; padding: 0 12px; border-radius: 8px; background: #f8f8f8; font-size: 13px; font-weight: 600; }
+    .mark { width: 24px; height: 24px; display: grid; place-items: center; border: 2px solid #8192ff; border-radius: 50%; color: #8192ff; font-size: 12px; }
+    .tab { border: 0; border-radius: 0; padding: 0 16px; background: transparent; color: #4e5253; box-shadow: none; }
+    .tab[aria-current="page"] { color: #292929; box-shadow: inset 0 -2px #8192ff; }
+    main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 32px 0 48px; }
+    .page-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+    section { background: #fefefe; border-radius: 20px; box-shadow: 0 1px 12px 1px rgba(68,102,136,.04); }
+    .section-heading { padding: 20px 24px 12px; }
     h1, h2, h3, p { margin-top: 0; }
-    h1 { margin-bottom: 0; font-size: 24px; }
-    h2 { margin-bottom: 4px; font-size: 17px; }
-    .muted { color: #617067; font-size: 14px; }
-    .filters { display: flex; gap: 8px; padding: 14px 20px; }
-    button { border: 1px solid #c8d4cd; border-radius: 999px; background: white; color: #244438; padding: 8px 12px; font: inherit; cursor: pointer; }
-    button[aria-pressed="true"] { background: #d9eee4; border-color: #74a88f; }
+    h1 { margin-bottom: 4px; font-size: 32px; line-height: 48px; letter-spacing: -.02em; }
+    h2 { margin-bottom: 4px; font-size: 16px; }
+    h3 { font-size: 14px; }
+    .muted { color: #5f6263; font-size: 13px; line-height: 20px; }
+    .heading-actions, .actions { display: flex; gap: 12px; }
+    button { min-height: 40px; border: 1px solid rgba(41,41,41,.16); border-radius: 8px; background: #fefefe; color: #292929; padding: 0 16px; font: 600 13px/1 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: rgba(41,41,41,.04); }
+    button:focus-visible { outline: 3px solid #f5f4ff; box-shadow: 0 0 0 2px #8192ff; }
+    .primary { border-color: #8192ff; background: #8192ff; color: #292929; box-shadow: 0 2px 8px rgba(99,102,241,.2); }
+    .primary:hover { background: #6b7de2; }
+    .summary { display: grid; grid-template-columns: 120px 1fr 1fr 1fr; align-items: center; gap: 24px; min-height: 138px; padding: 24px 32px; margin-bottom: 32px; }
+    .progress { width: 82px; height: 82px; display: grid; place-content: center; text-align: center; border: 9px solid #f5f4ff; border-radius: 50%; }
+    .progress strong { font-size: 18px; }.progress span { font-size: 11px; color: #5f6263; }
+    .summary-step { position: relative; min-height: 52px; padding-left: 44px; }
+    .summary-step::before { content: "✓"; position: absolute; left: 0; top: 2px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #f5f4ff; color: #6b7de2; }
+    .summary-step.active::before { content: "≡"; background: #8192ff; color: white; }
+    .summary-step.clear::before { background: #e6fbf7; color: #17b196; }
+    .summary-step strong { display: block; font-size: 13px; margin: 4px 0; }
+    .workspace { display: grid; grid-template-columns: .95fr 1.05fr; gap: 16px; }
+    .filters { display: flex; gap: 8px; padding: 0 24px 16px; }
+    .filters button { min-height: 32px; border: 0; border-radius: 999px; padding: 0 12px; color: #4e5253; background: rgba(41,41,41,.05); }
+    .filters button[aria-pressed="true"] { color: #4d5fc2; background: #f5f4ff; }
     .queue { list-style: none; margin: 0; padding: 0 12px 14px; }
-    .queue button { width: 100%; border: 0; border-radius: 12px; padding: 14px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; text-align: left; }
-    .queue button:hover, .queue button[aria-current="true"] { background: #edf6f1; }
-    .queue strong { font-size: 15px; }
-    .status { align-self: center; color: #8a4c10; background: #fff1db; border-radius: 999px; padding: 4px 8px; font-size: 12px; }
-    .detail { padding: 20px; }
+    .queue button { width: 100%; min-height: 68px; border: 0; border-radius: 12px; padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; text-align: left; }
+    .queue button:hover, .queue button[aria-current="true"] { background: #f5f4ff; }
+    .queue strong { font-size: 14px; }
+    .status { align-self: center; color: #9a4a09; background: #ffeede; border-radius: 999px; padding: 5px 9px; font-size: 11px; }
+    .detail { padding: 0 24px 24px; }
     .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
-    .fact { padding: 12px; background: #f5f8f6; border-radius: 10px; }
-    .fact span { display: block; color: #617067; font-size: 12px; margin-bottom: 3px; }
+    .fact { padding: 14px; background: #f8f8f8; border-radius: 10px; font-size: 14px; }
+    .fact span { display: block; color: #5f6263; font-size: 11px; margin-bottom: 4px; }
     .steps { list-style: none; margin: 0; padding: 0; }
-    .steps li { position: relative; padding: 12px 12px 12px 42px; border-top: 1px solid #edf1ee; }
-    .steps li::before { content: ""; position: absolute; left: 14px; top: 15px; width: 16px; height: 16px; border: 2px solid #77a28e; border-radius: 50%; }
-    .steps li.done::before { background: #2d7557; border-color: #2d7557; box-shadow: inset 0 0 0 3px white; }
-    .steps li.conditional { background: #fff9ee; }
+    .steps li { position: relative; padding: 13px 12px 13px 42px; border-top: 1px solid rgba(41,41,41,.08); }
+    .steps li::before { content: ""; position: absolute; left: 14px; top: 16px; width: 16px; height: 16px; border: 2px solid #a9adaf; border-radius: 50%; }
+    .steps li.done::before { content: "✓"; display: grid; place-items: center; background: #e6fbf7; border-color: #e6fbf7; color: #087463; font-size: 11px; }
+    .steps li.conditional { background: #ffeede; border-radius: 8px; }
     .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-    .primary { background: #1f684d; border-color: #1f684d; color: white; }
-    @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } header { padding: 20px 16px; } .facts { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .topnav { overflow-x: auto; padding: 0 8px; }.brand { flex: 0 0 auto; }.tab { flex: 0 0 auto; padding: 0 10px; } main { width: calc(100% - 24px); padding-top: 20px; }.page-heading { align-items: stretch; flex-direction: column; }.heading-actions button { flex: 1; }.summary { grid-template-columns: 1fr; padding: 20px; }.progress { margin: auto; }.workspace { grid-template-columns: 1fr; }.facts { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-  <header><h1>Vendor Onboarding</h1><p>Review new vendors, resolve exceptions, and send complete records forward.</p></header>
+  <nav class="topnav" aria-label="Vendor pages"><div class="brand"><span class="mark">A</span><span>Autograph.</span><span aria-hidden="true">·</span><span>Vendors</span></div><button class="tab">Import data</button><button class="tab" aria-current="page">Data Review</button><button class="tab">Integrations</button></nav>
   <main>
-    <section aria-labelledby="queue-title">
+    <div class="page-heading"><div><h1>Vendor Review</h1><p class="muted">Review new vendors, resolve exceptions, and send complete records forward.</p></div><div class="heading-actions"><button>↻ Run scan</button><button class="primary">Start Guided Review</button></div></div>
+    <section class="summary" aria-label="Review readiness"><div class="progress"><strong>67%</strong><span>ready</span></div><div class="summary-step clear"><strong>Intake complete</strong><span class="muted">3 vendor records received</span></div><div class="summary-step active"><strong>3 decisions remaining</strong><span class="muted">Across vendor submissions</span></div><div class="summary-step"><strong>Finance involved when needed</strong><span class="muted">Tax checks stay conditional</span></div></section>
+    <div class="workspace"><section aria-labelledby="queue-title">
       <div class="section-heading"><h2 id="queue-title">Operations review queue</h2><p class="muted">3 vendors need attention</p></div>
       <div class="filters" aria-label="Queue filters"><button aria-pressed="true">Needs review</button><button aria-pressed="false">Waiting</button><button aria-pressed="false">Ready</button></div>
       <ul class="queue">
@@ -57,8 +78,7 @@ export const vendorOnboardingPrototype = `<!doctype html>
         <li><button data-name="Cedar Creative Studio" data-type="US individual" data-tax="required"><strong>Cedar Creative Studio</strong><span class="status">Missing W-9</span><span class="muted">Submitted yesterday</span></button></li>
         <li><button data-name="Kiteworks GmbH" data-type="International company" data-tax="not-required"><strong>Kiteworks GmbH</strong><span class="status">Bank review</span><span class="muted">Submitted yesterday</span></button></li>
       </ul>
-    </section>
-    <section aria-labelledby="detail-title">
+    </section><section aria-labelledby="detail-title">
       <div class="section-heading"><h2 id="detail-title">Northstar Logistics</h2><p class="muted" id="vendor-type">US corporation</p></div>
       <div class="detail">
         <div class="facts"><div class="fact"><span>Requested by</span>Field Operations</div><div class="fact"><span>Risk tier</span>Standard</div></div>
@@ -66,7 +86,7 @@ export const vendorOnboardingPrototype = `<!doctype html>
         <ol class="steps"><li class="done">Business details complete</li><li class="done">Payment contact verified</li><li class="conditional" id="tax-step"><strong>Finance: verify tax information</strong><br><span class="muted">Required for tax-reportable US vendors</span></li><li>Final operations approval</li></ol>
         <div class="actions"><button>Request changes</button><button class="primary">Send to finance</button></div>
       </div>
-    </section>
+    </section></div>
   </main>
   <script>
     const rows = document.querySelectorAll('.queue button');
