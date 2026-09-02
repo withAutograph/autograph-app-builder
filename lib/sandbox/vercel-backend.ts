@@ -41,6 +41,50 @@ export interface HostedVercelBackendInput {
   readonly runtimeRecoveryPrewarmInput: () => RuntimeRecoveryPrewarmInput;
 }
 
+const PROVIDER_REQUEST_TIMEOUT_MS = 45_000;
+const PROVIDER_RETRY_DELAY_MS = 250;
+
+function retryableProviderFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const status = (error as Error & { status?: unknown }).status;
+  if (typeof status === "number" && (status === 429 || status >= 500)) return true;
+  return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/i.test(
+    `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
+  );
+}
+
+function providerDiagnostic(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown";
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const code =
+    cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
+      ? cause.code
+      : "provider_error";
+  return `Vercel Sandbox request failed (${code})`;
+}
+
+async function callProvider<T>(operation: string, call: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await Promise.race([
+        call(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Vercel Sandbox request timed out")), PROVIDER_REQUEST_TIMEOUT_MS),
+        ),
+      ]);
+    } catch (error) {
+      if (attempt === 0 && retryableProviderFailure(error)) {
+        console.warn(`[sandbox] ${operation}: ${providerDiagnostic(error)}; retrying once`);
+        await new Promise((resolve) => setTimeout(resolve, PROVIDER_RETRY_DELAY_MS));
+        continue;
+      }
+      console.warn(`[sandbox] ${operation}: ${providerDiagnostic(error)}`);
+      throw error;
+    }
+  }
+  throw new Error("unreachable");
+}
+
 function createRuntimeRecoveringBackend<BO, SO>(input: {
   readonly backend: SandboxBackend<BO, SO>;
   readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
@@ -54,17 +98,17 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
   return {
     name: input.backend.name,
     prewarm: (prewarmInput) =>
-      input.backend.prewarm({
+      callProvider("prewarm", () => input.backend.prewarm({
         ...prewarmInput,
         templateKey: providerTemplateKey(prewarmInput.templateKey)!,
-      }),
+      })),
     async create(createInput) {
       const providerCreateInput = {
         ...createInput,
         templateKey: providerTemplateKey(createInput.templateKey),
       };
       try {
-        return await input.backend.create(providerCreateInput);
+        return await callProvider("create", () => input.backend.create(providerCreateInput));
       } catch (error) {
         if (
           providerCreateInput.templateKey === null ||
@@ -80,7 +124,7 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
           seedFiles: recovery.seedFiles,
           templateKey: providerCreateInput.templateKey,
         });
-        return await input.backend.create(providerCreateInput);
+        return await callProvider("create", () => input.backend.create(providerCreateInput));
       }
     },
   };

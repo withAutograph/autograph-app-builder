@@ -45,6 +45,26 @@ function backendFactory(input: {
 }
 
 describe("hosted Vercel sandbox backend", () => {
+  it("retries a replayable transient provider request once", async () => {
+    const session = { id: "session-1" } as SandboxSession;
+    const handle = {
+      session,
+      useSessionFn: async () => session,
+      captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: "session-1" }),
+      stop: async () => undefined,
+      shutdown: async () => undefined,
+    } satisfies SandboxBackendHandle;
+    const transient = new Error("fetch failed");
+    const create = vi.fn().mockRejectedValueOnce(transient).mockResolvedValueOnce(handle);
+    const backend = createHostedVercelBackend({
+      factory: backendFactory({ create, prewarm: vi.fn() }),
+      runtimeRecoveryPrewarmInput: recoveryInput(),
+    });
+
+    await expect(backend.create({ runtimeContext, sessionKey: "session-1", templateKey: null })).resolves.toMatchObject({ session });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
   it("allows bootstrap hosts only for prewarm and denies every fresh live session", () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
