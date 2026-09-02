@@ -414,8 +414,8 @@ describe("supported-template adapter", () => {
     const contractPath = ".config/mise/config.toml";
     const supportedSource = readFileSync(join(root, contractPath), "utf8");
     const unsupportedSource = supportedSource.replace(
-      '[tasks."app:test"]',
-      '[tasks."renamed:test"]',
+      '[tasks."repository:preflight"]',
+      '[tasks."renamed:preflight"]',
     );
     const supported = await inspectSupportedRepository(root);
 
@@ -432,7 +432,7 @@ describe("supported-template adapter", () => {
     const committedUnsupported = await inspectSupportedRepository(root);
     expect(committedUnsupported.planningEligible).toBe(false);
     expect(committedUnsupported.planningFailures).toContain(
-      "app:test command is missing",
+      "repository:preflight command is missing",
     );
 
     writeFileSync(join(root, contractPath), supportedSource);
@@ -581,7 +581,7 @@ describe("supported-template adapter", () => {
     expect(drifted.digest).not.toBe(reviewed.digest);
   });
 
-  it("rejects the retired shell-owned topology path", async () => {
+  it("admits the shell-owned topology used by older Arrusted checkouts", async () => {
     const root = fixture();
     const topology = join(root, "microfrontends.json");
     const retiredTopology = join(root, "apps/shell/microfrontends.json");
@@ -604,10 +604,8 @@ describe("supported-template adapter", () => {
 
     const eligibility = await inspectSupportedRepository(root);
 
-    expect(eligibility.eligible).toBe(false);
-    expect(eligibility.failures).toContain(
-      "missing required path microfrontends.json",
-    );
+    expect(eligibility.eligible).toBe(true);
+    expect(eligibility.planningEligible).toBe(true);
   });
 
   it("accepts the declared planning contract and prepares the exact SHA", async () => {
@@ -954,22 +952,22 @@ describe("supported-template adapter", () => {
     );
   });
 
-  it("fails read-only planning on missing commands, runtime, or topology", async () => {
+  it("requires planning capabilities but treats validation and topology as advisory", async () => {
     const missingCommand = fixture();
     const misePath = join(missingCommand, ".config/mise/config.toml");
     writeFileSync(
       misePath,
       readFileSync(misePath, "utf8").replace(
-        '[tasks."app:test"]',
-        '[tasks."renamed:test"]',
+        '[tasks."repository:preflight"]',
+        '[tasks."renamed:preflight"]',
       ),
     );
-    commitFixture(missingCommand, "remove required test command");
+    commitFixture(missingCommand, "remove required planning command");
     process.env.REPOSITORY_LOCAL_ROOTS = missingCommand;
     const commandResult = await inspectSupportedRepository(missingCommand);
     expect(commandResult.planningEligible).toBe(false);
     expect(commandResult.planningFailures).toContain(
-      "app:test command is missing",
+      "repository:preflight command is missing",
     );
 
     const unsupportedRuntime = fixture();
@@ -993,10 +991,40 @@ describe("supported-template adapter", () => {
     commitFixture(invalidTopology, "invalidate topology owner");
     process.env.REPOSITORY_LOCAL_ROOTS = invalidTopology;
     const topologyResult = await inspectSupportedRepository(invalidTopology);
-    expect(topologyResult.planningEligible).toBe(false);
-    expect(topologyResult.planningFailures).toContain(
-      "repository topology owner is invalid",
+    expect(topologyResult.planningEligible).toBe(true);
+    expect(topologyResult.planningFailures).toEqual([]);
+  });
+
+  it("admits older Arrusted checkouts with advisory topology and command drift", async () => {
+    const root = fixture();
+    unlinkSync(join(root, "microfrontends.json"));
+    const misePath = join(root, ".config/mise/config.toml");
+    writeFileSync(
+      misePath,
+      readFileSync(misePath, "utf8").replace(
+        '[tasks."app:test"]',
+        '[tasks."legacy:test"]',
+      ),
     );
+    const preflightPath = join(
+      root,
+      ".config/mise/scripts/repository/repository-preflight.ts",
+    );
+    writeFileSync(
+      preflightPath,
+      readFileSync(preflightPath, "utf8").replace(
+        '"mise run app:test <app-id> <shard>"',
+        '"mise run legacy:test <app-id>"',
+      ),
+    );
+    commitFixture(root, "preserve older Arrusted source shape");
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+
+    const eligibility = await inspectSupportedRepository(root);
+
+    expect(eligibility.eligible).toBe(true);
+    expect(eligibility.planningEligible).toBe(true);
+    expect(eligibility.planningFailures).toEqual([]);
   });
 
   it("fails closed when the planner still declares Vite", async () => {

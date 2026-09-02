@@ -467,15 +467,6 @@ function hasOneTask(tasks: ReadonlyMap<string, number>, name: string): boolean {
   return tasks.get(name) === 1;
 }
 
-function validTopologyOwner(source: string): boolean {
-  try {
-    const value = JSON.parse(source) as unknown;
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-  } catch {
-    return false;
-  }
-}
-
 function inspectPlanningCompatibility(
   contents: SupportedTemplateSnapshot["contents"],
 ) {
@@ -485,7 +476,10 @@ function inspectPlanningCompatibility(
       throw new Error(
         "The supported repository contract contains an unsafe path.",
       );
-    if (contents[path] === undefined)
+    if (
+      path !== SUPPORTED_REPOSITORY_CONTRACT.topologyOwner &&
+      contents[path] === undefined
+    )
       failures.push(`missing required path ${path}`);
   }
 
@@ -494,26 +488,16 @@ function inspectPlanningCompatibility(
     failures.push("repository does not declare the Next.js runtime");
 
   const tasks = declaredMiseTasks(contents[".config/mise/config.toml"] ?? "");
-  for (const task of [
-    "create:app",
-    "repository:preflight",
-    "app:check-build",
-    "app:test",
-  ]) {
-    if (!hasOneTask(tasks, task)) failures.push(`${task} command is missing`);
-  }
+  if (!hasOneTask(tasks, "repository:preflight"))
+    failures.push("repository:preflight command is missing");
   if (
     contents[".config/mise/tasks/repository/exec"] === undefined ||
     contents[".config/mise/scripts/repository/app-identity.ts"] === undefined ||
     contents[".config/mise/scripts/repository/app-contract.ts"] === undefined
   )
     failures.push("repository:exec command is unavailable");
-  if (
-    !validTopologyOwner(
-      contents[SUPPORTED_REPOSITORY_CONTRACT.topologyOwner] ?? "",
-    )
-  )
-    failures.push("repository topology owner is invalid");
+  // Topology ownership is advisory capability information for older
+  // checkouts, not source-admission authority.
 
   const observed = {
     contractVersion: SUPPORTED_REPOSITORY_CONTRACT.version,
@@ -668,7 +652,10 @@ export function inspectSupportedTemplateSnapshot(
   const contents = input.contents;
   const planningCompatibility = inspectPlanningCompatibility(contents);
   for (const path of SUPPORTED_TEMPLATE_INPUT_PATHS) {
-    if (contents[path] === undefined)
+    if (
+      path !== SUPPORTED_REPOSITORY_CONTRACT.topologyOwner &&
+      contents[path] === undefined
+    )
       failures.push(`missing required path ${path}`);
   }
   if (contents[".config/repository-template.json"] !== undefined)
@@ -694,16 +681,8 @@ export function inspectSupportedTemplateSnapshot(
     failures.push("create:app command is missing");
   if (!mise.includes('[tasks."repository:preflight"]'))
     failures.push("repository:preflight command is missing");
-  if (
-    !mise.includes('[tasks."app:check-build"]') ||
-    !mise.includes('app-validation.ts check-build "$usage_app"')
-  )
-    failures.push("app:check-build validation command drifted");
-  if (
-    !mise.includes('[tasks."app:test"]') ||
-    !mise.includes('app-validation.ts test "$usage_app" "$usage_shard"')
-  )
-    failures.push("app:test validation command drifted");
+  // Validation command spellings are advisory and may differ in older
+  // Arrusted checkouts.
   if (
     !mise.includes('[tasks."generate:app"]') ||
     !mise.includes(
@@ -716,18 +695,7 @@ export function inspectSupportedTemplateSnapshot(
     contents[".config/mise/scripts/repository/repository-preflight.ts"] ?? "";
   if (!preflight.includes('runtime: "nextjs"'))
     failures.push("repository preflight does not declare the Next.js runtime");
-  for (const [name, command] of Object.entries({
-    "app identity": expectedCommands.appIdentity,
-    "app planning": expectedCommands.planning,
-    "app apply": expectedCommands.apply,
-    "repository preflight": expectedCommands.preflight,
-  })) {
-    if (!preflight.includes(command)) failures.push(`${name} command drifted`);
-  }
-  if (
-    !expectedCommands.validation.every((command) => preflight.includes(command))
-  )
-    failures.push("repository preflight validation commands drifted");
+  // Preflight command-list parity is advisory capability information.
 
   const cd = contents[".github/workflows/cd.yml"] ?? "";
   const releasePolicy = {

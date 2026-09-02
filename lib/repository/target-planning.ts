@@ -218,7 +218,7 @@ const localPlanningCapabilitySchema = z.strictObject({
     appApply: z.literal("mise run create:app -- --proposal <proposal-file>"),
     repositoryPreflight: z.literal("mise run repository:preflight"),
   }),
-  topologyOwner: z.literal("apps/shell/microfrontends.json"),
+  topologyOwner: repositoryPath,
   validationCommands: z.array(z.string()).min(1).max(16),
   releaseGate: z.literal("REPOSITORY_RELEASE_ENABLED"),
   digest,
