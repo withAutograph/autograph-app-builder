@@ -7,6 +7,7 @@ import {
   createDevelopmentShutdown,
   developmentChildExit,
   stopDevelopmentChild,
+  waitForDevelopmentPortRelease,
   waitForDevelopmentShutdown,
 } from "./process-supervisor";
 
@@ -61,5 +62,22 @@ describe("development process supervision", () => {
 
     await stopDevelopmentChild(child, { processGroup: true });
     expect(await exited).toBe(1);
+  });
+
+  it("cleans up a listener when the Eve wrapper exits before its descendant", async () => {
+    if (process.platform === "win32") return;
+    const port = 43987;
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        `require("node:child_process").spawn(process.execPath, ["-e", "require('node:net').createServer().listen(${port}); setInterval(() => {}, 1000)"], { stdio: "ignore" });`,
+      ],
+      { detached: true, stdio: "ignore" },
+    );
+    await developmentChildExit(child);
+
+    await stopDevelopmentChild(child, { processGroup: true });
+    await waitForDevelopmentPortRelease(port, { timeoutMs: 2_000 });
   });
 });

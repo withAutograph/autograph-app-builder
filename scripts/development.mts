@@ -22,6 +22,7 @@ import {
   createDevelopmentShutdown,
   developmentChildExit,
   stopDevelopmentChild,
+  waitForDevelopmentPortRelease,
   waitForDevelopmentShutdown,
 } from "../lib/development/process-supervisor";
 import {
@@ -323,6 +324,7 @@ async function runEveCycle(input: {
     } finally {
       watchers.abort();
       await stopDevelopmentChild(eve, { processGroup: true });
+      await waitForDevelopmentPortRelease(input.evePort);
     }
   } finally {
     await removeDevelopmentSnapshot(activeRun);

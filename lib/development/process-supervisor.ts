@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { createConnection } from "node:net";
 
 type DevelopmentSignal = "SIGINT" | "SIGTERM";
 
@@ -64,7 +65,11 @@ export async function stopDevelopmentChild(
   child: ChildProcess,
   options: Readonly<{ processGroup?: boolean }> = {},
 ) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  const childExited = child.exitCode !== null || child.signalCode !== null;
+  // The wrapper can exit before an Eve descendant does (for example when the
+  // wrapper observes a launch error).  Still signal its task-owned process
+  // group so a listener inherited by that group cannot survive a restart.
+  if (childExited && !options.processGroup) return;
   const exited = developmentChildExit(child);
   const signal = (value: NodeJS.Signals) => {
     if (
@@ -83,6 +88,7 @@ export async function stopDevelopmentChild(
     child.kill(value);
   };
   signal("SIGTERM");
+  if (childExited) return;
   const graceful = await Promise.race([
     exited.then(() => true),
     new Promise<false>((resolveWait) =>
@@ -93,4 +99,27 @@ export async function stopDevelopmentChild(
     signal("SIGKILL");
     await exited;
   }
+}
+
+export async function waitForDevelopmentPortRelease(
+  port: number,
+  options: Readonly<{ timeoutMs?: number; pollMs?: number }> = {},
+) {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const pollMs = options.pollMs ?? 50;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const occupied = await new Promise<boolean>((resolveOccupied) => {
+      const socket = createConnection({ host: "127.0.0.1", port });
+      const finish = (value: boolean) => {
+        socket.destroy();
+        resolveOccupied(value);
+      };
+      socket.once("connect", () => finish(true));
+      socket.once("error", () => finish(false));
+    });
+    if (!occupied) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
+  }
+  throw new Error(`Development Eve port ${port} was not released after shutdown.`);
 }
