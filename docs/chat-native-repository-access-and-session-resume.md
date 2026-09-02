@@ -71,7 +71,7 @@ that session on the same Store In flow.
 
 Public App Builder sessions MUST remain tenant-scoped and resumable until the
 user explicitly deletes them. User-session retention is independent of short
-compute leases, admission controls, and abandoned-turn detection.
+compute leases and abandoned-turn detection.
 
 Each durable session stores a product-facing title, inferred app identity,
 current product stage, resumability state, adapter generation, checkpoint
@@ -85,8 +85,9 @@ Resume follows these rules:
 1. Reuse a healthy Eve session.
 2. Otherwise fence the prior adapter generation, create a new generation, and
    rehydrate from the last durable checkpoint.
-3. Recreate repository state only after live access and immutable source
-   identity have been revalidated.
+3. Recreate repository state only after live access has been revalidated and
+   the current source state has been re-observed. Normal source movement
+   refreshes planning input; it is not a session-resume authority failure.
 4. Recover an abandoned `working` turn from the last settled checkpoint.
 5. Permit concurrent reads but only one mutating continuation. A competing
    continuation receives a retryable product-facing result.

@@ -8,6 +8,7 @@ import {
 } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 
 function isReviewedPhase(
   state: ReturnType<typeof appBuilderWorkflowState.get>,
@@ -179,10 +180,16 @@ export default defineTool({
         ? {}
         : { githubSource: durable.githubSource }),
     });
-    if (JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed))
+    if (
+      !canAutoSelectDevelopmentSource() &&
+      JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed)
+    )
       throw new Error(
         "The durable workflow receipt does not match the sandbox workspace.",
       );
-    return statusReceipt(durable, false);
+    return {
+      ...statusReceipt(durable, false),
+      workspace: observed,
+    };
   },
 });

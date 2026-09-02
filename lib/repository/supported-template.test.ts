@@ -14,10 +14,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import {
+  assertPreparedSandboxReleasePolicy,
+  assertRepositoryReleasePolicyAtGitSnapshot,
   inspectSupportedTemplateDependencyClosure,
   inspectPreparedSandboxWorkspace,
   inspectSupportedRepository,
+  prepareDevelopmentSandboxWorkspace,
   prepareSupportedSandboxWorkspace,
+  SUPPORTED_REPOSITORY_CONTRACT,
   SUPPORTED_TEMPLATE_DEPENDENCY_PATHS,
 } from "./supported-template";
 import {
@@ -47,6 +51,21 @@ function fixtureGit(root: string, args: string[]): void {
     ],
     { cwd: root, env: { ...process.env, HK: "0" } },
   );
+}
+
+function commitFixture(root: string, message: string): void {
+  fixtureGit(root, ["add", "--all"]);
+  fixtureGit(root, [
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.com",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "-m",
+    message,
+  ]);
 }
 
 afterEach(() => {
@@ -79,6 +98,11 @@ function fixture(): string {
       '[tasks."app:test"]',
       'run = \'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"\'',
     ].join("\n"),
+    ".config/mise/tasks/repository/exec": [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'exec mise exec -- bun ".config/mise/scripts/repository/$1" "${@:2}"',
+    ].join("\n"),
     ".github/workflows/cd.yml": [
       "jobs:",
       "  template-safety:",
@@ -104,6 +128,15 @@ function fixture(): string {
       "    if: needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository",
     ].join("\n"),
     "microfrontends.json": "{}\n",
+    "package.json": `${JSON.stringify(
+      {
+        name: "supported-template-fixture",
+        private: true,
+        devDependencies: { next: "16.3.3" },
+      },
+      null,
+      2,
+    )}\n`,
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":
@@ -211,6 +244,19 @@ function fakeSandbox({
       rmSync(resolve(root, path), { recursive: true, force: true });
     },
     run: async ({ command }: { command: string }) => {
+      if (command.includes("development-source-modes.json"))
+        return { exitCode: 0, stdout: "", stderr: "" };
+      if (command.includes("realWorkspace"))
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            repositoryInput: "/workspace/repository",
+            realRepository: "/workspace/repository",
+            realWorkspace: "/workspace",
+            workspaceRoot: "/workspace",
+          }),
+          stderr: "",
+        };
       try {
         return {
           exitCode: 0,
@@ -358,6 +404,7 @@ describe("supported-template adapter", () => {
     expect(afterSha.sourceSha).not.toBe(beforeSha.sourceSha);
     expect(afterSha.dirtyPaths).toEqual(beforeSha.dirtyPaths);
     expect(afterSha.observed).toEqual(beforeSha.observed);
+    expect(afterSha.compatibilityDigest).toBe(beforeSha.compatibilityDigest);
     expect(afterSha.digest).not.toBe(beforeSha.digest);
 
     const dirtyRoot = fixture();
@@ -368,26 +415,47 @@ describe("supported-template adapter", () => {
     expect(afterDirty.sourceSha).toBe(beforeDirty.sourceSha);
     expect(afterDirty.dirtyPaths).not.toEqual(beforeDirty.dirtyPaths);
     expect(afterDirty.observed).toEqual(beforeDirty.observed);
+    expect(afterDirty.compatibilityDigest).toBe(
+      beforeDirty.compatibilityDigest,
+    );
     expect(afterDirty.digest).not.toBe(beforeDirty.digest);
+  });
 
-    const supportedRoot = fixture();
-    const driftedRoot = cloneFixture(supportedRoot);
-    const contractPath = ".config/mise/scripts/repository/app-contract.ts";
-    writeFileSync(
-      join(supportedRoot, contractPath),
-      'const source = { runtime: "nextjs" };\n// same dirty path\n',
+  it("reads required compatibility bytes from the selected Git snapshot in both dirty directions", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const contractPath = ".config/mise/config.toml";
+    const supportedSource = readFileSync(join(root, contractPath), "utf8");
+    const unsupportedSource = supportedSource.replace(
+      '[tasks."repository:preflight"]',
+      '[tasks."renamed:preflight"]',
     );
-    writeFileSync(
-      join(driftedRoot, contractPath),
-      'const source = { runtime: "vite" };\n// same dirty path\n',
+    const supported = await inspectSupportedRepository(root);
+
+    writeFileSync(join(root, contractPath), unsupportedSource);
+    const dirtyUnsupported = await inspectSupportedRepository(root);
+    expect(dirtyUnsupported.sourceSha).toBe(supported.sourceSha);
+    expect(dirtyUnsupported.dirtyPaths).toContain(contractPath);
+    expect(dirtyUnsupported.planningEligible).toBe(true);
+    expect(dirtyUnsupported.compatibilityDigest).toBe(
+      supported.compatibilityDigest,
     );
-    allowRepositories(supportedRoot, driftedRoot);
-    const supported = await inspectSupportedRepository(supportedRoot);
-    const drifted = await inspectSupportedRepository(driftedRoot);
-    expect(drifted.sourceSha).toBe(supported.sourceSha);
-    expect(drifted.dirtyPaths).toEqual(supported.dirtyPaths);
-    expect(drifted.observed).not.toEqual(supported.observed);
-    expect(drifted.digest).not.toBe(supported.digest);
+
+    commitFixture(root, "commit unsupported contract");
+    const committedUnsupported = await inspectSupportedRepository(root);
+    expect(committedUnsupported.planningEligible).toBe(false);
+    expect(committedUnsupported.planningFailures).toContain(
+      "repository:preflight command is missing",
+    );
+
+    writeFileSync(join(root, contractPath), supportedSource);
+    const dirtySupported = await inspectSupportedRepository(root);
+    expect(dirtySupported.sourceSha).toBe(committedUnsupported.sourceSha);
+    expect(dirtySupported.dirtyPaths).toContain(contractPath);
+    expect(dirtySupported.planningEligible).toBe(false);
+    expect(dirtySupported.compatibilityDigest).toBe(
+      committedUnsupported.compatibilityDigest,
+    );
   });
 
   it("emits kind-specific canonical release-disabled source receipts", async () => {
@@ -396,7 +464,8 @@ describe("supported-template adapter", () => {
     const existing = await inspectSourceReceipt("existing-repository", root);
     const fresh = await inspectSourceReceipt("fresh-template", root);
     expect(existing.sourceSha).toBe(fresh.sourceSha);
-    expect(existing.contractDigest).toBe(fresh.contractDigest);
+    expect(existing.eligibilityDigest).not.toBe(fresh.eligibilityDigest);
+    expect(existing.contractDigest).not.toBe(fresh.contractDigest);
     expect(existing.digest).not.toBe(fresh.digest);
     expect(fresh.releaseEnabled).toBe(false);
     await expect(inspectSourceReceipt("fresh-template", root)).resolves.toEqual(
@@ -431,7 +500,7 @@ describe("supported-template adapter", () => {
     expect(eligibility.eligible).toBe(true);
     expect(after.sourceSha).not.toBe(before.sourceSha);
     expect(after.sourceTree).not.toBe(before.sourceTree);
-    expect(after.eligibilityDigest).not.toBe(before.eligibilityDigest);
+    expect(after.eligibilityDigest).toBe(before.eligibilityDigest);
     expect(after.contractDigest).not.toBe(before.contractDigest);
     expect(after.digest).not.toBe(before.digest);
   });
@@ -525,7 +594,7 @@ describe("supported-template adapter", () => {
     expect(drifted.digest).not.toBe(reviewed.digest);
   });
 
-  it("rejects the retired shell-owned topology path", async () => {
+  it("admits the shell-owned topology used by older Arrusted checkouts", async () => {
     const root = fixture();
     const topology = join(root, "microfrontends.json");
     const retiredTopology = join(root, "apps/shell/microfrontends.json");
@@ -548,24 +617,41 @@ describe("supported-template adapter", () => {
 
     const eligibility = await inspectSupportedRepository(root);
 
-    expect(eligibility.eligible).toBe(false);
-    expect(eligibility.failures).toContain(
-      "missing required path microfrontends.json",
-    );
+    expect(eligibility.eligible).toBe(true);
+    expect(eligibility.planningEligible).toBe(true);
   });
 
-  it("accepts only the closed V0 surface and prepares the exact SHA", async () => {
+  it("accepts the declared planning contract and prepares the exact SHA", async () => {
     const root = fixture();
     process.env.REPOSITORY_LOCAL_ROOTS = root;
     const eligibility = await inspectSupportedRepository(root);
     expect(eligibility.eligible).toBe(true);
+    expect(eligibility.planningEligible).toBe(true);
+    expect(eligibility.compatibilityDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(eligibility.observed.contractVersion).toBe(
+      SUPPORTED_REPOSITORY_CONTRACT.version,
+    );
+    expect(eligibility.observed.requiredPaths).toEqual(
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    );
     expect(eligibility.observed.runtime).toBe("nextjs");
     expect(eligibility.observed.planningCommand).toBe(
       "mise run repository:exec -- app-contract.ts --contract <contract-file>",
     );
-    expect(eligibility.observed.scaffoldCommand).toBe(
-      "mise run generate:app <app-id>",
-    );
+    expect(eligibility.releasePolicy).toEqual({
+      gate: "REPOSITORY_RELEASE_ENABLED",
+      eligible: true,
+    });
+    const releasePolicy = assertRepositoryReleasePolicyAtGitSnapshot({
+      sourcePath: eligibility.sourcePath,
+      sourceSha: eligibility.sourceSha!,
+      sourceTree: execFileSync(
+        "git",
+        ["rev-parse", `${eligibility.sourceSha}^{tree}`],
+        { cwd: eligibility.sourcePath, encoding: "utf8" },
+      ).trim(),
+    });
+    expect(releasePolicy.eligible).toBe(true);
     const sandbox = fakeSandbox();
     const prepared = await prepareSupportedSandboxWorkspace(
       root,
@@ -582,6 +668,14 @@ describe("supported-template adapter", () => {
     ).toBe("{}\n");
     expect(prepared.sourceTree).toMatch(/^[0-9a-f]{40}$/u);
     expect(prepared.workspaceDigest).toMatch(/^[0-9a-f]{64}$/u);
+    await expect(
+      assertPreparedSandboxReleasePolicy({
+        sandbox,
+        sourceSha: prepared.sourceSha,
+        sourceTree: prepared.sourceTree,
+        workspaceDigest: prepared.workspaceDigest,
+      }),
+    ).resolves.toMatchObject({ eligible: true });
     await expect(inspectPreparedSandboxWorkspace(sandbox)).resolves.toEqual({
       state: "prepared",
       workspace: prepared,
@@ -635,6 +729,81 @@ describe("supported-template adapter", () => {
       state: "prepared",
       workspace: prepared,
     });
+  });
+
+  it("updates only the live development source delta and preserves sandbox-owned files", async () => {
+    const root = fixture();
+    writeFileSync(join(root, "notes.md"), "first\n");
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const sandbox = fakeSandbox();
+
+    await prepareDevelopmentSandboxWorkspace(root, sandbox, "first");
+    await sandbox.writeTextFile({
+      path: "repository/.app-builder/generated-plan.json",
+      content: "generated\n",
+    });
+    writeFileSync(join(root, "notes.md"), "updated\n");
+    unlinkSync(join(root, ".github/workflows/cd.yml"));
+    // The release workflow is optional for planning compatibility, while this
+    // removal proves that only a previously managed path is deleted.
+
+    await prepareDevelopmentSandboxWorkspace(
+      root,
+      sandbox,
+      "second",
+      "planning",
+    );
+
+    expect(
+      readFileSync(
+        resolve(sandbox.resolvePath("repository"), "notes.md"),
+        "utf8",
+      ),
+    ).toBe("updated\n");
+    expect(
+      readFileSync(
+        resolve(
+          sandbox.resolvePath("repository"),
+          ".app-builder/generated-plan.json",
+        ),
+        "utf8",
+      ),
+    ).toBe("generated\n");
+    expect(() =>
+      readFileSync(
+        resolve(sandbox.resolvePath("repository"), ".github/workflows/cd.yml"),
+      ),
+    ).toThrow();
+  });
+
+  it("accepts legitimate writes when inspecting a live development workspace", async () => {
+    const root = fixture();
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+    const sandbox = fakeSandbox();
+
+    const eligibility = await inspectSupportedRepository(root);
+    const prepared = await prepareSupportedSandboxWorkspace(
+      root,
+      eligibility.sourceSha!,
+      eligibility.digest,
+      sandbox,
+      "first",
+    );
+    writeFileSync(
+      resolve(sandbox.resolvePath("repository"), "generated-plan.json"),
+      "generated\n",
+    );
+    writeFileSync(
+      resolve(sandbox.resolvePath("repository"), "microfrontends.json"),
+      "changed during planning\n",
+    );
+
+    await expect(
+      inspectPreparedSandboxWorkspace(sandbox, "development-live"),
+    ).resolves.toEqual({ state: "prepared", workspace: prepared });
+    await expect(inspectPreparedSandboxWorkspace(sandbox)).rejects.toThrow(
+      "A prepared workspace file drifted or is missing.",
+    );
   });
 
   it("rejects reuse when the durable prepared source tree drifts", async () => {
@@ -731,15 +900,168 @@ describe("supported-template adapter", () => {
     ).rejects.toThrow("Repository eligibility changed after review.");
   });
 
+  it("keeps read-only planning independent of implementation and release layout", async () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, ".config/mise/scripts/repository/app-contract.ts"),
+      "export function repositorySpecificPlanner() {}\n",
+    );
+    writeFileSync(
+      join(root, ".config/mise/scripts/repository/app-identity.ts"),
+      "export function repositorySpecificIdentity() {}\n",
+    );
+    writeFileSync(
+      join(root, ".config/turbo/generators/config.ts"),
+      "export const repositorySpecificGenerator = true;\n",
+    );
+    unlinkSync(join(root, ".config/turbo/generators/create-app.ts"));
+    writeFileSync(
+      join(root, ".github/workflows/cd.yml"),
+      "jobs:\n  release:\n    runs-on: ubuntu-latest\n",
+    );
+    writeFileSync(
+      join(root, ".config/repository-template.json"),
+      '{"repositoryOwned":"future declaration"}\n',
+    );
+    fixtureGit(root, ["add", "--all"]);
+    fixtureGit(root, [
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "refactor compatible repository",
+    ]);
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+
+    const eligibility = await inspectSupportedRepository(root);
+    const receipt = await inspectSourceReceipt("existing-repository", root);
+    const sandbox = fakeSandbox();
+    const workspace = await prepareSupportedSandboxWorkspace(
+      root,
+      receipt.sourceSha,
+      receipt.eligibilityDigest,
+      sandbox,
+      "call-compatible-planning",
+      false,
+      "planning",
+    );
+
+    expect(eligibility.planningEligible).toBe(true);
+    expect(eligibility.eligible).toBe(false);
+    expect(eligibility.releasePolicy.eligible).toBe(false);
+    expect(eligibility.compatibilityDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(receipt.eligibilityDigest).toBe(eligibility.compatibilityDigest);
+    expect(workspace.sourceSha).toBe(receipt.sourceSha);
+    expect(() =>
+      assertRepositoryReleasePolicyAtGitSnapshot({
+        sourcePath: receipt.sourcePath,
+        sourceSha: receipt.sourceSha,
+        sourceTree: receipt.sourceTree,
+      }),
+    ).toThrow("release policy required for outward effects");
+    await expect(
+      assertPreparedSandboxReleasePolicy({
+        sandbox,
+        sourceSha: workspace.sourceSha,
+        sourceTree: workspace.sourceTree,
+        workspaceDigest: workspace.workspaceDigest,
+      }),
+    ).rejects.toThrow("release policy required for outward effects");
+    await expect(inspectSourceReceipt("fresh-template", root)).rejects.toThrow(
+      "Source is not eligible",
+    );
+  });
+
+  it("requires planning capabilities but treats validation and topology as advisory", async () => {
+    const missingCommand = fixture();
+    const misePath = join(missingCommand, ".config/mise/config.toml");
+    writeFileSync(
+      misePath,
+      readFileSync(misePath, "utf8").replace(
+        '[tasks."repository:preflight"]',
+        '[tasks."renamed:preflight"]',
+      ),
+    );
+    commitFixture(missingCommand, "remove required planning command");
+    process.env.REPOSITORY_LOCAL_ROOTS = missingCommand;
+    const commandResult = await inspectSupportedRepository(missingCommand);
+    expect(commandResult.planningEligible).toBe(false);
+    expect(commandResult.planningFailures).toContain(
+      "repository:preflight command is missing",
+    );
+
+    const unsupportedRuntime = fixture();
+    writeFileSync(
+      join(unsupportedRuntime, "package.json"),
+      '{"name":"unsupported-runtime","private":true}\n',
+    );
+    commitFixture(unsupportedRuntime, "remove next runtime");
+    process.env.REPOSITORY_LOCAL_ROOTS = unsupportedRuntime;
+    const runtimeResult = await inspectSupportedRepository(unsupportedRuntime);
+    expect(runtimeResult.planningEligible).toBe(false);
+    expect(runtimeResult.planningFailures).toContain(
+      "repository does not declare the Next.js runtime",
+    );
+    expect(runtimeResult.compatibilityDigest).not.toBe(
+      commandResult.compatibilityDigest,
+    );
+
+    const invalidTopology = fixture();
+    writeFileSync(join(invalidTopology, "microfrontends.json"), "[]\n");
+    commitFixture(invalidTopology, "invalidate topology owner");
+    process.env.REPOSITORY_LOCAL_ROOTS = invalidTopology;
+    const topologyResult = await inspectSupportedRepository(invalidTopology);
+    expect(topologyResult.planningEligible).toBe(true);
+    expect(topologyResult.planningFailures).toEqual([]);
+  });
+
+  it("admits older Arrusted checkouts with advisory topology and command drift", async () => {
+    const root = fixture();
+    unlinkSync(join(root, "microfrontends.json"));
+    const misePath = join(root, ".config/mise/config.toml");
+    writeFileSync(
+      misePath,
+      readFileSync(misePath, "utf8").replace(
+        '[tasks."app:test"]',
+        '[tasks."legacy:test"]',
+      ),
+    );
+    const preflightPath = join(
+      root,
+      ".config/mise/scripts/repository/repository-preflight.ts",
+    );
+    writeFileSync(
+      preflightPath,
+      readFileSync(preflightPath, "utf8").replace(
+        '"mise run app:test <app-id> <shard>"',
+        '"mise run legacy:test <app-id>"',
+      ),
+    );
+    commitFixture(root, "preserve older Arrusted source shape");
+    process.env.REPOSITORY_LOCAL_ROOTS = root;
+
+    const eligibility = await inspectSupportedRepository(root);
+
+    expect(eligibility.eligible).toBe(true);
+    expect(eligibility.planningEligible).toBe(true);
+    expect(eligibility.planningFailures).toEqual([]);
+  });
+
   it("fails closed when the planner still declares Vite", async () => {
     const root = fixture();
     writeFileSync(
       join(root, ".config/mise/scripts/repository/app-contract.ts"),
       'const source = { runtime: "vite" };\n',
     );
+    commitFixture(root, "declare unsupported planner runtime");
     process.env.REPOSITORY_LOCAL_ROOTS = root;
     const eligibility = await inspectSupportedRepository(root);
     expect(eligibility.eligible).toBe(false);
+    expect(eligibility.planningEligible).toBe(true);
     expect(eligibility.failures).toContain(
       "app planner does not declare the Next.js runtime",
     );
@@ -752,9 +1074,11 @@ describe("supported-template adapter", () => {
     mkdirSync(join(legacy, ".."), { recursive: true });
     writeFileSync(legacy, "export {};\n");
     unlinkSync(current);
+    commitFixture(root, "restore retired generator path");
     process.env.REPOSITORY_LOCAL_ROOTS = root;
     const eligibility = await inspectSupportedRepository(root);
     expect(eligibility.eligible).toBe(false);
+    expect(eligibility.planningEligible).toBe(true);
     expect(eligibility.failures).toContain(
       "missing required path .config/turbo/generators/create-app.ts",
     );
@@ -766,9 +1090,12 @@ describe("supported-template adapter", () => {
       join(root, ".github/workflows/cd.yml"),
       "jobs:\n  template-safety:\n    name: something else\n",
     );
+    commitFixture(root, "change release gate");
     process.env.REPOSITORY_LOCAL_ROOTS = root;
     const eligibility = await inspectSupportedRepository(root);
     expect(eligibility.eligible).toBe(false);
+    expect(eligibility.planningEligible).toBe(true);
+    expect(eligibility.releasePolicy.eligible).toBe(false);
     expect(eligibility.failures).toContain(
       "REPOSITORY_RELEASE_ENABLED gate is not the supported CD gate",
     );

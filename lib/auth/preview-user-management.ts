@@ -176,7 +176,10 @@ export function previewUserManagementPlugins(
       roles: organizationRoles,
       creatorRole: "owner",
       allowUserToCreateOrganization: false,
-      membershipLimit: 100,
+      // Better Auth defaults to a 100-member organization ceiling when this
+      // option is omitted. App Builder does not impose a product membership
+      // quota, so use the largest exactly representable integer instead.
+      membershipLimit: Number.MAX_SAFE_INTEGER,
       invitationExpiresIn: 60 * 60 * 48,
       cancelPendingInvitationsOnReInvite: true,
       requireEmailVerificationOnInvitation: true,

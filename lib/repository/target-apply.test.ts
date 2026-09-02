@@ -29,6 +29,7 @@ import {
   type TargetApplyCommandReceipt,
 } from "./target-apply";
 import type { TargetProposal } from "./target-planning";
+import type { ExecutionDependencyLayout } from "./dependency-cache";
 
 const acceptedAppSpec = Buffer.from("# Accepted AppSpec\n");
 const acceptedAppSpecDigest = createHash("sha256")
@@ -90,6 +91,19 @@ const binding: TargetApplyBinding = {
   dependencyCacheContentDigest: "d".repeat(64),
   proposalDigest: "9".repeat(64),
 };
+
+const dependencyLayout = (cachePath: string): ExecutionDependencyLayout => ({
+  version: 1,
+  kind: "cache",
+  roots: [
+    {
+      path: "node_modules",
+      cachePath,
+      digest: binding.dependencyCacheContentDigest,
+    },
+  ],
+  workspaceLinks: [],
+});
 
 const before: OverlaySnapshot = {
   treeDigest: "a".repeat(64),
@@ -405,6 +419,9 @@ describe("proposal-bound target apply", () => {
         executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
         binding,
         artifactRevision: binding.artifactRevision,
+        dependencyLayout: dependencyLayout(
+          `/opt/app-builder/dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+        ),
         proposal,
         appliedByCallId: "competing-apply-call",
       }),
@@ -439,6 +456,9 @@ describe("proposal-bound target apply", () => {
         snapshotter: async () => snapshots.shift()!,
         binding,
         artifactRevision: binding.artifactRevision,
+        dependencyLayout: dependencyLayout(
+          `/opt/app-builder/dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+        ),
         proposal,
         appliedByCallId: "apply-call",
       }),
@@ -464,12 +484,15 @@ describe("proposal-bound target apply", () => {
     const overlayCopy = run.mock.calls
       .map(([request]) => (request as { command: string }).command)
       .find((command) => command.includes("cp -R"))!;
-    expect(overlayCopy).toContain("test -L");
-    expect(overlayCopy).toContain(
-      `/opt/app-builder/dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
-    );
     expect(overlayCopy).toContain("cp -R");
-    expect(overlayCopy).toContain("readlink --");
+    expect(overlayCopy).not.toContain("readlink --");
+    expect(writeTextFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          `/opt/app-builder/dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+        ),
+      }),
+    );
     expect(removePath).toHaveBeenCalledWith({
       path: `.app-builder/apply/${binding.proposalDigest}/repository/prototype/expense-review/app-spec.md`,
       force: true,
@@ -481,7 +504,7 @@ describe("proposal-bound target apply", () => {
   });
 
   it("copies a Vercel planning overlay with its workspace-materialized dependency root", async () => {
-    const { run, sandbox } = sandboxFixture();
+    const { sandbox, writeTextFile } = sandboxFixture();
     const snapshots = [planning, before, before, after];
     const result = await executeProposalBoundApply({
       sandbox,
@@ -493,18 +516,24 @@ describe("proposal-bound target apply", () => {
       snapshotter: async () => snapshots.shift()!,
       binding,
       artifactRevision: binding.artifactRevision,
+      dependencyLayout: dependencyLayout(
+        `/workspace/.app-builder/hosted-dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+      ),
       proposal,
       appliedByCallId: "hosted-apply-call",
       environment: { APP_BUILDER_REAL_SANDBOX: "1", VERCEL: "1" },
     });
     expect(result.ok).toBe(true);
-    const overlayCopy = run.mock.calls
-      .map(([request]) => (request as { command: string }).command)
-      .find((command) => command.includes("cp -R"));
-    expect(overlayCopy).toContain(
-      `/workspace/.app-builder/hosted-dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
-    );
-    expect(overlayCopy).not.toContain("/opt/app-builder/dependencies/");
+    const writtenScripts = writeTextFile.mock.calls as unknown as Array<
+      [{ content: string }]
+    >;
+    expect(
+      writtenScripts.some(([request]) =>
+        request.content.includes(
+          `/workspace/.app-builder/hosted-dependencies/${binding.dependencyCacheContentDigest}/node_modules`,
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("binds the pristine prepared tree separately from injected planning config", async () => {

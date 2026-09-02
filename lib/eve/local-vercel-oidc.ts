@@ -253,6 +253,7 @@ export function validateLocalVercelOidcClaims(input: {
   token: string;
   project: LinkedVercelProject;
   nowEpochSeconds: number;
+  allowExpired?: boolean;
 }): {
   issuerMode: "global" | "team";
   audienceBound: true;
@@ -285,7 +286,7 @@ export function validateLocalVercelOidcClaims(input: {
   if (
     claims.iat > input.nowEpochSeconds ||
     claims.nbf > input.nowEpochSeconds ||
-    claims.exp <= input.nowEpochSeconds ||
+    (!input.allowExpired && claims.exp <= input.nowEpochSeconds) ||
     claims.nbf < claims.iat ||
     claims.exp - claims.iat > 43_200
   ) {

@@ -11,7 +11,8 @@ import {
 } from "./supported-template";
 import {
   ARRUSTED_APP_VALIDATION_SHA256,
-  materializedDependencyNodeModulesRoot,
+  materializeExecutionDependencyView,
+  type ExecutionDependencyLayout,
 } from "./dependency-cache";
 import {
   applyOverlayRoot,
@@ -349,7 +350,8 @@ function attemptBinding(
 async function materializeValidationOverlay(input: {
   sandbox: SandboxSession;
   applyRoot: string;
-  dependencyCacheContentDigest: string;
+  dependencyLayout: ExecutionDependencyLayout;
+  viewKey: string;
   command: PlannedValidationCommand;
   environment: Readonly<Record<string, string | undefined>>;
 }): Promise<void> {
@@ -365,13 +367,9 @@ async function materializeValidationOverlay(input: {
   });
   if (absent.exitCode !== 0) throw new Error("ValidationOverlayExists");
   await ensureSandboxDirectories(input.sandbox, [parent]);
-  const dependencyRoot = materializedDependencyNodeModulesRoot(
-    input.dependencyCacheContentDigest,
-    input.environment,
-  );
   const copyCommand = hasTestCapability("simulated-target", input.environment)
     ? `cp -R ${input.applyRoot} ${input.command.validationRoot}`
-    : `test -L ${input.applyRoot}/node_modules && test "$(readlink -- ${input.applyRoot}/node_modules)" = "${dependencyRoot}" && cp -R ${input.applyRoot} ${input.command.validationRoot} && test -L ${input.command.validationRoot}/node_modules && test "$(readlink -- ${input.command.validationRoot}/node_modules)" = "${dependencyRoot}"`;
+    : `cp -R ${input.applyRoot} ${input.command.validationRoot}`;
   const copy = await input.sandbox.run({
     command: copyCommand,
     workingDirectory: "/workspace",
@@ -383,6 +381,12 @@ async function materializeValidationOverlay(input: {
     Buffer.byteLength(copy.stderr) > TARGET_VALIDATION_OUTPUT_BYTES
   )
     throw new Error("ValidationOverlayCopyFailed");
+  await materializeExecutionDependencyView({
+    sandbox: input.sandbox,
+    layout: input.dependencyLayout,
+    overlayRoot: relativeRoot,
+    viewKey: input.viewKey,
+  });
 }
 
 export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
@@ -472,12 +476,26 @@ export async function executeProposalBoundValidation(input: {
   verifyProtectedState?: () => Promise<void>;
   apply: TargetApplyReceipt;
   attempt: TargetValidationAttemptReceipt;
+  dependencyLayout?: ExecutionDependencyLayout;
   appId: string;
   environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<TargetValidationResult> {
   assertAttemptMatchesApply(input.attempt, input.apply);
   if (input.appId !== input.attempt.appId)
     throw new Error("The validation application id changed after approval.");
+  const environment = input.environment ?? process.env;
+  const dependencyLayout =
+    input.dependencyLayout ??
+    (hasTestCapability("simulated-target", environment)
+      ? ({
+          version: 1,
+          kind: "fixture",
+          roots: [],
+          workspaceLinks: [],
+        } as const)
+      : undefined);
+  if (dependencyLayout === undefined)
+    throw new Error("The dependency execution layout receipt is missing.");
   const snapshotter = input.snapshotter ?? inspectApplyOverlay;
   const commands: TargetValidationCommandReceipt[] = [];
   for (const planned of input.attempt.commands) {
@@ -497,9 +515,10 @@ export async function executeProposalBoundValidation(input: {
       await materializeValidationOverlay({
         sandbox: input.sandbox,
         applyRoot: input.apply.applyRoot,
-        dependencyCacheContentDigest: input.apply.dependencyCacheContentDigest,
+        dependencyLayout,
+        viewKey: sha256(`${input.attempt.digest}\0${planned.name}`),
         command: planned,
-        environment: input.environment ?? process.env,
+        environment,
       });
     } catch {
       return {

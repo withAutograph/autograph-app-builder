@@ -10,7 +10,6 @@ import {
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
-import { readHostedAdmissionControlBinding } from "../hosted/admission-control";
 import { createPostgresBuilderHandoffStore } from "../handoff/postgres-store";
 import { createBuilderHandoffService } from "../handoff/service";
 import { composeHostedMcpRuntime } from "./hosted-runtime";
@@ -49,7 +48,6 @@ function forwardedSessionAuth(principal: HostedPrincipal) {
 
 export function readHostedDeploymentConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
-  nowEpochMs = Date.now(),
 ) {
   const auth = readHostedMcpAuthConfig(environment);
   const resourceUrl = new URL(auth.resourceUrl);
@@ -63,10 +61,6 @@ export function readHostedDeploymentConfig(
   return {
     auth,
     databaseUrl: parseHostedDatabaseUrl(environment.DATABASE_URL),
-    admissionControl: readHostedAdmissionControlBinding(
-      environment,
-      nowEpochMs,
-    ),
     eve: {
       baseUrl: resourceUrl.origin,
     },
@@ -110,10 +104,7 @@ export function createDeploymentMcpRequestHandler(input: {
 
     try {
       if (hostedHandler === undefined) {
-        const config = readHostedDeploymentConfig(
-          input.environment,
-          input.now?.() ?? Date.now(),
-        );
+        const config = readHostedDeploymentConfig(input.environment);
         if (request.url !== config.auth.resourceUrl) {
           throw new Error(
             "The hosted request does not match the configured MCP resource.",
@@ -127,7 +118,6 @@ export function createDeploymentMcpRequestHandler(input: {
           database,
           eve: config.eve,
           workloadIdentity: input.workloadIdentity,
-          admissionControl: config.admissionControl,
           fetchImplementation: input.fetchImplementation,
           now: input.now,
         });

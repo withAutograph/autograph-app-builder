@@ -5,6 +5,7 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisionResponseSchema } from "../provisioning/contracts";
 import { builderAppIdSchema } from "../provisioning/names";
+import { activeBuilderModelIdSchema } from "../integrations/active-model";
 
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/u);
 const repositoryName = z
@@ -34,7 +35,7 @@ export const builderHandoffIntentSchema = z
         resolvedFullName: fullRepositoryName.optional(),
       })
       .strict(),
-    modelId: z.string().trim().min(1).max(200),
+    modelId: activeBuilderModelIdSchema,
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
     provisioningRequestId: z.string().uuid().optional(),
     provisioningRequestDigest: sha256.optional(),

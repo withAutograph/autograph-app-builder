@@ -14,7 +14,6 @@ import {
   type EveSessionService,
 } from "../eve/service";
 import type { HostedEveStore } from "../eve/hosted-store";
-import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 import {
   attachPrototypePreviewUrl,
   prototypePreviewRequestUrl,
@@ -115,7 +114,6 @@ export interface HostedMcpRuntime {
   store: HostedEveStore;
   transport: HostedEveTransport;
   handoffs?: HostedBuilderHandoffRuntime;
-  admissionControl?: HostedPreviewAdmissionControlBinding;
   beforeRead?: Parameters<
     typeof createHostedEveSessionService
   >[0]["beforeRead"];
@@ -335,7 +333,6 @@ async function hostedServiceForRequest(
   const parsedAuth = hostedMcpAuthConfigSchema.safeParse(runtime.auth);
   if (!parsedAuth.success) return unavailableResponse();
   const auth = parsedAuth.data;
-  if (runtime.admissionControl === undefined) return unavailableResponse();
   let token: string;
   try {
     token = parseStrictBearerAuthorization(
@@ -392,7 +389,6 @@ async function hostedServiceForRequest(
     principal,
     store: runtime.store,
     transport: runtime.transport,
-    admissionControl: runtime.admissionControl,
     ...(runtime.beforeRead === undefined
       ? {}
       : { beforeRead: runtime.beforeRead }),

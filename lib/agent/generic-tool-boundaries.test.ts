@@ -37,4 +37,19 @@ describe("generic sandbox tool boundaries", () => {
       inspector.indexOf("inspectSourceBoundSandboxWorkspace"),
     ).toBeLessThan(inspector.indexOf(".app-builder/source-files.json"));
   });
+
+  it("prepares the configured development source when a model inspects its sandbox path", async () => {
+    const router = await readFile(
+      resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
+      "utf8",
+    );
+
+    expect(router).toContain(
+      'const developmentWorkspacePath = "/workspace/repository"',
+    );
+    expect(router).toContain("canAutoSelectDevelopmentSource()");
+    expect(router).toContain("prepareDevelopmentSandboxWorkspace(");
+    expect(router).toContain('"planning",');
+    expect(router).toContain("sourceWorkflowState.update");
+  });
 });

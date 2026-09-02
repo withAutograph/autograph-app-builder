@@ -41,6 +41,8 @@ const silentInternalApprovalTools = new Set([
 ]);
 const unavailableConfirmationMessage =
   "I couldn't verify this action, so it was not run.";
+const unavailableContinuationMessage =
+  "I couldn't finish preparing your app. Your progress is saved, so you can try again.";
 const maximumPrototypeBytes = 262_144;
 const prototypePathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
@@ -71,8 +73,34 @@ const prototypeResultSchema = z
     invalidated: z.boolean().optional(),
   })
   .strict();
+const prototypeBundleResultSchema = z
+  .object({
+    prototype: publicPrototypeSchema,
+  })
+  .passthrough();
+const prototypeBundlePlanResultSchema = z
+  .object({ implementationPlan: publicImplementationPlanSchema })
+  .passthrough();
 const planRequestSchema = z
-  .object({ expectedAppSpecDigest: lowercaseSha256Schema })
+  .object({
+    expectedAppSpecDigest: lowercaseSha256Schema,
+    existingAppChanges: z
+      .array(
+        z
+          .object({
+            path: z
+              .string()
+              .min(1)
+              .max(512)
+              .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u),
+            content: z.string().max(262_144),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(32)
+      .optional(),
+  })
   .strict();
 const planResultSchema = z
   .object({
@@ -101,13 +129,25 @@ function sha256(value: string): string {
 
 function verifiedImplementationPlan(
   callId: string,
-  expectedAppSpecDigest: string,
+  request: z.infer<typeof planRequestSchema>,
   candidate: unknown,
 ): PublicImplementationPlan | undefined {
   const parsed = planResultSchema.safeParse(candidate);
   if (!parsed.success) return undefined;
   const result = parsed.data;
   const target = result.target;
+  const requestedChanges = request.existingAppChanges;
+  const iterationMatchesRequest =
+    requestedChanges === undefined
+      ? !("operation" in target)
+      : "operation" in target &&
+        target.operation === "iterate-existing-app" &&
+        target.iteration.changes.length === requestedChanges.length &&
+        target.iteration.changes.every(
+          (change, index) =>
+            change.path === requestedChanges[index]?.path &&
+            change.after.content === requestedChanges[index]?.content,
+        );
   const unsigned = {
     version: result.version,
     sourceSha: result.sourceSha,
@@ -126,9 +166,10 @@ function verifiedImplementationPlan(
   };
   if (
     (!result.reused && result.plannedByCallId !== callId) ||
-    result.appSpecDigest !== expectedAppSpecDigest ||
-    target.contract.appSpec.sha256 !== expectedAppSpecDigest ||
-    target.plan.product.appSpec.sha256 !== expectedAppSpecDigest ||
+    result.appSpecDigest !== request.expectedAppSpecDigest ||
+    target.contract.appSpec.sha256 !== request.expectedAppSpecDigest ||
+    target.plan.product.appSpec.sha256 !== request.expectedAppSpecDigest ||
+    !iterationMatchesRequest ||
     result.contractDigest !== sha256(JSON.stringify(target.contract)) ||
     result.digest !== sha256(JSON.stringify(unsigned)) ||
     target.blockers.length !== 0 ||
@@ -157,12 +198,17 @@ export function latestInstalledImplementationPlan(
   events: readonly MessageStreamEvent[],
 ): PublicImplementationPlan | undefined {
   const requested = new Map<string, z.infer<typeof planRequestSchema>>();
+  const requestedBundles = new Set<string>();
   let latest: PublicImplementationPlan | undefined;
 
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") continue;
+        if (action.toolName === "record_prototype_bundle") {
+          requestedBundles.add(action.callId);
+          continue;
+        }
         if (action.toolName !== "plan_app_creation") {
           requested.delete(action.callId);
           continue;
@@ -182,6 +228,14 @@ export function latestInstalledImplementationPlan(
     )
       continue;
 
+    if (event.data.result.toolName === "record_prototype_bundle") {
+      if (!requestedBundles.has(event.data.result.callId)) continue;
+      const output = prototypeBundlePlanResultSchema.safeParse(
+        event.data.result.output,
+      );
+      if (output.success) latest = output.data.implementationPlan;
+      continue;
+    }
     if (event.data.result.toolName === "record_prototype_artifact") {
       const output = event.data.result.output;
       if (
@@ -200,7 +254,7 @@ export function latestInstalledImplementationPlan(
     if (input === undefined) continue;
     const plan = verifiedImplementationPlan(
       callId,
-      input.expectedAppSpecDigest,
+      input,
       event.data.result.output,
     );
     if (plan !== undefined) latest = plan;
@@ -218,12 +272,17 @@ export function latestInstalledPrototype(
   events: readonly MessageStreamEvent[],
 ): PublicPrototype | undefined {
   const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+  const requestedBundles = new Set<string>();
   let latest: PublicPrototype | undefined;
 
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") continue;
+        if (action.toolName === "record_prototype_bundle") {
+          requestedBundles.add(action.callId);
+          continue;
+        }
         if (action.toolName !== "record_prototype_artifact") {
           requested.delete(action.callId);
           continue;
@@ -239,10 +298,19 @@ export function latestInstalledPrototype(
       event.type !== "action.result" ||
       event.data.status !== "completed" ||
       event.data.result.kind !== "tool-result" ||
-      event.data.result.toolName !== "record_prototype_artifact" ||
       event.data.result.isError === true
     )
       continue;
+
+    if (event.data.result.toolName === "record_prototype_bundle") {
+      if (!requestedBundles.has(event.data.result.callId)) continue;
+      const output = prototypeBundleResultSchema.safeParse(
+        event.data.result.output,
+      );
+      if (output.success) latest = output.data.prototype;
+      continue;
+    }
+    if (event.data.result.toolName !== "record_prototype_artifact") continue;
 
     const callId = event.data.result.callId;
     const input = requested.get(callId);
@@ -472,8 +540,8 @@ export function projectInstalledEveEvent(
         {
           type: "error.public",
           index,
-          code: event.data.code,
-          message: event.data.message,
+          code: "unable_to_continue",
+          message: unavailableContinuationMessage,
         },
         { type: "status", index, status: "failed" },
       ];

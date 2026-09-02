@@ -22,21 +22,6 @@ const environment = {
   MCP_OAUTH_JWKS_URL: "https://builder.example.test/api/auth/jwks",
   MCP_OAUTH_ALGORITHM: "ES256",
   MCP_RESOURCE_URL: "https://builder.example.test/mcp",
-  EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify({
-    version: 1,
-    environment: "preview",
-    enforcement: "provider-readback",
-    scope: "issuer-audience-workspace-subject",
-    startsPerSubjectPerMinute: 10,
-    startsPerWorkspacePerMinute: 50,
-    maxConcurrentSessionsPerSubject: 2,
-    maxActiveSessionsPerWorkspace: 20,
-    monthlySpendUsedUsdCents: 0,
-    monthlySpendLimitUsdCents: 10_000,
-    observedAt: "2026-08-27T00:55:00.000Z",
-    expiresAt: "2026-08-27T01:55:00.000Z",
-    readbackDigest: `sha256:${"a".repeat(64)}`,
-  }),
 };
 
 const workloadIdentity: HostedWorkloadIdentity = {
@@ -69,19 +54,11 @@ describe("hosted route composition", () => {
       ...environment,
       VERCEL_ENV: "production",
       EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
-      EVE_HOSTED_ADMISSION_CONTROL: JSON.stringify({
-        ...JSON.parse(environment.EVE_HOSTED_ADMISSION_CONTROL),
-        environment: "production",
-      }),
     };
-    const config = readHostedDeploymentConfig(
-      productionEnvironment,
-      nowEpochMs,
-    );
+    const config = readHostedDeploymentConfig(productionEnvironment);
     expect(config.forwarderSubject).toBe(
       "owner:withautograph:project:autograph-app-builder:environment:production",
     );
-    expect(config.admissionControl.environment).toBe("production");
   });
 
   it("opens no connection during construction and reuses one principal-free runtime", async () => {
@@ -107,7 +84,6 @@ describe("hosted route composition", () => {
     for (const invalidEnvironment of [
       { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
       { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
-      { ...environment, EVE_HOSTED_ADMISSION_CONTROL: undefined },
     ]) {
       const openDatabase = vi.fn(() => ({}) as unknown as Database);
       const handler = createDeploymentMcpRequestHandler({
@@ -176,51 +152,33 @@ describe("hosted route composition", () => {
   });
 
   it("accepts only a bounded PostgreSQL deployment URL", () => {
-    expect(
-      readHostedDeploymentConfig(environment, nowEpochMs).databaseUrl,
-    ).toBe(environment.DATABASE_URL);
+    expect(readHostedDeploymentConfig(environment).databaseUrl).toBe(
+      environment.DATABASE_URL,
+    );
     for (const databaseUrl of [
       "mysql://database.example.test/eve",
       "postgresql://database.example.test/eve\n",
       "not-a-url",
     ]) {
       expect(() =>
-        readHostedDeploymentConfig(
-          { ...environment, DATABASE_URL: databaseUrl },
-          nowEpochMs,
-        ),
+        readHostedDeploymentConfig({
+          ...environment,
+          DATABASE_URL: databaseUrl,
+        }),
       ).toThrow();
     }
-    expect(readHostedDeploymentConfig(environment, nowEpochMs).eve).toEqual({
+    expect(readHostedDeploymentConfig(environment).eve).toEqual({
       baseUrl: "https://builder.example.test",
     });
-    expect(
-      readHostedDeploymentConfig(environment, nowEpochMs).forwarderSubject,
-    ).toBe(
+    expect(readHostedDeploymentConfig(environment).forwarderSubject).toBe(
       "owner:withautograph:project:autograph-app-builder:environment:preview",
     );
-    expect(
-      readHostedDeploymentConfig(environment, nowEpochMs).admissionControl,
-    ).toMatchObject({
-      environment: "preview",
-      enforcement: "provider-readback",
-      maxConcurrentSessionsPerSubject: 2,
-    });
     expect(() =>
-      readHostedDeploymentConfig(
-        {
-          ...environment,
-          MCP_RESOURCE_URL: "https://builder.example.test/not-mcp",
-          MCP_OAUTH_AUDIENCE: "https://builder.example.test/not-mcp",
-        },
-        nowEpochMs,
-      ),
+      readHostedDeploymentConfig({
+        ...environment,
+        MCP_RESOURCE_URL: "https://builder.example.test/not-mcp",
+        MCP_OAUTH_AUDIENCE: "https://builder.example.test/not-mcp",
+      }),
     ).toThrow("resourceUrl must be the exact /mcp URL");
-    expect(() =>
-      readHostedDeploymentConfig(
-        { ...environment, EVE_HOSTED_ADMISSION_CONTROL: undefined },
-        nowEpochMs,
-      ),
-    ).toThrow("admission-control readback is required");
   });
 });

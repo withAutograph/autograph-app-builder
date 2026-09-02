@@ -88,7 +88,7 @@ describe("local Eve acceptance", () => {
     ).resolves.toMatchObject({ sessionId: started.sessionId });
   });
 
-  it("recovers a durable waiting boundary after the response stream disconnects", async () => {
+  it("continues at the durable tail after the response stream disconnects", async () => {
     const durableEvents = [
       {
         type: "step.completed",
@@ -110,6 +110,9 @@ describe("local Eve acceptance", () => {
     const session = {
       state: { sessionId: "wrun_stream_recovery", streamIndex: 0 },
       snapshot,
+      stream: vi.fn(async function* () {
+        yield durableEvents[1]!;
+      }),
       send: vi.fn(async () => response),
       respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -141,10 +144,122 @@ describe("local Eve acceptance", () => {
     await expect(
       service.get({ sessionId: started.sessionId, cursor: 2, limit: 100 }),
     ).resolves.toMatchObject({ status: "waiting", cursor: 2, events: [] });
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(snapshot).not.toHaveBeenCalled();
     expect(attach).toHaveBeenLastCalledWith(started.sessionId, {
-      streamIndex: 2,
+      streamIndex: 1,
     });
+  });
+
+  it("keeps buffered progress readable while a clean response close tails a live turn", async () => {
+    let releaseTail!: () => void;
+    const tailReady = new Promise<void>((resolve) => {
+      releaseTail = resolve;
+    });
+    const response = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: "step.started",
+          data: { turnId: "turn-clean-close" },
+        } as MessageStreamEvent;
+      },
+    };
+    const snapshot = vi.fn(async () => {
+      throw new Error("snapshot must not run for a live tail");
+    });
+    const session = {
+      state: { sessionId: "wrun_clean_close", streamIndex: 0 },
+      snapshot,
+      stream: vi.fn(async function* () {
+        await tailReady;
+        yield { type: "session.waiting", data: {} } as MessageStreamEvent;
+      }),
+      send: vi.fn(async () => response),
+      respond: vi.fn(async () => response),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const attach = vi.fn(() => session);
+    const service = createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach,
+        } as never,
+      },
+      { stateGeneration: "clean-response-tail" },
+    );
+    const started = await service.start({
+      prompt: "Build",
+      clientRequestId: "clean-response-tail-start",
+    });
+
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "working", cursor: 1 });
+    });
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(attach).toHaveBeenCalledWith(started.sessionId, { streamIndex: 1 });
+
+    releaseTail();
+    await vi.waitFor(async () => {
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+    });
+    expect(snapshot).not.toHaveBeenCalled();
+  });
+
+  it("still bounds a model turn after its response iterator closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<void>(() => undefined);
+      const response = {
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-closed-response" },
+          } as MessageStreamEvent;
+        },
+      };
+      const session = {
+        state: { sessionId: "wrun_closed_response", streamIndex: 0 },
+        stream: vi.fn(async function* () {
+          await never;
+        }),
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService(
+        {
+          sessions: {
+            create: vi.fn(async () => ({ session, response })),
+            attach: vi.fn(() => session),
+          } as never,
+        },
+        { stateGeneration: "closed-response-timeout", modelTurnTimeoutMs: 10 },
+      );
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "closed-response-timeout-start",
+      });
+
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({
+        status: "waiting",
+        error: { code: "model_turn_interrupted" },
+      });
+      expect(session.cancel).toHaveBeenCalledWith({
+        turnId: "turn-closed-response",
+      });
+      expect(response.cancel).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("preserves buffered settlement across a Next development module reload", async () => {
@@ -167,12 +282,16 @@ describe("local Eve acceptance", () => {
       respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
-    const firstService = createLocalEveSessionService({
-      sessions: {
-        create: vi.fn(async () => ({ session, response })),
-        attach: vi.fn(() => session),
-      } as never,
-    });
+    const stateGeneration = "one-development-invocation";
+    const firstService = createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach: vi.fn(() => session),
+        } as never,
+      },
+      { stateGeneration },
+    );
     const started = await firstService.start({
       prompt: "Build",
       clientRequestId: "module-reload-start",
@@ -189,12 +308,15 @@ describe("local Eve acceptance", () => {
 
     vi.resetModules();
     const reloaded = await import("./service");
-    const reloadedService = reloaded.createLocalEveSessionService({
-      sessions: {
-        create: vi.fn(),
-        attach: vi.fn(() => session),
-      } as never,
-    });
+    const reloadedService = reloaded.createLocalEveSessionService(
+      {
+        sessions: {
+          create: vi.fn(),
+          attach: vi.fn(() => session),
+        } as never,
+      },
+      { stateGeneration },
+    );
 
     await expect(
       reloadedService.get({
@@ -212,6 +334,16 @@ describe("local Eve acceptance", () => {
         }),
         expect.objectContaining({ type: "status", status: "waiting" }),
       ]),
+    });
+    await expect(
+      reloadedService.list({ cursor: 0, limit: 10 }),
+    ).resolves.toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          sessionId: started.sessionId,
+          title: "Build",
+        }),
+      ],
     });
   });
 
@@ -266,6 +398,98 @@ describe("local Eve acceptance", () => {
       cursor: 0,
       events: [],
     });
+  });
+
+  it("makes an active local turn resumable after its Eve child restarts", async () => {
+    let keepOldResponseOpen!: () => void;
+    const oldResponse = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: "step.started",
+          data: { turnId: "turn-before-restart" },
+        } as MessageStreamEvent;
+        await new Promise<void>((resolve) => (keepOldResponseOpen = resolve));
+      },
+    };
+    const resumedEvents = [
+      { type: "session.waiting", data: {} },
+    ] as MessageStreamEvent[];
+    const resumedResponse = {
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      async *[Symbol.asyncIterator]() {
+        for (const event of resumedEvents) yield event;
+      },
+    };
+    const session = {
+      state: { sessionId: "wrun_restart_interrupted" },
+      snapshot: vi.fn(async () => ({
+        events: [
+          {
+            type: "step.started",
+            data: { turnId: "turn-before-restart" },
+          },
+        ] as MessageStreamEvent[],
+        session: { sessionId: "wrun_restart_interrupted", streamIndex: 1 },
+      })),
+      send: vi.fn(async () => resumedResponse),
+      respond: vi.fn(async () => resumedResponse),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+    };
+    const attach = vi.fn(() => session);
+    const client = {
+      sessions: {
+        create: vi.fn(async () => ({ session, response: oldResponse })),
+        attach,
+      } as never,
+    };
+    const first = createLocalEveSessionService(client, {
+      stateGeneration: "one-local-invocation",
+      restartGeneration: "eve-child-one",
+    });
+    const started = await first.start({
+      prompt: "Build",
+      clientRequestId: "restart-interrupted-start",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        first.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "working", cursor: 1 });
+    });
+
+    const restarted = createLocalEveSessionService(client, {
+      stateGeneration: "one-local-invocation",
+      restartGeneration: "eve-child-two",
+    });
+    await expect(
+      restarted.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+    ).resolves.toMatchObject({ status: "waiting", cursor: 1 });
+    await expect(
+      restarted.cancel({ sessionId: started.sessionId }),
+    ).resolves.toMatchObject({
+      status: "waiting",
+    });
+    expect(session.cancel).not.toHaveBeenCalled();
+
+    await restarted.send({
+      sessionId: started.sessionId,
+      message: "Continue from the last product decision.",
+      clientRequestId: "restart-interrupted-send",
+    });
+    await vi.waitFor(async () => {
+      await expect(
+        restarted.get({
+          sessionId: started.sessionId,
+          cursor: 0,
+          limit: 100,
+        }),
+      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+    });
+    expect(attach).toHaveBeenCalledWith(started.sessionId, {
+      streamIndex: 1,
+    });
+    expect(session.snapshot).toHaveBeenCalledTimes(1);
+    keepOldResponseOpen();
   });
 
   it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
@@ -358,6 +582,85 @@ describe("local Eve acceptance", () => {
     });
   });
 
+  it("hydrates a route-local preview from the durable Eve session", async () => {
+    const content = "<!doctype html><html><body>Stock exceptions</body></html>";
+    const path = "prototype/stock-exceptions/index.html";
+    const mediaType = "text/html";
+    const digest = createHash("sha256").update(content).digest("hex");
+    const revision = createHash("sha256")
+      .update(JSON.stringify({ path, mediaType, digest }))
+      .digest("hex");
+    const events = [
+      {
+        type: "actions.requested",
+        data: {
+          actions: [
+            {
+              kind: "tool-call",
+              callId: "call_route_prototype",
+              toolName: "record_prototype_artifact",
+              input: { path, mediaType, content },
+            },
+          ],
+        },
+      },
+      {
+        type: "action.result",
+        data: {
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            callId: "call_route_prototype",
+            toolName: "record_prototype_artifact",
+            output: {
+              appId: "stock-exceptions",
+              path,
+              mediaType,
+              digest,
+              revision,
+              sessionId: "wrun_route_prototype",
+              recordedByCallId: "call_route_prototype",
+              size: Buffer.byteLength(content),
+              reused: false,
+            },
+          },
+        },
+      },
+      { type: "session.waiting", data: {} },
+    ] as unknown as MessageStreamEvent[];
+    const snapshot = vi.fn(async () => ({
+      events,
+      session: {
+        sessionId: "wrun_route_prototype",
+        streamIndex: events.length,
+      },
+    }));
+    const session = {
+      state: { sessionId: "wrun_route_prototype" },
+      snapshot,
+    };
+    const attach = vi.fn(() => session);
+    const service = createLocalEveSessionService(
+      { sessions: { attach } as never },
+      { stateGeneration: "route-local-preview" },
+    );
+
+    await expect(
+      service.get({
+        sessionId: "wrun_route_prototype",
+        cursor: 0,
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({
+      status: "waiting",
+      prototype: { path, mediaType, content, digest, revision },
+    });
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(attach).toHaveBeenLastCalledWith("wrun_route_prototype", {
+      streamIndex: events.length,
+    });
+  });
+
   it("returns one stable public handle without waiting for the active turn", async () => {
     const never = new Promise<void>(() => undefined);
     const response = {
@@ -398,6 +701,126 @@ describe("local Eve acceptance", () => {
     });
     expect(retry).toEqual(first);
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels one stalled model turn and exposes a retryable paused result", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<void>(() => undefined);
+      const response = {
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-model-stalled" },
+          } as MessageStreamEvent;
+          await never;
+        },
+      };
+      const durableEvents = [
+        {
+          type: "step.started",
+          data: { turnId: "turn-model-stalled" },
+        },
+      ] as MessageStreamEvent[];
+      const session = {
+        state: { sessionId: "wrun_model_stalled" },
+        snapshot: vi.fn(async () => ({
+          events: durableEvents,
+          session: {
+            sessionId: "wrun_model_stalled",
+            streamIndex: durableEvents.length,
+          },
+        })),
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService(
+        {
+          sessions: {
+            create: vi.fn(async () => ({ session, response })),
+            attach: vi.fn(() => session),
+          } as never,
+        },
+        { stateGeneration: "model-turn-timeout", modelTurnTimeoutMs: 10 },
+      );
+
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "model-turn-timeout-start",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      await Promise.resolve();
+
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({
+        status: "waiting",
+        error: {
+          code: "model_turn_interrupted",
+          message:
+            "Autograph paused because a response took too long. Your progress is saved; try again in a moment.",
+        },
+      });
+      await expect(
+        service.send({
+          sessionId: started.sessionId,
+          message: "Continue",
+          clientRequestId: "model-turn-timeout-retry",
+        }),
+      ).rejects.toThrow("previous Autograph response is still settling");
+      expect(session.cancel).toHaveBeenCalledWith({
+        turnId: "turn-model-stalled",
+      });
+      expect(response.cancel).not.toHaveBeenCalled();
+      expect(session.send).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not cancel a model turn that reaches its normal waiting boundary", async () => {
+    vi.useFakeTimers();
+    try {
+      const response = {
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-model-healthy" },
+          } as MessageStreamEvent;
+          yield { type: "session.waiting", data: {} } as MessageStreamEvent;
+        },
+      };
+      const session = {
+        state: { sessionId: "wrun_model_healthy" },
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService(
+        {
+          sessions: {
+            create: vi.fn(async () => ({ session, response })),
+            attach: vi.fn(() => session),
+          } as never,
+        },
+        { stateGeneration: "model-turn-healthy", modelTurnTimeoutMs: 10 },
+      );
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "model-turn-healthy-start",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+
+      await expect(
+        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+      ).resolves.toMatchObject({ status: "waiting" });
+      expect(response.cancel).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps get, send, and cancel independent while rejecting a non-outstanding response", async () => {
@@ -472,6 +895,48 @@ describe("local Eve acceptance", () => {
     expect(session.respond).not.toHaveBeenCalled();
     expect(response.cancel).toHaveBeenCalledTimes(1);
     expect(session.cancel).not.toHaveBeenCalled();
+  });
+
+  it("bounds a local cancel when the current Eve response cannot settle", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<void>(() => undefined);
+      const response = {
+        cancel: vi.fn(() => never),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "step.started",
+            data: { turnId: "turn-cancel-timeout" },
+          } as MessageStreamEvent;
+          await never;
+        },
+      };
+      const session = {
+        state: { sessionId: "wrun_cancel_timeout" },
+        send: vi.fn(async () => response),
+        respond: vi.fn(async () => response),
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+      };
+      const service = createLocalEveSessionService({
+        sessions: {
+          create: vi.fn(async () => ({ session, response })),
+          attach: vi.fn(() => session),
+        } as never,
+      });
+      const started = await service.start({
+        prompt: "Build",
+        clientRequestId: "cancel-timeout-start",
+      });
+
+      const cancellation = service.cancel({ sessionId: started.sessionId });
+      const expectedCancellation = expect(cancellation).rejects.toThrow(
+        "Cancellation was accepted",
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expectedCancellation;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("uses the retained session for an explicit turn cancellation", async () => {

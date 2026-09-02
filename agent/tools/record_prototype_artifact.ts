@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import {
+  completeBuildReadyPrototypeAppSpec,
   prototypeArtifactMediaTypes,
   prototypeArtifactPathPattern,
   prototypeArtifactReceipt,
@@ -13,6 +14,8 @@ import {
   assertUpstreamMutationAllowed,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
+
+import acceptAppSpec from "./accept_app_spec";
 
 export default defineTool({
   description:
@@ -53,29 +56,52 @@ export default defineTool({
           ? current.appSpec.appId
           : undefined,
     });
-    if (recorded.reused)
-      return { ...prototypeArtifactReceipt(recorded.artifact), reused: true };
-    updateExactWorkflow({
-      expected: current,
-      operation: "prototype artifact recording",
-      transition: () => {
-        return {
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          phase: "prepared",
-          preparedByCallId: current.preparedByCallId,
-          workspace: current.workspace,
-          sourceReceipt: current.sourceReceipt,
-          ...(current.githubSource === undefined
-            ? {}
-            : { githubSource: current.githubSource }),
-          artifacts: recorded.artifacts,
-        };
-      },
+    if (!recorded.reused)
+      updateExactWorkflow({
+        expected: current,
+        operation: "prototype artifact recording",
+        transition: () => {
+          return {
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            phase: "prepared",
+            preparedByCallId: current.preparedByCallId,
+            workspace: current.workspace,
+            sourceReceipt: current.sourceReceipt,
+            ...(current.githubSource === undefined
+              ? {}
+              : { githubSource: current.githubSource }),
+            artifacts: recorded.artifacts,
+          };
+        },
+      });
+    const buildReadyAppSpec = completeBuildReadyPrototypeAppSpec({
+      artifacts: recorded.artifacts,
+      appId: recorded.artifact.appId,
     });
+    if (buildReadyAppSpec !== undefined) {
+      // The model has completed the product-facing design. Continue the
+      // deterministic acceptance/planning transition here so a fourth model
+      // continuation is not required merely to choose internal operations.
+      await acceptAppSpec.execute(
+        {
+          appId: recorded.artifact.appId,
+          expectedArtifactDigest: buildReadyAppSpec.digest,
+          expectedArtifactRevision: buildReadyAppSpec.revision,
+          expectedSourceSha: current.workspace.sourceSha,
+          expectedSourceTree: current.workspace.sourceTree,
+          expectedEligibilityDigest: current.workspace.eligibilityDigest,
+          expectedWorkspaceDigest: current.workspace.workspaceDigest,
+        },
+        ctx,
+      );
+    }
     return {
       ...prototypeArtifactReceipt(recorded.artifact),
-      reused: false,
-      invalidated: current.phase !== "prepared",
+      reused: recorded.reused,
+      ...(recorded.reused ? {} : { invalidated: current.phase !== "prepared" }),
+      ...(buildReadyAppSpec === undefined
+        ? {}
+        : { implementationPlanReady: true }),
     };
   },
 });

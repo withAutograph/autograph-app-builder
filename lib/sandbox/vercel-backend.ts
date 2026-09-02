@@ -1,6 +1,7 @@
 import {
   SandboxTemplateNotProvisionedError,
   type SandboxBackend,
+  type SandboxBackendHandle,
   type SandboxBackendPrewarmInput,
 } from "eve/sandbox";
 import { vercel } from "eve/sandbox/vercel";
@@ -11,6 +12,7 @@ import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 import { createBoundedSandboxBackend } from "./sandbox-command-adapter";
 
 export interface HostedVercelBackendOptions {
+  readonly fetch?: ProviderFetch;
   readonly env?: Readonly<Record<string, string>>;
   readonly networkPolicy: {
     readonly allow: readonly string[];
@@ -38,7 +40,97 @@ export interface HostedVercelBackendInput {
   readonly sandboxEnvironment?: Readonly<Record<string, string>>;
   /** Maps Eve's authored key to a provider cache key when reuse has a narrower identity. */
   readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
+  /** Reuses already-open provider sessions within one local Eve process. */
+  readonly reuseProcessSessionHandles?: boolean;
   readonly runtimeRecoveryPrewarmInput: () => RuntimeRecoveryPrewarmInput;
+}
+
+const PROVIDER_REQUEST_TIMEOUT_MS = 45_000;
+const PROVIDER_RETRY_DELAY_MS = 250;
+
+function retryableProviderFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const status = (error as Error & { status?: unknown }).status;
+  if (typeof status === "number" && (status === 429 || status >= 500))
+    return true;
+  return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/i.test(
+    `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
+  );
+}
+
+function providerDiagnostic(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown";
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const code =
+    cause &&
+    typeof cause === "object" &&
+    "code" in cause &&
+    typeof cause.code === "string"
+      ? cause.code
+      : "provider_error";
+  return `Vercel Sandbox request failed (${code})`;
+}
+
+type ProviderFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+
+export function createProviderFetch(
+  fetchImpl: typeof fetch = fetch,
+  requestTimeoutMs = PROVIDER_REQUEST_TIMEOUT_MS,
+): ProviderFetch {
+  return async (input, init) => {
+    const original = new Request(input, init);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const timeout = new AbortController();
+      const timer = setTimeout(() => timeout.abort(), requestTimeoutMs);
+      const signal = original.signal.aborted
+        ? original.signal
+        : AbortSignal.any([original.signal, timeout.signal]);
+      try {
+        const response = await fetchImpl(original.clone(), { signal });
+        if (
+          attempt === 0 &&
+          (response.status === 429 || response.status >= 500)
+        ) {
+          await response.body?.cancel();
+          console.warn(
+            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS),
+          );
+          continue;
+        }
+        return response;
+      } catch (error) {
+        const callerCancelled = original.signal.aborted;
+        const providerRequestTimedOut =
+          timeout.signal.aborted && !callerCancelled;
+        if (
+          attempt === 0 &&
+          !callerCancelled &&
+          (providerRequestTimedOut || retryableProviderFailure(error))
+        ) {
+          console.warn(
+            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS),
+          );
+          continue;
+        }
+        console.warn(
+          `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}`,
+        );
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw new Error("unreachable");
+  };
 }
 
 function createRuntimeRecoveringBackend<BO, SO>(input: {
@@ -86,6 +178,74 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
   };
 }
 
+function createProcessSessionReusingBackend<BO, SO>(
+  backend: SandboxBackend<BO, SO>,
+): SandboxBackend<BO, SO> {
+  const processState = globalThis as typeof globalThis & {
+    __autographDevelopmentSandboxHandles?: Map<
+      string,
+      Promise<SandboxBackendHandle<unknown>>
+    >;
+  };
+  const sessions = (processState.__autographDevelopmentSandboxHandles ??=
+    new Map()) as Map<string, Promise<SandboxBackendHandle<SO>>>;
+  return {
+    name: backend.name,
+    prewarm: (input) => backend.prewarm(input),
+    create(input) {
+      const key = JSON.stringify([
+        backend.name,
+        input.runtimeContext.appRoot,
+        input.sessionKey,
+        input.templateKey,
+      ]);
+      const existing = sessions.get(key);
+      if (existing !== undefined) {
+        console.log(
+          JSON.stringify({
+            event: "autograph.local.sandbox-handle",
+            state: "hit",
+            sessionKey: input.sessionKey,
+          }),
+        );
+        return existing;
+      }
+      console.log(
+        JSON.stringify({
+          event: "autograph.local.sandbox-handle",
+          state: "miss",
+          sessionKey: input.sessionKey,
+        }),
+      );
+
+      const pending: Promise<SandboxBackendHandle<SO>> = backend
+        .create(input)
+        .then((handle) => {
+          let closed = false;
+          const close = async (kind: "stop" | "shutdown") => {
+            if (closed) return;
+            closed = true;
+            if (sessions.get(key) === pending) sessions.delete(key);
+            await handle[kind]();
+          };
+          return {
+            session: handle.session,
+            useSessionFn: handle.useSessionFn,
+            captureState: () => handle.captureState(),
+            stop: () => close("stop"),
+            shutdown: () => close("shutdown"),
+          } satisfies SandboxBackendHandle<SO>;
+        })
+        .catch((error: unknown) => {
+          if (sessions.get(key) === pending) sessions.delete(key);
+          throw error;
+        });
+      sessions.set(key, pending);
+      return pending;
+    },
+  };
+}
+
 /**
  * Keeps network authority different for the reusable template and every live
  * session. Only template construction may download the pinned toolchain.
@@ -115,15 +275,23 @@ export function createHostedVercelBackend(
     sessionCreateOptions: () => ({
       networkPolicy: SANDBOX_EXECUTION_POLICY.provider.networkPolicy,
     }),
+    // The SDK forwards this fetch to each provider request. Keep the wrapper
+    // at the HTTP boundary so aborts cancel the request before any retry.
+    fetch: createProviderFetch(),
   });
   const bounded = createBoundedSandboxBackend({
     backend,
     authorizeSessionCommand: (sessionId) =>
       assertHostedSandboxCommandAuthority({ sessionId }),
   });
-  return createRuntimeRecoveringBackend({
+  const recovering = createRuntimeRecoveringBackend({
     backend: bounded,
     providerTemplateKey: input.providerTemplateKey,
     resolvePrewarmInput: input.runtimeRecoveryPrewarmInput,
-  }) as ReturnType<typeof vercel>;
+  });
+  return (
+    input.reuseProcessSessionHandles
+      ? createProcessSessionReusingBackend(recovering)
+      : recovering
+  ) as ReturnType<typeof vercel>;
 }

@@ -25,10 +25,10 @@ export const BUILD_READY_HANDOFF_EXAMPLE = {
   optionalCapabilities: { integrations: [], hostedResources: [] },
 } as const;
 
-const capabilityId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-const publicRoute = z
-  .string()
-  .regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+(?:\*)?$/u);
+const capabilityIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+const publicRoutePattern = /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+(?:\*)?$/u;
+const capabilityId = z.string().regex(capabilityIdPattern);
+const publicRoute = z.string().regex(publicRoutePattern);
 const sortedUnique = <T extends z.ZodType<string>>(item: T) =>
   z.array(item).superRefine((values, context) => {
     const sorted = [...values].sort();
@@ -70,6 +70,75 @@ export type AppSpecValidationIssue = {
 
 export type AppSpecValidationResult =
   { valid: true } | { valid: false; issues: AppSpecValidationIssue[] };
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function normalizedStrings(value: unknown, pattern: RegExp): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (item): item is string =>
+          typeof item === "string" && pattern.test(item),
+      ),
+    ),
+  ].sort();
+}
+
+/**
+ * Canonicalizes the machine-only tail of an otherwise authored product brief.
+ * The agent should not spend turns repairing ordering, unknown keys, or a
+ * mechanical enum that the builder can resolve deterministically.
+ */
+export function normalizeBuildReadyAppSpec(content: string): string {
+  const normalizedContent = content.replace(/\r\n?/gu, "\n");
+  const heading = /^## Build handoff[ \t]*$/mu.exec(normalizedContent);
+  if (heading === null) return normalizedContent;
+  const section = normalizedContent.slice(heading.index + heading[0].length);
+  const block = /```json[ \t]*\n([\s\S]*?)\n[ \t]*```/iu.exec(section);
+  if (block?.[1] === undefined) return normalizedContent;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(block[1]);
+  } catch {
+    return normalizedContent;
+  }
+  const input = record(parsed);
+  const schema = record(input.schema);
+  const capabilities = record(input.optionalCapabilities);
+  const owner =
+    typeof input.owner === "string" && input.owner.trim().length > 0
+      ? input.owner.trim()
+      : BUILD_READY_HANDOFF_EXAMPLE.owner;
+  const canonical = {
+    status: "build-ready" as const,
+    owner,
+    schema: {
+      kind: schema.kind === "none" ? ("none" as const) : ("kernel" as const),
+    },
+    additionalPublicRoutes: normalizedStrings(
+      input.additionalPublicRoutes,
+      publicRoutePattern,
+    ),
+    optionalCapabilities: {
+      integrations: normalizedStrings(
+        capabilities.integrations,
+        capabilityIdPattern,
+      ),
+      hostedResources: normalizedStrings(
+        capabilities.hostedResources,
+        capabilityIdPattern,
+      ),
+    },
+  };
+  const prefix = normalizedContent.slice(0, heading.index).trimEnd();
+  return `${prefix}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(canonical, null, 2)}\n\`\`\``;
+}
 
 export function validateBuildReadyAppSpec(
   content: string,

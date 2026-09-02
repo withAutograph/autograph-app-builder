@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   type AppCreationProposal,
   type AppBuilderWorkflowState,
+  type DependencyPreparationReceipt,
 } from "./workflow-state";
 import {
   assertProposalExecutionBindings,
@@ -13,6 +16,31 @@ import {
 } from "./target-execution";
 import type { ObservedDependencyCache } from "../repository/dependency-cache";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
+
+const dependencyReceiptUnsigned: Omit<DependencyPreparationReceipt, "digest"> =
+  {
+    version: 2 as const,
+    sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
+    sourceReceiptDigest: "f".repeat(64),
+    eligibilityDigest: "d".repeat(64),
+    workspaceDigest: "c".repeat(64),
+    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
+    appSpecDigest: "e".repeat(64),
+    artifactRevision: "a".repeat(64),
+    targetSha: "a".repeat(40),
+    targetTree: "b".repeat(40),
+    cacheManifestDigest: "2".repeat(64),
+    cacheContentDigest: "3".repeat(64),
+    dependencyLayout: {
+      version: 1 as const,
+      kind: "fixture" as const,
+      roots: [],
+      workspaceLinks: [],
+    },
+    preparedByCallId: "dependency-call",
+  };
 
 const state = {
   version: APP_BUILDER_WORKFLOW_VERSION,
@@ -61,22 +89,10 @@ const state = {
     artifactRevision: "a".repeat(64),
   },
   dependencyReceipt: {
-    version: 2,
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
-    sourceReceiptDigest: "f".repeat(64),
-    eligibilityDigest: "d".repeat(64),
-    workspaceDigest: "c".repeat(64),
-    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
-    appSpecDigest: "e".repeat(64),
-    artifactRevision: "a".repeat(64),
-    targetSha: "f".repeat(40),
-    targetTree: "0".repeat(40),
-    cacheManifestDigest: "2".repeat(64),
-    cacheContentDigest: "3".repeat(64),
-    preparedByCallId: "dependency-call",
-    digest: "4".repeat(64),
+    ...dependencyReceiptUnsigned,
+    digest: createHash("sha256")
+      .update(JSON.stringify(dependencyReceiptUnsigned))
+      .digest("hex"),
   },
   identityReceipt: {
     version: 1,

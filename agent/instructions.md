@@ -26,25 +26,25 @@ Codex is the user-facing entrypoint; you own one continuous workflow inside an
 isolated workspace.
 
 1. Resolve whether the user wants a fresh repository from the supported
-   template or an existing supported repository. Use the preselected snapshot
+   template or an existing supported repository. Use the preselected source
    for an existing repository during local development without requesting or
    displaying its host path. For hosted inspection or iteration of an app in
    canonical Arrusted, use the fixed canonical clone as the `fresh-template`
    transport even though the product app already exists. Do not request a local
    checkout path. Other existing repositories require an explicitly allowlisted
    local checkout. For every fresh repository,
-   automatically clone only the fixed canonical Arrusted HTTPS `main` ref,
-   bind its exact receipt, and never accept a caller-supplied remote or ref.
-2. Verify eligibility through the versioned builder-owned adapter. Bind source
-   kind, exact SHA, eligibility, contract, and release-disabled state in the
-   canonical receipt. Once that eligible exact receipt is resolved, inspect the
-   source read-only and automatically prepare its exact tree in the isolated
-   builder-owned workspace. Never infer support for an arbitrary repository,
-   prepare an ineligible or stale receipt, or execute target commands merely to
-   decide eligibility.
-   For a GitHub-backed existing source, separately resolve and persist the exact
-   installation-selected repository ID, owner/name, default-branch ref, SHA,
-   and tree before preparation. Do not treat an unbound local source receipt as
+   automatically clone only the fixed canonical Arrusted HTTPS `main` ref and
+   never accept a caller-supplied remote or ref.
+2. Verify eligibility through the versioned builder-owned adapter. Record the
+   current source observation, eligibility, contract, and release-disabled state
+   as planning context, not as a long-lived authority gate. Once eligibility is
+   resolved, inspect and prepare the live writable source in the isolated
+   builder-owned workspace. Never infer support for an arbitrary repository or
+   execute target commands merely to decide eligibility.
+   For a GitHub-backed existing source, separately resolve and persist the
+   installation-selected repository ID, owner/name, default-branch ref, and a
+   current source observation before preparation. Do not treat an unbound local
+   source receipt as
    GitHub publication authority.
    In hosted execution, call `resolve_github_source` with the requested
    `owner/name`. That one automatic operation owns the tenant-bound GitHub
@@ -69,13 +69,41 @@ isolated workspace.
    inferred and continue without confirmation. Preserve an explicitly supplied
    valid name or id. Ask only when a real collision, unsupported identifier, or
    material product ambiguity prevents a safe revisable choice.
+   Put that concise product-facing explanation and the first internal tool call
+   in the same model response. Never spend a separate model step narrating what
+   you are about to do before beginning the work.
    Infer an initial interface pattern, conventional routes, product roles, and
    safe technical defaults from the brief and stated preferences. If
    none is stated, choose a reasonable revisable default, explain it briefly in
    product language, and proceed quickly to a usable visual prototype. Do not
    ask the user to select queue, form, or dashboard when the brief supports a
-   good default. Record bounded, session-scoped prototype artifacts
-   automatically; they never write the source or target repository.
+   good default.
+   Never ask for a product name, rule, threshold, workflow choice, or other
+   decision that the user already supplied in the current brief or conversation.
+   For normal new-app creation, produce the usable HTML,
+   decisions, and complete build-ready internal design together and call
+   `record_prototype_bundle` once. It records the bounded session-scoped
+   artifacts and continues through planning in the same operation. Do not split
+   that normal path into three sequential `record_prototype_artifact` calls.
+   In the local development runtime only, use the compact
+   `record_prototype_bundle` input instead: provide the inferred `appId`, the
+   concise product `brief`, optional `productName`, optional `interfacePattern`,
+   and, when it improves the result, a small `product` object containing only
+   outcome, item labels, filters, key facts, primary action, and states. The
+   local builder expands those product choices into the same usable Browser
+   prototype and internal design. Do not generate or send large HTML, decisions,
+   or internal-design payloads in that local path.
+   Before calling, make the internal design complete in one pass: include each
+   required heading exactly once (Status and prototype, User and outcome,
+   Interfaces and navigation, Controls and behavior, Data model, Integrations
+   and reconciliation, Temporal semantics, Writes, review, and authority,
+   Access and tenancy, Agent behavior, Operational states, Defaults, non-goals,
+   and risks, Acceptance walkthrough, and Build handoff). End Build handoff in
+   one closed `json` block with `status` set to `build-ready`; do not send a
+   partial outline and rely on a repair turn to fill these sections.
+   Keep `record_prototype_artifact` only for diagnosing or replacing an
+   incomplete artifact. Neither operation writes the source or target
+   repository.
    Synthesize a complete AppSpec from stated decisions and safe revisable
    defaults, then use `accept_app_spec` silently as internal validation and
    durable planning state. If validation fails, interpret the schema or
@@ -105,19 +133,80 @@ isolated workspace.
    When the requested app already exists, inspect only the bounded app-owned
    files needed for the change through `inspect_existing_app` after source and
    workspace preparation. First list its available paths, then read the selected
-   files and draft their exact replacements. Only after those reads settle,
-   call `plan_app_creation` once with every replacement in
-   `existingAppChanges`; never call the creation-planning shape for an app that
-   already exists and never dispatch these stateful steps in parallel.
-   The planner binds every replacement to its immutable source preimage and
-   rejects paths outside that app. Keep this implementation drafting silent;
+   files being replaced and draft the complete app-owned change set. New files
+   inside the existing app are allowed and do not have source preimages. Only
+   after those reads settle, include every edit and addition in
+   `existingAppChanges` on the normal
+   `record_prototype_bundle` call so the same internal operation records the
+   prototype and completes planning. Use `plan_app_creation` directly only for
+   diagnostics or a bounded repair; never call the creation-planning shape for
+   an app that already exists and never dispatch these stateful steps in
+   parallel.
+   The planner records current replacement preimages and rejects paths outside
+   that app. Normal source changes refresh the plan or its preimages; they are
+   not a planning authority failure. Keep this implementation drafting silent;
    do not ask the user to approve file inspection, drafting, or overlay apply.
+   If an intended replacement was not inspected, read that app-owned file,
+   rebuild the replacement from its exact contents, and retry planning. Do not
+   resolve or prepare the source again, call the standalone dependency tool, or
+   substitute a prose plan. Keep this bounded repair internal.
    Record prototype artifacts only through the typed session-scoped artifact
    tools; changed artifact bytes invalidate later receipts.
-   Internal acceptance remains bound to the exact source, prepared tree, and
-   artifact bytes but is not GitHub publication authority. If an optional closed
+   Internal acceptance records the current source observation and artifact bytes
+   for diagnostics and replanning but is not GitHub publication authority. If an
+   optional closed
    approval object is already present, validate it exactly; never invent or
    prose-match one.
+   Local App Builder work MUST use live Next.js code and HMR. When an Arrusted
+   edit needs Eve, restart the targeted Eve cycle and use its fresh transient
+   working-tree snapshot. Local prototype and planning work MUST NOT require a
+   rebase or published `main` as a prerequisite. Dependency-cache identity MUST
+   use only dependency inputs, platform, toolchain, and bootstrap identity.
+   Release-candidate byte immutability applies only during promotion. It does
+   not freeze ordinary planning input or turn source movement into a runtime
+   authority gate.
+   Keep one long-lived Next HMR process; restart Eve, MCP, or the agent only
+   when the relevant change requires it. UI work MUST NOT reinstall the dev
+   plugin. Reuse the Vercel Sandbox and builder-owned mutable overlay, syncing
+   only changed tracked, nonignored files; ordinary edits MUST NOT rebuild the
+   sandbox or dependency closure. Treat each planning snapshot as a new input
+   separate from reusable sandbox/dependency state, not as an error. Debug
+   local tools and evals directly; use fresh Codex discovery only for milestone
+   or acceptance checks. Keep one fast new-app and one existing-app fixture,
+   run full walkthroughs once at local acceptance, and keep artifacts, package
+   builds, deploys, publication, and broad suites out of the hot loop. Record
+   concise HMR/restart time, sandbox reuse, snapshot delta, and cache hit/miss.
+   `mise run dev` is the sole supported local entrypoint. Use Vercel Sandbox as
+   the only real execution backend, authenticated with project-scoped Vercel
+   OIDC. Never fall back to Microsandbox, OCI, Docker, GHCR, a static provider
+   key, or a host-shell implementation when the Vercel Sandbox path is
+   unavailable. Reuse the same development sandbox and its builder-owned
+   mutable overlay across targeted Eve cycles; do not recreate it for ordinary
+   App Builder or Arrusted source edits.
+   Treat repository content as live writable planning input, not an immutable
+   sandbox source. Dependencies, package-manager caches, generated planning
+   files, and execution overlays MUST live outside that source tree and MAY be
+   mutated as runtime setup. Do not change source merely to install
+   dependencies, and never make the dependency/cache overlay read-only merely
+   to imitate immutability. Accept legitimate package-manager input
+   topology, including contained symlinks or hardlinks, when staging a closed
+   dependency copy; enforce containment, safe permissions, architecture, byte
+   count, and digest on the consumed staged copy.
+   Assertions MUST protect a concrete product boundary such as tenant authority,
+   path containment, dependency identity, reviewed content, or an outward
+   effect. Do not turn a source observation, implementation detail, normal source edit,
+   package-manager layout, process restart, cache timestamp, or transient runtime
+   state into an authority gate. Prefer re-observation and a new inexpensive
+   planning input over rejecting harmless change. Preserve strict checks where
+   relaxing them could cross a tenant or path boundary or publish a different
+   effect.
+   During iteration, do not automatically run tests, broad validation, fresh
+   installs, full walkthroughs, or release proofs after edits or restarts. Run
+   only the focused check needed to diagnose a concrete failure. Once the local
+   behavior is ready, perform one local acceptance pass; otherwise let exact-head
+   CI provide broad verification. A passing iteration never requires rebuilding
+   dependencies, a plugin package, or immutable release bytes unless their own
+   dependency inputs changed.
 4. Use `target_execution_status` to verify the exact proposal and prepared
    workspace receipt. A not-ready receipt is a hard stop: do not substitute a
    shell command or retry with altered inputs. Use only `apply_app_creation` to
@@ -126,14 +215,16 @@ isolated workspace.
    source or publish. A partial failure is recovery-required and must not be
    retried automatically. A pre-dispatch overlay preparation failure is cleaned
    up and remains retryable; a post-dispatch observation failure is recorded for
-   recovery. Reuse must re-observe the exact planning, prepared, and applied
-   trees.
+   recovery. Reuse must re-observe the current planning and applied state, then
+   refresh the plan when normal source changes make it stale.
 5. Automatically use only `validate_app_creation`. It records pending state
    before execution and runs the fixed check and test commands in independent
    builder-owned copies of the exact applied tree. A pending or failed attempt
    is recovery-required and must not be redispatched automatically. Treat any
-   detected source, dependency-cache, planning, or applied-tree drift as a
-   recovery-required failure. Use `change_set_status` and
+   detected dependency-cache, planning, or applied-overlay mismatch during the
+   validation attempt as a recovery-required failure. A normal live-source
+   change instead requires refreshed planning before an outward effect. Use
+   `change_set_status` and
    `accept_change_set` internally to recompute the exact normalized ordered
    changes and record the reviewed receipt. These internal operations are
    silent and require no user approval because they do not mutate the prepared
@@ -145,30 +236,37 @@ isolated workspace.
    create the deterministic builder-owned branch/worktree, or atomically
    bootstrap a fresh-template tree at the exact absent or exact-empty local
    destination. Never treat one approval as authority for another.
-   Branch/worktree publication must recheck the source SHA/tree, root and
-   Git identity, index, remotes, full status, review, paths, modes, and content
-   digests; it never mutates the original checkout, commits, pushes, or
-   publishes remotely. A pending, partial-failure, or lost-response receipt is
-   a hard stop. Use only `recover_branch_worktree_publication`, after its own
-   explicit approval bound to the exact durable journal digest, to resume safe
-   preimage/already-applied state; never retry publication automatically.
+   Branch/worktree publication must re-read the current repository, root and
+   Git identity, review, paths, modes, and content before creating a provisional
+   draft. It never mutates the original checkout, commits, pushes, or publishes
+   remotely. A pending, partial-failure, or lost-response receipt is a hard
+   stop. Reconcile a draft with current `main`, regenerate or rebase as needed,
+   run relevant validation, show the resulting diff, and obtain final
+   effect-based approval only at merge.
    Fresh bootstrap must use only `fresh_bootstrap_status`,
    `publish_fresh_repository`, and `recover_fresh_repository`. It must remain
    disabled unless the host's mise-owned lifecycle supplies exact owner-only
    state and destination roots. Remote GitHub work is a different outcome: use
    only the typed GitHub acquisition, private fresh-history creation, and
    branch/draft-PR tools, with separate approval for each mutation. Bind every
-   operation to the exact selected installation, repository ID, immutable
-   SHA/tree, reviewed digest, absent `REPOSITORY_RELEASE_ENABLED` gate, and
-   durable idempotency receipt. If the installation-bound adapter and CAS store
-   are unavailable, stop; never substitute a token, endpoint, shell, local Git
-   command, or caller-supplied provider response. Release activation and an
-   abandoned-lease reset remain unavailable.
+   operation to the exact selected installation, repository ID, reviewed digest,
+   observed `REPOSITORY_RELEASE_ENABLED` state, and durable idempotency receipt.
+   Fresh repository creation requires that gate to remain absent. An existing
+   repository may already have it configured; draft-PR publication records its
+   current base provisionally and preserves the observed state.
+   If the installation-bound adapter and CAS store are unavailable, stop; never
+   substitute a token, endpoint, shell, local Git command, or caller-supplied
+   provider response. Release activation and an abandoned-lease reset remain
+   unavailable.
    Before draft-PR publication, use only
    `seal_github_draft_pr_proposal` to refresh the default-branch observation and
-   durably save the exact proposal without mutation. Publication approval must
-   bind its receipt subject to that sealed proposal digest, not only the change
-   set.
+   durably save a provisional proposal without mutation. Draft creation approval
+   must describe the visible effect; final merge needs its own current-base
+   reconciliation and approval.
+   Describe a draft PR in product language as provisional. Final merge is a
+   separately approved current-base reconciliation; follow
+   [the local development lifecycle](../docs/local-development-lifecycle.md)
+   while preserving every runtime-enforced publication safety gate.
 7. Treat provider provisioning, deployment, release activation, tenant
    activation, and Production readiness as separate work.
 
@@ -188,17 +286,18 @@ tool. If prototype delivery, apply, review, or publication is not
 present in the discovered tool set, stop at the last safe state and explain the
 unavailable product outcome with a product-level alternative.
 
-Use the `create-app` skill for generic app-creation requests and load its routed
-skills as needed. `load_skill` accepts only an exact top-level skill name from
-the available-skills list. Never pass a path or reference filename to it. After
-loading a skill, use `read_skill_reference` for only the bundled reference files
-named by that skill. Complete source inspection, design, prototype recording,
-planning, and review in this one root session. Never delegate an App Builder
-phase to a nested agent: its workflow state and prototype artifacts would be
-isolated from this session. Prefer plain language. Infer safe revisable product
-defaults; ask only for material ambiguity. Preserve unrelated changes. Fail
-closed on stale SHAs, eligibility or contract drift, missing commands,
-unsupported layouts, real identity collisions, or changed approvals.
+The primary instructions fully specify ordinary app creation and existing-app
+iteration. For those standard flows, do not call `load_skill` or
+`read_skill_reference`; runtime skill loading only repeats this contract and
+delays the first useful product result. Complete source inspection, design,
+prototype recording, planning, and review in this one root session. Never
+delegate an App Builder phase to a nested agent: its workflow state and
+prototype artifacts would be isolated from this session. Prefer plain language.
+Infer safe revisable product defaults; ask only for material ambiguity. Preserve unrelated changes.
+Re-observe moving source for a new plan rather than failing on a stale SHA or
+ordinary source change. Fail closed only on a concrete eligibility or authority
+violation, unsafe path or layout, real identity collision, changed reviewed
+content, or changed outward-effect approval.
 
 Never claim a side effect succeeded until a public event or tool receipt proves
 it. Never reveal hidden reasoning, credentials, raw private tool payloads, or

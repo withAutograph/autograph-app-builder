@@ -1,4 +1,9 @@
 import type { PrototypeArtifact } from "./workflow-state";
+import {
+  appSpecRepairDiagnostic,
+  normalizeBuildReadyAppSpec,
+  validateBuildReadyAppSpec,
+} from "./app-spec-validation";
 import { sha256, validAppId } from "./workflow-state";
 
 export const prototypeArtifactPathPattern =
@@ -138,4 +143,90 @@ export function prototypeArtifactReceipt(
 ): PrototypeArtifactReceipt {
   const { content, ...receipt } = artifact;
   return { ...receipt, size: Buffer.byteLength(content) };
+}
+
+/**
+ * Returns the final AppSpec only when the product has a complete, usable
+ * prototype bundle. This is deliberately a content check rather than a
+ * workflow-phase check: recording a valid AppSpec must not turn an exploratory
+ * draft into accepted planning state.
+ */
+export function completeBuildReadyPrototypeAppSpec(input: {
+  artifacts: readonly PrototypeArtifact[];
+  appId: string;
+}): PrototypeArtifact | undefined {
+  const prefix = `prototype/${input.appId}/`;
+  const byPath = new Map(
+    input.artifacts
+      .filter((artifact) => artifact.path.startsWith(prefix))
+      .map((artifact) => [artifact.path, artifact]),
+  );
+  const appSpec = byPath.get(`${prefix}app-spec.md`);
+  if (
+    appSpec === undefined ||
+    !byPath.has(`${prefix}index.html`) ||
+    !byPath.has(`${prefix}decisions.md`) ||
+    appSpec.mediaType !== "text/markdown" ||
+    !validateBuildReadyAppSpec(appSpec.content).valid
+  )
+    return undefined;
+  return appSpec;
+}
+
+export function recordPrototypeArtifactBundle(input: {
+  artifacts: readonly PrototypeArtifact[];
+  appId: string;
+  indexHtml: string;
+  decisionsMarkdown: string;
+  appSpecMarkdown: string;
+  sessionId: string;
+  callId: string;
+  expectedAppId?: string;
+}): {
+  artifacts: readonly PrototypeArtifact[];
+  appSpec: PrototypeArtifact;
+  reused: boolean;
+} {
+  const appSpecMarkdown = normalizeBuildReadyAppSpec(input.appSpecMarkdown);
+  let artifacts = input.artifacts;
+  let reused = true;
+  for (const artifact of [
+    {
+      path: `prototype/${input.appId}/index.html`,
+      mediaType: "text/html" as const,
+      content: input.indexHtml,
+    },
+    {
+      path: `prototype/${input.appId}/decisions.md`,
+      mediaType: "text/markdown" as const,
+      content: input.decisionsMarkdown,
+    },
+    {
+      path: `prototype/${input.appId}/app-spec.md`,
+      mediaType: "text/markdown" as const,
+      content: appSpecMarkdown,
+    },
+  ]) {
+    const recorded = recordPrototypeArtifactRevision({
+      artifacts,
+      ...artifact,
+      sessionId: input.sessionId,
+      callId: input.callId,
+      expectedAppId: input.expectedAppId,
+    });
+    artifacts = recorded.artifacts;
+    reused &&= recorded.reused;
+  }
+  const appSpec = completeBuildReadyPrototypeAppSpec({
+    artifacts,
+    appId: input.appId,
+  });
+  if (appSpec === undefined) {
+    const validation = validateBuildReadyAppSpec(appSpecMarkdown);
+    if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
+    throw new Error(
+      "The prototype bundle must contain a complete build-ready AppSpec.",
+    );
+  }
+  return { artifacts, appSpec, reused };
 }

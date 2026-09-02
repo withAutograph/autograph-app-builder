@@ -14,16 +14,18 @@ Run the only non-release workflow with an explicit local Arrusted checkout:
 mise run dev -- --arrusted-root /absolute/path/to/arrusted
 ```
 
-The checkout may be dirty. At the start of each run App Builder copies tracked
-and non-ignored untracked bytes into a new owner-only, read-only snapshot. The
-sandbox sees only that snapshot and never mounts or writes the developer
-checkout. Generated and applied work stays under a separate builder-owned
-destination root.
+The checkout may be dirty and is the live development source. App Builder
+synchronizes its tracked and non-ignored working-tree bytes into the persistent
+Vercel Sandbox as a new planning input. The source checkout remains writable;
+dependency setup, generated planning files, and app changes use the
+builder-owned mutable overlay rather than redefining the source input.
 
-The source fingerprint covers paths, modes, link targets, and file bytes. App
-Builder rechecks it while the run is active. A change terminates both local
-services, discards the run snapshot, and restarts from one fresh snapshot, so a
-result cannot mix source versions.
+Source identity is observed to explain what a planning result used, not to turn
+ordinary edits into a local failure. When source bytes change, the next plan is
+made from those bytes. No long-lived baseline or drift gate may block design,
+planning, implementation, or draft-PR creation. A draft proposal is
+provisional and is reconciled against current main only when someone chooses
+to merge it.
 
 Vercel Sandbox is the sole real execution backend. Local development obtains a
 project-scoped Vercel OIDC token through the mise-owned startup path; Preview
@@ -45,7 +47,9 @@ Development runs fail closed for checkout or branch publication, GitHub
 mutation, registry upload, deployment, hosted marketplace mutation, provider
 emulation or mutation, hosted binding selection, and hosted OAuth. Product
 conversation still reports product outcomes and effect-based approvals;
-snapshot, image, cache, and receipt mechanics stay internal.
+snapshot, cache, and receipt mechanics stay internal. Development does not
+need a release-candidate source identity: only bytes selected for build/publish
+promotion are immutable.
 
 ## Release promotion
 

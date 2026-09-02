@@ -19,10 +19,58 @@ import {
   updateExactWorkflow,
   validAppId,
 } from "@/lib/agent/workflow-state";
+import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
+import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
+
+import planAppCreation from "./plan_app_creation";
+
+function planningMarker(marker: string, phase: "start" | "finish") {
+  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
+    console.info(`[app-builder planning] ${marker} ${phase}`);
+}
+
+/**
+ * Planning is the deterministic continuation of a successfully accepted
+ * design.  Keeping it here prevents a live model turn from becoming a
+ * required orchestration hop between a complete design and its plan.
+ *
+ * `plan_app_creation` remains independently callable for diagnostics and its
+ * own state transition makes retries safe.  This guard avoids even invoking
+ * it again once the accepted design has already produced a proposal.
+ */
+async function planAcceptedAppSpec(
+  digest: string,
+  ctx: Parameters<typeof planAppCreation.execute>[1],
+  existingAppChanges?: { path: string; content: string }[],
+) {
+  const latest = appBuilderWorkflowState.get();
+  await continueAcceptedAppSpec({
+    phase: latest.phase,
+    planComplete:
+      latest.phase === "planned" ||
+      latest.phase === "apply_failed" ||
+      latest.phase === "applied" ||
+      latest.phase === "validation_pending" ||
+      latest.phase === "validation_failed" ||
+      latest.phase === "validated" ||
+      latest.phase === "reviewed",
+    plan: async () => {
+      await planAppCreation.execute(
+        {
+          expectedAppSpecDigest: digest,
+          ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
+        },
+        ctx,
+      );
+    },
+  });
+}
 
 export default defineTool({
   description:
-    "Silently validate and record one complete build-ready AppSpec as internal planning state. The Markdown must contain each of the 14 exact level-two headings from the design-app AppSpec reference once and end with its closed build-ready JSON handoff. On rejection, use the structured app_spec_invalid issues and exact example to replace the complete artifact and retry without asking the user. It remains bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
+    "Silently validate and record one complete build-ready AppSpec as internal planning state. The Markdown must contain each of the 14 exact level-two headings from the design-app AppSpec reference once and end with its closed build-ready JSON handoff. On rejection, use the structured app_spec_invalid issues and exact example to replace the complete artifact and retry without asking the user. Hosted acceptance remains bound to the prepared workspace receipt; development uses the current live workspace. It does not write or execute anything in the target repository.",
   inputSchema: z.strictObject({
     appId: z.string().min(1),
     expectedArtifactDigest: z.string().regex(/^[0-9a-f]{64}$/u),
@@ -31,6 +79,7 @@ export default defineTool({
     expectedSourceTree: gitObjectIdSchema,
     expectedEligibilityDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     expectedWorkspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    existingAppChanges: existingAppChangesSchema.optional(),
     approvalReceipt: approvalReceiptSchema.optional(),
   }),
   async execute(
@@ -42,6 +91,7 @@ export default defineTool({
       expectedSourceTree,
       expectedEligibilityDigest,
       expectedWorkspaceDigest,
+      existingAppChanges,
       approvalReceipt,
     },
     ctx,
@@ -59,6 +109,15 @@ export default defineTool({
         "Prepare an eligible repository before accepting an AppSpec.",
       );
     const workspace = current.workspace;
+    const development = canAutoSelectDevelopmentSource();
+    planningMarker("source-bound-workspace-inspection", "start");
+    const acceptedWorkspace = development
+      ? await inspectSourceBoundSandboxWorkspace({
+          sandbox: await ctx.getSandbox(),
+          receipt: current.sourceReceipt,
+        })
+      : workspace;
+    planningMarker("source-bound-workspace-inspection", "finish");
     const path = `prototype/${appId}/app-spec.md`;
     const artifact = exactPrototypeArtifact(current.artifacts, {
       path,
@@ -71,10 +130,11 @@ export default defineTool({
     const validation = validateBuildReadyAppSpec(artifact.content);
     if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
     if (
-      workspace.sourceSha !== expectedSourceSha ||
-      workspace.sourceTree !== expectedSourceTree ||
-      workspace.eligibilityDigest !== expectedEligibilityDigest ||
-      workspace.workspaceDigest !== expectedWorkspaceDigest
+      !development &&
+      (workspace.sourceSha !== expectedSourceSha ||
+        workspace.sourceTree !== expectedSourceTree ||
+        workspace.eligibilityDigest !== expectedEligibilityDigest ||
+        workspace.workspaceDigest !== expectedWorkspaceDigest)
     )
       throw new Error(
         "The prepared workspace receipt changed before AppSpec acceptance.",
@@ -123,6 +183,11 @@ export default defineTool({
         throw new Error(
           "The AppSpec approval receipt changed after acceptance.",
         );
+      await planAcceptedAppSpec(
+        current.appSpec.digest,
+        ctx,
+        existingAppChanges,
+      );
       return { ...current.appSpec, reused: true };
     }
     updateExactWorkflow({
@@ -132,7 +197,7 @@ export default defineTool({
         return {
           version: APP_BUILDER_WORKFLOW_VERSION,
           phase: "app_spec_accepted",
-          workspace,
+          workspace: acceptedWorkspace,
           sourceReceipt: current.sourceReceipt,
           ...(current.githubSource === undefined
             ? {}
@@ -143,6 +208,7 @@ export default defineTool({
         };
       },
     });
+    await planAcceptedAppSpec(accepted.digest, ctx, existingAppChanges);
     return { ...accepted, reused: false };
   },
 });

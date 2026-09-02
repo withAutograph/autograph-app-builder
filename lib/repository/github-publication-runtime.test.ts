@@ -379,7 +379,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
   it("keeps the shipped runtime disabled and requires every explicit dependency", async () => {
     const disabled = composeGitHubPublicationRuntime({ enabled: false });
     await expect(disabled.status()).resolves.toMatchObject({
-      version: 2,
+      version: 3,
       enabled: false,
       adapterConfigured: false,
       durableStoreConfigured: false,
@@ -397,6 +397,26 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     expect(() => composeGitHubPublicationRuntime({ enabled: true })).toThrow(
       /typed adapter and durable stores/u,
     );
+  });
+
+  it("reports operation-specific release-gate policy", async () => {
+    const status = await composeGitHubPublicationRuntime({
+      enabled: false,
+    }).status();
+
+    expect(status.releaseGate).toEqual({
+      name: "REPOSITORY_RELEASE_ENABLED",
+      policies: {
+        "create-approved-private-fresh-history-repository": {
+          requiredConfiguredState: false,
+        },
+        "publish-approved-branch-and-draft-pull-request": {
+          requiredConfiguredState: "sealed-proposal-value",
+          rejectsDrift: true,
+        },
+      },
+    });
+    expect(status.releaseGate).not.toHaveProperty("requiredState");
   });
 
   it("requests only operation-scoped permissions and rejects escalation", async () => {
@@ -609,7 +629,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
     expect(provider.draftMutations).toBe(0);
   });
 
-  it("refuses a stale default-branch observation before proposal persistence", async () => {
+  it("records the current default-branch observation when it advanced after source resolution", async () => {
     const provider = new Provider();
     const stores = new MemoryStores();
     const runtime = composeGitHubPublicationRuntime({
@@ -641,7 +661,7 @@ describe("GitHub runtime adapter and durable-store composition", () => {
         review: review(),
         title: "Add demo",
       }),
-    ).rejects.toThrow(/default branch changed/u);
+    ).rejects.toThrow(/stale, overlapping, or unauthorized/u);
     expect(stores.proposals.size).toBe(0);
     expect(provider.draftMutations).toBe(0);
   });

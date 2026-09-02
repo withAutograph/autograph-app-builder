@@ -18,6 +18,7 @@ import {
   developmentDependencySymlinkScript,
   developmentPinnedToolchainCommand,
   developmentVercelDependencyCommand,
+  developmentVercelDependencyRepairCommand,
   developmentVercelProviderTemplateKey,
   developmentVercelRevalidationKey,
   type DevelopmentVercelBootstrapInput,
@@ -66,28 +67,70 @@ describe("Development Vercel Sandbox dependency template", () => {
   it("builds the standard closed development-execution cache without an image", () => {
     const command = developmentVercelDependencyCommand(input());
     expect(command).toContain('"scope":"development-execution"');
-    expect(command).toContain('"version":2');
+    expect(command).toContain('"version":3');
     expect(command).toContain(
-      "/opt/app-builder/dependency-cache/node-modules.tar.gz",
+      `/workspace/.app-builder/dependency-cache/dependencies/${input().dependencyKey}/node_modules`,
     );
     expect(command).toContain(
-      "/opt/app-builder/dependency-cache/cargo-closure.tar.gz",
+      "/workspace/.app-builder/dependency-cache/cargo/config.toml",
     );
     expect(command).toContain(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
     );
     expect(command).toContain('node - "$work/source"');
     expect(command).not.toContain('readlink -f -- "$link"');
-    expect(command).toContain('directory = "/opt/app-builder/cargo/vendor"');
+    expect(command).toContain(
+      'directory = "/workspace/.app-builder/dependency-cache/cargo/vendor"',
+    );
     expect(command).toContain(
       'if grep -F "$work" "$work/cargo-closure/config.toml"',
     );
     expect(command).not.toContain("docker");
     expect(command).not.toContain("microsandbox");
+    expect(command).not.toContain("sudo");
+    expect(command).not.toContain("chmod -R a-w");
+    expect(command).toContain(
+      'test "$(realpath "$cache_root")" = "$cache_root"',
+    );
+    expect(command).toContain(
+      'find "$cache_root" \\( -type f -o -type d \\) -perm /022',
+    );
     expect(DEVELOPMENT_SANDBOX_ENVIRONMENT).toMatchObject({
       CARGO_NET_OFFLINE: "true",
       MISE_AUTO_INSTALL: "false",
     });
+  });
+
+  it("reuses a matching dependency cache before staging or installing source dependencies", () => {
+    const command = developmentVercelDependencyCommand(input());
+    const cacheHit = command.indexOf("development_vercel_dependency_cache_hit");
+    const staging = command.indexOf('work="$(mktemp -d');
+    const install = command.indexOf(
+      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent",
+    );
+
+    expect(cacheHit).toBeGreaterThan(-1);
+    expect(cacheHit).toBeLessThan(staging);
+    expect(cacheHit).toBeLessThan(install);
+    expect(command).toContain('"scope":"development-execution"');
+    expect(command).toContain('"dependencyKey":"' + input().dependencyKey);
+    expect(command).toContain("node_modules/path-to-regexp/package.json");
+    expect(command).toContain(
+      "node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json",
+    );
+    expect(command).toContain('"$cache_root/cargo/config.toml"');
+    expect(command).toContain('unlink "$source_archive"');
+  });
+
+  it("accepts validated Bun symlinks while rejecting writable cache entries", () => {
+    const command = developmentVercelDependencyRepairCommand(
+      input().dependencyKey,
+    );
+    expect(command).toContain(
+      'find "$cache_root" \\( -type f -o -type d \\) -perm /022',
+    );
+    expect(command).not.toContain('find "$cache_root" -perm /022');
+    expect(command).toContain(developmentDependencySymlinkScript);
   });
 
   it("keeps Bun links inside the closure and rebinds only workspace links", async () => {

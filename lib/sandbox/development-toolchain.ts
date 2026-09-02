@@ -23,6 +23,9 @@ const dependencyInputs = [
 
 export const DEVELOPMENT_SOURCE_ARCHIVE_PATH =
   ".app-builder/development-source.tar.gz";
+/** Development cache state belongs to the local builder and remains writable. */
+export const DEVELOPMENT_DEPENDENCY_CACHE_ROOT =
+  "/workspace/.app-builder/dependency-cache";
 export const DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS = [
   ...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   "index.crates.io",
@@ -135,13 +138,21 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
 /**
  * Makes Bun's installed dependency links portable before the closure is
  * archived. Links into node_modules stay relative to that closure. Workspace
- * links are rebound to the fixed sandbox repository path. Everything else is
- * rejected rather than producing a cache that will fail later.
+ * links are rebound to an explicit immutable source root when one is supplied,
+ * or to the fixed sandbox repository path for the legacy development archive.
+ * Everything else is rejected rather than producing a cache that will fail
+ * later.
  */
 export const developmentDependencySymlinkScript = String.raw`const fs = require("node:fs");
 const path = require("node:path");
 
 const sourceRoot = fs.realpathSync(process.argv[2]);
+const requestedWorkspaceRoot = process.argv[3];
+if (requestedWorkspaceRoot !== undefined && !path.isAbsolute(requestedWorkspaceRoot))
+  throw new Error("Development workspace dependency root must be absolute.");
+const workspaceRoot = requestedWorkspaceRoot === undefined
+  ? "/workspace/repository"
+  : fs.realpathSync(requestedWorkspaceRoot);
 const modulesRoot = fs.realpathSync(path.join(sourceRoot, "node_modules"));
 const contains = (root, candidate) => {
   const relative = path.relative(root, candidate);
@@ -187,7 +198,7 @@ for (const link of links) {
   } else if (contains(sourceRoot, target)) {
     const sourceRelative = path.relative(sourceRoot, target);
     replacement =
-      "/workspace/repository" +
+      workspaceRoot +
       (sourceRelative === ""
         ? ""
         : "/" + sourceRelative.split(path.sep).join("/"));
@@ -392,6 +403,44 @@ export function developmentVercelDependencyCommand(
 test "$(uname -m)" = x86_64
 source_archive='/workspace/${DEVELOPMENT_SOURCE_ARCHIVE_PATH}'
 printf '%s  %s\n' '${input.sourceArchiveSha256}' "$source_archive" | sha256sum --check --strict
+cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
+cache_dependencies="$cache_root/dependencies/${input.dependencyKey}"
+if node - "$cache_root/manifest.json" "$cache_dependencies" "$cache_root" <<'NODE'
+const fs = require("node:fs");
+const [manifestPath, dependencies, cacheRoot] = process.argv.slice(2);
+const expected = {
+  version: 3,
+  scope: "development-execution",
+  platform: "linux/amd64",
+  dependencyKey: "${input.dependencyKey}",
+  lockfiles: {".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},
+  runtime: {node:"${HOSTED_NODE_VERSION}",bun:"${HOSTED_BUN_VERSION}",mise:"${HOSTED_MISE_VERSION}",rust:"${HOSTED_RUST_VERSION}"},
+  closure: {package:"@vercel/microfrontends",version:"2.4.0",contentDigest:"${input.dependencyKey}",nodeModulesPath:"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${input.dependencyKey}/node_modules",cargoConfigPath:"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"},
+};
+const safe = (path, kind) => {
+  const entry = fs.lstatSync(path);
+  return !entry.isSymbolicLink() && (kind === "directory" ? entry.isDirectory() : entry.isFile()) && (entry.mode & 0o022) === 0;
+};
+try {
+  const actual = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const required = [
+    [manifestPath, "file"],
+    [dependencies, "directory"],
+    [dependencies + "/node_modules", "directory"],
+    [dependencies + "/node_modules/path-to-regexp/package.json", "file"],
+    [dependencies + "/node_modules/@vercel/microfrontends/package.json", "file"],
+    [dependencies + "/node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json", "file"],
+    [cacheRoot + "/cargo/vendor", "directory"],
+    [cacheRoot + "/cargo/config.toml", "file"],
+  ];
+  if (JSON.stringify(actual) !== JSON.stringify(expected) || !required.every(([path, kind]) => safe(path, kind))) process.exit(1);
+} catch { process.exit(1); }
+NODE
+then
+  unlink "$source_archive"
+  printf '%s\n' 'development_vercel_dependency_cache_hit:${input.dependencyKey}'
+  exit 0
+fi
 work="$(mktemp -d /tmp/app-builder-development.XXXXXX)"
 stage='source-staging'
 cleanup() { status=$?; if [ "$status" -ne 0 ]; then printf 'development_vercel_bootstrap_failed:%s\n' "$stage" >&2; fi; find "$work" -depth -delete 2>/dev/null || true; exit "$status"; }
@@ -410,30 +459,107 @@ NODE
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
-sed -i "s#$work/cargo-closure/vendor#/opt/app-builder/cargo/vendor#g" "$work/cargo-closure/config.toml"
-grep -F 'directory = "/opt/app-builder/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
+sed -i "s#$work/cargo-closure/vendor#${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor#g" "$work/cargo-closure/config.toml"
+grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
 if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
 printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
-stage='archive'
-tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --format=posix --pax-option=delete=atime,delete=ctime --create --file - node_modules | gzip --no-name --best > "$work/node-modules.tar.gz"
-tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --format=posix --pax-option=delete=atime,delete=ctime --create --file - --directory "$work/cargo-closure" config.toml vendor | gzip --no-name --best > "$work/cargo-closure.tar.gz"
-archive_sha="$(sha256sum "$work/node-modules.tar.gz" | cut -d' ' -f1)"
-archive_bytes="$(stat --format='%s' "$work/node-modules.tar.gz")"
-cargo_sha="$(sha256sum "$work/cargo-closure.tar.gz" | cut -d' ' -f1)"
-cargo_bytes="$(stat --format='%s' "$work/cargo-closure.tar.gz")"
-cat > "$work/manifest.json" <<'JSON'
-{"version":2,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${input.dependencyKey}","lockfiles":{".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","archivePath":"/opt/app-builder/dependency-cache/node-modules.tar.gz","archiveSha256":"ARCHIVE_SHA","archiveBytes":ARCHIVE_BYTES,"cargoArchivePath":"/opt/app-builder/dependency-cache/cargo-closure.tar.gz","cargoArchiveSha256":"CARGO_SHA","cargoArchiveBytes":CARGO_BYTES}}
-JSON
-sed -i "s/ARCHIVE_SHA/$archive_sha/g;s/ARCHIVE_BYTES/$archive_bytes/g;s/CARGO_SHA/$cargo_sha/g;s/CARGO_BYTES/$cargo_bytes/g" "$work/manifest.json"
 stage='cache-installation'
-sudo install -d -m 0755 /opt/app-builder/dependency-cache "/opt/app-builder/dependencies/$archive_sha" /opt/app-builder/cargo
-sudo install -m 0444 "$work/manifest.json" /opt/app-builder/dependency-cache/manifest.json
-sudo install -m 0444 "$work/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
-sudo install -m 0444 "$work/cargo-closure.tar.gz" /opt/app-builder/dependency-cache/cargo-closure.tar.gz
-sudo tar --extract --gzip --file "$work/node-modules.tar.gz" --directory "/opt/app-builder/dependencies/$archive_sha" --no-same-owner --no-same-permissions
-sudo tar --extract --gzip --file "$work/cargo-closure.tar.gz" --directory /opt/app-builder/cargo --no-same-owner --no-same-permissions
-sudo chmod -R a-w,a+rX /opt/app-builder/dependency-cache "/opt/app-builder/dependencies/$archive_sha" /opt/app-builder/cargo
+install -d -m 0755 "$cache_root"
+test "$(realpath "$cache_root")" = "$cache_root"
+rm -rf "$cache_dependencies" "$cache_root/cargo"
+install -d -m 0755 "$cache_dependencies" "$cache_root/cargo"
+mv node_modules "$cache_dependencies/node_modules"
+mv "$work/cargo-closure/vendor" "$cache_root/cargo/vendor"
+install -m 0644 "$work/cargo-closure/config.toml" "$cache_root/cargo/config.toml"
+chmod -R u+rwX,go-w "$cache_dependencies" "$cache_root/cargo"
+cat > "$work/manifest.json" <<'JSON'
+{"version":3,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${input.dependencyKey}","lockfiles":{".config/mise/config.toml":"${input.lockfiles[".config/mise/config.toml"]}",".config/mise/mise.lock":"${input.lockfiles[".config/mise/mise.lock"]}","bun.lock":"${input.lockfiles["bun.lock"]}","Cargo.lock":"${input.lockfiles["Cargo.lock"]}"},"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","contentDigest":"${input.dependencyKey}","nodeModulesPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${input.dependencyKey}/node_modules","cargoConfigPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"}}
+JSON
+install -m 0644 "$work/manifest.json" "$cache_root/manifest.json"
+if find "$cache_root" \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi
 printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
+}
+
+/**
+ * Repairs a partially provisioned development template in place.  Vercel may
+ * retain a provider template created before its dependency closure was
+ * written; that is a cache miss, not a reason to make the first planning turn
+ * fail.  This deliberately stages dependencies away from the prepared source
+ * tree, then installs the same reusable development cache that template
+ * bootstrap creates.
+ */
+export function developmentVercelDependencyRepairCommand(
+  dependencyKey: string,
+) {
+  if (!sha256Pattern.test(dependencyKey))
+    throw new Error("Development dependency key was invalid.");
+  return `set -euo pipefail
+test "$(uname -m)" = x86_64
+source_root='/workspace/repository'
+test -d "$source_root"
+lockfiles="$(node - "$source_root" '${dependencyKey}' <<'NODE'
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.argv[2];
+const expected = process.argv[3];
+const paths = [".config/mise/config.toml", ".config/mise/mise.lock", "bun.lock", "Cargo.lock"];
+const digest = (file) => {
+  try { return crypto.createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"); }
+  catch (error) { if (error.code === "ENOENT") return "absent"; throw error; }
+};
+const lockfiles = Object.fromEntries(paths.map((file) => [file, digest(file)]));
+const actual = crypto.createHash("sha256").update(JSON.stringify({
+  version: 2,
+  platform: "linux/amd64",
+  tools: { node: "${HOSTED_NODE_VERSION}", bun: "${HOSTED_BUN_VERSION}", mise: "${HOSTED_MISE_VERSION}", rust: "${HOSTED_RUST_VERSION}" },
+  lockfiles,
+})).digest("hex");
+if (actual !== expected) process.exit(1);
+process.stdout.write(JSON.stringify(lockfiles));
+NODE
+)"
+work="$(mktemp -d /tmp/app-builder-development-repair.XXXXXX)"
+stage='source-staging'
+heartbeat() { while :; do printf 'development_vercel_repair_progress:%s\n' "$stage" >&2; sleep 15; done; }
+heartbeat &
+heartbeat_pid=$!
+cleanup() { status=$?; kill "$heartbeat_pid" 2>/dev/null || true; wait "$heartbeat_pid" 2>/dev/null || true; if [ "$status" -ne 0 ]; then printf 'development_vercel_repair_failed:%s\n' "$stage" >&2; fi; find "$work" -depth -delete 2>/dev/null || true; exit "$status"; }
+trap cleanup EXIT
+install -d -m 0755 "$work/source"
+tar --create --directory "$source_root" --exclude='./.git' --exclude='./node_modules' --exclude='./.app-builder' --file - . | tar --extract --file - --directory "$work/source" --no-same-owner --no-same-permissions
+cd "$work/source"
+stage='javascript-install'
+bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent
+test -d node_modules && test ! -L node_modules
+node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(p,"utf8")).version;if(read("node_modules/path-to-regexp/package.json")!=="8.4.2"||read("node_modules/@vercel/microfrontends/package.json")!=="2.4.0"||read("node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="6.3.0")process.exit(1)'
+node - "$work/source" <<'NODE'
+${developmentDependencySymlinkScript}
+NODE
+stage='rust-install'
+install -d -m 0755 "$work/cargo-closure/vendor"
+CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
+sed -i "s#$work/cargo-closure/vendor#${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor#g" "$work/cargo-closure/config.toml"
+grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
+if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
+printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
+stage='cache-installation'
+cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
+cache_dependencies="$cache_root/dependencies/${dependencyKey}"
+install -d -m 0755 "$cache_root"
+test "$(realpath "$cache_root")" = "$cache_root"
+rm -rf "$cache_dependencies" "$cache_root/cargo"
+install -d -m 0755 "$cache_dependencies" "$cache_root/cargo"
+mv node_modules "$cache_dependencies/node_modules"
+mv "$work/cargo-closure/vendor" "$cache_root/cargo/vendor"
+install -m 0644 "$work/cargo-closure/config.toml" "$cache_root/cargo/config.toml"
+chmod -R u+rwX,go-w "$cache_dependencies" "$cache_root/cargo"
+cat > "$work/manifest.json" <<JSON
+{"version":3,"scope":"development-execution","platform":"linux/amd64","dependencyKey":"${dependencyKey}","lockfiles":$lockfiles,"runtime":{"node":"${HOSTED_NODE_VERSION}","bun":"${HOSTED_BUN_VERSION}","mise":"${HOSTED_MISE_VERSION}","rust":"${HOSTED_RUST_VERSION}"},"closure":{"package":"@vercel/microfrontends","version":"2.4.0","contentDigest":"${dependencyKey}","nodeModulesPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${dependencyKey}/node_modules","cargoConfigPath":"${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml"}}
+JSON
+if find "$cache_root" \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi
+install -m 0644 "$work/manifest.json" "$cache_root/manifest.json"
+printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;
 }
 
 /** Agent and skill edits may change Eve's authored key; the provider key may not. */

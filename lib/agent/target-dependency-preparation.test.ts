@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
   } as const;
   const cache = {
     manifest: {
-      version: 2,
+      version: 3,
       scope: "development-execution",
       platform: "linux/arm64",
       dependencyKey: "1".repeat(64),
@@ -37,17 +37,21 @@ const mocks = vi.hoisted(() => {
       closure: {
         package: "@vercel/microfrontends",
         version: "2.4.0",
-        archivePath: "/opt/app-builder/dependency-cache/node-modules.tar.gz",
-        archiveSha256: "6".repeat(64),
-        archiveBytes: 1,
-        cargoArchivePath:
-          "/opt/app-builder/dependency-cache/cargo-closure.tar.gz",
-        cargoArchiveSha256: "7".repeat(64),
-        cargoArchiveBytes: 1,
+        contentDigest: "1".repeat(64),
+        nodeModulesPath:
+          "/workspace/.app-builder/dependency-cache/dependencies/1111111111111111111111111111111111111111111111111111111111111111/node_modules",
+        cargoConfigPath:
+          "/workspace/.app-builder/dependency-cache/cargo/config.toml",
       },
     },
     manifestDigest: "8".repeat(64),
-    contentDigest: "6".repeat(64),
+    contentDigest: "1".repeat(64),
+    dependencyLayout: {
+      version: 1,
+      kind: "fixture",
+      roots: [],
+      workspaceLinks: [],
+    },
   } as const;
   class MissingDependencyCache extends Error {
     readonly code = "dependency_cache_missing" as const;
@@ -59,6 +63,20 @@ const mocks = vi.hoisted(() => {
     MissingDependencyCache,
     exactPrototypeArtifact: vi.fn(),
     assertUpstreamMutationAllowed: vi.fn(),
+    assertExactDependencyPreparationReceipt: vi.fn(
+      (receipt: {
+        version: number;
+        dependencyLayout?: unknown;
+        digest: string;
+      }) => {
+        if (
+          receipt.version !== 2 ||
+          receipt.dependencyLayout === undefined ||
+          receipt.digest !== "f".repeat(64)
+        )
+          throw new Error("The dependency preparation receipt is malformed.");
+      },
+    ),
     bootstrapLiveTemplateDependencies: vi.fn(async () => cache),
     inspectDependencyCache: vi.fn(async () => cache),
     materializeOfflineDependencies: vi.fn(async () => cache),
@@ -101,6 +119,8 @@ vi.mock("@/lib/agent/workflow-state", () => ({
     mocks.current = transition(mocks.current);
   },
   assertUpstreamMutationAllowed: mocks.assertUpstreamMutationAllowed,
+  assertExactDependencyPreparationReceipt:
+    mocks.assertExactDependencyPreparationReceipt,
   sha256: () => "f".repeat(64),
 }));
 
@@ -134,6 +154,7 @@ vi.mock("@/lib/repository/dependency-cache", () => ({
       );
   },
   bootstrapLiveTemplateDependencies: mocks.bootstrapLiveTemplateDependencies,
+  dependencyExecutionLayout: () => mocks.cache.dependencyLayout,
   dependencyTargetForWorkspace: (
     _cache: unknown,
     workspace: { sourceSha: string; sourceTree: string },
@@ -141,11 +162,9 @@ vi.mock("@/lib/repository/dependency-cache", () => ({
   inspectDependencyCache: mocks.inspectDependencyCache,
   materializeOfflineDependencies: mocks.materializeOfflineDependencies,
   shouldPreferLiveTemplateDependencies: (
-    sourceReceiptVersion: number,
+    _sourceReceiptVersion: number,
     environment: Readonly<Record<string, string | undefined>>,
-  ) =>
-    (sourceReceiptVersion === 3 || sourceReceiptVersion === 4) &&
-    environment.APP_BUILDER_EXECUTION_MODE !== "development",
+  ) => environment.APP_BUILDER_EXECUTION_MODE !== "development",
 }));
 
 vi.mock("@/lib/repository/source-receipt", () => ({
@@ -156,6 +175,23 @@ vi.mock("@/lib/repository/source-receipt", () => ({
 vi.mock("@/lib/repository/arrusted-template", () => ({
   inspectSourceBoundSandboxWorkspace: mocks.inspectSourceBoundSandboxWorkspace,
 }));
+
+vi.mock("@/lib/repository/development-source", () => ({
+  canAutoSelectDevelopmentSource: () => false,
+  developmentSourceReceipt: vi.fn(),
+}));
+
+vi.mock("@/lib/agent/existing-app-changes", async () => {
+  const { z } = await import("zod");
+  return {
+    existingAppChangesSchema: z
+      .array(
+        z.object({ path: z.string().min(1), content: z.string() }).strict(),
+      )
+      .min(1)
+      .max(32),
+  };
+});
 
 vi.mock("@/lib/sandbox/toolchain", () => ({
   configuredToolchainImage: () => undefined,
@@ -174,6 +210,12 @@ vi.mock("@/lib/sandbox/toolchain", () => ({
 
 vi.mock("@/lib/sandbox/backend", () => ({
   sandboxBackendPlan: () => ({ kind: "fixture-just-bash", blockers: [] }),
+}));
+
+vi.mock("@/lib/sandbox/development-toolchain", () => ({
+  DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS: ["registry.npmjs.org"],
+  developmentVercelDependencyRepairCommand: (dependencyKey: string) =>
+    `repair ${dependencyKey}`,
 }));
 
 vi.mock("@/lib/testing/test-capability", () => ({
@@ -394,6 +436,62 @@ describe("target dependency preparation", () => {
     );
   });
 
+  it("reuses one prepared closure while an existing-app preimage is repaired and retried", async () => {
+    mocks.current = existingRepositoryAcceptedState();
+    mocks.inspectDependencyCache
+      .mockRejectedValueOnce(
+        new DependencyCacheMissingError("hosted cache missing"),
+      )
+      .mockResolvedValue(mocks.cache);
+    mocks.executeTargetIdentityAndPlanning.mockRejectedValueOnce(
+      Object.assign(new Error("exact preimage required"), {
+        code: "existing_app_change_preimage_missing",
+        rejectedPaths: ["apps/expense-review/app/missing.tsx"],
+        exactAppOwnedPaths: ["apps/expense-review/app/page.tsx"],
+      }),
+    );
+    planningResult();
+
+    await expect(
+      planAppCreation.execute(
+        {
+          expectedAppSpecDigest: appSpecDigest,
+          existingAppChanges: [
+            {
+              path: "apps/expense-review/app/missing.tsx",
+              content: "invalid\n",
+            },
+          ],
+        },
+        toolContext("first-plan").context,
+      ),
+    ).rejects.toMatchObject({
+      code: "existing_app_change_preimage_missing",
+    });
+    expect(mocks.current).toMatchObject({ phase: "dependencies_prepared" });
+
+    await expect(
+      planAppCreation.execute(
+        {
+          expectedAppSpecDigest: appSpecDigest,
+          existingAppChanges: [
+            {
+              path: "apps/expense-review/app/page.tsx",
+              content: "export default function Page() { return 'Ready'; }\n",
+            },
+          ],
+        },
+        toolContext("retry-plan").context,
+      ),
+    ).resolves.toMatchObject({ reused: false });
+
+    expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeOfflineDependencies).toHaveBeenCalledTimes(1);
+    expect(mocks.executeTargetIdentityAndPlanning).toHaveBeenCalledTimes(2);
+    expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledTimes(3);
+    expect(mocks.current).toMatchObject({ phase: "planned" });
+  });
+
   it("reuses one development closure for code-only source changes", async () => {
     vi.stubEnv("APP_BUILDER_EXECUTION_MODE", "development");
     const firstContext = toolContext("first-call");
@@ -459,6 +557,12 @@ describe("target dependency preparation", () => {
 
     expect(first).toMatchObject({ reused: false });
     expect(retry).toMatchObject({ reused: true });
+    expect(mocks.assertExactDependencyPreparationReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 2,
+        dependencyLayout: mocks.cache.dependencyLayout,
+      }),
+    );
     expect(mocks.materializePlanningOverlay).toHaveBeenCalledTimes(1);
     expect(mocks.materializeOfflineDependencies).toHaveBeenCalledTimes(1);
   });
@@ -477,6 +581,7 @@ describe("target dependency preparation", () => {
     );
 
     expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledTimes(1);
+    expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledTimes(2);
   });
 
   it("plans a hosted existing repository against its exact live dependency closure", async () => {
@@ -504,7 +609,6 @@ describe("target dependency preparation", () => {
     );
     expect(mocks.bootstrapLiveTemplateDependencies).toHaveBeenCalledWith({
       sandbox: expect.anything(),
-      target: mocks.workspace,
     });
     expect(mocks.current).toMatchObject({
       phase: "planned",
@@ -638,6 +742,12 @@ describe("target dependency preparation", () => {
         toolContext("retry-call").context,
       ),
     ).rejects.toThrow("changed after its durable receipt");
+    expect(mocks.assertExactDependencyPreparationReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 2,
+        dependencyLayout: mocks.cache.dependencyLayout,
+      }),
+    );
     expect(mocks.materializeOfflineDependencies).toHaveBeenCalledTimes(1);
   });
 

@@ -116,6 +116,7 @@ export default defineTool({
         : {}),
       binding,
       artifactRevision: current.appSpec.artifactRevision,
+      dependencyLayout: current.dependencyReceipt.dependencyLayout,
       proposal: current.proposal.target,
       appliedByCallId: ctx.callId,
     });

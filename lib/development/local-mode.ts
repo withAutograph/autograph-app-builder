@@ -11,7 +11,6 @@ import {
   realpath,
   readdir,
   rm,
-  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -51,6 +50,11 @@ export type DevelopmentSnapshot = Readonly<{
   fingerprint: string;
   commit: string;
   tree: string;
+  entries: readonly Readonly<{
+    path: string;
+    digest: string;
+    bytes: number;
+  }>[];
 }>;
 
 function argumentValue(args: readonly string[], index: number, name: string) {
@@ -388,24 +392,6 @@ export function waitForDevelopmentSourceChange(input: {
   });
 }
 
-async function makeReadOnly(root: string) {
-  async function visit(path: string) {
-    const entries = await readdir(path, { withFileTypes: true });
-    for (const entry of entries) {
-      const child = join(path, entry.name);
-      if (entry.isDirectory()) {
-        await visit(child);
-        await chmod(child, 0o500);
-      } else if (entry.isFile()) {
-        const info = await stat(child);
-        await chmod(child, info.mode & 0o111 ? 0o500 : 0o400);
-      }
-    }
-  }
-  await visit(root);
-  await chmod(root, 0o500);
-}
-
 export async function createDevelopmentSnapshot(input: {
   sourceRoot: string;
   runRoot: string;
@@ -482,8 +468,23 @@ export async function createDevelopmentSnapshot(input: {
       encoding: "utf8",
       env: gitEnvironment(),
     }).trim();
-    await makeReadOnly(root);
-    return { root, fingerprint, commit, tree };
+    // The recorded commit/tree/fingerprint identify this one per-cycle copy.
+    // They do not require a current or clean checkout and must not become a
+    // freshness gate. The local materialization stays owner-writable: Eve
+    // installs runtime overlays and generated planning files beside this
+    // source. It is removed after the cycle and never crosses into hosted or
+    // release execution.
+    return {
+      root,
+      fingerprint,
+      commit,
+      tree,
+      entries: entries.map((entry) => ({
+        path: entry.path,
+        digest: sha256(entry.content),
+        bytes: entry.content.byteLength,
+      })),
+    };
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;

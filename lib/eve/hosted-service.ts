@@ -47,10 +47,8 @@ import {
   type EveSessionResult,
   type PublicInputRequest,
 } from "../mcp/contracts";
-import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 import {
   HostedAdapterSessionUnavailableError,
-  HostedAdmissionDeniedError,
   HostedIdempotencyConflictError,
   HostedRejectedOperationError,
   HostedSessionBusyError,
@@ -64,7 +62,6 @@ import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
 
 export {
   HostedAdapterSessionUnavailableError,
-  HostedAdmissionDeniedError,
   HostedCancellationUnsettledError,
   HostedIdempotencyConflictError,
   HostedRejectedOperationError,
@@ -417,7 +414,6 @@ export function createHostedEveSessionService(input: {
     adapterSessionId: string;
   }) => Promise<void>;
   now?: () => number;
-  admissionControl?: HostedPreviewAdmissionControlBinding;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
 }): EveSessionService {
   const principal = hostedPrincipalSchema.parse(input.principal);
@@ -548,17 +544,7 @@ export function createHostedEveSessionService(input: {
     let reservation: z.infer<typeof reserveOperationResultSchema>;
     try {
       reservation = reserveOperationResultSchema.parse(
-        await input.store.reserveOperation(
-          principal,
-          candidate,
-          options.kind === "start" && input.admissionControl !== undefined
-            ? {
-                binding: input.admissionControl,
-                nowEpochMs: timestamp,
-                sessionTimeoutPolicy,
-              }
-            : undefined,
-        ),
+        await input.store.reserveOperation(principal, candidate),
       );
     } catch {
       throw new HostedSubmissionUnknownError();
@@ -567,9 +553,7 @@ export function createHostedEveSessionService(input: {
       case "conflict":
         throw new HostedIdempotencyConflictError();
       case "rejected":
-        if (reservation.reason === "session_busy")
-          throw new HostedSessionBusyError();
-        throw new HostedAdmissionDeniedError();
+        throw new HostedSessionBusyError();
       case "reserved": {
         const operation = requireOwnedOperation(reservation.operation, {
           operationId,

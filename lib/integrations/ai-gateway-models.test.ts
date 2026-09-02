@@ -13,8 +13,8 @@ describe("AI Gateway model catalog", () => {
       Response.json({
         data: [
           {
-            id: "openai/live-model",
-            name: "Live Model",
+            id: "openai/gpt-5.6-sol",
+            name: "GPT 5.6 Sol",
             owned_by: "openai",
             type: "language",
             zdr: "all",
@@ -33,20 +33,20 @@ describe("AI Gateway model catalog", () => {
     );
     const result = await loadGatewayModels({
       fetch: request,
-      defaultModelId: "openai/live-model",
+      defaultModelId: "openai/gpt-5.6-sol",
       now: () => 1,
     });
     expect(result.status).toBe("ready");
     expect(result.entries).toEqual([
       {
-        id: "openai/live-model",
-        name: "Live Model",
+        id: "openai/gpt-5.6-sol",
+        name: "GPT 5.6 Sol",
         provider: "openai",
         capabilities: ["tool-use"],
         zdr: "all",
       },
     ]);
-    expect(result.defaultModelId).toBe("openai/live-model");
+    expect(result.defaultModelId).toBe("openai/gpt-5.6-sol");
   });
 
   it("uses a validated cached catalog during a transient provider failure", async () => {
@@ -55,9 +55,9 @@ describe("AI Gateway model catalog", () => {
         Response.json({
           data: [
             {
-              id: "a/model",
-              name: "Model",
-              owned_by: "a",
+              id: "openai/gpt-5.6-sol",
+              name: "GPT 5.6 Sol",
+              owned_by: "openai",
               type: "language",
               zdr: "some",
               tags: [],

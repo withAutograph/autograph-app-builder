@@ -15,19 +15,12 @@ export const sandboxExecutionPolicySchema = z
     lease: z.object({
       ttlMs: z.literal(900_000),
       heartbeatMs: z.literal(60_000),
-      maxActivePerSubject: z.literal(1),
-      maxActivePerWorkspace: z.literal(4),
     }),
     command: z.object({
       maximumWallTimeMs: z.literal(300_000),
       maximumNoOutputTimeMs: z.literal(60_000),
       maximumOutputBytes: z.literal(1_048_576),
       maximumKillCleanupTimeMs: z.literal(2_000),
-      maximumProcesses: z.literal(128),
-      maximumOpenFiles: z.literal(256),
-      maximumFileBytes: z.literal(268_435_456),
-      maximumWorkspaceBytes: z.literal(2_147_483_648),
-      maximumWorkspaceFiles: z.literal(100_000),
     }),
   })
   .strict();
@@ -48,19 +41,12 @@ export const SANDBOX_EXECUTION_POLICY = sandboxExecutionPolicySchema.parse({
   lease: {
     ttlMs: 900_000,
     heartbeatMs: 60_000,
-    maxActivePerSubject: 1,
-    maxActivePerWorkspace: 4,
   },
   command: {
     maximumWallTimeMs: 300_000,
     maximumNoOutputTimeMs: 60_000,
     maximumOutputBytes: 1_048_576,
     maximumKillCleanupTimeMs: 2_000,
-    maximumProcesses: 128,
-    maximumOpenFiles: 256,
-    maximumFileBytes: 268_435_456,
-    maximumWorkspaceBytes: 2_147_483_648,
-    maximumWorkspaceFiles: 100_000,
   },
 });
 

@@ -75,15 +75,37 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development Eve application root",
     true,
   );
-  const activeRun = resolve(applicationRoot, "../..");
-  if (!contained(runsRoot, activeRun) || dirname(activeRun) !== runsRoot)
-    throw new Error("Development Eve application was outside the active run.");
-  if (applicationRoot !== join(activeRun, "eve-application/source"))
-    throw new Error("Development Eve application root was not fresh.");
+  const supervisorRoot = ownerDirectory(
+    required(environment, "APP_BUILDER_DEV_SUPERVISOR_ROOT"),
+    "Development Eve supervisor root",
+    true,
+  );
+  if (
+    !contained(runsRoot, supervisorRoot) ||
+    dirname(supervisorRoot) !== runsRoot
+  )
+    throw new Error("Development Eve supervisor was outside the runs root.");
+  const cycleRoot = ownerDirectory(
+    dirname(dirname(applicationRoot)),
+    "Development Eve cycle root",
+    true,
+  );
+  if (
+    !contained(supervisorRoot, cycleRoot) ||
+    dirname(cycleRoot) !== supervisorRoot
+  )
+    throw new Error("Development Eve cycle was outside the supervisor root.");
+  if (applicationRoot !== join(cycleRoot, "eve-application/source"))
+    throw new Error(
+      "Development Eve application root was not supervisor-bound.",
+    );
   const sourceRoot = ownerDirectory(
     required(environment, "REPOSITORY_LOCAL_ROOTS"),
     "Development Arrusted source root",
   );
+  const activeRun = dirname(sourceRoot);
+  if (!contained(runsRoot, activeRun) || dirname(activeRun) !== runsRoot)
+    throw new Error("Development Arrusted source was outside the active run.");
   if (sourceRoot !== join(activeRun, "source"))
     throw new Error("Development Arrusted source was outside the active run.");
   const runtimeHome = ownerDirectory(
@@ -91,15 +113,15 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development runtime home",
     true,
   );
-  if (runtimeHome !== join(activeRun, "home"))
-    throw new Error("Development runtime home was outside the active run.");
+  if (runtimeHome !== join(cycleRoot, "home"))
+    throw new Error("Development runtime home was not supervisor-bound.");
   const workflowData = ownerDirectory(
     required(environment, "WORKFLOW_LOCAL_DATA_DIR"),
     "Development workflow data root",
     true,
   );
-  if (workflowData !== join(activeRun, "workflow-data"))
-    throw new Error("Development workflow data was outside the active run.");
+  if (workflowData !== join(cycleRoot, "workflow-data"))
+    throw new Error("Development workflow data was not supervisor-bound.");
   const destinationRoot = ownerDirectory(
     required(environment, "REPOSITORY_WORKSPACE_ROOT"),
     "Development destination root",
@@ -113,6 +135,7 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     destinationRoot,
     runtimeHome,
     sourceRoot,
+    supervisorRoot,
     workflowData,
   };
 }
@@ -144,6 +167,8 @@ function exactBinding(environment: Environment) {
     throw new Error("Local Eve port was invalid.");
   if (environment.EVE_AGENT_HOST !== `http://127.0.0.1:${port}`)
     throw new Error("Local Eve loopback binding was invalid.");
+  if (environment.WORKFLOW_LOCAL_BASE_URL !== `http://127.0.0.1:${port}`)
+    throw new Error("Local Eve workflow queue binding was invalid.");
   const sourceSha = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA");
   const sourceTree = required(
     environment,
@@ -216,6 +241,7 @@ export function createLocalEveInvocation(input: {
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
       EVE_HOSTED_ADAPTER: "0",
       EVE_AGENT_HOST: `http://127.0.0.1:${binding.port}`,
+      WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${binding.port}`,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_DATA_DIR: roots.workflowData,

@@ -1,5 +1,33 @@
 # Implementation gates
 
+## Moving-source policy
+
+Design and planning operate on the current live repository, including normal
+working-tree edits in local development and the current branch state in hosted
+environments. A newly observed SHA, tree, or baseline is diagnostic context; it
+MUST NOT block planning, dependency-cache reuse, or creation of a provisional
+draft PR. Draft PRs are allowed to become stale or conflict.
+
+The coordinator reconciles only at merge: re-read the current default branch,
+rebase or regenerate the proposal, run the relevant validation, show the actual
+diff, and obtain final effect-based approval. This is the point at which the
+current source matters for the merge outcome. Only release-candidate bytes
+selected for publication require immutable identity and byte/digest equality.
+
+The boundaries that remain strict are the ones that protect a concrete effect:
+tenant and provider authority, path containment, dependency-input/cache
+integrity, reviewed content, and outward-effect approvals. Source observations,
+process state, timestamps, package-manager layout, and ordinary source edits
+are not authority gates.
+
+App Builder MUST NOT impose arbitrary workspace, filesystem, process, cache,
+or source-size quotas on design or planning. A provider may reject a request for
+its own documented capacity or policy constraint; that outcome is external
+diagnostic information, not a reason to redefine a normal repository change as
+drift. Bounded command timeouts, cancellation, and output handling remain
+operational recovery controls. They protect a running command and MUST NOT be
+used to limit the repository the user is planning against.
+
 The public execution contract has exactly two modes: non-release
 `mise run dev`, and immutable promotion through `mise run release:prove`
 followed by separately authorized `mise run release:publish`. All task names
@@ -90,9 +118,11 @@ route or static asset. The hosted backend can run only the fixed read-only
 identity and planning commands; missing, Development, or mismatched Vercel
 environments use the non-executing backend.
 The bounded command backend is active for every hosted template and live
-session command. It shares one stdout/stderr byte budget, rejects direct
-authored process spawning, enforces wall and no-output deadlines, actively
-kills the process, cancels stream readers, and bounds kill cleanup. Eve
+session command. It bounds command output and execution time to make an
+individual command cancellable and recoverable, rejects direct authored process
+spawning, actively kills the process, cancels stream readers, and bounds kill
+cleanup. These are operational controls, not workspace or repository quotas.
+Eve
 0.43 exposes no provider-native per-command timeout on its public sandbox
 session surface, so no such timeout is claimed.
 Durable per-turn execution leasing remains dormant unless a deployment sets
@@ -101,10 +131,10 @@ the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` gate. The awaited
 its PostgreSQL epoch; terminal turn hooks stop compute before releasing.
 `session.waiting` is deliberately not a release boundary because it may be
 an in-turn authorization park. `mise run test:postgres-sandbox-leases`
-proves same-subject serialization, the workspace cap, idempotent replay,
+proves same-subject serialization, idempotent replay,
 rollback, expiry, heartbeat, and recovery/reacquisition races against an
 ephemeral digest-pinned PostgreSQL container. A provider stop failure keeps
-the fenced lease orphaned and admission-blocking; only a successful stop may
+the fenced lease orphaned and reuse-blocking; only a successful stop may
 settle it as released, and one failed stop does not abort the remaining
 recovery batch. This source proof does not activate the gate or prove
 provider-side orphan lookup and stop.
@@ -117,20 +147,22 @@ planning metadata under deny-all runtime networking. It precreates the
 archive's directories and preserves their metadata during extraction so the
 verified cache remains reliable on the sandbox overlay filesystem. Its durable receipt is
 internally observed; `APP_BUILDER_DEPENDENCY_CACHE_DIGEST` is not accepted.
-The cache target, durable source receipt, and prepared workspace must agree
-on both the exact source commit and tree. That binding is carried through
-dependency, identity, proposal, apply, validation, review, and publication
-receipts; a SHA match with a different tree fails closed.
-Source receipt V3 hashes only this immutable logical binding; its absolute
-local checkout path is diagnostic and deliberately excluded. Generate the
-strict path-independent evidence with:
+The cache target is keyed by dependency inputs, platform, toolchain, and
+bootstrap identity. The selected source commit/tree may move during design and
+planning; source observations are diagnostic context and are not a drift gate.
+Planning and draft proposals may be regenerated from the latest live source.
+Source receipt V3 may record a source observation for diagnostics, but it is not
+long-lived mutation authority. Generate the path-independent observation with:
 
 ```sh
 mise run source:inspect -- --source-kind <existing-repository|fresh-template> --source-path <absolute-allowlisted-path>
 ```
 
-The command emits no local path, rejects the V2
-schema and unknown arguments, and does not prepare or mutate the source.
+The command emits no local path, rejects the V2 schema and unknown arguments,
+and does not prepare or mutate the source. It does not freeze the source for
+ordinary planning. Merge-time reconciliation re-reads the current default
+branch, rebases or regenerates, validates the actual diff, and obtains final
+effect-based approval. Only release-candidate bytes require immutable identity.
 The implemented fixed target identity and planning operation then uses a
 builder-owned overlay, bounded execution, strict output schemas, and durable
 receipts. Real execution still requires both the immutable image and a
@@ -311,14 +343,10 @@ Before enabling real MCP mutations:
    confirmation-bound tasks with identity-free receipts. Retention preserves
    reserved replay authority and never deletes GitHub mutation journals;
    deletion requires a five-minute revocation drain.
-5. Before hosted composition can open storage, bind a fresh exact provider
-   readback through the closed `EVE_HOSTED_ADMISSION_CONTROL` contract. It must
-   name bounded per-subject/workspace request and session ceilings plus current
-   monthly spend and its ceiling, and expire within 24 hours. The runtime must
-   enforce every field: monthly spend fails closed before dispatch, while the
-   durable PostgreSQL start reservation serializes the start and active-session
-   ceilings. Every observed session result refreshes the durable status used by
-   those checks.
+5. Treat provider capacity as external availability, not an App Builder user,
+   workspace, session, or spend quota. The durable PostgreSQL reservation keeps
+   only the correctness guarantees needed for idempotency and one mutating
+   continuation at a time; it must not become an admission gate.
 6. Keep continuation credentials outside the current MCP/store contract. The
    canonical installed Eve 0.44.4 session routes require only durable session IDs.
 7. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
@@ -341,7 +369,7 @@ Before enabling real MCP mutations:
 11. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
 12. Keep user-facing hosted sessions resumable until explicit deletion. Apply
     the fixed 30-minute idle and 24-hour maximum windows only to compute leases
-    and admission counts, fence replaced adapter generations, and recover from
+    and provider resource cleanup, fence replaced adapter generations, and recover from
     bounded durable checkpoints. Retention and drained tenant deletion remain
     separately confirmed operations.
 

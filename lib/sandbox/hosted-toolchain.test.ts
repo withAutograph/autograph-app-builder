@@ -13,9 +13,7 @@ import { join } from "node:path";
 import { create as createTar } from "tar";
 import { describe, expect, it } from "vitest";
 
-import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 import {
-  HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES,
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
   HOSTED_NODE_VERSION,
@@ -30,14 +28,10 @@ import {
 } from "./hosted-toolchain";
 
 describe("hosted Vercel Sandbox toolchain", () => {
-  it("reserves enough single-file capacity for the pinned bootstrap artifact", () => {
-    expect(SANDBOX_EXECUTION_POLICY.command.maximumFileBytes).toBe(268_435_456);
-    expect(SANDBOX_EXECUTION_POLICY.command.maximumFileBytes).toBeGreaterThan(
-      HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES,
+  it("builds the bootstrap command without imposing an App Builder file-size cap", () => {
+    expect(hostedToolchainBootstrapCommand()).toContain(
+      "extract_verified_archive",
     );
-    expect(() =>
-      hostedToolchainBootstrapCommand(HOSTED_BOOTSTRAP_MINIMUM_FILE_BYTES - 1),
-    ).toThrow("cannot hold the hosted artifact");
   });
 
   it("pins both supported Linux architectures by checksum", () => {

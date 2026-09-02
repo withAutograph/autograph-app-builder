@@ -1,3 +1,9 @@
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -6,12 +12,26 @@ import { inspectDependencyCache } from "./dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
+  materializePlanningOverlay,
   sandboxTargetCommandExecutor,
   TARGET_PLANNING_MISE_PROFILE,
   targetContractDigest,
   targetExecutionBinding,
+  targetProposalSchema,
   type TargetCommandExecutor,
 } from "./target-planning";
+
+function digest(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function runLocal(command: string, args: readonly string[], cwd: string) {
+  const result = spawnSync(command, args, { cwd, encoding: "utf8" });
+  if (result.status !== 0)
+    throw new Error(
+      `${command} ${args.join(" ")} failed: ${result.stderr || result.error?.message || "unknown error"}`,
+    );
+}
 
 function sandboxFixture() {
   const files = new Map<string, string | Uint8Array>([
@@ -68,6 +88,11 @@ function sandboxFixture() {
       content: Uint8Array;
     }) => {
       files.set(path, content);
+    },
+    removePath: async ({ path }: { path: string }) => {
+      for (const candidate of [...files.keys()])
+        if (candidate === path || candidate.startsWith(`${path}/`))
+          files.delete(candidate);
     },
     run,
   } as unknown as SandboxSession;
@@ -212,6 +237,226 @@ describe("typed target identity and planning", () => {
       before: { mode: "644" },
       after: { mode: "644" },
     });
+    expect(
+      targetProposalSchema.safeParse({
+        ...result.proposal,
+        iteration: { ...result.proposal.iteration, digest: "0".repeat(64) },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("plans app-owned additions alongside replacements", async () => {
+    const { sandbox } = sandboxFixture();
+    const executor = vi.fn(fixtureTargetCommandExecutor());
+    const onIdentity = vi.fn();
+    const input = {
+      sandbox,
+      executor,
+      appId: "vendor",
+      appSpecContent: "accepted",
+      appSpecDigest: "a".repeat(64),
+      artifactRevision: "b".repeat(64),
+      onIdentity,
+    };
+
+    const planned = await executeTargetIdentityAndPlanning({
+      ...input,
+      existingAppChanges: [
+        {
+          path: "apps/vendor/app/missing.tsx",
+          content: "changed\n",
+        },
+        {
+          path: "apps/vendor/app/page.tsx",
+          content: "export default function Page() { return 'Ready'; }\n",
+        },
+      ],
+    });
+    const afterContent = "export default function Page() { return 'Ready'; }\n";
+    const addition = {
+      path: "apps/vendor/app/missing.tsx",
+      after: {
+        mode: "644",
+        digest: digest("changed\n"),
+        content: "changed\n",
+      },
+    };
+    const replacement = {
+      path: "apps/vendor/app/page.tsx",
+      before: {
+        mode: "644",
+        digest: digest("export default function Page() {}\n"),
+      },
+      after: {
+        mode: "644",
+        digest: digest(afterContent),
+        content: afterContent,
+      },
+    };
+    expect(planned.proposal).toMatchObject({
+      operation: "iterate-existing-app",
+      iteration: {
+        changes: [addition, replacement],
+        digest: digest(JSON.stringify([addition, replacement])),
+      },
+    });
+    expect(onIdentity).toHaveBeenCalledTimes(1);
+  });
+
+  it("materializes the sanitized prepared tree with one contained sandbox copy", async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "app-builder-planning-overlay-"),
+    );
+    const workspace = join(temporaryRoot, "workspace");
+    const repository = join(workspace, "repository");
+    const trackedPath = "apps/vendor/app/page.tsx";
+    const outsidePath = "provider-secret.txt";
+    const absolutePath = (path: string) =>
+      path === "/workspace"
+        ? workspace
+        : path.startsWith("/workspace/")
+          ? join(workspace, path.slice("/workspace/".length))
+          : join(workspace, path);
+    const readBinary = async (path: string) => {
+      try {
+        return new Uint8Array(await readFile(absolutePath(path)));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
+    };
+    const run = vi.fn(
+      async ({
+        command,
+        workingDirectory,
+      }: {
+        command: string;
+        workingDirectory: string;
+      }) => {
+        const result = spawnSync(
+          "/bin/sh",
+          ["-c", command.replaceAll("/workspace", workspace)],
+          {
+            cwd: absolutePath(workingDirectory),
+            encoding: "utf8",
+          },
+        );
+        return {
+          exitCode: result.status ?? 1,
+          stdout: result.stdout,
+          stderr: result.stderr || result.error?.message || "",
+        };
+      },
+    );
+    const sandbox = {
+      id: "local-command-sandbox",
+      resolvePath: (path: string) => `/workspace/${path}`,
+      readTextFile: async ({ path }: { path: string }) => {
+        try {
+          return await readFile(absolutePath(path), "utf8");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+          throw error;
+        }
+      },
+      readBinaryFile: async ({ path }: { path: string }) => readBinary(path),
+      writeTextFile: async ({
+        path,
+        content,
+      }: {
+        path: string;
+        content: string;
+      }) => {
+        const destination = absolutePath(path);
+        await mkdir(dirname(destination), { recursive: true });
+        await writeFile(destination, content, "utf8");
+      },
+      writeBinaryFile: async ({
+        path,
+        content,
+      }: {
+        path: string;
+        content: Uint8Array;
+      }) => {
+        const destination = absolutePath(path);
+        await mkdir(dirname(destination), { recursive: true });
+        await writeFile(destination, content);
+      },
+      removePath: async ({ path }: { path: string }) => {
+        await rm(absolutePath(path), { recursive: true, force: true });
+      },
+      run,
+    } as unknown as SandboxSession;
+    const committed =
+      "export default function Page() { return 'Committed'; }\n";
+    const dirty = "export default function Page() { return 'Dirty'; }\n";
+
+    try {
+      await mkdir(join(repository, dirname(trackedPath)), { recursive: true });
+      await writeFile(join(repository, trackedPath), committed, "utf8");
+      runLocal("git", ["init", "--quiet"], repository);
+      runLocal("git", ["add", trackedPath], repository);
+      runLocal(
+        "git",
+        [
+          "-c",
+          "user.name=Autograph Test",
+          "-c",
+          "user.email=autograph@example.invalid",
+          "-c",
+          "commit.gpgsign=false",
+          "commit",
+          "--quiet",
+          "-m",
+          "fixture",
+        ],
+        repository,
+      );
+      await writeFile(join(repository, trackedPath), dirty, "utf8");
+      await writeFile(join(workspace, outsidePath), "secret\n", "utf8");
+      await mkdir(join(workspace, ".app-builder"), { recursive: true });
+      await writeFile(
+        join(workspace, ".app-builder/source-files.json"),
+        JSON.stringify([{ path: trackedPath, mode: "100644" }]),
+        "utf8",
+      );
+      vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "1");
+
+      await materializePlanningOverlay({
+        sandbox,
+        artifactRevision: "b".repeat(64),
+        appId: "vendor",
+        appSpecContent: "accepted",
+        appSpecDigest: "a".repeat(64),
+      });
+
+      const overlayRoot = join(
+        workspace,
+        ".app-builder/target-inputs",
+        "b".repeat(64),
+        "repository",
+      );
+      await expect(
+        readFile(join(overlayRoot, trackedPath), "utf8"),
+      ).resolves.toBe(dirty);
+      await expect(
+        readFile(join(overlayRoot, outsidePath), "utf8"),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      expect(
+        run.mock.calls.filter(([request]) => request.command.startsWith("cp ")),
+      ).toEqual([
+        [
+          {
+            command: `cp -R /workspace/repository/. /workspace/.app-builder/target-inputs/${"b".repeat(64)}/repository/`,
+            workingDirectory: "/workspace",
+            abortSignal: expect.any(AbortSignal),
+          },
+        ],
+      ]);
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
   it("refuses to run the creation planner for an existing application", async () => {
@@ -235,7 +480,7 @@ describe("typed target identity and planning", () => {
     );
   });
 
-  it("rejects path escapes, other-app paths, and missing preimages", async () => {
+  it("rejects path escapes, other-app paths, and owned contract paths", async () => {
     const { sandbox } = sandboxFixture();
     const base = {
       sandbox,
@@ -248,7 +493,6 @@ describe("typed target identity and planning", () => {
     for (const path of [
       "../secrets",
       "apps/shell/app/page.tsx",
-      "apps/vendor/app/missing.tsx",
       "apps/vendor/app.contract.json",
     ])
       await expect(

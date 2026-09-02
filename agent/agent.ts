@@ -2,6 +2,7 @@ import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
 import { sha256 } from "@/lib/agent/workflow-state";
+import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export const vendorOnboardingPrototype = `<!doctype html>
@@ -180,7 +181,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "inspect_source",
-            input: { path, sourceKind: "existing-repository" },
+            input: {
+              path: developmentInspectionPath({ requestedPath: path }),
+              sourceKind: "existing-repository",
+            },
           },
         ],
       };
@@ -602,6 +606,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase === "planned") {
+      if (stale)
+        return "Stale offline dependency preparation was rejected; the completed product plan was preserved.";
+      return lostResponse
+        ? "The lost-response retry reused the exact durable dependency-preparation receipt."
+        : "The target-bound offline dependency closure is already available in builder-owned planning metadata.";
+    }
     if (
       status?.phase !== "app_spec_accepted" &&
       status?.phase !== "dependencies_prepared"
@@ -651,6 +662,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase === "planned")
+      return "The app is ready in the private preview.";
     if (
       status?.phase !== "dependencies_prepared" ||
       status.appSpec?.digest === undefined
@@ -1718,7 +1731,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
                       ? { path }
                       : {}),
                   }
-                : { path: path!, sourceKind },
+                : {
+                    path: developmentInspectionPath({ requestedPath: path! }),
+                    sourceKind,
+                  },
           },
         ],
       };
@@ -1797,13 +1813,23 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   return "Tell me what you want the app to help someone accomplish. I will infer a sensible starting experience and show you something reviewable.";
 });
 
+const localDevelopmentAgent =
+  process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+
 export default defineAgent({
   model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-sol",
+  ...(!hasTestCapability("mock-model")
+    ? {
+        modelOptions: {
+          providerOptions: {
+            gateway: {
+              only: ["openai"],
+              order: ["openai"],
+            },
+          },
+        },
+      }
+    : {}),
   modelContextWindowTokens: 128_000,
-  reasoning: "high",
-  limits: {
-    maxInputTokensPerSession: 2_000_000,
-    maxOutputTokensPerSession: 200_000,
-    sessionTimeoutMs: 7 * 24 * 60 * 60 * 1_000,
-  },
+  reasoning: localDevelopmentAgent ? "low" : "high",
 });

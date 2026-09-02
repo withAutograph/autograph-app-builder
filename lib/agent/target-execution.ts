@@ -7,6 +7,7 @@ import { hasTestCapability } from "../testing/test-capability";
 
 import {
   assertExactDependencyTargetBinding,
+  dependencyExecutionLayout,
   dependencyCacheReceiptDigest,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
@@ -27,7 +28,10 @@ import {
   isHostedVercelSandboxBackend,
   sandboxBackendPlan,
 } from "../sandbox/backend";
-import { sha256 } from "./workflow-state";
+import {
+  assertExactDependencyPreparationReceipt,
+  sha256,
+} from "./workflow-state";
 
 export type ProposalWorkflowState = Extract<
   AppBuilderWorkflowState,
@@ -69,6 +73,7 @@ export function plannedProposalForExecution(
 export function assertProposalExecutionBindings(
   state: ProposalWorkflowState,
 ): void {
+  assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
   if (!target.success)
     throw new Error(
@@ -261,6 +266,8 @@ export async function inspectTargetExecutionReadiness(input: {
     input.state.dependencyReceipt.cacheManifestDigest ===
       cache.manifestDigest &&
     input.state.dependencyReceipt.cacheContentDigest === cache.contentDigest &&
+    JSON.stringify(input.state.dependencyReceipt.dependencyLayout) ===
+      JSON.stringify(dependencyExecutionLayout(cache, environment)) &&
     required.every((tool) => tool.matches);
   const blockers = targetExecutionBlockers({
     imageConfigured: image !== undefined,

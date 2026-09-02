@@ -13,10 +13,11 @@ import {
   appBuilderWorkflowState,
   assertCurrentGitHubDraftProposal,
 } from "@/lib/agent/workflow-state";
+import { assertPreparedSandboxReleasePolicy } from "@/lib/repository/supported-template";
 
 export default defineTool({
   description:
-    "After separate approval of the exact sealed proposal digest, publish only the approved path set to a deterministic branch and open one draft pull request. It refuses stale base, overlap, collision, digest drift, or an enabled release gate.",
+    "After separate approval of the sealed proposal digest, publish only the approved path set to a deterministic branch and open one provisional draft pull request. Its observed base may advance or conflict later; reconciliation, validation, final diff review, and final effect-based approval belong at merge. It still refuses overlap, collision, release-gate drift, or digest drift.",
   inputSchema: z.strictObject({
     expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     approvalReceipt: approvalReceiptSchema,
@@ -43,6 +44,12 @@ export default defineTool({
       subjectDigest: input.expectedProposalDigest,
     });
     const sandbox = await ctx.getSandbox();
+    await assertPreparedSandboxReleasePolicy({
+      sandbox,
+      sourceSha: state.sourceReceipt.sourceSha,
+      sourceTree: state.sourceReceipt.sourceTree,
+      workspaceDigest: state.workspace.workspaceDigest,
+    });
     const contentSource = await publicationContentSourceForReviewedWorkflow({
       state,
       sandbox,

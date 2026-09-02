@@ -1,12 +1,11 @@
 import { defineTool } from "eve/tools";
-import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
-import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   prepareOrReuseDependencies,
   type DependencyReadyState,
 } from "@/lib/agent/target-dependency-preparation";
+import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -15,35 +14,20 @@ import {
   type TargetIdentityReceipt,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-import {
-  assertExactDependencyTargetBinding,
-  inspectDependencyCache,
-  shouldPreferLiveTemplateDependencies,
-  type ObservedDependencyCache,
-} from "@/lib/repository/dependency-cache";
+import { assertExactDependencyTargetBinding } from "@/lib/repository/dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
   sandboxTargetCommandExecutor,
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
-import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
-    "Required completion gate for every app creation or existing-app iteration. It automatically prepares or reuses verified dependencies before planning. For an existing app, first call inspect_existing_app after workspace preparation, read the bounded app-owned files, and provide every exact replacement as existingAppChanges; never call this tool without those changes for an existing app. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, arbitrary shell, arguments, cwd, or caller-controlled environment are available.",
+    "Required completion gate for every app creation or existing-app iteration. It automatically prepares or reuses verified dependencies before planning. For an existing app, first call inspect_existing_app after workspace preparation, read the app-owned files being replaced, and provide the complete app-owned change set as existingAppChanges. New app-owned files are allowed; replacements remain bound to their observed contents. Never call this tool without the intended changes for an existing app. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, arbitrary shell, arguments, cwd, or caller-controlled environment are available.",
   inputSchema: z.object({
     expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    existingAppChanges: z
-      .array(
-        z.strictObject({
-          path: z.string().min(1).max(512),
-          content: z.string().max(262_144),
-        }),
-      )
-      .min(1)
-      .max(32)
-      .optional(),
+    existingAppChanges: existingAppChangesSchema.optional(),
   }),
   async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
     const state = appBuilderWorkflowState.get();
@@ -52,50 +36,17 @@ export default defineTool({
       throw new Error(
         "Accept a build-ready AppSpec before running target planning.",
       );
-    let current: DependencyReadyState;
-    let sandbox: SandboxSession;
-    let cache: ObservedDependencyCache;
-    if (state.phase === "app_spec_accepted") {
-      const prepared = await prepareOrReuseDependencies({
-        current: state,
-        expectedAppSpecDigest,
-        sessionId: ctx.session.id,
-        callId: ctx.callId,
-        environment: process.env,
-        getSandbox: () => ctx.getSandbox(),
-      });
-      current = prepared.state;
-      sandbox = prepared.sandbox;
-      cache = prepared.cache;
-    } else {
-      current = state;
-      if (current.appSpec.digest !== expectedAppSpecDigest)
-        throw new Error("The accepted AppSpec changed before target planning.");
-      exactPrototypeArtifact(current.artifacts, {
-        path: current.appSpec.artifactPath,
-        digest: current.appSpec.digest,
-        revision: current.appSpec.artifactRevision,
-        sessionId: ctx.session.id,
-      });
-      sandbox = await ctx.getSandbox();
-      await inspectSourceBoundSandboxWorkspace({
-        sandbox,
-        receipt: current.sourceReceipt,
-        expectedWorkspace: current.workspace,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
-      });
-      cache = await inspectDependencyCache(
-        sandbox,
-        process.env,
-        current.workspace,
-        shouldPreferLiveTemplateDependencies(
-          current.sourceReceipt.version,
-          process.env,
-        ),
-      );
-    }
+    const prepared = await prepareOrReuseDependencies({
+      current: state,
+      expectedAppSpecDigest,
+      sessionId: ctx.session.id,
+      callId: ctx.callId,
+      environment: process.env,
+      getSandbox: () => ctx.getSandbox(),
+    });
+    const current: DependencyReadyState = prepared.state;
+    const sandbox = prepared.sandbox;
+    const cache = prepared.cache;
     assertExactDependencyTargetBinding({
       workspace: current.workspace,
       sourceReceipt: current.sourceReceipt,
@@ -150,6 +101,8 @@ export default defineTool({
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
       existingAppChanges,
+      sourceReceipt: current.sourceReceipt,
+      environment: process.env,
       onIdentity(identity) {
         if (identityReceipt !== undefined) {
           if (

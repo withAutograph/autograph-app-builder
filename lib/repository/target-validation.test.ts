@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import type { OverlaySnapshot, TargetApplyReceipt } from "./target-apply";
+import type { ExecutionDependencyLayout } from "./dependency-cache";
 import {
   appliedOverlayDriftFailure,
   assertReusableTargetApplyReceipt,
@@ -84,6 +85,19 @@ const apply: TargetApplyReceipt = {
   digest: digest("f"),
 };
 
+const dependencyLayout = (cachePath: string): ExecutionDependencyLayout => ({
+  version: 1,
+  kind: "cache",
+  roots: [
+    {
+      path: "node_modules",
+      cachePath,
+      digest: apply.dependencyCacheContentDigest,
+    },
+  ],
+  workspaceLinks: [],
+});
+
 function snapshot(treeDigest: string): OverlaySnapshot {
   return { treeDigest, files: apply.postTree };
 }
@@ -134,9 +148,15 @@ function sandboxFixture() {
     void request;
     return { exitCode: 0, stdout: "", stderr: "" };
   });
+  const writeTextFile = vi.fn(async () => undefined);
   return {
     run,
-    sandbox: { id: "sandbox", run } as unknown as SandboxSession,
+    writeTextFile,
+    sandbox: {
+      id: "sandbox",
+      run,
+      writeTextFile,
+    } as unknown as SandboxSession,
   };
 }
 
@@ -369,6 +389,9 @@ describe("proposal-bound target validation", () => {
         snapshotter: async () => snapshots.shift()!,
         apply,
         attempt: createTargetValidationAttempt(apply, "validation-call"),
+        dependencyLayout: dependencyLayout(
+          `/opt/app-builder/dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
+        ),
         appId: "example",
       }),
     );
@@ -395,18 +418,13 @@ describe("proposal-bound target validation", () => {
         apply.digest,
         name as "check-build" | "test",
       );
-      expect(command).toContain(`test -L ${apply.applyRoot}/node_modules`);
       expect(command).toContain(`cp -R ${apply.applyRoot} ${validationRoot}`);
-      expect(command).toContain(`test -L ${validationRoot}/node_modules`);
-      expect(command).toContain(
-        `/opt/app-builder/dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
-      );
-      expect(command).toContain("readlink --");
+      expect(command).not.toContain("readlink --");
     }
   });
 
   it("copies validation overlays with the Vercel workspace-materialized dependency root", async () => {
-    const { run, sandbox } = sandboxFixture();
+    const { run, sandbox, writeTextFile } = sandboxFixture();
     const snapshots = [
       snapshot(apply.postTreeDigest),
       snapshot(apply.postTreeDigest),
@@ -417,6 +435,9 @@ describe("proposal-bound target validation", () => {
       snapshotter: async () => snapshots.shift()!,
       apply,
       attempt: createTargetValidationAttempt(apply, "hosted-validation"),
+      dependencyLayout: dependencyLayout(
+        `/workspace/.app-builder/hosted-dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
+      ),
       appId: "example",
       environment: { APP_BUILDER_REAL_SANDBOX: "1", VERCEL: "1" },
     });
@@ -425,12 +446,16 @@ describe("proposal-bound target validation", () => {
       .map(([request]) => (request as { command: string }).command)
       .filter((command) => command.includes("cp -R"));
     expect(copyCommands).toHaveLength(2);
-    for (const command of copyCommands) {
-      expect(command).toContain(
-        `/workspace/.app-builder/hosted-dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
-      );
-      expect(command).not.toContain("/opt/app-builder/dependencies/");
-    }
+    const writtenScripts = writeTextFile.mock.calls as unknown as Array<
+      [{ content: string }]
+    >;
+    expect(
+      writtenScripts.every(([request]) =>
+        request.content.includes(
+          `/workspace/.app-builder/hosted-dependencies/${apply.dependencyCacheContentDigest}/node_modules`,
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("keeps the two-command protected validation below the relay ceiling", async () => {

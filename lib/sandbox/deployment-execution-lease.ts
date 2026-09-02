@@ -179,11 +179,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
       nowEpochMs: input.nowEpochMs ?? Date.now(),
     });
     if (result.disposition === "rejected") {
-      throw new Error(
-        result.reason === "recovery-in-progress"
-          ? "Hosted sandbox recovery is still in progress."
-          : "Hosted sandbox execution concurrency is exhausted.",
-      );
+      throw new Error("Hosted sandbox recovery is still in progress.");
     }
     commandAuthorities.set(input.sessionId, {
       lease: result.lease,

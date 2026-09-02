@@ -19,7 +19,7 @@ describe("two-mode development workflow contract", () => {
     const runner = readFileSync("scripts/development.mts", "utf8");
     expect(runner).toContain("createDevelopmentSnapshot");
     expect(runner).toContain("waitForDevelopmentSourceChange");
-    expect(runner).toContain("createDevelopmentApplication");
+    expect(runner).toContain("createDevelopmentCycle");
     expect(runner).toContain("waitForDevelopmentRuntimeChange");
     expect(runner).toContain("createDevelopmentPackage");
     expect(runner).toContain("waitForDevelopmentMcp");
@@ -34,6 +34,9 @@ describe("two-mode development workflow contract", () => {
       2,
     );
     expect(runner).toContain('WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0"');
+    expect(runner).toContain(
+      "WORKFLOW_LOCAL_BASE_URL: input.closed.EVE_AGENT_HOST",
+    );
     expect(runner).not.toContain("microsandbox");
     expect(runner).not.toContain("docker");
     expect(runner).not.toContain("APP_BUILDER_SANDBOX_IMAGE");

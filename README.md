@@ -32,9 +32,8 @@ There are exactly two user-facing modes:
 
 - `mise run dev -- --arrusted-root /absolute/path/to/arrusted` is the fast,
   non-release loop. It uses that explicit checkout only for local development;
-  every new App Builder application acquires the canonical Arrusted `main`
-  template through the clone-and-pin source boundary, reuses platform-specific
-  dependency state, exposes the
+  new and existing-app planning use the current writable Arrusted source as
+  live input, reuse platform-specific dependency state, expose the
   exact five public `autograph_*` tools on loopback `/mcp`, and cannot publish,
   deploy, select hosted bindings, or mutate a provider.
 - `mise run release:prove` builds and locally proves one clean, immutable
@@ -56,14 +55,14 @@ The normative daily loop is the [local-development lifecycle](docs/local-develop
 Inside the supported modes, the workflow engine can model an existing eligible
 checkout or an explicitly allowlisted fresh-template checkout:
 
-1. for a new app, clone the canonical Arrusted HTTPS `main` ref, resolve its
-   exact commit/tree, then inspect that source with the versioned V0 adapter;
-2. emit a canonical receipt binding source kind, exact SHA, eligibility,
-   supported-template contract, and release-disabled state;
+1. for a new app, resolve the canonical Arrusted source and inspect the current
+   live repository state with the versioned adapter;
+2. record source kind, current observation, eligibility, supported-template
+   contract, and release-disabled state for diagnostics and re-observation;
 3. for a fresh-template source, automatically verify one exact acquisition
    receipt without cloning, copying, or creating a destination repository;
-4. materialize that exact receipt at `/workspace/repository` inside the
-   App Builder's isolated workspace; and
+4. materialize the current source in the App Builder's isolated, writable
+   workspace; and
 5. persist the prepared phase in durable Eve state and expose a verified,
    read-only workspace-status receipt while unrestricted shell and file writes
    remain disabled;
@@ -115,10 +114,10 @@ are accepted. Recording a new artifact revision invalidates any accepted
 AppSpec and downstream proposal. Artifact recording never writes the target
 workspace. The durable workflow uses its V15 state key so older, synthetic, or
 unverified-cache planning state cannot be mistaken for target identity or
-planning receipts. Every dependency, identity, proposal, apply, validation,
-review, and publication boundary carries the prepared source commit and tree;
-the immutable dependency-cache target must match both before target planning;
-an intact prepared sandbox can still be recovered and reviewed again.
+planning receipts. Dependency-cache identity is independent of ordinary source
+movement; it is keyed only by dependency inputs, platform, toolchain, and
+bootstrap identity. Current source observations are re-read for a new plan and
+do not freeze planning or a provisional draft.
 
 The real target commands remain fail-closed until an immutable cache-bearing
 sandbox image is configured and its fixed manifest and archive bytes are
@@ -172,8 +171,8 @@ exact durable journal digest and fails closed on any conflicting bytes or Git
 identity. The original checkout's HEAD, index, and worktree state remain exact.
 
 Local execution is exposed only as `mise run dev`; the `local:*` tasks are
-private mechanics. Development always uses an immutable source snapshot and a
-separate builder-owned destination. Release proof and promotion are exposed
+private mechanics. Development uses live writable source plus a separate
+builder-owned mutable overlay. Release proof and promotion are exposed
 only as `mise run release:prove` and `mise run release:publish`. Every status,
 publish, and recovery tool re-reads configured roots and fixed executable
 identities rather than accepting ambient authority.
@@ -197,10 +196,13 @@ The shipped default runtime is still disabled until
 that live deployment composition is installed.
 The skills do not authorize raw target commands, tokens, or shell fallbacks.
 
-The initial adapter supports the known `withAutograph/arrusted-development`
-repository family and fails closed on drift. It deliberately does not infer
-workflows for arbitrary repositories and does not use a target-owned repository
-template manifest.
+The initial adapter supports repositories that satisfy the declared
+[minimum planning contract](docs/repository-compatibility.md). Compatibility is
+based on the Next.js runtime, required repository-owned paths, fixed identity,
+planning, apply, and validation commands, and the topology owner. It is not
+inferred from generator implementation text, package branding, receipt history,
+or release-workflow layout. Exact source SHA/tree binding and outward release
+policy remain separate fail-closed checks.
 
 ## Included surfaces
 
@@ -478,13 +480,12 @@ team/project/environment. The environment must be exactly `preview` or
 `production`, and `VERCEL_ENV` must match the explicit
 `EVE_HOSTED_VERCEL_ENVIRONMENT`; missing, Development, wildcard, and mismatched
 bindings fail closed. Production still requires separate activation evidence.
-This boundary never falls back to the local adapter. Hosted composition also
-requires a fresh, closed
-`EVE_HOSTED_ADMISSION_CONTROL` JSON binding to an exact provider readback. That
-binding names bounded per-subject and per-workspace start/session ceilings plus
-current monthly spend and its ceiling, and expires within 24 hours. Starts are
-rejected at the spend ceiling; the durable reservation transaction enforces the
-start/session limits before dispatch. The
+This boundary never falls back to the local adapter. App Builder does not
+impose per-user, per-workspace, concurrent-session, or spend quotas. Provider
+capacity is external to the product; availability failures are surfaced as
+provider failures rather than product admission decisions. The durable
+reservation still protects idempotency and prevents simultaneous mutation of
+the same session. The
 OAuth resource metadata is served from
 `/.well-known/oauth-protected-resource`. The signed, consent-bound
 `workspace_id` access-token claim is the sole workspace selector. OAuth
@@ -546,7 +547,7 @@ source proof rather than deployment, database, or client-registration proof.
 The deterministic source/configuration receipt is explicitly marked
 `source-configuration-only` and `activation.status=not-proven`. A distinct
 future live-activation schema requires digest-bound deployment, OAuth metadata,
-minted-token, migration, admission-control, workload-identity, tenant-isolation,
+minted-token, migration, provider-capacity, workload-identity, tenant-isolation,
 and five-tool lifecycle evidence. Neither schema performs or authorizes those
 external actions.
 

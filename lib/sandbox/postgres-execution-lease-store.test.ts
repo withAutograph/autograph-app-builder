@@ -64,12 +64,18 @@ describe("PostgreSQL sandbox execution lease authority", () => {
     ).toThrow();
   });
 
-  it("uses unambiguous, NUL-free admission lock keys", () => {
-    for (const scope of ["workspace", "subject"] as const) {
-      const key = sandboxLeaseAdvisoryKey(scope, principal);
-      expect(key).not.toContain("\0");
-      expect(JSON.parse(key)).toHaveLength(scope === "workspace" ? 5 : 6);
-    }
+  it("uses an unambiguous, NUL-free exact-session lock key", () => {
+    const key = sandboxLeaseAdvisoryKey(principal, "session_1");
+    expect(key).not.toContain("\0");
+    expect(JSON.parse(key)).toEqual([
+      "sandbox_execution_lease_v1",
+      "session",
+      principal.issuer,
+      principal.audience,
+      principal.workspaceId,
+      principal.ownerUserId,
+      "session_1",
+    ]);
   });
 
   it("keeps the lease migration additive, tenant-bound, and recovery indexed", async () => {

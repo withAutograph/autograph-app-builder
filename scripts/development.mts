@@ -2,9 +2,10 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import { createDevelopmentApplication } from "../lib/development/application-root";
+import { createDevelopmentCycle } from "../lib/development/application-root";
 import {
   createDevelopmentPackage,
+  developmentPackageFingerprint,
   developmentLaunchEnvironment,
   registerDevelopmentPackage,
 } from "../lib/development/dev-package";
@@ -14,12 +15,14 @@ import {
   parseDevelopmentArguments,
   removeDevelopmentSnapshot,
   waitForDevelopmentSourceChange,
+  type DevelopmentSnapshot,
 } from "../lib/development/local-mode";
 import { waitForDevelopmentMcp } from "../lib/development/mcp-readiness";
 import {
   createDevelopmentShutdown,
   developmentChildExit,
   stopDevelopmentChild,
+  waitForDevelopmentPortRelease,
   waitForDevelopmentShutdown,
 } from "../lib/development/process-supervisor";
 import {
@@ -42,6 +45,13 @@ const developmentTools = {
   mise: HOSTED_MISE_VERSION,
   rust: HOSTED_RUST_VERSION,
 } as const;
+
+type DevelopmentSupervisorState = {
+  fingerprint?: string;
+  result?: Awaited<ReturnType<typeof createDevelopmentPackage>>;
+  dependencyKey?: string;
+  snapshot?: DevelopmentSnapshot;
+};
 
 function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];
@@ -103,6 +113,7 @@ function eveWrapperEnvironment(input: {
   closed: Readonly<Record<string, string>>;
   applicationRoot: string;
   runsRoot: string;
+  supervisorRoot: string;
   runtimeHome: string;
   workflowData: string;
 }) {
@@ -116,9 +127,15 @@ function eveWrapperEnvironment(input: {
     NODE_ENV: "production",
     ...input.closed,
     APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
+    APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
     APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
     APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
     APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
+    // Eve's world-local queue must use the same explicitly selected loopback
+    // endpoint as the public adapter.  Leaving this unset makes world-local
+    // probe arbitrary ports, which can route a redelivery to Next instead of
+    // the Eve worker and replay a turn without durable progress.
+    WORKFLOW_LOCAL_BASE_URL: input.closed.EVE_AGENT_HOST,
     WORKFLOW_LOCAL_DATA_DIR: input.workflowData,
     WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
   } satisfies NodeJS.ProcessEnv;
@@ -129,6 +146,8 @@ async function runEveCycle(input: {
   sourceRoot: string;
   runsRoot: string;
   codexRoot: string;
+  supervisorRoot: string;
+  packageState: DevelopmentSupervisorState;
   destinationRoot: string;
   nextPort: number;
   evePort: number;
@@ -137,17 +156,19 @@ async function runEveCycle(input: {
   nextExited: Promise<{ kind: "next-exit"; code: number }>;
 }) {
   input.signal.throwIfAborted();
+  // Every child gets a new restart generation. Next keeps its public local
+  // session index, observes this marker on the next MCP request, and fences
+  // any response stream owned by the child we are replacing.
   await rotateLocalEveCycleBinding(input.cycleFile);
+  const cycleStartedAt = performance.now();
+  const cycle = await createDevelopmentCycle({
+    repositoryRoot,
+    supervisorRoot: input.supervisorRoot,
+  });
   const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
-  const runtimeHome = await privateRoot(join(activeRun, "home"));
-  const workflowData = await privateRoot(join(activeRun, "workflow-data"));
   try {
     const snapshot = await createDevelopmentSnapshot({
       sourceRoot: input.sourceRoot,
-      runRoot: activeRun,
-    });
-    const application = await createDevelopmentApplication({
-      repositoryRoot,
       runRoot: activeRun,
     });
     const dependencyKey = await developmentDependencyKey({
@@ -155,14 +176,49 @@ async function runEveCycle(input: {
       platform: "linux/amd64",
       tools: developmentTools,
     });
+    const dependencyCacheHit =
+      input.packageState.dependencyKey === dependencyKey;
+    const previousEntries = new Map(
+      input.packageState.snapshot?.entries.map((entry) => [entry.path, entry]),
+    );
+    const currentEntries = new Map(
+      snapshot.entries.map((entry) => [entry.path, entry]),
+    );
+    const changedPaths = new Set([
+      ...previousEntries.keys(),
+      ...currentEntries.keys(),
+    ]);
+    let snapshotDeltaFiles = 0;
+    let snapshotDeltaBytes = 0;
+    for (const path of changedPaths) {
+      const previous = previousEntries.get(path);
+      const current = currentEntries.get(path);
+      if (previous?.digest === current?.digest) continue;
+      snapshotDeltaFiles += 1;
+      snapshotDeltaBytes += current?.bytes ?? previous?.bytes ?? 0;
+    }
     const runtimeFingerprint =
       await fingerprintDevelopmentRuntime(repositoryRoot);
-    const packageResult = await createDevelopmentPackage({
+    const packageFingerprint = await developmentPackageFingerprint({
       repositoryRoot,
-      outputRoot: input.codexRoot,
       port: input.nextPort,
     });
+    const packageReused =
+      input.packageState.fingerprint === packageFingerprint &&
+      input.packageState.result !== undefined;
+    if (!packageReused) {
+      input.packageState.result = await createDevelopmentPackage({
+        repositoryRoot,
+        outputRoot: input.codexRoot,
+        port: input.nextPort,
+      });
+      input.packageState.fingerprint = packageFingerprint;
+    }
+    const packageResult = input.packageState.result;
+    if (packageResult === undefined)
+      throw new Error("Development package was unavailable.");
     const closed = developmentLaunchEnvironment({
+      sourceRoot: input.sourceRoot,
       snapshotRoot: snapshot.root,
       destinationRoot: input.destinationRoot,
       sourceSha: snapshot.commit,
@@ -185,11 +241,16 @@ async function runEveCycle(input: {
         cwd: repositoryRoot,
         env: eveWrapperEnvironment({
           closed,
-          applicationRoot: application.root,
+          applicationRoot: cycle.application.root,
           runsRoot: input.runsRoot,
-          runtimeHome,
-          workflowData,
+          supervisorRoot: input.supervisorRoot,
+          runtimeHome: cycle.runtimeHome,
+          workflowData: cycle.workflowData,
         }),
+        // Eve starts a local server child of its own.  Put this wrapper and
+        // every descendant in a separate process group so Ctrl+C cleans up
+        // the whole Eve cycle instead of leaving its listener on the port.
+        detached: process.platform !== "win32",
         stdio: "inherit",
       },
     );
@@ -225,14 +286,29 @@ async function runEveCycle(input: {
         stopping,
       ]);
       if (startup.kind !== "ready") return startup;
-      await registerDevelopmentPackage({
-        codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
-        codexHome: requiredEnvironment(
-          "APP_BUILDER_DEV_CODEX_HOME",
-          "profile root",
-        ),
-        marketplaceRoot: packageResult.marketplaceRoot,
-      });
+      if (!packageReused)
+        await registerDevelopmentPackage({
+          codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
+          codexHome: requiredEnvironment(
+            "APP_BUILDER_DEV_CODEX_HOME",
+            "profile root",
+          ),
+          marketplaceRoot: packageResult.marketplaceRoot,
+        });
+      console.info(
+        JSON.stringify({
+          event: "autograph.local.eve-cycle",
+          eveRestartMs: Math.round(performance.now() - cycleStartedAt),
+          persistentEveStateReused: false,
+          cycleRoot: cycle.root,
+          packageReused,
+          snapshotDeltaFiles,
+          snapshotDeltaBytes,
+          dependencyCache: dependencyCacheHit ? "hit" : "miss",
+        }),
+      );
+      input.packageState.dependencyKey = dependencyKey;
+      input.packageState.snapshot = snapshot;
       console.log("Autograph App Builder development is ready.");
       console.log(
         "Open a fresh Codex task and select Autograph App Builder (Development).",
@@ -247,7 +323,8 @@ async function runEveCycle(input: {
       ]);
     } finally {
       watchers.abort();
-      await stopDevelopmentChild(eve);
+      await stopDevelopmentChild(eve, { processGroup: true });
+      await waitForDevelopmentPortRelease(input.evePort);
     }
   } finally {
     await removeDevelopmentSnapshot(activeRun);
@@ -267,6 +344,14 @@ try {
   await rotateLocalEveCycleBinding(cycleFile);
   const cacheRoot = await privateRoot(join(artifactRoot, "cache"));
   const runsRoot = await privateRoot(join(stateRoot, "runs"));
+  // A completed invocation leaves its Eve runtime behind for diagnosis.  Give
+  // every new `mise run dev` invocation a private supervisor root so starting
+  // again never collides with that finished application tree. Each targeted
+  // Eve restart receives a separate cycle root below this supervisor.
+  const supervisorRoot = await privateRoot(
+    await realpath(await mkdtemp(join(runsRoot, "supervisor-"))),
+  );
+  const packageState: DevelopmentSupervisorState = {};
   const nextHome = await privateRoot(join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(
     args.destinationRoot ?? join(artifactRoot, "destination"),
@@ -302,6 +387,8 @@ try {
       sourceRoot,
       runsRoot,
       codexRoot: await privateRoot(join(cacheRoot, "codex")),
+      supervisorRoot,
+      packageState,
       destinationRoot,
       nextPort: args.nextPort,
       evePort: args.evePort,

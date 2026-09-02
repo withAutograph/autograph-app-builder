@@ -151,6 +151,7 @@ describe("development Codex package", () => {
   it("closes every publication, hosted, provider, and release capability", () => {
     expect(
       developmentLaunchEnvironment({
+        sourceRoot: "/private/user/arrusted",
         snapshotRoot: "/private/dev/source",
         destinationRoot: "/private/dev/destination",
         sourceSha: "b".repeat(40),
@@ -165,18 +166,23 @@ describe("development Codex package", () => {
       APP_BUILDER_SANDBOX_PROVIDER: "vercel",
       APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "b".repeat(40),
       APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "c".repeat(40),
+      APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: "/private/user/arrusted",
+      APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: "/private/dev/source",
       APP_BUILDER_LOCAL_PUBLICATION: "0",
       APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
       APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
       APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
       EVE_HOSTED_ADAPTER: "0",
       WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
       REPOSITORY_LOCAL_ROOTS: "/private/dev/source",
       REPOSITORY_WORKSPACE_ROOT: "/private/dev/destination",
     });
     expect(
       developmentLaunchEnvironment({
+        sourceRoot: "/private/user/arrusted",
         snapshotRoot: "/private/dev/source",
         destinationRoot: "/private/dev/destination",
         sourceSha: "b".repeat(40),

@@ -88,13 +88,14 @@ function recordedPlanEvents(input?: {
   blockers?: string[];
   plannedByCallId?: string;
   reused?: boolean;
+  existingAppChanges?: { path: string; content: string }[];
 }): MessageStreamEvent[] {
   const callId = input?.callId ?? "call_plan";
   const plannedByCallId = input?.plannedByCallId ?? callId;
   const expectedAppSpecDigest = input?.expectedAppSpecDigest ?? "a".repeat(64);
   const outputAppSpecDigest =
     input?.outputAppSpecDigest ?? expectedAppSpecDigest;
-  const target = {
+  const targetBase = {
     contract: {
       version: 1 as const,
       appId: "vendor-onboarding",
@@ -129,6 +130,23 @@ function recordedPlanEvents(input?: {
     blockers: input?.blockers ?? [],
     mutations: [] as [],
   };
+  const iterationChanges = input?.existingAppChanges?.map(
+    ({ path, content }) => ({
+      path,
+      before: { mode: "644", digest: digest(`before:${path}`) },
+      after: { mode: "644", digest: digest(content), content },
+    }),
+  );
+  const target = iterationChanges
+    ? {
+        ...targetBase,
+        operation: "iterate-existing-app" as const,
+        iteration: {
+          changes: iterationChanges,
+          digest: digest(JSON.stringify(iterationChanges)),
+        },
+      }
+    : targetBase;
   const unsigned = {
     version: 1 as const,
     sourceSha: "1".repeat(40),
@@ -155,7 +173,12 @@ function recordedPlanEvents(input?: {
             kind: "tool-call",
             callId,
             toolName: "plan_app_creation",
-            input: { expectedAppSpecDigest },
+            input: {
+              expectedAppSpecDigest,
+              ...(input?.existingAppChanges === undefined
+                ? {}
+                : { existingAppChanges: input.existingAppChanges }),
+            },
           },
         ],
       },
@@ -236,6 +259,50 @@ describe("installed Eve 0.43 projection", () => {
       proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
+  });
+
+  it("projects an existing-app plan without dropping its typed replacements", () => {
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({
+          existingAppChanges: [
+            {
+              path: "apps/vendor-onboarding/app/page.tsx",
+              content: "export default function Page() { return 'Ready'; }\n",
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      appId: "vendor-onboarding",
+      workspacePath: "apps/vendor-onboarding",
+      readOnly: true,
+    });
+  });
+
+  it("rejects an existing-app plan that is not bound to the requested replacements", () => {
+    const events = recordedPlanEvents({
+      existingAppChanges: [
+        {
+          path: "apps/vendor-onboarding/app/page.tsx",
+          content: "export default function Page() { return 'Ready'; }\n",
+        },
+      ],
+    });
+    const request = events.find((event) => event.type === "actions.requested");
+    if (
+      request?.type !== "actions.requested" ||
+      request.data.actions[0]?.kind !== "tool-call" ||
+      typeof request.data.actions[0].input !== "object" ||
+      request.data.actions[0].input === null
+    )
+      throw new Error("expected a plan request fixture");
+    const input = request.data.actions[0].input as {
+      existingAppChanges: { content: string }[];
+    };
+    input.existingAppChanges[0]!.content = "different\n";
+
+    expect(latestInstalledImplementationPlan(events)).toBeUndefined();
   });
 
   it("rejects a fresh plan bound to another call", () => {
@@ -838,5 +905,32 @@ describe("installed Eve 0.43 projection", () => {
       "error",
       "status",
     ]);
+    expect(JSON.stringify(projected)).not.toContain("Stopped");
+  });
+
+  it("keeps source and planning diagnostics out of public failures", () => {
+    const projected = projectInstalledEveEvents([
+      installedEvent({
+        type: "session.failed",
+        data: {
+          code: "source_workspace_invalid",
+          message:
+            "The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest.",
+        },
+      }),
+    ]);
+    expect(projected).toEqual([
+      {
+        type: "error",
+        index: 0,
+        code: "unable_to_continue",
+        message:
+          "I couldn't finish preparing your app. Your progress is saved, so you can try again.",
+      },
+      { type: "status", index: 1, status: "failed" },
+    ]);
+    expect(JSON.stringify(projected)).not.toMatch(
+      /AppSpec|cache|dependency|digest|receipt|source workspace|validation/iu,
+    );
   });
 });

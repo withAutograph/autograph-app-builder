@@ -41,8 +41,7 @@ export default defineTool({
     if (
       proposal.reviewDigest !== state.reviewReceipt.digest ||
       proposal.changeSetDigest !== state.reviewReceipt.changeSetDigest ||
-      proposal.repositoryId !== state.githubSource.repository.repositoryId ||
-      proposal.baseSha !== state.githubSource.resolvedSha
+      proposal.repositoryId !== state.githubSource.repository.repositoryId
     )
       throw new Error(
         "The sealed draft pull-request proposal is not bound to the current reviewed workflow.",

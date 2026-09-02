@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { hostedMcpAuthConfigSchema } from "../mcp/request-auth";
-import { hostedPreviewAdmissionControlBindingSchema } from "./admission-control";
 
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const gitObjectSchema = z.string().regex(/^[a-f0-9]{40}$/u);
@@ -47,7 +46,6 @@ const hostedPreviewConfigurationSchema = z
         ]),
       })
       .strict(),
-    admissionControl: hostedPreviewAdmissionControlBindingSchema,
   })
   .strict()
   .superRefine((config, context) => {
@@ -72,7 +70,6 @@ export const hostedPreviewSourceConfigurationReceiptSchema = z
     forwarderContractDigest: sha256Schema,
     databaseContractDigest: sha256Schema,
     sameOriginContractDigest: sha256Schema,
-    admissionControlContractDigest: sha256Schema,
     claims: z
       .object({
         workspaceSelector: z.literal("signed-workspace_id-only"),
@@ -109,7 +106,6 @@ export const hostedPreviewActivationReceiptSchema = z
     oauthMetadataReadbackDigest: sha256Schema,
     mintedTokenContractDigest: sha256Schema,
     databaseMigrationReadbackDigest: sha256Schema,
-    admissionControlReadbackDigest: sha256Schema,
     workloadIdentityProofDigest: sha256Schema,
     tenantIsolationProofDigest: sha256Schema,
     fiveToolLifecycleProofDigest: sha256Schema,
@@ -118,7 +114,6 @@ export const hostedPreviewActivationReceiptSchema = z
         oauthMounted: z.literal(true),
         databaseMigrated: z.literal(true),
         mintedTokenVerified: z.literal(true),
-        admissionControlVerified: z.literal(true),
         workloadIdentityVerified: z.literal(true),
         tenantIsolationVerified: z.literal(true),
         fiveToolLifecycleVerified: z.literal(true),
@@ -161,7 +156,6 @@ export function buildHostedPreviewSourceConfigurationReceipt(input: {
       resourceOrigin: new URL(configuration.auth.resourceUrl).origin,
       eveBaseUrl: configuration.eve.baseUrl,
     }),
-    admissionControlContractDigest: digest(configuration.admissionControl),
     claims: {
       workspaceSelector: "signed-workspace_id-only",
       maximumAccessTokenLifetimeSeconds: 300,

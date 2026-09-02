@@ -13,8 +13,8 @@ case "${1:-}" in
 Usage:
   mise run dev -- --arrusted-root /absolute/path/to/arrusted [options]
 
-Run the non-release App Builder workflow from a read-only snapshot of a local
-Arrusted checkout. Keep this command running while you use the development
+Run the non-release App Builder workflow from a writable local Arrusted checkout
+and a transient development snapshot. Keep this command running while you use the development
 plugin from a fresh Codex task.
 
 Required:

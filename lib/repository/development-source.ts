@@ -8,9 +8,6 @@ import {
   type SourceReceipt,
 } from "./source-receipt";
 
-const gitObjectPattern = /^[0-9a-f]{40}$/u;
-const sha256Pattern = /^[0-9a-f]{64}$/u;
-
 type Environment = Readonly<Record<string, string | undefined>>;
 
 const closedDevelopmentBinding = (environment: Environment) =>
@@ -51,13 +48,8 @@ function exactDevelopmentSourceRoot(path: string) {
   )
     throw new Error("Development source root was not canonical.");
   const info = lstatSync(path);
-  if (
-    !info.isDirectory() ||
-    info.isSymbolicLink() ||
-    info.uid !== process.getuid?.() ||
-    (info.mode & 0o022) !== 0
-  )
-    throw new Error("Development source root was not owner-bound.");
+  if (!info.isDirectory() || info.isSymbolicLink())
+    throw new Error("Development source root was not a directory.");
   return path;
 }
 
@@ -84,31 +76,8 @@ export async function developmentSourceReceipt(
     throw new Error(
       "Development source path did not match the selected snapshot.",
     );
-  const expectedSha = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_SOURCE_SHA",
-  );
-  const expectedTree = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_SOURCE_TREE",
-  );
-  const fingerprint = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT",
-  );
-  if (
-    !gitObjectPattern.test(expectedSha) ||
-    !gitObjectPattern.test(expectedTree) ||
-    !sha256Pattern.test(fingerprint)
-  )
-    throw new Error("Development source identity was invalid.");
-
-  const receipt = await inspectSourceReceipt(sourceKind, sourceRoot);
-  if (
-    receipt.sourcePath !== sourceRoot ||
-    receipt.sourceSha !== expectedSha ||
-    receipt.sourceTree !== expectedTree
-  )
-    throw new Error("Development source snapshot drifted.");
-  return receipt;
+  // Development deliberately re-observes a live checkout.  Source edits are
+  // normal planning input, not authority failures; the sandbox materializer
+  // computes the current working-tree generation when it synchronizes bytes.
+  return await inspectSourceReceipt(sourceKind, sourceRoot);
 }

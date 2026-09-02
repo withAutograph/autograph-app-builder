@@ -53,7 +53,10 @@ import {
 } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
-import { resolveAllowedRepository } from "./supported-template";
+import {
+  resolveAllowedRepository,
+  SUPPORTED_REPOSITORY_CONTRACT,
+} from "./supported-template";
 
 export type BranchWorktreePublicationFaultHooks = {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -1122,7 +1125,11 @@ async function inspectBranchPublicationSource(input: {
     headReference,
     indexFileDigest: contentDigest(await readFile(indexPath)),
     remoteDigest: stableDigest(git(canonicalPath, ["remote", "-v"])),
-    contractDigest: inspectSourceContractDigest(canonicalPath, headSha),
+    contractDigest: inspectSourceContractDigest(
+      canonicalPath,
+      headSha,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
     dirty: [] as const,
     index: [] as const,
     dirtyDigest,
@@ -1400,7 +1407,11 @@ async function worktreeSnapshot(proposal: BranchWorktreePublicationProposal) {
     ]).trim(),
     indexFileDigest: contentDigest(await readFile(indexPath)),
     remoteDigest: stableDigest(git(root, ["remote", "-v"])),
-    contractDigest: inspectSourceContractDigest(root, proposal.baseSha),
+    contractDigest: inspectSourceContractDigest(
+      root,
+      proposal.baseSha,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
     statusDigest: stableDigest(statusEntries),
   };
 }

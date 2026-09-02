@@ -69,7 +69,7 @@ export type AcquireSandboxLeaseResult =
   | { disposition: "acquired" | "existing"; lease: SandboxExecutionLease }
   | {
       disposition: "rejected";
-      reason: "subject-limit" | "workspace-limit" | "recovery-in-progress";
+      reason: "recovery-in-progress";
     };
 
 export interface SandboxExecutionLeaseStore {
@@ -167,25 +167,6 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
         );
       }
       return { disposition: "existing", lease: structuredClone(existing) };
-    }
-    const active = [...this.leases.values()].filter(
-      (lease) =>
-        lease.state === "active" &&
-        lease.expiresAtEpochMs > input.nowEpochMs &&
-        lease.principal.issuer === principal.issuer &&
-        lease.principal.audience === principal.audience &&
-        lease.principal.workspaceId === principal.workspaceId,
-    );
-    if (
-      active.filter(
-        ({ principal: candidate }) =>
-          candidate.ownerUserId === principal.ownerUserId,
-      ).length >= input.policy.lease.maxActivePerSubject
-    ) {
-      return { disposition: "rejected", reason: "subject-limit" };
-    }
-    if (active.length >= input.policy.lease.maxActivePerWorkspace) {
-      return { disposition: "rejected", reason: "workspace-limit" };
     }
     const lease = sandboxExecutionLeaseSchema.parse({
       version: 1,

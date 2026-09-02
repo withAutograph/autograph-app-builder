@@ -105,6 +105,7 @@ function createVercelDefinition() {
         bootstrapNetworkHosts: DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
         sandboxEnvironment: DEVELOPMENT_SANDBOX_ENVIRONMENT,
         providerTemplateKey: () => providerTemplateKey,
+        reuseProcessSessionHandles: true,
         runtimeRecoveryPrewarmInput: () => ({
           bootstrap: bootstrapDevelopmentVercelSandbox,
           seedFiles: readHostedManagedSeedFiles(),

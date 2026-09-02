@@ -149,7 +149,7 @@ describe("Development source selection", () => {
     expect(inspectSourceReceipt).not.toHaveBeenCalled();
   });
 
-  it("rejects a source whose exact Git identity drifted", async () => {
+  it("re-observes a source whose Git identity changed during development", async () => {
     const root = fixtureRoot();
     inspectSourceReceipt.mockResolvedValue({
       ...receipt(root, "existing-repository"),
@@ -161,6 +161,6 @@ describe("Development source selection", () => {
         undefined,
         exactEnvironment(root),
       ),
-    ).rejects.toThrow("snapshot drifted");
+    ).resolves.toMatchObject({ sourceSha: "9".repeat(40) });
   });
 });

@@ -9,6 +9,7 @@ import {
 
 import {
   createHostedVercelBackend,
+  createProviderFetch,
   type HostedVercelBackendFactory,
   type HostedVercelBackendOptions,
 } from "./vercel-backend";
@@ -45,6 +46,70 @@ function backendFactory(input: {
 }
 
 describe("hosted Vercel sandbox backend", () => {
+  it("retries transport failures at the cancellable fetch boundary", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockRejectedValueOnce(new Error("fetch failed"))
+      .mockResolvedValueOnce(new Response("ok"));
+    const request = new Request(
+      "https://sandbox.example.test/v1/create?secret=hidden",
+      {
+        method: "POST",
+        headers: { authorization: "Bearer hidden", "x-private": "hidden" },
+        body: "hidden",
+      },
+    );
+    await expect(createProviderFetch(fetch)(request)).resolves.toMatchObject({
+      status: 200,
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0]![0]).toBeInstanceOf(Request);
+  });
+
+  it("retries one provider timeout without retrying caller cancellation", async () => {
+    const timedOutFetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementationOnce(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(init.signal?.reason),
+              { once: true },
+            );
+          }),
+      )
+      .mockResolvedValueOnce(new Response("ok"));
+    await expect(
+      createProviderFetch(
+        timedOutFetch,
+        1,
+      )(
+        new Request("https://sandbox.example.test/fs/write", {
+          method: "POST",
+        }),
+      ),
+    ).resolves.toMatchObject({ status: 200 });
+    expect(timedOutFetch).toHaveBeenCalledTimes(2);
+
+    const controller = new AbortController();
+    controller.abort();
+    const cancelledFetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockRejectedValue(new DOMException("cancelled", "AbortError"));
+    await expect(
+      createProviderFetch(
+        cancelledFetch,
+        1,
+      )(
+        new Request("https://sandbox.example.test/fs/read", {
+          signal: controller.signal,
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(cancelledFetch).toHaveBeenCalledOnce();
+  });
+
   it("allows bootstrap hosts only for prewarm and denies every fresh live session", () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
@@ -139,6 +204,54 @@ describe("hosted Vercel sandbox backend", () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ templateKey: providerKey }),
     );
+  });
+
+  it("reuses one live Development session until its handle is closed", async () => {
+    const session = { id: "session-1" } as SandboxSession;
+    const stop = vi.fn(async () => undefined);
+    const handle = {
+      session,
+      useSessionFn: async () => session,
+      captureState: async () => ({
+        backendName: "vercel",
+        metadata: { sandboxName: "provider-session" },
+        sessionKey: "session-1",
+      }),
+      stop,
+      shutdown: vi.fn(async () => undefined),
+    } satisfies SandboxBackendHandle;
+    const create = vi.fn(async () => handle);
+    const options = {
+      factory: backendFactory({
+        create,
+        prewarm: vi.fn(async () => ({ reused: true })),
+      }),
+      reuseProcessSessionHandles: true,
+      runtimeRecoveryPrewarmInput: recoveryInput(),
+    } as const;
+    const firstBackend = createHostedVercelBackend(options);
+    const secondBackend = createHostedVercelBackend(options);
+    const input = {
+      runtimeContext,
+      sessionKey: "session-1",
+      templateKey,
+    };
+
+    const [first, second] = await Promise.all([
+      firstBackend.create(input),
+      secondBackend.create(input),
+    ]);
+
+    expect(first).toBe(second);
+    expect(create).toHaveBeenCalledOnce();
+
+    await first.stop();
+    await first.stop();
+    expect(stop).toHaveBeenCalledOnce();
+
+    const reopened = await secondBackend.create(input);
+    expect(create).toHaveBeenCalledTimes(2);
+    await reopened.shutdown();
   });
 
   it("replays the exact non-empty managed seeds and bootstrap, then retries once", async () => {
