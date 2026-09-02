@@ -175,7 +175,8 @@ describe("prototype artifact receipts", () => {
         callId: "call-bundle-retry",
       }).reused,
     ).toBe(true);
-    expect(() =>
+    let diagnostic: unknown;
+    try {
       recordPrototypeArtifactBundle({
         artifacts: [],
         appId: "expense-review",
@@ -184,7 +185,16 @@ describe("prototype artifact receipts", () => {
         appSpecMarkdown: "Still exploring.",
         sessionId,
         callId: "call-incomplete-bundle",
-      }),
-    ).toThrow("complete build-ready AppSpec");
+      });
+    } catch (error) {
+      diagnostic = JSON.parse((error as Error).message);
+    }
+    expect(diagnostic).toMatchObject({
+      code: "app_spec_invalid",
+      instruction: expect.stringContaining("replace the complete Markdown artifact"),
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "missing_heading" }),
+      ]),
+    });
   });
 });
