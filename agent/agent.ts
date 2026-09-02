@@ -1,6 +1,8 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
+import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
+
 import { sha256 } from "@/lib/agent/workflow-state";
 import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
@@ -223,73 +225,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "record_ui_preview",
-            input: {
-              appId: "renewal-review",
-              routes: ["/"],
-              files: [
-                {
-                  path: "src/routes/index.tsx",
-                  content:
-                    'import { Button, PageHeader, StatusPill } from "@autograph/components"; import { DataTableComposition } from "@autograph/compositions"; export default function RenewalReview() { const renewals = [{ account: "Northstar", days: 21, status: "Intervention" }, { account: "Kiteworks", days: 48, status: "Monitor" }]; return <main><PageHeader title="Renewal review" description="Decide which accounts need intervention in the next 90 days." /><StatusPill>2 accounts need attention</StatusPill><DataTableComposition data={renewals} /><Button>Open account review</Button></main>; }',
-                },
-              ],
-              manifest: {
-                version: 1,
-                screens: [
-                  {
-                    id: "renewal-queue",
-                    title: "Renewal queue",
-                    route: "/",
-                    entry: "src/routes/index.tsx",
-                  },
-                ],
-                productionComponents: [
-                  { name: "Button", source: "@autograph/components" },
-                  { name: "PageHeader", source: "@autograph/components" },
-                  { name: "StatusPill", source: "@autograph/components" },
-                ],
-                productionCompositions: [
-                  {
-                    name: "DataTableComposition",
-                    source: "@autograph/compositions",
-                  },
-                ],
-                productionIcons: [],
-                fixtureFacts: [
-                  {
-                    id: "renewal-window",
-                    statement: "The review window is 90 days.",
-                    routes: ["/"],
-                  },
-                ],
-                decisions: [],
-                assumptions: [
-                  {
-                    id: "queue-first",
-                    statement:
-                      "Customer-success managers start from a prioritized renewal queue.",
-                    routes: ["/"],
-                  },
-                ],
-                openQuestions: [
-                  {
-                    id: "intervention-owner",
-                    statement:
-                      "Should the first version assign an intervention owner?",
-                    routes: ["/"],
-                  },
-                ],
-                implementationNotes: [
-                  {
-                    visibleElement: "Open account review",
-                    productionMeaning:
-                      "Navigates to evidence and recommended next actions for the selected account.",
-                    routes: ["/"],
-                  },
-                ],
-              },
-              catalogGaps: [],
-            },
+            input: renewalReviewUiPreview,
           },
         ],
       };

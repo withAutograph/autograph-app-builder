@@ -1,6 +1,7 @@
 import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 
+import { renewalReviewDesignPrompt } from "../lib/testing/prompt-driven-design";
 import { isProductFacing } from "./support/public-conversation";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
@@ -11,7 +12,7 @@ export default defineEval({
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Supported repository at ${repository}
-Create a component-backed renewal review UI for customer-success managers deciding which upcoming renewals need intervention. The workflow is not settled yet.`);
+${renewalReviewDesignPrompt}`);
 
     t.succeeded();
     t.toolOrder(["inspect_source", "prepare_workspace", "record_ui_preview"]);
@@ -39,7 +40,7 @@ Create a component-backed renewal review UI for customer-success managers decidi
             openQuestions?: unknown[];
           };
           return (
-            (manifest.productionComponents?.length ?? 0) >= 3 &&
+            (manifest.productionComponents?.length ?? 0) >= 4 &&
             manifest.productionCompositions?.some(
               ({ name }) => name === "DataTableComposition",
             ) === true &&

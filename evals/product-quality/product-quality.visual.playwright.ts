@@ -9,6 +9,10 @@ import * as axe from "axe-core";
 import { expect, test, type Page } from "playwright/test";
 
 import { vendorOnboardingPrototype } from "../../agent/agent";
+import {
+  renderRenewalReviewFixture,
+  renewalReviewUiPreview,
+} from "../../lib/testing/prompt-driven-design";
 
 const visualRoot = resolve(__dirname, "__visual__");
 const evidenceRoot = resolve(
@@ -89,16 +93,69 @@ async function loadPrototype(page: Page) {
   ).toBeVisible();
 }
 
+async function loadRenewalReview(page: Page) {
+  await page.goto(`${prototypeUrl}/renewal-review`);
+  await page.addScriptTag({ content: axe.source });
+  const accessibility = await page.evaluate(async () => {
+    const runner = (
+      globalThis as typeof globalThis & {
+        axe: { run: () => Promise<{ violations: unknown[] }> };
+      }
+    ).axe;
+    return runner.run();
+  });
+  expect(accessibility.violations).toEqual([]);
+  await expect(
+    page.getByRole("heading", { name: "Renewal review" }),
+  ).toBeVisible();
+  for (const component of renewalReviewUiPreview.manifest.productionComponents)
+    await expect(
+      page.locator(`[data-arrusted-component="${component.name}"]`).first(),
+    ).toBeVisible();
+  for (const composition of renewalReviewUiPreview.manifest
+    .productionCompositions)
+    await expect(
+      page.locator(`[data-arrusted-composition="${composition.name}"]`),
+    ).toBeVisible();
+}
+
 test.beforeAll(async () => {
-  prototypeServer = createServer((_request, response) => {
+  prototypeServer = createServer((request, response) => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end(vendorOnboardingPrototype);
+    response.end(
+      request.url?.includes("renewal-review")
+        ? renderRenewalReviewFixture()
+        : vendorOnboardingPrototype,
+    );
   });
   await new Promise<void>((resolveServer) =>
     prototypeServer?.listen(0, "127.0.0.1", resolveServer),
   );
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;
+});
+
+test.describe("prompt-driven Arrusted UI preview", () => {
+  test("baselines the generated desktop renewal review", async ({ page }) => {
+    await page.setViewportSize({ width: 1592, height: 902 });
+    await loadRenewalReview(page);
+    await page.getByRole("row", { name: /Kiteworks GmbH/u }).click();
+    await expect(
+      page.getByRole("heading", { name: "Kiteworks GmbH" }),
+    ).toBeVisible();
+    await page.getByRole("row", { name: /Northstar Health/u }).click();
+    await attachVisualEvidence(page, "renewal-review-desktop");
+  });
+
+  test("baselines the generated narrow renewal review", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loadRenewalReview(page);
+    await page.getByRole("button", { name: "All renewals" }).click();
+    await expect(
+      page.getByRole("cell", { name: "Mercury Labs" }),
+    ).toBeVisible();
+    await attachVisualEvidence(page, "renewal-review-mobile");
+  });
 });
 
 test.afterAll(
