@@ -19,6 +19,7 @@ import {
   HOSTED_NODE_VERSION,
   HOSTED_RUST_VERSION,
   HOSTED_TOOLCHAIN_CONTRACT_VERSION,
+  HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS,
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   hostedArchiveExtractorShellFunction,
   hostedToolchainArtifacts,
@@ -32,6 +33,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(hostedToolchainBootstrapCommand()).toContain(
       "extract_verified_archive",
     );
+    expect(HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS).toBe(900_000);
   });
 
   it("pins both supported Linux architectures by checksum", () => {
@@ -65,6 +67,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
 
   it("downloads to temporary files, verifies, and installs without piping code", () => {
     const command = hostedToolchainBootstrapCommand();
+    expect(command.indexOf("trap cleanup EXIT")).toBeLessThan(
+      command.indexOf("command -v curl >/dev/null"),
+    );
+    expect(command).toContain("stage='base-capabilities'");
     expect(
       command.indexOf("install -d -m 0755 /workspace/.app-builder"),
     ).toBeLessThan(command.indexOf("curl --fail"));
@@ -231,8 +237,10 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(definition).toContain("HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS");
     expect(definition).toContain("useHostedArtifactProof");
     expect(definition).toContain(
-      "revalidationKey: hostedToolchainRevalidationKey",
+      "revalidationKey: () => sandboxRevalidationKey(undefined, plan.kind)",
     );
+    expect(definition).toContain("await use();");
+    expect(definition).not.toContain("hostedToolchainBootstrapCommand");
   });
 
   it("selects the environment before constructing any sandbox backend", () => {

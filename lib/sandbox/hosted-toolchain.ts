@@ -15,6 +15,7 @@ export const HOSTED_BUN_VERSION = "1.3.14";
 export const HOSTED_NODE_VERSION = "24.18.0";
 export const HOSTED_RUST_VERSION = "1.97.1";
 export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 5;
+export const HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS = 900_000;
 
 export const hostedToolchainArtifacts = {
   aarch64: {
@@ -156,15 +157,10 @@ case "$(uname -m)" in
   ${artifactCase("x86_64")}
   *) echo 'unsupported Vercel Sandbox architecture' >&2; exit 1 ;;
 esac
-command -v curl >/dev/null
-command -v git >/dev/null
-command -v python3 >/dev/null
-command -v sha256sum >/dev/null
-command -v unzip >/dev/null
 ${hostedArchiveExtractorShellFunction()}
 work="$(mktemp -d /tmp/app-builder-toolchain.XXXXXX)"
 seed='/workspace/.app-builder/hosted-seed.tar.gz'
-stage='prepare-workspace'
+stage='base-capabilities'
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then printf 'hosted_toolchain_bootstrap_failed:%s\n' "$stage" >&2; fi
@@ -173,6 +169,12 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+command -v curl >/dev/null
+command -v git >/dev/null
+command -v python3 >/dev/null
+command -v sha256sum >/dev/null
+command -v unzip >/dev/null
+stage='prepare-workspace'
 install -d -m 0755 /workspace/.app-builder
 stage='artifact-download'
 curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "$seed"

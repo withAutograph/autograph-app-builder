@@ -218,6 +218,12 @@ vi.mock("@/lib/sandbox/development-toolchain", () => ({
     `repair ${dependencyKey}`,
 }));
 
+vi.mock("@/lib/sandbox/hosted-toolchain", () => ({
+  HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS: ["registry.npmjs.org"],
+  HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS: 900_000,
+  hostedToolchainBootstrapCommand: () => "prepare hosted toolchain",
+}));
+
 vi.mock("@/lib/testing/test-capability", () => ({
   hasTestCapability: () => true,
 }));
@@ -317,7 +323,11 @@ function existingRepositoryAcceptedState(): AppBuilderWorkflowState {
 }
 
 function toolContext(callId = "plan-call") {
-  const sandbox = { id: "sandbox" };
+  const sandbox = {
+    id: "sandbox",
+    run: vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" })),
+    setNetworkPolicy: vi.fn(async () => undefined),
+  };
   const getSandbox = vi.fn(async () => sandbox);
   return {
     context: {

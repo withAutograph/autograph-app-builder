@@ -26,6 +26,11 @@ import {
   developmentVercelDependencyRepairCommand,
 } from "@/lib/sandbox/development-toolchain";
 import {
+  HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
+  HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS,
+  hostedToolchainBootstrapCommand,
+} from "@/lib/sandbox/hosted-toolchain";
+import {
   materializePlanningOverlay,
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
@@ -92,6 +97,31 @@ async function repairDevelopmentDependencyCache(input: {
     )?.[1];
     throw new Error(
       `The development dependency cache could not be prepared (${stage ?? "unknown-stage"}).`,
+    );
+  }
+}
+
+async function prepareHostedToolchain(sandbox: SandboxSession) {
+  await sandbox.setNetworkPolicy({
+    allow: [...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS],
+  });
+  const result = await (async () => {
+    try {
+      return await sandbox.run({
+        command: hostedToolchainBootstrapCommand(),
+        workingDirectory: "/workspace",
+        abortSignal: AbortSignal.timeout(HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS),
+      });
+    } finally {
+      await sandbox.setNetworkPolicy("deny-all");
+    }
+  })();
+  if (result.exitCode !== 0) {
+    const stage = `${result.stderr}\n${result.stdout}`.match(
+      /hosted_toolchain_bootstrap_failed:([a-z-]+)/u,
+    )?.[1];
+    throw new Error(
+      `The hosted planning toolchain could not be prepared (${stage ?? "provider-termination"}).`,
     );
   }
 }
@@ -242,6 +272,7 @@ export async function prepareOrReuseDependencies(input: {
       });
     } else if (preferLiveTemplate) {
       planningMarker("dependency-cache-repair", "repair");
+      await prepareHostedToolchain(sandbox);
       await bootstrapLiveTemplateDependencies({
         sandbox,
       });
