@@ -1,6 +1,7 @@
 import {
   SandboxTemplateNotProvisionedError,
   type SandboxBackend,
+  type SandboxBackendHandle,
   type SandboxBackendPrewarmInput,
 } from "eve/sandbox";
 import { vercel } from "eve/sandbox/vercel";
@@ -39,6 +40,8 @@ export interface HostedVercelBackendInput {
   readonly sandboxEnvironment?: Readonly<Record<string, string>>;
   /** Maps Eve's authored key to a provider cache key when reuse has a narrower identity. */
   readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
+  /** Reuses already-open provider sessions within one local Eve process. */
+  readonly reuseProcessSessionHandles?: boolean;
   readonly runtimeRecoveryPrewarmInput: () => RuntimeRecoveryPrewarmInput;
 }
 
@@ -167,6 +170,75 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
   };
 }
 
+function createProcessSessionReusingBackend<BO, SO>(
+  backend: SandboxBackend<BO, SO>,
+): SandboxBackend<BO, SO> {
+  const processState = globalThis as typeof globalThis & {
+    __autographDevelopmentSandboxHandles?: Map<
+      string,
+      Promise<SandboxBackendHandle<unknown>>
+    >;
+  };
+  const sessions = (processState.__autographDevelopmentSandboxHandles ??=
+    new Map()) as Map<string, Promise<SandboxBackendHandle<SO>>>;
+  return {
+    name: backend.name,
+    prewarm: (input) => backend.prewarm(input),
+    create(input) {
+      const key = JSON.stringify([
+        backend.name,
+        input.runtimeContext.appRoot,
+        input.sessionKey,
+        input.templateKey,
+      ]);
+      const existing = sessions.get(key);
+      if (existing !== undefined) {
+        console.log(
+          JSON.stringify({
+            event: "autograph.local.sandbox-handle",
+            state: "hit",
+            sessionKey: input.sessionKey,
+          }),
+        );
+        return existing;
+      }
+      console.log(
+        JSON.stringify({
+          event: "autograph.local.sandbox-handle",
+          state: "miss",
+          sessionKey: input.sessionKey,
+        }),
+      );
+
+      let pending: Promise<SandboxBackendHandle<SO>>;
+      pending = backend
+        .create(input)
+        .then((handle) => {
+          let closed = false;
+          const close = async (kind: "stop" | "shutdown") => {
+            if (closed) return;
+            closed = true;
+            if (sessions.get(key) === pending) sessions.delete(key);
+            await handle[kind]();
+          };
+          return {
+            session: handle.session,
+            useSessionFn: handle.useSessionFn,
+            captureState: () => handle.captureState(),
+            stop: () => close("stop"),
+            shutdown: () => close("shutdown"),
+          } satisfies SandboxBackendHandle<SO>;
+        })
+        .catch((error: unknown) => {
+          if (sessions.get(key) === pending) sessions.delete(key);
+          throw error;
+        });
+      sessions.set(key, pending);
+      return pending;
+    },
+  };
+}
+
 /**
  * Keeps network authority different for the reusable template and every live
  * session. Only template construction may download the pinned toolchain.
@@ -205,9 +277,12 @@ export function createHostedVercelBackend(
     authorizeSessionCommand: (sessionId) =>
       assertHostedSandboxCommandAuthority({ sessionId }),
   });
-  return createRuntimeRecoveringBackend({
+  const recovering = createRuntimeRecoveringBackend({
     backend: bounded,
     providerTemplateKey: input.providerTemplateKey,
     resolvePrewarmInput: input.runtimeRecoveryPrewarmInput,
-  }) as ReturnType<typeof vercel>;
+  });
+  return (input.reuseProcessSessionHandles
+    ? createProcessSessionReusingBackend(recovering)
+    : recovering) as ReturnType<typeof vercel>;
 }

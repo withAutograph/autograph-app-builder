@@ -162,6 +162,54 @@ describe("hosted Vercel sandbox backend", () => {
     );
   });
 
+  it("reuses one live Development session until its handle is closed", async () => {
+    const session = { id: "session-1" } as SandboxSession;
+    const stop = vi.fn(async () => undefined);
+    const handle = {
+      session,
+      useSessionFn: async () => session,
+      captureState: async () => ({
+        backendName: "vercel",
+        metadata: { sandboxName: "provider-session" },
+        sessionKey: "session-1",
+      }),
+      stop,
+      shutdown: vi.fn(async () => undefined),
+    } satisfies SandboxBackendHandle;
+    const create = vi.fn(async () => handle);
+    const options = {
+      factory: backendFactory({
+        create,
+        prewarm: vi.fn(async () => ({ reused: true })),
+      }),
+      reuseProcessSessionHandles: true,
+      runtimeRecoveryPrewarmInput: recoveryInput(),
+    } as const;
+    const firstBackend = createHostedVercelBackend(options);
+    const secondBackend = createHostedVercelBackend(options);
+    const input = {
+      runtimeContext,
+      sessionKey: "session-1",
+      templateKey,
+    };
+
+    const [first, second] = await Promise.all([
+      firstBackend.create(input),
+      secondBackend.create(input),
+    ]);
+
+    expect(first).toBe(second);
+    expect(create).toHaveBeenCalledOnce();
+
+    await first.stop();
+    await first.stop();
+    expect(stop).toHaveBeenCalledOnce();
+
+    const reopened = await secondBackend.create(input);
+    expect(create).toHaveBeenCalledTimes(2);
+    await reopened.shutdown();
+  });
+
   it("replays the exact non-empty managed seeds and bootstrap, then retries once", async () => {
     const session = { id: "session-1" } as SandboxSession;
     const stop = vi.fn(async () => undefined);
