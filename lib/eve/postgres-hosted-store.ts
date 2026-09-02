@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -21,9 +21,7 @@ import {
   type HostedEveStore,
   type HostedOperationRecord,
   type HostedSessionRecord,
-  type HostedSessionTimeoutPolicy,
 } from "./hosted-store";
-import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -83,124 +81,6 @@ function sessionTenantPredicate(principal: HostedPrincipal) {
     eq(agentSessions.audience, principal.audience),
     eq(agentSessions.workspaceId, principal.workspaceId),
     eq(agentSessions.ownerUserId, principal.ownerUserId),
-  );
-}
-
-function workspaceOperationPredicate(principal: HostedPrincipal) {
-  return and(
-    eq(agentOperations.issuer, principal.issuer),
-    eq(agentOperations.audience, principal.audience),
-    eq(agentOperations.workspaceId, principal.workspaceId),
-  );
-}
-
-function workspaceSessionPredicate(principal: HostedPrincipal) {
-  return and(
-    eq(agentSessions.issuer, principal.issuer),
-    eq(agentSessions.audience, principal.audience),
-    eq(agentSessions.workspaceId, principal.workspaceId),
-  );
-}
-
-async function exceedsAdmissionLimit(
-  database: Transaction,
-  principal: HostedPrincipal,
-  binding: HostedPreviewAdmissionControlBinding,
-  nowEpochMs: number,
-  sessionTimeoutPolicy: HostedSessionTimeoutPolicy,
-) {
-  if (binding.monthlySpendUsedUsdCents >= binding.monthlySpendLimitUsdCents) {
-    return true;
-  }
-  const workspaceKey = admissionAdvisoryLockKey("workspace", principal);
-  const subjectKey = admissionAdvisoryLockKey("subject", principal);
-  await database.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${workspaceKey}, 0))`,
-  );
-  await database.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${subjectKey}, 0))`,
-  );
-  const minuteStart = new Date(nowEpochMs - 60_000);
-  const idleCutoff = new Date(nowEpochMs - sessionTimeoutPolicy.idleTimeoutMs);
-  const lifetimeCutoff = new Date(
-    nowEpochMs - sessionTimeoutPolicy.maxLifetimeMs,
-  );
-  const activeStatuses = ["working", "input_required", "waiting"];
-  const [subjectStarts, workspaceStarts, subjectConcurrent, workspaceActive] =
-    await Promise.all([
-      database
-        .select({ value: count() })
-        .from(agentOperations)
-        .where(
-          and(
-            tenantPredicate(principal),
-            eq(agentOperations.kind, "start"),
-            gte(agentOperations.createdAt, minuteStart),
-          ),
-        ),
-      database
-        .select({ value: count() })
-        .from(agentOperations)
-        .where(
-          and(
-            workspaceOperationPredicate(principal),
-            eq(agentOperations.kind, "start"),
-            gte(agentOperations.createdAt, minuteStart),
-          ),
-        ),
-      database
-        .select({ value: count() })
-        .from(agentSessions)
-        .where(
-          and(
-            sessionTenantPredicate(principal),
-            gt(agentSessions.updatedAt, idleCutoff),
-            gt(agentSessions.createdAt, lifetimeCutoff),
-            sql`${agentSessions.record}->>'status' = 'working'`,
-          ),
-        ),
-      database
-        .select({ value: count() })
-        .from(agentSessions)
-        .where(
-          and(
-            workspaceSessionPredicate(principal),
-            gt(agentSessions.updatedAt, idleCutoff),
-            gt(agentSessions.createdAt, lifetimeCutoff),
-            inArray(sql`${agentSessions.record}->>'status'`, activeStatuses),
-          ),
-        ),
-    ]);
-  return (
-    (subjectStarts[0]?.value ?? 0) >= binding.startsPerSubjectPerMinute ||
-    (workspaceStarts[0]?.value ?? 0) >= binding.startsPerWorkspacePerMinute ||
-    (subjectConcurrent[0]?.value ?? 0) >=
-      binding.maxConcurrentSessionsPerSubject ||
-    (workspaceActive[0]?.value ?? 0) >= binding.maxActiveSessionsPerWorkspace
-  );
-}
-
-export function admissionAdvisoryLockKey(
-  scope: "workspace" | "subject",
-  principal: HostedPrincipal,
-) {
-  return JSON.stringify(
-    scope === "workspace"
-      ? [
-          "hosted_eve_admission_v1",
-          scope,
-          principal.issuer,
-          principal.audience,
-          principal.workspaceId,
-        ]
-      : [
-          "hosted_eve_admission_v1",
-          scope,
-          principal.issuer,
-          principal.audience,
-          principal.workspaceId,
-          principal.ownerUserId,
-        ],
   );
 }
 
@@ -401,7 +281,7 @@ export function createPostgresHostedEveStore(
   database: Database,
 ): HostedEveStore {
   return {
-    async reserveOperation(principalInput, candidateInput, admission) {
+    async reserveOperation(principalInput, candidateInput) {
       const principal = hostedPrincipalSchema.parse(principalInput);
       const candidate = hostedOperationRecordSchema.parse(candidateInput);
       if (
@@ -491,22 +371,6 @@ export function createPostgresHostedEveStore(
               disposition: "rejected" as const,
               reason: "session_busy" as const,
             };
-        }
-        if (
-          candidate.kind === "start" &&
-          (admission === undefined ||
-            (await exceedsAdmissionLimit(
-              transaction,
-              principal,
-              admission.binding,
-              admission.nowEpochMs,
-              admission.sessionTimeoutPolicy,
-            )))
-        ) {
-          return {
-            disposition: "rejected" as const,
-            reason: "admission_limit" as const,
-          };
         }
         try {
           const inserted = await transaction

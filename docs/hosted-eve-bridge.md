@@ -85,15 +85,11 @@ each request. Invalid composition returns 503 and never falls back to the local
 adapter. Unconfigured mode and the explicit loopback-only local adapter preserve
 the same exact five MCP tools.
 
-Hosted composition additionally requires a fresh closed admission-control
-binding in `EVE_HOSTED_ADMISSION_CONTROL`. It binds exact per-subject and
-per-workspace start limits, active/concurrent session ceilings, a monthly spend
-observation plus ceiling, an observation window of at most 24 hours, and the
-SHA-256 digest of the provider readback. Missing, stale,
-environment-mismatched, unknown, or out-of-range bindings return 503 before
-storage opens. The durable start
-reservation serializes and enforces the rate/session fields before Eve
-dispatch, and every observed public session result refreshes active status.
+App Builder does not impose per-user, per-workspace, concurrent-session, or
+spend quotas. Provider capacity remains external to the product and is
+observed at request time rather than converted into an App Builder admission
+gate. The durable start reservation still serializes a mutating continuation
+for one session, which is a correctness constraint rather than a usage cap.
 
 The MCP-side contract accepts no continuation credential and the durable store
 schema has no field for one. Canonical Eve 0.44.4 routes use durable session IDs
@@ -103,8 +99,8 @@ as an opaque secret container.
 
 Hosted session handles remain tenant-scoped and resumable until explicitly
 deleted. The 30-minute idle and 24-hour lifetime windows apply only to compute
-and admission accounting: expired active rows no longer consume a new-start
-slot, but their product history remains readable. Bounded checkpoints retain
+leases: expired compute is recoverable without limiting the number of sessions,
+and product history remains readable. Bounded checkpoints retain
 the latest public product events, outstanding input, prototype, and plan.
 Unchanged `working` observations cannot refresh an execution lease forever; the
 service marks the session checkpoint-resumable and fences any replacement
@@ -163,8 +159,8 @@ enabled only by the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` deployment
 gate. It acquires at `turn.started`, reasserts the current PostgreSQL epoch
 before each command, and releases at terminal turn boundaries rather than at
 an interim `session.waiting` authorization park. The Mise-owned PostgreSQL
-behavioral task proves admission concurrency, replay, rollback, expiry,
-heartbeat, recovery races, and fail-closed admission after a provider stop
+behavioral task proves execution concurrency, replay, rollback, expiry,
+heartbeat, recovery races, and fail-closed fencing after a provider stop
 failure. Failed stops remain fenced and orphaned while the rest of the batch
 continues; only successful stops release their leases. This does not prove or
 activate provider-side orphan lookup and stop, so hosted enforcement and
@@ -178,11 +174,9 @@ Hosted activation still requires separately authorized work:
   remain fail-closed without that configuration and unapplied schema. The
   issuer records user consent and derives `workspace_id` from the exact live
   membership; the resource server rechecks that membership on every request;
-- read back the exact Preview provider request, concurrency, session, and spend
-  controls; construct the closed, time-bounded admission-control binding from
-  that evidence. The runtime rejects starts when observed monthly spend reaches
-  the ceiling and atomically enforces the per-subject/workspace start and
-  active-session ceilings in its durable reservation transaction;
+- verify the exact Preview provider capacity and availability behavior without
+  translating provider capacity into App Builder user, workspace, session, or
+  spend quotas;
 - establish a separately evidenced Preview restore point, apply the five
   checked-in additive PostgreSQL migrations with `mise run database:migrate`,
   then run `mise run hosted:storage-verify`. The verifier opens one bounded
@@ -238,7 +232,7 @@ marked `source-configuration-only`, contains source and contract digests plus
 explicit no-secret and no-immediate-revocation claims, and records
 `activation.status=not-proven` without endpoint, tenant, or provider values. A
 separate future activation receipt schema accepts only digest-bound live
-deployment, OAuth metadata, minted-token, migration, admission-control,
+deployment, OAuth metadata, minted-token, migration, provider-capacity,
 workload-identity, tenant-isolation, and five-tool lifecycle proof. It cannot
 create or activate any of them.
 

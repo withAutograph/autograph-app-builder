@@ -30,6 +30,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   restarts, timestamps, cache metadata, or normal source edits into authority
   gates. Re-observe cheap mutable facts and refresh planning input instead of
   rejecting harmless development changes.
+- Do not invent App Builder usage, spend, start-rate, membership, user,
+  workspace, or concurrent-session quotas. Provider capacity is external.
+  Retain only limits that protect correctness or security, such as tenant
+  isolation, one mutating continuation per session, bounded untrusted input,
+  authentication abuse protection, and cleanup of stuck processes.
 
 ## Iteration and validation
 

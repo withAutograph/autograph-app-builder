@@ -1815,9 +1815,4 @@ export default defineAgent({
       : "openai/gpt-5.6-sol",
   modelContextWindowTokens: 128_000,
   reasoning: localDevelopmentAgent ? "medium" : "high",
-  limits: {
-    maxInputTokensPerSession: 2_000_000,
-    maxOutputTokensPerSession: 200_000,
-    sessionTimeoutMs: 7 * 24 * 60 * 60 * 1_000,
-  },
 });

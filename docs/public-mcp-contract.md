@@ -31,7 +31,7 @@ Healthy active sessions retain their public handle. A terminal or interrupted
 session resumes from a bounded durable checkpoint as a child session, while a
 missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
-their short-lived compute and admission leases.
+their short-lived compute leases.
 
 Hosted authorization advertises the matching `autograph:*` scopes. A caller
 must hold `autograph:session` before the request-scoped tenant service is

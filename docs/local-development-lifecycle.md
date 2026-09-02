@@ -45,9 +45,12 @@ current writable checkout or branch as live input and re-observe it when
 needed. Normal source movement is not a quota, a failure, or a long-lived drift
 gate. Only a release candidate selected for publication becomes immutable.
 Provider resource constraints may be surfaced honestly, but App Builder MUST
-NOT invent workspace-, file-, process-, or cache-size quotas as planning
-authority. Execution timeouts and cancellation remain operational controls, not
-product limits on a repository or planning session.
+NOT invent user, membership, workspace, start-rate, concurrent-session, spend,
+file-, process-, or cache-size quotas. Provider capacity is external. Tenant
+isolation, one mutating continuation per session, bounded untrusted input,
+authentication abuse protection, execution timeouts, cancellation, and stuck
+process cleanup remain correctness and security controls—not product usage
+limits.
 
 ## Fast loop
 

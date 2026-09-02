@@ -15,8 +15,6 @@ export const sandboxExecutionPolicySchema = z
     lease: z.object({
       ttlMs: z.literal(900_000),
       heartbeatMs: z.literal(60_000),
-      maxActivePerSubject: z.literal(1),
-      maxActivePerWorkspace: z.literal(4),
     }),
     command: z.object({
       maximumWallTimeMs: z.literal(300_000),
@@ -43,8 +41,6 @@ export const SANDBOX_EXECUTION_POLICY = sandboxExecutionPolicySchema.parse({
   lease: {
     ttlMs: 900_000,
     heartbeatMs: 60_000,
-    maxActivePerSubject: 1,
-    maxActivePerWorkspace: 4,
   },
   command: {
     maximumWallTimeMs: 300_000,

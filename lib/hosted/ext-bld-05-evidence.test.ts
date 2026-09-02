@@ -53,7 +53,7 @@ const input = {
     idleTimeoutSeconds: 1_800,
     maximumLifetimeSeconds: 86_400,
     expiredSessionDeniedBeforeTransport: true,
-    expiredSessionsExcludedFromAdmission: true,
+    expiredSessionsExcludedFromActiveCompute: true,
     evePackageVersion: "0.43.0" as const,
     continuationCredential: "not-applicable-canonical-session-id-only" as const,
   },

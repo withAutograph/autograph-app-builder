@@ -59,13 +59,6 @@ export class HostedRejectedOperationError extends Error {
   }
 }
 
-export class HostedAdmissionDeniedError extends Error {
-  constructor() {
-    super("The hosted Eve admission limit was reached.");
-    this.name = "HostedAdmissionDeniedError";
-  }
-}
-
 /** Transport adapters use this only when dispatch may have reached Eve. */
 export class SubmissionOutcomeUnknownError extends Error {
   constructor() {

@@ -14,7 +14,6 @@ import {
   sessionStatusSchema,
   type PublicSessionSummary,
 } from "../mcp/contracts";
-import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 
 export const hostedOperationKindSchema = z.enum([
   "start",
@@ -296,7 +295,7 @@ export function isHostedSessionExpired(input: {
   );
 }
 
-/** Admission/compute accounting only. User-visible session records do not expire. */
+/** Compute recovery only. User-visible session records do not expire. */
 export const isHostedSessionComputeLeaseExpired = isHostedSessionExpired;
 
 function canonicalRecordValue(value: unknown): string {
@@ -473,7 +472,7 @@ export const reserveOperationResultSchema = z.discriminatedUnion(
     z
       .object({
         disposition: z.literal("rejected"),
-        reason: z.enum(["admission_limit", "session_busy"]),
+        reason: z.literal("session_busy"),
       })
       .strict(),
   ],
@@ -493,11 +492,6 @@ export interface HostedEveStore {
   reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
-    admission?: {
-      binding: HostedPreviewAdmissionControlBinding;
-      nowEpochMs: number;
-      sessionTimeoutPolicy: HostedSessionTimeoutPolicy;
-    },
   ): Promise<ReserveOperationResult>;
   settleSucceeded(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
@@ -555,11 +549,6 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   async reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
-    admission?: {
-      binding: HostedPreviewAdmissionControlBinding;
-      nowEpochMs: number;
-      sessionTimeoutPolicy: HostedSessionTimeoutPolicy;
-    },
   ): Promise<ReserveOperationResult> {
     const parsed = hostedOperationRecordSchema.parse(candidate);
     if (tenantKeyFor(parsed.principal) !== tenantKeyFor(principal)) {
@@ -597,61 +586,6 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       )
     ) {
       return { disposition: "rejected", reason: "session_busy" };
-    }
-    if (parsed.kind === "start" && admission !== undefined) {
-      const minuteStart = admission.nowEpochMs - 60_000;
-      const subjectStarts = [...this.operations.values()].filter(
-        (record) =>
-          record.kind === "start" &&
-          record.createdAtEpochMs >= minuteStart &&
-          record.principal.issuer === principal.issuer &&
-          record.principal.audience === principal.audience &&
-          record.principal.workspaceId === principal.workspaceId &&
-          record.principal.ownerUserId === principal.ownerUserId,
-      ).length;
-      const workspaceStarts = [...this.operations.values()].filter(
-        (record) =>
-          record.kind === "start" &&
-          record.createdAtEpochMs >= minuteStart &&
-          record.principal.issuer === principal.issuer &&
-          record.principal.audience === principal.audience &&
-          record.principal.workspaceId === principal.workspaceId,
-      ).length;
-      const subjectConcurrent = [...this.sessions.values()].filter(
-        (record) =>
-          !isHostedSessionExpired({
-            record,
-            nowEpochMs: admission.nowEpochMs,
-            policy: admission.sessionTimeoutPolicy,
-          }) &&
-          record.principal.issuer === principal.issuer &&
-          record.principal.audience === principal.audience &&
-          record.principal.workspaceId === principal.workspaceId &&
-          record.principal.ownerUserId === principal.ownerUserId &&
-          record.status === "working",
-      ).length;
-      const workspaceActive = [...this.sessions.values()].filter(
-        (record) =>
-          !isHostedSessionExpired({
-            record,
-            nowEpochMs: admission.nowEpochMs,
-            policy: admission.sessionTimeoutPolicy,
-          }) &&
-          record.principal.issuer === principal.issuer &&
-          record.principal.audience === principal.audience &&
-          record.principal.workspaceId === principal.workspaceId &&
-          ["working", "input_required", "waiting"].includes(record.status),
-      ).length;
-      const limits = admission.binding;
-      if (
-        limits.monthlySpendUsedUsdCents >= limits.monthlySpendLimitUsdCents ||
-        subjectStarts >= limits.startsPerSubjectPerMinute ||
-        workspaceStarts >= limits.startsPerWorkspacePerMinute ||
-        subjectConcurrent >= limits.maxConcurrentSessionsPerSubject ||
-        workspaceActive >= limits.maxActiveSessionsPerWorkspace
-      ) {
-        return { disposition: "rejected", reason: "admission_limit" };
-      }
     }
     this.operations.set(key, structuredClone(parsed));
     return { disposition: "reserved", operation: structuredClone(parsed) };

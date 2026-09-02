@@ -134,7 +134,7 @@ an in-turn authorization park. `mise run test:postgres-sandbox-leases`
 proves same-subject serialization, idempotent replay,
 rollback, expiry, heartbeat, and recovery/reacquisition races against an
 ephemeral digest-pinned PostgreSQL container. A provider stop failure keeps
-the fenced lease orphaned and admission-blocking; only a successful stop may
+the fenced lease orphaned and reuse-blocking; only a successful stop may
 settle it as released, and one failed stop does not abort the remaining
 recovery batch. This source proof does not activate the gate or prove
 provider-side orphan lookup and stop.
@@ -343,14 +343,10 @@ Before enabling real MCP mutations:
    confirmation-bound tasks with identity-free receipts. Retention preserves
    reserved replay authority and never deletes GitHub mutation journals;
    deletion requires a five-minute revocation drain.
-5. Before hosted composition can open storage, bind a fresh exact provider
-   readback through the closed `EVE_HOSTED_ADMISSION_CONTROL` contract. It must
-   name bounded per-subject/workspace request and session ceilings plus current
-   monthly spend and its ceiling, and expire within 24 hours. The runtime must
-   enforce every field: monthly spend fails closed before dispatch, while the
-   durable PostgreSQL start reservation serializes the start and active-session
-   ceilings. Every observed session result refreshes the durable status used by
-   those checks.
+5. Treat provider capacity as external availability, not an App Builder user,
+   workspace, session, or spend quota. The durable PostgreSQL reservation keeps
+   only the correctness guarantees needed for idempotency and one mutating
+   continuation at a time; it must not become an admission gate.
 6. Keep continuation credentials outside the current MCP/store contract. The
    canonical installed Eve 0.44.4 session routes require only durable session IDs.
 7. Resolve Eve's idempotency capability. If no deterministic start key exists, persist `submission_unknown` and never redispatch automatically.
@@ -373,7 +369,7 @@ Before enabling real MCP mutations:
 11. Pass cross-tenant, OAuth-negative, disclosure, cancellation, and lost-response tests.
 12. Keep user-facing hosted sessions resumable until explicit deletion. Apply
     the fixed 30-minute idle and 24-hour maximum windows only to compute leases
-    and admission counts, fence replaced adapter generations, and recover from
+    and provider resource cleanup, fence replaced adapter generations, and recover from
     bounded durable checkpoints. Retention and drained tenant deletion remain
     separately confirmed operations.
 

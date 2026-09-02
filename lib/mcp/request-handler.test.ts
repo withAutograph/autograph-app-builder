@@ -19,22 +19,6 @@ const auth = {
   algorithm: "ES256" as const,
   resourceUrl: "https://builder.example.test/mcp",
 };
-const admissionControl = {
-  version: 1 as const,
-  environment: "preview" as const,
-  enforcement: "provider-readback" as const,
-  scope: "issuer-audience-workspace-subject" as const,
-  startsPerSubjectPerMinute: 10,
-  startsPerWorkspacePerMinute: 50,
-  maxConcurrentSessionsPerSubject: 2,
-  maxActiveSessionsPerWorkspace: 20,
-  monthlySpendUsedUsdCents: 0,
-  monthlySpendLimitUsdCents: 10_000,
-  observedAt: "2033-05-18T03:32:00.000Z",
-  expiresAt: "2033-05-18T04:32:00.000Z",
-  readbackDigest: `sha256:${"a".repeat(64)}`,
-};
-
 const exactTools = [
   "autograph_cancel",
   "autograph_get",
@@ -103,7 +87,6 @@ function runtime(
     },
     store: new InMemoryHostedEveStore(),
     transport,
-    admissionControl,
     now: () => 2_000_000_000_000,
   };
 }

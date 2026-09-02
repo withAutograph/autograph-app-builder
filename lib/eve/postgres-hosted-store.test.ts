@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
 import {
-  admissionAdvisoryLockKey,
   parseHostedOperationRow,
   parseHostedSessionRow,
 } from "./postgres-hosted-store";
@@ -76,51 +75,6 @@ const sessionRow = {
 };
 
 describe("PostgreSQL hosted Eve row authority", () => {
-  it("encodes admission advisory lock keys as unambiguous PostgreSQL text", () => {
-    const workspaceKey = admissionAdvisoryLockKey("workspace", principal);
-    const subjectKey = admissionAdvisoryLockKey("subject", principal);
-
-    expect(workspaceKey).toBe(
-      '["hosted_eve_admission_v1","workspace","https://identity.example.test","eve-hosted","workspace_1"]',
-    );
-    expect(subjectKey).toBe(
-      '["hosted_eve_admission_v1","subject","https://identity.example.test","eve-hosted","workspace_1","user_1"]',
-    );
-    expect(workspaceKey).not.toContain("\0");
-    expect(subjectKey).not.toContain("\0");
-
-    const embeddedNullKey = admissionAdvisoryLockKey("subject", {
-      ...principal,
-      workspaceId: "workspace\0one",
-      ownerUserId: "user\0one",
-    });
-    expect(embeddedNullKey).not.toContain("\0");
-    expect(JSON.parse(embeddedNullKey)).toEqual([
-      "hosted_eve_admission_v1",
-      "subject",
-      principal.issuer,
-      principal.audience,
-      "workspace\0one",
-      "user\0one",
-    ]);
-
-    expect(
-      admissionAdvisoryLockKey("workspace", {
-        ...principal,
-        issuer: "issuer-a",
-        audience: "audience-b|workspace-c",
-        workspaceId: "workspace-d",
-      }),
-    ).not.toBe(
-      admissionAdvisoryLockKey("workspace", {
-        ...principal,
-        issuer: "issuer-a|audience-b",
-        audience: "workspace-c",
-        workspaceId: "workspace-d",
-      }),
-    );
-  });
-
   it("accepts only an operation whose indexed authority matches its closed record", () => {
     expect(parseHostedOperationRow(operationRow)).toEqual(operationRecord);
     expect(() =>
@@ -336,14 +290,4 @@ describe("PostgreSQL hosted Eve row authority", () => {
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 
-  it("excludes idle and maximum-lifetime-expired sessions from admission", async () => {
-    const source = await readFile(
-      new URL("./postgres-hosted-store.ts", import.meta.url),
-      "utf8",
-    );
-    expect(source).toContain("sessionTimeoutPolicy.idleTimeoutMs");
-    expect(source).toContain("sessionTimeoutPolicy.maxLifetimeMs");
-    expect(source).toContain("gt(agentSessions.updatedAt, idleCutoff)");
-    expect(source).toContain("gt(agentSessions.createdAt, lifetimeCutoff)");
-  });
 });

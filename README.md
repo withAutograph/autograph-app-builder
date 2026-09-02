@@ -480,13 +480,12 @@ team/project/environment. The environment must be exactly `preview` or
 `production`, and `VERCEL_ENV` must match the explicit
 `EVE_HOSTED_VERCEL_ENVIRONMENT`; missing, Development, wildcard, and mismatched
 bindings fail closed. Production still requires separate activation evidence.
-This boundary never falls back to the local adapter. Hosted composition also
-requires a fresh, closed
-`EVE_HOSTED_ADMISSION_CONTROL` JSON binding to an exact provider readback. That
-binding names bounded per-subject and per-workspace start/session ceilings plus
-current monthly spend and its ceiling, and expires within 24 hours. Starts are
-rejected at the spend ceiling; the durable reservation transaction enforces the
-start/session limits before dispatch. The
+This boundary never falls back to the local adapter. App Builder does not
+impose per-user, per-workspace, concurrent-session, or spend quotas. Provider
+capacity is external to the product; availability failures are surfaced as
+provider failures rather than product admission decisions. The durable
+reservation still protects idempotency and prevents simultaneous mutation of
+the same session. The
 OAuth resource metadata is served from
 `/.well-known/oauth-protected-resource`. The signed, consent-bound
 `workspace_id` access-token claim is the sole workspace selector. OAuth
@@ -548,7 +547,7 @@ source proof rather than deployment, database, or client-registration proof.
 The deterministic source/configuration receipt is explicitly marked
 `source-configuration-only` and `activation.status=not-proven`. A distinct
 future live-activation schema requires digest-bound deployment, OAuth metadata,
-minted-token, migration, admission-control, workload-identity, tenant-isolation,
+minted-token, migration, provider-capacity, workload-identity, tenant-isolation,
 and five-tool lifecycle evidence. Neither schema performs or authorizes those
 external actions.
 

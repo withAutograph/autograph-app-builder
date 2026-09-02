@@ -71,7 +71,7 @@ that session on the same Store In flow.
 
 Public App Builder sessions MUST remain tenant-scoped and resumable until the
 user explicitly deletes them. User-session retention is independent of short
-compute leases, admission controls, and abandoned-turn detection.
+compute leases and abandoned-turn detection.
 
 Each durable session stores a product-facing title, inferred app identity,
 current product stage, resumability state, adapter generation, checkpoint
