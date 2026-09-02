@@ -1,4 +1,5 @@
 import type { PrototypeArtifact } from "./workflow-state";
+import { validateBuildReadyAppSpec } from "./app-spec-validation";
 import { sha256, validAppId } from "./workflow-state";
 
 export const prototypeArtifactPathPattern =
@@ -138,4 +139,32 @@ export function prototypeArtifactReceipt(
 ): PrototypeArtifactReceipt {
   const { content, ...receipt } = artifact;
   return { ...receipt, size: Buffer.byteLength(content) };
+}
+
+/**
+ * Returns the final AppSpec only when the product has a complete, usable
+ * prototype bundle. This is deliberately a content check rather than a
+ * workflow-phase check: recording a valid AppSpec must not turn an exploratory
+ * draft into accepted planning state.
+ */
+export function completeBuildReadyPrototypeAppSpec(input: {
+  artifacts: readonly PrototypeArtifact[];
+  appId: string;
+}): PrototypeArtifact | undefined {
+  const prefix = `prototype/${input.appId}/`;
+  const byPath = new Map(
+    input.artifacts
+      .filter((artifact) => artifact.path.startsWith(prefix))
+      .map((artifact) => [artifact.path, artifact]),
+  );
+  const appSpec = byPath.get(`${prefix}app-spec.md`);
+  if (
+    appSpec === undefined ||
+    !byPath.has(`${prefix}index.html`) ||
+    !byPath.has(`${prefix}decisions.md`) ||
+    appSpec.mediaType !== "text/markdown" ||
+    !validateBuildReadyAppSpec(appSpec.content).valid
+  )
+    return undefined;
+  return appSpec;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  completeBuildReadyPrototypeAppSpec,
   exactPrototypeArtifact,
   expectedPrototypeArtifactMediaType,
   parsePrototypeArtifactPath,
@@ -111,5 +112,38 @@ describe("prototype artifact receipts", () => {
         path: "prototype/vendor-review/app-spec.md",
       }),
     ).toThrow("different prototype app");
+  });
+
+  it("recognizes only a complete, build-ready prototype bundle", () => {
+    const index = record({
+      path: "prototype/expense-review/index.html",
+      mediaType: "text/html",
+      content: "<!doctype html><title>Expense review</title>",
+    });
+    const decisions = record({
+      artifacts: index.artifacts,
+      path: "prototype/expense-review/decisions.md",
+      content: "# Decisions\n",
+    });
+    const incomplete = record({ artifacts: decisions.artifacts });
+    expect(
+      completeBuildReadyPrototypeAppSpec({
+        artifacts: incomplete.artifacts,
+        appId: "expense-review",
+      }),
+    ).toBeUndefined();
+
+    const content = `## Status and prototype\n\nReady.\n\n## User and outcome\n\nA.\n\n## Interfaces and navigation\n\nA.\n\n## Controls and behavior\n\nA.\n\n## Data model\n\nA.\n\n## Integrations and reconciliation\n\nA.\n\n## Temporal semantics\n\nA.\n\n## Writes, review, and authority\n\nA.\n\n## Access and tenancy\n\nA.\n\n## Agent behavior\n\nA.\n\n## Operational states\n\nA.\n\n## Defaults, non-goals, and risks\n\nA.\n\n## Acceptance walkthrough\n\nA.\n\n## Build handoff\n\n\`\`\`json\n{\n  "status": "build-ready",\n  "owner": "operations",\n  "schema": { "kind": "none" },\n  "additionalPublicRoutes": [],\n  "optionalCapabilities": { "integrations": [], "hostedResources": [] }\n}\n\`\`\``;
+    const complete = record({
+      artifacts: incomplete.artifacts,
+      content,
+      callId: "call-4",
+    });
+    expect(
+      completeBuildReadyPrototypeAppSpec({
+        artifacts: complete.artifacts,
+        appId: "expense-review",
+      }),
+    ).toMatchObject({ path: "prototype/expense-review/app-spec.md" });
   });
 });
