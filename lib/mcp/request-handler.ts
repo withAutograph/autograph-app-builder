@@ -418,6 +418,38 @@ async function isToolCallRequest(request: Request): Promise<boolean> {
   }
 }
 
+const hostedToolScopes = new Map([
+  ["autograph_start", "autograph:start"],
+  ["autograph_get", "autograph:get"],
+  ["autograph_send", "autograph:send"],
+  ["autograph_respond", "autograph:respond"],
+  ["autograph_cancel", "autograph:cancel"],
+]);
+
+async function requiredScopesForRequest(request: Request): Promise<string[]> {
+  try {
+    const body: unknown = await request.clone().json();
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "method" in body &&
+      body.method === "tools/call" &&
+      "params" in body &&
+      typeof body.params === "object" &&
+      body.params !== null &&
+      "name" in body.params &&
+      typeof body.params.name === "string"
+    ) {
+      const operationScope = hostedToolScopes.get(body.params.name);
+      if (operationScope !== undefined)
+        return ["autograph:session", operationScope];
+    }
+  } catch {
+    // Malformed requests remain subject to the session scope and MCP parsing.
+  }
+  return ["autograph:session"];
+}
+
 async function hostedServiceForRequest(
   request: Request,
   runtime: HostedMcpRuntime,
@@ -425,13 +457,14 @@ async function hostedServiceForRequest(
   const parsedAuth = hostedMcpAuthConfigSchema.safeParse(runtime.auth);
   if (!parsedAuth.success) return unavailableResponse();
   const auth = parsedAuth.data;
+  const requiredScopes = await requiredScopesForRequest(request);
   let token: string;
   try {
     token = parseStrictBearerAuthorization(
       request.headers.get("authorization"),
     );
   } catch {
-    return unauthorizedResponse(auth);
+    return unauthorizedResponse(auth, requiredScopes);
   }
 
   let verifiedClaims;
@@ -441,7 +474,7 @@ async function hostedServiceForRequest(
       nowEpochSeconds: Math.floor((runtime.now?.() ?? Date.now()) / 1_000),
     });
   } catch {
-    return unauthorizedResponse(auth);
+    return unauthorizedResponse(auth, requiredScopes);
   }
 
   let principal: HostedPrincipal;
@@ -450,16 +483,16 @@ async function hostedServiceForRequest(
       verifiedClaims,
       expectedIssuer: auth.issuer,
       expectedAudience: auth.audience,
-      requiredScopes: ["autograph:session"],
+      requiredScopes,
     });
   } catch (error) {
     if (
       error instanceof HostedAuthorizationError &&
       error.code === "insufficient_scope"
     ) {
-      return forbiddenResponse(auth);
+      return forbiddenResponse(auth, requiredScopes);
     }
-    return unauthorizedResponse(auth);
+    return unauthorizedResponse(auth, requiredScopes);
   }
 
   try {
