@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { defineState } from "eve/context";
 
+import type { UiPreviewInput } from "@/lib/agent/ui-preview";
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import type {
   TargetIdentity,
@@ -81,7 +82,8 @@ export type UiPreviewRevision = {
   sourceTree: string;
   routes: readonly string[];
   files: readonly { path: string; content: string }[];
-  catalogGaps: readonly { path: string; reason: string }[];
+  manifest?: UiPreviewInput["manifest"];
+  catalogGaps: readonly UiPreviewInput["catalogGaps"][number][];
   previewHtml: string;
   createdByCallId: string;
 };

@@ -19,44 +19,54 @@ roles, and provisional behavior. Explicit choices are preserved. The builder
 asks a question only for a material ambiguity, unsupported identity, or real
 collision.
 
-### 3. Create an interactive prototype
+### 3. Create a component-backed UI preview
 
-It creates a self-contained, clickable prototype with realistic and consistent
-sample data. The prototype makes navigation, controls, actions, first-use,
-empty, loading, and error states visible.
+It prepares the exact Arrusted source, inspects public components and
+compositions plus their real production consumers, and creates a fixture-backed
+React UI in a disposable overlay. Navigation, controls, actions, first-use,
+empty, loading, and error states work without APIs, persistence, or backend
+implementation.
 
 ### 4. Iterate with the user
 
 The user reacts to what feels wrong, missing, unnecessary, or unlike their
-work. The builder revises the prototype first, then resolves the next
-highest-value uncertainty with a small number of focused questions.
+work. The builder revises only the UI and its synchronized internal design
+manifest, then resolves the next highest-value visible uncertainty with a small
+number of focused questions. The Browser remains a pure product preview.
 
-### 5. Define production behavior
+### 5. Finalize the reviewed UI explicitly
+
+Praise such as "looks good" does not start implementation planning. The user
+must explicitly ask to finalize functionality for the exact current UI
+revision. A later design revision invalidates that acceptance and returns the
+session to UI review.
+
+### 6. Define production behavior
 
 The builder settles the production meaning behind the approved experience:
 data and integrations, routes, controls, writes, review and approval behavior,
 provenance, permissions, agent responsibilities, failure behavior, non-goals,
 and the acceptance walkthrough.
 
-### 6. Reach build-ready status
+### 7. Reach build-ready status
 
 The builder checks that the experience and its production behavior are complete
 enough to implement. Internal preparation and completeness repair are silent.
 The user is interrupted only if an unresolved product decision genuinely blocks
 the build.
 
-### 7. Prepare the implementation proposal
+### 8. Prepare the implementation proposal
 
 The approved experience is mapped to the target repository. The builder
 produces a concrete, read-only proposal describing the app changes before any
 target checkout or external system is changed.
 
-### 8. Review and validate locally
+### 9. Review and validate locally
 
 After the appropriate authorization, the builder prepares its changes, runs the
 fixed local checks and tests, and presents the ordered result for review.
 
-### 9. Authorize consequential effects separately
+### 10. Authorize consequential effects separately
 
 Applying changes to an existing checkout, opening a pull request, publishing,
 deploying, changing providers, or creating external resources each requires
@@ -92,6 +102,7 @@ effect.
 ## Source documents
 
 This overview summarizes the detailed [design workflow](../agent/skills/design-app/SKILL.md),
+[UI preview review options](ui-preview-review-experiences.md),
 [create-app workflow](../agent/skills/create-app/SKILL.md), [orchestration
 workflow](../skills/autograph-app-builder/SKILL.md), and [session
 semantics](../skills/autograph-app-builder/references/session-semantics.md).

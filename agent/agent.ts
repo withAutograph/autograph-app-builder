@@ -181,6 +181,122 @@ export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("component-backed renewal review ui")) {
+    const path = lastUserMessage?.match(
+      /supported repository at (\/\S+)/iu,
+    )?.[1];
+    if (path === undefined)
+      return "I need the supported project location before I can shape the renewal review.";
+    const inspection = toolResults.find(
+      ({ name }) => name === "inspect_source",
+    );
+    if (inspection === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "inspect_source",
+            input: {
+              path: developmentInspectionPath({ requestedPath: path }),
+              sourceKind: "existing-repository",
+            },
+          },
+        ],
+      };
+    const source = inspection.output as { digest?: string } | undefined;
+    const preparation = toolResults.find(
+      ({ name }) => name === "prepare_workspace",
+    );
+    if (preparation === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "prepare_workspace",
+            input: { expectedSourceReceiptDigest: source?.digest },
+          },
+        ],
+      };
+    const preview = toolResults.find(
+      ({ name }) => name === "record_ui_preview",
+    );
+    if (preview === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "record_ui_preview",
+            input: {
+              appId: "renewal-review",
+              routes: ["/"],
+              files: [
+                {
+                  path: "src/routes/index.tsx",
+                  content:
+                    'import { Button, PageHeader, StatusPill } from "@autograph/components"; import { DataTableComposition } from "@autograph/compositions"; export default function RenewalReview() { const renewals = [{ account: "Northstar", days: 21, status: "Intervention" }, { account: "Kiteworks", days: 48, status: "Monitor" }]; return <main><PageHeader title="Renewal review" description="Decide which accounts need intervention in the next 90 days." /><StatusPill>2 accounts need attention</StatusPill><DataTableComposition data={renewals} /><Button>Open account review</Button></main>; }',
+                },
+              ],
+              manifest: {
+                version: 1,
+                screens: [
+                  {
+                    id: "renewal-queue",
+                    title: "Renewal queue",
+                    route: "/",
+                    entry: "src/routes/index.tsx",
+                  },
+                ],
+                productionComponents: [
+                  { name: "Button", source: "@autograph/components" },
+                  { name: "PageHeader", source: "@autograph/components" },
+                  { name: "StatusPill", source: "@autograph/components" },
+                ],
+                productionCompositions: [
+                  {
+                    name: "DataTableComposition",
+                    source: "@autograph/compositions",
+                  },
+                ],
+                productionIcons: [],
+                fixtureFacts: [
+                  {
+                    id: "renewal-window",
+                    statement: "The review window is 90 days.",
+                    routes: ["/"],
+                  },
+                ],
+                decisions: [],
+                assumptions: [
+                  {
+                    id: "queue-first",
+                    statement:
+                      "Customer-success managers start from a prioritized renewal queue.",
+                    routes: ["/"],
+                  },
+                ],
+                openQuestions: [
+                  {
+                    id: "intervention-owner",
+                    statement:
+                      "Should the first version assign an intervention owner?",
+                    routes: ["/"],
+                  },
+                ],
+                implementationNotes: [
+                  {
+                    visibleElement: "Open account review",
+                    productionMeaning:
+                      "Navigates to evidence and recommended next actions for the selected account.",
+                    routes: ["/"],
+                  },
+                ],
+              },
+              catalogGaps: [],
+            },
+          },
+        ],
+      };
+    if (preview.isError)
+      return "I couldn't produce a reliable renewal review preview.";
+    return "I shaped **Renewal Review** around a prioritized 90-day queue using the existing table and review components. The preview is ready to explore; the intervention-owner choice remains open, and no functionality or live data has been planned yet.";
+  }
   if (message.includes("uncertain vendor workflow brief"))
     return "These lead to meaningfully different products. Which outcome should lead the first version: getting each new vendor approved once (recommended, because it delivers the fastest operational value), or continuously monitoring vendors after approval (broader scope with recurring compliance work)?";
   if (message.includes("anonymous public vendor portal"))
