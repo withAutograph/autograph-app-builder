@@ -25,10 +25,10 @@ schema, authorization, database, or runtime authority.
 The canonical compiler and runtime design lives in the Arrusted
 [generated-app CUE/Postgres backend plan](https://github.com/withAutograph/arrusted-development/blob/main/docs/plans/2026-09-02-generated-app-cue-postgres-backend.md).
 That document owns the PostgreSQL API seam, the runtime-adapter and
-database-binding decisions, and the compiler and database invariants that every
-frontend view layer must preserve. App Builder must not select, duplicate, or
-weaken those decisions. This document owns the separate Next.js view-layer
-spike and ADR.
+database-binding decisions, the migration-tooling decision, and the compiler
+and database invariants that every frontend view layer must preserve. App
+Builder must not select, duplicate, or weaken those decisions. This document
+owns the separate Next.js view-layer spike and ADR.
 
 ## Objective
 
@@ -42,8 +42,10 @@ The normal generated path is:
 accepted AppSpec
   -> app-owned CUE source
   -> normalized compiler contract
-  -> private PostgreSQL kernel
-  -> public typed PostgreSQL API schema
+  -> desired private PostgreSQL kernel and public typed PostgreSQL API schema
+  -> typed migration intent and selected migration-engine input
+  -> selected migration engine
+  -> validated artifact activation in PostgreSQL
   -> adapter metadata, validators, and TypeScript bindings
   -> server-only DAL and generated actions
   -> generated frontend projection metadata and selected view integration
@@ -72,15 +74,22 @@ choose any of the following:
    private Hasura v2, private Hasura DDN/v3, or private PostGraphile as the
    runtime adapter; or
 2. CUE-generated or PostgreSQL-introspected database bindings; or
-3. direct Server Component-to-DAL reads or Fate component views backed by a
+3. the existing Arrusted Rust planner and installer, Atlas Community, Atlas
+   Pro, `pg-schema-diff` with a thin Arrusted lifecycle adapter, or `pgroll` as
+   the schema-migration implementation; or
+4. direct Server Component-to-DAL reads or Fate component views backed by a
    generated read Server Action as the frontend view layer.
 
-The first two choices require the conformance comparisons and accepted ADRs
-defined by the canonical runtime plan. The third requires the view-layer spike
-and accepted ADR in this document. App Builder work may define and test the
-adapter-neutral handoff before those decisions. It must stop before generating
-the first product application against a provisional adapter, binding source,
-or view layer.
+The first three choices require the conformance comparisons and accepted ADRs
+defined by the canonical runtime plan. The fourth requires the view-layer
+spike and accepted ADR in this document. App Builder work may define and test
+the adapter-neutral handoff before those decisions. It must stop before
+generating the first product application against a provisional adapter,
+binding source, migration engine, or view layer.
+
+No runtime adapter, database-binding source, migration engine, or frontend view
+layer is selected by this plan. In particular, Atlas Community, Atlas Pro,
+`pg-schema-diff`, `pgroll`, and Fate remain unselected.
 
 Whichever candidates are selected, the product-facing server contract remains
 generated named operations over a server-only DAL. Every adapter consumes only
@@ -138,6 +147,40 @@ DDL against a shared or Production database as part of repository mutation.
 Database installation and activation remain separate, environment-scoped
 operations owned by the canonical runtime contract.
 
+The AppSpec never selects a migration engine or supplies migration files,
+engine revisions, operational roles, connection details, or activation
+instructions. The engine is an environment and architecture decision applied
+to compiler-generated artifacts after application generation.
+
+## Migration-tooling handoff
+
+The compiler hands the selected migration engine deterministic, hash-bound
+inputs rather than an independently editable migration source. The handoff
+contains the desired private-kernel and public-API catalogs, immutable logical
+identities, predecessor and target artifact hashes, typed migration intent,
+data-preservation and compatibility requirements, validation requirements, and
+source mappings.
+
+The accepted migration-tooling ADR may authorize an engine to inspect, plan,
+execute, maintain a private operational ledger, serve active and candidate
+schemas concurrently, activate, and roll back. Any such lifecycle remains a
+mechanical realization of the compiler contract:
+
+- engine state maps one-to-one to compiler artifact hashes;
+- handwritten or app-authored migration input is rejected;
+- engine metadata, ledgers, roles, and administration objects remain private
+  and absent from runtime-adapter introspection;
+- activation succeeds only after compiler-required validation and an atomic
+  expected-artifact transition; and
+- the engine emits a canonical lifecycle receipt identifying its pinned
+  version, source and target artifacts, plan hash, completed phases, validation
+  result, active artifact, and rollback disposition.
+
+App Builder includes only the selected pinned integration and generated input
+format after the ADR. Components, Server Actions, DAL methods, and AppSpec
+remain migration-engine independent. The five migration candidates and their
+complete conformance requirements are owned by the canonical Arrusted plan.
+
 ## Generated application contract
 
 Each `cue-postgres` application receives generated artifacts in four groups.
@@ -151,8 +194,12 @@ Each `cue-postgres` application receives generated artifacts in four groups.
   projections, stable named-read functions, volatile CRUD/lifecycle/command
   functions, named parameters, typed row or composite results, and generated
   grants;
-- deterministic PostgreSQL bundle and materialization plan for both layers;
-- artifact manifest, source map, compiler version, and content hashes; and
+- deterministic desired PostgreSQL catalog and typed migration intent for both
+  layers, including predecessor and target identities, preservation rules,
+  compatibility requirements, validation requirements, and source maps;
+- selected engine input plus the canonical plan and lifecycle-receipt contract;
+- artifact manifest, compiler version, content hashes, and migration-engine
+  compatibility metadata; and
 - relationship, limit, active-artifact, runtime-adapter, protocol-binding, and
   database-binding compatibility metadata.
 
@@ -307,11 +354,11 @@ detailed invariants.
 
 This division is mandatory if Fate is selected:
 
-| Layer | Owns | Must not own |
-| --- | --- | --- |
-| App-owned CUE | data model, relations, permitted named read/command capabilities, constraints, and authorization references | React components, Fate component views, DOM events, cache state, or a transport implementation |
-| Compiler-generated integration | private PostgreSQL kernel, public PostgreSQL API schema, adapter metadata and protocol bindings, DAL, Server Actions, entity TypeScript types, generated Fate roots/action map, server `dataView` masks, transport, cache scope, and runtime validation | independently edited schema, policy, gateway semantics, component views, or arbitrary client query access |
-| App-authored React/Fate components | presentation, component-local `view<T>()` declarations, view composition, `useView`, `useRequest`, normal React Actions, pending UI, and safe expected-error UI | tables, SQL, RLS, DAL calls, trusted context, operation implementation, server masks, or authority selection |
+| Layer                              | Owns                                                                                                                                                                                                                                                    | Must not own                                                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| App-owned CUE                      | data model, relations, permitted named read/command capabilities, constraints, and authorization references                                                                                                                                             | React components, Fate component views, DOM events, cache state, or a transport implementation               |
+| Compiler-generated integration     | private PostgreSQL kernel, public PostgreSQL API schema, adapter metadata and protocol bindings, DAL, Server Actions, entity TypeScript types, generated Fate roots/action map, server `dataView` masks, transport, cache scope, and runtime validation | independently edited schema, policy, gateway semantics, component views, or arbitrary client query access    |
+| App-authored React/Fate components | presentation, component-local `view<T>()` declarations, view composition, `useView`, `useRequest`, normal React Actions, pending UI, and safe expected-error UI                                                                                         | tables, SQL, RLS, DAL calls, trusted context, operation implementation, server masks, or authority selection |
 
 The compiler does not generate an app's component views or components. A
 component author uses Fate normally: it imports `view`, `useView`,
@@ -469,13 +516,19 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
   return <ProjectBoard project={project} />;
 }
 
-function ProjectBoard({ project: projectRef }: { project: ViewRef<"Project"> }) {
+function ProjectBoard({
+  project: projectRef,
+}: {
+  project: ViewRef<"Project">;
+}) {
   const project = useView(ProjectBoardView, projectRef);
 
   return (
     <main>
       <h1>{project.name}</h1>
-      {project.tasks.map((task) => <TaskRow key={task.id} task={task} />)}
+      {project.tasks.map((task) => (
+        <TaskRow key={task.id} task={task} />
+      ))}
     </main>
   );
 }
@@ -659,8 +712,9 @@ that exercise, all of the following:
 
 Acceptance requires proof that:
 
-1. all three ADRs have been accepted and the generated application contains
-   only the selected runtime adapter, database binding, and view layer;
+1. all four ADRs have been accepted and the generated application contains
+   only the selected runtime adapter, database binding, migration-engine
+   integration, and view layer;
 2. App Builder produces and validates the app-owned CUE source from the
    accepted AppSpec;
 3. the repository is created with no handwritten data-backend implementation;
@@ -678,8 +732,10 @@ Acceptance requires proof that:
    the selected cache behavior;
 9. the accepted view-layer fallback is executable without changing the
    database contract; and
-10. one CUE schema evolution produces a reviewed, non-destructive plan and a
-   compatible regenerated application.
+10. one CUE schema evolution runs through the selected migration engine,
+    preserves representative persisted data, produces the canonical lifecycle
+    receipt, activates atomically, and remains compatible with the regenerated
+    application.
 
 All local proof uses `mise run dev` and the repository's supported generated-
 app validation entrypoints. Provider-backed Preview or Production proof is a
@@ -692,9 +748,10 @@ later, separately authorized step.
 2. Add the adapter-neutral normalized operation and artifact handoff without
    generating a product app.
 3. Complete the six-candidate runtime comparison, the independent binding
-   comparison, and the Next.js view-layer spike; record and accept all three
-   ADR decisions. These evidence lanes may run in parallel once the normalized
-   operation contract and public PostgreSQL API schema are stable.
+   comparison, the five-candidate migration-tooling comparison, and the
+   Next.js view-layer spike; record and accept all four ADR decisions. These
+   evidence lanes may run in parallel once the normalized operation contract,
+   desired PostgreSQL catalog, and typed migration intent are stable.
 4. Add `cue-postgres` to the AppSpec, planning, validation, and app-creation
    contracts while preserving `none` and legacy-read compatibility for
    `kernel`.
@@ -714,10 +771,13 @@ later, separately authorized step.
 - allowing a gateway, protocol schema, or generated protocol binding to become
   an independently edited model, relationship, authorization, or operation
   authority;
+- selecting a migration engine in AppSpec, exposing engine administration or
+  ledger objects to a runtime adapter, or accepting handwritten migration
+  input alongside the compiler contract;
 - treating a Fate component view as a PostgreSQL API view or backend authority;
 - introducing a `/fate` Route Handler or unbounded client query language;
-- selecting the runtime adapter or database-binding source in this document,
-  or selecting Fate without the required view-layer ADR;
+- selecting the runtime adapter, database-binding source, or migration engine
+  in this document, or selecting Fate without the required view-layer ADR;
 - encoding provider protocols, secrets, or arbitrary orchestration in CUE;
 - running installation or activation inside a request or Server Action; or
 - claiming that every application behavior is declarative in the first data-
