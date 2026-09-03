@@ -91,7 +91,7 @@ export function classifySandboxCloneFailure(stderr: string) {
 
 export function sandboxCloneFailureStage(stderr: string) {
   return stderr.match(
-    /AUTOGRAPH_CLONE_STAGE=(credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u,
+    /AUTOGRAPH_CLONE_STAGE=(prepare-directory|initialize|configure-remote|credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u,
   )?.[1];
 }
 
@@ -329,15 +329,25 @@ console.log(JSON.stringify({
 function sandboxCloneCommand() {
   const script = [
     "set -eu",
+    'echo "AUTOGRAPH_CLONE_STAGE=prepare-directory" >&2',
     `mkdir -p ${SANDBOX_WORKSPACE}`,
+    'echo "AUTOGRAPH_CLONE_STAGE=initialize" >&2',
     `git -C ${SANDBOX_WORKSPACE} init --quiet`,
+    'echo "AUTOGRAPH_CLONE_STAGE=configure-remote" >&2',
     `git -C ${SANDBOX_WORKSPACE} remote add origin ${ARRUSTED_TEMPLATE_REPOSITORY}`,
+    'echo "AUTOGRAPH_CLONE_STAGE=clone" >&2',
     `git -C ${SANDBOX_WORKSPACE} -c credential.helper= fetch --depth 1 --no-recurse-submodules origin ${ARRUSTED_TEMPLATE_REF}`,
+    'echo "AUTOGRAPH_CLONE_STAGE=resolve-ref" >&2',
     `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse FETCH_HEAD)"`,
+    'echo "AUTOGRAPH_CLONE_STAGE=checkout" >&2',
     `git -C ${SANDBOX_WORKSPACE} checkout --detach --quiet "$resolved_sha"`,
+    'echo "AUTOGRAPH_CLONE_STAGE=clean-worktree" >&2',
     `test -z "$(git -C ${SANDBOX_WORKSPACE} status --porcelain=v1)"`,
+    'echo "AUTOGRAPH_CLONE_STAGE=gitmodules" >&2',
     `test ! -e ${SANDBOX_WORKSPACE}/.gitmodules`,
+    'echo "AUTOGRAPH_CLONE_STAGE=gitlinks" >&2',
     `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
+    'echo "AUTOGRAPH_CLONE_STAGE=inspect" >&2',
     `node /workspace/${SANDBOX_CLONE_INSPECTOR}`,
   ].join("\n");
   return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
