@@ -296,6 +296,7 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).toContain(
       "PATH=/usr/local/bin:/usr/bin:/bin",
     );
+    expect(run.mock.calls[0]?.[0].command).toContain("TERM=dumb");
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
@@ -304,6 +305,7 @@ describe("canonical Arrusted template readiness", () => {
     )?.[0].command;
     expect(reinspection).toContain("arrusted-template-reinspect.cjs");
     expect(reinspection).toContain("PATH=/usr/local/bin:/usr/bin:/bin");
+    expect(reinspection).toContain("TERM=dumb");
     expect(reinspection).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
