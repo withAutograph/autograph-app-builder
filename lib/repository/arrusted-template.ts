@@ -144,7 +144,7 @@ const sourceSha = git(["rev-parse", "HEAD"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceSha)) throw new Error("invalid source SHA");
 const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceTree)) throw new Error("invalid source tree");
-const output = git(["ls-tree", "-rz", "--full-tree", sourceSha], "buffer");
+const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
 const files = output
   .toString("utf8")
   .split("\0")
@@ -255,7 +255,7 @@ const symbolicRef = spawnSync(
 if (symbolicRef.error || ![0, 1].includes(symbolicRef.status))
   throw new Error("invalid checkout state");
 const detached = symbolicRef.status === 1 && symbolicRef.stdout.trim() === "";
-const output = git(["ls-tree", "-rz", "--full-tree", sourceSha], "buffer");
+const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
 const gitlinks = [];
 const files = output
   .toString("utf8")
