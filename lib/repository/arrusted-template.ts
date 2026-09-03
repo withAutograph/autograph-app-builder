@@ -325,14 +325,25 @@ console.log(JSON.stringify({
 
 const sandboxCloneStages = [
   {
-    stage: "initialize",
+    stage: "prepare-directory",
+    network: false,
+    program: [
+      "set -eu",
+      `mkdir -p ${SANDBOX_WORKSPACE}`,
+      `find ${SANDBOX_WORKSPACE} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + >/dev/null 2>&1 || true`,
+    ].join("\n"),
+  },
+  {
+    stage: "initialize-git",
+    network: false,
+    program: ["set -eu", `git -C ${SANDBOX_WORKSPACE} init --quiet`].join("\n"),
+  },
+  {
+    stage: "configure-remote",
     network: false,
     program: [
       "set -eu",
       `remote=${ARRUSTED_TEMPLATE_REPOSITORY}`,
-      `mkdir -p ${SANDBOX_WORKSPACE}`,
-      `find ${SANDBOX_WORKSPACE} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
-      `git -C ${SANDBOX_WORKSPACE} init --quiet`,
       `git -C ${SANDBOX_WORKSPACE} remote remove origin >/dev/null 2>&1 || true`,
       `git -C ${SANDBOX_WORKSPACE} remote add origin "$remote"`,
     ].join("\n"),
