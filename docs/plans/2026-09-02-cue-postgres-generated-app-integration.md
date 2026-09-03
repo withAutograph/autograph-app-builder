@@ -28,7 +28,9 @@ That document owns the PostgreSQL API seam, the runtime-adapter and
 database-binding decisions, the migration-tooling decision, and the compiler
 and database invariants that every frontend view layer must preserve. App
 Builder must not select, duplicate, or weaken those decisions. This document
-owns the separate Next.js view-layer spike and ADR.
+owns the separate Next.js view-layer spike and ADR, plus the external
+access-surface spike and ADR. Platform/control-plane APIs and MCP remain
+separate from generated-app data-plane access.
 
 ## Objective
 
@@ -78,18 +80,22 @@ choose any of the following:
    Pro, `pg-schema-diff` with a thin Arrusted lifecycle adapter, or `pgroll` as
    the schema-migration implementation; or
 4. direct Server Component-to-DAL reads or Fate component views backed by a
-   generated read Server Action as the frontend view layer.
+   generated read Server Action as the frontend view layer; or
+5. the external REST/GraphQL, SDK, CLI, and generated-MCP access surface or
+   its generator path.
 
 The first three choices require the conformance comparisons and accepted ADRs
 defined by the canonical runtime plan. The fourth requires the view-layer
-spike and accepted ADR in this document. App Builder work may define and test
+spike and accepted ADR in this document; the fifth requires the access-surface
+spike and accepted ADR. App Builder work may define and test
 the adapter-neutral handoff before those decisions. It must stop before
 generating the first product application against a provisional adapter,
 binding source, migration engine, or view layer.
 
-No runtime adapter, database-binding source, migration engine, or frontend view
-layer is selected by this plan. In particular, Atlas Community, Atlas Pro,
-`pg-schema-diff`, `pgroll`, and Fate remain unselected.
+No runtime adapter, database-binding source, migration engine, frontend view
+layer, access surface, or generator is selected by this plan. In particular,
+Atlas Community, Atlas Pro, `pg-schema-diff`, `pgroll`, and Fate remain
+unselected.
 
 Whichever candidates are selected, the product-facing server contract remains
 generated named operations over a server-only DAL. Every adapter consumes only
@@ -695,6 +701,58 @@ compile to one atomic database operation using the runtime's closed mutation
 vocabulary. App Builder must reject arbitrary SQL, arbitrary executable code,
 network access, and provider credentials in CUE.
 
+## Serving and access surfaces
+
+The generated application is served from the public typed PostgreSQL `api`
+schema through selected private adapters; no protocol branch is an authority:
+
+```text
+CUE -> normalized named operations -> private kernel + public PostgreSQL api
+                                      |          |          |
+                                   REST      GraphQL   Next Server Actions
+                                      |          |          |
+                                  SDK/CLI   SDK/CLI/Fate   RSC/browser
+                                      \          |          /
+                                  generated app MCP
+                              (agents, ChatGPT, tools)
+```
+
+The compiler emits one operation manifest (roots, arguments, DTOs, relations,
+field capabilities, limits, auth references, errors, artifact and version)
+from which it generates OpenAPI/REST, GraphQL persisted operations, DAL and
+Server Action bindings, SDKs, CLI commands, MCP tools, documentation, and
+compatibility metadata. These are projections, never independently editable
+contracts. PostgreSQL credentials, private tables, SQL, and unrestricted query
+controls are never distributed.
+
+| Actor                | Surface                                  | Boundary                                                             |
+| -------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| Generated-app user   | RSC reads, Server Actions, optional Fate | Next derives app, tenant, actor, role, provenance, artifact          |
+| External application | Versioned REST or GraphQL                | Authenticated gateway; named roots and masks remain compiler-derived |
+| SDK or CLI consumer  | Generated language clients and commands  | Ergonomics only; no extra fields or operations                       |
+| Agent or ChatGPT     | Generated app MCP                        | Authenticated tools mapped to named operations                       |
+| App Builder/operator | Platform APIs and platform MCP           | Separate control plane, never generated-app data plane               |
+| Migration/deployment | Private PostgreSQL and migration engine  | Private roles, ledger, DDL, activation                               |
+
+External HTTP defaults to authenticated server-to-server use. Browser exposure
+requires an explicit fifth access-surface ADR covering CORS, browser tokens,
+abuse controls, limits, and tenant isolation. Candidate generators are
+[OpenAPI Generator](https://openapi-generator.tech/),
+[Stainless](https://www.stainless.com/docs/openapi/),
+[Speakeasy](https://www.speakeasy.com/docs/sdks/introduction),
+[liblab](https://liblab.com/), and [Smithy](https://smithy.io/2.0/spec/index.html),
+with [GraphQL Code Generator](https://the-guild.dev/graphql/codegen/plugins/presets/preset-client)
+for GraphQL clients. Seamless is deferred until its product identity is clear.
+
+### Access-surface ADR gate
+
+The fifth ADR compares private versus external REST/GraphQL, auth and tenant
+context, field/operation allowlists, limits, parity with DAL and Actions,
+SDK/CLI/MCP generation, deterministic release artifacts, compatibility and
+deprecation, licensing, diagnostics, and fallback. It records exact versions
+and whether each tool requires hosted login. Only one strategy and generator
+path may ship; all others remain disposable spikes.
+
 ## First real generated-app proof
 
 The first acceptance target is a real product application generated through
@@ -712,7 +770,7 @@ that exercise, all of the following:
 
 Acceptance requires proof that:
 
-1. all four ADRs have been accepted and the generated application contains
+1. all five ADRs have been accepted and the generated application contains
    only the selected runtime adapter, database binding, migration-engine
    integration, and view layer;
 2. App Builder produces and validates the app-owned CUE source from the
@@ -747,9 +805,9 @@ later, separately authorized step.
    cross-links.
 2. Add the adapter-neutral normalized operation and artifact handoff without
    generating a product app.
-3. Complete the six-candidate runtime comparison, the independent binding
-   comparison, the five-candidate migration-tooling comparison, and the
-   Next.js view-layer spike; record and accept all four ADR decisions. These
+3. Complete the six-candidate runtime comparison, independent binding and
+   five-candidate migration-tooling comparisons, Next.js view-layer spike, and
+   access-surface/SDK/CLI/MCP spike; record and accept all five ADR decisions. These
    evidence lanes may run in parallel once the normalized operation contract,
    desired PostgreSQL catalog, and typed migration intent are stable.
 4. Add `cue-postgres` to the AppSpec, planning, validation, and app-creation
