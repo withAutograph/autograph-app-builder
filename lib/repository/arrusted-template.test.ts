@@ -224,6 +224,11 @@ describe("canonical Arrusted template readiness", () => {
               }
             : { exitCode: 0, stdout: "", stderr: "" },
     );
+    const writeTextFile = vi.fn(
+      async ({ path, content }: { path: string; content: string }) => {
+        files.set(path, content);
+      },
+    );
     const sandbox = {
       id: "sandbox-template-clone",
       readTextFile: vi.fn(
@@ -232,11 +237,7 @@ describe("canonical Arrusted template readiness", () => {
       readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
         path === "repository/microfrontends.json" ? sourceBytes : null,
       ),
-      writeTextFile: vi.fn(
-        async ({ path, content }: { path: string; content: string }) => {
-          files.set(path, content);
-        },
-      ),
+      writeTextFile,
       removePath: vi.fn(async ({ path }: { path: string }) => {
         files.delete(path);
       }),
@@ -288,6 +289,18 @@ describe("canonical Arrusted template readiness", () => {
     expect(cloneCommand).toContain("checkout --detach");
     expect(cloneCommand).toContain(
       "node /workspace/.arrusted-template-inspect.cjs",
+    );
+    const inspectionProgram = writeTextFile.mock.calls.find(
+      ([call]) => call.path === ".arrusted-template-inspect.cjs",
+    )?.[0].content;
+    const reinspectionProgram = writeTextFile.mock.calls.find(
+      ([call]) => call.path === ".arrusted-template-reinspect.cjs",
+    )?.[0].content;
+    expect(inspectionProgram).toContain(
+      'git(["ls-tree", "-r", "-z", "--full-tree", sourceSha]',
+    );
+    expect(reinspectionProgram).toContain(
+      'git(["ls-tree", "-r", "-z", "--full-tree", sourceSha]',
     );
     expect(run.mock.calls[0]?.[0].command).not.toContain("env -i");
     expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
