@@ -8,6 +8,7 @@ import {
   acquireCanonicalArrustedTemplate,
   classifySandboxCloneFailure,
   inspectCanonicalArrustedSandboxWorkspace,
+  sanitizeSandboxCloneError,
   sandboxCloneFailureStage,
   templateReadinessAttestationDigest,
 } from "./arrusted-template";
@@ -34,6 +35,16 @@ describe("sandbox clone failure classification", () => {
     expect(
       sandboxCloneFailureStage("AUTOGRAPH_CLONE_STAGE=anything-else"),
     ).toBeUndefined();
+  });
+
+  it("redacts credentials and URLs from bounded launch diagnostics", () => {
+    const token = "ghs_sensitive_reader_token";
+    const result = sanitizeSandboxCloneError(
+      `fatal: ${token} at https://github.com/private/repo\npermission denied`,
+      token,
+    );
+    expect(result).toBe("fatal: [redacted] at [url] permission denied");
+    expect(result).not.toContain(token);
   });
 });
 
