@@ -144,7 +144,7 @@ const sourceSha = git(["rev-parse", "HEAD"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceSha)) throw new Error("invalid source SHA");
 const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceTree)) throw new Error("invalid source tree");
-const output = git(["ls-tree", "-rz", "--full-tree", sourceSha], "buffer");
+const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
 const files = output
   .toString("utf8")
   .split("\0")
@@ -255,7 +255,7 @@ const symbolicRef = spawnSync(
 if (symbolicRef.error || ![0, 1].includes(symbolicRef.status))
   throw new Error("invalid checkout state");
 const detached = symbolicRef.status === 1 && symbolicRef.stdout.trim() === "";
-const output = git(["ls-tree", "-rz", "--full-tree", sourceSha], "buffer");
+const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
 const gitlinks = [];
 const files = output
   .toString("utf8")
@@ -357,7 +357,16 @@ function sandboxCloneCommand() {
     'echo "AUTOGRAPH_CLONE_STAGE=gitlinks" >&2',
     `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
     'echo "AUTOGRAPH_CLONE_STAGE=inspect" >&2',
-    `node /workspace/${SANDBOX_CLONE_INSPECTOR}`,
+    "mkdir -p /workspace/.app-builder",
+    `if node /workspace/${SANDBOX_CLONE_INSPECTOR} > /workspace/.app-builder/clone-inspection.stdout 2> /workspace/.app-builder/clone-inspection.stderr; then`,
+    "  cat /workspace/.app-builder/clone-inspection.stdout",
+    "else",
+    "  status=$?",
+    '  printf "AUTOGRAPH_CLONE_INSPECT_ERROR=" >&2',
+    '  tr "\\r\\n" "  " < /workspace/.app-builder/clone-inspection.stderr | head -c 512 >&2 || true',
+    '  printf "\\n" >&2',
+    '  exit "$status"',
+    "fi",
   ].join("\n");
   return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
 }
