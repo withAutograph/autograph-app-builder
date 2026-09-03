@@ -327,11 +327,7 @@ const sandboxCloneStages = [
   {
     stage: "prepare-directory",
     network: false,
-    program: [
-      "set -eu",
-      `mkdir -p ${SANDBOX_WORKSPACE}`,
-      `find ${SANDBOX_WORKSPACE} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + >/dev/null 2>&1 || true`,
-    ].join("\n"),
+    program: ["set -eu", `mkdir -p ${SANDBOX_WORKSPACE}`].join("\n"),
   },
   {
     stage: "initialize-git",
@@ -420,6 +416,14 @@ async function cloneCanonicalArrustedWorkspace(input: {
     await input.sandbox.writeTextFile({
       path: SANDBOX_CLONE_INSPECTOR,
       content: sandboxCloneInspectionProgram,
+    });
+    // This is a builder-owned working checkout. Recreate it through the
+    // sandbox filesystem API so a stale file, symlink, or partial checkout
+    // cannot make `mkdir -p` fail before ordinary Git initialization begins.
+    await input.sandbox.removePath({
+      path: "repository",
+      recursive: true,
+      force: true,
     });
     for (const stage of sandboxCloneStages) {
       await input.sandbox.writeTextFile({
