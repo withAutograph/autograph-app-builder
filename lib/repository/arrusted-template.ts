@@ -96,13 +96,23 @@ export function sandboxCloneFailureStage(stderr: string) {
 }
 
 export function sanitizeSandboxCloneError(stderr: string, token: string) {
-  return stderr
+  const sanitized = stderr
     .replaceAll(token, "[redacted]")
     .replaceAll(/https?:\/\/[^\s]+/gu, "[url]")
     .replaceAll(/[\r\n]+/gu, " ")
     .replaceAll(/[^\x20-\x7e]/gu, "?")
-    .trim()
-    .slice(0, 512);
+    .trim();
+  if (sanitized.length <= 512) return sanitized;
+
+  // Clone stage logs are deliberately detailed. Preserve a terminal inspector
+  // error too, otherwise the successful stages can consume the full bound.
+  const inspectorError = sanitized.lastIndexOf(
+    "AUTOGRAPH_CLONE_INSPECT_ERROR=",
+  );
+  if (inspectorError === -1) return sanitized.slice(0, 512);
+  const suffix = sanitized.slice(inspectorError);
+  const prefixLength = Math.max(0, 512 - suffix.length - 4);
+  return `${sanitized.slice(0, prefixLength)} ...${suffix}`;
 }
 
 const sandboxCloneInspectionProgram = String.raw`

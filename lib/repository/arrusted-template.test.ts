@@ -47,6 +47,22 @@ describe("sandbox clone failure classification", () => {
     expect(result).toBe("fatal: [redacted] at [url] permission denied");
     expect(result).not.toContain(token);
   });
+
+  it("preserves a terminal inspector failure after successful clone stages", () => {
+    const stages = Array.from(
+      { length: 40 },
+      () => "AUTOGRAPH_CLONE_STAGE=checkout",
+    ).join("\n");
+    const result = sanitizeSandboxCloneError(
+      `${stages}\nAUTOGRAPH_CLONE_INSPECT_ERROR=unsupported source entry`,
+      "unused-token",
+    );
+    expect(result).toContain("AUTOGRAPH_CLONE_STAGE=checkout");
+    expect(result).toContain(
+      "AUTOGRAPH_CLONE_INSPECT_ERROR=unsupported source entry",
+    );
+    expect(result.length).toBeLessThanOrEqual(512);
+  });
 });
 
 function eligibleContents() {
