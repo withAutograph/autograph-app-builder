@@ -319,8 +319,8 @@ function sandboxCloneCommand() {
     'stage() { printf "%s\\n" "$1" > "$stage_file"; }',
     'cleanup() { rm -f "$credential"; }',
     "trap cleanup EXIT HUP INT TERM",
-    'test -f "$credential"',
-    'chmod 600 "$credential"',
+    "stage credential",
+    'test -r "$credential"',
     "stage clone",
     `rm -rf ${SANDBOX_WORKSPACE}`,
     `git -c protocol.allow=never -c protocol.https.allow=always -c 'credential.helper=store --file=/workspace/${SANDBOX_CLONE_CREDENTIAL}' -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main ${remote} ${SANDBOX_WORKSPACE}`,
@@ -418,7 +418,7 @@ async function cloneCanonicalArrustedWorkspace(input: {
           failureStage
             ?.trim()
             .match(
-              /^(clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)$/u,
+              /^(credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)$/u,
             )?.[1] ?? "unknown",
       }),
     );

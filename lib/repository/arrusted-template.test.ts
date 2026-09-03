@@ -261,6 +261,9 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).toContain(
       "credential.helper=store --file=/workspace/.app-builder/arrusted-template-reader-token",
     );
+    expect(run.mock.calls[0]?.[0].command).toContain("stage credential");
+    expect(run.mock.calls[0]?.[0].command).toContain('test -r "$credential"');
+    expect(run.mock.calls[0]?.[0].command).not.toContain("chmod 600");
     expect(run.mock.calls[0]?.[0].command).toContain(
       "GIT_ASKPASS=/usr/bin/false",
     );
