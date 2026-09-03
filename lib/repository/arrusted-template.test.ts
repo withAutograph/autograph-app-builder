@@ -284,10 +284,13 @@ describe("canonical Arrusted template readiness", () => {
     expect(stagedCloneScripts[1]).toContain(
       "git -C /workspace/repository init",
     );
-    expect(stagedCloneScripts[0]).not.toContain("rm -rf /workspace/repository");
-    expect(stagedCloneScripts[0]).toContain(
-      "find /workspace/repository -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + >/dev/null 2>&1 || true",
-    );
+    expect(stagedCloneScripts[0]).not.toContain("rm -rf");
+    expect(stagedCloneScripts[0]).toContain("mkdir -p /workspace/repository");
+    expect(sandbox.removePath).toHaveBeenCalledWith({
+      path: "repository",
+      recursive: true,
+      force: true,
+    });
     expect(stagedCloneScripts[2]).toContain("remote remove origin");
     expect(stagedCloneScripts[3]).toContain(
       "fetch --depth 1 --no-recurse-submodules origin main",
@@ -416,7 +419,11 @@ describe("canonical Arrusted template readiness", () => {
       }),
     ).rejects.toThrow("clone could not be prepared");
     expect(files.has(".arrusted-template-reader-token")).toBe(false);
-    expect(removePath).toHaveBeenCalledTimes(2);
+    expect(removePath).toHaveBeenCalledWith({
+      path: "repository",
+      recursive: true,
+      force: true,
+    });
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
 
