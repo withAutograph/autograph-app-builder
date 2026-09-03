@@ -14,6 +14,7 @@ import {
 } from "./arrusted-template";
 import type { ArrustedTemplateReader } from "./arrusted-template-reader";
 import { SUPPORTED_TEMPLATE_INPUT_PATHS } from "./supported-template";
+import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
 
 const contractPaths = SUPPORTED_TEMPLATE_INPUT_PATHS;
 
@@ -283,11 +284,8 @@ describe("canonical Arrusted template readiness", () => {
     );
     expect(stagedCloneScript).toContain("checkout --detach");
     expect(stagedCloneScript).toContain("core.hooksPath=/dev/null");
-    expect(stagedCloneScript).toContain(
-      "credential.helper=store --file=/workspace/.arrusted-template-reader-token",
-    );
-    expect(stagedCloneScript).toContain("stage credential");
-    expect(stagedCloneScript).toContain('test -r "$credential"');
+    expect(stagedCloneScript).not.toContain("credential.helper=store");
+    expect(stagedCloneScript).not.toContain("reader-token");
     expect(stagedCloneScript).not.toContain("chmod 600");
     expect(run.mock.calls[0]?.[0].command).toContain(
       "GIT_ASKPASS=/usr/bin/false",
@@ -323,9 +321,12 @@ describe("canonical Arrusted template readiness", () => {
     expect(files.has(".arrusted-template-inspect.cjs")).toBe(false);
     expect(files.has(".arrusted-template-reinspect.cjs")).toBe(false);
     expect(reader.acquire).toHaveBeenCalledOnce();
-    expect(setNetworkPolicy).toHaveBeenNthCalledWith(1, {
-      allow: ["github.com"],
-    });
+    expect(setNetworkPolicy).toHaveBeenNthCalledWith(
+      1,
+      githubSandboxCredentialPolicy(
+        "ghs_reader_token_that_is_only_for_this_acquisition",
+      ),
+    );
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
     reinspectionRemote =
       "https://github.com/withAutograph/another-private-template.git";
@@ -401,57 +402,9 @@ describe("canonical Arrusted template readiness", () => {
       }),
     ).rejects.toThrow("clone could not be prepared");
     expect(files.has(".arrusted-template-reader-token")).toBe(false);
-    expect(removePath).toHaveBeenCalledTimes(3);
+    expect(removePath).toHaveBeenCalledTimes(2);
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
-
-  it.each(["credential-write", "network-enable"] as const)(
-    "removes staged credentials and restores deny-all when %s fails",
-    async (failure) => {
-      const files = new Map<string, string>();
-      const removePath = vi.fn(async ({ path }: { path: string }) => {
-        files.delete(path);
-      });
-      const setNetworkPolicy = vi.fn(async (policy: unknown) => {
-        if (failure === "network-enable" && policy !== "deny-all")
-          throw new Error("network unavailable");
-      });
-      const sandbox = {
-        id: `sandbox-template-${failure}`,
-        readTextFile: vi.fn(async () => null),
-        writeTextFile: vi.fn(
-          async ({ path, content }: { path: string; content: string }) => {
-            if (
-              failure === "credential-write" &&
-              path === ".arrusted-template-reader-token"
-            )
-              throw new Error("credential unavailable");
-            files.set(path, content);
-          },
-        ),
-        removePath,
-        setNetworkPolicy,
-        run: vi.fn(),
-      } as unknown as SandboxSession;
-      const reader: ArrustedTemplateReader = {
-        acquire: vi.fn(async () => ({
-          token: "ghs_reader_token_that_is_only_for_this_acquisition",
-        })),
-      };
-
-      await expect(
-        acquireCanonicalArrustedTemplate({
-          sandbox,
-          callId: `call-template-${failure}`,
-          reader,
-        }),
-      ).rejects.toThrow();
-      expect(files.has(".arrusted-template-reader-token")).toBe(false);
-      expect(removePath).toHaveBeenCalledTimes(3);
-      expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
-      expect(sandbox.run).not.toHaveBeenCalled();
-    },
-  );
 
   it("fails closed when the exact SHA has no successful readiness check", async () => {
     vi.stubGlobal(

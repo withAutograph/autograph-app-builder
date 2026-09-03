@@ -1,5 +1,7 @@
 import type { SandboxSession } from "eve/sandbox";
 
+import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
+
 import {
   inspectExistingRepositorySnapshotReceipt,
   parseCanonicalTemplateSnapshot,
@@ -27,11 +29,8 @@ const SANDBOX_WORKSPACE = "/workspace/repository";
 const SANDBOX_OPERATION_TIMEOUT_MS = 120_000;
 const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
-const SANDBOX_CLONE_HOSTS = ["github.com"] as const;
 export const SANDBOX_GITHUB_SOURCE_INSPECTION =
   ".app-builder/canonical-clone-inspection.json";
-const SANDBOX_CLONE_CREDENTIAL = ".app-builder/arrusted-template-reader-token";
-const SANDBOX_CLONE_ASKPASS = ".app-builder/arrusted-template-reader-askpass";
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
@@ -310,17 +309,8 @@ function sandboxCloneCommand(input: {
   const remoteRef = shellQuote(`refs/remotes/origin/${input.branch}`);
   const script = [
     "set -eu",
-    `credential=/workspace/${SANDBOX_CLONE_CREDENTIAL}`,
-    `askpass=/workspace/${SANDBOX_CLONE_ASKPASS}`,
-    'cleanup() { rm -f "$askpass" "$credential"; }',
-    "trap cleanup EXIT HUP INT TERM",
-    'test -f "$credential"',
-    'test -f "$askpass"',
-    'chmod 600 "$credential"',
-    'chmod 700 "$askpass"',
     `rm -rf ${SANDBOX_WORKSPACE}`,
     `git -c protocol.allow=never -c protocol.https.allow=always -c credential.helper= -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --no-checkout --no-recurse-submodules --single-branch --branch ${branch} ${remote} ${SANDBOX_WORKSPACE}`,
-    "cleanup",
     `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = ${remote}`,
     `remote_ref=${remoteRef}`,
     `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse "$remote_ref")"`,
@@ -335,7 +325,7 @@ function sandboxCloneCommand(input: {
     `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
     `node -e ${shellQuote(sandboxCloneInspectionProgram)}`,
   ].join("\n");
-  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/workspace/${SANDBOX_CLONE_ASKPASS} APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE=/workspace/${SANDBOX_CLONE_CREDENTIAL} SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
+  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
 }
 
 function sandboxGitHubSourceReinspectionCommand(input: {
@@ -507,23 +497,9 @@ export async function cloneGitHubSourceWorkspace(input: {
 
   let result;
   try {
-    await input.sandbox.writeTextFile({
-      path: SANDBOX_CLONE_CREDENTIAL,
-      content: `${input.token}\n`,
-    });
-    await input.sandbox.writeTextFile({
-      path: SANDBOX_CLONE_ASKPASS,
-      content: [
-        "#!/bin/sh",
-        'case "$1" in',
-        '  Username*) printf "%s\\n" "x-access-token" ;;',
-        '  Password*) sed -n "1p" "$APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE" ;;',
-        "  *) exit 1 ;;",
-        "esac",
-        "",
-      ].join("\n"),
-    });
-    await input.sandbox.setNetworkPolicy({ allow: [...SANDBOX_CLONE_HOSTS] });
+    await input.sandbox.setNetworkPolicy(
+      githubSandboxCredentialPolicy(input.token),
+    );
     result = await input.sandbox.run({
       command: sandboxCloneCommand({
         remote,
@@ -539,17 +515,7 @@ export async function cloneGitHubSourceWorkspace(input: {
       abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     });
   } finally {
-    try {
-      await Promise.all([
-        input.sandbox.removePath({ path: SANDBOX_CLONE_ASKPASS, force: true }),
-        input.sandbox.removePath({
-          path: SANDBOX_CLONE_CREDENTIAL,
-          force: true,
-        }),
-      ]);
-    } finally {
-      await input.sandbox.setNetworkPolicy("deny-all");
-    }
+    await input.sandbox.setNetworkPolicy("deny-all");
   }
   if (
     Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
