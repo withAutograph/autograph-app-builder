@@ -192,13 +192,9 @@ function verifiedImplementationPlan(
   return publicImplementationPlanSchema.parse({
     appId: target.contract.appId,
     runtime: target.plan.source.runtime,
-    workspacePath: target.plan.source.workspacePath,
     packageName: target.plan.source.packageName,
     projectName: target.plan.topology.projectName,
     routes: target.plan.topology.routes,
-    sourceSha: result.sourceSha,
-    sourceTree: result.sourceTree,
-    proposalDigest: result.digest,
     readOnly: true,
   });
 }

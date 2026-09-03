@@ -184,13 +184,9 @@ export const publicImplementationPlanSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
     runtime: z.literal("nextjs"),
-    workspacePath: repositoryPathSchema,
     packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
     projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
     routes: z.array(z.string().startsWith("/")).min(1),
-    sourceSha: gitObjectIdSchema,
-    sourceTree: gitObjectIdSchema,
-    proposalDigest: sha256DigestSchema,
     readOnly: z.literal(true),
   })
   .strict();

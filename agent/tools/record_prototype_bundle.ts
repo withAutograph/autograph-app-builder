@@ -20,9 +20,6 @@ import acceptAppSpec from "./accept_app_spec";
 import prepareWorkspace from "./prepare_workspace";
 import sourceStatus from "./source_status";
 
-const localDevelopment =
-  process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
-
 const bundleInputSchema = z
   .object({
     appId: z.string().min(1),
@@ -76,9 +73,8 @@ const bundleInputSchema = z
   });
 
 export default defineTool({
-  description: localDevelopment
-    ? "Local development fast path: provide appId, brief, an optional productName, optional interfacePattern, and optional small product object (outcome, itemLabels, filters, keyFacts, primaryAction, states). For an existing app, first inspect files being replaced and include the complete app-owned change set in existingAppChanges; new app-owned files are allowed. This same call must complete planning, so never omit the intended changes or defer planning to another model step. This tool deterministically expands the concise product choices into a usable Browser prototype and build-ready internal design, then continues planning. Do not author HTML, decisions, or an internal design payload in local development. It never writes the target repository."
-    : "Record one complete, usable new-app prototype bundle and continue silently through implementation planning in one internal operation. Prefer this normal creation path over three record_prototype_artifact calls. Before calling, provide a complete build-ready internal design with each heading exactly once: ## Status and prototype; ## User and outcome; ## Interfaces and navigation; ## Controls and behavior; ## Data model; ## Integrations and reconciliation; ## Temporal semantics; ## Writes, review, and authority; ## Access and tenancy; ## Agent behavior; ## Operational states; ## Defaults, non-goals, and risks; ## Acceptance walkthrough; ## Build handoff. End Build handoff with one closed json block using status build-ready. It never writes the target repository.",
+  description:
+    "Record one complete, usable prototype bundle and continue silently through implementation planning in one operation. For products that naturally fit a queue, dashboard, or form, provide appId, a concise brief, and optional product choices (productName, interfacePattern, outcome, itemLabels, filters, keyFacts, primaryAction, states); the builder expands them into a Browser prototype and complete internal design. For any other product shape, provide the complete authored indexHtml, decisionsMarkdown, and appSpecMarkdown instead of forcing it into those patterns. For an existing app, include the inspected app-owned change set in existingAppChanges. Empty workflows automatically resolve and prepare the eligible source before recording. Never expose internal preparation, validation, or receipt mechanics, and never write the target repository.",
   inputSchema: bundleInputSchema,
   async execute(input, ctx) {
     const { appId } = input;
@@ -86,11 +82,11 @@ export default defineTool({
       throw new Error("App id must be one lowercase kebab-case segment.");
     let current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "prototype bundle recording");
-    if (current.phase === "empty" && localDevelopment) {
+    if (current.phase === "empty") {
       await sourceStatus.execute({}, ctx);
       const source = sourceWorkflowState.get();
       if (source.phase === "empty")
-        throw new Error("The local development source is unavailable.");
+        throw new Error("The supported builder source is unavailable.");
       await prepareWorkspace.execute(
         { expectedSourceReceiptDigest: source.receipt.digest },
         ctx,
@@ -98,9 +94,7 @@ export default defineTool({
       current = appBuilderWorkflowState.get();
     }
     if (current.phase === "empty")
-      throw new Error(
-        "Prepare a workspace before recording a prototype bundle.",
-      );
+      throw new Error("The builder workspace could not be prepared.");
     if (current.phase === "ui_previewed" || current.phase === "ui_accepted")
       throw new Error(
         "This session is using component-backed UI review; revise or finalize that UI instead of recording an HTML bundle.",
@@ -112,25 +106,17 @@ export default defineTool({
     const compactBundle =
       input.brief === undefined
         ? undefined
-        : localDevelopment
-          ? developmentPrototypeBundle({
-              appId,
-              brief: input.brief,
-              ...(input.productName === undefined
-                ? {}
-                : { productName: input.productName }),
-              ...(input.interfacePattern === undefined
-                ? {}
-                : { interfacePattern: input.interfacePattern }),
-              ...(input.product === undefined
-                ? {}
-                : { product: input.product }),
-            })
-          : undefined;
-    if (input.brief !== undefined && compactBundle === undefined)
-      throw new Error(
-        "Concise prototype generation is available only in local development.",
-      );
+        : developmentPrototypeBundle({
+            appId,
+            brief: input.brief,
+            ...(input.productName === undefined
+              ? {}
+              : { productName: input.productName }),
+            ...(input.interfacePattern === undefined
+              ? {}
+              : { interfacePattern: input.interfacePattern }),
+            ...(input.product === undefined ? {} : { product: input.product }),
+          });
     const recorded = recordPrototypeArtifactBundle({
       artifacts: current.artifacts,
       appId,

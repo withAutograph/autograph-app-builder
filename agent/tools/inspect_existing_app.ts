@@ -5,9 +5,12 @@ import {
   appBuilderWorkflowState,
   validAppId,
 } from "@/lib/agent/workflow-state";
+import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { canInspectExistingApplication } from "@/lib/agent/existing-app-sequencing";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { safeSourcePath } from "@/lib/repository/source-path";
+import sourceStatus from "./source_status";
+import prepareWorkspace from "./prepare_workspace";
 
 const maximumFileBytes = 262_144;
 const maximumTotalBytes = 1_048_576;
@@ -15,11 +18,9 @@ const maximumTotalBytes = 1_048_576;
 export default defineDynamic({
   events: {
     "step.started": () => {
-      if (!canInspectExistingApplication(appBuilderWorkflowState.get()))
-        return null;
       return defineTool({
         description:
-          "After source and workspace preparation, read regular text files from one existing application. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
+          "Read regular text files from one existing application. A fresh canonical-source flow prepares itself automatically. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
         inputSchema: z.strictObject({
           appId: z.string().min(1),
           paths: z.array(z.string().min(1).max(512)).max(32).default([]),
@@ -27,7 +28,23 @@ export default defineDynamic({
         async execute({ appId, paths }, ctx) {
           if (!validAppId(appId))
             throw new Error("The existing application id is invalid.");
-          const state = appBuilderWorkflowState.get();
+          let state = appBuilderWorkflowState.get();
+          // The canonical Arrusted starter is already the supported transport
+          // for its built-in applications. Make inspection self-starting so a
+          // fresh existing-app conversation does not need to know the internal
+          // source/setup sequence. Arbitrary repositories still require the
+          // explicit source resolution path.
+          if (state.phase === "empty") {
+            await sourceStatus.execute({}, ctx);
+            const source = sourceWorkflowState.get();
+            if (source.phase === "empty")
+              throw new Error("The canonical source could not be prepared.");
+            await prepareWorkspace.execute(
+              { expectedSourceReceiptDigest: source.receipt.digest },
+              ctx,
+            );
+            state = appBuilderWorkflowState.get();
+          }
           if (state.phase === "empty" || !canInspectExistingApplication(state))
             throw new Error("Prepare the source before inspection.");
           const prefix = `apps/${appId}/`;
