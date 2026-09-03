@@ -37,7 +37,6 @@ const SANDBOX_OPERATION_TIMEOUT_MS = 120_000;
 const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
-const SANDBOX_CLONE_SCRIPT = ".arrusted-template-clone.sh";
 const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
 const SANDBOX_REINSPECTOR = ".arrusted-template-reinspect.cjs";
 
@@ -67,6 +66,10 @@ async function acquisitionStage<T>(
 
 function receiptReadinessDigest(input: Record<string, unknown>) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 export function classifySandboxCloneFailure(stderr: string) {
@@ -323,61 +326,21 @@ console.log(JSON.stringify({
 }));
 `;
 
-const sandboxCloneStages = [
-  {
-    stage: "prepare-directory",
-    network: false,
-    program: ["set -eu", `mkdir -p ${SANDBOX_WORKSPACE}`].join("\n"),
-  },
-  {
-    stage: "initialize-git",
-    network: false,
-    program: ["set -eu", `git -C ${SANDBOX_WORKSPACE} init --quiet`].join("\n"),
-  },
-  {
-    stage: "configure-remote",
-    network: false,
-    program: [
-      "set -eu",
-      `remote=${ARRUSTED_TEMPLATE_REPOSITORY}`,
-      `git -C ${SANDBOX_WORKSPACE} remote remove origin >/dev/null 2>&1 || true`,
-      `git -C ${SANDBOX_WORKSPACE} remote add origin "$remote"`,
-    ].join("\n"),
-  },
-  {
-    stage: "fetch",
-    network: true,
-    program: [
-      "set -eu",
-      `git -C ${SANDBOX_WORKSPACE} -c credential.helper= fetch --depth 1 --no-recurse-submodules origin main`,
-    ].join("\n"),
-  },
-  {
-    stage: "checkout",
-    network: false,
-    program: [
-      "set -eu",
-      `remote=${ARRUSTED_TEMPLATE_REPOSITORY}`,
-      `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = "$remote"`,
-      `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse FETCH_HEAD)"`,
-      `git -C ${SANDBOX_WORKSPACE} checkout --detach --quiet "$resolved_sha"`,
-      `git -C ${SANDBOX_WORKSPACE} clean -ffdx --quiet`,
-      `test -z "$(git -C ${SANDBOX_WORKSPACE} status --porcelain=v1)"`,
-      `test ! -e ${SANDBOX_WORKSPACE}/.gitmodules`,
-      `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
-    ].join("\n"),
-  },
-  {
-    stage: "inspect",
-    network: false,
-    program: ["set -eu", `node /workspace/${SANDBOX_CLONE_INSPECTOR}`].join(
-      "\n",
-    ),
-  },
-] as const;
-
 function sandboxCloneCommand() {
-  return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh /workspace/${SANDBOX_CLONE_SCRIPT}`;
+  const script = [
+    "set -eu",
+    `mkdir -p ${SANDBOX_WORKSPACE}`,
+    `git -C ${SANDBOX_WORKSPACE} init --quiet`,
+    `git -C ${SANDBOX_WORKSPACE} remote add origin ${ARRUSTED_TEMPLATE_REPOSITORY}`,
+    `git -C ${SANDBOX_WORKSPACE} -c credential.helper= fetch --depth 1 --no-recurse-submodules origin ${ARRUSTED_TEMPLATE_REF}`,
+    `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse FETCH_HEAD)"`,
+    `git -C ${SANDBOX_WORKSPACE} checkout --detach --quiet "$resolved_sha"`,
+    `test -z "$(git -C ${SANDBOX_WORKSPACE} status --porcelain=v1)"`,
+    `test ! -e ${SANDBOX_WORKSPACE}/.gitmodules`,
+    `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
+    `node /workspace/${SANDBOX_CLONE_INSPECTOR}`,
+  ].join("\n");
+  return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
 }
 
 function sandboxCloneReinspectionCommand() {
@@ -425,61 +388,37 @@ async function cloneCanonicalArrustedWorkspace(input: {
       recursive: true,
       force: true,
     });
-    for (const stage of sandboxCloneStages) {
-      await input.sandbox.writeTextFile({
-        path: SANDBOX_CLONE_SCRIPT,
-        content: `${stage.program}\n`,
-      });
-      if (stage.network)
-        await input.sandbox.setNetworkPolicy(
-          githubSandboxCredentialPolicy(input.token),
-        );
-      let stageResult;
-      try {
-        stageResult = await input.sandbox.run({
-          command: sandboxCloneCommand(),
-          env: { TERM: "dumb" },
-          abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
-        });
-      } finally {
-        if (stage.network) await input.sandbox.setNetworkPolicy("deny-all");
-      }
-      if (
-        Buffer.byteLength(stageResult.stdout) >
-          SANDBOX_OPERATION_OUTPUT_BYTES ||
-        Buffer.byteLength(stageResult.stderr) >
-          SANDBOX_OPERATION_OUTPUT_BYTES ||
-        stageResult.exitCode !== 0
-      ) {
-        console.warn(
-          JSON.stringify({
-            event: "autograph.template-clone-command.failed",
-            category: classifySandboxCloneFailure(
-              stageResult.stderr.toLowerCase(),
-            ),
-            exitCode: stageResult.exitCode,
-            outputWithinLimit:
-              Buffer.byteLength(stageResult.stdout) <=
-                SANDBOX_OPERATION_OUTPUT_BYTES &&
-              Buffer.byteLength(stageResult.stderr) <=
-                SANDBOX_OPERATION_OUTPUT_BYTES,
-            commandStage: stage.stage,
-            errorSummary: sanitizeSandboxCloneError(
-              stageResult.stderr,
-              input.token,
-            ),
-          }),
-        );
-        throw new Error(
-          "The canonical Arrusted workspace clone could not be prepared.",
-        );
-      }
-      if (stage.stage === "inspect") result = stageResult;
+    await input.sandbox.setNetworkPolicy(
+      githubSandboxCredentialPolicy(input.token),
+    );
+    result = await input.sandbox.run({
+      command: sandboxCloneCommand(),
+      workingDirectory: "/workspace",
+      env: { TERM: "dumb" },
+      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
+    });
+    if (
+      Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
+      Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
+      result.exitCode !== 0
+    ) {
+      console.warn(
+        JSON.stringify({
+          event: "autograph.template-clone-command.failed",
+          category: classifySandboxCloneFailure(result.stderr.toLowerCase()),
+          exitCode: result.exitCode,
+          outputWithinLimit:
+            Buffer.byteLength(result.stdout) <= SANDBOX_OPERATION_OUTPUT_BYTES &&
+            Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
+          errorSummary: sanitizeSandboxCloneError(result.stderr, input.token),
+        }),
+      );
+      throw new Error("The canonical Arrusted workspace clone could not be prepared.");
     }
   } finally {
     try {
       const cleanup = await Promise.allSettled(
-        [SANDBOX_CLONE_SCRIPT, SANDBOX_CLONE_INSPECTOR].map((path) =>
+        [SANDBOX_CLONE_INSPECTOR].map((path) =>
           input.sandbox.removePath({ path, force: true }),
         ),
       );

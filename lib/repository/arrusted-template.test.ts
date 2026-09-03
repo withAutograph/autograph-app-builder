@@ -189,7 +189,8 @@ describe("canonical Arrusted template readiness", () => {
       "https://github.com/withAutograph/arrusted-development.git";
     const run = vi.fn(
       async ({ command }: { command: string; env?: Record<string, string> }) =>
-        command.includes("arrusted-template-clone.sh")
+        command.includes("arrusted-template-inspect.cjs") &&
+        !command.includes("arrusted-template-reinspect.cjs")
           ? {
               exitCode: 0,
               stdout: JSON.stringify({
@@ -269,44 +270,28 @@ describe("canonical Arrusted template readiness", () => {
     );
     if (receipt.version !== 4) throw new Error("expected a V4 receipt");
     await inspectCanonicalArrustedSandboxWorkspace({ sandbox, receipt });
-    expect(run.mock.calls[0]?.[0].command).toContain(
-      "/bin/sh /workspace/.arrusted-template-clone.sh",
+    const cloneCommand = run.mock.calls[0]?.[0].command;
+    expect(cloneCommand).toContain("/bin/sh -ceu");
+    expect(cloneCommand).toContain("mkdir -p /workspace/repository");
+    expect(cloneCommand).toContain("git -C /workspace/repository init");
+    expect(cloneCommand).toContain(
+      "fetch --depth 1 --no-recurse-submodules origin refs/heads/main",
     );
+    expect(cloneCommand).toContain("checkout --detach");
+    expect(cloneCommand).toContain("node /workspace/.arrusted-template-inspect.cjs");
     expect(run.mock.calls[0]?.[0].command).not.toContain("env -i");
     expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
-    const stagedCloneScripts = vi
-      .mocked(sandbox.writeTextFile)
-      .mock.calls.filter(
-        ([call]) => call.path === ".arrusted-template-clone.sh",
-      )
-      .map(([call]) => call.content);
-    expect(stagedCloneScripts).toHaveLength(6);
-    expect(stagedCloneScripts[1]).toContain(
-      "git -C /workspace/repository init",
-    );
-    expect(stagedCloneScripts[0]).not.toContain("rm -rf");
-    expect(stagedCloneScripts[0]).toContain("mkdir -p /workspace/repository");
     expect(sandbox.removePath).toHaveBeenCalledWith({
       path: "repository",
       recursive: true,
       force: true,
     });
-    expect(stagedCloneScripts[2]).toContain("remote remove origin");
-    expect(stagedCloneScripts[3]).toContain(
-      "fetch --depth 1 --no-recurse-submodules origin main",
-    );
-    expect(stagedCloneScripts[4]).toContain("rev-parse FETCH_HEAD");
-    expect(stagedCloneScripts[4]).toContain("checkout --detach");
-    expect(stagedCloneScripts[4]).toContain("clean -ffdx --quiet");
-    expect(stagedCloneScripts[5]).toContain(
-      "node /workspace/.arrusted-template-inspect.cjs",
-    );
-    expect(stagedCloneScripts.join("\n")).not.toContain(" clone ");
-    expect(stagedCloneScripts.join("\n")).not.toContain(
+    expect(cloneCommand).not.toContain(" clone ");
+    expect(cloneCommand).not.toContain(
       "credential.helper=store",
     );
-    expect(stagedCloneScripts.join("\n")).not.toContain("reader-token");
-    expect(stagedCloneScripts.join("\n")).not.toContain("chmod 600");
+    expect(cloneCommand).not.toContain("reader-token");
+    expect(cloneCommand).not.toContain("chmod 600");
     expect(run.mock.calls[0]?.[0].command).toContain(
       "GIT_ASKPASS=/usr/bin/false",
     );
@@ -314,7 +299,7 @@ describe("canonical Arrusted template readiness", () => {
       "APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE",
     );
     expect(run.mock.calls[0]?.[0].env).toEqual({ TERM: "dumb" });
-    expect(run.mock.calls[0]?.[0]).not.toHaveProperty("workingDirectory");
+    expect(run.mock.calls[0]?.[0].workingDirectory).toBe("/workspace");
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
