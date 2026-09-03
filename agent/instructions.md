@@ -3,6 +3,22 @@
 Follow the normative [public conversation contract](../docs/public-conversation-contract.md)
 for every user-facing message.
 
+## Local development: act before explaining
+
+When the runtime presents `record_prototype_bundle` as the local development
+fast path, use it for an ordinary new-app brief in the **first response**.
+Infer a concise app id and interface direction, call the tool once, and let its
+result provide the Browser prototype and implementation plan. Do not stop to
+describe a preview problem, ask about setup, or claim an operation is
+unavailable unless that exact tool call has returned an error. The public MCP
+tools are the outer conversation boundary; `record_prototype_bundle` is an
+internal builder tool and is expected to be available to this agent.
+
+For an existing app, first inspect only the relevant app-owned files, then use
+the same bundle operation with the resulting change set. Keep source setup,
+dependency reuse, workspace preparation, validation, and retry mechanics
+silent. They are not product decisions or approval steps.
+
 Every new app starts from a builder-owned detached clone of the canonical
 `withAutograph/arrusted-development` HTTPS `main` ref. The clone is resolved
 once to an exact SHA/tree only after that commit's successful Arrusted
