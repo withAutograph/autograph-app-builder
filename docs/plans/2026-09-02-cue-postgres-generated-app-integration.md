@@ -14,9 +14,9 @@ Existing HC, Vendor, and other Arrusted applications are behavioral and parity
 references; this plan does not migrate them.
 
 It also defines a pre-application evaluation of
-[Fate](https://fate.technology/) as an optional component-local view and cache
-layer. Fate is an unselected frontend candidate. It cannot become a schema,
-authorization, database, or runtime authority.
+[Fate](https://fate.technology/) as an optional generated React projection and
+mutation runtime. Fate is an unselected frontend candidate. It cannot become a
+schema, authorization, database, or runtime authority.
 
 The canonical compiler and runtime design lives in the Arrusted
 [generated-app CUE/Postgres backend plan](https://github.com/withAutograph/arrusted-development/blob/main/docs/plans/2026-09-02-generated-app-cue-postgres-backend.md).
@@ -40,7 +40,7 @@ accepted AppSpec
   -> PostgreSQL artifact
   -> generated validators and TypeScript bindings
   -> server-only DAL and generated actions
-  -> selected generated view integration
+  -> generated frontend projection metadata and selected view integration
   -> generated Next.js application
 ```
 
@@ -207,7 +207,7 @@ DTOs to Client Components. Mutations use the generated actions above. This is
 the retained fallback and the production behavior unless the view-layer ADR
 explicitly selects Fate.
 
-### Fate component views
+### Fate as a generated projection runtime
 
 Fate provides explicit, composable component views, normalized caching, and
 server-side data masks. Its current documentation labels it alpha and provides
@@ -216,6 +216,32 @@ to work in this Next.js architecture without proof. References:
 [views](https://fate.technology/guide/views),
 [server integration](https://fate.technology/integrations/server), and
 [getting started](https://fate.technology/guide/getting-started).
+
+The intended candidate architecture is not CUE versus Fate. CUE compiles the
+secure data capability graph; PostgreSQL enforces it; Fate is a generated React
+projection and mutation runtime over that graph. CUE declares model identities,
+read and command-result capabilities, relations, filters, pagination, command
+inputs, authorization references, and artifact compatibility. Fate component
+views compose and narrow those generated capabilities; they never define a
+model, database view, permission, query root, or command implementation.
+
+For the candidate, the compiler emits a deterministic Fate manifest alongside
+SQL, the DAL, and actions:
+
+```text
+app-owned CUE
+  -> normalized data capability graph
+      -> PostgreSQL artifact and generated DAL/actions
+      -> generated Fate entity types and roots
+      -> generated server data-view masks and relation resolvers
+      -> generated read/mutation transport maps and cache metadata
+```
+
+The generated Fate server integration resolves through the DAL rather than
+Fate's supplied Prisma, Drizzle, or native HTTP helpers. `dataView` masks,
+procedure IDs, mutation maps, TypeScript types, and cache scopes are compiler
+outputs and are never app-authored parallel authorities. The canonical runtime
+plan owns this capability-graph contract and its detailed invariants.
 
 The candidate has two read paths:
 
@@ -238,6 +264,94 @@ then invokes the DAL. It returns only generated serializable DTOs and safe
 errors. There is no `/fate` Route Handler, browser-visible runtime gateway, or
 generic table query API.
 
+Generated Fate mutations map one-for-one to CUE CRUD/lifecycle/named commands
+and their existing Server Actions. A mutation may request only the command's
+declared result capability for cache reconciliation; it cannot select an
+operation, function, authority, or field outside the generated manifest.
+Expected errors stay safe serialized action results, unexpected failures reach
+the generated React error boundary, and optimistic updates roll back on every
+failed or rejected command.
+
+### Illustrative generated-app shape
+
+The following is a target sketch, not final CUE syntax or an additional
+authoring authority. The app author declares a named read and command in CUE;
+the compiler emits the Fate-facing modules from the resulting normalized
+capability graph.
+
+```cue
+// app-owned CUE, illustrative only
+queries: projectBoard: {
+  input: { projectId: UUID }
+  capability: Project {
+    id
+    name
+    status
+    tasks: { id, title, status, dueAt }
+  }
+}
+
+commands: completeTask: {
+  input:  { taskId: UUID, version: int }
+  result: Task { id, status }
+}
+```
+
+```text
+generated/
+  dal.server.ts
+  actions.ts
+  fate/types.ts
+  fate/data-views.server.ts
+  fate/roots.ts
+  fate/mutations.ts
+  fate/transport.server.ts
+  fate/transport.client.ts
+```
+
+```tsx
+// Component-authored projection over generated types and capabilities.
+const TaskRowView = view<Task>()({
+  id: true,
+  title: true,
+  status: true,
+  dueAt: true,
+});
+
+const ProjectBoardView = view<Project>()({
+  id: true,
+  name: true,
+  status: true,
+  tasks: TaskRowView,
+});
+
+// `projectBoard` is a generated root; the transport validates the narrowed
+// selection before invoking the DAL.
+const { projectBoard } = useRequest({
+  projectBoard: { input: { projectId }, view: ProjectBoardView },
+});
+```
+
+```tsx
+// Generated mapping, shown only to make the boundary concrete.
+export const mutations = {
+  "task.complete": {
+    action: completeTask,
+    resultCapability: TaskResultCapability,
+    invalidates: ["projectBoard"],
+  },
+};
+```
+
+RSC creates the request-scoped Fate client and preloads the root through the
+DAL. The browser hydrates that scoped snapshot before views render, then uses
+the generated transport for later reads and mutations. Its cache scope binds
+the generated contract and active artifact plus the current app, tenant, actor,
+and authorization scope. Snapshot, entity, selection, and cache state cannot
+cross those boundaries. Automatic route generation and declarative intent
+routing remain the separately deferred explorations below; they are not
+required to prove this Fate integration.
+
 ### View-layer ADR gate
 
 Build both candidates against the same representative compiled schema and the
@@ -250,6 +364,11 @@ candidate must prove:
 - request-scoped server rendering, dehydration, and client hydration without
   duplicate reads or cross-app, cross-tenant, cross-user, cross-authorization,
   or cross-artifact cache reuse;
+- deterministic generation of the Fate types, data-view masks, roots,
+  mutation map, and transport from the same normalized contract as SQL;
+- exact correspondence between generated Fate roots/mutations and CUE named
+  capabilities, with no direct ORM, raw SQL, native Fate HTTP handler, or
+  Vite-plugin authority path;
 - bounded read-action batching without per-field or per-entity action
   waterfalls;
 - tenant isolation, safe errors, cancellation, timeouts, and malformed-batch
