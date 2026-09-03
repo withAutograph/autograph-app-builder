@@ -279,11 +279,13 @@ describe("canonical Arrusted template readiness", () => {
       .mock.calls.find(
         ([call]) => call.path === ".arrusted-template-clone.sh",
       )?.[0].content;
+    expect(stagedCloneScript).toContain("git -C /workspace/repository init");
     expect(stagedCloneScript).toContain(
-      "clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main",
+      "fetch --depth 1 --no-recurse-submodules origin main",
     );
+    expect(stagedCloneScript).toContain("rev-parse FETCH_HEAD");
     expect(stagedCloneScript).toContain("checkout --detach");
-    expect(stagedCloneScript).toContain("core.hooksPath=/dev/null");
+    expect(stagedCloneScript).not.toContain(" clone ");
     expect(stagedCloneScript).not.toContain("credential.helper=store");
     expect(stagedCloneScript).not.toContain("reader-token");
     expect(stagedCloneScript).not.toContain("chmod 600");
