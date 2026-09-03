@@ -434,8 +434,6 @@ async function cloneCanonicalArrustedWorkspace(input: {
       try {
         stageResult = await input.sandbox.run({
           command: sandboxCloneCommand(),
-          workingDirectory: "/workspace",
-          env: { TERM: "dumb" },
           abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
         });
       } finally {

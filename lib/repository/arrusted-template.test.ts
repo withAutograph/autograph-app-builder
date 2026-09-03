@@ -310,7 +310,8 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE",
     );
-    expect(run.mock.calls[0]?.[0].env).toEqual({ TERM: "dumb" });
+    expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+    expect(run.mock.calls[0]?.[0]).not.toHaveProperty("workingDirectory");
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
