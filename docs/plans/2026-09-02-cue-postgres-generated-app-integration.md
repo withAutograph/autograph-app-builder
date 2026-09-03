@@ -684,6 +684,51 @@ size, and developer-facing simplicity. It must not introduce arbitrary
 client-selected server functions, a generic route handler, or a permanent
 global event bus.
 
+## Cross-channel vocabulary
+
+The generated contract uses one machine vocabulary across every channel. App
+Builder may generate channel-specific presentation labels, but those labels
+always map back to the canonical operation identity.
+
+| Term | Meaning |
+| --- | --- |
+| App | Generated application boundary |
+| Tenant | Isolation and billing boundary |
+| Actor | Authenticated human or service principal |
+| Role | Server-derived authorization grouping |
+| Capability | CUE-declared allowed data or behavior scope |
+| Named query | Authorized read with fixed roots, fields, relations, filters, ordering, and limits |
+| Named command | Authorized atomic mutation or domain action |
+| Lifecycle operation | Generated state transition such as approve, revert, or archive |
+| Resource | Stable logical entity exposed by a capability |
+| Projection | Channel-specific representation of a capability |
+| DTO | Serializable operation result |
+| Input | Validated caller-supplied arguments |
+| Context | Trusted server-derived app, tenant, actor, role, provenance, and artifact identity |
+| Artifact | Versioned compiler output and activation identity |
+| Receipt | Durable execution, migration, activation, or publication record |
+| Error | Safe discriminated failure with stable code and retry/field metadata |
+| Event | Optional fact or notification, never an authorization source |
+| Channel | REST, GraphQL, Server Action, SDK, CLI, MCP, or chat integration |
+
+Queries, commands, and lifecycle operations remain distinct; capabilities are
+not roles; resources are not database tables; projections are not authorities;
+events are not commands; artifact identity is not caller input; and a channel
+adapter is not the database runtime adapter.
+
+REST uses paths and HTTP verbs, GraphQL uses fields and persisted operations,
+SDKs use typed methods, CLIs use stable verbs/flags and safe output, and MCP
+uses bounded tools and confirmations. Slack and other chat channels use the
+MCP-only bridge and conversational labels; they cannot define new operations or
+access the database directly. Platform MCP remains a separate control-plane
+contract.
+
+The compiler operation manifest contains canonical operation IDs, operation
+kind, resource/capability identity, typed inputs and DTOs, field/relation
+allowlists, limits, context requirements, idempotency/concurrency rules, stable
+errors, artifact compatibility, and channel projections. Renames require aliases,
+deprecation metadata, compatibility windows, and receipts.
+
 ## Generated operation surface
 
 Model CRUD maps to the compiled lifecycle rather than direct table mutation:
