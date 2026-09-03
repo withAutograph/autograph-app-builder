@@ -279,6 +279,8 @@ describe("canonical Arrusted template readiness", () => {
     const cloneCommand = run.mock.calls[0]?.[0].command;
     expect(cloneCommand).toContain("/bin/sh -ceu");
     expect(cloneCommand).toContain("mkdir -p /workspace/repository");
+    expect(cloneCommand).toContain("clone-inspection.stderr");
+    expect(cloneCommand).toContain("AUTOGRAPH_CLONE_INSPECT_ERROR=");
     expect(cloneCommand).toContain("git -C /workspace/repository init");
     expect(cloneCommand).toContain(
       "fetch --depth 1 --no-recurse-submodules origin refs/heads/main",
