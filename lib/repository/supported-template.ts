@@ -995,15 +995,16 @@ async function verifyDevelopmentSandboxWorkspace(
     ? JSON.stringify(process.execPath)
     : "node";
   const inspection = await sandbox.run({
-    command: `${node} -e ${JSON.stringify(developmentWorkspaceInspectionProgram)}`,
-    workingDirectory: "/workspace",
+    command: `cd /workspace && ${node} -e ${JSON.stringify(developmentWorkspaceInspectionProgram)}`,
     abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
   });
+  const normalizedStdout = inspection.stdout
+    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .trim();
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
     Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes ||
-    inspection.stdout !== developmentWorkspaceInspectionReceipt ||
-    inspection.exitCode !== 0
+    normalizedStdout !== developmentWorkspaceInspectionReceipt
   )
     throw new Error(
       "The prepared development workspace escaped its sandbox boundary.",

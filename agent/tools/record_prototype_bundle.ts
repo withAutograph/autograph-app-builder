@@ -8,6 +8,7 @@ import {
 } from "@/lib/agent/prototype-artifacts";
 import { developmentPrototypeBundle } from "@/lib/agent/development-prototype";
 import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
+import { sourceWorkflowState } from "@/lib/agent/source-state";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -16,6 +17,8 @@ import {
   validAppId,
 } from "@/lib/agent/workflow-state";
 import acceptAppSpec from "./accept_app_spec";
+import prepareWorkspace from "./prepare_workspace";
+import sourceStatus from "./source_status";
 
 const localDevelopment =
   process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
@@ -81,8 +84,19 @@ export default defineTool({
     const { appId } = input;
     if (!validAppId(appId))
       throw new Error("App id must be one lowercase kebab-case segment.");
-    const current = appBuilderWorkflowState.get();
+    let current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "prototype bundle recording");
+    if (current.phase === "empty" && localDevelopment) {
+      await sourceStatus.execute({}, ctx);
+      const source = sourceWorkflowState.get();
+      if (source.phase === "empty")
+        throw new Error("The local development source is unavailable.");
+      await prepareWorkspace.execute(
+        { expectedSourceReceiptDigest: source.receipt.digest },
+        ctx,
+      );
+      current = appBuilderWorkflowState.get();
+    }
     if (current.phase === "empty")
       throw new Error(
         "Prepare a workspace before recording a prototype bundle.",

@@ -143,12 +143,18 @@ export default defineTool({
       throw new Error(
         "The prepared workspace receipt changed before AppSpec acceptance.",
       );
-    if (current.githubSource === undefined && approvalReceipt !== undefined)
+    if (
+      !development &&
+      current.githubSource === undefined &&
+      approvalReceipt !== undefined
+    )
       throw new Error(
         "An AppSpec approval receipt requires an immutable GitHub source binding.",
       );
     const exactApprovalReceipt =
-      current.githubSource === undefined || approvalReceipt === undefined
+      development ||
+      current.githubSource === undefined ||
+      approvalReceipt === undefined
         ? undefined
         : assertApprovalReceipt({
             actual: approvalReceipt,

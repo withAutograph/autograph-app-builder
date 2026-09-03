@@ -56,6 +56,9 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(developmentVercelRevalidationKey(codeOnlyChange)).toBe(
       developmentVercelRevalidationKey(first),
     );
+    expect(
+      developmentVercelRevalidationKey({ dependencyKey: first.dependencyKey }),
+    ).toBe(developmentVercelRevalidationKey(first));
     expect(developmentVercelProviderTemplateKey(first.dependencyKey)).toBe(
       developmentVercelProviderTemplateKey(codeOnlyChange.dependencyKey),
     );
@@ -97,7 +100,9 @@ describe("Development Vercel Sandbox dependency template", () => {
     );
     expect(DEVELOPMENT_SANDBOX_ENVIRONMENT).toMatchObject({
       CARGO_NET_OFFLINE: "true",
+      LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
       MISE_AUTO_INSTALL: "false",
+      TERM: "xterm-256color",
     });
   });
 

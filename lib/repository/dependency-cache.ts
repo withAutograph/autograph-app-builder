@@ -690,6 +690,12 @@ function boundedOutput(stdout: string, stderr: string, label: string) {
     throw new Error(`${label} output exceeded the fixed size limit.`);
 }
 
+function commandPayload(output: string) {
+  return output
+    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replaceAll("\r", "");
+}
+
 function fixtureManifest(
   target: ExactSourceBinding = {
     sourceSha: ARRUSTED_TARGET_SHA,
@@ -1301,9 +1307,10 @@ export async function inspectDependencyCache(
     throw new DependencyCacheMissingError(
       "The fixed offline dependency cache manifest is missing.",
     );
+  const manifestPayload = commandPayload(manifestResult.stdout);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(manifestResult.stdout) as unknown;
+    parsed = JSON.parse(manifestPayload) as unknown;
   } catch {
     throw new Error("The fixed offline dependency cache manifest is invalid.");
   }
@@ -1346,8 +1353,9 @@ export async function inspectDependencyCache(
   );
   if (archiveResult.exitCode !== 0)
     throw new Error("The fixed offline dependency cache archive is missing.");
+  const archivePayload = commandPayload(archiveResult.stdout);
   const [checksumLine, sizeLine, cargoChecksumLine, cargoSizeLine] =
-    archiveResult.stdout.trim().split("\n");
+    archivePayload.trim().split("\n");
   const developmentClosure = developmentExecution
     ? developmentDependencyCacheManifestSchema.parse(validated.data).closure
     : undefined;
@@ -1384,7 +1392,7 @@ export async function inspectDependencyCache(
 
   return {
     manifest: validated.data,
-    manifestDigest: sha256(manifestResult.stdout),
+    manifestDigest: sha256(manifestPayload),
     contentDigest: observedDigest,
   };
 }

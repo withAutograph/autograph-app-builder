@@ -39,7 +39,9 @@ export const DEVELOPMENT_SANDBOX_ENVIRONMENT = {
   MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data",
   MISE_EXEC_AUTO_INSTALL: "false",
   MISE_TASK_RUN_AUTO_INSTALL: "false",
+  LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
   PATH: "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",
+  TERM: "xterm-256color",
 } as const;
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -311,11 +313,19 @@ extract_verified_archive "$work/rust-std.tar.xz" "$work"
 stage='readback'
 PATH="$root/bin:$root/rust/bin:/usr/bin:/bin"
 export PATH
+LD_LIBRARY_PATH="$root/rust/lib"
+export LD_LIBRARY_PATH
+TERM='xterm-256color'
+export TERM
 mise --version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '
-rustc --version | grep -E '^rustc 1[.]97[.]1 '`;
+rustc --version | grep -E '^rustc 1[.]97[.]1 '
+trap - EXIT
+find "$work" -depth -delete 2>/dev/null || true
+printf '%s\n' 'development_toolchain_ready'
+exit 0`;
 }
 
 export function developmentPinnedToolchainKey() {
@@ -570,9 +580,10 @@ export function developmentVercelProviderTemplateKey(dependencyKey: string) {
 }
 
 export function developmentVercelRevalidationKey(
-  input: DevelopmentVercelBootstrapInput,
+  input: Pick<DevelopmentVercelBootstrapInput, "dependencyKey">,
 ) {
-  assertInput(input);
+  if (!sha256Pattern.test(input.dependencyKey))
+    throw new Error("Development dependency key was invalid.");
   return `autograph-app-builder-vercel-development-v1:${sha256(
     JSON.stringify({
       contractVersion: 1,

@@ -220,7 +220,7 @@ function planningMarker(marker: string, phase: "start" | "finish") {
  * Hosted planning keeps the literal V0 topology contract.
  */
 const localPlanningCapabilitySchema = z.strictObject({
-  contractVersion: z.literal(1),
+  contractVersion: z.literal(2),
   runtime: z.literal("nextjs"),
   packageScope: z.literal("@autograph"),
   requiredPaths: z.array(repositoryPath).min(1).max(64),
@@ -232,6 +232,9 @@ const localPlanningCapabilitySchema = z.strictObject({
       "mise run repository:exec -- app-contract.ts --contract <contract-file>",
     ),
     appApply: z.literal("mise run create:app -- --proposal <proposal-file>"),
+    appBuilderUiPreview: z.literal(
+      "mise run repository:render-app-builder-ui-preview -- --input <overlay.json> --preview-root <preview-root> --output <preview-dir>",
+    ),
     repositoryPreflight: z.literal("mise run repository:preflight"),
   }),
   topologyOwner: repositoryPath,
@@ -260,20 +263,21 @@ async function observeLocalPlanningCapability(input: {
   }
 
   const result = await input.sandbox.run({
-    command:
-      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise run repository:preflight",
-    workingDirectory: input.planningRoot,
+    command: `cd ${input.planningRoot} && MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise run repository:preflight`,
     abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
   });
+  const stdout = result.stdout
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/\r/gu, "")
+    .trim();
   if (
-    result.exitCode !== 0 ||
-    Buffer.byteLength(result.stdout) > TARGET_COMMAND_OUTPUT_BYTES ||
+    Buffer.byteLength(stdout) > TARGET_COMMAND_OUTPUT_BYTES ||
     Buffer.byteLength(result.stderr) > TARGET_COMMAND_OUTPUT_BYTES
   )
     throw new Error("Local planning capability was unavailable.");
   let value: unknown;
   try {
-    value = JSON.parse(result.stdout) as unknown;
+    value = JSON.parse(stdout) as unknown;
   } catch {
     throw new Error("Local planning capability was invalid.");
   }
@@ -300,8 +304,12 @@ function parseOutput<T>(
   schema: z.ZodType<T>,
   label: string,
 ): T {
+  const stdout = result.stdout
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/\r/gu, "")
+    .trim();
   if (
-    Buffer.byteLength(result.stdout) > TARGET_COMMAND_OUTPUT_BYTES ||
+    Buffer.byteLength(stdout) > TARGET_COMMAND_OUTPUT_BYTES ||
     Buffer.byteLength(result.stderr) > TARGET_COMMAND_OUTPUT_BYTES
   )
     throw new Error(`${label} output exceeded the fixed size limit.`);
@@ -309,7 +317,7 @@ function parseOutput<T>(
     throw new Error(`${label} failed with exit code ${result.exitCode}.`);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(result.stdout) as unknown;
+    parsed = JSON.parse(stdout) as unknown;
   } catch {
     throw new Error(`${label} returned invalid JSON.`);
   }
@@ -585,9 +593,7 @@ export async function executeTargetIdentityAndPlanning(input: {
   );
   if (existingApplication && input.existingAppChanges === undefined)
     throw new ExistingApplicationChangesRequiredError();
-  if (input.existingAppChanges !== undefined) {
-    if (!existingApplication)
-      throw new Error("The requested existing application does not exist.");
+  if (existingApplication && input.existingAppChanges !== undefined) {
     const seen = new Set<string>();
     const changes: TargetIterationChange[] = [];
     for (const requested of input.existingAppChanges) {

@@ -29,7 +29,7 @@ function processFixture(stdout: string[], stderr: string[] = []) {
 describe("bounded sandbox command", () => {
   it("keeps process-group cleanup without injecting resource quotas", () => {
     const command = boundedSandboxCommand("mise run check");
-    expect(command).toContain("setsid bash");
+    expect(command).toContain("setsid --wait bash");
     expect(command).toContain("kill -TERM");
     for (const removedControl of ["ulimit", "node -e", "workspace_quota"])
       expect(command).not.toContain(removedControl);
@@ -46,7 +46,7 @@ describe("bounded sandbox command", () => {
     ).resolves.toEqual({ exitCode: 0, stdout: "hello", stderr: "warning" });
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: expect.stringContaining("setsid bash"),
+        command: expect.stringContaining("setsid --wait bash"),
         abortSignal: expect.any(AbortSignal),
       }),
     );
