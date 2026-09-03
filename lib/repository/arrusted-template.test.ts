@@ -274,21 +274,30 @@ describe("canonical Arrusted template readiness", () => {
     );
     expect(run.mock.calls[0]?.[0].command).not.toContain("env -i");
     expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
-    const stagedCloneScript = vi
+    const stagedCloneScripts = vi
       .mocked(sandbox.writeTextFile)
-      .mock.calls.find(
+      .mock.calls.filter(
         ([call]) => call.path === ".arrusted-template-clone.sh",
-      )?.[0].content;
-    expect(stagedCloneScript).toContain("git -C /workspace/repository init");
-    expect(stagedCloneScript).toContain(
+      )
+      .map(([call]) => call.content);
+    expect(stagedCloneScripts).toHaveLength(4);
+    expect(stagedCloneScripts[0]).toContain(
+      "git -C /workspace/repository init",
+    );
+    expect(stagedCloneScripts[1]).toContain(
       "fetch --depth 1 --no-recurse-submodules origin main",
     );
-    expect(stagedCloneScript).toContain("rev-parse FETCH_HEAD");
-    expect(stagedCloneScript).toContain("checkout --detach");
-    expect(stagedCloneScript).not.toContain(" clone ");
-    expect(stagedCloneScript).not.toContain("credential.helper=store");
-    expect(stagedCloneScript).not.toContain("reader-token");
-    expect(stagedCloneScript).not.toContain("chmod 600");
+    expect(stagedCloneScripts[2]).toContain("rev-parse FETCH_HEAD");
+    expect(stagedCloneScripts[2]).toContain("checkout --detach");
+    expect(stagedCloneScripts[3]).toContain(
+      "node /workspace/.arrusted-template-inspect.cjs",
+    );
+    expect(stagedCloneScripts.join("\n")).not.toContain(" clone ");
+    expect(stagedCloneScripts.join("\n")).not.toContain(
+      "credential.helper=store",
+    );
+    expect(stagedCloneScripts.join("\n")).not.toContain("reader-token");
+    expect(stagedCloneScripts.join("\n")).not.toContain("chmod 600");
     expect(run.mock.calls[0]?.[0].command).toContain(
       "GIT_ASKPASS=/usr/bin/false",
     );
