@@ -38,7 +38,6 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_HOSTS = ["github.com"] as const;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_CREDENTIAL = ".app-builder/arrusted-template-reader-token";
-const SANDBOX_CLONE_STAGE = ".app-builder/arrusted-template-clone-stage";
 
 export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
 
@@ -87,6 +86,12 @@ export function classifySandboxCloneFailure(stderr: string) {
     return "network" as const;
   if (/timed? out|operation timeout/u.test(stderr)) return "timeout" as const;
   return "git-command" as const;
+}
+
+export function sandboxCloneFailureStage(stderr: string) {
+  return stderr.match(
+    /AUTOGRAPH_CLONE_STAGE=(credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u,
+  )?.[1];
 }
 
 const sandboxCloneInspectionProgram = String.raw`
@@ -315,10 +320,11 @@ function sandboxCloneCommand() {
   const script = [
     "set -eu",
     `credential=/workspace/${SANDBOX_CLONE_CREDENTIAL}`,
-    `stage_file=/workspace/${SANDBOX_CLONE_STAGE}`,
-    'stage() { printf "%s\\n" "$1" > "$stage_file"; }',
+    "current_stage=credential",
+    'stage() { current_stage="$1"; }',
     'cleanup() { rm -f "$credential"; }',
-    "trap cleanup EXIT HUP INT TERM",
+    'finish() { status=$?; if [ "$status" -ne 0 ]; then printf "AUTOGRAPH_CLONE_STAGE=%s\\n" "$current_stage" >&2; fi; cleanup; exit "$status"; }',
+    "trap finish EXIT HUP INT TERM",
     "stage credential",
     'test -r "$credential"',
     "stage clone",
@@ -339,7 +345,8 @@ function sandboxCloneCommand() {
     `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
     "stage inspect",
     `node -e ${shellQuote(sandboxCloneInspectionProgram)}`,
-    'rm -f "$stage_file"',
+    "trap - EXIT HUP INT TERM",
+    "cleanup",
   ].join("\n");
   return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
 }
@@ -397,10 +404,6 @@ async function cloneCanonicalArrustedWorkspace(input: {
       await input.sandbox.setNetworkPolicy("deny-all");
     }
   }
-  const failureStage = await input.sandbox.readTextFile({
-    path: SANDBOX_CLONE_STAGE,
-  });
-  await input.sandbox.removePath({ path: SANDBOX_CLONE_STAGE, force: true });
   if (
     Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
     Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
@@ -414,12 +417,7 @@ async function cloneCanonicalArrustedWorkspace(input: {
         outputWithinLimit:
           Buffer.byteLength(result.stdout) <= SANDBOX_OPERATION_OUTPUT_BYTES &&
           Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
-        commandStage:
-          failureStage
-            ?.trim()
-            .match(
-              /^(credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)$/u,
-            )?.[1] ?? "unknown",
+        commandStage: sandboxCloneFailureStage(result.stderr) ?? "unknown",
       }),
     );
     throw new Error(

@@ -8,6 +8,7 @@ import {
   acquireCanonicalArrustedTemplate,
   classifySandboxCloneFailure,
   inspectCanonicalArrustedSandboxWorkspace,
+  sandboxCloneFailureStage,
   templateReadinessAttestationDigest,
 } from "./arrusted-template";
 import type { ArrustedTemplateReader } from "./arrusted-template-reader";
@@ -24,6 +25,15 @@ describe("sandbox clone failure classification", () => {
     ["fatal: unexpected git failure", "git-command"],
   ])("classifies a sanitized provider failure", (stderr, expected) => {
     expect(classifySandboxCloneFailure(stderr.toLowerCase())).toBe(expected);
+  });
+
+  it("reads only an allowlisted command stage from captured output", () => {
+    expect(
+      sandboxCloneFailureStage("fatal\nAUTOGRAPH_CLONE_STAGE=clone\n"),
+    ).toBe("clone");
+    expect(
+      sandboxCloneFailureStage("AUTOGRAPH_CLONE_STAGE=anything-else"),
+    ).toBeUndefined();
   });
 });
 
@@ -368,7 +378,7 @@ describe("canonical Arrusted template readiness", () => {
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
       false,
     );
-    expect(removePath).toHaveBeenCalledTimes(2);
+    expect(removePath).toHaveBeenCalledTimes(1);
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
 
