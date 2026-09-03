@@ -270,6 +270,45 @@ status does not waive any gate. The ADR reports evidence and requires explicit
 architecture-owner acceptance. A selection produces one generated production
 view layer; the generator does not maintain both as permanent runtime options.
 
+## Future exploration: declarative screen orchestration
+
+This is a recorded future exploration, not a current milestone, ADR, first-app
+acceptance criterion, or commitment to extend CUE beyond its data-backend
+authority. Consider it only after the first real generated-app proof and only
+if repeated generated screens show material read and error-handling boilerplate.
+
+A future presentation contract could explicitly bind a route or other trusted
+screen input to an already-declared named read, select a generated screen, and
+use the generated safe error policy. For example, it could declare that
+`/projects/[id]` binds its `id` route parameter to `projectBoard.projectId`.
+The generator could then create the Next.js page, loading state, not-found
+handling, and safe error boundary rather than requiring an app author to
+manually invoke, unwrap, and classify the DAL result.
+
+The input source and binding must remain explicit; the compiler must not infer
+that an arbitrary route parameter maps to an operation field. The exploration
+does not choose whether such a presentation contract belongs in AppSpec, a
+separate app-owned presentation manifest, or a constrained CUE extension.
+
+Any proposal must preserve these boundaries:
+
+- CUE named operations remain the backend authority; screen declarations may
+  bind to and narrow them but cannot define tables, policies, queries, or
+  trusted context.
+- The generated route derives app, tenant, actor, authorization, provenance,
+  and artifact context server-side exactly as the DAL and actions do today.
+- Error classification remains generated and safe: unauthenticated, forbidden,
+  not-found, validation, conflict, and unavailable outcomes cannot become
+  caller-controlled presentation or data-disclosure behavior.
+- Fate, if selected later, may consume the same explicit screen binding for
+  preload and component views; it does not make that binding a generic browser
+  query API.
+
+This exploration requires its own proposal and evidence before implementation.
+It must demonstrate less generated-page boilerplate without obscuring route
+inputs, access behavior, error semantics, Next.js ownership, or the DAL
+boundary.
+
 ## Generated operation surface
 
 Model CRUD maps to the compiled lifecycle rather than direct table mutation:
