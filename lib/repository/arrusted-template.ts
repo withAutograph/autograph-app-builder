@@ -4,6 +4,7 @@ import type { SandboxSession } from "eve/sandbox";
 
 import { createGitHubTokenOctokit } from "../github/octokit";
 import { canAutoSelectDevelopmentSource } from "./development-source";
+import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
 
 import {
   ARRUSTED_TEMPLATE_REF,
@@ -35,9 +36,7 @@ const SANDBOX_WORKSPACE = "/workspace/repository";
 const SANDBOX_OPERATION_TIMEOUT_MS = 120_000;
 const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
-const SANDBOX_CLONE_HOSTS = ["github.com"] as const;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
-const SANDBOX_CLONE_CREDENTIAL = ".arrusted-template-reader-token";
 const SANDBOX_CLONE_SCRIPT = ".arrusted-template-clone.sh";
 const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
 const SANDBOX_REINSPECTOR = ".arrusted-template-reinspect.cjs";
@@ -327,19 +326,14 @@ console.log(JSON.stringify({
 const sandboxCloneProgram =
   [
     "set -eu",
-    `credential=/workspace/${SANDBOX_CLONE_CREDENTIAL}`,
     `remote=${ARRUSTED_TEMPLATE_REPOSITORY}`,
-    "current_stage=credential",
+    "current_stage=clone",
     'stage() { current_stage="$1"; }',
-    'cleanup() { rm -f "$credential"; }',
-    'finish() { status=$?; if [ "$status" -ne 0 ]; then printf "AUTOGRAPH_CLONE_STAGE=%s\\n" "$current_stage" >&2; fi; cleanup; exit "$status"; }',
+    'finish() { status=$?; if [ "$status" -ne 0 ]; then printf "AUTOGRAPH_CLONE_STAGE=%s\\n" "$current_stage" >&2; fi; exit "$status"; }',
     "trap finish EXIT HUP INT TERM",
-    "stage credential",
-    'test -r "$credential"',
     "stage clone",
     `rm -rf ${SANDBOX_WORKSPACE}`,
-    `git -c protocol.allow=never -c protocol.https.allow=always -c 'credential.helper=store --file=/workspace/${SANDBOX_CLONE_CREDENTIAL}' -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main "$remote" ${SANDBOX_WORKSPACE}`,
-    "cleanup",
+    `git -c protocol.allow=never -c protocol.https.allow=always -c credential.helper= -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main "$remote" ${SANDBOX_WORKSPACE}`,
     "stage verify-remote",
     `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = "$remote"`,
     "stage resolve-ref",
@@ -355,7 +349,6 @@ const sandboxCloneProgram =
     "stage inspect",
     `node /workspace/${SANDBOX_CLONE_INSPECTOR}`,
     "trap - EXIT HUP INT TERM",
-    "cleanup",
   ].join("\n") + "\n";
 
 function sandboxCloneCommand() {
@@ -396,10 +389,6 @@ async function cloneCanonicalArrustedWorkspace(input: {
   let result;
   try {
     await input.sandbox.writeTextFile({
-      path: SANDBOX_CLONE_CREDENTIAL,
-      content: `https://x-access-token:${encodeURIComponent(input.token)}@github.com\n`,
-    });
-    await input.sandbox.writeTextFile({
       path: SANDBOX_CLONE_SCRIPT,
       content: sandboxCloneProgram,
     });
@@ -407,7 +396,9 @@ async function cloneCanonicalArrustedWorkspace(input: {
       path: SANDBOX_CLONE_INSPECTOR,
       content: sandboxCloneInspectionProgram,
     });
-    await input.sandbox.setNetworkPolicy({ allow: [...SANDBOX_CLONE_HOSTS] });
+    await input.sandbox.setNetworkPolicy(
+      githubSandboxCredentialPolicy(input.token),
+    );
     result = await input.sandbox.run({
       command: sandboxCloneCommand(),
       workingDirectory: "/workspace",
@@ -417,11 +408,9 @@ async function cloneCanonicalArrustedWorkspace(input: {
   } finally {
     try {
       const cleanup = await Promise.allSettled(
-        [
-          SANDBOX_CLONE_CREDENTIAL,
-          SANDBOX_CLONE_SCRIPT,
-          SANDBOX_CLONE_INSPECTOR,
-        ].map((path) => input.sandbox.removePath({ path, force: true })),
+        [SANDBOX_CLONE_SCRIPT, SANDBOX_CLONE_INSPECTOR].map((path) =>
+          input.sandbox.removePath({ path, force: true }),
+        ),
       );
       const failures = cleanup.filter((result) => result.status === "rejected");
       if (failures.length > 0)

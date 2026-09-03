@@ -15,6 +15,7 @@ import {
 } from "./sandbox-github-source";
 import { inspectExistingRepositorySnapshotReceipt } from "./source-receipt";
 import { SUPPORTED_REPOSITORY_CONTRACT } from "./supported-template";
+import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
@@ -232,60 +233,60 @@ describe("sandbox GitHub source transport", () => {
     });
     expect(setNetworkPolicy.mock.calls).toEqual([
       ["deny-all"],
-      [{ allow: ["github.com"] }],
+      [githubSandboxCredentialPolicy("ghs_repository_scoped_read_token")],
       ["deny-all"],
     ]);
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
       false,
     );
+    expect(sandbox.writeTextFile).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("ghs_repository"),
+      }),
+    );
+    expect(run.mock.calls[0]?.[0].command).not.toContain(
+      "credential.helper=store",
+    );
+    expect(run.mock.calls[0]?.[0].command).not.toContain("ASKPASS_TOKEN");
   });
 
-  it.each(["askpass-write", "clone-run"] as const)(
-    "removes clone credentials and restores deny-all after %s failure",
-    async (failure) => {
-      const files = new Map<string, string>();
-      const removePath = vi.fn(async ({ path }: { path: string }) => {
-        files.delete(path);
-      });
-      const setNetworkPolicy = vi.fn(async () => undefined);
-      let writes = 0;
-      const sandbox = {
-        id: "sandbox-source",
-        readTextFile: vi.fn(async () => null),
-        writeTextFile: vi.fn(
-          async ({ path, content }: { path: string; content: string }) => {
-            writes += 1;
-            if (failure === "askpass-write" && writes === 2)
-              throw new Error("write failed");
-            files.set(path, content);
-          },
-        ),
-        removePath,
-        setNetworkPolicy,
-        run: vi.fn(async () => {
-          throw new Error("run failed");
-        }),
-      } as unknown as SandboxSession;
+  it("restores deny-all after a clone failure without staged credentials", async () => {
+    const files = new Map<string, string>();
+    const removePath = vi.fn(async ({ path }: { path: string }) => {
+      files.delete(path);
+    });
+    const setNetworkPolicy = vi.fn(async () => undefined);
+    const sandbox = {
+      id: "sandbox-source",
+      readTextFile: vi.fn(async () => null),
+      writeTextFile: vi.fn(
+        async ({ path, content }: { path: string; content: string }) => {
+          files.set(path, content);
+        },
+      ),
+      removePath,
+      setNetworkPolicy,
+      run: vi.fn(async () => {
+        throw new Error("run failed");
+      }),
+    } as unknown as SandboxSession;
 
-      await expect(
-        cloneGitHubSourceWorkspace({
-          sandbox,
-          token: "ghs_repository_scoped_read_token",
-          remote: "https://github.com/withAutograph/app-builder-dogfood.git",
-          branch: "main",
-          expectedSha: sourceSha,
-          expectedTree: sourceTree,
-        }),
-      ).rejects.toThrow(
-        failure === "askpass-write" ? "write failed" : "run failed",
-      );
-      expect(removePath).toHaveBeenCalledTimes(2);
-      expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
-      expect(
-        [...files.keys()].some((path) => path.includes("reader-token")),
-      ).toBe(false);
-    },
-  );
+    await expect(
+      cloneGitHubSourceWorkspace({
+        sandbox,
+        token: "ghs_repository_scoped_read_token",
+        remote: "https://github.com/withAutograph/app-builder-dogfood.git",
+        branch: "main",
+        expectedSha: sourceSha,
+        expectedTree: sourceTree,
+      }),
+    ).rejects.toThrow("run failed");
+    expect(removePath).toHaveBeenCalledTimes(0);
+    expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
+    expect(
+      [...files.keys()].some((path) => path.includes("reader-token")),
+    ).toBe(false);
+  });
 
   it("restores deny-all before rejecting a tampered prepared-workspace record", async () => {
     const setNetworkPolicy = vi.fn(async () => undefined);
