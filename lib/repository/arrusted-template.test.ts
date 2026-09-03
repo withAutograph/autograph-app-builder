@@ -186,34 +186,35 @@ describe("canonical Arrusted template readiness", () => {
     const setNetworkPolicy = vi.fn(async () => undefined);
     let reinspectionRemote =
       "https://github.com/withAutograph/arrusted-development.git";
-    const run = vi.fn(async ({ command }: { command: string }) =>
-      command.includes("arrusted-template-clone.sh")
-        ? {
-            exitCode: 0,
-            stdout: JSON.stringify({
-              sourceSha,
-              sourceTree,
-              workspaceDigest,
-            }),
-            stderr: "",
-          }
-        : command.includes("arrusted-template-reinspect.cjs")
+    const run = vi.fn(
+      async ({ command }: { command: string; env?: Record<string, string> }) =>
+        command.includes("arrusted-template-clone.sh")
           ? {
               exitCode: 0,
               stdout: JSON.stringify({
-                remote: reinspectionRemote,
-                resolvedRef: sourceSha,
-                detached: true,
-                hasGitmodules: false,
-                gitlinks: [],
-                manifestMatches: true,
-                checksumsMatch: true,
+                sourceSha,
+                sourceTree,
                 workspaceDigest,
-                snapshot: inspection,
               }),
               stderr: "",
             }
-          : { exitCode: 0, stdout: "", stderr: "" },
+          : command.includes("arrusted-template-reinspect.cjs")
+            ? {
+                exitCode: 0,
+                stdout: JSON.stringify({
+                  remote: reinspectionRemote,
+                  resolvedRef: sourceSha,
+                  detached: true,
+                  hasGitmodules: false,
+                  gitlinks: [],
+                  manifestMatches: true,
+                  checksumsMatch: true,
+                  workspaceDigest,
+                  snapshot: inspection,
+                }),
+                stderr: "",
+              }
+            : { exitCode: 0, stdout: "", stderr: "" },
     );
     const sandbox = {
       id: "sandbox-template-clone",
