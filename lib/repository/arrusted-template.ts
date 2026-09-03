@@ -37,10 +37,10 @@ const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_HOSTS = ["github.com"] as const;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
-const SANDBOX_CLONE_CREDENTIAL = ".app-builder/arrusted-template-reader-token";
-const SANDBOX_CLONE_SCRIPT = ".app-builder/clone-canonical-template.sh";
-const SANDBOX_CLONE_INSPECTOR = ".app-builder/inspect-canonical-template.cjs";
-const SANDBOX_REINSPECTOR = ".app-builder/reinspect-canonical-template.cjs";
+const SANDBOX_CLONE_CREDENTIAL = ".arrusted-template-reader-token";
+const SANDBOX_CLONE_SCRIPT = ".arrusted-template-clone.sh";
+const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
+const SANDBOX_REINSPECTOR = ".arrusted-template-reinspect.cjs";
 
 export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
 
