@@ -278,7 +278,9 @@ describe("canonical Arrusted template readiness", () => {
       "fetch --depth 1 --no-recurse-submodules origin refs/heads/main",
     );
     expect(cloneCommand).toContain("checkout --detach");
-    expect(cloneCommand).toContain("node /workspace/.arrusted-template-inspect.cjs");
+    expect(cloneCommand).toContain(
+      "node /workspace/.arrusted-template-inspect.cjs",
+    );
     expect(run.mock.calls[0]?.[0].command).not.toContain("env -i");
     expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
     expect(sandbox.removePath).toHaveBeenCalledWith({
@@ -287,9 +289,7 @@ describe("canonical Arrusted template readiness", () => {
       force: true,
     });
     expect(cloneCommand).not.toContain(" clone ");
-    expect(cloneCommand).not.toContain(
-      "credential.helper=store",
-    );
+    expect(cloneCommand).not.toContain("credential.helper=store");
     expect(cloneCommand).not.toContain("reader-token");
     expect(cloneCommand).not.toContain("chmod 600");
     expect(run.mock.calls[0]?.[0].command).toContain(

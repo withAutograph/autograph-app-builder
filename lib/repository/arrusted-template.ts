@@ -408,12 +408,15 @@ async function cloneCanonicalArrustedWorkspace(input: {
           category: classifySandboxCloneFailure(result.stderr.toLowerCase()),
           exitCode: result.exitCode,
           outputWithinLimit:
-            Buffer.byteLength(result.stdout) <= SANDBOX_OPERATION_OUTPUT_BYTES &&
+            Buffer.byteLength(result.stdout) <=
+              SANDBOX_OPERATION_OUTPUT_BYTES &&
             Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
           errorSummary: sanitizeSandboxCloneError(result.stderr, input.token),
         }),
       );
-      throw new Error("The canonical Arrusted workspace clone could not be prepared.");
+      throw new Error(
+        "The canonical Arrusted workspace clone could not be prepared.",
+      );
     }
   } finally {
     try {
