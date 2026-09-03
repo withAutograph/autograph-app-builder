@@ -8,8 +8,11 @@ status: proposed
 # CUE/Postgres Generated-App Integration
 
 This plan defines how App Builder will create new applications whose data
-backend is authored in CUE, compiled into PostgreSQL, and consumed through a
-type-safe Next.js boundary. It covers newly generated applications only.
+backend is authored in CUE, compiled into a private PostgreSQL kernel plus a
+public, typed PostgreSQL `api` schema, and consumed through a type-safe Next.js
+boundary. Here, public means available to the selected private runtime adapter,
+not reachable from a browser or the public internet. This plan covers newly
+generated applications only.
 Existing HC, Vendor, and other Arrusted applications are behavioral and parity
 references; this plan does not migrate them.
 
@@ -21,10 +24,11 @@ schema, authorization, database, or runtime authority.
 
 The canonical compiler and runtime design lives in the Arrusted
 [generated-app CUE/Postgres backend plan](https://github.com/withAutograph/arrusted-development/blob/main/docs/plans/2026-09-02-generated-app-cue-postgres-backend.md).
-That document owns the runtime-adapter and database-binding decisions and the
-compiler and database invariants that every frontend view layer must preserve.
-App Builder must not select, duplicate, or weaken those decisions. This
-document owns the separate Next.js view-layer spike and ADR.
+That document owns the PostgreSQL API seam, the runtime-adapter and
+database-binding decisions, and the compiler and database invariants that every
+frontend view layer must preserve. App Builder must not select, duplicate, or
+weaken those decisions. This document owns the separate Next.js view-layer
+spike and ADR.
 
 ## Objective
 
@@ -38,25 +42,35 @@ The normal generated path is:
 accepted AppSpec
   -> app-owned CUE source
   -> normalized compiler contract
-  -> PostgreSQL artifact
-  -> generated validators and TypeScript bindings
+  -> private PostgreSQL kernel
+  -> public typed PostgreSQL API schema
+  -> adapter metadata, validators, and TypeScript bindings
   -> server-only DAL and generated actions
   -> generated frontend projection metadata and selected view integration
   -> generated Next.js application
 ```
 
-CUE is the only app-authored data-backend source. SQL, runtime-adapter metadata,
-TypeScript bindings, validators, DAL modules, actions, and any frontend view
-metadata are generated artifacts and are never edited as independent
-authorities.
+CUE is the only app-authored data-backend source. The public PostgreSQL `api`
+schema is the stable generated seam consumed by every runtime projection. SQL,
+runtime-adapter metadata, protocol and database bindings, validators, DAL
+modules, actions, and any frontend view metadata are generated artifacts and
+are never edited as independent authorities.
+
+All application data reads, authorization and tenant decisions, constraints,
+lifecycle transitions, atomic commands, and artifact-compatibility checks
+terminate in PostgreSQL. External provider calls are not database operations;
+later versioned capabilities must authorize and record their durable state in
+PostgreSQL while platform-owned adapters retain credentials and network
+protocols.
 
 ## Scope and decision boundary
 
 This plan introduces the App Builder side of the architecture, but it does not
 choose any of the following:
 
-1. direct PostgreSQL, private PostgREST, or private Hasura as the runtime
-   adapter; or
+1. direct PostgreSQL, private PostgREST, private PostgREST plus `pg_graphql`,
+   private Hasura v2, private Hasura DDN/v3, or private PostGraphile as the
+   runtime adapter; or
 2. CUE-generated or PostgreSQL-introspected database bindings; or
 3. direct Server Component-to-DAL reads or Fate component views backed by a
    generated read Server Action as the frontend view layer.
@@ -69,9 +83,12 @@ the first product application against a provisional adapter, binding source,
 or view layer.
 
 Whichever candidates are selected, the product-facing server contract remains
-generated named operations over a server-only DAL. Client Components invoke
-generated, authenticated mutation actions. The baseline view candidate has
-Server Components call DAL reads directly; the Fate candidate additionally
+generated named operations over a server-only DAL. Every adapter consumes only
+the generated PostgreSQL `api` schema and may translate its typed views and
+functions into SQL, REST, RPC, or GraphQL. It cannot become an independent
+schema, relationship, authorization, or operation authority. Client Components
+invoke generated, authenticated mutation actions. The baseline view candidate
+has Server Components call DAL reads directly; the Fate candidate additionally
 permits bounded, authenticated read actions after hydration.
 
 ## AppSpec schema mode
@@ -128,9 +145,20 @@ Each `cue-postgres` application receives generated artifacts in four groups.
 ### Compiler artifacts
 
 - normalized application contract;
-- deterministic PostgreSQL bundle and materialization plan;
+- deterministic private PostgreSQL kernel, including physical lifecycle and
+  version tables, constraints, forced RLS, and internal JSON kernel functions;
+- public typed PostgreSQL `api` schema containing security-invoker read
+  projections, stable named-read functions, volatile CRUD/lifecycle/command
+  functions, named parameters, typed row or composite results, and generated
+  grants;
+- deterministic PostgreSQL bundle and materialization plan for both layers;
 - artifact manifest, source map, compiler version, and content hashes; and
-- runtime and database-binding compatibility metadata.
+- relationship, limit, active-artifact, runtime-adapter, protocol-binding, and
+  database-binding compatibility metadata.
+
+Physical tables, installer and administration functions, and internal JSON
+kernel primitives are not adapter introspection surfaces. Typed API functions
+may wrap those kernel primitives without changing their internal behavior.
 
 ### Type and validation artifacts
 
@@ -141,9 +169,20 @@ Each `cue-postgres` application receives generated artifacts in four groups.
 - a stable discriminated error contract.
 
 The accepted ADR determines whether the internal database-binding types come
-from the normalized CUE contract or PostgreSQL introspection. Operation
-exposure, trusted fields, authorization requirements, and public DTOs always
-come from the normalized CUE contract.
+from the normalized CUE contract or introspection of an installed PostgreSQL
+API schema. Operation exposure, trusted fields, authorization requirements,
+runtime masks, capability manifests, and public DTOs always come from the
+normalized CUE contract because database or protocol introspection cannot
+recover those semantics.
+
+The selected runtime adapter may additionally use private generated protocol
+bindings. PostgREST candidates may use its OpenAPI description or compatible
+PostgREST type generation; GraphQL candidates may use GraphQL introspection and
+generated typed documents; direct PostgreSQL may use catalog-derived bindings.
+Those bindings are implementation details behind the DAL, not application
+imports or additional authorities. A managed PostgREST-compatible service such
+as Neon Data API is a deployment form of the PostgREST candidate rather than a
+separate semantic candidate.
 
 If the Fate candidate is being evaluated, the compiler also emits candidate
 entity identity and relationship metadata, TypeScript view types, server-side
@@ -162,11 +201,16 @@ than a caller-typed generic query API. It contains:
 - the selected runtime adapter behind a non-exported interface; and
 - operation-to-cache invalidation metadata.
 
+The selected adapter receives only fixed generated operation identifiers,
+validated input, and trusted server context, and accesses only the public
+PostgreSQL `api` schema. App code cannot supply a table, view, function, SQL
+fragment, REST path, GraphQL document, role, or implementation identifier.
+
 Under the baseline view candidate, Server Components call read methods
 directly. Under the Fate candidate, server rendering still executes through
 this DAL, while post-hydration reads may enter through the generated bounded
 read action defined below. Neither candidate makes the database or a selected
-runtime gateway reachable from the browser.
+runtime projection reachable from the browser.
 
 ### Mutation actions
 
@@ -198,8 +242,10 @@ The view-layer comparison does not reopen the server operation contract. A CUE
 named query declares an authorized backend operation, including its visible
 models and relations, filters, ordering, pagination, arguments, and result
 capabilities. A Fate component view is a TypeScript projection composed within
-those capabilities. A PostgreSQL view is a possible compiler output and is not
-a Fate component view.
+those capabilities. A PostgreSQL API view is a typed compiler output inside the
+public PostgreSQL `api` schema and is unrelated to a Fate component view. A
+runtime adapter projects that API schema into SQL, REST, RPC, or GraphQL without
+changing either meaning.
 
 ### Server Component and DAL baseline
 
@@ -211,9 +257,12 @@ explicitly selects Fate.
 ### Fate as a generated projection runtime
 
 Fate provides explicit, composable component views, normalized caching, and
-server-side data masks. Its current documentation labels it alpha and provides
-Vite-oriented automatic type wiring, so none of those capabilities are assumed
-to work in this Next.js architecture without proof. References:
+server-side data masks. Its official maturity guidance is currently
+inconsistent: the Getting Started page retains an alpha warning while the
+[Fate 1.0 announcement](https://fate.technology/posts/fate-1.0) describes the
+release as production-ready. Its documentation also provides Vite-oriented
+automatic type wiring, so none of those capabilities or maturity claims are
+assumed to satisfy this Next.js architecture without proof. References:
 [views](https://fate.technology/guide/views),
 [server integration](https://fate.technology/integrations/server), and
 [getting started](https://fate.technology/guide/getting-started).
@@ -232,17 +281,27 @@ SQL, the DAL, and actions:
 ```text
 app-owned CUE
   -> normalized data capability graph
-      -> PostgreSQL artifact and generated DAL/actions
+      -> private PostgreSQL kernel
+      -> public typed PostgreSQL API schema
+      -> selected private adapter and generated DAL/actions
       -> generated Fate entity types and roots
       -> generated server data-view masks and relation resolvers
       -> generated read/mutation transport maps and cache metadata
 ```
 
 The generated Fate server integration resolves through the DAL rather than
-Fate's supplied Prisma, Drizzle, or native HTTP helpers. `dataView` masks,
-procedure IDs, mutation maps, TypeScript types, and cache scopes are compiler
-outputs and are never app-authored parallel authorities. The canonical runtime
-plan owns this capability-graph contract and its detailed invariants.
+calling Fate's Prisma, Drizzle, or native browser HTTP helpers. Direct
+PostgreSQL and REST candidates use the generated custom Fate transport.
+GraphQL candidates may evaluate Fate's
+[`createGraphQLTransport`](https://fate.technology/api/%40nkzw/fate/functions/createGraphQLTransport)
+behind the authenticated Next.js read boundary after the generated root,
+selection, argument, and scope checks pass. It never receives a browser-visible
+gateway URL or credential. `dataView` masks, procedure IDs, mutation maps,
+TypeScript types, protocol bindings, and cache scopes are compiler outputs and
+are never app-authored parallel authorities. The same app-authored Fate
+components and component views must run unchanged against all six adapter
+spikes. The canonical runtime plan owns this capability-graph contract and its
+detailed invariants.
 
 ### Precise authoring boundary
 
@@ -251,7 +310,7 @@ This division is mandatory if Fate is selected:
 | Layer | Owns | Must not own |
 | --- | --- | --- |
 | App-owned CUE | data model, relations, permitted named read/command capabilities, constraints, and authorization references | React components, Fate component views, DOM events, cache state, or a transport implementation |
-| Compiler-generated integration | PostgreSQL artifact, DAL, Server Actions, entity TypeScript types, generated Fate roots/action map, server `dataView` masks, custom transport, cache scope, and runtime validation | independently edited schema, policy, component views, or arbitrary client query access |
+| Compiler-generated integration | private PostgreSQL kernel, public PostgreSQL API schema, adapter metadata and protocol bindings, DAL, Server Actions, entity TypeScript types, generated Fate roots/action map, server `dataView` masks, transport, cache scope, and runtime validation | independently edited schema, policy, gateway semantics, component views, or arbitrary client query access |
 | App-authored React/Fate components | presentation, component-local `view<T>()` declarations, view composition, `useView`, `useRequest`, normal React Actions, pending UI, and safe expected-error UI | tables, SQL, RLS, DAL calls, trusted context, operation implementation, server masks, or authority selection |
 
 The compiler does not generate an app's component views or components. A
@@ -286,7 +345,9 @@ The candidate has two read paths:
    named-query work from the same request window into one bounded action call
    rather than creating an action waterfall. Fate exposes a custom
    [transport interface](https://fate.technology/api/@nkzw/fate/interfaces/Transport)
-   for this evaluation.
+   for this evaluation. With a GraphQL adapter, the generated server-side
+   implementation may use Fate's GraphQL transport only after validation; the
+   browser-facing action contract is unchanged.
 
 The read action treats the complete batch as untrusted serialized input. It
 authenticates and authorizes each operation, derives trusted app, tenant,
@@ -435,8 +496,11 @@ explorations below; they are not required to prove this Fate integration.
 ### View-layer ADR gate
 
 Build both candidates against the same representative compiled schema and the
-same Next.js screens before the first real product application. The Fate
-candidate must prove:
+same Next.js screens before the first real product application. Exercise those
+screens through the six runtime candidates defined by the canonical plan; the
+app-authored React components, Fate component views, roots, and public DTO
+imports must be identical in every run. Only the generated private adapter and
+protocol-binding implementation may vary. The Fate candidate must prove:
 
 - production Next.js compilation without Fate's Vite plugin;
 - type-level rejection and runtime rejection of forbidden fields, relations,
@@ -452,6 +516,9 @@ candidate must prove:
 - exact correspondence between generated Fate roots/mutations and CUE named
   capabilities, with no direct ORM, raw SQL, native Fate HTTP handler, or
   Vite-plugin authority path;
+- equivalent custom REST/direct and server-side GraphQL-backed transport
+  behavior, with no private gateway URL, credential, GraphQL document, REST
+  path, or adapter-specific error exposed to component code;
 - bounded read-action batching without per-field or per-entity action
   waterfalls;
 - tenant isolation, safe errors, cancellation, timeouts, and malformed-batch
@@ -461,16 +528,19 @@ candidate must prove:
 - a documented cutover to the DAL baseline that does not change CUE, SQL,
   PostgreSQL functions, the runtime adapter, or database bindings.
 
-For both candidates, record measured latency, action and query counts, client
-bundle cost, cache behavior, generated artifact surface, diagnostics,
-implementation complexity, and maintenance cost. For Fate, also record the
-exact tested version and license, the named alpha-risk owner, upgrade policy,
-API stability findings, and fallback procedure.
+For both candidates, record measured latency, action and database-query counts,
+client bundle cost, cache behavior, generated artifact surface, diagnostics,
+implementation complexity, and maintenance cost. Attribute adapter-specific
+latency, protocol code generation, schema reload, and connection behavior to
+the runtime ADR rather than using them to choose the view layer. For Fate, also
+record the exact tested version and license, the named alpha-risk owner,
+upgrade policy, API stability findings, and fallback procedure.
 
-Fate is production-eligible but is neither preferred nor selected. Its alpha
-status does not waive any gate. The ADR reports evidence and requires explicit
-architecture-owner acceptance. A selection produces one generated production
-view layer; the generator does not maintain both as permanent runtime options.
+Fate is production-eligible but is neither preferred nor selected. Conflicting
+maturity guidance does not waive any gate. The ADR reports evidence for the
+exact tested version and requires explicit architecture-owner acceptance. A
+selection produces one generated production view layer; the generator does not
+maintain both as permanent runtime options.
 
 ## Future exploration: declarative screen orchestration
 
@@ -594,8 +664,10 @@ Acceptance requires proof that:
 2. App Builder produces and validates the app-owned CUE source from the
    accepted AppSpec;
 3. the repository is created with no handwritten data-backend implementation;
-4. the compiler artifacts and generated TypeScript are deterministic and
-   current;
+4. the private PostgreSQL kernel, public PostgreSQL API schema, adapter
+   metadata, and generated TypeScript are deterministic and current, and
+   adapter introspection exposes no private tables, kernel functions, installer
+   functions, or administrative operations;
 5. the selected view layer reads through the generated DAL, including
    request-scoped preload and bounded read-action behavior when Fate is
    selected;
@@ -619,9 +691,10 @@ later, separately authorized step.
    cross-links.
 2. Add the adapter-neutral normalized operation and artifact handoff without
    generating a product app.
-3. Complete the runtime and binding conformance comparisons and the Next.js
-   view-layer spike; record and accept all three ADR decisions. These evidence
-   lanes may run in parallel once the normalized operation contract is stable.
+3. Complete the six-candidate runtime comparison, the independent binding
+   comparison, and the Next.js view-layer spike; record and accept all three
+   ADR decisions. These evidence lanes may run in parallel once the normalized
+   operation contract and public PostgreSQL API schema are stable.
 4. Add `cue-postgres` to the AppSpec, planning, validation, and app-creation
    contracts while preserving `none` and legacy-read compatibility for
    `kernel`.
@@ -634,8 +707,14 @@ later, separately authorized step.
 ## Non-goals
 
 - migrating existing Arrusted applications;
-- exposing PostgreSQL, PostgREST, or Hasura directly to browsers;
-- treating a Fate component view as a PostgreSQL view or backend authority;
+- exposing PostgreSQL, PostgREST, `pg_graphql`, either Hasura architecture, or
+  PostGraphile directly to browsers;
+- exposing physical tables, kernel functions, installer functions, or
+  administrative operations through the public PostgreSQL API schema;
+- allowing a gateway, protocol schema, or generated protocol binding to become
+  an independently edited model, relationship, authorization, or operation
+  authority;
+- treating a Fate component view as a PostgreSQL API view or backend authority;
 - introducing a `/fate` Route Handler or unbounded client query language;
 - selecting the runtime adapter or database-binding source in this document,
   or selecting Fate without the required view-layer ADR;
