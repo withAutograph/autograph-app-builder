@@ -309,6 +309,50 @@ It must demonstrate less generated-page boilerplate without obscuring route
 inputs, access behavior, error semantics, Next.js ownership, or the DAL
 boundary.
 
+## Future exploration: declarative intent routing
+
+This is another recorded future exploration, not a current milestone, ADR,
+first-app acceptance criterion, or state-management selection. It may be
+considered only after the first real generated-app proof and a separate
+proposal. It does not replace generated Server Actions, the DAL, PostgreSQL
+enforcement, or the operation contract.
+
+A generated app could render a `CommandForm` or equivalent interactive element
+with a compiler-generated `data-autograph-command` identifier. A single
+generated client `IntentRouter` could capture native submit and selected click
+events, collect caller-controlled `FormData` or explicitly declared safe data
+attributes, validate them through the generated command parser, and dispatch
+the matching generated action from a closed registry. This would remove direct
+function calls from individual element event handlers without creating a
+generic browser mutation API.
+
+Native forms are the default candidate because they retain semantic controls,
+keyboard behavior, and a path to progressive enhancement. Click routing is a
+candidate only for compact commands that do not have form input. A raw DOM
+attribute is always caller-controlled: it may carry declared IDs, versions, or
+form fields, but never app, tenant, actor, roles, capabilities, provenance,
+artifact identity, database identity, implementation names, or authorization.
+
+Any proposal must preserve these boundaries:
+
+- command identifiers, trigger kinds, input bindings, parsers, action targets,
+  safe error handling, feedback keys, and cache invalidation come from the
+  generated contract; callers cannot name arbitrary commands or payload shapes;
+- pending, success, error, retry, cancellation, and optimistic state remain
+  scoped to a command and subject rather than a single global action queue;
+- Redux, signals, or another client-state library are optional implementation
+  choices for local feedback state, not the command transport or authority;
+  and
+- Fate, if selected, may reconcile its cache from a generated command result
+  but does not own mutation authorization or command execution.
+
+The evaluation must compare generated React form Actions with the intent-router
+candidate, including accessibility, no-JavaScript behavior, event semantics,
+concurrent commands, safe error delivery, optimistic rollback, generated code
+size, and developer-facing simplicity. It must not introduce arbitrary
+client-selected server functions, a generic route handler, or a permanent
+global event bus.
+
 ## Generated operation surface
 
 Model CRUD maps to the compiled lifecycle rather than direct table mutation:
