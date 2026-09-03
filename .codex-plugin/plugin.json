@@ -1,6 +1,6 @@
 {
   "name": "app-builder",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Design and create apps with Autograph App Builder.",
   "author": { "name": "Autograph", "url": "https://github.com/withAutograph" },
   "homepage": "https://github.com/withAutograph/autograph-app-builder",
