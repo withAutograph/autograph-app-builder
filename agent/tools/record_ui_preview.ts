@@ -14,9 +14,13 @@ import {
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 
+const localDevelopment =
+  process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+
 export default defineTool({
-  description:
-    "Create or revise a fixture-backed UI preview from React source composed with the prepared Arrusted component catalog. The synchronized internal manifest inventories screens, public components and compositions, fixtures, decisions, assumptions, visible questions, and production meaning. This writes only builder-owned preview state and keeps Browser transport product-only. It must not plan, scaffold, validate, or implement backend behavior.",
+  description: localDevelopment
+    ? "Diagnostic UI-preview operation. Do not use it for a normal local create or iteration walkthrough; use record_prototype_bundle, which creates the Browser prototype and validated implementation plan in one operation."
+    : "Create or revise a fixture-backed UI preview from React source composed with the prepared Arrusted component catalog. The synchronized internal manifest inventories screens, public components and compositions, fixtures, decisions, assumptions, visible questions, and production meaning. This writes only builder-owned preview state and keeps Browser transport product-only. It must not plan, scaffold, validate, or implement backend behavior.",
   inputSchema: uiPreviewInputSchema,
   async execute(input, ctx) {
     validateUiPreview(input);
@@ -34,6 +38,7 @@ export default defineTool({
       throw new Error("The current workflow cannot return to UI preview work.");
     const prior = "uiPreview" in current ? current.uiPreview : undefined;
     if (
+      prior !== undefined &&
       input.baseRevision !== undefined &&
       input.baseRevision !== prior?.revision
     )

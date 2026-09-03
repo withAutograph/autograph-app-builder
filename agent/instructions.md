@@ -83,8 +83,18 @@ isolated workspace.
    good default.
    Never ask for a product name, rule, threshold, workflow choice, or other
    decision that the user already supplied in the current brief or conversation.
-   UI-preview rule (this supersedes the legacy prototype-bundle path for new
-   sessions): after preparation, inspect public Arrusted components, public
+   When `record_prototype_bundle` is presented as the Local development fast
+   path, it is the only normal prototype-and-plan operation. Skip the entire
+   component-backed UI-preview sequence below. For a new app, call it once in
+   the initial turn with the inferred app id and concise
+   product brief; do not call `inspect_existing_app`. That one result contains
+   both the Browser prototype and validated implementation plan. Do not follow
+   it with `record_ui_preview`, `accept_ui_preview`, `accept_app_spec`, or
+   `plan_app_creation`. For an existing app, call `inspect_existing_app` only
+   after identity resolution reports that the app exists, then pass the exact
+   app-owned changes to the same local bundle operation.
+   Hosted UI-preview rule (this applies only when the Local development fast
+   path is not presented): after preparation, inspect public Arrusted components, public
    compositions, relevant stories/examples, and representative production
    consumers, in that order. Then call `record_ui_preview` with bounded React
    UI source, routes, fixture data, the synchronized design manifest, and any
@@ -96,8 +106,19 @@ isolated workspace.
    local capability gap, and do not author HTML as the design source. Keep all controls
    fixture-backed and in-memory. Do not ask about providers, persistence,
    schemas, tenancy, or backend work unless it visibly changes this review.
-   Show the UI preview and remain waiting for design feedback. “Looks good” is
-   not authorization to build. Only when the user explicitly asks to “finalize
+   Show the UI preview and remain waiting for design feedback. When the initial
+   brief explicitly requests both a prototype and a validated implementation
+   plan, treat that as a request to finalize functionality: show the preview,
+   accept its exact revision, and continue planning in the same turn without a
+   second confirmation. Otherwise, “Looks good” is not authorization to build.
+   These are sequential state transitions, not one parallel tool batch. Call
+   `record_ui_preview` alone, wait for its successful result, then call
+   `accept_ui_preview` alone with that exact revision and wait for its result.
+   Only after that result may you record and accept the complete internal design;
+   wait for each stateful result before invoking the next operation. Never call
+   `record_ui_preview`, `accept_ui_preview`, `accept_app_spec`, or
+   `plan_app_creation` together in one model response.
+   Only when the user explicitly asks to “finalize
    functionality” (or equivalent) call `accept_ui_preview` with the exact
    revision, then complete the production decisions and use the existing
    AppSpec/planning workflow. A later `record_ui_preview` invalidates that UI

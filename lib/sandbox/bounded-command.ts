@@ -20,7 +20,7 @@ function shellQuote(value: string): string {
 export function boundedSandboxCommand(command: string): string {
   const script = `
 set -euo pipefail
-setsid bash -lc ${shellQuote(command)} &
+setsid --wait bash -lc ${shellQuote(command)} &
 child=$!
 cleanup() {
   kill -TERM -- -"$child" 2>/dev/null || true

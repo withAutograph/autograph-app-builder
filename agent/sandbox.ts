@@ -38,10 +38,13 @@ const plan = sandboxBackendPlan({
   fixture: useFixtureSandbox,
   localImageConfigured: image !== undefined,
 });
-const developmentBootstrap =
-  plan.kind === "vercel-development"
-    ? readDevelopmentVercelBootstrapInput()
-    : undefined;
+let developmentBootstrap:
+  ReturnType<typeof readDevelopmentVercelBootstrapInput> | undefined;
+
+function getDevelopmentBootstrap() {
+  developmentBootstrap ??= readDevelopmentVercelBootstrapInput();
+  return developmentBootstrap;
+}
 
 const bootstrapHostedVercelSandbox: NonNullable<
   SandboxBackendPrewarmInput["bootstrap"]
@@ -53,25 +56,30 @@ const bootstrapHostedVercelSandbox: NonNullable<
 const bootstrapDevelopmentVercelSandbox: NonNullable<
   SandboxBackendPrewarmInput["bootstrap"]
 > = async ({ use }) => {
-  if (developmentBootstrap === undefined)
-    throw new Error(
-      "The Development Vercel bootstrap binding was unavailable.",
-    );
+  const bootstrap = getDevelopmentBootstrap();
   // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
   const sandbox = await use();
   await sandbox.writeBinaryFile({
     path: DEVELOPMENT_SOURCE_ARCHIVE_PATH,
-    content: developmentBootstrap.sourceArchive,
+    content: bootstrap.sourceArchive,
   });
-  for (const [command, timeoutMs] of [
-    [developmentPinnedToolchainCommand(), 300_000],
-    [developmentVercelDependencyCommand(developmentBootstrap), 900_000],
+  for (const [command, timeoutMs, successMarker] of [
+    [
+      developmentPinnedToolchainCommand(),
+      300_000,
+      "development_toolchain_ready",
+    ],
+    [
+      developmentVercelDependencyCommand(bootstrap),
+      900_000,
+      "development_vercel_",
+    ],
   ] as const) {
     const result = await sandbox.run({
       command,
       abortSignal: AbortSignal.timeout(timeoutMs),
     });
-    if (result.exitCode !== 0) {
+    if (result.exitCode !== 0 && !result.stdout.includes(successMarker)) {
       const stage = result.stderr.match(
         /(?:development_toolchain_failed|development_vercel_bootstrap_failed):[a-z-]+/u,
       )?.[0];
@@ -83,10 +91,12 @@ const bootstrapDevelopmentVercelSandbox: NonNullable<
 };
 
 function createVercelDefinition() {
-  if (developmentBootstrap !== undefined) {
-    const providerTemplateKey = developmentVercelProviderTemplateKey(
-      developmentBootstrap.dependencyKey,
-    );
+  if (plan.kind === "vercel-development") {
+    const dependencyKey = process.env.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY;
+    if (dependencyKey === undefined)
+      throw new Error("The Development Vercel dependency key was unavailable.");
+    const providerTemplateKey =
+      developmentVercelProviderTemplateKey(dependencyKey);
     return defineSandbox({
       backend: createHostedVercelBackend({
         bootstrapNetworkHosts: DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
@@ -104,7 +114,7 @@ function createVercelDefinition() {
         await use({ networkPolicy: "deny-all" });
       },
       revalidationKey: () =>
-        developmentVercelRevalidationKey(developmentBootstrap),
+        developmentVercelRevalidationKey({ dependencyKey }),
     });
   }
   return defineSandbox({
