@@ -176,7 +176,7 @@ describe("canonical Arrusted template readiness", () => {
     let reinspectionRemote =
       "https://github.com/withAutograph/arrusted-development.git";
     const run = vi.fn(async ({ command }: { command: string }) =>
-      command.includes("clone-canonical-template.sh")
+      command.includes("arrusted-template-clone.sh")
         ? {
             exitCode: 0,
             stdout: JSON.stringify({
@@ -186,7 +186,7 @@ describe("canonical Arrusted template readiness", () => {
             }),
             stderr: "",
           }
-        : command.includes("reinspect-canonical-template.cjs")
+        : command.includes("arrusted-template-reinspect.cjs")
           ? {
               exitCode: 0,
               stdout: JSON.stringify({
@@ -257,13 +257,13 @@ describe("canonical Arrusted template readiness", () => {
     if (receipt.version !== 4) throw new Error("expected a V4 receipt");
     await inspectCanonicalArrustedSandboxWorkspace({ sandbox, receipt });
     expect(run.mock.calls[0]?.[0].command).toContain(
-      "/bin/sh /workspace/.app-builder/clone-canonical-template.sh",
+      "/bin/sh /workspace/.arrusted-template-clone.sh",
     );
     expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
     const stagedCloneScript = vi
       .mocked(sandbox.writeTextFile)
       .mock.calls.find(
-        ([call]) => call.path === ".app-builder/clone-canonical-template.sh",
+        ([call]) => call.path === ".arrusted-template-clone.sh",
       )?.[0].content;
     expect(stagedCloneScript).toContain(
       "clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main",
@@ -271,7 +271,7 @@ describe("canonical Arrusted template readiness", () => {
     expect(stagedCloneScript).toContain("checkout --detach");
     expect(stagedCloneScript).toContain("core.hooksPath=/dev/null");
     expect(stagedCloneScript).toContain(
-      "credential.helper=store --file=/workspace/.app-builder/arrusted-template-reader-token",
+      "credential.helper=store --file=/workspace/.arrusted-template-reader-token",
     );
     expect(stagedCloneScript).toContain("stage credential");
     expect(stagedCloneScript).toContain('test -r "$credential"');
@@ -289,23 +289,17 @@ describe("canonical Arrusted template readiness", () => {
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
     const reinspection = run.mock.calls.find(([call]) =>
-      call.command.includes("reinspect-canonical-template.cjs"),
+      call.command.includes("arrusted-template-reinspect.cjs"),
     )?.[0].command;
-    expect(reinspection).toContain("reinspect-canonical-template.cjs");
+    expect(reinspection).toContain("arrusted-template-reinspect.cjs");
     expect(reinspection).toContain("PATH=/usr/local/bin:/usr/bin:/bin");
     expect(reinspection).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
-    expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
-      false,
-    );
-    expect(files.has(".app-builder/clone-canonical-template.sh")).toBe(false);
-    expect(files.has(".app-builder/inspect-canonical-template.cjs")).toBe(
-      false,
-    );
-    expect(files.has(".app-builder/reinspect-canonical-template.cjs")).toBe(
-      false,
-    );
+    expect(files.has(".arrusted-template-reader-token")).toBe(false);
+    expect(files.has(".arrusted-template-clone.sh")).toBe(false);
+    expect(files.has(".arrusted-template-inspect.cjs")).toBe(false);
+    expect(files.has(".arrusted-template-reinspect.cjs")).toBe(false);
     expect(reader.acquire).toHaveBeenCalledOnce();
     expect(setNetworkPolicy).toHaveBeenNthCalledWith(1, {
       allow: ["github.com"],
@@ -384,9 +378,7 @@ describe("canonical Arrusted template readiness", () => {
         reader,
       }),
     ).rejects.toThrow("clone could not be prepared");
-    expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
-      false,
-    );
+    expect(files.has(".arrusted-template-reader-token")).toBe(false);
     expect(removePath).toHaveBeenCalledTimes(3);
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
@@ -409,7 +401,7 @@ describe("canonical Arrusted template readiness", () => {
           async ({ path, content }: { path: string; content: string }) => {
             if (
               failure === "credential-write" &&
-              path === ".app-builder/arrusted-template-reader-token"
+              path === ".arrusted-template-reader-token"
             )
               throw new Error("credential unavailable");
             files.set(path, content);
@@ -432,9 +424,7 @@ describe("canonical Arrusted template readiness", () => {
           reader,
         }),
       ).rejects.toThrow();
-      expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
-        false,
-      );
+      expect(files.has(".arrusted-template-reader-token")).toBe(false);
       expect(removePath).toHaveBeenCalledTimes(3);
       expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
       expect(sandbox.run).not.toHaveBeenCalled();
