@@ -411,6 +411,7 @@ async function cloneCanonicalArrustedWorkspace(input: {
     result = await input.sandbox.run({
       command: sandboxCloneCommand(),
       workingDirectory: "/workspace",
+      env: { TERM: "dumb" },
       abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     });
   } finally {
@@ -579,6 +580,7 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     result = await input.sandbox.run({
       command: sandboxCloneReinspectionCommand(),
       workingDirectory: "/workspace",
+      env: { TERM: "dumb" },
       abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     });
   } finally {
