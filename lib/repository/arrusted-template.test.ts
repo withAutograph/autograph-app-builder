@@ -188,7 +188,13 @@ describe("canonical Arrusted template readiness", () => {
     let reinspectionRemote =
       "https://github.com/withAutograph/arrusted-development.git";
     const run = vi.fn(
-      async ({ command }: { command: string; env?: Record<string, string> }) =>
+      async ({
+        command,
+      }: {
+        command: string;
+        env?: Record<string, string>;
+        workingDirectory?: string;
+      }) =>
         command.includes("arrusted-template-inspect.cjs") &&
         !command.includes("arrusted-template-reinspect.cjs")
           ? {
