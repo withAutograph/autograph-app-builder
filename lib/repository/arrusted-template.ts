@@ -106,6 +106,15 @@ export function sanitizeSandboxCloneError(stderr: string, token: string) {
 }
 
 const sandboxCloneInspectionProgram = String.raw`
+process.on("uncaughtException", (error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(
+    "AUTOGRAPH_CLONE_INSPECT_ERROR=" +
+      message.replace(/[\r\n]/g, " ").slice(0, 512) +
+      "\\n",
+  );
+  process.exit(1);
+});
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
