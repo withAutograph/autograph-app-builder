@@ -331,6 +331,7 @@ const sandboxCloneStages = [
       "set -eu",
       `remote=${ARRUSTED_TEMPLATE_REPOSITORY}`,
       `mkdir -p ${SANDBOX_WORKSPACE}`,
+      `find ${SANDBOX_WORKSPACE} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
       `test -z "$(find ${SANDBOX_WORKSPACE} -mindepth 1 -maxdepth 1 -print -quit)"`,
       `git -C ${SANDBOX_WORKSPACE} init --quiet`,
       `git -C ${SANDBOX_WORKSPACE} remote add origin "$remote"`,

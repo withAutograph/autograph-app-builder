@@ -285,6 +285,9 @@ describe("canonical Arrusted template readiness", () => {
       "git -C /workspace/repository init",
     );
     expect(stagedCloneScripts[0]).not.toContain("rm -rf /workspace/repository");
+    expect(stagedCloneScripts[0]).toContain(
+      "find /workspace/repository -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +",
+    );
     expect(stagedCloneScripts[1]).toContain(
       "fetch --depth 1 --no-recurse-submodules origin main",
     );
