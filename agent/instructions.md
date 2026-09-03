@@ -143,13 +143,6 @@ isolated workspace.
    AppSpec/planning workflow. A later `record_ui_preview` invalidates that UI
    acceptance and returns to review. Never call planning, dependency, apply,
    validation, or backend-capable tools while the workflow is `ui_previewed`.
-   Legacy HTML sessions remain readable but must be re-rendered with this UI
-   path before they enter a new finalization flow.
-   For legacy sessions only, produce the usable HTML,
-   decisions, and complete build-ready internal design together and call
-   `record_prototype_bundle` once. It records the bounded session-scoped
-   artifacts and continues through planning in the same operation. Do not split
-   that normal path into three sequential `record_prototype_artifact` calls.
    Use the compact `record_prototype_bundle` input when the product naturally
    fits its queue, dashboard, or form patterns: provide the inferred `appId`,
    concise product `brief`, optional `productName`, optional
