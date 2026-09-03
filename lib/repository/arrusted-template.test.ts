@@ -280,22 +280,22 @@ describe("canonical Arrusted template readiness", () => {
         ([call]) => call.path === ".arrusted-template-clone.sh",
       )
       .map(([call]) => call.content);
-    expect(stagedCloneScripts).toHaveLength(4);
-    expect(stagedCloneScripts[0]).toContain(
+    expect(stagedCloneScripts).toHaveLength(6);
+    expect(stagedCloneScripts[1]).toContain(
       "git -C /workspace/repository init",
     );
     expect(stagedCloneScripts[0]).not.toContain("rm -rf /workspace/repository");
     expect(stagedCloneScripts[0]).toContain(
-      "find /workspace/repository -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +",
+      "find /workspace/repository -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + >/dev/null 2>&1 || true",
     );
-    expect(stagedCloneScripts[0]).toContain("remote remove origin");
-    expect(stagedCloneScripts[1]).toContain(
+    expect(stagedCloneScripts[2]).toContain("remote remove origin");
+    expect(stagedCloneScripts[3]).toContain(
       "fetch --depth 1 --no-recurse-submodules origin main",
     );
-    expect(stagedCloneScripts[2]).toContain("rev-parse FETCH_HEAD");
-    expect(stagedCloneScripts[2]).toContain("checkout --detach");
-    expect(stagedCloneScripts[2]).toContain("clean -ffdx --quiet");
-    expect(stagedCloneScripts[3]).toContain(
+    expect(stagedCloneScripts[4]).toContain("rev-parse FETCH_HEAD");
+    expect(stagedCloneScripts[4]).toContain("checkout --detach");
+    expect(stagedCloneScripts[4]).toContain("clean -ffdx --quiet");
+    expect(stagedCloneScripts[5]).toContain(
       "node /workspace/.arrusted-template-inspect.cjs",
     );
     expect(stagedCloneScripts.join("\n")).not.toContain(" clone ");
