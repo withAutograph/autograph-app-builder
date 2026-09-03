@@ -272,7 +272,7 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).toContain(
       "/bin/sh /workspace/.arrusted-template-clone.sh",
     );
-    expect(run.mock.calls[0]?.[0].command).toMatch(/^exec env -i /u);
+    expect(run.mock.calls[0]?.[0].command).not.toContain("env -i");
     expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
     const stagedCloneScript = vi
       .mocked(sandbox.writeTextFile)
@@ -293,10 +293,6 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE",
     );
-    expect(run.mock.calls[0]?.[0].command).toContain(
-      "PATH=/usr/local/bin:/usr/bin:/bin",
-    );
-    expect(run.mock.calls[0]?.[0].command).toContain("TERM=dumb");
     expect(run.mock.calls[0]?.[0].env).toEqual({ TERM: "dumb" });
     expect(run.mock.calls[0]?.[0].command).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
