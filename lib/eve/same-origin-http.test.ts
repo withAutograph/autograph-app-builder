@@ -219,13 +219,9 @@ describe("same-origin canonical Eve transport", () => {
     expect(snapshot.implementationPlan).toEqual({
       appId: "vendor-onboarding",
       runtime: "nextjs",
-      workspacePath: "apps/vendor-onboarding",
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
       routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      sourceSha: "1".repeat(40),
-      sourceTree: "2".repeat(40),
-      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
     expect(JSON.stringify(snapshot.events)).not.toContain("proposalDigest");

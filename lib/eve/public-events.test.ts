@@ -231,17 +231,23 @@ describe("toPublicEvent", () => {
 });
 
 describe("installed Eve 0.43 projection", () => {
+  it("keeps source and workspace bindings out of the public plan", () => {
+    const plan = latestInstalledImplementationPlan(recordedPlanEvents());
+    expect(plan).toBeDefined();
+    const serialized = JSON.stringify(plan);
+    expect(serialized).not.toContain("sourceSha");
+    expect(serialized).not.toContain("sourceTree");
+    expect(serialized).not.toContain("proposalDigest");
+    expect(serialized).not.toContain("workspacePath");
+  });
+
   it("projects only a receipt-bound read-only target implementation plan", () => {
     expect(latestInstalledImplementationPlan(recordedPlanEvents())).toEqual({
       appId: "vendor-onboarding",
       runtime: "nextjs",
-      workspacePath: "apps/vendor-onboarding",
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
       routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      sourceSha: "1".repeat(40),
-      sourceTree: "2".repeat(40),
-      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
   });
@@ -257,7 +263,6 @@ describe("installed Eve 0.43 projection", () => {
       ),
     ).toMatchObject({
       appId: "vendor-onboarding",
-      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
   });
@@ -276,7 +281,6 @@ describe("installed Eve 0.43 projection", () => {
       ),
     ).toMatchObject({
       appId: "vendor-onboarding",
-      workspacePath: "apps/vendor-onboarding",
       readOnly: true,
     });
   });

@@ -41,4 +41,21 @@ describe("development prototype bundle", () => {
     expect(bundle.indexHtml).toContain("&lt;img");
     expect(bundle.indexHtml).not.toContain("<img src=x");
   });
+
+  it("gives the primary action an accessible, usable interaction", () => {
+    const bundle = developmentPrototypeBundle({
+      appId: "vendor-onboarding",
+      brief: "Review new vendors.",
+      product: { primaryAction: "Add vendor" },
+    });
+    expect(bundle.indexHtml).toContain('id="primary-action"');
+    expect(bundle.indexHtml).toContain('<dialog class="dialog"');
+    expect(bundle.indexHtml).toContain('aria-live="polite"');
+    expect(bundle.indexHtml).toContain('name="note" required');
+    expect(bundle.indexHtml).toContain('id="action-cancel"');
+    expect(bundle.indexHtml).toContain(
+      ";document.querySelector('#action-cancel')",
+    );
+    expect(bundle.indexHtml).toContain("Saved: ");
+  });
 });

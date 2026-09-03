@@ -72,6 +72,9 @@ isolated workspace.
    inferred and continue without confirmation. Preserve an explicitly supplied
    valid name or id. Ask only when a real collision, unsupported identifier, or
    material product ambiguity prevents a safe revisable choice.
+   When the user names an existing path as `apps/<app-id>`, that exact final
+   path segment is the app id. Preserve it unchanged for inspection and
+   planning; never rename, pluralize, or re-infer it.
    Put that concise product-facing explanation and the first internal tool call
    in the same model response. Never spend a separate model step narrating what
    you are about to do before beginning the work.
@@ -131,14 +134,18 @@ isolated workspace.
    `record_prototype_bundle` once. It records the bounded session-scoped
    artifacts and continues through planning in the same operation. Do not split
    that normal path into three sequential `record_prototype_artifact` calls.
-   In the local development runtime only, use the compact
-   `record_prototype_bundle` input instead: provide the inferred `appId`, the
-   concise product `brief`, optional `productName`, optional `interfacePattern`,
-   and, when it improves the result, a small `product` object containing only
-   outcome, item labels, filters, key facts, primary action, and states. The
-   local builder expands those product choices into the same usable Browser
-   prototype and internal design. Do not generate or send large HTML, decisions,
-   or internal-design payloads in that local path.
+   Use the compact `record_prototype_bundle` input when the product naturally
+   fits its queue, dashboard, or form patterns: provide the inferred `appId`,
+   concise product `brief`, optional `productName`, optional
+   `interfacePattern`, and, when useful, a small `product` object containing
+   outcome, item labels, filters, key facts, primary action, and states. These
+   are fast defaults for suitable products, never universal product
+   requirements. If the brief calls for another composition such as a calendar,
+   editor, map, board, report, or conversational workspace, use the complete
+   authored bundle input and follow the product rather than forcing it into a
+   queue/detail layout. Both paths work in local and hosted execution. An empty
+   workflow automatically resolves and prepares its eligible source; never ask
+   the user to perform that setup.
    Before calling, make the internal design complete in one pass: include each
    required heading exactly once (Status and prototype, User and outcome,
    Interfaces and navigation, Controls and behavior, Data model, Integrations

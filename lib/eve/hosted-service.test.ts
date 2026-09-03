@@ -228,13 +228,9 @@ describe("hosted Eve service core", () => {
     const implementationPlan = {
       appId: "vendor-onboarding",
       runtime: "nextjs" as const,
-      workspacePath: "apps/vendor-onboarding",
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
       routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      sourceSha: "a".repeat(40),
-      sourceTree: "b".repeat(40),
-      proposalDigest: "c".repeat(64),
       readOnly: true as const,
     };
     expect(
@@ -838,16 +834,12 @@ describe("hosted Eve service core", () => {
       implementationPlan: {
         appId: "stock-exceptions",
         runtime: "nextjs",
-        workspacePath: "apps/stock-exceptions",
         packageName: "@autograph/stock-exceptions",
         projectName: "apps-stock-exceptions",
         routes: Array.from(
           { length: 48 },
           (_, index) => `/${index}-${"r".repeat(1_024)}`,
         ),
-        sourceSha: "c".repeat(40),
-        sourceTree: "d".repeat(40),
-        proposalDigest: "e".repeat(64),
         readOnly: true,
       },
     };

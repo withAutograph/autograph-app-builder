@@ -244,13 +244,9 @@ describe("publicImplementationPlanSchema", () => {
   const plan = {
     appId: "vendor-onboarding",
     runtime: "nextjs" as const,
-    workspacePath: "apps/vendor-onboarding",
     packageName: "@autograph/vendor-onboarding",
     projectName: "apps-vendor-onboarding",
     routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
-    proposalDigest: "c".repeat(64),
     readOnly: true as const,
   };
 
@@ -265,13 +261,13 @@ describe("publicImplementationPlanSchema", () => {
     expect(
       publicImplementationPlanSchema.safeParse({
         ...plan,
-        sourceSha: "d".repeat(64),
+        sourceSha: "d".repeat(40),
       }).success,
     ).toBe(false);
     expect(
       publicImplementationPlanSchema.safeParse({
         ...plan,
-        workspacePath: "../outside",
+        proposalDigest: "private",
       }).success,
     ).toBe(false);
   });

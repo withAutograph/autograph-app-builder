@@ -27,6 +27,9 @@ missing operation with a raw shell command or generic file write.
    of non-alphanumeric characters with one hyphen, and trimming hyphens. Ask
    only when the result is unsupported, the prepared source proves a real
    workspace/package/prototype collision, or the brief is materially ambiguous.
+   When the user names an existing path as `apps/<app-id>`, preserve that exact
+   final path segment as the app id for inspection and planning. Never rename,
+   pluralize, or re-infer it.
    The selected adapter's builder-owned identity operation remains authoritative
    for target planning; never construct or guess a repository script path.
 

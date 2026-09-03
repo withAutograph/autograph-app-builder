@@ -36,7 +36,7 @@ const runGenerator = (cwd: string, endpoint: string) =>
 const writeFixture = async (
   root: string,
   {
-    version = "0.2.7",
+    version = "0.2.8",
     extraServer = false,
   }: { version?: string; extraServer?: boolean } = {},
 ) => {
@@ -96,7 +96,7 @@ describe("OpenAI package generator", () => {
       expect(codex.mcpServers["app-builder"].url).toBe(endpoint);
       expect(codex.mcpServers["app-builder"].oauth_resource).toBe(endpoint);
       expect(Object.keys(codex.mcpServers)).toEqual(["app-builder"]);
-      expect(manifest.version).toBe("0.2.7");
+      expect(manifest.version).toBe("0.2.8");
       expect(manifest.interface).toMatchObject({
         displayName: "Autograph App Builder",
         shortDescription: "Design and create apps with Autograph",

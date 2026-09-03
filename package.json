@@ -1,6 +1,6 @@
 {
   "name": "autograph-app-builder",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Autograph App Builder designs and creates apps in supported repositories.",
   "private": true,
   "license": "MIT",
