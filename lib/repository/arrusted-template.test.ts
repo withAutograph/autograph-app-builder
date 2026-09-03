@@ -271,6 +271,7 @@ describe("canonical Arrusted template readiness", () => {
     expect(run.mock.calls[0]?.[0].command).toContain(
       "/bin/sh /workspace/.arrusted-template-clone.sh",
     );
+    expect(run.mock.calls[0]?.[0].command).toMatch(/^exec env -i /u);
     expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
     const stagedCloneScript = vi
       .mocked(sandbox.writeTextFile)
@@ -306,6 +307,7 @@ describe("canonical Arrusted template readiness", () => {
       call.command.includes("arrusted-template-reinspect.cjs"),
     )?.[0].command;
     expect(reinspection).toContain("arrusted-template-reinspect.cjs");
+    expect(reinspection).toMatch(/^exec env -i /u);
     expect(reinspection).toContain("PATH=/usr/local/bin:/usr/bin:/bin");
     expect(reinspection).toContain("TERM=dumb");
     expect(
