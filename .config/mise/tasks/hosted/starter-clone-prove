@@ -1,0 +1,18 @@
+#!/bin/sh
+#MISE description="Exercise the canonical Arrusted clone in a project-OIDC Vercel Sandbox"
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  echo "usage: mise run hosted:starter-clone-prove" >&2
+  exit 64
+fi
+if [ "${VERCEL_TOKEN+x}" = x ] || [ "${AI_GATEWAY_API_KEY+x}" = x ]; then
+  echo "hosted:starter-clone-prove refuses static provider credentials" >&2
+  exit 78
+fi
+
+mise run local:ensure-oidc
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx/esm \
+  .config/mise/scripts/repository/prove-hosted-starter-clone.mts

@@ -38,6 +38,9 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_HOSTS = ["github.com"] as const;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_CREDENTIAL = ".app-builder/arrusted-template-reader-token";
+const SANDBOX_CLONE_SCRIPT = ".app-builder/clone-canonical-template.sh";
+const SANDBOX_CLONE_INSPECTOR = ".app-builder/inspect-canonical-template.cjs";
+const SANDBOX_REINSPECTOR = ".app-builder/reinspect-canonical-template.cjs";
 
 export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
 
@@ -65,10 +68,6 @@ async function acquisitionStage<T>(
 
 function receiptReadinessDigest(input: Record<string, unknown>) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
-}
-
-function shellQuote(value: string) {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 export function classifySandboxCloneFailure(stderr: string) {
@@ -315,11 +314,11 @@ console.log(JSON.stringify({
 }));
 `;
 
-function sandboxCloneCommand() {
-  const remote = shellQuote(ARRUSTED_TEMPLATE_REPOSITORY);
-  const script = [
+const sandboxCloneProgram =
+  [
     "set -eu",
     `credential=/workspace/${SANDBOX_CLONE_CREDENTIAL}`,
+    `remote=${ARRUSTED_TEMPLATE_REPOSITORY}`,
     "current_stage=credential",
     'stage() { current_stage="$1"; }',
     'cleanup() { rm -f "$credential"; }',
@@ -329,10 +328,10 @@ function sandboxCloneCommand() {
     'test -r "$credential"',
     "stage clone",
     `rm -rf ${SANDBOX_WORKSPACE}`,
-    `git -c protocol.allow=never -c protocol.https.allow=always -c 'credential.helper=store --file=/workspace/${SANDBOX_CLONE_CREDENTIAL}' -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main ${remote} ${SANDBOX_WORKSPACE}`,
+    `git -c protocol.allow=never -c protocol.https.allow=always -c 'credential.helper=store --file=/workspace/${SANDBOX_CLONE_CREDENTIAL}' -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main "$remote" ${SANDBOX_WORKSPACE}`,
     "cleanup",
     "stage verify-remote",
-    `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = ${remote}`,
+    `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = "$remote"`,
     "stage resolve-ref",
     `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse refs/remotes/origin/main)"`,
     "stage checkout",
@@ -344,15 +343,17 @@ function sandboxCloneCommand() {
     "stage gitlinks",
     `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
     "stage inspect",
-    `node -e ${shellQuote(sandboxCloneInspectionProgram)}`,
+    `node /workspace/${SANDBOX_CLONE_INSPECTOR}`,
     "trap - EXIT HUP INT TERM",
     "cleanup",
-  ].join("\n");
-  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
+  ].join("\n") + "\n";
+
+function sandboxCloneCommand() {
+  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh /workspace/${SANDBOX_CLONE_SCRIPT}`;
 }
 
 function sandboxCloneReinspectionCommand() {
-  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxCloneReinspectionProgram)}`;
+  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node /workspace/${SANDBOX_REINSPECTOR}`;
 }
 
 async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
@@ -388,6 +389,14 @@ async function cloneCanonicalArrustedWorkspace(input: {
       path: SANDBOX_CLONE_CREDENTIAL,
       content: `https://x-access-token:${encodeURIComponent(input.token)}@github.com\n`,
     });
+    await input.sandbox.writeTextFile({
+      path: SANDBOX_CLONE_SCRIPT,
+      content: sandboxCloneProgram,
+    });
+    await input.sandbox.writeTextFile({
+      path: SANDBOX_CLONE_INSPECTOR,
+      content: sandboxCloneInspectionProgram,
+    });
     await input.sandbox.setNetworkPolicy({ allow: [...SANDBOX_CLONE_HOSTS] });
     result = await input.sandbox.run({
       command: sandboxCloneCommand(),
@@ -396,10 +405,16 @@ async function cloneCanonicalArrustedWorkspace(input: {
     });
   } finally {
     try {
-      await input.sandbox.removePath({
-        path: SANDBOX_CLONE_CREDENTIAL,
-        force: true,
-      });
+      const cleanup = await Promise.allSettled(
+        [
+          SANDBOX_CLONE_CREDENTIAL,
+          SANDBOX_CLONE_SCRIPT,
+          SANDBOX_CLONE_INSPECTOR,
+        ].map((path) => input.sandbox.removePath({ path, force: true })),
+      );
+      const failures = cleanup.filter((result) => result.status === "rejected");
+      if (failures.length > 0)
+        throw new AggregateError(failures, "Sandbox clone cleanup failed.");
     } finally {
       await input.sandbox.setNetworkPolicy("deny-all");
     }
@@ -544,11 +559,23 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     observed.eligibilityDigest !== receipt.eligibilityDigest
   )
     throw new Error("The canonical Arrusted workspace drifted.");
-  const result = await input.sandbox.run({
-    command: sandboxCloneReinspectionCommand(),
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
-  });
+  let result;
+  try {
+    await input.sandbox.writeTextFile({
+      path: SANDBOX_REINSPECTOR,
+      content: sandboxCloneReinspectionProgram,
+    });
+    result = await input.sandbox.run({
+      command: sandboxCloneReinspectionCommand(),
+      workingDirectory: "/workspace",
+      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
+    });
+  } finally {
+    await input.sandbox.removePath({
+      path: SANDBOX_REINSPECTOR,
+      force: true,
+    });
+  }
   if (
     Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
     Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||

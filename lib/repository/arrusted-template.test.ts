@@ -176,7 +176,7 @@ describe("canonical Arrusted template readiness", () => {
     let reinspectionRemote =
       "https://github.com/withAutograph/arrusted-development.git";
     const run = vi.fn(async ({ command }: { command: string }) =>
-      command.includes(" clone ")
+      command.includes("clone-canonical-template.sh")
         ? {
             exitCode: 0,
             stdout: JSON.stringify({
@@ -186,7 +186,7 @@ describe("canonical Arrusted template readiness", () => {
             }),
             stderr: "",
           }
-        : command.includes("symbolic-ref")
+        : command.includes("reinspect-canonical-template.cjs")
           ? {
               exitCode: 0,
               stdout: JSON.stringify({
@@ -256,24 +256,26 @@ describe("canonical Arrusted template readiness", () => {
     );
     if (receipt.version !== 4) throw new Error("expected a V4 receipt");
     await inspectCanonicalArrustedSandboxWorkspace({ sandbox, receipt });
-    expect(
-      run.mock.calls.filter(([call]) =>
-        String(call.command).includes(" clone "),
-      ),
-    ).toHaveLength(1);
     expect(run.mock.calls[0]?.[0].command).toContain(
+      "/bin/sh /workspace/.app-builder/clone-canonical-template.sh",
+    );
+    expect(run.mock.calls[0]?.[0].command).not.toContain(" clone ");
+    const stagedCloneScript = vi
+      .mocked(sandbox.writeTextFile)
+      .mock.calls.find(
+        ([call]) => call.path === ".app-builder/clone-canonical-template.sh",
+      )?.[0].content;
+    expect(stagedCloneScript).toContain(
       "clone --depth 1 --no-checkout --no-recurse-submodules --single-branch --branch main",
     );
-    expect(run.mock.calls[0]?.[0].command).toContain("checkout --detach");
-    expect(run.mock.calls[0]?.[0].command).toContain(
-      "core.hooksPath=/dev/null",
-    );
-    expect(run.mock.calls[0]?.[0].command).toContain(
+    expect(stagedCloneScript).toContain("checkout --detach");
+    expect(stagedCloneScript).toContain("core.hooksPath=/dev/null");
+    expect(stagedCloneScript).toContain(
       "credential.helper=store --file=/workspace/.app-builder/arrusted-template-reader-token",
     );
-    expect(run.mock.calls[0]?.[0].command).toContain("stage credential");
-    expect(run.mock.calls[0]?.[0].command).toContain('test -r "$credential"');
-    expect(run.mock.calls[0]?.[0].command).not.toContain("chmod 600");
+    expect(stagedCloneScript).toContain("stage credential");
+    expect(stagedCloneScript).toContain('test -r "$credential"');
+    expect(stagedCloneScript).not.toContain("chmod 600");
     expect(run.mock.calls[0]?.[0].command).toContain(
       "GIT_ASKPASS=/usr/bin/false",
     );
@@ -287,14 +289,21 @@ describe("canonical Arrusted template readiness", () => {
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
     const reinspection = run.mock.calls.find(([call]) =>
-      call.command.includes("symbolic-ref"),
+      call.command.includes("reinspect-canonical-template.cjs"),
     )?.[0].command;
-    expect(reinspection).toContain("symbolic-ref");
+    expect(reinspection).toContain("reinspect-canonical-template.cjs");
     expect(reinspection).toContain("PATH=/usr/local/bin:/usr/bin:/bin");
     expect(reinspection).not.toContain(
       "ghs_reader_token_that_is_only_for_this_acquisition",
     );
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
+      false,
+    );
+    expect(files.has(".app-builder/clone-canonical-template.sh")).toBe(false);
+    expect(files.has(".app-builder/inspect-canonical-template.cjs")).toBe(
+      false,
+    );
+    expect(files.has(".app-builder/reinspect-canonical-template.cjs")).toBe(
       false,
     );
     expect(reader.acquire).toHaveBeenCalledOnce();
@@ -378,7 +387,7 @@ describe("canonical Arrusted template readiness", () => {
     expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
       false,
     );
-    expect(removePath).toHaveBeenCalledTimes(1);
+    expect(removePath).toHaveBeenCalledTimes(3);
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
   });
 
@@ -426,7 +435,7 @@ describe("canonical Arrusted template readiness", () => {
       expect(files.has(".app-builder/arrusted-template-reader-token")).toBe(
         false,
       );
-      expect(removePath).toHaveBeenCalledOnce();
+      expect(removePath).toHaveBeenCalledTimes(3);
       expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
       expect(sandbox.run).not.toHaveBeenCalled();
     },
