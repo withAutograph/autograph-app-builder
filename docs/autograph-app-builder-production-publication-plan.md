@@ -16,7 +16,7 @@ one auditable package identity.
 
 ## Canonical package release
 
-`v0.2.6` is produced only by the protected `promote` job after every exact-main
+`v0.2.7` is produced only by the protected `promote` job after every exact-main
 CI lane and the exact Vercel Git Production deployment pass. The release
 verification workflow then checks the published tag and assets independently.
 
@@ -42,7 +42,7 @@ After the immutable product release exists, run the marketplace repository's
 **Import plugin release** workflow with:
 
 - repository: `withAutograph/autograph-app-builder`
-- version: `0.2.6`
+- version: `0.2.7`
 
 The marketplace independently downloads and verifies the release, checks the
 receipt and attestations, extracts only the generated Codex package, retains a
