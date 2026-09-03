@@ -14,8 +14,9 @@ Existing HC, Vendor, and other Arrusted applications are behavioral and parity
 references; this plan does not migrate them.
 
 It also defines a pre-application evaluation of
-[Fate](https://fate.technology/) as an optional generated React projection and
-mutation runtime. Fate is an unselected frontend candidate. It cannot become a
+[Fate](https://fate.technology/) as an optional React projection and mutation
+runtime backed by generated integration. Fate is an unselected frontend
+candidate. It cannot become a
 schema, authorization, database, or runtime authority.
 
 The canonical compiler and runtime design lives in the Arrusted
@@ -218,12 +219,12 @@ to work in this Next.js architecture without proof. References:
 [getting started](https://fate.technology/guide/getting-started).
 
 The intended candidate architecture is not CUE versus Fate. CUE compiles the
-secure data capability graph; PostgreSQL enforces it; Fate is a generated React
+secure data capability graph; PostgreSQL enforces it; Fate is the React
 projection and mutation runtime over that graph. CUE declares model identities,
 read and command-result capabilities, relations, filters, pagination, command
-inputs, authorization references, and artifact compatibility. Fate component
-views compose and narrow those generated capabilities; they never define a
-model, database view, permission, query root, or command implementation.
+inputs, authorization references, and artifact compatibility. It does not
+declare a component, a Fate `view`, a React event handler, a `dataView`, or a
+client cache policy.
 
 For the candidate, the compiler emits a deterministic Fate manifest alongside
 SQL, the DAL, and actions:
@@ -242,6 +243,38 @@ Fate's supplied Prisma, Drizzle, or native HTTP helpers. `dataView` masks,
 procedure IDs, mutation maps, TypeScript types, and cache scopes are compiler
 outputs and are never app-authored parallel authorities. The canonical runtime
 plan owns this capability-graph contract and its detailed invariants.
+
+### Precise authoring boundary
+
+This division is mandatory if Fate is selected:
+
+| Layer | Owns | Must not own |
+| --- | --- | --- |
+| App-owned CUE | data model, relations, permitted named read/command capabilities, constraints, and authorization references | React components, Fate component views, DOM events, cache state, or a transport implementation |
+| Compiler-generated integration | PostgreSQL artifact, DAL, Server Actions, entity TypeScript types, generated Fate roots/action map, server `dataView` masks, custom transport, cache scope, and runtime validation | independently edited schema, policy, component views, or arbitrary client query access |
+| App-authored React/Fate components | presentation, component-local `view<T>()` declarations, view composition, `useView`, `useRequest`, normal React Actions, pending UI, and safe expected-error UI | tables, SQL, RLS, DAL calls, trusted context, operation implementation, server masks, or authority selection |
+
+The compiler does not generate an app's component views or components. A
+component author uses Fate normally: it imports `view`, `useView`,
+`useRequest`, and `useFateClient` from `react-fate`, and compiler-emitted entity
+types from the generated package. It may select and compose only fields known
+to the emitted capability types. The generated root types reject selections
+that are outside that root's CUE capability at build time; the transport treats
+every serialized selection as untrusted and repeats the check against the
+current server-side authorization mask.
+
+`dataView` and a Fate component `view` are deliberately different terms. A
+`dataView` is a compiler-generated server mask that bounds what can ever leave
+the generated DAL boundary. A component `view<T>()` is app-authored React code
+that asks for the subset it needs to render. Adding an existing permitted field
+to a component view changes neither CUE nor SQL. Exposing a new field or
+relation requires a CUE change and recompilation.
+
+React components use normal React event handlers or form actions. They may
+call `fate.actions.task.complete` through `useActionState`, for example, but
+that action name and its private generated transport mapping originate in CUE.
+This candidate does not introduce a global DOM-event router, `data-*` mutation
+protocol, or a component-visible Server Action implementation.
 
 The candidate has two read paths:
 
@@ -269,8 +302,8 @@ and their existing Server Actions. A mutation may request only the command's
 declared result capability for cache reconciliation; it cannot select an
 operation, function, authority, or field outside the generated manifest.
 Expected errors stay safe serialized action results, unexpected failures reach
-the generated React error boundary, and optimistic updates roll back on every
-failed or rejected command.
+the nearest configured React error boundary, and optimistic updates roll back
+on every failed or rejected command.
 
 ### Illustrative generated-app shape
 
@@ -310,47 +343,94 @@ generated/
 ```
 
 ```tsx
-// Component-authored projection over generated types and capabilities.
-const TaskRowView = view<Task>()({
+// app/components/task-row.tsx -- app-authored, ordinary Fate component code
+"use client";
+
+import { useActionState, useTransition } from "react";
+import { view, useFateClient, useView, type ViewRef } from "react-fate";
+import type { Task } from "@/generated/fate/types";
+
+export const TaskRowView = view<Task>()({
   id: true,
   title: true,
   status: true,
-  dueAt: true,
+  version: true,
 });
 
-const ProjectBoardView = view<Project>()({
+export function TaskRow({ task: taskRef }: { task: ViewRef<"Task"> }) {
+  const task = useView(TaskRowView, taskRef);
+  const fate = useFateClient();
+  const [, startTransition] = useTransition();
+  const [result, completeTask, pending] = useActionState(
+    fate.actions.task.complete,
+    null,
+  );
+
+  return (
+    <button
+      disabled={task.status === "complete" || pending}
+      onClick={() =>
+        startTransition(() =>
+          completeTask({
+            input: { taskId: task.id, version: task.version },
+            optimistic: { status: "complete" },
+          }),
+        )
+      }
+    >
+      {result?.error ? result.error.message : task.title}
+    </button>
+  );
+}
+```
+
+```tsx
+// app/components/project-board.tsx -- app-authored view composition
+"use client";
+
+import { view, useRequest, useView, type ViewRef } from "react-fate";
+import type { Project } from "@/generated/fate/types";
+import { TaskRow, TaskRowView } from "./task-row";
+
+export const ProjectBoardView = view<Project>()({
   id: true,
   name: true,
   status: true,
   tasks: TaskRowView,
 });
 
-// `projectBoard` is a generated root; the transport validates the narrowed
-// selection before invoking the DAL.
-const { projectBoard } = useRequest({
-  projectBoard: { input: { projectId }, view: ProjectBoardView },
-});
+export function ProjectScreen({ projectId }: { projectId: string }) {
+  // `project` is a compiler-generated root, but this is ordinary Fate usage.
+  const { project } = useRequest({
+    project: { byId: { id: projectId, view: ProjectBoardView } },
+  });
+
+  return <ProjectBoard project={project} />;
+}
+
+function ProjectBoard({ project: projectRef }: { project: ViewRef<"Project"> }) {
+  const project = useView(ProjectBoardView, projectRef);
+
+  return (
+    <main>
+      <h1>{project.name}</h1>
+      {project.tasks.map((task) => <TaskRow key={task.id} task={task} />)}
+    </main>
+  );
+}
 ```
 
-```tsx
-// Generated mapping, shown only to make the boundary concrete.
-export const mutations = {
-  "task.complete": {
-    action: completeTask,
-    resultCapability: TaskResultCapability,
-    invalidates: ["projectBoard"],
-  },
-};
-```
-
-RSC creates the request-scoped Fate client and preloads the root through the
-DAL. The browser hydrates that scoped snapshot before views render, then uses
-the generated transport for later reads and mutations. Its cache scope binds
-the generated contract and active artifact plus the current app, tenant, actor,
-and authorization scope. Snapshot, entity, selection, and cache state cannot
-cross those boundaries. Automatic route generation and declarative intent
-routing remain the separately deferred explorations below; they are not
-required to prove this Fate integration.
+The example's `TaskRowView` and `ProjectBoardView` are app source, not generated
+files. In contrast, `Task`, the `project` root, `fate.actions.task.complete`,
+and their transport wiring are compiler outputs. The screen never invokes a
+DAL function or Server Action directly. RSC creates the request-scoped Fate
+client and preloads the root through the DAL. The browser hydrates that scoped
+snapshot before views render, then uses the generated transport for later reads
+and mutations. Its cache scope binds the generated contract and active artifact
+plus the current app, tenant, actor, and authorization scope. Snapshot, entity,
+selection, and cache state cannot cross those boundaries. Automatic route
+generation and declarative intent routing remain the separately deferred
+explorations below; they are not required to prove this Fate integration.
 
 ### View-layer ADR gate
 
@@ -366,6 +446,9 @@ candidate must prove:
   or cross-artifact cache reuse;
 - deterministic generation of the Fate types, data-view masks, roots,
   mutation map, and transport from the same normalized contract as SQL;
+- ordinary component-local Fate `view`, `useView`, `useRequest`, and React
+  Action usage without generating component views or exposing compiler/DAL
+  implementation details to component code;
 - exact correspondence between generated Fate roots/mutations and CUE named
   capabilities, with no direct ORM, raw SQL, native Fate HTTP handler, or
   Vite-plugin authority path;
