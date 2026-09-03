@@ -45,7 +45,10 @@ export interface HostedVercelBackendInput {
   readonly runtimeRecoveryPrewarmInput: () => RuntimeRecoveryPrewarmInput;
 }
 
-const PROVIDER_REQUEST_TIMEOUT_MS = 45_000;
+// Provider command responses may legitimately remain open for the full
+// repository-operation window. Keep the transport deadline above that window
+// so the HTTP wrapper does not discard a successful sandbox operation.
+const PROVIDER_REQUEST_TIMEOUT_MS = 150_000;
 const PROVIDER_RETRY_DELAY_MS = 250;
 
 function retryableProviderFailure(error: unknown): boolean {
