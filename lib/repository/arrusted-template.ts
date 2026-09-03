@@ -93,6 +93,16 @@ export function sandboxCloneFailureStage(stderr: string) {
   )?.[1];
 }
 
+export function sanitizeSandboxCloneError(stderr: string, token: string) {
+  return stderr
+    .replaceAll(token, "[redacted]")
+    .replaceAll(/https?:\/\/[^\s]+/gu, "[url]")
+    .replaceAll(/[\r\n]+/gu, " ")
+    .replaceAll(/[^\x20-\x7e]/gu, "?")
+    .trim()
+    .slice(0, 512);
+}
+
 const sandboxCloneInspectionProgram = String.raw`
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
@@ -433,6 +443,7 @@ async function cloneCanonicalArrustedWorkspace(input: {
           Buffer.byteLength(result.stdout) <= SANDBOX_OPERATION_OUTPUT_BYTES &&
           Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
         commandStage: sandboxCloneFailureStage(result.stderr) ?? "unknown",
+        errorSummary: sanitizeSandboxCloneError(result.stderr, input.token),
       }),
     );
     throw new Error(
