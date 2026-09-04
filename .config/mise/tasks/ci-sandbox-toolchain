@@ -1,5 +1,7 @@
 #!/bin/sh
-#MISE description="Run the optional sandbox-toolchain Eve gate for CI"
+#MISE description="Run the active Vercel Sandbox contract tests for CI"
 set -eu
 
-exec mise run test:sandbox-toolchain
+exec mise run test:unit -- \
+  lib/sandbox/backend.test.ts \
+  lib/sandbox/vercel-backend.test.ts

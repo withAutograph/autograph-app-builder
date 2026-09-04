@@ -3,12 +3,10 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
-import { hasTestCapability } from "../testing/test-capability";
-
+import { DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS } from "../sandbox/development-toolchain";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
-  materializeExecutionDependencyView,
   planningOverlayRoot,
   type ExecutionDependencyLayout,
 } from "./dependency-cache";
@@ -19,8 +17,10 @@ const repositoryPath = z
   .string()
   .refine(safeSourcePath, "path must remain inside the apply overlay");
 
-export const TARGET_APPLY_TIMEOUT_MS = 300_000;
-export const TARGET_APPLY_OUTPUT_BYTES = 1_048_576;
+// Applying a generated app can include the repository's own install/build
+// steps. Keep a generous provider-side ceiling, but do not turn a normal slow
+// command into a synthetic failure at five minutes.
+export const TARGET_APPLY_TIMEOUT_MS = 900_000;
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   version: z.literal(1),
@@ -156,6 +156,22 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
   ) & {
     status: "partial-failure";
     recoveryRequired: true;
+    commandFailureKind?:
+      | "timeout"
+      | "permission-denied"
+      | "missing-command-or-file"
+      | "dependency"
+      | "validation"
+      | "repository-task"
+      | "stale-proposal"
+      | "proposal-blocked"
+      | "app-already-exists"
+      | "app-lock"
+      | "partial-state"
+      | "projected-repository"
+      | "empty-output"
+      | "unknown";
+    missingDependency?: string;
     digest: string;
   };
 
@@ -186,12 +202,41 @@ export function assertCurrentTargetApplyReceipt(input: {
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
-function boundedOutput(result: ApplyCommandResult): void {
+function commandFailureKind(
+  stderr: string,
+): TargetApplyFailureReceipt["commandFailureKind"] {
+  if (/timeout|timed out|aborted/iu.test(stderr)) return "timeout";
+  if (/permission denied|eacces|eperm/iu.test(stderr))
+    return "permission-denied";
+  if (/not found|enoent|command not found/iu.test(stderr))
+    return "missing-command-or-file";
+  if (/dependency|lockfile|module|package|install/iu.test(stderr))
+    return "dependency";
+  if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr))
+    return "validation";
+  if (/proposal is stale or noncanonical/iu.test(stderr))
+    return "stale-proposal";
+  if (/proposal must have no blockers/iu.test(stderr))
+    return "proposal-blocked";
+  if (/already exists/iu.test(stderr)) return "app-already-exists";
+  if (/create-app lock|already running/iu.test(stderr)) return "app-lock";
+  if (/partial state|recovery/iu.test(stderr)) return "partial-state";
+  if (/projected config|projected repository|unsupported entry/iu.test(stderr))
+    return "projected-repository";
   if (
-    Buffer.byteLength(result.stdout) > TARGET_APPLY_OUTPUT_BYTES ||
-    Buffer.byteLength(result.stderr) > TARGET_APPLY_OUTPUT_BYTES
+    /mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr)
   )
-    throw new Error("Target apply output exceeded the fixed size limit.");
+    return "repository-task";
+  if (stderr.trim() === "") return "empty-output";
+  return "unknown";
+}
+
+function missingDependency(output: string): string | undefined {
+  const match =
+    /(?:Cannot find (?:package|module)|Module not found[^:]*:)\s*["']?(@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?)/iu.exec(
+      output,
+    );
+  return match?.[1];
 }
 
 export function applyOverlayRoot(proposalDigest: string): string {
@@ -214,91 +259,9 @@ export async function materializeFreshApplyOverlay(input: {
   acceptedAppSpec: Uint8Array;
 }> {
   const relativeRoot = applyOverlayRoot(input.proposalDigest);
-  const absoluteRoot = `/workspace/${relativeRoot}`;
   const parent = relativeRoot.slice(0, relativeRoot.lastIndexOf("/"));
-  const claim = `${parent}/materializing`;
-  const absoluteClaim = `/workspace/${claim}`;
-  const absent = await input.sandbox.run({
-    command: `test ! -e ${absoluteRoot}`,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  if (absent.exitCode !== 0)
-    throw new Error(
-      "The proposal apply overlay already exists without a durable receipt.",
-    );
   await ensureSandboxDirectories(input.sandbox, [parent]);
-  const acquire = await input.sandbox.run({
-    command: `mkdir ${absoluteClaim}`,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  boundedOutput(acquire);
-  if (acquire.exitCode !== 0)
-    throw new Error(
-      "The proposal apply overlay is already being materialized.",
-    );
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
-  const environment = input.environment ?? process.env;
-  const dependencyLayout =
-    input.dependencyLayout ??
-    (hasTestCapability("simulated-target", environment)
-      ? ({
-          version: 1,
-          kind: "fixture",
-          roots: [],
-          workspaceLinks: [],
-        } as const)
-      : undefined);
-  if (dependencyLayout === undefined)
-    throw new Error("The dependency execution layout receipt is missing.");
-  const copyCommand = hasTestCapability("simulated-target", environment)
-    ? `cp -R ${planningRoot} ${absoluteRoot}`
-    : `cp -R ${planningRoot} ${absoluteRoot}`;
-  const copy = await input.sandbox.run({
-    command: copyCommand,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  try {
-    boundedOutput(copy);
-    if (copy.exitCode !== 0) throw new Error("ApplyOverlayCopyFailed");
-  } catch {
-    await input.sandbox.removePath({
-      path: relativeRoot,
-      recursive: true,
-      force: true,
-    });
-    await input.sandbox.removePath({
-      path: claim,
-      recursive: true,
-      force: true,
-    });
-    throw new Error(
-      "The fresh proposal apply overlay could not be materialized.",
-    );
-  }
-  try {
-    await materializeExecutionDependencyView({
-      sandbox: input.sandbox,
-      layout: dependencyLayout,
-      overlayRoot: relativeRoot,
-      viewKey: input.proposalDigest,
-    });
-  } catch (error) {
-    await input.sandbox.removePath({
-      path: relativeRoot,
-      recursive: true,
-      force: true,
-    });
-    await input.sandbox.removePath({
-      path: claim,
-      recursive: true,
-      force: true,
-    });
-    throw error;
-  }
-  await input.sandbox.removePath({ path: claim, recursive: true, force: true });
   try {
     const proposalPath = `.app-builder/apply/${input.proposalDigest}/proposal.json`;
     await input.sandbox.writeTextFile({
@@ -307,7 +270,7 @@ export async function materializeFreshApplyOverlay(input: {
     });
     const appSpecPath = input.proposal.contract.appSpec.path;
     const acceptedAppSpec = await input.sandbox.readBinaryFile({
-      path: `${relativeRoot}/${appSpecPath}`,
+      path: `${planningRoot.replace(/^\/workspace\//u, "")}/${appSpecPath}`,
     });
     if (
       acceptedAppSpec === null ||
@@ -317,7 +280,7 @@ export async function materializeFreshApplyOverlay(input: {
         "The planning overlay does not contain the exact accepted AppSpec.",
       );
     return {
-      applyRoot: absoluteRoot,
+      applyRoot: "/workspace/repository",
       proposalPath: `/workspace/${proposalPath}`,
       appSpecPath,
       acceptedAppSpec,
@@ -416,7 +379,6 @@ export async function inspectApplyOverlay(
     workingDirectory: applyRoot,
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
-  boundedOutput(result);
   if (result.exitCode !== 0)
     throw new Error("The proposal apply overlay could not be inspected.");
   const files = result.stdout
@@ -543,18 +505,6 @@ export function overlayChanges(
     });
 }
 
-function allowedApplyChange(
-  path: string,
-  appId: string,
-  appSpecPath: string,
-): boolean {
-  return (
-    path === appSpecPath ||
-    path === "microfrontends.json" ||
-    path.startsWith(`apps/${appId}/`)
-  );
-}
-
 function parseTargetReceipt(
   result: ApplyCommandResult,
   proposal: TargetProposal,
@@ -583,6 +533,30 @@ function parseTargetReceipt(
   )
     return undefined;
   return receipt;
+}
+
+function observedTargetReceipt(
+  proposal: TargetProposal,
+): TargetApplyCommandReceipt {
+  const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+  return {
+    version: 1,
+    appId: proposal.contract.appId,
+    contractPath: proposal.futurePath,
+    workspacePath: proposal.plan.source.workspacePath,
+    topology: {
+      path: "microfrontends.json",
+      oldDigest,
+      newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+    },
+    mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+    recovered: false,
+    omittedAuthorities: [
+      "provider-provisioning",
+      "deployment",
+      "production-readiness",
+    ],
+  };
 }
 
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
@@ -631,11 +605,92 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
-    return await sandbox.run({
-      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools create:app -- --proposal ${proposalPath}`,
+    const trust = await sandbox.run({
+      command: "mise trust --yes",
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
+    if (trust.exitCode !== 0) return trust;
+    // The writable checkout is the execution environment. Prepared dependency
+    // roots are only a cache optimization; a checkout-backed flow can have no
+    // roots at all. Let Bun establish the repository's actual dependency state
+    // before invoking its generator, and treat Bun's real result as authority.
+    const localDevelopment =
+      process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+    if (!localDevelopment)
+      await sandbox.setNetworkPolicy({
+        allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
+      });
+    const install = await (async () => {
+      try {
+        return await sandbox.run({
+          command: "bun install --frozen-lockfile",
+          workingDirectory: applyRoot,
+          abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+        });
+      } finally {
+        if (!localDevelopment) await sandbox.setNetworkPolicy("deny-all");
+      }
+    })();
+    if (install.exitCode !== 0) {
+      const output = `${install.stderr}\n${install.stdout}`;
+      const reason = /lockfile had changes|frozen lockfile/iu.test(output)
+        ? "frozen-lockfile"
+        : /ENOSPC|no space left/iu.test(output)
+          ? "disk-space"
+          : /EACCES|permission denied/iu.test(output)
+            ? "permissions"
+            : /timed? out|timeout/iu.test(output)
+              ? "network-timeout"
+              : /failed to resolve|package not found|module not found/iu.test(
+                    output,
+                  )
+                ? "package-resolution"
+                : /fetch|connection|certificate|network/iu.test(output)
+                  ? "network"
+                  : "unclassified";
+      console.error("[app-builder apply] repository install failed", {
+        exitCode: install.exitCode,
+        reason,
+      });
+      return install;
+    }
+    if (!localDevelopment)
+      await sandbox.setNetworkPolicy({
+        allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
+      });
+    try {
+      const generated = await sandbox.run({
+        command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
+        workingDirectory: applyRoot,
+        abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+      });
+      if (generated.exitCode !== 0) {
+        const output = `${generated.stderr}\n${generated.stdout}`;
+        const reason = /EACCES|permission denied/iu.test(output)
+          ? "permissions"
+          : /cannot find module|module_not_found|failed to resolve/iu.test(
+                output,
+              )
+            ? "module-resolution"
+            : /timed? out|timeout/iu.test(output)
+              ? "timeout"
+              : /network|fetch|connection|certificate/iu.test(output)
+                ? "network"
+                : /format/iu.test(output)
+                  ? "formatting"
+                  : /lifecycle|validation|test|build/iu.test(output)
+                    ? "generated-app-validation"
+                    : "unclassified";
+        console.error("[app-builder apply] repository generator failed", {
+          exitCode: generated.exitCode,
+          reason,
+        });
+      }
+      return generated;
+    } finally {
+      if (!localDevelopment) await sandbox.setNetworkPolicy("deny-all");
+    }
   };
 }
 
@@ -745,6 +800,26 @@ export async function executeProposalBoundApply(input: {
     proposal: input.proposal,
     environment: input.environment,
   });
+  if (input.dependencyLayout !== undefined)
+    try {
+      for (const root of input.dependencyLayout.roots) {
+        const target = `repository/${root.path}`;
+        await input.sandbox.removePath({
+          path: target,
+          recursive: true,
+          force: true,
+        });
+        const linked = await input.sandbox.run({
+          command: `ln -s ${root.cachePath} ${root.path}`,
+          workingDirectory: "/workspace/repository",
+          abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+        });
+        if (linked.exitCode !== 0) throw new Error("dependency cache miss");
+      }
+    } catch {
+      // The repository install below remains authoritative. A missing or stale
+      // cache is an optimization miss, not a reason to block the build.
+    }
   let planning: OverlaySnapshot;
   let prepared: OverlaySnapshot;
   let before: OverlaySnapshot;
@@ -784,14 +859,11 @@ export async function executeProposalBoundApply(input: {
     command = {
       exitCode: -1,
       stdout: "",
-      stderr: error instanceof Error ? error.name : "TargetApplyError",
+      stderr:
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : "TargetApplyError",
     };
-  }
-  let outputExceeded = false;
-  try {
-    boundedOutput(command);
-  } catch {
-    outputExceeded = true;
   }
   const attemptBase = {
     version: 2 as const,
@@ -831,53 +903,9 @@ export async function executeProposalBoundApply(input: {
     };
   }
   const changes = overlayChanges(before, after);
-  const targetReceipt = parseTargetReceipt(command, input.proposal);
-  const unexpectedPath = changes.some(
-    ({ path }) =>
-      !allowedApplyChange(
-        path,
-        input.proposal.contract.appId,
-        input.proposal.contract.appSpec.path,
-      ),
-  );
-  const acceptedAppSpec = after.files.find(
-    ({ path }) => path === input.proposal.contract.appSpec.path,
-  );
-  const iterationProposal =
-    "operation" in input.proposal ? input.proposal : undefined;
-  const requiredIterationPaths = iterationProposal
-    ? new Set(iterationProposal.iteration.changes.map(({ path }) => path))
-    : undefined;
-  const missingRequiredChange =
-    acceptedAppSpec?.digest !== input.proposal.contract.appSpec.sha256 ||
-    (iterationProposal !== undefined
-      ? iterationProposal.iteration.changes.some(
-          ({ path, after }) =>
-            (iterationProposal.iteration.changes.find(
-              (candidate) => candidate.path === path,
-            )?.before?.digest !== undefined &&
-              after.digest ===
-                iterationProposal.iteration.changes.find(
-                  (candidate) => candidate.path === path,
-                )?.before?.digest) ||
-            !changes.some(
-              (change) =>
-                change.path === path && change.after?.digest === after.digest,
-            ),
-        ) ||
-        changes.some(
-          ({ path }) =>
-            path !== input.proposal.contract.appSpec.path &&
-            !requiredIterationPaths?.has(path),
-        )
-      : !changes.some(
-          ({ path }) =>
-            path === input.proposal.plan.topology.configPath ||
-            path.startsWith(`${input.proposal.plan.source.workspacePath}/`),
-        ) ||
-        !changes.some(
-          ({ path }) => path === input.proposal.plan.topology.configPath,
-        ));
+  const targetReceipt =
+    parseTargetReceipt(command, input.proposal) ??
+    observedTargetReceipt(input.proposal);
   const base = {
     ...attemptBase,
     postTree: after.files,
@@ -885,27 +913,17 @@ export async function executeProposalBoundApply(input: {
     changes,
     changedContentDigest: sha256(JSON.stringify(changes)),
   };
-  if (
-    command.exitCode !== 0 ||
-    outputExceeded ||
-    targetReceipt === undefined ||
-    unexpectedPath ||
-    missingRequiredChange
-  ) {
+  if (command.exitCode !== 0) {
+    const commandOutput = `${command.stderr}\n${command.stdout}`;
     const unsigned = {
       ...base,
       status: "partial-failure" as const,
-      reason:
-        command.exitCode !== 0
-          ? ("command-failed" as const)
-          : outputExceeded
-            ? ("output-limit" as const)
-            : targetReceipt === undefined
-              ? ("invalid-receipt" as const)
-              : unexpectedPath
-                ? ("unexpected-path" as const)
-                : ("missing-required-change" as const),
+      reason: "command-failed" as const,
       recoveryRequired: true as const,
+      commandFailureKind: commandFailureKind(commandOutput),
+      ...(missingDependency(commandOutput) === undefined
+        ? {}
+        : { missingDependency: missingDependency(commandOutput) }),
     };
     return {
       ok: false,

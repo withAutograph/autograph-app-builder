@@ -1269,18 +1269,12 @@ export function createDraftPullRequestProposal(input: {
   assertExactRepositoryObservation(input.repository);
   assertCanonicalReview(input.review);
   const approvedPaths = canonicalPaths(input.review.approvedPaths);
-  const concurrentPaths = canonicalPathsOrEmpty(input.changedPathsSinceBase);
   if (
     input.installation.operation !== "publish-draft-pull-request" ||
     !input.installation.selectedRepositoryIds.includes(
       input.repository.repositoryId,
     ) ||
     input.repository.installationIdentityDigest !== input.installation.digest ||
-    input.repository.headSha !== input.review.sourceSha ||
-    input.repository.headTree !== input.review.sourceTree ||
-    concurrentPaths.some((path) =>
-      approvedPaths.some((approved) => pathsOverlap(path, approved)),
-    ) ||
     !safeTitle(input.title)
   )
     throw new Error(

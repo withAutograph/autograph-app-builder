@@ -574,7 +574,7 @@ describe("installed Eve 0.43 projection", () => {
     ).toBe("failed");
   });
 
-  it.each(["apply_app_creation", "validate_app_creation", "accept_change_set"])(
+  it.each(["validate_app_creation", "accept_change_set"])(
     "does not expose an unexpected internal %s approval",
     (toolName) => {
       const projected = projectInstalledEveEvent(
@@ -610,6 +610,48 @@ describe("installed Eve 0.43 projection", () => {
       expect(JSON.stringify(projected)).not.toContain("not projected");
     },
   );
+
+  it("presents sandbox build approval in product language", () => {
+    const projected = projectInstalledEveEvent(
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: [
+            {
+              requestId: "req_build",
+              kind: "tool-approval",
+              prompt: "Approve internal apply_app_creation call",
+              action: {
+                kind: "tool-call",
+                toolName: "apply_app_creation",
+                input: {
+                  productSummary:
+                    "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
+                },
+              },
+            },
+          ],
+        },
+      }),
+      4,
+    );
+
+    expect(projected).toEqual([
+      {
+        type: "input.requested",
+        index: 4,
+        request: {
+          requestId: "req_build",
+          kind: "approval",
+          title: "Build this app?",
+          description:
+            "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
+          allowFreeform: false,
+        },
+      },
+    ]);
+    expect(JSON.stringify(projected)).not.toContain("apply_app_creation");
+  });
 
   it("fails closed without exposing a malformed receipt or raw arguments", () => {
     const requested = installedEvent({

@@ -906,7 +906,17 @@ describe("request-scoped MCP service selection", () => {
     expect(resourceReadResponse.status).toBe(200);
 
     const toolResult = await mcpResult<{
-      tools: Array<{ name: string; title?: string; description?: string }>;
+      tools: Array<{
+        name: string;
+        title?: string;
+        description?: string;
+        annotations?: {
+          readOnlyHint?: boolean;
+          destructiveHint?: boolean;
+          idempotentHint?: boolean;
+          openWorldHint?: boolean;
+        };
+      }>;
     }>(toolResponse);
     expect(toolResult.tools.map(({ name }) => name).sort()).toEqual(exactTools);
     expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(
@@ -929,14 +939,51 @@ describe("request-scoped MCP service selection", () => {
       ),
     ).toEqual({
       autograph_start:
-        "Start a durable app build and return immediately; check progress separately.",
+        "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
       autograph_get:
         "List recent app builds, or read the next page of one app build's progress and requests.",
       autograph_send:
-        "Send additional direction while the current app build is waiting.",
+        "Send additional direction to an App Builder session. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
       autograph_respond:
-        "Answer the complete outstanding set of App Builder questions in one response.",
-      autograph_cancel: "Request cancellation of the active app build.",
+        "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
+      autograph_cancel:
+        "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
+    });
+    expect(
+      Object.fromEntries(
+        toolResult.tools.map(({ name, annotations }) => [name, annotations]),
+      ),
+    ).toEqual({
+      autograph_start: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_get: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_send: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_respond: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_cancel: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     });
 
     const resourceResult = await mcpResult<{

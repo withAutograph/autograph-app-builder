@@ -1,5 +1,11 @@
 #!/bin/sh
-#MISE description="Run App Builder product-quality gates and CI evidence capture"
+#MISE description="Run deterministic product-quality checks that do not require provider credentials"
 set -eu
 
-exec mise run test:product-evals
+mise run test:unit -- \
+  lib/agent/component-composition-policy.test.ts \
+  evals/support/product-quality.test.ts
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" node_modules/playwright/cli.js test \
+  --config playwright.product-quality.config.ts

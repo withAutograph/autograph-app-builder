@@ -21,8 +21,16 @@ export async function prepareReviewedWorkflow(
 
   await t.send("Run target identity and planning.");
 
-  const apply = await t.send("Apply the current creation proposal.");
-  apply.notEvent("input.requested");
+  await t.send("Apply the current creation proposal.");
+  // Keep this helper compatible with the installed Eve eval surface: the
+  // pending request list is the stable context-level contract.
+  if (
+    t.pendingInputRequests.length !== 1 ||
+    t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
+  ) {
+    throw new Error("Expected one apply_app_creation approval request.");
+  }
+  await t.respondAll("approve");
 
   const validation = await t.send("Validate the applied creation.");
   validation.notEvent("input.requested");

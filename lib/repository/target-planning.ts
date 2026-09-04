@@ -20,7 +20,6 @@ import {
 } from "../sandbox/backend";
 import { developmentExecutionArtifactDigest } from "../sandbox/development-toolchain";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
-import { developmentSourceReceipt } from "./development-source";
 import type { SourceReceipt } from "./source-receipt";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -213,92 +212,6 @@ function planningMarker(marker: string, phase: "start" | "finish") {
     console.info(`[app-builder planning] ${marker} ${phase}`);
 }
 
-/**
- * A development-only observation of the repository's preflight contract.
- * This is deliberately bound to the source receipt selected by the trusted
- * local invocation, rather than to a caller-provided execution-mode flag.
- * Hosted planning keeps the literal V0 topology contract.
- */
-const localPlanningCapabilitySchema = z.strictObject({
-  contractVersion: z.literal(2),
-  runtime: z.literal("nextjs"),
-  packageScope: z.literal("@autograph"),
-  requiredPaths: z.array(repositoryPath).min(1).max(64),
-  commands: z.strictObject({
-    appIdentity: z.literal(
-      "mise run repository:exec -- app-identity.ts --app <app-id>",
-    ),
-    appPlan: z.literal(
-      "mise run repository:exec -- app-contract.ts --contract <contract-file>",
-    ),
-    appApply: z.literal("mise run create:app -- --proposal <proposal-file>"),
-    appBuilderUiPreview: z.literal(
-      "mise run repository:render-app-builder-ui-preview -- --input <overlay.json> --preview-root <preview-root> --output <preview-dir>",
-    ),
-    repositoryPreflight: z.literal("mise run repository:preflight"),
-  }),
-  topologyOwner: repositoryPath,
-  validationCommands: z.array(z.string()).min(1).max(16),
-  releaseGate: z.literal("REPOSITORY_RELEASE_ENABLED"),
-  digest,
-});
-
-type LocalPlanningCapability = z.infer<typeof localPlanningCapabilitySchema>;
-
-async function observeLocalPlanningCapability(input: {
-  sandbox: SandboxSession;
-  planningRoot: string;
-  sourceReceipt: SourceReceipt;
-  environment: Readonly<Record<string, string | undefined>>;
-}): Promise<LocalPlanningCapability | undefined> {
-  planningMarker("local-planning-preflight", "start");
-  const selected = await developmentSourceReceipt(
-    input.sourceReceipt.sourceKind,
-    undefined,
-    input.environment,
-  );
-  if (selected === undefined) {
-    planningMarker("local-planning-preflight", "finish");
-    return undefined;
-  }
-
-  const result = await input.sandbox.run({
-    command: `cd ${input.planningRoot} && MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise run repository:preflight`,
-    abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
-  });
-  const stdout = result.stdout
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
-    .replace(/\r/gu, "")
-    .trim();
-  if (
-    Buffer.byteLength(stdout) > TARGET_COMMAND_OUTPUT_BYTES ||
-    Buffer.byteLength(result.stderr) > TARGET_COMMAND_OUTPUT_BYTES
-  )
-    throw new Error("Local planning capability was unavailable.");
-  let value: unknown;
-  try {
-    value = JSON.parse(stdout) as unknown;
-  } catch {
-    throw new Error("Local planning capability was invalid.");
-  }
-  const parsed = localPlanningCapabilitySchema.safeParse(value);
-  if (!parsed.success)
-    throw new Error("Local planning capability was invalid.");
-  const { digest: observedDigest, ...unsigned } = parsed.data;
-  if (sha256(JSON.stringify(unsigned)) !== observedDigest)
-    throw new Error("Local planning capability was invalid.");
-  const owner = await input.sandbox.readBinaryFile({
-    path: `${input.planningRoot.replace(/^\/workspace\//u, "")}/${parsed.data.topologyOwner}`,
-  });
-  if (
-    owner === null ||
-    !parsed.data.requiredPaths.includes(parsed.data.topologyOwner)
-  )
-    throw new Error("Local planning topology was unavailable.");
-  planningMarker("local-planning-preflight", "finish");
-  return parsed.data;
-}
-
 function parseOutput<T>(
   result: TargetCommandResult,
   schema: z.ZodType<T>,
@@ -313,8 +226,12 @@ function parseOutput<T>(
     Buffer.byteLength(result.stderr) > TARGET_COMMAND_OUTPUT_BYTES
   )
     throw new Error(`${label} output exceeded the fixed size limit.`);
-  if (result.exitCode !== 0)
-    throw new Error(`${label} failed with exit code ${result.exitCode}.`);
+  if (result.exitCode !== 0) {
+    const diagnostic = result.stderr.trim() || result.stdout.trim();
+    throw new Error(
+      `${label} failed with exit code ${result.exitCode}${diagnostic.length === 0 ? "." : `: ${diagnostic.slice(0, 2_000)}`}`,
+    );
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout) as unknown;
@@ -328,16 +245,23 @@ function parseOutput<T>(
 }
 
 export function targetExecutionBinding(
-  cache: ObservedDependencyCache,
+  cache: ObservedDependencyCache | undefined,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   if (hasTestCapability("simulated-target", environment))
     return {
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-      dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
+      dependencyCacheDigest:
+        cache === undefined ? "checkout" : dependencyCacheReceiptDigest(cache),
       fixture: true,
     } as const;
   const imageDigest = configuredToolchainImage(environment);
+  if (cache === undefined)
+    return {
+      imageDigest: imageDigest ?? "vercel-sandbox",
+      dependencyCacheDigest: "checkout",
+      fixture: false,
+    } as const;
   if (imageDigest === undefined) {
     const backend = sandboxBackendPlan({
       environment,
@@ -458,19 +382,38 @@ export function sandboxTargetCommandExecutor(
     contractPath,
   }) => {
     const abortSignal = AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS);
-    const mise =
-      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools repository:exec --";
     const request =
       command === "identity"
         ? {
-            command: `${mise} app-identity.ts --app ${requestedAppId}`,
+            command: `bun .config/mise/scripts/repository/app-identity.ts --app ${requestedAppId}`,
             workingDirectory: planningRoot,
           }
         : {
-            command: `${mise} app-contract.ts --contract ${contractPath} --root ${planningRoot}`,
+            command: `bun .config/mise/scripts/repository/app-contract.ts --contract ${contractPath} --root ${planningRoot}`,
             workingDirectory: planningRoot,
           };
-    return sandbox.run({ ...request, abortSignal });
+    const result = await sandbox.run({ ...request, abortSignal });
+    if (
+      result.exitCode === 0 ||
+      !/(?:cannot find module|module_not_found|node_modules|dependencies? (?:are )?missing)/iu.test(
+        `${result.stdout}\n${result.stderr}`,
+      )
+    )
+      return result;
+
+    await sandbox.setNetworkPolicy("allow-all");
+    try {
+      const setup = await sandbox.run({
+        command:
+          "bun install --frozen-lockfile --ignore-scripts --filter @autograph/platform-microfrontends",
+        workingDirectory: planningRoot,
+        abortSignal: AbortSignal.timeout(300_000),
+      });
+      if (setup.exitCode !== 0) return setup;
+      return sandbox.run({ ...request, abortSignal });
+    } finally {
+      await sandbox.setNetworkPolicy("deny-all");
+    }
   };
 }
 
@@ -535,15 +478,6 @@ export async function executeTargetIdentityAndPlanning(input: {
 }) {
   planningMarker("target-identity-and-planning", "start");
   const overlay = await materializePlanningOverlay(input);
-  const capability =
-    input.sourceReceipt === undefined
-      ? undefined
-      : await observeLocalPlanningCapability({
-          sandbox: input.sandbox,
-          planningRoot: overlay.planningRoot,
-          sourceReceipt: input.sourceReceipt,
-          environment: input.environment ?? process.env,
-        });
   const identity = parseOutput(
     await input.executor({
       command: "identity",
@@ -629,7 +563,7 @@ export async function executeTargetIdentityAndPlanning(input: {
     if (changes.length === 0)
       throw new Error("At least one existing-app change is required.");
     const topologyBytes = await input.sandbox.readBinaryFile({
-      path: `repository/${capability?.topologyOwner ?? "microfrontends.json"}`,
+      path: "repository/microfrontends.json",
     });
     if (topologyBytes === null)
       throw new Error("The existing application topology is missing.");
@@ -645,7 +579,7 @@ export async function executeTargetIdentityAndPlanning(input: {
     const iterationDigest = sha256(JSON.stringify(changes));
     await input.onIdentity?.(identity);
     const proposal = targetIterationProposalSchemaForTopology(
-      capability?.topologyOwner ?? "microfrontends.json",
+      "microfrontends.json",
     ).parse({
       operation: "iterate-existing-app",
       contract,
@@ -663,7 +597,7 @@ export async function executeTargetIdentityAndPlanning(input: {
           optionalCapabilities: { integrations: [], hostedResources: [] },
         },
         topology: {
-          configPath: capability?.topologyOwner ?? "microfrontends.json",
+          configPath: "microfrontends.json",
           projectName: identity.projectName,
           packageName: identity.packageName,
           routes: identity.baseRoutes,
@@ -688,7 +622,7 @@ export async function executeTargetIdentityAndPlanning(input: {
       ...overlay,
     }),
     targetProposalSchemaForTopology(
-      capability?.topologyOwner ?? "microfrontends.json",
+      "microfrontends.json",
     ) as unknown as z.ZodType<TargetProposal>,
     "Target planning command",
   );
@@ -703,11 +637,6 @@ export async function executeTargetIdentityAndPlanning(input: {
     proposal.plan.topology.packageName !== identity.packageName
   )
     throw new Error("Target proposal did not match the resolved identity.");
-  if (
-    capability !== undefined &&
-    proposal.plan.topology.configPath !== capability.topologyOwner
-  )
-    throw new Error("Target proposal did not use the observed local topology.");
   const result = { identity, proposal, ...overlay };
   planningMarker("target-identity-and-planning", "finish");
   return result;

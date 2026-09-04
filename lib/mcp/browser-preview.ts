@@ -201,7 +201,16 @@ export function createServicePrototypePreviewResolver(input: {
   return async ({ request, sessionId }) => {
     const service = await input.serviceForRequest(request);
     if (service === undefined) return undefined;
-    const result = await service.get({ sessionId, cursor: 0, limit: 1 });
-    return result.prototype;
+    // The public event tail can expose the preview URL just before the
+    // corresponding prototype event has reached the request-scoped read. Give
+    // that normal delivery race a short chance to settle so the first Browser
+    // navigation does not turn a valid preview into a sticky 404.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const result = await service.get({ sessionId, cursor: 0, limit: 1 });
+      if (result.prototype !== undefined) return result.prototype;
+      if (attempt < 4)
+        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    }
+    return undefined;
   };
 }

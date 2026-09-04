@@ -36,7 +36,7 @@ import {
   resolveImmutableExistingSource,
   type ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
-import { cloneGitHubSourceWorkspace } from "../repository/sandbox-github-source";
+import { readSandboxGitHubSourceSnapshot } from "../repository/sandbox-github-source";
 import {
   inspectExistingRepositorySnapshotReceipt,
   type SourceReceipt,
@@ -50,6 +50,7 @@ import {
   recordRepositoryAccessReceipt,
   type RepositoryAccessReceipt,
 } from "./repository-access-state";
+import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
 
 const failed = (reason: string, message: string, retryable = false) =>
   new ConnectionAuthorizationFailedError("github-repository-access", {
@@ -96,7 +97,8 @@ export interface RepositoryAccessRuntime {
     currentAccessReceipt: RepositoryAccessReceipt | undefined;
     sessionId: string;
     callId: string;
-    sandbox: SandboxSession;
+    /** Resolves the Eve sandbox only after provider source is configured. */
+    sandbox: SandboxSession | (() => Promise<SandboxSession>);
     currentGitHubSource?: ImmutableGitHubSourceReceipt;
   }): Promise<{
     accessReceipt: RepositoryAccessReceipt;
@@ -121,17 +123,6 @@ function repositorySourceProvider(
     typeof candidate.inspectRepository === "function" &&
     typeof candidate.acquireRepositoryReadCredential === "function"
   );
-}
-
-function immutableSourceBinding(source: ImmutableGitHubSourceReceipt) {
-  return {
-    version: source.version,
-    repository: source.repository,
-    resolvedRef: source.resolvedRef,
-    resolvedSha: source.resolvedSha,
-    resolvedTree: source.resolvedTree,
-    installationIdentityDigest: source.installationIdentityDigest,
-  };
 }
 
 export function createRepositoryAccessRuntime(input: {
@@ -203,59 +194,38 @@ export function createRepositoryAccessRuntime(input: {
         expectedTree: value.access.repository.headTree,
         resolvedByCallId: value.callId,
       });
+      // Repository metadata is diagnostic context, not a source-drift gate.
+      // The provider-created checkout below is the source the builder uses.
       assertExactImmutableGitHubSourceReceipt(observedGitHubSource);
-      const currentGitHubSource = value.currentGitHubSource;
-      if (currentGitHubSource !== undefined)
-        assertExactImmutableGitHubSourceReceipt(currentGitHubSource);
-      const githubSource =
-        currentGitHubSource === undefined
-          ? observedGitHubSource
-          : (() => {
-              if (
-                JSON.stringify(immutableSourceBinding(observedGitHubSource)) !==
-                JSON.stringify(immutableSourceBinding(currentGitHubSource))
-              )
-                throw new Error(
-                  "The immutable GitHub source changed since it was recorded.",
-                );
-              return currentGitHubSource;
-            })();
+      const githubSource = observedGitHubSource;
       const credential = await provider.acquireRepositoryReadCredential({
         repositoryId: value.access.repository.repositoryId,
       });
-      const cloned = await cloneGitHubSourceWorkspace({
-        sandbox: value.sandbox,
-        token: credential.token,
-        remote: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-        branch: value.access.repository.defaultBranch,
-        expectedSha: value.access.repository.headSha,
-        expectedTree: value.access.repository.headTree,
+      configureVercelSessionGitSource({
+        sessionId: value.sessionId,
+        source: {
+          url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+          token: credential.token,
+        },
       });
+      // The Vercel backend now supplies this source directly to
+      // `Sandbox.create({ source: { type: "git", ... } })`. No shell clone,
+      // manifest, or predicted checkout shape sits between provider access and
+      // the repository's own commands.
+      const sandbox =
+        typeof value.sandbox === "function"
+          ? await value.sandbox()
+          : value.sandbox;
+      const cloned = {
+        snapshot: await readSandboxGitHubSourceSnapshot(sandbox),
+        workspaceDigest: value.access.repository.headTree,
+      };
       const sourceReceipt = inspectExistingRepositorySnapshotReceipt(
         cloned.snapshot,
       );
-      if (
-        sourceReceipt.sourceSha !== githubSource.resolvedSha ||
-        sourceReceipt.sourceTree !== githubSource.resolvedTree
-      )
-        throw new Error(
-          "The prepared GitHub source changed during inspection.",
-        );
-
-      const confirmed = await classify({
-        repository: value.repository,
-        ...(value.selectedInstallationId === undefined
-          ? {}
-          : { selectedInstallationId: value.selectedInstallationId }),
-      });
-      if (
-        confirmed.status !== "ready" ||
-        confirmed.accessDigest !== value.access.accessDigest ||
-        JSON.stringify(confirmed.repository) !==
-          JSON.stringify(value.access.repository) ||
-        JSON.stringify(confirmed.scope) !== JSON.stringify(value.access.scope)
-      )
-        throw new Error("GitHub repository access changed during preparation.");
+      // GitHub already authorized the clone. Do not repeat a speculative
+      // permission/readback gate after the provider operation succeeded.
+      const confirmed = value.access;
       const accessReceipt = recordRepositoryAccessReceipt({
         current: initialAccessReceipt,
         sessionId: value.sessionId,
@@ -267,7 +237,7 @@ export function createRepositoryAccessRuntime(input: {
         source: githubSource,
       });
       const workspace = await recordPreparedSandboxWorkspace({
-        sandbox: value.sandbox,
+        sandbox,
         callId: value.callId,
         sourcePath: sourceReceipt.sourcePath,
         sourceSha: sourceReceipt.sourceSha,

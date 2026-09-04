@@ -15,6 +15,14 @@ missing operation with a raw shell command or generic file write.
 
 ## Workflow
 
+When `record_prototype_bundle` is available, it is the normal fast path. For a
+new app, call it in the first response with the inferred `appId`, the user's
+brief, and an inferred interface pattern when useful. It automatically prepares
+the writable checkout and returns the Browser prototype and implementation
+plan. Do not split this into model-selected source, workspace, dependency, or
+planning steps. For an existing app, inspect only the app-owned files first and
+then call the same operation with the intended app-owned changes.
+
 1. If the user explicitly requests only a bare Next.js workspace, follow
    [$scaffold-app-workspace](../scaffold-app-workspace/SKILL.md) and stop this
    route-owned flow. Do not interpret a generic “create an app” request as bare
@@ -33,34 +41,21 @@ missing operation with a raw shell command or generic file write.
    The selected adapter's builder-owned identity operation remains authoritative
    for target planning; never construct or guess a repository script path.
 
-3. After an eligible exact source receipt is resolved, automatically inspect
-   the source read-only and prepare its isolated builder-owned workspace. Use
-   `source_status` once to begin a normal new-app flow; an empty hosted source
-   state acquires and internally binds the canonical starter without another
-   model-selected setup operation. Do not require `inspect_source` or
-   `approve_source_acquisition` on that path. Use
-   the runtime's single preselected existing-repository snapshot during local
-   development without asking for or displaying its host path. Outside that
-   closed binding, retain the explicit allowlisted-path requirement. In hosted
-   execution, an inspection or iteration of an app already present in canonical
-   Arrusted uses the builder-owned canonical clone as the `fresh-template`
-   transport. Do not ask the user for a local checkout path in that case.
-   Use
-   `workspace_status` to verify preparation, then perform known file reads under
-   the exact absolute `workspacePath` returned by preparation. Never pass that
-   sandbox path or an internal hosted artifact path to `inspect_repository`.
-   Inspect existing workspace identities, current topology, and
-   `prototype/<app-id>/app-spec.md`. Do not request approval for supported-source
-   inspection, workspace preparation, or non-published prototype artifacts.
+3. Resolve the available source and prepare a writable builder workspace
+   automatically. Use source discovery and repository commands as context, not
+   as approval gates. Do not require separate inspection or source-acquisition
+   questions, and do not ask the user for internal paths or setup details. Use
+   the runtime's local or hosted source directly without asking for internal
+   paths. Inspect useful files and components opportunistically. Do not request
+   approval for source inspection, workspace preparation, or prototypes.
    Preserve unrelated changes.
    For a hosted existing repository named as `owner/name`, use only
    `resolve_github_source`; it owns the current access readback, source
    inspection, and isolated preparation without a preceding access tool. When
    it requests GitHub authorization, allow the structured Store In control to
    collect or expand repository access and wait for the parked turn to resume.
-   Never ask “Repository selected?”, treat the user's answer as provider
-   authority, or request installation/repository ids, SHAs, trees, settings
-   changes, or other access mechanics in chat. When the tool returns
+   Never ask “Repository selected?” or request installation ids, SHAs, trees,
+   settings changes, or other access mechanics in chat. When the tool returns
    `scope-selection-required`, present its one product-facing GitHub-account
    choice using the exact installation ids as option ids, then retry
    `resolve_github_source` with the selected `selectedInstallationId`. Do not
@@ -82,10 +77,17 @@ missing operation with a raw shell command or generic file write.
    replacements, and retry planning without resolving or preparing the source
    again. Never expose this repair or substitute prose. Return only product
    blockers without workarounds or internal validator mechanics.
-6. Present the usable prototype and complete proposal, then continue through
-   builder-owned preparation, checks, and review automatically and silently.
-   Never invoke the target command through generic shell access.
-7. Use only the discovered `apply_app_creation` tool. It must rerun readiness,
+6. Present the usable Browser prototype and a concise product summary, then call
+   `apply_app_creation` with that summary. This produces the first normal user
+   prompt: **Build this app?** Do not request approval before this point for
+   session work, source access, inspection, design, prototypes, internal
+   drafting, or planning. Never invoke the target command through generic shell
+   access.
+7. Treat approval of **Build this app?** as permission to edit and validate only
+   the private App Builder checkout. It is not permission to create or modify a
+   repository, push a branch, open a pull request, deploy, provision resources,
+   publish a package, or release anything. Use only the discovered
+   `apply_app_creation` tool. It must rerun readiness,
    bind the exact proposal and earlier receipts, and write only its fresh
    builder-owned overlay. If it records partial failure, stop in
    recovery-required state without automatic retry.

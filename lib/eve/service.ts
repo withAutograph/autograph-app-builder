@@ -134,7 +134,14 @@ type LocalEveRuntimeState = {
 };
 
 const localCancellationTimeoutMs = 5_000;
-const localModelTurnTimeoutMs = 120_000;
+// Repository apply and validation run inside the Vercel Sandbox.  Their
+// provider command budget is five minutes, so the local Eve watchdog must not
+// interrupt the model turn before that operation can settle.  The previous
+// two-minute watchdog converted a still-running apply into
+// `model_turn_interrupted`, after which continuation could only see the stale
+// recovery boundary.  Keep the watchdog as a genuine upper bound while
+// allowing one full sandbox command to complete.
+const localModelTurnTimeoutMs = 360_000;
 const localModelTurnInterruptedMessage =
   "Autograph paused because a response took too long. Your progress is saved; try again in a moment.";
 

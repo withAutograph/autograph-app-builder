@@ -301,6 +301,12 @@ const executionDependencyRootSchema = z.strictObject({
 export const executionDependencyLayoutSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     version: z.literal(1),
+    kind: z.literal("checkout"),
+    roots: z.tuple([]),
+    workspaceLinks: z.tuple([]),
+  }),
+  z.strictObject({
+    version: z.literal(1),
     kind: z.literal("fixture"),
     roots: z.tuple([]),
     workspaceLinks: z.tuple([]),
@@ -631,7 +637,7 @@ export async function materializeExecutionDependencyView(input: {
   viewKey: string;
 }) {
   const layout = executionDependencyLayoutSchema.parse(input.layout);
-  if (layout.kind === "fixture") return;
+  if (layout.kind === "fixture" || layout.kind === "checkout") return;
   if (!sha256Digest.safeParse(input.viewKey).success)
     throw new Error("The dependency view key is invalid.");
   if (!safeSourcePath(input.overlayRoot))

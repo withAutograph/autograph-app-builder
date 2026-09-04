@@ -160,10 +160,6 @@ export default defineTool({
         appId,
         expectedArtifactDigest: recorded.appSpec.digest,
         expectedArtifactRevision: recorded.appSpec.revision,
-        expectedSourceSha: current.workspace.sourceSha,
-        expectedSourceTree: current.workspace.sourceTree,
-        expectedEligibilityDigest: current.workspace.eligibilityDigest,
-        expectedWorkspaceDigest: current.workspace.workspaceDigest,
         ...(input.existingAppChanges === undefined
           ? {}
           : { existingAppChanges: input.existingAppChanges }),

@@ -9,6 +9,7 @@ import {
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 function isReviewedPhase(
   state: ReturnType<typeof appBuilderWorkflowState.get>,
@@ -164,6 +165,14 @@ export default defineTool({
   inputSchema: z.object({}),
   async execute(_input, ctx) {
     const durable = appBuilderWorkflowState.get();
+    if (hasTestCapability("simulated-target")) {
+      return durable.phase === "empty"
+        ? durable
+        : {
+            ...statusReceipt(durable, false),
+            workspace: workflowWorkspace(durable),
+          };
+    }
     const sandbox = await ctx.getSandbox();
     if (durable.phase === "empty") {
       const observed = await inspectPreparedSandboxWorkspace(sandbox);

@@ -203,4 +203,21 @@ describe("Browser prototype preview", () => {
       limit: 1,
     });
   });
+
+  it("waits briefly for a prototype event that is still being delivered", async () => {
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce({ ...result, prototype: undefined })
+      .mockResolvedValueOnce(result);
+    const resolver = createServicePrototypePreviewResolver({
+      serviceForRequest: async () => ({ get }) as unknown as EveSessionService,
+    });
+    await expect(
+      resolver({
+        request: new Request("https://builder.example.test/preview"),
+        sessionId: "session-one",
+      }),
+    ).resolves.toEqual(prototype);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
 });

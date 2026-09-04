@@ -240,7 +240,13 @@ export function createAutographMcpHandler(
       {
         title: "Start with Autograph App Builder",
         description:
-          "Start a durable app build and return immediately; check progress separately.",
+          "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
         ...toolAuthMeta("start"),
@@ -262,6 +268,12 @@ export function createAutographMcpHandler(
         title: "Check App Builder progress",
         description:
           "List recent app builds, or read the next page of one app build's progress and requests.",
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
         inputSchema: eveGetInputSchema,
         outputSchema: eveGetResultSchema,
         ...toolAuthMeta("get"),
@@ -290,7 +302,13 @@ export function createAutographMcpHandler(
       {
         title: "Send App Builder feedback",
         description:
-          "Send additional direction while the current app build is waiting.",
+          "Send additional direction to an App Builder session. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
         inputSchema: eveSendInputSchema,
         outputSchema: eveSessionResultSchema,
         ...toolAuthMeta("send"),
@@ -311,7 +329,13 @@ export function createAutographMcpHandler(
       {
         title: "Answer App Builder questions",
         description:
-          "Answer the complete outstanding set of App Builder questions in one response.",
+          "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
         inputSchema: eveRespondInputSchema,
         outputSchema: eveSessionResultSchema,
         ...toolAuthMeta("respond", {
@@ -333,7 +357,14 @@ export function createAutographMcpHandler(
       "autograph_cancel",
       {
         title: "Stop App Builder work",
-        description: "Request cancellation of the active app build.",
+        description:
+          "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
         inputSchema: eveCancelInputSchema,
         outputSchema: eveSessionResultSchema,
         ...toolAuthMeta("cancel"),

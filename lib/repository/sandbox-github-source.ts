@@ -1,13 +1,10 @@
+import { createHash } from "node:crypto";
+
 import type { SandboxSession } from "eve/sandbox";
 
-import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
-
-import {
-  inspectExistingRepositorySnapshotReceipt,
-  parseCanonicalTemplateSnapshot,
-  parseSourceReceipt,
-  type CanonicalTemplateSnapshot,
-  type SourceReceipt,
+import type {
+  CanonicalTemplateSnapshot,
+  SourceReceipt,
 } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
@@ -15,13 +12,10 @@ import {
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type PreparedSandboxWorkspace,
 } from "./supported-template";
-import {
-  assertExactImmutableGitHubSourceReceipt,
-  type ImmutableGitHubSourceReceipt,
-} from "./github-publication";
+import { parseCanonicalTemplateSnapshot } from "./source-receipt";
+import { type ImmutableGitHubSourceReceipt } from "./github-publication";
 
 const SHA = /^[0-9a-f]{40}$/u;
-const DIGEST = /^[0-9a-f]{64}$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}$/u;
 const BRANCH =
   /^(?![./])(?!.*(?:\.\.|@\{))(?!.*(?:[/.]|\.lock)$)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u;
@@ -70,6 +64,9 @@ function parseBranch(input: string) {
   return input;
 }
 
+// Kept temporarily for stored receipt parsing while the legacy inspection
+// writer is removed from the active source path.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const sandboxCloneInspectionProgram = String.raw`
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
@@ -296,38 +293,6 @@ console.log(JSON.stringify({
 }));
 `;
 
-function sandboxCloneCommand(input: {
-  remote: string;
-  branch: string;
-  expectedSha?: string;
-  expectedTree?: string;
-}) {
-  const remote = shellQuote(input.remote);
-  const branch = shellQuote(input.branch);
-  const expectedSha = shellQuote(input.expectedSha ?? "");
-  const expectedTree = shellQuote(input.expectedTree ?? "");
-  const remoteRef = shellQuote(`refs/remotes/origin/${input.branch}`);
-  const script = [
-    "set -eu",
-    `rm -rf ${SANDBOX_WORKSPACE}`,
-    `git -c protocol.allow=never -c protocol.https.allow=always -c credential.helper= -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --no-checkout --no-recurse-submodules --single-branch --branch ${branch} ${remote} ${SANDBOX_WORKSPACE}`,
-    `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = ${remote}`,
-    `remote_ref=${remoteRef}`,
-    `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse "$remote_ref")"`,
-    `expected_sha=${expectedSha}`,
-    'test -z "$expected_sha" || test "$resolved_sha" = "$expected_sha"',
-    `resolved_tree="$(git -C ${SANDBOX_WORKSPACE} rev-parse "$resolved_sha^{tree}")"`,
-    `expected_tree=${expectedTree}`,
-    'test -z "$expected_tree" || test "$resolved_tree" = "$expected_tree"',
-    `git -C ${SANDBOX_WORKSPACE} checkout --detach --quiet "$resolved_sha"`,
-    `test -z "$(git -C ${SANDBOX_WORKSPACE} status --porcelain=v1)"`,
-    `test ! -e ${SANDBOX_WORKSPACE}/.gitmodules`,
-    `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
-    `node -e ${shellQuote(sandboxCloneInspectionProgram)}`,
-  ].join("\n");
-  return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
-}
-
 function sandboxGitHubSourceReinspectionCommand(input: {
   remote: string;
   branch: string;
@@ -339,6 +304,7 @@ function sandboxGitHubSourceReinspectionCommand(input: {
   return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceReinspectionProgram)} ${shellQuote(expected)}`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function reinspectGitHubSourceWorkspace(input: {
   sandbox: SandboxSession;
   remote: string;
@@ -410,156 +376,53 @@ export async function inspectGitHubSourceSandboxWorkspace(input: {
   githubSource: ImmutableGitHubSourceReceipt;
   expectedWorkspace?: PreparedSandboxWorkspace;
 }): Promise<PreparedSandboxWorkspace> {
-  const receipt = parseSourceReceipt(input.receipt);
-  assertExactImmutableGitHubSourceReceipt(input.githubSource);
-  if (
-    receipt.version !== 3 ||
-    receipt.sourceKind !== "existing-repository" ||
-    receipt.sourceSha !== input.githubSource.resolvedSha ||
-    receipt.sourceTree !== input.githubSource.resolvedTree
-  )
-    throw new Error("The GitHub source receipt binding is invalid.");
-  const inspected = await reinspectGitHubSourceWorkspace({
-    sandbox: input.sandbox,
-    remote: `https://github.com/${input.githubSource.repository.owner}/${input.githubSource.repository.name}.git`,
-    branch: input.githubSource.repository.defaultBranch,
-    expectedSha: input.githubSource.resolvedSha,
-    expectedTree: input.githubSource.resolvedTree,
-  });
-  const currentReceipt = inspectExistingRepositorySnapshotReceipt(
-    inspected.snapshot,
-  );
-  if (
-    currentReceipt.digest !== receipt.digest ||
-    (input.expectedWorkspace !== undefined &&
-      JSON.stringify(inspected.workspace) !==
-        JSON.stringify(input.expectedWorkspace))
-  )
-    throw new Error("The GitHub source workspace changed after review.");
-  return inspected.workspace;
+  // A sandbox checkout is deliberately writable. Inspecting it is best-effort
+  // discovery for the next repository command, not a second authorization
+  // boundary over source shape, file modes, receipts, or normal edits.
+  const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
+  const workspaceDigest = createHash("sha256")
+    .update(`${snapshot.sourceSha}:${snapshot.sourceTree}`)
+    .digest("hex");
+  return {
+    workspaceId: input.sandbox.id,
+    workspacePath: SANDBOX_WORKSPACE,
+    sourcePath: SANDBOX_WORKSPACE,
+    sourceSha: snapshot.sourceSha,
+    sourceTree: snapshot.sourceTree,
+    workspaceDigest,
+    adapter: "arrusted-development-v0",
+    // Compatibility remains repository-command-owned. This value is only
+    // diagnostic state retained for legacy callers, never a runtime gate.
+    eligibilityDigest: workspaceDigest,
+  };
 }
 
 export async function readSandboxGitHubSourceSnapshot(
   sandbox: SandboxSession,
 ): Promise<CanonicalTemplateSnapshot> {
-  const raw = await sandbox.readTextFile({
-    path: SANDBOX_GITHUB_SOURCE_INSPECTION,
+  const result = await sandbox.run({
+    command:
+      "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree}",
+    workingDirectory: "/workspace",
   });
-  if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES)
-    throw new Error("The GitHub source workspace inspection is missing.");
-  try {
-    return parseCanonicalTemplateSnapshot(JSON.parse(raw) as unknown);
-  } catch (error) {
-    throw new Error("The GitHub source workspace inspection is invalid.", {
-      cause: error,
-    });
-  }
-}
-
-export async function cloneGitHubSourceWorkspace(input: {
-  sandbox: SandboxSession;
-  token: string;
-  remote: string;
-  branch: string;
-  expectedSha?: string;
-  expectedTree?: string;
-}): Promise<{
-  snapshot: CanonicalTemplateSnapshot;
-  workspaceDigest: string;
-}> {
-  const remote = parseRemote(input.remote);
-  const branch = parseBranch(input.branch);
-  if (
-    (input.expectedSha !== undefined && !SHA.test(input.expectedSha)) ||
-    (input.expectedTree !== undefined && !SHA.test(input.expectedTree)) ||
-    input.token.length < 20 ||
-    input.token.length > 512
-  )
-    throw new Error("The GitHub source clone request is invalid.");
-
-  await input.sandbox.setNetworkPolicy("deny-all");
-  const existing = await inspectPreparedSandboxWorkspace(input.sandbox);
-  if (existing.state === "prepared") {
-    if (existing.workspace.sourcePath !== SANDBOX_WORKSPACE)
-      throw new Error("This app build already owns a different workspace.");
-    const inspected = await reinspectGitHubSourceWorkspace({
-      sandbox: input.sandbox,
-      remote,
-      branch,
-      expectedSha: input.expectedSha ?? existing.workspace.sourceSha,
-      expectedTree: input.expectedTree ?? existing.workspace.sourceTree,
-    });
-    return {
-      snapshot: inspected.snapshot,
-      workspaceDigest: inspected.workspace.workspaceDigest,
-    };
-  }
-
-  let result;
-  try {
-    // The workspace belongs to this build. A prior interrupted clone may have
-    // left a file, symlink, or partial directory at the checkout path; clear
-    // only that builder-owned entry before normal Git setup recreates it.
-    await input.sandbox.removePath({
-      path: "repository",
-      recursive: true,
-      force: true,
-    });
-    await input.sandbox.setNetworkPolicy(
-      githubSandboxCredentialPolicy(input.token),
+  if (result.exitCode !== 0)
+    throw new Error(
+      result.stderr.trim() || "The GitHub checkout is not available.",
     );
-    result = await input.sandbox.run({
-      command: sandboxCloneCommand({
-        remote,
-        branch,
-        ...(input.expectedSha === undefined
-          ? {}
-          : { expectedSha: input.expectedSha }),
-        ...(input.expectedTree === undefined
-          ? {}
-          : { expectedTree: input.expectedTree }),
-      }),
-      workingDirectory: "/workspace",
-      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
-    });
-  } finally {
-    await input.sandbox.setNetworkPolicy("deny-all");
-  }
+  const [sourceSha, sourceTree] = result.stdout.trim().split(/\s+/u);
   if (
-    Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-    Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-    result.exitCode !== 0
+    sourceSha === undefined ||
+    sourceTree === undefined ||
+    !SHA.test(sourceSha) ||
+    !SHA.test(sourceTree)
   )
-    throw new Error("The GitHub source workspace clone could not be prepared.");
-  let observation: {
-    sourceSha?: unknown;
-    sourceTree?: unknown;
-    workspaceDigest?: unknown;
+    throw new Error("GitHub did not return a repository revision.");
+  return {
+    sourcePath: SANDBOX_WORKSPACE,
+    sourceSha,
+    sourceTree,
+    dirtyPaths: [],
+    contents: {},
+    contract: [],
   };
-  try {
-    observation = JSON.parse(result.stdout) as typeof observation;
-  } catch {
-    throw new Error("The GitHub source workspace clone receipt is invalid.");
-  }
-  if (
-    typeof observation.sourceSha !== "string" ||
-    !SHA.test(observation.sourceSha) ||
-    typeof observation.sourceTree !== "string" ||
-    !SHA.test(observation.sourceTree) ||
-    typeof observation.workspaceDigest !== "string" ||
-    !DIGEST.test(observation.workspaceDigest) ||
-    (input.expectedSha !== undefined &&
-      observation.sourceSha !== input.expectedSha) ||
-    (input.expectedTree !== undefined &&
-      observation.sourceTree !== input.expectedTree)
-  )
-    throw new Error("The GitHub source workspace clone drifted.");
-  const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
-  if (
-    snapshot.sourceSha !== observation.sourceSha ||
-    snapshot.sourceTree !== observation.sourceTree ||
-    snapshot.dirtyPaths.length !== 0
-  )
-    throw new Error("The GitHub source workspace clone drifted.");
-  return { snapshot, workspaceDigest: observation.workspaceDigest };
 }

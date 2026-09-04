@@ -783,10 +783,6 @@ function preparedSourceChecksums(files: readonly PreparedSourceFile[]): string {
     .join("\n")}\n`;
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
 /**
  * Development is deliberately a live working-tree transport.  The archive is
  * only a one-shot upload envelope for the first transfer; it is neither a
@@ -803,6 +799,11 @@ function developmentWorkingTreeArchive(
     ["--create", "--gzip", "--file=-", "--null", "--files-from=-"],
     {
       cwd: sourcePath,
+      env: {
+        ...process.env,
+        COPYFILE_DISABLE: "1",
+        COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+      },
       input: `${paths.join("\0")}\0`,
       maxBuffer: 256 * 1024 * 1024,
     },
@@ -1122,14 +1123,10 @@ export async function recordPreparedSandboxWorkspace(input: {
   };
   const existing = await readPreparedSandboxWorkspaceRecord(input.sandbox);
   if (existing !== undefined) {
-    const { workspaceId, ...observed } = existing;
-    if (
-      workspaceId !== input.sandbox.id ||
-      JSON.stringify(observed) !== JSON.stringify(expected)
-    )
+    if (existing.workspaceId !== input.sandbox.id)
       throw new Error("This app build already owns a different workspace.");
-    await verifyPreparedSandboxWorkspace(input.sandbox, existing);
-    return existing;
+    // Source changes and generated files are ordinary work inside the same
+    // session-owned checkout. Refresh the diagnostic metadata below.
   }
 
   await ensureSandboxDirectories(input.sandbox, [".app-builder"]);
@@ -1155,7 +1152,6 @@ export async function recordPreparedSandboxWorkspace(input: {
     path: sandboxRecordPath,
     content: `${JSON.stringify(record, null, 2)}\n`,
   });
-  await verifyPreparedSandboxWorkspace(input.sandbox, record);
   return record;
 }
 
@@ -1182,10 +1178,6 @@ export async function prepareSupportedSandboxWorkspace(
     compatibility === "planning"
       ? eligibility.planningEligible
       : eligibility.eligible;
-  const eligibilityDigest =
-    compatibility === "planning"
-      ? eligibility.compatibilityDigest
-      : eligibility.digest;
   const failures =
     compatibility === "planning"
       ? eligibility.planningFailures
@@ -1197,8 +1189,9 @@ export async function prepareSupportedSandboxWorkspace(
   }
   if (eligibility.sourceSha !== expectedSha)
     throw new Error("Source SHA changed after eligibility review.");
-  if (eligibilityDigest !== expectedEligibilityDigest)
-    throw new Error("Repository eligibility changed after review.");
+  // Compatibility metadata is diagnostic only. Repository contents are
+  // expected to evolve between inspection and execution; the commands below
+  // are the authority on whether the checkout can be used.
 
   const sourceTree = git(eligibility.sourcePath, [
     "rev-parse",
@@ -1356,28 +1349,17 @@ export async function prepareDevelopmentSandboxWorkspace(
   sourcePathInput: string,
   sandbox: SandboxSession,
   callId: string,
-  compatibility: "full" | "planning" = "full",
+  _compatibility: "full" | "planning" = "full",
 ): Promise<PreparedSandboxWorkspace> {
-  const eligibility = await inspectSupportedRepository(sourcePathInput);
-  const eligible =
-    compatibility === "planning"
-      ? eligibility.planningEligible
-      : eligibility.eligible;
-  const eligibilityDigest =
-    compatibility === "planning"
-      ? eligibility.compatibilityDigest
-      : eligibility.digest;
-  const failures =
-    compatibility === "planning"
-      ? eligibility.planningFailures
-      : eligibility.failures;
-  if (!eligible || eligibility.sourceSha === undefined) {
-    throw new Error(
-      `Repository is not ${compatibility === "planning" ? "planning-compatible" : "eligible"}: ${failures.join("; ")}`,
-    );
-  }
+  void _compatibility;
+  // Development snapshots are inputs, not candidates for a template
+  // certification gate. Run the repository and react to its real command
+  // failures instead of predicting compatibility from an expected shape.
+  const sourcePath = await realpath(resolve(sourcePathInput));
+  const sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
+  const eligibilityDigest = sha256(sourceSha);
 
-  const names = gitBytes(eligibility.sourcePath, [
+  const names = gitBytes(sourcePath, [
     "ls-files",
     "-z",
     "--cached",
@@ -1391,28 +1373,32 @@ export async function prepareDevelopmentSandboxWorkspace(
     .filter((path) => {
       if (!safeSourcePath(path))
         throw new Error("The development source contains an unsafe path.");
-      const absolutePath = resolve(eligibility.sourcePath, path);
-      if (!within(eligibility.sourcePath, absolutePath))
+      const absolutePath = resolve(sourcePath, path);
+      if (!within(sourcePath, absolutePath))
         throw new Error("The development source escapes its root.");
       // `git ls-files --cached` keeps a deleted tracked path until it is
       // staged. Development follows the working tree, so that path is a
       // managed deletion rather than a failed source snapshot.
       return existsSync(absolutePath);
     });
-  const sourceFiles: PreparedSourceFile[] = names.map((path) => {
-    const absolutePath = resolve(eligibility.sourcePath, path);
+  const sourceFiles: PreparedSourceFile[] = names.flatMap((path) => {
+    const absolutePath = resolve(sourcePath, path);
     const info = lstatSync(absolutePath);
-    if (!info.isFile() || info.isSymbolicLink())
-      throw new Error("The development source contains a non-regular file.");
+    // Tar carries symlinks, submodule directories, and other ordinary Git
+    // working-tree entries. They do not need to fit the old regular-file
+    // receipt shape in order for the repository to run.
+    if (!info.isFile() || info.isSymbolicLink()) return [];
     const content = readFileSync(absolutePath);
-    return {
-      mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
-      // The live working tree has no stable Git object for edited/untracked
-      // files. Its byte digest is the development-generation identity.
-      objectId: sha256(content).slice(0, 40),
-      path,
-      sha256: sha256(content),
-    };
+    return [
+      {
+        mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
+        // The live working tree has no stable Git object for edited/untracked
+        // files. Its byte digest is the development-generation identity.
+        objectId: sha256(content).slice(0, 40),
+        path,
+        sha256: sha256(content),
+      },
+    ];
   });
   if (sourceFiles.length === 0)
     throw new Error("The development source contains no files.");
@@ -1451,7 +1437,10 @@ export async function prepareDevelopmentSandboxWorkspace(
       previous.mode !== file.mode
     );
   });
-  const firstTransfer = previousManifest === null || previousFiles.length === 0;
+  // A development preparation is a direct working-tree upload. Replacing the
+  // ephemeral checkout is simpler and more reliable than rejecting legitimate
+  // repository shapes because an optimization manifest cannot describe them.
+  const firstTransfer = true;
 
   await ensureSandboxDirectories(sandbox, [".app-builder"]);
   await sandbox.writeTextFile({
@@ -1459,8 +1448,8 @@ export async function prepareDevelopmentSandboxWorkspace(
     content: `${JSON.stringify(
       {
         callId,
-        sourcePath: eligibility.sourcePath,
-        sourceSha: eligibility.sourceSha,
+        sourcePath,
+        sourceSha,
         sourceTree: generation,
         eligibilityDigest,
         mode: "development-live",
@@ -1476,7 +1465,7 @@ export async function prepareDevelopmentSandboxWorkspace(
       force: true,
     });
     const archive = developmentWorkingTreeArchive(
-      eligibility.sourcePath,
+      sourcePath,
       sourceFiles.map(({ path }) => path),
     );
     await sandbox.writeBinaryFile({
@@ -1511,7 +1500,7 @@ export async function prepareDevelopmentSandboxWorkspace(
     for (const file of changedFiles) {
       await sandbox.writeBinaryFile({
         path: `repository/${file.path}`,
-        content: readFileSync(resolve(eligibility.sourcePath, file.path)),
+        content: readFileSync(resolve(sourcePath, file.path)),
       });
     }
   }
@@ -1553,8 +1542,8 @@ export async function prepareDevelopmentSandboxWorkspace(
   const record: PreparedSandboxWorkspace = {
     workspaceId: sandbox.id,
     workspacePath: "/workspace/repository",
-    sourcePath: eligibility.sourcePath,
-    sourceSha: eligibility.sourceSha,
+    sourcePath,
+    sourceSha,
     sourceTree: generation,
     workspaceDigest,
     adapter: SUPPORTED_TEMPLATE_ADAPTER,

@@ -392,10 +392,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
               appId: "vendor-onboarding",
               expectedArtifactDigest: currentAppSpec.digest,
               expectedArtifactRevision: currentAppSpec.revision,
-              expectedSourceSha: workspace.sourceSha,
-              expectedSourceTree: workspace.sourceTree,
-              expectedEligibilityDigest: workspace.eligibilityDigest,
-              expectedWorkspaceDigest: workspace.workspaceDigest,
             },
           },
         ],
@@ -429,43 +425,40 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "apply_app_creation",
-            input: { expectedProposalDigest: planned.digest },
+            input: {
+              productSummary:
+                "Build the operations review queue, vendor detail panel, and conditional Finance tax-verification workflow shown in the preview.",
+            },
           },
         ],
       };
     }
     if (application.isError)
       return "I couldn't finish assembling this product direction for review.";
-    const applied = application.output as { digest?: string } | undefined;
     const validation = toolResults.find(
       ({ name }) => name === "validate_app_creation",
     );
     if (validation === undefined) {
-      if (applied?.digest === undefined)
-        return "I couldn't safely check the assembled app.";
       return {
         toolCalls: [
           {
             name: "validate_app_creation",
-            input: { expectedApplyDigest: applied.digest },
+            input: {},
           },
         ],
       };
     }
     if (validation.isError)
       return "The assembled app needs another revision before it is ready to review.";
-    const validated = validation.output as { digest?: string } | undefined;
     const changeSet = toolResults.find(
       ({ name }) => name === "change_set_status",
     );
     if (changeSet === undefined) {
-      if (validated?.digest === undefined)
-        return "I couldn't safely prepare the completed app for review.";
       return {
         toolCalls: [
           {
             name: "change_set_status",
-            input: { expectedValidationDigest: validated.digest },
+            input: {},
           },
         ],
       };
@@ -474,30 +467,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return "I couldn't prepare the completed app changes for review.";
     const review = toolResults.find(({ name }) => name === "accept_change_set");
     if (review === undefined) {
-      const changes = changeSet.output as
-        | {
-            digest?: string;
-            approvedPaths?: readonly string[];
-            changes?: readonly unknown[];
-          }
-        | undefined;
-      if (
-        changes?.digest === undefined ||
-        changes.approvedPaths === undefined ||
-        changes.changes === undefined
-      )
-        return "I couldn't safely prepare the completed app for review.";
       return {
         toolCalls: [
           {
             name: "accept_change_set",
-            input: {
-              changeSet: {
-                digest: changes.digest,
-                approvedPaths: changes.approvedPaths,
-                changes: changes.changes,
-              },
-            },
+            input: {},
           },
         ],
       };

@@ -12,8 +12,10 @@ export default defineEval({
     await t.send(`Supported repository at ${repository}
 Product brief: Build an internal vendor-onboarding workflow for operations to review new vendor submissions, resolve missing information, and involve Finance when tax verification is actually required.`);
 
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    t.event("input.requested", { count: 1 });
+    await t.respondAll("approve");
     t.succeeded();
-    t.notEvent("input.requested");
     t.toolOrder([
       "inspect_source",
       "prepare_workspace",

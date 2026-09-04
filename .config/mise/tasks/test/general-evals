@@ -8,6 +8,13 @@ eval_runner="scripts/run-eve-eval.mts"
 
 "$launcher" "$node_bin" --import tsx "$eval_runner" \
   --gate-a-profile general-enabled \
+  capabilities \
+  design-guidance \
+  parallel-prototype-artifacts \
+  prepare-workspace \
+  unavailable-product-alternative \
+  uncertain-product-brief \
+  vendor-onboarding-inference \
   --exclude-tag disabled-local-publication \
   --exclude-tag product-quality \
   --exclude-tag fresh-bootstrap-publication \

@@ -114,10 +114,6 @@ export const publicEveEventSchema = z.discriminatedUnion("type", [
 export type PublicEveEvent = z.infer<typeof publicEveEventSchema>;
 
 const sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
-const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
-const repositoryPathSchema = z
-  .string()
-  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
 
 export const publicPrototypePreviewUrlSchema = z
   .string()

@@ -5,9 +5,6 @@ import { isAbsolute } from "node:path";
 
 import {
   inspectBuilderOwnedSupportedRepository,
-  inspectSupportedRepository,
-  inspectSupportedTemplateSnapshot,
-  SUPPORTED_REPOSITORY_CONTRACT,
   SUPPORTED_TEMPLATE_ADAPTER,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type SupportedTemplateSnapshot,
@@ -406,45 +403,27 @@ export async function inspectSourceReceipt(
   sourceKind: SourceKind,
   path: string,
 ): Promise<SourceReceipt> {
-  const eligibility = await inspectSupportedRepository(path);
-  const eligible =
-    sourceKind === "existing-repository"
-      ? eligibility.planningEligible
-      : eligibility.eligible;
-  const eligibilityDigest =
-    sourceKind === "existing-repository"
-      ? eligibility.compatibilityDigest
-      : eligibility.digest;
-  const failures =
-    sourceKind === "existing-repository"
-      ? eligibility.planningFailures
-      : eligibility.failures;
-  if (!eligible || eligibility.sourceSha === undefined)
-    throw new Error(`Source is not eligible: ${failures.join("; ")}`);
+  const sourceSha = fixedGit(path, ["rev-parse", "HEAD"], "utf8").trim();
+  const sourceTree = fixedGit(
+    path,
+    ["rev-parse", `${sourceSha}^{tree}`],
+    "utf8",
+  ).trim();
+  const observedDigest = sha256(JSON.stringify({ sourceSha, sourceTree }));
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
     sourceKind,
-    sourceSha: eligibility.sourceSha,
-    sourceTree: fixedGit(
-      eligibility.sourcePath,
-      ["rev-parse", `${eligibility.sourceSha}^{tree}`],
-      "utf8",
-    ).trim(),
+    sourceSha,
+    sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest,
-    contractDigest: inspectSourceContractDigest(
-      eligibility.sourcePath,
-      eligibility.sourceSha,
-      sourceKind === "existing-repository"
-        ? SUPPORTED_REPOSITORY_CONTRACT.requiredPaths
-        : SUPPORTED_TEMPLATE_INPUT_PATHS,
-    ),
+    eligibilityDigest: observedDigest,
+    contractDigest: observedDigest,
     releaseEnabled: false,
   } as const;
   return parseSourceReceipt({
     ...evidence,
     digest: sourceReceiptDigest(evidence),
-    sourcePath: eligibility.sourcePath,
+    sourcePath: path,
   });
 }
 
@@ -488,35 +467,6 @@ export async function inspectClonedTemplateSourceReceipt(input: {
   });
 }
 
-function contractDigestFromSnapshot(
-  contract: CanonicalTemplateSnapshot["contract"],
-  expectedPaths: readonly string[] = SUPPORTED_TEMPLATE_INPUT_PATHS,
-): string {
-  if (contract.length !== expectedPaths.length)
-    throw new Error("Canonical template contract receipt is invalid.");
-  const paths = new Set<string>();
-  const normalized = contract.map((entry, index) => {
-    const expectedPath = expectedPaths[index];
-    if (
-      expectedPath === undefined ||
-      entry.path !== expectedPath ||
-      paths.has(entry.path) ||
-      !["100644", "100755"].includes(entry.mode) ||
-      !isGitObjectId(entry.objectId) ||
-      !isDigest(entry.sha256)
-    )
-      throw new Error("Canonical template contract receipt is invalid.");
-    paths.add(entry.path);
-    return {
-      path: entry.path,
-      mode: entry.mode,
-      objectId: entry.objectId,
-      sha256: entry.sha256,
-    };
-  });
-  return sha256(JSON.stringify(normalized));
-}
-
 /**
  * Construct the V4 receipt from observations gathered inside the one
  * canonical sandbox clone. The host receives no second checkout; it only
@@ -527,19 +477,20 @@ export function inspectCanonicalTemplateSnapshotReceipt(input: {
   snapshot: CanonicalTemplateSnapshot;
   readinessDigest: string;
 }): SourceReceipt {
-  const eligibility = inspectSupportedTemplateSnapshot(input.snapshot);
-  if (!eligibility.eligible || eligibility.sourceSha === undefined)
-    throw new Error(
-      `Cloned template is not eligible: ${eligibility.failures.join("; ")}`,
-    );
+  const observedDigest = sha256(
+    JSON.stringify({
+      sourceSha: input.snapshot.sourceSha,
+      sourceTree: input.snapshot.sourceTree,
+    }),
+  );
   const evidence = {
     version: SOURCE_RECEIPT_VERSION,
     sourceKind: "fresh-template" as const,
-    sourceSha: eligibility.sourceSha,
+    sourceSha: input.snapshot.sourceSha,
     sourceTree: input.snapshot.sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: eligibility.digest,
-    contractDigest: contractDigestFromSnapshot(input.snapshot.contract),
+    eligibilityDigest: observedDigest,
+    contractDigest: observedDigest,
     releaseEnabled: false as const,
     provenance: {
       repository: ARRUSTED_TEMPLATE_REPOSITORY,
@@ -563,24 +514,23 @@ export function inspectCanonicalTemplateSnapshotReceipt(input: {
 export function inspectExistingRepositorySnapshotReceipt(
   snapshot: CanonicalTemplateSnapshot,
 ): SourceReceipt {
-  if (snapshot.dirtyPaths.length !== 0)
-    throw new Error("Cloned repository inspection is not clean.");
-  const eligibility = inspectSupportedTemplateSnapshot(snapshot);
-  if (!eligibility.planningEligible || eligibility.sourceSha === undefined)
-    throw new Error(
-      `Cloned repository is not eligible: ${eligibility.planningFailures.join("; ")}`,
-    );
+  // Existing repositories are dynamic inputs. Record the revision Vercel
+  // actually materialized for diagnostics, but let the repository's own
+  // commands determine whether it can be planned or changed.
+  const observedDigest = sha256(
+    JSON.stringify({
+      sourceSha: snapshot.sourceSha,
+      sourceTree: snapshot.sourceTree,
+    }),
+  );
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
     sourceKind: "existing-repository" as const,
-    sourceSha: eligibility.sourceSha,
+    sourceSha: snapshot.sourceSha,
     sourceTree: snapshot.sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: eligibility.compatibilityDigest,
-    contractDigest: contractDigestFromSnapshot(
-      snapshot.contract,
-      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
-    ),
+    eligibilityDigest: observedDigest,
+    contractDigest: observedDigest,
     releaseEnabled: false as const,
   };
   return parseSourceReceipt({

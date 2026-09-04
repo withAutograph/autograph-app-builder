@@ -27,11 +27,13 @@ export function createAuthorizedSandboxSession(input: {
       // between an Arrusted operation and its provider runtime.
       return input.session.run(options);
     },
-    async spawn() {
+    async spawn(options) {
       await authorize();
-      throw new Error(
-        "Direct authored sandbox spawn is disabled; use the bounded command adapter.",
-      );
+      // Keep the signed-user boundary while delegating process semantics to
+      // Vercel Sandbox. The previous rejection forced callers through a
+      // custom command wrapper and turned ordinary repository work into an
+      // artificial gate.
+      return input.session.spawn(options);
     },
   };
 }
@@ -61,7 +63,7 @@ export function createAuthorizedSandboxBackend<BO, SO>(input: {
   authorizeSessionCommand(sessionId: string): Promise<unknown>;
 }): SandboxBackend<BO, SO> {
   return {
-    name: `${input.backend.name}-bounded-v1`,
+    name: `${input.backend.name}-authorized`,
     async create(createInput) {
       const handle = await input.backend.create(createInput);
       return wrapHandle({
