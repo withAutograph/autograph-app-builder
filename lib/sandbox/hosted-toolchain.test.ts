@@ -108,6 +108,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     );
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("sudo install --owner=root --group=root");
+    expect(command).toContain('export TERM="${TERM:-dumb}"');
     expect(command).toContain("mise --version");
     expect(command).toContain("bun --version");
     expect(command).toContain("node --version");
@@ -198,9 +199,9 @@ describe("hosted Vercel Sandbox toolchain", () => {
   });
 
   it("binds snapshot revalidation to the contract, inputs, and exact command bytes", () => {
-    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(5);
+    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(6);
     expect(hostedToolchainRevalidationKey()).toMatch(
-      /^autograph-app-builder-vercel-toolchain-v5:[0-9a-f]{64}$/u,
+      /^autograph-app-builder-vercel-toolchain-v6:[0-9a-f]{64}$/u,
     );
     expect(hostedToolchainRevalidationKey()).toBe(
       hostedToolchainRevalidationKey(),
