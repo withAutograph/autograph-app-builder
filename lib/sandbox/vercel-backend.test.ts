@@ -499,4 +499,30 @@ describe("provider-native Vercel source", () => {
       clearVercelSessionGitSource("session-source");
     }
   });
+
+  it("forwards a source when Eve decorates the provider session key", () => {
+    let options: HostedVercelBackendOptions | undefined;
+    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
+      options = input;
+      return { name: "injected-vercel-backend" } as never;
+    }) satisfies HostedVercelBackendFactory);
+    configureVercelSessionGitSource({
+      sessionId: "wrun_source",
+      source: { url: "https://github.com/acme/private.git", token: "token" },
+    });
+    try {
+      createHostedVercelBackend({ factory });
+      expect(
+        options?.sessionCreateOptions({
+          session: {
+            id: "eve-sbx-ses-vercel-scope-version-wrun_source-root",
+          },
+        }),
+      ).toMatchObject({
+        source: { url: "https://github.com/acme/private.git" },
+      });
+    } finally {
+      clearVercelSessionGitSource("wrun_source");
+    }
+  });
 });
