@@ -109,7 +109,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("sudo install --owner=root --group=root");
     expect(command).toContain('export TERM="${TERM:-dumb}"');
-    expect(command).toContain("mise --version");
+    expect(command).toContain("mise --no-config --version");
     expect(command).toContain("bun --version");
     expect(command).toContain("node --version");
     expect(command).toContain("node -e 'const fs=require");
