@@ -440,13 +440,18 @@ async function cloneCanonicalArrustedWorkspace(input: {
       console.warn(
         JSON.stringify({
           event: "autograph.template-clone-command.failed",
-          category: classifySandboxCloneFailure(result.stderr.toLowerCase()),
+          category: classifySandboxCloneFailure(
+            `${result.stderr}\n${result.stdout}`.toLowerCase(),
+          ),
           exitCode: result.exitCode,
           outputWithinLimit:
             Buffer.byteLength(result.stdout) <=
               SANDBOX_OPERATION_OUTPUT_BYTES &&
             Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
-          errorSummary: sanitizeSandboxCloneError(result.stderr, input.token),
+          errorSummary: sanitizeSandboxCloneError(
+            `${result.stderr}\n${result.stdout}`,
+            input.token,
+          ),
         }),
       );
       throw new Error(
