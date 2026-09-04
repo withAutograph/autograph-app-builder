@@ -28,7 +28,8 @@ export default defineTool({
         }
       } else {
         const receipt = await acquireCanonicalArrustedTemplate({
-          sandbox: await ctx.getSandbox(),
+          sandbox: () => ctx.getSandbox(),
+          sessionId: ctx.session.id,
           callId: ctx.callId,
         });
         sourceWorkflowState.update(() => ({

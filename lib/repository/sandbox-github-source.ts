@@ -14,9 +14,7 @@ import {
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type PreparedSandboxWorkspace,
 } from "./supported-template";
-import {
-  parseCanonicalTemplateSnapshot,
-} from "./source-receipt";
+import { parseCanonicalTemplateSnapshot } from "./source-receipt";
 import {
   assertExactImmutableGitHubSourceReceipt,
   type ImmutableGitHubSourceReceipt,
@@ -420,7 +418,7 @@ export async function inspectGitHubSourceSandboxWorkspace(input: {
     .update(`${snapshot.sourceSha}:${snapshot.sourceTree}`)
     .digest("hex");
   return {
-    workspaceId: `github-${snapshot.sourceSha}`,
+    workspaceId: input.sandbox.id,
     workspacePath: SANDBOX_WORKSPACE,
     sourcePath: SANDBOX_WORKSPACE,
     sourceSha: snapshot.sourceSha,

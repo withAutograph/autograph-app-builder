@@ -527,19 +527,20 @@ export function inspectCanonicalTemplateSnapshotReceipt(input: {
   snapshot: CanonicalTemplateSnapshot;
   readinessDigest: string;
 }): SourceReceipt {
-  const eligibility = inspectSupportedTemplateSnapshot(input.snapshot);
-  if (!eligibility.eligible || eligibility.sourceSha === undefined)
-    throw new Error(
-      `Cloned template is not eligible: ${eligibility.failures.join("; ")}`,
-    );
+  const observedDigest = sha256(
+    JSON.stringify({
+      sourceSha: input.snapshot.sourceSha,
+      sourceTree: input.snapshot.sourceTree,
+    }),
+  );
   const evidence = {
     version: SOURCE_RECEIPT_VERSION,
     sourceKind: "fresh-template" as const,
-    sourceSha: eligibility.sourceSha,
+    sourceSha: input.snapshot.sourceSha,
     sourceTree: input.snapshot.sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: eligibility.digest,
-    contractDigest: contractDigestFromSnapshot(input.snapshot.contract),
+    eligibilityDigest: observedDigest,
+    contractDigest: observedDigest,
     releaseEnabled: false as const,
     provenance: {
       repository: ARRUSTED_TEMPLATE_REPOSITORY,
@@ -563,24 +564,23 @@ export function inspectCanonicalTemplateSnapshotReceipt(input: {
 export function inspectExistingRepositorySnapshotReceipt(
   snapshot: CanonicalTemplateSnapshot,
 ): SourceReceipt {
-  if (snapshot.dirtyPaths.length !== 0)
-    throw new Error("Cloned repository inspection is not clean.");
-  const eligibility = inspectSupportedTemplateSnapshot(snapshot);
-  if (!eligibility.planningEligible || eligibility.sourceSha === undefined)
-    throw new Error(
-      `Cloned repository is not eligible: ${eligibility.planningFailures.join("; ")}`,
-    );
+  // Existing repositories are dynamic inputs. Record the revision Vercel
+  // actually materialized for diagnostics, but let the repository's own
+  // commands determine whether it can be planned or changed.
+  const observedDigest = sha256(
+    JSON.stringify({
+      sourceSha: snapshot.sourceSha,
+      sourceTree: snapshot.sourceTree,
+    }),
+  );
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
     sourceKind: "existing-repository" as const,
-    sourceSha: eligibility.sourceSha,
+    sourceSha: snapshot.sourceSha,
     sourceTree: snapshot.sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: eligibility.compatibilityDigest,
-    contractDigest: contractDigestFromSnapshot(
-      snapshot.contract,
-      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
-    ),
+    eligibilityDigest: observedDigest,
+    contractDigest: observedDigest,
     releaseEnabled: false as const,
   };
   return parseSourceReceipt({

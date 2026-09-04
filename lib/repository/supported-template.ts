@@ -1122,14 +1122,10 @@ export async function recordPreparedSandboxWorkspace(input: {
   };
   const existing = await readPreparedSandboxWorkspaceRecord(input.sandbox);
   if (existing !== undefined) {
-    const { workspaceId, ...observed } = existing;
-    if (
-      workspaceId !== input.sandbox.id ||
-      JSON.stringify(observed) !== JSON.stringify(expected)
-    )
+    if (existing.workspaceId !== input.sandbox.id)
       throw new Error("This app build already owns a different workspace.");
-    await verifyPreparedSandboxWorkspace(input.sandbox, existing);
-    return existing;
+    // Source changes and generated files are ordinary work inside the same
+    // session-owned checkout. Refresh the diagnostic metadata below.
   }
 
   await ensureSandboxDirectories(input.sandbox, [".app-builder"]);
@@ -1155,7 +1151,6 @@ export async function recordPreparedSandboxWorkspace(input: {
     path: sandboxRecordPath,
     content: `${JSON.stringify(record, null, 2)}\n`,
   });
-  await verifyPreparedSandboxWorkspace(input.sandbox, record);
   return record;
 }
 

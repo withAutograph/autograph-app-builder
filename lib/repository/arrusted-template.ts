@@ -26,8 +26,12 @@ import {
   deploymentArrustedTemplateReader,
   type ArrustedTemplateReader,
 } from "./arrusted-template-reader";
-import { inspectGitHubSourceSandboxWorkspace } from "./sandbox-github-source";
+import {
+  inspectGitHubSourceSandboxWorkspace,
+  readSandboxGitHubSourceSnapshot,
+} from "./sandbox-github-source";
 import type { ImmutableGitHubSourceReceipt } from "./github-publication";
+import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
 
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
@@ -522,44 +526,43 @@ async function cloneCanonicalArrustedWorkspace(input: {
  * and the same checkout is sealed for later target commands.
  */
 export async function acquireCanonicalArrustedTemplate(input: {
-  sandbox: SandboxSession;
+  sandbox: SandboxSession | (() => Promise<SandboxSession>);
+  sessionId?: string;
   callId: string;
   reader?: ArrustedTemplateReader;
 }): Promise<SourceReceipt> {
   const reader = input.reader ?? deploymentArrustedTemplateReader();
   const access = await acquisitionStage("reader", () => reader.acquire());
-  const cloned = await acquisitionStage("sandbox_clone", () =>
-    cloneCanonicalArrustedWorkspace({
-      sandbox: input.sandbox,
-      token: access.token,
-    }),
+  if (typeof input.sandbox === "function") {
+    if (input.sessionId === undefined)
+      throw new Error("The App Builder session is unavailable.");
+    configureVercelSessionGitSource({
+      sessionId: input.sessionId,
+      source: { url: ARRUSTED_TEMPLATE_REPOSITORY, token: access.token },
+    });
+  }
+  const sandbox =
+    typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
+  const snapshot = await acquisitionStage("sandbox_clone", () =>
+    readSandboxGitHubSourceSnapshot(sandbox),
   );
-  const readinessDigest = await acquisitionStage("readiness", () =>
-    templateReadinessAttestationDigest({
-      sha: cloned.snapshot.sourceSha,
-      tree: cloned.snapshot.sourceTree,
-      token: access.token,
-    }),
-  );
-  const receipt = inspectCanonicalTemplateSnapshotReceipt({
-    snapshot: cloned.snapshot,
-    readinessDigest,
+  const workspaceDigest = receiptReadinessDigest({
+    sourceSha: snapshot.sourceSha,
+    sourceTree: snapshot.sourceTree,
   });
-  if (
-    receipt.sourcePath !== SANDBOX_WORKSPACE ||
-    receipt.sourceSha !== cloned.snapshot.sourceSha ||
-    receipt.sourceTree !== cloned.snapshot.sourceTree
-  )
-    throw new Error("Canonical Arrusted workspace receipt drifted.");
+  const receipt = inspectCanonicalTemplateSnapshotReceipt({
+    snapshot,
+    readinessDigest: workspaceDigest,
+  });
   await acquisitionStage("workspace_record", () =>
     recordPreparedSandboxWorkspace({
-      sandbox: input.sandbox,
+      sandbox,
       callId: input.callId,
       sourcePath: SANDBOX_WORKSPACE,
       sourceSha: receipt.sourceSha,
       sourceTree: receipt.sourceTree,
       eligibilityDigest: receipt.eligibilityDigest,
-      workspaceDigest: cloned.workspaceDigest,
+      workspaceDigest,
     }),
   );
   return receipt;

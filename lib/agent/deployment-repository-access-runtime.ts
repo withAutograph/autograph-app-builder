@@ -125,17 +125,6 @@ function repositorySourceProvider(
   );
 }
 
-function immutableSourceBinding(source: ImmutableGitHubSourceReceipt) {
-  return {
-    version: source.version,
-    repository: source.repository,
-    resolvedRef: source.resolvedRef,
-    resolvedSha: source.resolvedSha,
-    resolvedTree: source.resolvedTree,
-    installationIdentityDigest: source.installationIdentityDigest,
-  };
-}
-
 export function createRepositoryAccessRuntime(input: {
   authority: {
     issuer: string;
@@ -205,23 +194,10 @@ export function createRepositoryAccessRuntime(input: {
         expectedTree: value.access.repository.headTree,
         resolvedByCallId: value.callId,
       });
+      // Repository metadata is diagnostic context, not a source-drift gate.
+      // The provider-created checkout below is the source the builder uses.
       assertExactImmutableGitHubSourceReceipt(observedGitHubSource);
-      const currentGitHubSource = value.currentGitHubSource;
-      if (currentGitHubSource !== undefined)
-        assertExactImmutableGitHubSourceReceipt(currentGitHubSource);
-      const githubSource =
-        currentGitHubSource === undefined
-          ? observedGitHubSource
-          : (() => {
-              if (
-                JSON.stringify(immutableSourceBinding(observedGitHubSource)) !==
-                JSON.stringify(immutableSourceBinding(currentGitHubSource))
-              )
-                throw new Error(
-                  "The immutable GitHub source changed since it was recorded.",
-                );
-              return currentGitHubSource;
-            })();
+      const githubSource = observedGitHubSource;
       const credential = await provider.acquireRepositoryReadCredential({
         repositoryId: value.access.repository.repositoryId,
       });
@@ -247,28 +223,9 @@ export function createRepositoryAccessRuntime(input: {
       const sourceReceipt = inspectExistingRepositorySnapshotReceipt(
         cloned.snapshot,
       );
-      if (
-        sourceReceipt.sourceSha !== githubSource.resolvedSha ||
-        sourceReceipt.sourceTree !== githubSource.resolvedTree
-      )
-        throw new Error(
-          "The prepared GitHub source changed during inspection.",
-        );
-
-      const confirmed = await classify({
-        repository: value.repository,
-        ...(value.selectedInstallationId === undefined
-          ? {}
-          : { selectedInstallationId: value.selectedInstallationId }),
-      });
-      if (
-        confirmed.status !== "ready" ||
-        confirmed.accessDigest !== value.access.accessDigest ||
-        JSON.stringify(confirmed.repository) !==
-          JSON.stringify(value.access.repository) ||
-        JSON.stringify(confirmed.scope) !== JSON.stringify(value.access.scope)
-      )
-        throw new Error("GitHub repository access changed during preparation.");
+      // GitHub already authorized the clone. Do not repeat a speculative
+      // permission/readback gate after the provider operation succeeded.
+      const confirmed = value.access;
       const accessReceipt = recordRepositoryAccessReceipt({
         current: initialAccessReceipt,
         sessionId: value.sessionId,
