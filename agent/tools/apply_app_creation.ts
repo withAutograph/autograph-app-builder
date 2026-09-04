@@ -98,7 +98,7 @@ export default defineTool({
         }),
       });
       throw new Error(
-        `Target apply entered recovery-required partial failure ${result.receipt.digest}.`,
+        `Target apply failed because the repository command exited with code ${result.receipt.command.exitCode}.`,
       );
     }
     updateExactWorkflow({
