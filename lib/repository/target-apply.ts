@@ -595,6 +595,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
+    const install = await sandbox.run({
+      command: "bun install --frozen-lockfile",
+      workingDirectory: applyRoot,
+      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    });
+    if (install.exitCode !== 0) return install;
     return await sandbox.run({
       command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
