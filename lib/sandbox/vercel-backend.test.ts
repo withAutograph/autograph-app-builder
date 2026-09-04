@@ -421,6 +421,50 @@ describe.skip("retired template-backed Vercel backend", () => {
 });
 
 describe("provider-native Vercel source", () => {
+  it("falls back to a fresh sandbox when an optional template is absent", async () => {
+    const session = { id: "fresh-session" } as SandboxSession;
+    const handle = {
+      session,
+      useSessionFn: async () => session,
+      captureState: async () => ({
+        backendName: "vercel",
+        metadata: {},
+        sessionKey: "fresh-session",
+      }),
+      stop: async () => undefined,
+      shutdown: async () => undefined,
+    } satisfies SandboxBackendHandle;
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new SandboxTemplateNotProvisionedError({
+          backendName: "vercel",
+          templateKey,
+        }),
+      )
+      .mockResolvedValueOnce(handle);
+    const prewarm = vi.fn();
+    const backend = createHostedVercelBackend({
+      factory: backendFactory({ create, prewarm }),
+    });
+
+    const result = await backend.create({
+      runtimeContext,
+      sessionKey: "fresh-session",
+      templateKey,
+    });
+    expect(result.session.id).toBe("fresh-session");
+    expect(create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ templateKey }),
+    );
+    expect(create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ templateKey: null }),
+    );
+    expect(prewarm).not.toHaveBeenCalled();
+  });
+
   it("forwards a server-owned Git source only to the matching fresh session", () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {

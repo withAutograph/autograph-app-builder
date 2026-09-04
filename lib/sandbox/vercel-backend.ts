@@ -142,7 +142,6 @@ export function createProviderFetch(
 function createRuntimeRecoveringBackend<BO, SO>(input: {
   readonly backend: SandboxBackend<BO, SO>;
   readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
-  readonly resolvePrewarmInput: () => RuntimeRecoveryPrewarmInput<BO>;
 }): SandboxBackend<BO, SO> {
   const providerTemplateKey = (authoredTemplateKey: string | null) =>
     authoredTemplateKey === null
@@ -171,14 +170,13 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
         )
           throw error;
 
-        const recovery = input.resolvePrewarmInput();
-        await input.backend.prewarm({
-          bootstrap: recovery.bootstrap,
-          runtimeContext: createInput.runtimeContext,
-          seedFiles: recovery.seedFiles,
-          templateKey: providerCreateInput.templateKey,
+        // Templates are an optional startup optimization. When the provider
+        // has no matching template, create a fresh Vercel Sandbox directly
+        // instead of blocking the user or requiring an out-of-band prewarm.
+        return await input.backend.create({
+          ...providerCreateInput,
+          templateKey: null,
         });
-        return await input.backend.create(providerCreateInput);
       }
     },
   };
@@ -299,8 +297,13 @@ export function createHostedVercelBackend(
     authorizeSessionCommand: (sessionId) =>
       assertHostedSandboxCommandAuthority({ sessionId }),
   });
-  // A missing snapshot or provider cache is not an authority failure. Let the
-  // normal Vercel Sandbox create path return the provider's actual result;
-  // callers may rebuild an optimization later, but never block on it here.
-  return authorized as ReturnType<typeof vercel>;
+  const templateOptional = createRuntimeRecoveringBackend({
+    backend: authorized,
+    providerTemplateKey: input.providerTemplateKey,
+  });
+  return (
+    input.reuseProcessSessionHandles
+      ? createProcessSessionReusingBackend(templateOptional)
+      : templateOptional
+  ) as ReturnType<typeof vercel>;
 }
