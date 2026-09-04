@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
+import { DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS } from "@/lib/sandbox/development-toolchain";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
@@ -614,12 +615,21 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
     // before invoking its generator, and treat Bun's real result as authority.
-    const install = await sandbox.run({
-      command:
-        "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
-      workingDirectory: applyRoot,
-      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    await sandbox.setNetworkPolicy({
+      allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
     });
+    const install = await (async () => {
+      try {
+        return await sandbox.run({
+          command:
+            "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
+          workingDirectory: applyRoot,
+          abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+        });
+      } finally {
+        await sandbox.setNetworkPolicy("deny-all");
+      }
+    })();
     if (install.exitCode !== 0) {
       const output = `${install.stderr}\n${install.stdout}`;
       const reason = /lockfile had changes|frozen lockfile/iu.test(output)
