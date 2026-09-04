@@ -659,11 +659,32 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
       });
     try {
-      return await sandbox.run({
+      const generated = await sandbox.run({
         command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
         workingDirectory: applyRoot,
         abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
       });
+      if (generated.exitCode !== 0) {
+        const output = `${generated.stderr}\n${generated.stdout}`;
+        const reason = /EACCES|permission denied/iu.test(output)
+          ? "permissions"
+          : /cannot find module|module_not_found|failed to resolve/iu.test(output)
+            ? "module-resolution"
+            : /timed? out|timeout/iu.test(output)
+              ? "timeout"
+              : /network|fetch|connection|certificate/iu.test(output)
+                ? "network"
+                : /format/iu.test(output)
+                  ? "formatting"
+                  : /lifecycle|validation|test|build/iu.test(output)
+                    ? "generated-app-validation"
+                    : "unclassified";
+        console.error("[app-builder apply] repository generator failed", {
+          exitCode: generated.exitCode,
+          reason,
+        });
+      }
+      return generated;
     } finally {
       if (!localDevelopment) await sandbox.setNetworkPolicy("deny-all");
     }
