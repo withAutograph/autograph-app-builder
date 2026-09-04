@@ -385,11 +385,11 @@ export function sandboxTargetCommandExecutor(
     const request =
       command === "identity"
         ? {
-            command: `node --experimental-strip-types .config/mise/scripts/repository/app-identity.ts --app ${requestedAppId}`,
+            command: `bun .config/mise/scripts/repository/app-identity.ts --app ${requestedAppId}`,
             workingDirectory: planningRoot,
           }
         : {
-            command: `node --experimental-strip-types .config/mise/scripts/repository/app-contract.ts --contract ${contractPath} --root ${planningRoot}`,
+            command: `bun .config/mise/scripts/repository/app-contract.ts --contract ${contractPath} --root ${planningRoot}`,
             workingDirectory: planningRoot,
           };
     const result = await sandbox.run({ ...request, abortSignal });
