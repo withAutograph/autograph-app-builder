@@ -54,7 +54,7 @@ describe("development Codex package", () => {
         ],
       });
       expect(manifest.name).toBe("app-builder");
-      expect(manifest.version).toBe("0.0.0-development");
+      expect(manifest.version).toBe("0.0.0-development.3210");
       expect(manifest.interface).toMatchObject({
         displayName: "Autograph App Builder (Development)",
         shortDescription: "Build with local App Builder and Arrusted changes",
@@ -62,7 +62,7 @@ describe("development Codex package", () => {
       expect(manifest).not.toHaveProperty("apps");
       expect(mcp).toEqual({
         mcpServers: {
-          "app-builder-dev": {
+          "app-builder-dev-3210": {
             type: "http",
             url: "http://127.0.0.1:3210/mcp",
             oauth_resource: "http://127.0.0.1:3210/mcp",
@@ -73,6 +73,7 @@ describe("development Codex package", () => {
       expect(result.receipt).toMatchObject({
         format: "autograph-development-package-v2",
         selector: "app-builder@autograph-dev",
+        version: "0.0.0-development.3210",
         mcpAppPreview: false,
         publication: false,
       });
@@ -90,6 +91,7 @@ describe("development Codex package", () => {
       codexBin: "/mise/bin/codex",
       codexHome: "/private/dev/codex-home",
       marketplaceRoot: "/private/dev/marketplace",
+      version: "0.0.0-development.3210",
       runner: async (args, options) => {
         commands.push({ args, allowFailure: options.allowFailure ?? false });
         return {
@@ -100,7 +102,7 @@ describe("development Codex package", () => {
                     pluginId: "app-builder@autograph-dev",
                     name: "app-builder",
                     marketplaceName: "autograph-dev",
-                    version: "0.0.0-development",
+                    version: "0.0.0-development.3210",
                     installed: true,
                     enabled: true,
                     source: {

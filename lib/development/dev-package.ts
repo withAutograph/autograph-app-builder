@@ -25,6 +25,10 @@ export const DEVELOPMENT_PLUGIN_SELECTOR = `${DEVELOPMENT_PLUGIN_NAME}@${DEVELOP
 export const DEVELOPMENT_MCP_SERVER_NAME = "app-builder-dev";
 export const DEVELOPMENT_VERSION = "0.0.0-development";
 
+function developmentVersion(port: number) {
+  return `${DEVELOPMENT_VERSION}.${port}`;
+}
+
 export type DevelopmentCodexCommandRunner = (
   args: readonly string[],
   options: { allowFailure?: boolean },
@@ -94,6 +98,11 @@ export async function createDevelopmentPackage(input: {
     DEVELOPMENT_PLUGIN_NAME,
   );
   const endpoint = `http://127.0.0.1:${input.port}/mcp`;
+  // Codex retains an MCP transport by server name across tasks.  Make the
+  // local-only transport identity include its loopback port so a fresh
+  // development task cannot inherit a connection to an earlier dev server.
+  const mcpServer = `${DEVELOPMENT_MCP_SERVER_NAME}-${input.port}`;
+  const version = developmentVersion(input.port);
   try {
     await mkdir(join(pluginRoot, ".codex-plugin"), {
       recursive: true,
@@ -118,7 +127,7 @@ export async function createDevelopmentPackage(input: {
     const manifest = {
       ...sourceManifest,
       name: DEVELOPMENT_PLUGIN_NAME,
-      version: DEVELOPMENT_VERSION,
+      version,
       description: "Local-only Autograph App Builder development package.",
       interface: {
         ...sourceInterface,
@@ -130,7 +139,7 @@ export async function createDevelopmentPackage(input: {
     delete (manifest as { apps?: unknown }).apps;
     const mcp = {
       mcpServers: {
-        [DEVELOPMENT_MCP_SERVER_NAME]: {
+        [mcpServer]: {
           type: "http",
           url: endpoint,
           oauth_resource: endpoint,
@@ -195,7 +204,8 @@ export async function createDevelopmentPackage(input: {
       marketplace: DEVELOPMENT_MARKETPLACE_NAME,
       plugin: DEVELOPMENT_PLUGIN_NAME,
       selector: DEVELOPMENT_PLUGIN_SELECTOR,
-      mcpServer: DEVELOPMENT_MCP_SERVER_NAME,
+      version,
+      mcpServer,
       endpoint,
       tools,
       mcpAppPreview: false,
@@ -205,7 +215,8 @@ export async function createDevelopmentPackage(input: {
           marketplace: DEVELOPMENT_MARKETPLACE_NAME,
           plugin: DEVELOPMENT_PLUGIN_NAME,
           selector: DEVELOPMENT_PLUGIN_SELECTOR,
-          mcpServer: DEVELOPMENT_MCP_SERVER_NAME,
+          version,
+          mcpServer,
           endpoint,
           tools,
         }),
@@ -232,6 +243,7 @@ export async function registerDevelopmentPackage(input: {
   codexBin: string;
   codexHome: string;
   marketplaceRoot: string;
+  version: string;
   runner?: DevelopmentCodexCommandRunner;
 }) {
   const codexBin = resolve(input.codexBin);
@@ -285,7 +297,7 @@ export async function registerDevelopmentPackage(input: {
     installed?.pluginId !== DEVELOPMENT_PLUGIN_SELECTOR ||
     installed.name !== DEVELOPMENT_PLUGIN_NAME ||
     installed.marketplaceName !== DEVELOPMENT_MARKETPLACE_NAME ||
-    installed.version !== DEVELOPMENT_VERSION ||
+    installed.version !== input.version ||
     installed.installed !== true ||
     installed.enabled !== true ||
     installed.source?.source !== "local" ||

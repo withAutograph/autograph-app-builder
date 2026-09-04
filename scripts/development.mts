@@ -294,6 +294,7 @@ async function runEveCycle(input: {
             "profile root",
           ),
           marketplaceRoot: packageResult.marketplaceRoot,
+          version: packageResult.receipt.version,
         });
       console.info(
         JSON.stringify({
