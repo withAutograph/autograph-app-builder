@@ -98,7 +98,7 @@ export default defineTool({
         }),
       });
       throw new Error(
-        `Target apply failed because the repository command exited with code ${result.receipt.command.exitCode}.`,
+        `The repository build command exited with code ${result.receipt.command.exitCode} (${result.receipt.commandFailureKind ?? "unknown"}).${result.receipt.command.exitCode === -1 ? " The execution service did not return a normal command result." : ""}`,
       );
     }
     updateExactWorkflow({

@@ -158,6 +158,13 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
   ) & {
     status: "partial-failure";
     recoveryRequired: true;
+    commandFailureKind?:
+      | "timeout"
+      | "permission-denied"
+      | "missing-command-or-file"
+      | "dependency"
+      | "validation"
+      | "unknown";
     digest: string;
   };
 
@@ -187,6 +194,21 @@ export function assertCurrentTargetApplyReceipt(input: {
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
+
+function commandFailureKind(
+  stderr: string,
+): TargetApplyFailureReceipt["commandFailureKind"] {
+  if (/timeout|timed out|aborted/iu.test(stderr)) return "timeout";
+  if (/permission denied|eacces|eperm/iu.test(stderr))
+    return "permission-denied";
+  if (/not found|enoent|command not found/iu.test(stderr))
+    return "missing-command-or-file";
+  if (/dependency|lockfile|module|package|install/iu.test(stderr))
+    return "dependency";
+  if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr))
+    return "validation";
+  return "unknown";
+}
 
 export function applyOverlayRoot(proposalDigest: string): string {
   if (!digest.safeParse(proposalDigest).success)
@@ -847,6 +869,7 @@ export async function executeProposalBoundApply(input: {
       status: "partial-failure" as const,
       reason: "command-failed" as const,
       recoveryRequired: true as const,
+      commandFailureKind: commandFailureKind(command.stderr),
     };
     return {
       ok: false,
