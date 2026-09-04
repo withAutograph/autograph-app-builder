@@ -2,6 +2,7 @@ import { cimd } from "@better-auth/cimd";
 import { mcp } from "@better-auth/mcp";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import type { GithubProfile } from "@better-auth/core/social-providers";
 import {
   genericOAuth,
   jwt,
@@ -67,11 +68,116 @@ const vercelUserInfoSchema = z
   .passthrough();
 
 const vercelUserInfoEndpoint = "https://api.vercel.com/login/oauth/userinfo";
+const githubUserInfoEndpoint = "https://api.github.com/user";
+const githubEmailsEndpoint = "https://api.github.com/user/emails";
+
+const githubProfileSchema = z
+  .object({
+    id: z.union([z.string().min(1), z.number().int().positive()]),
+    login: z.string().min(1).max(256),
+    name: z.string().min(1).max(512).nullable().optional(),
+    avatar_url: z.string().url().max(2_048).nullable().optional(),
+  })
+  .passthrough();
+
+const githubEmailsSchema = z
+  .array(
+    z
+      .object({
+        email: z.string().email().max(320),
+        primary: z.boolean(),
+        verified: z.boolean(),
+      })
+      .passthrough(),
+  )
+  .max(100);
 
 type VercelOAuthTokens = {
   accessToken?: string;
   idToken?: string;
 };
+
+type GitHubOAuthTokens = {
+  accessToken?: string;
+};
+
+async function readBoundedJson(
+  response: Response,
+  limit: number,
+): Promise<unknown | null> {
+  if (!response.ok) return null;
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > limit) return null;
+  const body = await response.text();
+  if (body.length > limit) return null;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * GitHub keeps the authoritative verified-email assertion on its emails
+ * endpoint. Read it explicitly so private profile emails still produce a
+ * usable, verified identity without trusting a profile field alone.
+ */
+export async function fetchVerifiedGitHubUserInfo(
+  tokens: GitHubOAuthTokens,
+  fetchImplementation: typeof fetch = fetch,
+) {
+  if (!tokens.accessToken) return null;
+  const headers = {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${tokens.accessToken}`,
+    "User-Agent": "autograph-app-builder",
+  };
+
+  let profileResponse: Response;
+  let emailsResponse: Response;
+  try {
+    [profileResponse, emailsResponse] = await Promise.all([
+      fetchImplementation(githubUserInfoEndpoint, {
+        headers,
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(5_000),
+      }),
+      fetchImplementation(githubEmailsEndpoint, {
+        headers,
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(5_000),
+      }),
+    ]);
+  } catch {
+    return null;
+  }
+
+  const [profileBody, emailsBody] = await Promise.all([
+    readBoundedJson(profileResponse, 16_384),
+    readBoundedJson(emailsResponse, 16_384),
+  ]);
+  const profile = githubProfileSchema.safeParse(profileBody);
+  const emails = githubEmailsSchema.safeParse(emailsBody);
+  if (!profile.success || !emails.success) return null;
+  const email =
+    emails.data.find((candidate) => candidate.primary && candidate.verified) ??
+    emails.data.find((candidate) => candidate.verified);
+  if (!email) return null;
+  const normalizedEmail = email.email.trim().toLowerCase();
+  if (!normalizedEmail) return null;
+
+  return {
+    user: {
+      name: profile.data.name ?? profile.data.login,
+      email: normalizedEmail,
+      image: profile.data.avatar_url ?? undefined,
+      emailVerified: true,
+    },
+    data: { ...profile.data, email: normalizedEmail },
+  };
+}
 
 async function exchangeLocalEmulatedOAuthCode(input: {
   tokenUrl: string;
@@ -627,6 +733,16 @@ export function createPreviewOAuthServer(input: {
               clientSecret: config.githubClientSecret,
               disableSignUp: false,
               overrideUserInfoOnSignIn: false,
+              getUserInfo: async (tokens) => {
+                const result = await fetchVerifiedGitHubUserInfo(tokens);
+                if (result === null) return null;
+                return {
+                  ...result,
+                  // GitHub's own response contains additional profile fields
+                  // beyond the identity fields this boundary needs to inspect.
+                  data: result.data as GithubProfile,
+                };
+              },
             },
           }
         : {},
