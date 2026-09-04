@@ -19,7 +19,19 @@ export function configureVercelSessionGitSource(input: {
 }
 
 export function readVercelSessionGitSource(sessionId: string) {
-  return pendingSources.get(sessionId);
+  const exact = pendingSources.get(sessionId);
+  if (exact !== undefined) return exact;
+
+  // Eve may decorate the public run id when deriving its provider session
+  // key. Resolve only an unambiguous delimiter-bounded suffix; never fall
+  // back to an arbitrary pending source.
+  const matches = [...pendingSources.entries()].filter(
+    ([candidate]) =>
+      candidate !== sessionId &&
+      (sessionId.includes(`-${candidate}-`) ||
+        sessionId.endsWith(`-${candidate}`)),
+  );
+  return matches.length === 1 ? matches[0]?.[1] : undefined;
 }
 
 export function clearVercelSessionGitSource(sessionId: string) {
