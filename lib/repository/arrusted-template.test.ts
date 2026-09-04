@@ -297,13 +297,10 @@ describe("canonical Arrusted template readiness", () => {
     expect(cloneCommand).toContain("/bin/sh -ceu");
     expect(cloneCommand).toContain("mkdir -p /workspace/repository");
     expect(cloneCommand).toContain(
-      "if mkdir -p /workspace/.app-builder && node /workspace/.arrusted-template-inspect.cjs",
+      "if node /workspace/.arrusted-template-inspect.cjs; then",
     );
-    expect(cloneCommand).toContain("clone-inspection.stderr");
-    expect(cloneCommand).toContain("AUTOGRAPH_CLONE_INSPECT_ERROR=");
-    expect(cloneCommand).toContain(
-      "inspection setup failed before stderr capture",
-    );
+    expect(cloneCommand).toContain("AUTOGRAPH_CLONE_INSPECTION_COMMAND_FAILED");
+    expect(cloneCommand).not.toContain("clone-inspection.stderr");
     expect(cloneCommand).toContain("git -C /workspace/repository init");
     expect(cloneCommand).toContain(
       "fetch --quiet --depth 1 --no-recurse-submodules origin refs/heads/main",
