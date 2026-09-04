@@ -799,6 +799,11 @@ function developmentWorkingTreeArchive(
     ["--create", "--gzip", "--file=-", "--null", "--files-from=-"],
     {
       cwd: sourcePath,
+      env: {
+        ...process.env,
+        COPYFILE_DISABLE: "1",
+        COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+      },
       input: `${paths.join("\0")}\0`,
       maxBuffer: 256 * 1024 * 1024,
     },

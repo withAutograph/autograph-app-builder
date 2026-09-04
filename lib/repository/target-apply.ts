@@ -624,8 +624,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     const install = await (async () => {
       try {
         return await sandbox.run({
-          command:
-            "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
+          command: "bun install --frozen-lockfile",
           workingDirectory: applyRoot,
           abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
         });
