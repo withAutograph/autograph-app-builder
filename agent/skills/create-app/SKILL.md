@@ -15,6 +15,14 @@ missing operation with a raw shell command or generic file write.
 
 ## Workflow
 
+When `record_prototype_bundle` is available, it is the normal fast path. For a
+new app, call it in the first response with the inferred `appId`, the user's
+brief, and an inferred interface pattern when useful. It automatically prepares
+the writable checkout and returns the Browser prototype and implementation
+plan. Do not split this into model-selected source, workspace, dependency, or
+planning steps. For an existing app, inspect only the app-owned files first and
+then call the same operation with the intended app-owned changes.
+
 1. If the user explicitly requests only a bare Next.js workspace, follow
    [$scaffold-app-workspace](../scaffold-app-workspace/SKILL.md) and stop this
    route-owned flow. Do not interpret a generic “create an app” request as bare

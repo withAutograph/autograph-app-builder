@@ -40,3 +40,11 @@ implementation plan. Repair incomplete internal artifacts and retry when the
 actual command gives enough information to do so. Ask a product question only
 for genuine ambiguity. Stop for user approval only before an outward effect,
 such as changing a repository or opening a draft PR.
+
+In local development, use `record_prototype_bundle` in the first response for
+an ordinary new-app brief. Infer the app id and a suitable interface pattern,
+pass the concise brief, and let that single operation prepare the writable
+checkout, create the Browser prototype, and produce the implementation plan.
+Do not wait for the model to choose separate source, workspace, dependency, or
+planning operations. For an existing app, inspect the app-owned files first,
+then call the same bundle operation with the intended app-owned changes.

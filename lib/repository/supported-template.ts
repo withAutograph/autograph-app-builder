@@ -1351,28 +1351,16 @@ export async function prepareDevelopmentSandboxWorkspace(
   sourcePathInput: string,
   sandbox: SandboxSession,
   callId: string,
-  compatibility: "full" | "planning" = "full",
+  _compatibility: "full" | "planning" = "full",
 ): Promise<PreparedSandboxWorkspace> {
-  const eligibility = await inspectSupportedRepository(sourcePathInput);
-  const eligible =
-    compatibility === "planning"
-      ? eligibility.planningEligible
-      : eligibility.eligible;
-  const eligibilityDigest =
-    compatibility === "planning"
-      ? eligibility.compatibilityDigest
-      : eligibility.digest;
-  const failures =
-    compatibility === "planning"
-      ? eligibility.planningFailures
-      : eligibility.failures;
-  if (!eligible || eligibility.sourceSha === undefined) {
-    throw new Error(
-      `Repository is not ${compatibility === "planning" ? "planning-compatible" : "eligible"}: ${failures.join("; ")}`,
-    );
-  }
+  // Development snapshots are inputs, not candidates for a template
+  // certification gate. Run the repository and react to its real command
+  // failures instead of predicting compatibility from an expected shape.
+  const sourcePath = await realpath(resolve(sourcePathInput));
+  const sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
+  const eligibilityDigest = sha256(sourceSha);
 
-  const names = gitBytes(eligibility.sourcePath, [
+  const names = gitBytes(sourcePath, [
     "ls-files",
     "-z",
     "--cached",
@@ -1386,8 +1374,8 @@ export async function prepareDevelopmentSandboxWorkspace(
     .filter((path) => {
       if (!safeSourcePath(path))
         throw new Error("The development source contains an unsafe path.");
-      const absolutePath = resolve(eligibility.sourcePath, path);
-      if (!within(eligibility.sourcePath, absolutePath))
+      const absolutePath = resolve(sourcePath, path);
+      if (!within(sourcePath, absolutePath))
         throw new Error("The development source escapes its root.");
       // `git ls-files --cached` keeps a deleted tracked path until it is
       // staged. Development follows the working tree, so that path is a
@@ -1395,7 +1383,7 @@ export async function prepareDevelopmentSandboxWorkspace(
       return existsSync(absolutePath);
     });
   const sourceFiles: PreparedSourceFile[] = names.map((path) => {
-    const absolutePath = resolve(eligibility.sourcePath, path);
+    const absolutePath = resolve(sourcePath, path);
     const info = lstatSync(absolutePath);
     if (!info.isFile() || info.isSymbolicLink())
       throw new Error("The development source contains a non-regular file.");
@@ -1454,8 +1442,8 @@ export async function prepareDevelopmentSandboxWorkspace(
     content: `${JSON.stringify(
       {
         callId,
-        sourcePath: eligibility.sourcePath,
-        sourceSha: eligibility.sourceSha,
+        sourcePath,
+        sourceSha,
         sourceTree: generation,
         eligibilityDigest,
         mode: "development-live",
@@ -1471,7 +1459,7 @@ export async function prepareDevelopmentSandboxWorkspace(
       force: true,
     });
     const archive = developmentWorkingTreeArchive(
-      eligibility.sourcePath,
+      sourcePath,
       sourceFiles.map(({ path }) => path),
     );
     await sandbox.writeBinaryFile({
@@ -1506,7 +1494,7 @@ export async function prepareDevelopmentSandboxWorkspace(
     for (const file of changedFiles) {
       await sandbox.writeBinaryFile({
         path: `repository/${file.path}`,
-        content: readFileSync(resolve(eligibility.sourcePath, file.path)),
+        content: readFileSync(resolve(sourcePath, file.path)),
       });
     }
   }
@@ -1548,8 +1536,8 @@ export async function prepareDevelopmentSandboxWorkspace(
   const record: PreparedSandboxWorkspace = {
     workspaceId: sandbox.id,
     workspacePath: "/workspace/repository",
-    sourcePath: eligibility.sourcePath,
-    sourceSha: eligibility.sourceSha,
+    sourcePath,
+    sourceSha,
     sourceTree: generation,
     workspaceDigest,
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
