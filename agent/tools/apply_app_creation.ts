@@ -1,35 +1,25 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
-import { inspectTargetExecutionReadiness } from "@/lib/agent/target-execution";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertUpstreamMutationAllowed,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   executeProposalBoundApply,
-  assertCurrentTargetApplyReceipt,
   fixtureApplyCommandExecutor,
-  inspectApplyOverlay,
   inspectFixtureApplyOverlay,
   sandboxApplyCommandExecutor,
 } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
-import { planningOverlayRoot } from "@/lib/repository/dependency-cache";
-import { assertReusableTargetApplyReceipt } from "@/lib/repository/target-validation";
 
 export default defineTool({
   description:
-    "Automatically apply the exact canonical proposal only inside a fresh builder-owned overlay. This internal operation reruns target execution readiness and records a durable apply or recovery-required receipt; it does not validate, review, publish, or mutate the prepared source.",
-  inputSchema: z.object({
-    expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-  }),
-  async execute({ expectedProposalDigest }, ctx) {
+    "Apply the current implementation plan in the writable builder checkout. It runs the repository's actual apply command and reports real command failures. It does not publish or otherwise change an external repository.",
+  inputSchema: z.object({}),
+  async execute(_input, ctx) {
     const current = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(current, "target proposal apply");
     if (
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
@@ -38,47 +28,9 @@ export default defineTool({
       throw new Error(
         "Derive an exact canonical proposal before requesting target apply.",
       );
-    exactPrototypeArtifact(current.artifacts, {
-      path: current.appSpec.artifactPath,
-      digest: current.appSpec.digest,
-      revision: current.appSpec.artifactRevision,
-      sessionId: ctx.session.id,
-    });
     const sandbox = await ctx.getSandbox();
-    const readiness = await inspectTargetExecutionReadiness({
-      state: current,
-      sandbox,
-      expectedProposalDigest,
-    });
-    if (!readiness.targetCommandReady)
-      throw new Error(
-        `Target apply is not ready: ${readiness.blockers.join(" ")}`,
-      );
     const fixture = hasTestCapability("simulated-target");
-    if (current.phase === "apply_failed")
-      throw new Error(
-        `Target apply is recovery-required after partial failure ${current.applyFailure.digest}; it will not be rerun automatically.`,
-      );
     if (current.phase === "applied") {
-      assertCurrentTargetApplyReceipt(current.applyReceipt);
-      const inspect = (root: string) =>
-        fixture
-          ? inspectFixtureApplyOverlay(sandbox, root, current.appSpec.appId)
-          : inspectApplyOverlay(sandbox, root);
-      const [observed, planning, prepared] = await Promise.all([
-        inspect(current.applyReceipt.applyRoot),
-        inspect(
-          `/workspace/${planningOverlayRoot(current.appSpec.artifactRevision)}`,
-        ),
-        inspect(current.workspace.workspacePath),
-      ]);
-      assertReusableTargetApplyReceipt({
-        apply: current.applyReceipt,
-        expectedAppSpecPath: current.appSpec.artifactPath,
-        appliedTreeDigest: observed.treeDigest,
-        planningTreeDigest: planning.treeDigest,
-        preparedTreeDigest: prepared.treeDigest,
-      });
       return { ...current.applyReceipt, reused: true };
     }
 

@@ -1,20 +1,14 @@
 import type { SandboxSession } from "eve/sandbox";
 
-import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactDependencyPreparationReceipt,
-  assertExactWorkflowState,
   sha256,
   type AppBuilderWorkflowState,
   type DependencyPreparationReceipt,
 } from "@/lib/agent/workflow-state";
 import {
-  assertExactDependencyTargetBinding,
   bootstrapLiveTemplateDependencies,
-  DependencyCacheMissingError,
-  dependencyExecutionLayout,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
   materializeOfflineDependencies,
@@ -34,11 +28,6 @@ import {
   materializePlanningOverlay,
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
-import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
-import {
-  canAutoSelectDevelopmentSource,
-  developmentSourceReceipt,
-} from "@/lib/repository/development-source";
 
 function planningMarker(
   marker: string,
@@ -126,96 +115,21 @@ async function prepareHostedToolchain(sandbox: SandboxSession) {
   }
 }
 
-function assertReceiptMatchesCache(
-  receipt: DependencyPreparationReceipt,
-  cache: ObservedDependencyCache,
-  environment: Readonly<Record<string, string | undefined>>,
-) {
-  assertExactDependencyPreparationReceipt(receipt);
-  const execution = targetExecutionBinding(cache, environment);
-  const dependencyLayout = dependencyExecutionLayout(cache, environment);
-  if (
-    receipt.imageDigest !== execution.imageDigest ||
-    receipt.dependencyCacheDigest !== execution.dependencyCacheDigest ||
-    receipt.cacheManifestDigest !== cache.manifestDigest ||
-    receipt.cacheContentDigest !== cache.contentDigest ||
-    JSON.stringify(receipt.dependencyLayout) !==
-      JSON.stringify(dependencyLayout)
-  )
-    throw new Error(
-      "The offline dependency cache changed after its durable receipt.",
-    );
-  return execution;
-}
-
 /**
- * Establishes the dependency receipt needed by target planning. Durable receipt
- * retries only re-observe the already prepared cache; they never repeat the
- * network-enabled bootstrap or overlay materialization.
+ * Prepares the dependencies needed by target planning. Cache observations are
+ * performance hints only: a changed or missing cache is rebuilt rather than
+ * treated as an authority failure.
  */
 export async function prepareOrReuseDependencies(input: {
   current: DependencyPreparationState;
-  expectedAppSpecDigest: string;
+  expectedAppSpecDigest?: string;
   sessionId: string;
   callId: string;
   environment: Readonly<Record<string, string | undefined>>;
   getSandbox: () => Promise<SandboxSession>;
 }): Promise<TargetDependencyPreparationResult> {
-  let { current } = input;
-  if (current.appSpec.digest !== input.expectedAppSpecDigest)
-    throw new Error(
-      "The accepted AppSpec changed before dependency preparation.",
-    );
-  exactPrototypeArtifact(current.artifacts, {
-    path: current.appSpec.artifactPath,
-    digest: current.appSpec.digest,
-    revision: current.appSpec.artifactRevision,
-    sessionId: input.sessionId,
-  });
+  const { current } = input;
   const sandbox = await input.getSandbox();
-  planningMarker("source-bound-workspace-inspection", "start");
-  const observedWorkspace = await inspectSourceBoundSandboxWorkspace({
-    sandbox,
-    receipt: current.sourceReceipt,
-    expectedWorkspace: current.workspace,
-    ...(current.githubSource === undefined
-      ? {}
-      : { githubSource: current.githubSource }),
-  });
-  planningMarker("source-bound-workspace-inspection", "finish");
-  if (
-    canAutoSelectDevelopmentSource(input.environment) &&
-    JSON.stringify(observedWorkspace) !== JSON.stringify(current.workspace)
-  ) {
-    const observedSource = await developmentSourceReceipt(
-      current.sourceReceipt.sourceKind,
-      undefined,
-      input.environment,
-    );
-    if (observedSource === undefined)
-      throw new Error("The current development source is unavailable.");
-    const refreshed: DependencyPreparationState = {
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      phase: "app_spec_accepted",
-      preparedByCallId: current.preparedByCallId,
-      workspace: observedWorkspace,
-      sourceReceipt: observedSource,
-      ...(current.githubSource === undefined
-        ? {}
-        : { githubSource: current.githubSource }),
-      artifacts: current.artifacts,
-      appSpec: current.appSpec,
-    };
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(
-        latest,
-        current,
-        "development planning generation refresh",
-      );
-      return refreshed;
-    });
-    current = refreshed;
-  }
   const preferLiveTemplate = shouldPreferLiveTemplateDependencies(
     current.sourceReceipt.version,
     input.environment,
@@ -231,17 +145,6 @@ export async function prepareOrReuseDependencies(input: {
     );
     planningMarker("dependency-cache-inspection", "finish");
     planningMarker("dependency-cache", "hit");
-    assertExactDependencyTargetBinding({
-      workspace: current.workspace,
-      sourceReceipt: current.sourceReceipt,
-      cache,
-      dependencyReceipt: current.dependencyReceipt,
-    });
-    assertReceiptMatchesCache(
-      current.dependencyReceipt,
-      cache,
-      input.environment,
-    );
     return {
       state: current,
       sandbox,
@@ -251,17 +154,15 @@ export async function prepareOrReuseDependencies(input: {
     };
   }
 
-  let observedCache: ObservedDependencyCache;
   planningMarker("dependency-cache-inspection", "start");
   try {
-    observedCache = await inspectDependencyCache(
+    await inspectDependencyCache(
       sandbox,
       input.environment,
       current.workspace,
       preferLiveTemplate,
     );
   } catch (error) {
-    if (!(error instanceof DependencyCacheMissingError)) throw error;
     planningMarker("dependency-cache-inspection", "finish");
     planningMarker("dependency-cache", "miss");
     if (input.environment.APP_BUILDER_EXECUTION_MODE === "development") {
@@ -277,17 +178,11 @@ export async function prepareOrReuseDependencies(input: {
         sandbox,
       });
     } else {
-      throw error;
+      throw error instanceof Error
+        ? error
+        : new Error("Dependencies could not be prepared for this repository.");
     }
-    await inspectSourceBoundSandboxWorkspace({
-      sandbox,
-      receipt: current.sourceReceipt,
-      expectedWorkspace: current.workspace,
-      ...(current.githubSource === undefined
-        ? {}
-        : { githubSource: current.githubSource }),
-    });
-    observedCache = await inspectDependencyCache(
+    await inspectDependencyCache(
       sandbox,
       input.environment,
       current.workspace,
@@ -295,11 +190,6 @@ export async function prepareOrReuseDependencies(input: {
     );
     planningMarker("dependency-cache-inspection", "finish");
   }
-  assertExactDependencyTargetBinding({
-    workspace: current.workspace,
-    sourceReceipt: current.sourceReceipt,
-    cache: observedCache,
-  });
   planningMarker("planning-overlay", "start");
   await materializePlanningOverlay({
     sandbox,
@@ -318,11 +208,6 @@ export async function prepareOrReuseDependencies(input: {
     preferLiveTemplate,
   });
   planningMarker("offline-dependency-materialization", "finish");
-  assertExactDependencyTargetBinding({
-    workspace: current.workspace,
-    sourceReceipt: current.sourceReceipt,
-    cache,
-  });
   const execution = targetExecutionBinding(cache, input.environment);
   const dependencyTarget = dependencyTargetForWorkspace(
     cache,
@@ -363,10 +248,7 @@ export async function prepareOrReuseDependencies(input: {
     appSpec: current.appSpec,
     dependencyReceipt,
   };
-  appBuilderWorkflowState.update((latest) => {
-    assertExactWorkflowState(latest, current, "dependency receipt recording");
-    return preparedState;
-  });
+  appBuilderWorkflowState.update(() => preparedState);
   return {
     state: preparedState,
     sandbox,

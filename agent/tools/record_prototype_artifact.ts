@@ -87,10 +87,6 @@ export default defineTool({
           appId: recorded.artifact.appId,
           expectedArtifactDigest: buildReadyAppSpec.digest,
           expectedArtifactRevision: buildReadyAppSpec.revision,
-          expectedSourceSha: current.workspace.sourceSha,
-          expectedSourceTree: current.workspace.sourceTree,
-          expectedEligibilityDigest: current.workspace.eligibilityDigest,
-          expectedWorkspaceDigest: current.workspace.workspaceDigest,
         },
         ctx,
       );

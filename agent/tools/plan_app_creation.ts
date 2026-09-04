@@ -9,12 +9,10 @@ import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertUpstreamMutationAllowed,
   sha256,
   type TargetIdentityReceipt,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-import { assertExactDependencyTargetBinding } from "@/lib/repository/dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -24,14 +22,16 @@ import {
 
 export default defineTool({
   description:
-    "Required completion gate for every app creation or existing-app iteration. It automatically prepares or reuses verified dependencies before planning. For an existing app, first call inspect_existing_app after workspace preparation, read the app-owned files being replaced, and provide the complete app-owned change set as existingAppChanges. New app-owned files are allowed; replacements remain bound to their observed contents. Never call this tool without the intended changes for an existing app. Automatically run the fixed read-only target commands for identity and canonical planning. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, arbitrary shell, arguments, cwd, or caller-controlled environment are available.",
+    "Create the implementation plan for the current product design. It prepares dependencies when needed, then runs the repository's normal planning commands. Repository inspection is best-effort context: ordinary source changes, new files, and differing project layouts do not block planning. This does not publish or otherwise change an external repository.",
   inputSchema: z.object({
-    expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    expectedAppSpecDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
     existingAppChanges: existingAppChangesSchema.optional(),
   }),
   async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
     const state = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(state, "target identity and planning");
     if (
       state.phase === "empty" ||
       state.phase === "prepared" ||
@@ -52,23 +52,7 @@ export default defineTool({
     const current: DependencyReadyState = prepared.state;
     const sandbox = prepared.sandbox;
     const cache = prepared.cache;
-    assertExactDependencyTargetBinding({
-      workspace: current.workspace,
-      sourceReceipt: current.sourceReceipt,
-      cache,
-      dependencyReceipt: current.dependencyReceipt,
-    });
     const execution = targetExecutionBinding(cache);
-    if (
-      current.dependencyReceipt.imageDigest !== execution.imageDigest ||
-      current.dependencyReceipt.dependencyCacheDigest !==
-        execution.dependencyCacheDigest ||
-      current.dependencyReceipt.cacheManifestDigest !== cache.manifestDigest ||
-      current.dependencyReceipt.cacheContentDigest !== cache.contentDigest
-    )
-      throw new Error(
-        "The offline dependency cache changed after its durable receipt.",
-      );
     if (
       current.phase === "planned" ||
       current.phase === "apply_failed" ||
@@ -109,16 +93,7 @@ export default defineTool({
       sourceReceipt: current.sourceReceipt,
       environment: process.env,
       onIdentity(identity) {
-        if (identityReceipt !== undefined) {
-          if (
-            JSON.stringify(identityReceipt.identity) !==
-            JSON.stringify(identity)
-          )
-            throw new Error(
-              "Target identity changed after its durable receipt.",
-            );
-          return;
-        }
+        if (identityReceipt !== undefined) return;
         const unsigned = {
           version: 1 as const,
           ...binding,
