@@ -60,7 +60,15 @@ async function runtimePaths(repositoryRoot: string) {
 export async function fingerprintDevelopmentRuntime(repositoryRoot: string) {
   const hash = createHash("sha256");
   for (const path of await runtimePaths(repositoryRoot)) {
-    const content = await readFile(join(repositoryRoot, path));
+    let content: Buffer;
+    try {
+      content = await readFile(join(repositoryRoot, path));
+    } catch (error) {
+      // A file may disappear between Git's listing and the read while a live
+      // edit is being saved. The next watcher pass observes the settled tree.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
     hash.update(`${Buffer.byteLength(path)}\0${content.byteLength}\0${path}\0`);
     hash.update(content);
   }
