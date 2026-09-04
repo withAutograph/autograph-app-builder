@@ -29,7 +29,11 @@ export default defineTool({
         "Apply the requested changes before running the repository checks.",
       );
     if (current.phase === "validated") {
-      return { ...current.validationReceipt, reused: true };
+      return {
+        status: "validated" as const,
+        commandCount: current.validationReceipt.commands.length,
+        reused: true,
+      };
     }
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
@@ -82,6 +86,10 @@ export default defineTool({
       phase: "validated",
       validationReceipt: result.receipt,
     }));
-    return { ...result.receipt, reused: false };
+    return {
+      status: "validated" as const,
+      commandCount: result.receipt.commands.length,
+      reused: false,
+    };
   },
 });
