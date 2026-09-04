@@ -35,7 +35,12 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
     if (current.phase === "applied") {
-      return { ...current.applyReceipt, reused: true };
+      return {
+        status: "applied" as const,
+        appId: current.proposal.target.contract.appId,
+        changedFileCount: current.applyReceipt.changes.length,
+        reused: true,
+      };
     }
 
     const binding = {
@@ -121,6 +126,11 @@ export default defineTool({
         applyReceipt: result.receipt,
       }),
     });
-    return { ...result.receipt, reused: false };
+    return {
+      status: "applied" as const,
+      appId: current.proposal.target.contract.appId,
+      changedFileCount: result.receipt.changes.length,
+      reused: false,
+    };
   },
 });
