@@ -113,6 +113,7 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(command).toContain("bun --version");
     expect(command).toContain("node --version");
     expect(command).toContain("node -e 'const fs=require");
+    expect(command).toContain("hosted_dependency_manifest_mismatch:");
     expect(command).toContain("cargo --version");
     expect(command).toContain("rustc --version");
     expect(command).toContain(
