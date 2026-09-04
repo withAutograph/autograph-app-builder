@@ -404,7 +404,8 @@ export function sandboxTargetCommandExecutor(
     await sandbox.setNetworkPolicy("allow-all");
     try {
       const setup = await sandbox.run({
-        command: "bun install --frozen-lockfile",
+        command:
+          "bun install --frozen-lockfile --filter @autograph/platform-microfrontends",
         workingDirectory: planningRoot,
         abortSignal: AbortSignal.timeout(300_000),
       });
