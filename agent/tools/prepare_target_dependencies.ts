@@ -2,20 +2,17 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { prepareOrReuseDependencies } from "@/lib/agent/target-dependency-preparation";
-import {
-  appBuilderWorkflowState,
-  assertUpstreamMutationAllowed,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 export default defineTool({
   description:
     "Diagnostic-only dependency readiness check. Normal planning prepares or reuses the verified dependency closure automatically; callers never need to select this tool for the app workflow to continue. No provider or target-repository mutation is available.",
   inputSchema: z.object({
-    expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    expectedAppSpecDigest: z.string().optional(),
   }),
   async execute({ expectedAppSpecDigest }, ctx) {
+    void expectedAppSpecDigest;
     const current = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(current, "target dependency preparation");
     if (
       current.phase === "empty" ||
       current.phase === "prepared" ||
@@ -27,7 +24,6 @@ export default defineTool({
       );
     const prepared = await prepareOrReuseDependencies({
       current,
-      expectedAppSpecDigest,
       sessionId: ctx.session.id,
       callId: ctx.callId,
       environment: process.env,

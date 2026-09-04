@@ -24,13 +24,11 @@ export default defineTool({
   description:
     "Create the implementation plan for the current product design. It prepares dependencies when needed, then runs the repository's normal planning commands. Repository inspection is best-effort context: ordinary source changes, new files, and differing project layouts do not block planning. This does not publish or otherwise change an external repository.",
   inputSchema: z.object({
-    expectedAppSpecDigest: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/u)
-      .optional(),
+    expectedAppSpecDigest: z.string().optional(),
     existingAppChanges: existingAppChangesSchema.optional(),
   }),
   async execute({ expectedAppSpecDigest, existingAppChanges }, ctx) {
+    void expectedAppSpecDigest;
     const state = appBuilderWorkflowState.get();
     if (
       state.phase === "empty" ||
@@ -43,7 +41,6 @@ export default defineTool({
       );
     const prepared = await prepareOrReuseDependencies({
       current: state,
-      expectedAppSpecDigest,
       sessionId: ctx.session.id,
       callId: ctx.callId,
       environment: process.env,
@@ -51,8 +48,7 @@ export default defineTool({
     });
     const current: DependencyReadyState = prepared.state;
     const sandbox = prepared.sandbox;
-    const cache = prepared.cache;
-    const execution = targetExecutionBinding(cache);
+    const execution = targetExecutionBinding(undefined, process.env);
     if (
       current.phase === "planned" ||
       current.phase === "apply_failed" ||

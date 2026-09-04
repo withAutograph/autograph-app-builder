@@ -328,16 +328,23 @@ function parseOutput<T>(
 }
 
 export function targetExecutionBinding(
-  cache: ObservedDependencyCache,
+  cache: ObservedDependencyCache | undefined,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   if (hasTestCapability("simulated-target", environment))
     return {
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-      dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
+      dependencyCacheDigest:
+        cache === undefined ? "checkout" : dependencyCacheReceiptDigest(cache),
       fixture: true,
     } as const;
   const imageDigest = configuredToolchainImage(environment);
+  if (cache === undefined)
+    return {
+      imageDigest: imageDigest ?? "vercel-sandbox",
+      dependencyCacheDigest: "checkout",
+      fixture: false,
+    } as const;
   if (imageDigest === undefined) {
     const backend = sandboxBackendPlan({
       environment,
@@ -470,6 +477,21 @@ export function sandboxTargetCommandExecutor(
             command: `${mise} app-contract.ts --contract ${contractPath} --root ${planningRoot}`,
             workingDirectory: planningRoot,
           };
+    const result = await sandbox.run({ ...request, abortSignal });
+    if (
+      result.exitCode === 0 ||
+      !/(?:cannot find module|module_not_found|node_modules|dependencies? (?:are )?missing)/iu.test(
+        `${result.stdout}\n${result.stderr}`,
+      )
+    )
+      return result;
+
+    const setup = await sandbox.run({
+      command: "bun install --frozen-lockfile",
+      workingDirectory: planningRoot,
+      abortSignal,
+    });
+    if (setup.exitCode !== 0) return setup;
     return sandbox.run({ ...request, abortSignal });
   };
 }
