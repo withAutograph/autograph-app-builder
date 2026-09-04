@@ -13,29 +13,6 @@ export class SandboxCommandLimitError extends Error {
   }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
-}
-
-export function boundedSandboxCommand(command: string): string {
-  const script = `
-set -euo pipefail
-setsid --wait bash -lc ${shellQuote(command)} &
-child=$!
-cleanup() {
-  kill -TERM -- -"$child" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-set +e
-wait "$child"
-child_status=$?
-set -e
-trap - EXIT INT TERM
-exit "$child_status"
-`;
-  return `bash -lc ${shellQuote(script)}`;
-}
-
 type OutputReader = ReadableStreamDefaultReader<Uint8Array>;
 
 async function collectBounded(
@@ -147,7 +124,7 @@ export async function runBoundedSandboxCommand(
     const spawnPromise = Promise.resolve(
       sandbox.spawn({
         ...options,
-        command: boundedSandboxCommand(options.command),
+        command: options.command,
         abortSignal: signal,
       }),
     );

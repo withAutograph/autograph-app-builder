@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxProcess } from "eve/sandbox";
-import {
-  boundedSandboxCommand,
-  runBoundedSandboxCommand,
-} from "./bounded-command";
+import { runBoundedSandboxCommand } from "./bounded-command";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
 const stream = (...chunks: string[]) =>
@@ -27,15 +24,7 @@ function processFixture(stdout: string[], stderr: string[] = []) {
 }
 
 describe("bounded sandbox command", () => {
-  it("keeps process-group cleanup without injecting resource quotas", () => {
-    const command = boundedSandboxCommand("mise run check");
-    expect(command).toContain("setsid --wait bash");
-    expect(command).toContain("kill -TERM");
-    for (const removedControl of ["ulimit", "node -e", "workspace_quota"])
-      expect(command).not.toContain(removedControl);
-  });
-
-  it("collects bounded output through spawn rather than buffered run", async () => {
+  it("passes the authored command directly to spawn", async () => {
     const fixture = processFixture(["hello"], ["warning"]);
     const spawn = vi.fn(async (options: unknown) => {
       void options;
@@ -46,7 +35,7 @@ describe("bounded sandbox command", () => {
     ).resolves.toEqual({ exitCode: 0, stdout: "hello", stderr: "warning" });
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: expect.stringContaining("setsid --wait bash"),
+        command: "mise run check",
         abortSignal: expect.any(AbortSignal),
       }),
     );
