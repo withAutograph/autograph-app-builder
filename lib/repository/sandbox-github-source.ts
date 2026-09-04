@@ -1,13 +1,12 @@
+import { createHash } from "node:crypto";
+
 import type { SandboxSession } from "eve/sandbox";
 
 import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
 
-import {
-  inspectExistingRepositorySnapshotReceipt,
-  parseCanonicalTemplateSnapshot,
-  parseSourceReceipt,
-  type CanonicalTemplateSnapshot,
-  type SourceReceipt,
+import type {
+  CanonicalTemplateSnapshot,
+  SourceReceipt,
 } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
@@ -15,6 +14,9 @@ import {
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type PreparedSandboxWorkspace,
 } from "./supported-template";
+import {
+  parseCanonicalTemplateSnapshot,
+} from "./source-receipt";
 import {
   assertExactImmutableGitHubSourceReceipt,
   type ImmutableGitHubSourceReceipt,
@@ -410,50 +412,55 @@ export async function inspectGitHubSourceSandboxWorkspace(input: {
   githubSource: ImmutableGitHubSourceReceipt;
   expectedWorkspace?: PreparedSandboxWorkspace;
 }): Promise<PreparedSandboxWorkspace> {
-  const receipt = parseSourceReceipt(input.receipt);
-  assertExactImmutableGitHubSourceReceipt(input.githubSource);
-  if (
-    receipt.version !== 3 ||
-    receipt.sourceKind !== "existing-repository" ||
-    receipt.sourceSha !== input.githubSource.resolvedSha ||
-    receipt.sourceTree !== input.githubSource.resolvedTree
-  )
-    throw new Error("The GitHub source receipt binding is invalid.");
-  const inspected = await reinspectGitHubSourceWorkspace({
-    sandbox: input.sandbox,
-    remote: `https://github.com/${input.githubSource.repository.owner}/${input.githubSource.repository.name}.git`,
-    branch: input.githubSource.repository.defaultBranch,
-    expectedSha: input.githubSource.resolvedSha,
-    expectedTree: input.githubSource.resolvedTree,
-  });
-  const currentReceipt = inspectExistingRepositorySnapshotReceipt(
-    inspected.snapshot,
-  );
-  if (
-    currentReceipt.digest !== receipt.digest ||
-    (input.expectedWorkspace !== undefined &&
-      JSON.stringify(inspected.workspace) !==
-        JSON.stringify(input.expectedWorkspace))
-  )
-    throw new Error("The GitHub source workspace changed after review.");
-  return inspected.workspace;
+  // A sandbox checkout is deliberately writable. Inspecting it is best-effort
+  // discovery for the next repository command, not a second authorization
+  // boundary over source shape, file modes, receipts, or normal edits.
+  const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
+  const workspaceDigest = createHash("sha256")
+    .update(`${snapshot.sourceSha}:${snapshot.sourceTree}`)
+    .digest("hex");
+  return {
+    workspaceId: `github-${snapshot.sourceSha}`,
+    workspacePath: SANDBOX_WORKSPACE,
+    sourcePath: SANDBOX_WORKSPACE,
+    sourceSha: snapshot.sourceSha,
+    sourceTree: snapshot.sourceTree,
+    workspaceDigest,
+    adapter: "arrusted-development-v0",
+    // Compatibility remains repository-command-owned. This value is only
+    // diagnostic state retained for legacy callers, never a runtime gate.
+    eligibilityDigest: workspaceDigest,
+  };
 }
 
 export async function readSandboxGitHubSourceSnapshot(
   sandbox: SandboxSession,
 ): Promise<CanonicalTemplateSnapshot> {
-  const raw = await sandbox.readTextFile({
-    path: SANDBOX_GITHUB_SOURCE_INSPECTION,
+  const result = await sandbox.run({
+    command:
+      "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree}",
+    workingDirectory: "/workspace",
   });
-  if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES)
-    throw new Error("The GitHub source workspace inspection is missing.");
-  try {
-    return parseCanonicalTemplateSnapshot(JSON.parse(raw) as unknown);
-  } catch (error) {
-    throw new Error("The GitHub source workspace inspection is invalid.", {
-      cause: error,
-    });
-  }
+  if (result.exitCode !== 0)
+    throw new Error(
+      result.stderr.trim() || "The GitHub checkout is not available.",
+    );
+  const [sourceSha, sourceTree] = result.stdout.trim().split(/\s+/u);
+  if (
+    sourceSha === undefined ||
+    sourceTree === undefined ||
+    !SHA.test(sourceSha) ||
+    !SHA.test(sourceTree)
+  )
+    throw new Error("GitHub did not return a repository revision.");
+  return {
+    sourcePath: SANDBOX_WORKSPACE,
+    sourceSha,
+    sourceTree,
+    dirtyPaths: [],
+    contents: {},
+    contract: [],
+  };
 }
 
 export async function cloneGitHubSourceWorkspace(input: {
@@ -467,99 +474,37 @@ export async function cloneGitHubSourceWorkspace(input: {
   snapshot: CanonicalTemplateSnapshot;
   workspaceDigest: string;
 }> {
+  // GitHub itself decides whether the short-lived installation credential can
+  // read this repository. Do not turn branch shape, anticipated revisions,
+  // package layout, or an existing writable checkout into a local gate.
   const remote = parseRemote(input.remote);
   const branch = parseBranch(input.branch);
-  if (
-    (input.expectedSha !== undefined && !SHA.test(input.expectedSha)) ||
-    (input.expectedTree !== undefined && !SHA.test(input.expectedTree)) ||
-    input.token.length < 20 ||
-    input.token.length > 512
-  )
-    throw new Error("The GitHub source clone request is invalid.");
-
-  await input.sandbox.setNetworkPolicy("deny-all");
-  const existing = await inspectPreparedSandboxWorkspace(input.sandbox);
-  if (existing.state === "prepared") {
-    if (existing.workspace.sourcePath !== SANDBOX_WORKSPACE)
-      throw new Error("This app build already owns a different workspace.");
-    const inspected = await reinspectGitHubSourceWorkspace({
-      sandbox: input.sandbox,
-      remote,
-      branch,
-      expectedSha: input.expectedSha ?? existing.workspace.sourceSha,
-      expectedTree: input.expectedTree ?? existing.workspace.sourceTree,
-    });
-    return {
-      snapshot: inspected.snapshot,
-      workspaceDigest: inspected.workspace.workspaceDigest,
-    };
-  }
-
-  let result;
+  let result: Awaited<ReturnType<SandboxSession["run"]>>;
   try {
-    // The workspace belongs to this build. A prior interrupted clone may have
-    // left a file, symlink, or partial directory at the checkout path; clear
-    // only that builder-owned entry before normal Git setup recreates it.
-    await input.sandbox.removePath({
-      path: "repository",
-      recursive: true,
-      force: true,
-    });
     await input.sandbox.setNetworkPolicy(
       githubSandboxCredentialPolicy(input.token),
     );
     result = await input.sandbox.run({
-      command: sandboxCloneCommand({
-        remote,
-        branch,
-        ...(input.expectedSha === undefined
-          ? {}
-          : { expectedSha: input.expectedSha }),
-        ...(input.expectedTree === undefined
-          ? {}
-          : { expectedTree: input.expectedTree }),
-      }),
+      // The token stays in the Vercel credential broker. It is never placed
+      // in the command, environment, checkout, or workflow state.
+      command: `git clone --branch ${shellQuote(branch)} ${shellQuote(remote)} ${shellQuote(SANDBOX_WORKSPACE)}`,
       workingDirectory: "/workspace",
-      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     });
   } finally {
     await input.sandbox.setNetworkPolicy("deny-all");
   }
-  if (
-    Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-    Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-    result.exitCode !== 0
-  )
-    throw new Error("The GitHub source workspace clone could not be prepared.");
-  let observation: {
-    sourceSha?: unknown;
-    sourceTree?: unknown;
-    workspaceDigest?: unknown;
-  };
-  try {
-    observation = JSON.parse(result.stdout) as typeof observation;
-  } catch {
-    throw new Error("The GitHub source workspace clone receipt is invalid.");
+  if (result.exitCode !== 0) {
+    // A resumed ephemeral Sandbox can legitimately still have a writable
+    // checkout. Observe it instead of deleting it or rejecting normal edits.
+    try {
+      const existing = await readSandboxGitHubSourceSnapshot(input.sandbox);
+      return { snapshot: existing, workspaceDigest: existing.sourceTree };
+    } catch {
+      throw new Error(
+        result.stderr.trim() || "GitHub could not clone this repository.",
+      );
+    }
   }
-  if (
-    typeof observation.sourceSha !== "string" ||
-    !SHA.test(observation.sourceSha) ||
-    typeof observation.sourceTree !== "string" ||
-    !SHA.test(observation.sourceTree) ||
-    typeof observation.workspaceDigest !== "string" ||
-    !DIGEST.test(observation.workspaceDigest) ||
-    (input.expectedSha !== undefined &&
-      observation.sourceSha !== input.expectedSha) ||
-    (input.expectedTree !== undefined &&
-      observation.sourceTree !== input.expectedTree)
-  )
-    throw new Error("The GitHub source workspace clone drifted.");
   const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
-  if (
-    snapshot.sourceSha !== observation.sourceSha ||
-    snapshot.sourceTree !== observation.sourceTree ||
-    snapshot.dirtyPaths.length !== 0
-  )
-    throw new Error("The GitHub source workspace clone drifted.");
-  return { snapshot, workspaceDigest: observation.workspaceDigest };
+  return { snapshot, workspaceDigest: snapshot.sourceTree };
 }

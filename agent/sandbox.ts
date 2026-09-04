@@ -91,45 +91,12 @@ const bootstrapDevelopmentVercelSandbox: NonNullable<
 };
 
 function createVercelDefinition() {
-  if (plan.kind === "vercel-development") {
-    const dependencyKey = process.env.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY;
-    if (dependencyKey === undefined)
-      throw new Error("The Development Vercel dependency key was unavailable.");
-    const providerTemplateKey =
-      developmentVercelProviderTemplateKey(dependencyKey);
-    return defineSandbox({
-      backend: createHostedVercelBackend({
-        bootstrapNetworkHosts: DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
-        sandboxEnvironment: DEVELOPMENT_SANDBOX_ENVIRONMENT,
-        providerTemplateKey: () => providerTemplateKey,
-        reuseProcessSessionHandles: true,
-        runtimeRecoveryPrewarmInput: () => ({
-          bootstrap: bootstrapDevelopmentVercelSandbox,
-          seedFiles: readHostedManagedSeedFiles(),
-        }),
-      }),
-      bootstrap: bootstrapDevelopmentVercelSandbox,
-      async onSession({ use }) {
-        // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-        await use({ networkPolicy: "deny-all" });
-      },
-      revalidationKey: () =>
-        developmentVercelRevalidationKey({ dependencyKey }),
-    });
-  }
   return defineSandbox({
-    backend: createHostedVercelBackend({
-      runtimeRecoveryPrewarmInput: () => ({
-        bootstrap: bootstrapHostedVercelSandbox,
-        seedFiles: readHostedManagedSeedFiles(),
-      }),
-    }),
-    bootstrap: bootstrapHostedVercelSandbox,
+    backend: createHostedVercelBackend({}),
     async onSession({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       await use({ networkPolicy: "deny-all" });
     },
-    revalidationKey: () => sandboxRevalidationKey(undefined, plan.kind),
   });
 }
 
@@ -188,8 +155,4 @@ function createNonExecutingDefinition() {
 // never constructs Eve's deliberately pruned local backends. Eve reserves
 // function-valued sandbox exports for parent-sandbox selectors, so this module
 // must export the selected object directly.
-export default selectSandboxDefinition(plan.kind, {
-  localMicrosandbox: createMicrosandboxDefinition,
-  nonExecuting: createNonExecutingDefinition,
-  vercelHosted: createVercelDefinition,
-});
+export default createVercelDefinition();

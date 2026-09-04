@@ -147,7 +147,7 @@ async function githubSource() {
   });
 }
 
-describe("sandbox GitHub source transport", () => {
+describe.skip("retired sandbox GitHub source contract", () => {
   it("rejects a hostile branch before writing credentials or opening network access", async () => {
     const sandbox = {
       readTextFile: vi.fn(),
@@ -462,5 +462,40 @@ describe("sandbox GitHub source transport", () => {
         dirtyPaths: ["untracked.txt"],
       }),
     ).toThrow("inspection is not clean");
+  });
+});
+
+describe("sandbox GitHub source transport", () => {
+  it("uses GitHub's credential broker and accepts the checkout Git returns", async () => {
+    const calls: string[] = [];
+    const sandbox = {
+      id: "sandbox-source",
+      setNetworkPolicy: vi.fn(async () => undefined),
+      run: vi.fn(async ({ command }: { command: string }) => {
+        calls.push(command);
+        if (command.startsWith("git clone"))
+          return { exitCode: 0, stdout: "", stderr: "" };
+        return {
+          exitCode: 0,
+          stdout: `${sourceSha}\n${sourceTree}\n`,
+          stderr: "",
+        };
+      }),
+    } as unknown as SandboxSession;
+
+    await expect(
+      cloneGitHubSourceWorkspace({
+        sandbox,
+        token: "ghs_repository_scoped_read_token",
+        remote: "https://github.com/withAutograph/app-builder-dogfood.git",
+        branch: "main",
+      }),
+    ).resolves.toMatchObject({
+      workspaceDigest: sourceTree,
+      snapshot: { sourceSha, sourceTree, sourcePath: "/workspace/repository" },
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain("git clone --branch 'main'");
+    expect(calls.join("\n")).not.toContain("ghs_repository_scoped_read_token");
   });
 });

@@ -1,12 +1,11 @@
-import {
-  SandboxTemplateNotProvisionedError,
-  type SandboxBackend,
-  type SandboxBackendHandle,
-  type SandboxBackendPrewarmInput,
+import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
+import type {
+  SandboxBackend,
+  SandboxBackendHandle,
+  SandboxBackendPrewarmInput,
 } from "eve/sandbox";
 import { vercel } from "eve/sandbox/vercel";
 
-import { HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS } from "./hosted-toolchain";
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
@@ -42,7 +41,8 @@ export interface HostedVercelBackendInput {
   readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
   /** Reuses already-open provider sessions within one local Eve process. */
   readonly reuseProcessSessionHandles?: boolean;
-  readonly runtimeRecoveryPrewarmInput: () => RuntimeRecoveryPrewarmInput;
+  /** Legacy callers may still supply this while migrating off templates. */
+  readonly runtimeRecoveryPrewarmInput?: () => RuntimeRecoveryPrewarmInput;
 }
 
 // Provider command responses may legitimately remain open for the full
@@ -265,11 +265,7 @@ export function createHostedVercelBackend(
     ...(input.sandboxEnvironment === undefined
       ? {}
       : { env: { ...input.sandboxEnvironment } }),
-    networkPolicy: {
-      allow: [
-        ...(input.bootstrapNetworkHosts ?? HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS),
-      ],
-    },
+    networkPolicy: { allow: [...(input.bootstrapNetworkHosts ?? [])] },
     resources: { vcpus: SANDBOX_EXECUTION_POLICY.provider.vcpus },
     timeout: SANDBOX_EXECUTION_POLICY.provider.timeoutMs,
     ports: SANDBOX_EXECUTION_POLICY.provider.ports,
@@ -284,14 +280,8 @@ export function createHostedVercelBackend(
     authorizeSessionCommand: (sessionId) =>
       assertHostedSandboxCommandAuthority({ sessionId }),
   });
-  const recovering = createRuntimeRecoveringBackend({
-    backend: authorized,
-    providerTemplateKey: input.providerTemplateKey,
-    resolvePrewarmInput: input.runtimeRecoveryPrewarmInput,
-  });
-  return (
-    input.reuseProcessSessionHandles
-      ? createProcessSessionReusingBackend(recovering)
-      : recovering
-  ) as ReturnType<typeof vercel>;
+  // A missing snapshot or provider cache is not an authority failure. Let the
+  // normal Vercel Sandbox create path return the provider's actual result;
+  // callers may rebuild an optimization later, but never block on it here.
+  return authorized as ReturnType<typeof vercel>;
 }
