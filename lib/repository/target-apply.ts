@@ -161,6 +161,8 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
       | "missing-command-or-file"
       | "dependency"
       | "validation"
+      | "repository-task"
+      | "empty-output"
       | "unknown";
     digest: string;
   };
@@ -204,6 +206,11 @@ function commandFailureKind(
     return "dependency";
   if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr))
     return "validation";
+  if (
+    /mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr)
+  )
+    return "repository-task";
+  if (stderr.trim() === "") return "empty-output";
   return "unknown";
 }
 
@@ -574,7 +581,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
     return await sandbox.run({
-      command: `mise --env app-builder run create:app -- --proposal ${proposalPath}`,
+      command: `mise run create:app -- --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
@@ -786,7 +793,9 @@ export async function executeProposalBoundApply(input: {
       status: "partial-failure" as const,
       reason: "command-failed" as const,
       recoveryRequired: true as const,
-      commandFailureKind: commandFailureKind(command.stderr),
+      commandFailureKind: commandFailureKind(
+        `${command.stderr}\n${command.stdout}`,
+      ),
     };
     return {
       ok: false,
