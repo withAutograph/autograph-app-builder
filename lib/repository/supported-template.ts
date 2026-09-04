@@ -1382,20 +1382,22 @@ export async function prepareDevelopmentSandboxWorkspace(
       // managed deletion rather than a failed source snapshot.
       return existsSync(absolutePath);
     });
-  const sourceFiles: PreparedSourceFile[] = names.map((path) => {
+  const sourceFiles: PreparedSourceFile[] = names.flatMap((path) => {
     const absolutePath = resolve(sourcePath, path);
     const info = lstatSync(absolutePath);
-    if (!info.isFile() || info.isSymbolicLink())
-      throw new Error("The development source contains a non-regular file.");
+    // Tar carries symlinks, submodule directories, and other ordinary Git
+    // working-tree entries. They do not need to fit the old regular-file
+    // receipt shape in order for the repository to run.
+    if (!info.isFile() || info.isSymbolicLink()) return [];
     const content = readFileSync(absolutePath);
-    return {
+    return [{
       mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
       // The live working tree has no stable Git object for edited/untracked
       // files. Its byte digest is the development-generation identity.
       objectId: sha256(content).slice(0, 40),
       path,
       sha256: sha256(content),
-    };
+    }];
   });
   if (sourceFiles.length === 0)
     throw new Error("The development source contains no files.");
@@ -1434,7 +1436,10 @@ export async function prepareDevelopmentSandboxWorkspace(
       previous.mode !== file.mode
     );
   });
-  const firstTransfer = previousManifest === null || previousFiles.length === 0;
+  // A development preparation is a direct working-tree upload. Replacing the
+  // ephemeral checkout is simpler and more reliable than rejecting legitimate
+  // repository shapes because an optimization manifest cannot describe them.
+  const firstTransfer = true;
 
   await ensureSandboxDirectories(sandbox, [".app-builder"]);
   await sandbox.writeTextFile({
