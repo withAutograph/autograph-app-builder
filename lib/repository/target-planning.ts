@@ -401,13 +401,18 @@ export function sandboxTargetCommandExecutor(
     )
       return result;
 
-    const setup = await sandbox.run({
-      command: "bun install --frozen-lockfile",
-      workingDirectory: planningRoot,
-      abortSignal,
-    });
-    if (setup.exitCode !== 0) return setup;
-    return sandbox.run({ ...request, abortSignal });
+    await sandbox.setNetworkPolicy("allow-all");
+    try {
+      const setup = await sandbox.run({
+        command: "bun install --frozen-lockfile",
+        workingDirectory: planningRoot,
+        abortSignal: AbortSignal.timeout(300_000),
+      });
+      if (setup.exitCode !== 0) return setup;
+      return sandbox.run({ ...request, abortSignal });
+    } finally {
+      await sandbox.setNetworkPolicy("deny-all");
+    }
   };
 }
 
