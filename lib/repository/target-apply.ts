@@ -604,6 +604,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
+    const trust = await sandbox.run({
+      command: "mise trust --yes",
+      workingDirectory: applyRoot,
+      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    });
+    if (trust.exitCode !== 0) return trust;
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
