@@ -1178,10 +1178,6 @@ export async function prepareSupportedSandboxWorkspace(
     compatibility === "planning"
       ? eligibility.planningEligible
       : eligibility.eligible;
-  const eligibilityDigest =
-    compatibility === "planning"
-      ? eligibility.compatibilityDigest
-      : eligibility.digest;
   const failures =
     compatibility === "planning"
       ? eligibility.planningFailures
