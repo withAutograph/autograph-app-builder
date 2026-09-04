@@ -609,7 +609,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // roots at all. Let Bun establish the repository's actual dependency state
     // before invoking its generator, and treat Bun's real result as authority.
     const install = await sandbox.run({
-      command: "bun install --frozen-lockfile",
+      command: "bun install --frozen-lockfile --ignore-scripts",
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
