@@ -227,7 +227,6 @@ export async function materializeFreshApplyOverlay(input: {
     workingDirectory: "/workspace",
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
-  boundedOutput(acquire);
   if (acquire.exitCode !== 0)
     throw new Error(
       "The proposal apply overlay is already being materialized.",
@@ -255,7 +254,6 @@ export async function materializeFreshApplyOverlay(input: {
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
   try {
-    boundedOutput(copy);
     if (copy.exitCode !== 0) throw new Error("ApplyOverlayCopyFailed");
   } catch {
     await input.sandbox.removePath({
@@ -410,7 +408,6 @@ export async function inspectApplyOverlay(
     workingDirectory: applyRoot,
     abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
-  boundedOutput(result);
   if (result.exitCode !== 0)
     throw new Error("The proposal apply overlay could not be inspected.");
   const files = result.stdout
