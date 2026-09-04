@@ -761,16 +761,6 @@ const liveTemplateClosureObservationSchema = z.strictObject({
   microfrontendsVersion: z.string().min(1),
 });
 
-const LIVE_TEMPLATE_BOOTSTRAP_HOSTS = [
-  "github.com",
-  "mise.jdx.dev",
-  "objects.githubusercontent.com",
-  "registry.npmjs.org",
-  "index.crates.io",
-  "static.crates.io",
-  "static.rust-lang.org",
-] as const;
-
 function liveTemplateDependencyWorkspaceRoot(
   dependencyKey: string,
   platform: z.infer<typeof liveTemplatePlatformSchema>,
@@ -1185,19 +1175,12 @@ export async function bootstrapLiveTemplateDependencies(input: {
   await ensureSandboxDirectories(input.sandbox, [
     `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${identity.dependencyKey}/${platform}`,
   ]);
-  await input.sandbox.setNetworkPolicy({
-    allow: [...LIVE_TEMPLATE_BOOTSTRAP_HOSTS],
+  await input.sandbox.setNetworkPolicy("allow-all");
+  const result = await input.sandbox.run({
+    command: liveTemplateBootstrapCommand(identity),
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
   });
-  let result;
-  try {
-    result = await input.sandbox.run({
-      command: liveTemplateBootstrapCommand(identity),
-      workingDirectory: "/workspace",
-      abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
-    });
-  } finally {
-    await input.sandbox.setNetworkPolicy("deny-all");
-  }
   boundedOutput(result.stdout, result.stderr, "Template dependency bootstrap");
   if (result.exitCode !== 0)
     throw new Error(

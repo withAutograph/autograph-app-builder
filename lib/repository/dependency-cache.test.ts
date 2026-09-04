@@ -922,14 +922,9 @@ describe("offline dependency cache", () => {
     expect(changedManifest.manifest.dependencyInputs).toEqual(
       fixture.source().dependencyInputs,
     );
-    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(4);
-    expect(fixture.setNetworkPolicy).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        allow: expect.arrayContaining(["registry.npmjs.org"]),
-      }),
-    );
-    expect(fixture.setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+    expect(fixture.setNetworkPolicy).toHaveBeenNthCalledWith(1, "allow-all");
+    expect(fixture.setNetworkPolicy).toHaveBeenLastCalledWith("allow-all");
     expect(fixture.writeTextFile).toHaveBeenCalledTimes(2);
     expect(fixture.writeTextFile).toHaveBeenNthCalledWith(
       1,
@@ -962,7 +957,7 @@ describe("offline dependency cache", () => {
         call.command.includes("bun install"),
       ),
     ).toHaveLength(1);
-    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
     expect(
       fixture.run.mock.calls.filter(([call]) =>
         call.command.includes(
@@ -990,7 +985,7 @@ describe("offline dependency cache", () => {
         call.command.includes("bun install"),
       ),
     ).toHaveLength(1);
-    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
   });
 
   it("rejects byte-tampered Cargo closure content without reinstalling", async () => {
@@ -1011,7 +1006,7 @@ describe("offline dependency cache", () => {
         call.command.includes("bun install"),
       ),
     ).toHaveLength(1);
-    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a missing live template closure with a present manifest without reinstalling", async () => {
@@ -1032,7 +1027,7 @@ describe("offline dependency cache", () => {
         call.command.includes("bun install"),
       ),
     ).toHaveLength(1);
-    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
+    expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
   });
 
   it("verifies target-bound manifest and archive bytes before extraction", async () => {

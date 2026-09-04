@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
-import { DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS } from "../sandbox/development-toolchain";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
@@ -615,23 +614,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
     // before invoking its generator, and treat Bun's real result as authority.
-    const localDevelopment =
-      process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
-    if (!localDevelopment)
-      await sandbox.setNetworkPolicy({
-        allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
-      });
-    const install = await (async () => {
-      try {
-        return await sandbox.run({
-          command: "bun install --frozen-lockfile",
-          workingDirectory: applyRoot,
-          abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-        });
-      } finally {
-        if (!localDevelopment) await sandbox.setNetworkPolicy("deny-all");
-      }
-    })();
+    await sandbox.setNetworkPolicy("allow-all");
+    const install = await sandbox.run({
+      command: "bun install --frozen-lockfile",
+      workingDirectory: applyRoot,
+      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    });
     if (install.exitCode !== 0) {
       const output = `${install.stderr}\n${install.stdout}`;
       const reason = /lockfile had changes|frozen lockfile/iu.test(output)
@@ -655,42 +643,32 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       });
       return install;
     }
-    if (!localDevelopment)
-      await sandbox.setNetworkPolicy({
-        allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
+    const generated = await sandbox.run({
+      command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
+      workingDirectory: applyRoot,
+      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    });
+    if (generated.exitCode !== 0) {
+      const output = `${generated.stderr}\n${generated.stdout}`;
+      const reason = /EACCES|permission denied/iu.test(output)
+        ? "permissions"
+        : /cannot find module|module_not_found|failed to resolve/iu.test(output)
+          ? "module-resolution"
+          : /timed? out|timeout/iu.test(output)
+            ? "timeout"
+            : /network|fetch|connection|certificate/iu.test(output)
+              ? "network"
+              : /format/iu.test(output)
+                ? "formatting"
+                : /lifecycle|validation|test|build/iu.test(output)
+                  ? "generated-app-validation"
+                  : "unclassified";
+      console.error("[app-builder apply] repository generator failed", {
+        exitCode: generated.exitCode,
+        reason,
       });
-    try {
-      const generated = await sandbox.run({
-        command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
-        workingDirectory: applyRoot,
-        abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-      });
-      if (generated.exitCode !== 0) {
-        const output = `${generated.stderr}\n${generated.stdout}`;
-        const reason = /EACCES|permission denied/iu.test(output)
-          ? "permissions"
-          : /cannot find module|module_not_found|failed to resolve/iu.test(
-                output,
-              )
-            ? "module-resolution"
-            : /timed? out|timeout/iu.test(output)
-              ? "timeout"
-              : /network|fetch|connection|certificate/iu.test(output)
-                ? "network"
-                : /format/iu.test(output)
-                  ? "formatting"
-                  : /lifecycle|validation|test|build/iu.test(output)
-                    ? "generated-app-validation"
-                    : "unclassified";
-        console.error("[app-builder apply] repository generator failed", {
-          exitCode: generated.exitCode,
-          reason,
-        });
-      }
-      return generated;
-    } finally {
-      if (!localDevelopment) await sandbox.setNetworkPolicy("deny-all");
     }
+    return generated;
   };
 }
 

@@ -315,59 +315,55 @@ async function reinspectGitHubSourceWorkspace(input: {
   snapshot: CanonicalTemplateSnapshot;
   workspace: PreparedSandboxWorkspace;
 }> {
-  try {
-    const prepared = await inspectPreparedSandboxWorkspace(input.sandbox);
-    if (prepared.state !== "prepared")
-      throw new Error("The prepared GitHub source workspace is missing.");
-    const storedSnapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
-    if (
-      storedSnapshot.sourceSha !== input.expectedSha ||
-      storedSnapshot.sourceTree !== input.expectedTree
-    )
-      throw new Error("The stored GitHub source inspection drifted.");
-    const result = await input.sandbox.run({
-      command: sandboxGitHubSourceReinspectionCommand(input),
-      workingDirectory: "/workspace",
-      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
-    });
-    if (
-      Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
-      Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-      result.exitCode !== 0
-    )
-      throw new Error("The GitHub source workspace could not be verified.");
-    const inspection = JSON.parse(result.stdout) as {
-      remote?: unknown;
-      resolvedRef?: unknown;
-      detached?: unknown;
-      hasGitmodules?: unknown;
-      gitlinks?: unknown;
-      manifestMatches?: unknown;
-      checksumsMatch?: unknown;
-      workspaceDigest?: unknown;
-      snapshot?: unknown;
-    };
-    const snapshot = parseCanonicalTemplateSnapshot(inspection.snapshot);
-    if (
-      inspection.remote !== parseRemote(input.remote) ||
-      inspection.resolvedRef !== input.expectedSha ||
-      inspection.detached !== true ||
-      inspection.hasGitmodules !== false ||
-      !Array.isArray(inspection.gitlinks) ||
-      inspection.gitlinks.length !== 0 ||
-      inspection.manifestMatches !== true ||
-      inspection.checksumsMatch !== true ||
-      inspection.workspaceDigest !== prepared.workspace.workspaceDigest ||
-      snapshot.sourceSha !== input.expectedSha ||
-      snapshot.sourceTree !== input.expectedTree ||
-      snapshot.dirtyPaths.length !== 0 ||
-      JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot)
-    )
-      throw new Error("The GitHub source workspace drifted.");
-    return { snapshot, workspace: prepared.workspace };
-  } finally {
-    await input.sandbox.setNetworkPolicy("deny-all");
-  }
+  const prepared = await inspectPreparedSandboxWorkspace(input.sandbox);
+  if (prepared.state !== "prepared")
+    throw new Error("The prepared GitHub source workspace is missing.");
+  const storedSnapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
+  if (
+    storedSnapshot.sourceSha !== input.expectedSha ||
+    storedSnapshot.sourceTree !== input.expectedTree
+  )
+    throw new Error("The stored GitHub source inspection drifted.");
+  const result = await input.sandbox.run({
+    command: sandboxGitHubSourceReinspectionCommand(input),
+    workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
+  });
+  if (
+    Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
+    Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
+    result.exitCode !== 0
+  )
+    throw new Error("The GitHub source workspace could not be verified.");
+  const inspection = JSON.parse(result.stdout) as {
+    remote?: unknown;
+    resolvedRef?: unknown;
+    detached?: unknown;
+    hasGitmodules?: unknown;
+    gitlinks?: unknown;
+    manifestMatches?: unknown;
+    checksumsMatch?: unknown;
+    workspaceDigest?: unknown;
+    snapshot?: unknown;
+  };
+  const snapshot = parseCanonicalTemplateSnapshot(inspection.snapshot);
+  if (
+    inspection.remote !== parseRemote(input.remote) ||
+    inspection.resolvedRef !== input.expectedSha ||
+    inspection.detached !== true ||
+    inspection.hasGitmodules !== false ||
+    !Array.isArray(inspection.gitlinks) ||
+    inspection.gitlinks.length !== 0 ||
+    inspection.manifestMatches !== true ||
+    inspection.checksumsMatch !== true ||
+    inspection.workspaceDigest !== prepared.workspace.workspaceDigest ||
+    snapshot.sourceSha !== input.expectedSha ||
+    snapshot.sourceTree !== input.expectedTree ||
+    snapshot.dirtyPaths.length !== 0 ||
+    JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot)
+  )
+    throw new Error("The GitHub source workspace drifted.");
+  return { snapshot, workspace: prepared.workspace };
 }
 
 export async function inspectGitHubSourceSandboxWorkspace(input: {

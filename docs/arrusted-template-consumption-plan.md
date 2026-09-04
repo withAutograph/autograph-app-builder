@@ -44,7 +44,7 @@ installation’s live repository inventory before cloning. It uses the token onl
 to validate that inventory, make the one direct workspace clone, and read Check
 Runs for the resolved SHA. The source transport writes it only to a temporary owner-only
 askpass credential file, removes the file on every success or failure path,
-and restores `deny-all` networking after cloning. It disables prompts,
+and leaves Vercel Sandbox networking available after cloning. It disables prompts,
 inherited Git configuration, hooks, SSH/file protocols, and submodules, and
 refuses an origin, ref, tree, or clean-worktree mismatch. The token, reader
 installation ID, authorization header, and credential digest never appear in
@@ -61,7 +61,7 @@ digests, and a digest of the successful readiness Check Run's immutable
 metadata (ID, name, completion time, and conclusion). Before fixed target
 commands, the locked dependency closure is bootstrapped once under a fixed
 allowlist, keyed by source SHA and sandbox platform, made read-only, and
-followed by a restored `deny-all` network policy. V3 receipts remain readable
+without an App Builder-managed network-policy restriction. V3 receipts remain readable
 for sessions that began before clone provenance existed.
 
 ## Readiness admission

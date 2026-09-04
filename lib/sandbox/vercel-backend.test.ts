@@ -114,7 +114,7 @@ describe.skip("retired template-backed Vercel backend", () => {
     expect(cancelledFetch).toHaveBeenCalledOnce();
   });
 
-  it("allows bootstrap hosts only for prewarm and denies every fresh live session", () => {
+  it("keeps networking available for prewarm and every fresh live session", () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
       options = input;
@@ -128,9 +128,9 @@ describe.skip("retired template-backed Vercel backend", () => {
 
     expect(factory).toHaveBeenCalledOnce();
     expect(options).toBeDefined();
-    expect(options!.networkPolicy).toEqual({ allow: [] });
+    expect(options!.networkPolicy).toBe("allow-all");
     expect(options!.sessionCreateOptions()).toEqual({
-      networkPolicy: "deny-all",
+      networkPolicy: "allow-all",
     });
   });
 
@@ -149,9 +149,7 @@ describe.skip("retired template-backed Vercel backend", () => {
       },
       runtimeRecoveryPrewarmInput: recoveryInput(),
     });
-    expect(options?.networkPolicy).toEqual({
-      allow: ["registry.npmjs.org"],
-    });
+    expect(options?.networkPolicy).toBe("allow-all");
     expect(options?.env).toEqual({
       MISE_AUTO_INSTALL: "false",
       CARGO_NET_OFFLINE: "true",
@@ -439,12 +437,12 @@ describe("provider-native Vercel source", () => {
       expect(
         options?.sessionCreateOptions({ session: { id: "other" } }),
       ).toEqual({
-        networkPolicy: "deny-all",
+        networkPolicy: "allow-all",
       });
       expect(
         options?.sessionCreateOptions({ session: { id: "session-source" } }),
       ).toEqual({
-        networkPolicy: "deny-all",
+        networkPolicy: "allow-all",
         source: {
           type: "git",
           url: "https://github.com/acme/private.git",
