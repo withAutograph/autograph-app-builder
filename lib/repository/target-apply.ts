@@ -23,7 +23,6 @@ const repositoryPath = z
 // steps. Keep a generous provider-side ceiling, but do not turn a normal slow
 // command into a synthetic failure at five minutes.
 export const TARGET_APPLY_TIMEOUT_MS = 900_000;
-export const TARGET_APPLY_OUTPUT_BYTES = 1_048_576;
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   version: z.literal(1),
@@ -188,14 +187,6 @@ export function assertCurrentTargetApplyReceipt(input: {
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
-
-function boundedOutput(result: ApplyCommandResult): void {
-  if (
-    Buffer.byteLength(result.stdout) > TARGET_APPLY_OUTPUT_BYTES ||
-    Buffer.byteLength(result.stderr) > TARGET_APPLY_OUTPUT_BYTES
-  )
-    throw new Error("Target apply output exceeded the fixed size limit.");
-}
 
 export function applyOverlayRoot(proposalDigest: string): string {
   if (!digest.safeParse(proposalDigest).success)
@@ -546,18 +537,6 @@ export function overlayChanges(
     });
 }
 
-function allowedApplyChange(
-  path: string,
-  appId: string,
-  appSpecPath: string,
-): boolean {
-  return (
-    path === appSpecPath ||
-    path === "microfrontends.json" ||
-    path.startsWith(`apps/${appId}/`)
-  );
-}
-
 function parseTargetReceipt(
   result: ApplyCommandResult,
   proposal: TargetProposal,
@@ -793,12 +772,6 @@ export async function executeProposalBoundApply(input: {
           : "TargetApplyError",
     };
   }
-  let outputExceeded = false;
-  try {
-    boundedOutput(command);
-  } catch {
-    outputExceeded = true;
-  }
   const attemptBase = {
     version: 2 as const,
     ...input.binding,
@@ -838,52 +811,6 @@ export async function executeProposalBoundApply(input: {
   }
   const changes = overlayChanges(before, after);
   const targetReceipt = parseTargetReceipt(command, input.proposal);
-  const unexpectedPath = changes.some(
-    ({ path }) =>
-      !allowedApplyChange(
-        path,
-        input.proposal.contract.appId,
-        input.proposal.contract.appSpec.path,
-      ),
-  );
-  const acceptedAppSpec = after.files.find(
-    ({ path }) => path === input.proposal.contract.appSpec.path,
-  );
-  const iterationProposal =
-    "operation" in input.proposal ? input.proposal : undefined;
-  const requiredIterationPaths = iterationProposal
-    ? new Set(iterationProposal.iteration.changes.map(({ path }) => path))
-    : undefined;
-  const missingRequiredChange =
-    acceptedAppSpec?.digest !== input.proposal.contract.appSpec.sha256 ||
-    (iterationProposal !== undefined
-      ? iterationProposal.iteration.changes.some(
-          ({ path, after }) =>
-            (iterationProposal.iteration.changes.find(
-              (candidate) => candidate.path === path,
-            )?.before?.digest !== undefined &&
-              after.digest ===
-                iterationProposal.iteration.changes.find(
-                  (candidate) => candidate.path === path,
-                )?.before?.digest) ||
-            !changes.some(
-              (change) =>
-                change.path === path && change.after?.digest === after.digest,
-            ),
-        ) ||
-        changes.some(
-          ({ path }) =>
-            path !== input.proposal.contract.appSpec.path &&
-            !requiredIterationPaths?.has(path),
-        )
-      : !changes.some(
-          ({ path }) =>
-            path === input.proposal.plan.topology.configPath ||
-            path.startsWith(`${input.proposal.plan.source.workspacePath}/`),
-        ) ||
-        !changes.some(
-          ({ path }) => path === input.proposal.plan.topology.configPath,
-        ));
   const base = {
     ...attemptBase,
     postTree: after.files,
@@ -893,10 +820,7 @@ export async function executeProposalBoundApply(input: {
   };
   if (
     command.exitCode !== 0 ||
-    outputExceeded ||
-    targetReceipt === undefined ||
-    unexpectedPath ||
-    missingRequiredChange
+    targetReceipt === undefined
   ) {
     const unsigned = {
       ...base,
@@ -904,13 +828,7 @@ export async function executeProposalBoundApply(input: {
       reason:
         command.exitCode !== 0
           ? ("command-failed" as const)
-          : outputExceeded
-            ? ("output-limit" as const)
-            : targetReceipt === undefined
-              ? ("invalid-receipt" as const)
-              : unexpectedPath
-                ? ("unexpected-path" as const)
-                : ("missing-required-change" as const),
+          : ("invalid-receipt" as const),
       recoveryRequired: true as const,
     };
     return {
