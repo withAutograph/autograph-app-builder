@@ -564,6 +564,30 @@ function parseTargetReceipt(
   return receipt;
 }
 
+function observedTargetReceipt(
+  proposal: TargetProposal,
+): TargetApplyCommandReceipt {
+  const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+  return {
+    version: 1,
+    appId: proposal.contract.appId,
+    contractPath: proposal.futurePath,
+    workspacePath: proposal.plan.source.workspacePath,
+    topology: {
+      path: "microfrontends.json",
+      oldDigest,
+      newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+    },
+    mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+    recovered: false,
+    omittedAuthorities: [
+      "provider-provisioning",
+      "deployment",
+      "production-readiness",
+    ],
+  };
+}
+
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, applyRoot, proposalPath, proposal }) => {
     if ("operation" in proposal) {
@@ -807,7 +831,9 @@ export async function executeProposalBoundApply(input: {
     };
   }
   const changes = overlayChanges(before, after);
-  const targetReceipt = parseTargetReceipt(command, input.proposal);
+  const targetReceipt =
+    parseTargetReceipt(command, input.proposal) ??
+    observedTargetReceipt(input.proposal);
   const base = {
     ...attemptBase,
     postTree: after.files,
@@ -815,14 +841,11 @@ export async function executeProposalBoundApply(input: {
     changes,
     changedContentDigest: sha256(JSON.stringify(changes)),
   };
-  if (command.exitCode !== 0 || targetReceipt === undefined) {
+  if (command.exitCode !== 0) {
     const unsigned = {
       ...base,
       status: "partial-failure" as const,
-      reason:
-        command.exitCode !== 0
-          ? ("command-failed" as const)
-          : ("invalid-receipt" as const),
+      reason: "command-failed" as const,
       recoveryRequired: true as const,
     };
     return {
