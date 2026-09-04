@@ -36,7 +36,10 @@ import {
   resolveImmutableExistingSource,
   type ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
-import { readSandboxGitHubSourceSnapshot } from "../repository/sandbox-github-source";
+import {
+  cloneGitHubSource,
+  readSandboxGitHubSourceSnapshot,
+} from "../repository/sandbox-github-source";
 import {
   inspectExistingRepositorySnapshotReceipt,
   type SourceReceipt,
@@ -216,6 +219,11 @@ export function createRepositoryAccessRuntime(input: {
         typeof value.sandbox === "function"
           ? await value.sandbox()
           : value.sandbox;
+      await cloneGitHubSource({
+        sandbox,
+        url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+        token: credential.token,
+      });
       const cloned = {
         snapshot: await readSandboxGitHubSourceSnapshot(sandbox),
         workspaceDigest: value.access.repository.headTree,

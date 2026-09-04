@@ -142,7 +142,6 @@ describe.skip("retired template-backed Vercel backend", () => {
     }) satisfies HostedVercelBackendFactory);
     createHostedVercelBackend({
       factory,
-      bootstrapNetworkHosts: ["registry.npmjs.org"],
       sandboxEnvironment: {
         MISE_AUTO_INSTALL: "false",
         CARGO_NET_OFFLINE: "true",
