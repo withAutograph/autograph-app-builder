@@ -98,7 +98,7 @@ export default defineTool({
         }),
       });
       throw new Error(
-        `The repository build command exited with code ${result.receipt.command.exitCode} (${result.receipt.commandFailureKind ?? "unknown"}).${result.receipt.command.exitCode === -1 ? " The execution service did not return a normal command result." : ""}`,
+        `The repository build command exited with code ${result.receipt.command.exitCode} (${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${result.receipt.command.exitCode === -1 ? " The execution service did not return a normal command result." : ""}`,
       );
     }
     updateExactWorkflow({

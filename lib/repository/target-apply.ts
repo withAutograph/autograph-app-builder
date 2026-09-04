@@ -171,6 +171,7 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
       | "projected-repository"
       | "empty-output"
       | "unknown";
+    missingDependency?: string;
     digest: string;
   };
 
@@ -228,6 +229,14 @@ function commandFailureKind(
     return "repository-task";
   if (stderr.trim() === "") return "empty-output";
   return "unknown";
+}
+
+function missingDependency(output: string): string | undefined {
+  const match =
+    /(?:Cannot find (?:package|module)|Module not found[^:]*:)\s*["']?(@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?)/iu.exec(
+      output,
+    );
+  return match?.[1];
 }
 
 export function applyOverlayRoot(proposalDigest: string): string {
@@ -816,14 +825,16 @@ export async function executeProposalBoundApply(input: {
     changedContentDigest: sha256(JSON.stringify(changes)),
   };
   if (command.exitCode !== 0) {
+    const commandOutput = `${command.stderr}\n${command.stdout}`;
     const unsigned = {
       ...base,
       status: "partial-failure" as const,
       reason: "command-failed" as const,
       recoveryRequired: true as const,
-      commandFailureKind: commandFailureKind(
-        `${command.stderr}\n${command.stdout}`,
-      ),
+      commandFailureKind: commandFailureKind(commandOutput),
+      ...(missingDependency(commandOutput) === undefined
+        ? {}
+        : { missingDependency: missingDependency(commandOutput) }),
     };
     return {
       ok: false,
