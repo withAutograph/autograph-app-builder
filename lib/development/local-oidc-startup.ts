@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
@@ -100,6 +100,22 @@ function installedOidcNeedsRefresh(input: {
     );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    const credentialPath = resolve(input.repositoryRoot, ".env.local");
+    const stat = lstatSync(credentialPath);
+    const ownerId = process.getuid?.();
+    if (
+      stat.isFile() &&
+      !stat.isSymbolicLink() &&
+      stat.nlink === 1 &&
+      ownerId !== undefined &&
+      stat.uid === ownerId &&
+      (stat.mode & 0o077) !== 0
+    ) {
+      // `vercel link` and `vercel env pull` may create this owner-owned file
+      // with ordinary permissions. Refresh it, then let local:install-oidc
+      // atomically rewrite it owner-only before the token is consumed.
+      return true;
+    }
     throw error;
   }
   const token = parseLocalVercelOidcToken(environment);
