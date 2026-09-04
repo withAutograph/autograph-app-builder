@@ -3,12 +3,9 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
-import { hasTestCapability } from "../testing/test-capability";
-
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
-  materializeExecutionDependencyView,
   planningOverlayRoot,
   type ExecutionDependencyLayout,
 } from "./dependency-cache";
@@ -230,89 +227,9 @@ export async function materializeFreshApplyOverlay(input: {
   acceptedAppSpec: Uint8Array;
 }> {
   const relativeRoot = applyOverlayRoot(input.proposalDigest);
-  const absoluteRoot = `/workspace/${relativeRoot}`;
   const parent = relativeRoot.slice(0, relativeRoot.lastIndexOf("/"));
-  const claim = `${parent}/materializing`;
-  const absoluteClaim = `/workspace/${claim}`;
-  const absent = await input.sandbox.run({
-    command: `test ! -e ${absoluteRoot}`,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  if (absent.exitCode !== 0)
-    throw new Error(
-      "The proposal apply overlay already exists without a durable receipt.",
-    );
   await ensureSandboxDirectories(input.sandbox, [parent]);
-  const acquire = await input.sandbox.run({
-    command: `mkdir ${absoluteClaim}`,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  if (acquire.exitCode !== 0)
-    throw new Error(
-      "The proposal apply overlay is already being materialized.",
-    );
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
-  const environment = input.environment ?? process.env;
-  const dependencyLayout =
-    input.dependencyLayout ??
-    (hasTestCapability("simulated-target", environment)
-      ? ({
-          version: 1,
-          kind: "fixture",
-          roots: [],
-          workspaceLinks: [],
-        } as const)
-      : undefined);
-  if (dependencyLayout === undefined)
-    throw new Error("The dependency execution layout receipt is missing.");
-  const copyCommand = hasTestCapability("simulated-target", environment)
-    ? `cp -R ${planningRoot} ${absoluteRoot}`
-    : `cp -R ${planningRoot} ${absoluteRoot}`;
-  const copy = await input.sandbox.run({
-    command: copyCommand,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  try {
-    if (copy.exitCode !== 0) throw new Error("ApplyOverlayCopyFailed");
-  } catch {
-    await input.sandbox.removePath({
-      path: relativeRoot,
-      recursive: true,
-      force: true,
-    });
-    await input.sandbox.removePath({
-      path: claim,
-      recursive: true,
-      force: true,
-    });
-    throw new Error(
-      "The fresh proposal apply overlay could not be materialized.",
-    );
-  }
-  try {
-    await materializeExecutionDependencyView({
-      sandbox: input.sandbox,
-      layout: dependencyLayout,
-      overlayRoot: relativeRoot,
-      viewKey: input.proposalDigest,
-    });
-  } catch (error) {
-    await input.sandbox.removePath({
-      path: relativeRoot,
-      recursive: true,
-      force: true,
-    });
-    await input.sandbox.removePath({
-      path: claim,
-      recursive: true,
-      force: true,
-    });
-    throw error;
-  }
-  await input.sandbox.removePath({ path: claim, recursive: true, force: true });
   try {
     const proposalPath = `.app-builder/apply/${input.proposalDigest}/proposal.json`;
     await input.sandbox.writeTextFile({
@@ -321,7 +238,7 @@ export async function materializeFreshApplyOverlay(input: {
     });
     const appSpecPath = input.proposal.contract.appSpec.path;
     const acceptedAppSpec = await input.sandbox.readBinaryFile({
-      path: `${relativeRoot}/${appSpecPath}`,
+      path: `${planningRoot.replace(/^\/workspace\//u, "")}/${appSpecPath}`,
     });
     if (
       acceptedAppSpec === null ||
@@ -331,7 +248,7 @@ export async function materializeFreshApplyOverlay(input: {
         "The planning overlay does not contain the exact accepted AppSpec.",
       );
     return {
-      applyRoot: absoluteRoot,
+      applyRoot: "/workspace/repository",
       proposalPath: `/workspace/${proposalPath}`,
       appSpecPath,
       acceptedAppSpec,
