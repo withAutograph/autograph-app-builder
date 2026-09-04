@@ -818,10 +818,7 @@ export async function executeProposalBoundApply(input: {
     changes,
     changedContentDigest: sha256(JSON.stringify(changes)),
   };
-  if (
-    command.exitCode !== 0 ||
-    targetReceipt === undefined
-  ) {
+  if (command.exitCode !== 0 || targetReceipt === undefined) {
     const unsigned = {
       ...base,
       status: "partial-failure" as const,
