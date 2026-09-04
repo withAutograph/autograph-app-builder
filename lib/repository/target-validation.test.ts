@@ -79,16 +79,21 @@ function sandboxFixture() {
 
 describe("target validation", () => {
   it("runs repository commands without receipt or source preflight", async () => {
-    const { sandbox, run } = sandboxFixture();
+    const { sandbox } = sandboxFixture();
     const currentApply = { ...apply, digest: "current-worktree" };
     const attempt = createTargetValidationAttempt(
       currentApply,
       "validation-call",
     );
+    const execute = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: "passed",
+      stderr: "",
+    }));
 
     const result = await executeProposalBoundValidation({
       sandbox,
-      executor: async () => ({ exitCode: 0, stdout: "passed", stderr: "" }),
+      executor: execute,
       apply: currentApply,
       attempt,
       appId: "example",
@@ -101,7 +106,7 @@ describe("target validation", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(run).toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it("reports the actual repository command failure", async () => {

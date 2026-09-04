@@ -193,12 +193,26 @@ function attemptBinding(
 
 export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
   return async ({ sandbox, appId, command, validationRoot }) => {
-    void appId;
-    return await sandbox.run({
-      command,
-      workingDirectory: validationRoot,
-      abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
-    });
+    const run = (script: "check" | "build" | "test") =>
+      sandbox.run({
+        command:
+          script === "test"
+            ? `bun run --cwd apps/${appId} test -- --shard=1/1`
+            : `bun run --cwd apps/${appId} ${script}`,
+        workingDirectory: validationRoot,
+        abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
+      });
+    if (command.startsWith("mise run app:check-build ")) {
+      const checked = await run("check");
+      if (checked.exitCode !== 0) return checked;
+      const built = await run("build");
+      return {
+        exitCode: built.exitCode,
+        stdout: `${checked.stdout}\n${built.stdout}`,
+        stderr: `${checked.stderr}\n${built.stderr}`,
+      };
+    }
+    return await run("test");
   };
 }
 
