@@ -90,7 +90,7 @@ describe("public plugin installation documentation", () => {
       "tar -xzf app-builder-codex-marketplace-0.2.9.tar.gz",
     );
     expect(auditLog).toMatch(
-      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.8/u,
+      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.9/u,
     );
     expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
@@ -114,7 +114,7 @@ describe("public plugin installation documentation", () => {
       "Once the pre-release `v0.2.9` GitHub release is published",
     );
     expect(documentation).toMatch(
-      /These\s+commands fail closed until `v0\.2\.8` exists/u,
+      /These\s+commands fail closed until `v0\.2\.9` exists/u,
     );
     expect(documentation).toContain("app-builder-0.2.9.tar.gz");
     expect(documentation).toContain(
