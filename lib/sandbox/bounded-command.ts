@@ -13,17 +13,13 @@ export class SandboxCommandLimitError extends Error {
   }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
-}
-
 export function boundedSandboxCommand(command: string): string {
-  // Vercel Sandbox runs the command itself. Do not add a second session,
-  // process group, or shell lifecycle on top: those wrappers can change the
-  // child exit status and are not part of the documented Sandbox command
-  // contract. `runBoundedSandboxCommand` still stops the provider process
-  // when its caller aborts or a concrete output/timeout error occurs.
-  return `bash -lc ${shellQuote(command)}`;
+  // `SandboxSession.run` accepts a command string and delegates its execution
+  // to the selected Eve/Vercel backend. Do not wrap it in another shell or
+  // process group: that changes process semantics without adding a product
+  // boundary. `runBoundedSandboxCommand` still stops the provider process
+  // when its caller aborts or a concrete command failure occurs.
+  return command;
 }
 
 type OutputReader = ReadableStreamDefaultReader<Uint8Array>;

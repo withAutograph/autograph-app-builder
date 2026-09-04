@@ -27,12 +27,13 @@ function processFixture(stdout: string[], stderr: string[] = []) {
 }
 
 describe("bounded sandbox command", () => {
-  it("uses the documented direct shell command without an extra process wrapper", () => {
+  it("passes the authored command directly to the sandbox backend", () => {
     const command = boundedSandboxCommand("mise run check");
-    expect(command).toBe("bash -lc 'mise run check'");
+    expect(command).toBe("mise run check");
     for (const removedControl of [
       "setsid",
       "kill -TERM",
+      "bash -lc",
       "ulimit",
       "node -e",
       "workspace_quota",
@@ -51,7 +52,7 @@ describe("bounded sandbox command", () => {
     ).resolves.toEqual({ exitCode: 0, stdout: "hello", stderr: "warning" });
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: expect.stringContaining("bash -lc"),
+        command: "mise run check",
         abortSignal: expect.any(AbortSignal),
       }),
     );
