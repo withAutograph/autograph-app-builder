@@ -18,22 +18,12 @@ function shellQuote(value: string): string {
 }
 
 export function boundedSandboxCommand(command: string): string {
-  const script = `
-set -euo pipefail
-setsid --wait bash -lc ${shellQuote(command)} &
-child=$!
-cleanup() {
-  kill -TERM -- -"$child" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-set +e
-wait "$child"
-child_status=$?
-set -e
-trap - EXIT INT TERM
-exit "$child_status"
-`;
-  return `bash -lc ${shellQuote(script)}`;
+  // Vercel Sandbox runs the command itself. Do not add a second session,
+  // process group, or shell lifecycle on top: those wrappers can change the
+  // child exit status and are not part of the documented Sandbox command
+  // contract. `runBoundedSandboxCommand` still stops the provider process
+  // when its caller aborts or a concrete output/timeout error occurs.
+  return `bash -lc ${shellQuote(command)}`;
 }
 
 type OutputReader = ReadableStreamDefaultReader<Uint8Array>;

@@ -27,11 +27,16 @@ function processFixture(stdout: string[], stderr: string[] = []) {
 }
 
 describe("bounded sandbox command", () => {
-  it("keeps process-group cleanup without injecting resource quotas", () => {
+  it("uses the documented direct shell command without an extra process wrapper", () => {
     const command = boundedSandboxCommand("mise run check");
-    expect(command).toContain("setsid --wait bash");
-    expect(command).toContain("kill -TERM");
-    for (const removedControl of ["ulimit", "node -e", "workspace_quota"])
+    expect(command).toBe("bash -lc 'mise run check'");
+    for (const removedControl of [
+      "setsid",
+      "kill -TERM",
+      "ulimit",
+      "node -e",
+      "workspace_quota",
+    ])
       expect(command).not.toContain(removedControl);
   });
 
@@ -46,7 +51,7 @@ describe("bounded sandbox command", () => {
     ).resolves.toEqual({ exitCode: 0, stdout: "hello", stderr: "warning" });
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: expect.stringContaining("setsid --wait bash"),
+        command: expect.stringContaining("bash -lc"),
         abortSignal: expect.any(AbortSignal),
       }),
     );
