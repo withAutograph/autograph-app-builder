@@ -198,7 +198,10 @@ describe("canonical Arrusted template readiness", () => {
         command.includes("arrusted-template-inspect.cjs") &&
         !command.includes("arrusted-template-reinspect.cjs")
           ? {
-              exitCode: 0,
+              // The clone inspection receipt is complete even when the
+              // sandbox reports a nonzero terminal status. Receipt validity,
+              // not that auxiliary status, controls continuation.
+              exitCode: 1,
               stdout: JSON.stringify({
                 sourceSha,
                 sourceTree,

@@ -397,21 +397,31 @@ async function cloneCanonicalArrustedWorkspace(input: {
       env: { TERM: "dumb" },
       abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     });
+    // A provider-side command status is not a source-identity boundary. The
+    // receipt below is the productive observation: it must still parse and
+    // bind the checked-out commit/tree and declared template contract. Vercel
+    // Sandbox can report a nonzero terminal status after a command has
+    // completed and written that receipt, so do not discard valid work solely
+    // because of that auxiliary status.
     if (
       Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-      Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-      result.exitCode !== 0
+      Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES
     ) {
       console.warn(
         JSON.stringify({
           event: "autograph.template-clone-command.failed",
-          category: classifySandboxCloneFailure(result.stderr.toLowerCase()),
+          category: classifySandboxCloneFailure(
+            `${result.stderr}\n${result.stdout}`.toLowerCase(),
+          ),
           exitCode: result.exitCode,
           outputWithinLimit:
             Buffer.byteLength(result.stdout) <=
               SANDBOX_OPERATION_OUTPUT_BYTES &&
             Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
-          errorSummary: sanitizeSandboxCloneError(result.stderr, input.token),
+          errorSummary: sanitizeSandboxCloneError(
+            `${result.stderr}\n${result.stdout}`,
+            input.token,
+          ),
         }),
       );
       throw new Error(
@@ -443,6 +453,10 @@ async function cloneCanonicalArrustedWorkspace(input: {
       workspaceDigest?: unknown;
     };
   } catch {
+    if (result.exitCode !== 0)
+      throw new Error(
+        "The canonical Arrusted workspace clone could not be prepared.",
+      );
     throw new Error(
       "The canonical Arrusted workspace clone receipt is invalid.",
     );
