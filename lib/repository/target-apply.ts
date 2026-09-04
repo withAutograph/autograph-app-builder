@@ -6,6 +6,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
+  materializeExecutionDependencyView,
   planningOverlayRoot,
   type ExecutionDependencyLayout,
 } from "./dependency-cache";
@@ -595,12 +596,6 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
-    const install = await sandbox.run({
-      command: "bun install --frozen-lockfile",
-      workingDirectory: applyRoot,
-      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-    });
-    if (install.exitCode !== 0) return install;
     return await sandbox.run({
       command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
@@ -715,6 +710,18 @@ export async function executeProposalBoundApply(input: {
     proposal: input.proposal,
     environment: input.environment,
   });
+  if (input.dependencyLayout !== undefined)
+    try {
+      await materializeExecutionDependencyView({
+        sandbox: input.sandbox,
+        layout: input.dependencyLayout,
+        overlayRoot: "repository",
+        viewKey: input.binding.proposalDigest,
+      });
+    } catch {
+      // The repository command remains authoritative. A missing or stale cache
+      // is an optimization miss, not a reason to block the build.
+    }
   let planning: OverlaySnapshot;
   let prepared: OverlaySnapshot;
   let before: OverlaySnapshot;
