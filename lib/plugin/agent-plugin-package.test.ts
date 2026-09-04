@@ -76,7 +76,7 @@ describe("Agent Plugins package", () => {
       }),
     ).resolves.toEqual({
       name: "app-builder",
-      version: "0.2.10",
+      version: "0.2.11",
       specification: "1.0.0",
       packageKind: "generated-artifact",
     });
@@ -125,7 +125,7 @@ describe("Agent Plugins package", () => {
       await writePluginVersion(root, version);
       await expect(
         validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-      ).rejects.toThrow("version must be exactly 0.2.10");
+      ).rejects.toThrow("version must be exactly 0.2.11");
     },
   );
 
