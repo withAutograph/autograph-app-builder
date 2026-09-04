@@ -604,6 +604,16 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
+    // The writable checkout is the execution environment. Prepared dependency
+    // roots are only a cache optimization; a checkout-backed flow can have no
+    // roots at all. Let Bun establish the repository's actual dependency state
+    // before invoking its generator, and treat Bun's real result as authority.
+    const install = await sandbox.run({
+      command: "bun install --frozen-lockfile",
+      workingDirectory: applyRoot,
+      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    });
+    if (install.exitCode !== 0) return install;
     return await sandbox.run({
       command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
@@ -735,14 +745,8 @@ export async function executeProposalBoundApply(input: {
         if (linked.exitCode !== 0) throw new Error("dependency cache miss");
       }
     } catch {
-      // A cache is only an optimization. If it cannot be attached to this
-      // writable checkout, let the repository install its frozen dependencies
-      // normally before running its generator.
-      await input.sandbox.run({
-        command: "bun install --frozen-lockfile",
-        workingDirectory: "/workspace/repository",
-        abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-      });
+      // The repository install below remains authoritative. A missing or stale
+      // cache is an optimization miss, not a reason to block the build.
     }
   let planning: OverlaySnapshot;
   let prepared: OverlaySnapshot;
