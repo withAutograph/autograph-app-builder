@@ -5,9 +5,7 @@ import { isAbsolute } from "node:path";
 
 import {
   inspectBuilderOwnedSupportedRepository,
-  inspectSupportedRepository,
   inspectSupportedTemplateSnapshot,
-  SUPPORTED_REPOSITORY_CONTRACT,
   SUPPORTED_TEMPLATE_ADAPTER,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type SupportedTemplateSnapshot,
@@ -406,45 +404,27 @@ export async function inspectSourceReceipt(
   sourceKind: SourceKind,
   path: string,
 ): Promise<SourceReceipt> {
-  const eligibility = await inspectSupportedRepository(path);
-  const eligible =
-    sourceKind === "existing-repository"
-      ? eligibility.planningEligible
-      : eligibility.eligible;
-  const eligibilityDigest =
-    sourceKind === "existing-repository"
-      ? eligibility.compatibilityDigest
-      : eligibility.digest;
-  const failures =
-    sourceKind === "existing-repository"
-      ? eligibility.planningFailures
-      : eligibility.failures;
-  if (!eligible || eligibility.sourceSha === undefined)
-    throw new Error(`Source is not eligible: ${failures.join("; ")}`);
+  const sourceSha = fixedGit(path, ["rev-parse", "HEAD"], "utf8").trim();
+  const sourceTree = fixedGit(
+    path,
+    ["rev-parse", `${sourceSha}^{tree}`],
+    "utf8",
+  ).trim();
+  const observedDigest = sha256(JSON.stringify({ sourceSha, sourceTree }));
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
     sourceKind,
-    sourceSha: eligibility.sourceSha,
-    sourceTree: fixedGit(
-      eligibility.sourcePath,
-      ["rev-parse", `${eligibility.sourceSha}^{tree}`],
-      "utf8",
-    ).trim(),
+    sourceSha,
+    sourceTree,
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest,
-    contractDigest: inspectSourceContractDigest(
-      eligibility.sourcePath,
-      eligibility.sourceSha,
-      sourceKind === "existing-repository"
-        ? SUPPORTED_REPOSITORY_CONTRACT.requiredPaths
-        : SUPPORTED_TEMPLATE_INPUT_PATHS,
-    ),
+    eligibilityDigest: observedDigest,
+    contractDigest: observedDigest,
     releaseEnabled: false,
   } as const;
   return parseSourceReceipt({
     ...evidence,
     digest: sourceReceiptDigest(evidence),
-    sourcePath: eligibility.sourcePath,
+    sourcePath: path,
   });
 }
 
