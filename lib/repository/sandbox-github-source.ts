@@ -26,6 +26,29 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 export const SANDBOX_GITHUB_SOURCE_INSPECTION =
   ".app-builder/canonical-clone-inspection.json";
 
+/** Clone a private GitHub source through the writable Vercel Sandbox. */
+export async function cloneGitHubSource(input: {
+  sandbox: SandboxSession;
+  url: string;
+  token: string;
+}) {
+  const basic = Buffer.from(`x-access-token:${input.token}`).toString("base64");
+  const result = await input.sandbox.run({
+    command: `git clone --depth 1 ${shellQuote(input.url)} /workspace/repository`,
+    workingDirectory: "/workspace",
+    env: {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+      GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
+      GIT_TERMINAL_PROMPT: "0",
+    },
+  });
+  if (result.exitCode !== 0)
+    throw new Error(
+      result.stderr.trim() || "The GitHub checkout is not available.",
+    );
+}
+
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }

@@ -17,7 +17,7 @@ export interface HostedVercelBackendOptions {
   readonly sessionCreateOptions: (context?: {
     readonly session: { readonly id: string };
   }) => {
-    readonly networkPolicy: "deny-all" | "allow-all";
+    readonly networkPolicy: "allow-all";
     readonly source?: {
       readonly type: "git";
       readonly url: string;
@@ -38,7 +38,6 @@ type RuntimeRecoveryPrewarmInput<BO = Record<string, never>> = Readonly<{
 
 export interface HostedVercelBackendInput {
   readonly factory?: HostedVercelBackendFactory;
-  readonly bootstrapNetworkHosts?: readonly string[];
   readonly sandboxEnvironment?: Readonly<Record<string, string>>;
   /** Maps Eve's authored key to a provider cache key when reuse has a narrower identity. */
   readonly providerTemplateKey?: (authoredTemplateKey: string) => string;

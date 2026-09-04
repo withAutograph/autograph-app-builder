@@ -2,7 +2,6 @@ import { defineSandbox } from "eve/sandbox";
 import { justbash } from "eve/sandbox/just-bash";
 
 import {
-  DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
   DEVELOPMENT_SANDBOX_ENVIRONMENT,
   developmentPinnedToolchainCommand,
 } from "@/lib/sandbox/development-toolchain";
@@ -19,7 +18,6 @@ function createVercelDefinition() {
     backend: createHostedVercelBackend({
       ...(process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development"
         ? {
-            bootstrapNetworkHosts: DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
             sandboxEnvironment: DEVELOPMENT_SANDBOX_ENVIRONMENT,
           }
         : {}),
