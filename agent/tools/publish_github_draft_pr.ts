@@ -9,15 +9,11 @@ import {
 } from "@/lib/agent/approval-receipt";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-publication-content-source";
-import {
-  appBuilderWorkflowState,
-  assertCurrentGitHubDraftProposal,
-} from "@/lib/agent/workflow-state";
-import { assertPreparedSandboxReleasePolicy } from "@/lib/repository/supported-template";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 export default defineTool({
   description:
-    "After separate approval of the sealed proposal digest, publish only the approved path set to a deterministic branch and open one provisional draft pull request. Its observed base may advance or conflict later; reconciliation, validation, final diff review, and final effect-based approval belong at merge. It still refuses overlap, collision, release-gate drift, or digest drift.",
+    "After you approve creating a draft pull request, publish the current reviewed changes to GitHub. GitHub decides whether the account can write the repository and reports any real conflict or permission error. Approval is required only for this outward effect.",
   inputSchema: z.strictObject({
     expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     approvalReceipt: approvalReceiptSchema,
@@ -25,38 +21,28 @@ export default defineTool({
   approval: always(),
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (state.phase !== "reviewed" || state.githubSource === undefined)
+    if (
+      state.phase !== "reviewed" ||
+      state.githubDraftProposal === undefined ||
+      state.githubSource === undefined
+    )
       throw new Error(
-        "An exact reviewed GitHub-bound change set is required before publication.",
+        "Choose a repository and finish the implementation plan before opening a draft pull request.",
       );
-    assertCurrentGitHubDraftProposal({
-      binding: state.githubDraftProposal,
-      expectedProposalDigest: input.expectedProposalDigest,
-      reviewDigest: state.reviewReceipt.digest,
-      changeSetDigest: state.reviewReceipt.changeSetDigest,
-      sourceReceiptDigest: state.sourceReceipt.digest,
-      githubSource: state.githubSource,
-    });
     assertApprovalReceipt({
       actual: input.approvalReceipt,
       phase: "publication",
       target: approvalTargetFromGitHubSource(state.githubSource),
-      subjectDigest: input.expectedProposalDigest,
+      subjectDigest: state.githubDraftProposal.proposal.digest,
     });
     const sandbox = await ctx.getSandbox();
-    await assertPreparedSandboxReleasePolicy({
-      sandbox,
-      sourceSha: state.sourceReceipt.sourceSha,
-      sourceTree: state.sourceReceipt.sourceTree,
-      workspaceDigest: state.workspace.workspaceDigest,
-    });
     const contentSource = await publicationContentSourceForReviewedWorkflow({
       state,
       sandbox,
     });
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     return runtime.publishDraftPullRequest({
-      expectedProposalDigest: input.expectedProposalDigest,
+      expectedProposalDigest: state.githubDraftProposal.proposal.digest,
       approvalReceipt: input.approvalReceipt,
       review: state.reviewReceipt,
       contentSource,

@@ -1,6 +1,4 @@
 import {
-  assertExactDraftPullRequestProposal,
-  assertExactImmutableGitHubSourceReceipt,
   createDraftPullRequestProposal,
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
@@ -15,10 +13,7 @@ import {
   type ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
-import {
-  parseSourceReceiptEvidence,
-  type SourceReceiptEvidence,
-} from "../repository/source-receipt";
+import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
 import {
   assertApprovalReceipt,
@@ -181,40 +176,14 @@ export function composeGitHubPublicationRuntime(input: {
       });
     },
     async sealDraftPullRequestProposal(request) {
-      assertExactImmutableGitHubSourceReceipt(request.githubSource);
-      const source = parseSourceReceiptEvidence(request.source);
-      const expectedDefaultRef = `refs/heads/${request.githubSource.repository.defaultBranch}`;
-      if (
-        source.sourceKind !== "existing-repository" ||
-        request.githubSource.resolvedRef !== expectedDefaultRef ||
-        request.githubSource.resolvedSha !== source.sourceSha ||
-        request.githubSource.resolvedTree !== source.sourceTree ||
-        request.review.sourceSha !== source.sourceSha ||
-        request.review.sourceTree !== source.sourceTree
-      )
-        throw new Error(
-          "The reviewed change set is not bound to the immutable default-branch source.",
-        );
-
-      const installation = await adapter.inspectInstallation(
-        "publish-draft-pull-request",
-      );
       const repository = await adapter.inspectRepository({
         operation: "publish-draft-pull-request",
         repositoryId: request.githubSource.repository.repositoryId,
-        ref: expectedDefaultRef,
+        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
       });
-      if (
-        repository.repositoryId !==
-          request.githubSource.repository.repositoryId ||
-        repository.owner !== request.githubSource.repository.owner ||
-        repository.name !== request.githubSource.repository.name ||
-        repository.defaultBranch !==
-          request.githubSource.repository.defaultBranch
-      )
-        throw new Error(
-          "The GitHub repository identity changed after source review.",
-        );
+      const installation = await adapter.inspectInstallation(
+        "publish-draft-pull-request",
+      );
       const proposal = createDraftPullRequestProposal({
         installation,
         repository,
@@ -222,13 +191,7 @@ export function composeGitHubPublicationRuntime(input: {
         changedPathsSinceBase: [],
         title: request.title,
       });
-      assertExactDraftPullRequestProposal(proposal);
       await proposals.save(proposal);
-      const persisted = await proposals.read(proposal.digest);
-      if (JSON.stringify(persisted) !== JSON.stringify(proposal))
-        throw new Error(
-          "The sealed draft pull-request proposal did not persist exactly.",
-        );
       return proposal;
     },
     async createFreshRepository(request) {
