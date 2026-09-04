@@ -735,8 +735,14 @@ export async function executeProposalBoundApply(input: {
         if (linked.exitCode !== 0) throw new Error("dependency cache miss");
       }
     } catch {
-      // The repository command remains authoritative. A missing or stale cache
-      // is an optimization miss, not a reason to block the build.
+      // A cache is only an optimization. If it cannot be attached to this
+      // writable checkout, let the repository install its frozen dependencies
+      // normally before running its generator.
+      await input.sandbox.run({
+        command: "bun install --frozen-lockfile",
+        workingDirectory: "/workspace/repository",
+        abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+      });
     }
   let planning: OverlaySnapshot;
   let prepared: OverlaySnapshot;
