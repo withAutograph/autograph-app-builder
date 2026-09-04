@@ -210,7 +210,7 @@ describe("Browser prototype preview", () => {
       .mockResolvedValueOnce({ ...result, prototype: undefined })
       .mockResolvedValueOnce(result);
     const resolver = createServicePrototypePreviewResolver({
-      serviceForRequest: async () => ({ get } as unknown as EveSessionService),
+      serviceForRequest: async () => ({ get }) as unknown as EveSessionService,
     });
     await expect(
       resolver({

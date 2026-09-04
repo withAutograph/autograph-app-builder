@@ -1390,14 +1390,16 @@ export async function prepareDevelopmentSandboxWorkspace(
     // receipt shape in order for the repository to run.
     if (!info.isFile() || info.isSymbolicLink()) return [];
     const content = readFileSync(absolutePath);
-    return [{
-      mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
-      // The live working tree has no stable Git object for edited/untracked
-      // files. Its byte digest is the development-generation identity.
-      objectId: sha256(content).slice(0, 40),
-      path,
-      sha256: sha256(content),
-    }];
+    return [
+      {
+        mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
+        // The live working tree has no stable Git object for edited/untracked
+        // files. Its byte digest is the development-generation identity.
+        objectId: sha256(content).slice(0, 40),
+        path,
+        sha256: sha256(content),
+      },
+    ];
   });
   if (sourceFiles.length === 0)
     throw new Error("The development source contains no files.");

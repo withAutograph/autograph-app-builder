@@ -436,7 +436,9 @@ describe("provider-native Vercel source", () => {
     });
     try {
       createHostedVercelBackend({ factory });
-      expect(options?.sessionCreateOptions({ session: { id: "other" } })).toEqual({
+      expect(
+        options?.sessionCreateOptions({ session: { id: "other" } }),
+      ).toEqual({
         networkPolicy: "deny-all",
       });
       expect(
