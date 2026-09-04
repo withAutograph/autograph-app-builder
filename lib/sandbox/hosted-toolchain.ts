@@ -14,7 +14,7 @@ export const HOSTED_MISE_VERSION = "2026.8.12";
 export const HOSTED_BUN_VERSION = "1.3.14";
 export const HOSTED_NODE_VERSION = "24.18.0";
 export const HOSTED_RUST_VERSION = "1.97.1";
-export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 6;
+export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 7;
 export const HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS = 900_000;
 
 export const hostedToolchainArtifacts = {
@@ -154,7 +154,7 @@ export function hostedToolchainBootstrapCommand(): string {
   return `set -euo pipefail
 export TERM="\${TERM:-dumb}"
 if command -v mise >/dev/null && command -v bun >/dev/null && command -v node >/dev/null && command -v cargo >/dev/null && command -v rustc >/dev/null && test -r /opt/app-builder/dependency-cache/manifest.json && test -r /opt/app-builder/dependency-cache/node-modules.tar.gz; then
-  mise --no-config --version | grep -E '^2026[.]8[.]12($| )' >/dev/null
+  mise --no-config version | grep -E '^2026[.]8[.]12($| )' >/dev/null
   bun --version | grep -E '^1[.]3[.]14$' >/dev/null
   node --version | grep -E '^v24[.]18[.]0$' >/dev/null
   cargo --version | grep -E '^cargo 1[.]97[.]1 ' >/dev/null
@@ -248,7 +248,7 @@ sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/m
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
 stage='toolchain-readback'
 git --version
-mise --no-config --version | grep -E '^2026[.]8[.]12($| )'
+mise --no-config version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '
