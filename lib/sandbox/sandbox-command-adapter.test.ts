@@ -3,41 +3,31 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   SandboxBackend,
   SandboxBackendHandle,
-  SandboxProcess,
   SandboxSession,
 } from "eve/sandbox";
-import { createBoundedSandboxBackend } from "./sandbox-command-adapter";
-
-const stream = (value: string) =>
-  new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(value));
-      controller.close();
-    },
-  });
+import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
 
 function sessionFixture() {
-  const spawn = vi.fn(
-    async () =>
-      ({
-        stdout: stream("bounded"),
-        stderr: stream(""),
-        wait: async () => ({ exitCode: 0 }),
-        kill: async () => undefined,
-      }) as unknown as SandboxProcess,
-  );
+  const run = vi.fn(async () => ({
+    exitCode: 0,
+    stdout: "provider output",
+    stderr: "",
+  }));
+  const spawn = vi.fn();
   return {
     session: {
       id: "session_1",
       spawn,
+      run,
       resolvePath: (path: string) => `/workspace/${path}`,
     } as unknown as SandboxSession,
+    run,
     spawn,
   };
 }
 
 describe("production sandbox command adapter", () => {
-  it("routes a live backend caller through authority and bounded spawn", async () => {
+  it("routes a live backend caller through authority and Vercel's command transport", async () => {
     const fixture = sessionFixture();
     const authorize = vi.fn(async () => undefined);
     const handle = {
@@ -51,7 +41,7 @@ describe("production sandbox command adapter", () => {
       stop: async () => undefined,
       shutdown: async () => undefined,
     } satisfies SandboxBackendHandle;
-    const backend = createBoundedSandboxBackend({
+    const backend = createAuthorizedSandboxBackend({
       backend: {
         name: "fixture",
         create: async () => handle,
@@ -66,22 +56,17 @@ describe("production sandbox command adapter", () => {
     });
     await expect(live.session.run({ command: "true" })).resolves.toEqual({
       exitCode: 0,
-      stdout: "bounded",
+      stdout: "provider output",
       stderr: "",
     });
     expect(authorize).toHaveBeenCalledOnce();
     expect(authorize).toHaveBeenCalledWith("session_1");
-    expect(fixture.spawn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: "true",
-        abortSignal: expect.any(AbortSignal),
-      }),
-    );
+    expect(fixture.run).toHaveBeenCalledWith({ command: "true" });
   });
 
   it("does not expose an unbounded authored spawn path", async () => {
     const fixture = sessionFixture();
-    const backend = createBoundedSandboxBackend({
+    const backend = createAuthorizedSandboxBackend({
       backend: {
         name: "fixture",
         create: async () =>

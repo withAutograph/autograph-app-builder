@@ -9,7 +9,7 @@ import { vercel } from "eve/sandbox/vercel";
 import { HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS } from "./hosted-toolchain";
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
-import { createBoundedSandboxBackend } from "./sandbox-command-adapter";
+import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
 
 export interface HostedVercelBackendOptions {
   readonly fetch?: ProviderFetch;
@@ -278,17 +278,14 @@ export function createHostedVercelBackend(
     sessionCreateOptions: () => ({
       networkPolicy: SANDBOX_EXECUTION_POLICY.provider.networkPolicy,
     }),
-    // The SDK forwards this fetch to each provider request. Keep the wrapper
-    // at the HTTP boundary so aborts cancel the request before any retry.
-    fetch: createProviderFetch(),
   });
-  const bounded = createBoundedSandboxBackend({
+  const authorized = createAuthorizedSandboxBackend({
     backend,
     authorizeSessionCommand: (sessionId) =>
       assertHostedSandboxCommandAuthority({ sessionId }),
   });
   const recovering = createRuntimeRecoveringBackend({
-    backend: bounded,
+    backend: authorized,
     providerTemplateKey: input.providerTemplateKey,
     resolvePrewarmInput: input.runtimeRecoveryPrewarmInput,
   });
