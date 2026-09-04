@@ -162,6 +162,12 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
       | "dependency"
       | "validation"
       | "repository-task"
+      | "stale-proposal"
+      | "proposal-blocked"
+      | "app-already-exists"
+      | "app-lock"
+      | "partial-state"
+      | "projected-repository"
       | "empty-output"
       | "unknown";
     digest: string;
@@ -206,6 +212,15 @@ function commandFailureKind(
     return "dependency";
   if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr))
     return "validation";
+  if (/proposal is stale or noncanonical/iu.test(stderr))
+    return "stale-proposal";
+  if (/proposal must have no blockers/iu.test(stderr))
+    return "proposal-blocked";
+  if (/already exists/iu.test(stderr)) return "app-already-exists";
+  if (/create-app lock|already running/iu.test(stderr)) return "app-lock";
+  if (/partial state|recovery/iu.test(stderr)) return "partial-state";
+  if (/projected config|projected repository|unsupported entry/iu.test(stderr))
+    return "projected-repository";
   if (
     /mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr)
   )
@@ -580,6 +595,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
+    const trust = await sandbox.run({
+      command: "mise trust --yes",
+      workingDirectory: applyRoot,
+      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    });
+    if (trust.exitCode !== 0) return trust;
     return await sandbox.run({
       command: `mise run create:app -- --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
