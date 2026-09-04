@@ -243,10 +243,11 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(definition).toContain("HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS");
     expect(definition).toContain("useHostedArtifactProof");
     expect(definition).toContain(
-      "revalidationKey: () => sandboxRevalidationKey(undefined, plan.kind)",
+      "`${sandboxRevalidationKey(undefined, plan.kind)}:${hostedToolchainRevalidationKey()}`",
     );
-    expect(definition).toContain("await use();");
-    expect(definition).not.toContain("hostedToolchainBootstrapCommand");
+    expect(definition).toContain("const sandbox = await use();");
+    expect(definition).toContain("hostedToolchainBootstrapCommand()");
+    expect(definition).toContain("HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS");
   });
 
   it("selects the environment before constructing any sandbox backend", () => {

@@ -152,6 +152,14 @@ PY
 
 export function hostedToolchainBootstrapCommand(): string {
   return `set -euo pipefail
+if command -v mise >/dev/null && command -v bun >/dev/null && command -v node >/dev/null && command -v cargo >/dev/null && command -v rustc >/dev/null && test -r /opt/app-builder/dependency-cache/manifest.json && test -r /opt/app-builder/dependency-cache/node-modules.tar.gz; then
+  mise --version | grep -E '^2026[.]8[.]12($| )' >/dev/null
+  bun --version | grep -E '^1[.]3[.]14$' >/dev/null
+  node --version | grep -E '^v24[.]18[.]0$' >/dev/null
+  cargo --version | grep -E '^cargo 1[.]97[.]1 ' >/dev/null
+  rustc --version | grep -E '^rustc 1[.]97[.]1 ' >/dev/null
+  exit 0
+fi
 case "$(uname -m)" in
   ${artifactCase("aarch64")}
   ${artifactCase("x86_64")}

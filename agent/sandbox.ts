@@ -18,7 +18,9 @@ import {
 } from "@/lib/sandbox/development-toolchain";
 import {
   HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
+  HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS,
   hostedArtifactWorkspaceInstallCommand,
+  hostedToolchainBootstrapCommand,
   hostedToolchainRevalidationKey,
 } from "@/lib/sandbox/hosted-toolchain";
 import {
@@ -50,7 +52,13 @@ const bootstrapHostedVercelSandbox: NonNullable<
   SandboxBackendPrewarmInput["bootstrap"]
 > = async ({ use }) => {
   // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-  await use();
+  const sandbox = await use();
+  const result = await sandbox.run({
+    command: hostedToolchainBootstrapCommand(),
+    abortSignal: AbortSignal.timeout(HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS),
+  });
+  if (result.exitCode !== 0)
+    throw new Error("The hosted Vercel Sandbox toolchain failed to prewarm.");
 };
 
 const bootstrapDevelopmentVercelSandbox: NonNullable<
@@ -129,7 +137,8 @@ function createVercelDefinition() {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       await use({ networkPolicy: "deny-all" });
     },
-    revalidationKey: () => sandboxRevalidationKey(undefined, plan.kind),
+    revalidationKey: () =>
+      `${sandboxRevalidationKey(undefined, plan.kind)}:${hostedToolchainRevalidationKey()}`,
   });
 }
 
