@@ -53,13 +53,13 @@ function unsigned(): PromotionReceiptUnsigned {
       "autograph_cancel",
     ],
     package: {
-      version: "0.2.8",
+      version: "0.2.9",
       root: "package",
       receipt: "package/release-receipt.json",
       receiptSha256: "3".repeat(64),
-      archive: "package/app-builder-0.2.8.tar.gz",
+      archive: "package/app-builder-0.2.9.tar.gz",
       archiveSha256: "4".repeat(64),
-      marketplaceArchive: "package/app-builder-codex-marketplace-0.2.8.tar.gz",
+      marketplaceArchive: "package/app-builder-codex-marketplace-0.2.9.tar.gz",
       marketplaceArchiveSha256: "5".repeat(64),
       checksums: "package/SHA256SUMS",
       checksumsSha256: "6".repeat(64),
@@ -115,11 +115,11 @@ async function candidate() {
   const marketplaceArchive = Buffer.from("marketplace-package");
   const checksums = Buffer.from("checksums\n");
   await writeFile(
-    join(root, "package/app-builder-0.2.8.tar.gz"),
+    join(root, "package/app-builder-0.2.9.tar.gz"),
     packageArchive,
   );
   await writeFile(
-    join(root, "package/app-builder-codex-marketplace-0.2.8.tar.gz"),
+    join(root, "package/app-builder-codex-marketplace-0.2.9.tar.gz"),
     marketplaceArchive,
   );
   await writeFile(join(root, "package/SHA256SUMS"), checksums);
@@ -171,7 +171,7 @@ async function candidate() {
     format: "autograph-portable-plugin-release-v3",
     specification: "1.0.0",
     name: "app-builder",
-    version: "0.2.8",
+    version: "0.2.9",
     source: {
       repository: values.builder.repository,
       sha: values.builder.commit,
@@ -179,11 +179,11 @@ async function candidate() {
     },
     endpoint: values.endpoint,
     archive: {
-      name: "app-builder-0.2.8.tar.gz",
+      name: "app-builder-0.2.9.tar.gz",
       sha256: sha256(packageArchive),
     },
     codexMarketplaceArchive: {
-      name: "app-builder-codex-marketplace-0.2.8.tar.gz",
+      name: "app-builder-codex-marketplace-0.2.9.tar.gz",
       sha256: sha256(marketplaceArchive),
     },
     codexMarketplaceAssets: {},
@@ -315,7 +315,7 @@ describe("release promotion contract", () => {
 
     const packageMutation = await candidate();
     await writeFile(
-      join(packageMutation, "package/app-builder-0.2.8.tar.gz"),
+      join(packageMutation, "package/app-builder-0.2.9.tar.gz"),
       "changed",
     );
     await expect(

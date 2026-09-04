@@ -91,7 +91,7 @@ const promotionReceiptUnsignedSchema = z
     ]),
     package: z
       .object({
-        version: z.literal("0.2.8"),
+        version: z.literal("0.2.9"),
         root: safePath,
         receipt: safePath,
         receiptSha256: hash,
