@@ -22,7 +22,14 @@ export async function prepareReviewedWorkflow(
   await t.send("Run target identity and planning.");
 
   await t.send("Apply the current creation proposal.");
-  t.requireInputRequest({ toolName: "apply_app_creation" });
+  // Keep this helper compatible with the installed Eve eval surface: the
+  // pending request list is the stable context-level contract.
+  if (
+    t.pendingInputRequests.length !== 1 ||
+    t.pendingInputRequests[0]?.toolName !== "apply_app_creation"
+  ) {
+    throw new Error("Expected one apply_app_creation approval request.");
+  }
   await t.respondAll("approve");
 
   const validation = await t.send("Validate the applied creation.");
