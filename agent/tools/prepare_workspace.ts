@@ -67,7 +67,6 @@ export default defineTool({
     const {
       sourcePath: path,
       sourceSha: expectedSha,
-      sourceTree: expectedTree,
       eligibilityDigest: expectedEligibilityDigest,
     } = currentReceipt;
     const currentWorkspace = workflowWorkspace(current);
