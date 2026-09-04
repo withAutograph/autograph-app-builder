@@ -643,7 +643,9 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
             ? "permissions"
             : /timed? out|timeout/iu.test(output)
               ? "network-timeout"
-              : /failed to resolve|package not found|module not found/iu.test(output)
+              : /failed to resolve|package not found|module not found/iu.test(
+                    output,
+                  )
                 ? "package-resolution"
                 : /fetch|connection|certificate|network/iu.test(output)
                   ? "network"
@@ -668,7 +670,9 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         const output = `${generated.stderr}\n${generated.stdout}`;
         const reason = /EACCES|permission denied/iu.test(output)
           ? "permissions"
-          : /cannot find module|module_not_found|failed to resolve/iu.test(output)
+          : /cannot find module|module_not_found|failed to resolve/iu.test(
+                output,
+              )
             ? "module-resolution"
             : /timed? out|timeout/iu.test(output)
               ? "timeout"

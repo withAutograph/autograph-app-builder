@@ -19,7 +19,7 @@ export interface HostedVercelBackendOptions {
   readonly sessionCreateOptions: (context?: {
     readonly session: { readonly id: string };
   }) => {
-    readonly networkPolicy: "deny-all";
+    readonly networkPolicy: "deny-all" | "allow-all";
     readonly source?: {
       readonly type: "git";
       readonly url: string;
