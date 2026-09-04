@@ -13,9 +13,7 @@ import { readVercelSessionGitSource } from "./vercel-session-source";
 export interface HostedVercelBackendOptions {
   readonly fetch?: ProviderFetch;
   readonly env?: Readonly<Record<string, string>>;
-  readonly networkPolicy: {
-    readonly allow: readonly string[];
-  };
+  readonly networkPolicy: "allow-all";
   readonly sessionCreateOptions: (context?: {
     readonly session: { readonly id: string };
   }) => {
@@ -270,7 +268,7 @@ export function createHostedVercelBackend(
     ...(input.sandboxEnvironment === undefined
       ? {}
       : { env: { ...input.sandboxEnvironment } }),
-    networkPolicy: { allow: [...(input.bootstrapNetworkHosts ?? [])] },
+    networkPolicy: "allow-all",
     // Eve resolves this for every fresh live session, including a replacement
     // created after the provider loses the previously recorded sandbox.
     sessionCreateOptions: (context) => {
@@ -279,10 +277,7 @@ export function createHostedVercelBackend(
           ? undefined
           : readVercelSessionGitSource(context.session.id);
       return {
-        networkPolicy:
-          input.sandboxEnvironment === undefined
-            ? ("deny-all" as const)
-            : ("allow-all" as const),
+        networkPolicy: "allow-all" as const,
         ...(source === undefined
           ? {}
           : {

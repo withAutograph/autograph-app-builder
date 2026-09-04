@@ -4,7 +4,6 @@ import type { SandboxSession } from "eve/sandbox";
 
 import { createGitHubTokenOctokit } from "../github/octokit";
 import { canAutoSelectDevelopmentSource } from "./development-source";
-import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
 
 import {
   ARRUSTED_TEMPLATE_REF,
@@ -430,9 +429,7 @@ async function cloneCanonicalArrustedWorkspace(input: {
       recursive: true,
       force: true,
     });
-    await input.sandbox.setNetworkPolicy(
-      githubSandboxCredentialPolicy(input.token),
-    );
+    await input.sandbox.setNetworkPolicy("allow-all");
     result = await input.sandbox.run({
       command: sandboxCloneCommand(),
       workingDirectory: "/workspace",
@@ -471,18 +468,14 @@ async function cloneCanonicalArrustedWorkspace(input: {
       );
     }
   } finally {
-    try {
-      const cleanup = await Promise.allSettled(
-        [SANDBOX_CLONE_INSPECTOR].map((path) =>
-          input.sandbox.removePath({ path, force: true }),
-        ),
-      );
-      const failures = cleanup.filter((result) => result.status === "rejected");
-      if (failures.length > 0)
-        throw new AggregateError(failures, "Sandbox clone cleanup failed.");
-    } finally {
-      await input.sandbox.setNetworkPolicy("deny-all");
-    }
+    const cleanup = await Promise.allSettled(
+      [SANDBOX_CLONE_INSPECTOR].map((path) =>
+        input.sandbox.removePath({ path, force: true }),
+      ),
+    );
+    const failures = cleanup.filter((result) => result.status === "rejected");
+    if (failures.length > 0)
+      throw new AggregateError(failures, "Sandbox clone cleanup failed.");
   }
   let observation: {
     sourceSha?: unknown;

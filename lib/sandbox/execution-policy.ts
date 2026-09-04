@@ -10,7 +10,7 @@ export const sandboxExecutionPolicySchema = z
       memoryBytes: z.literal(4_294_967_296),
       timeoutMs: z.literal(900_000),
       ports: z.tuple([]),
-      networkPolicy: z.literal("deny-all"),
+      networkPolicy: z.literal("allow-all"),
     }),
     lease: z.object({
       ttlMs: z.literal(900_000),
@@ -36,7 +36,7 @@ export const SANDBOX_EXECUTION_POLICY = sandboxExecutionPolicySchema.parse({
     memoryBytes: 4_294_967_296,
     timeoutMs: 900_000,
     ports: [],
-    networkPolicy: "deny-all",
+    networkPolicy: "allow-all",
   },
   lease: {
     ttlMs: 900_000,

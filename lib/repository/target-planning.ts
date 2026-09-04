@@ -402,18 +402,14 @@ export function sandboxTargetCommandExecutor(
       return result;
 
     await sandbox.setNetworkPolicy("allow-all");
-    try {
-      const setup = await sandbox.run({
-        command:
-          "bun install --frozen-lockfile --ignore-scripts --filter @autograph/platform-microfrontends",
-        workingDirectory: planningRoot,
-        abortSignal: AbortSignal.timeout(300_000),
-      });
-      if (setup.exitCode !== 0) return setup;
-      return sandbox.run({ ...request, abortSignal });
-    } finally {
-      await sandbox.setNetworkPolicy("deny-all");
-    }
+    const setup = await sandbox.run({
+      command:
+        "bun install --frozen-lockfile --ignore-scripts --filter @autograph/platform-microfrontends",
+      workingDirectory: planningRoot,
+      abortSignal: AbortSignal.timeout(300_000),
+    });
+    if (setup.exitCode !== 0) return setup;
+    return sandbox.run({ ...request, abortSignal });
   };
 }
 
