@@ -783,10 +783,6 @@ function preparedSourceChecksums(files: readonly PreparedSourceFile[]): string {
     .join("\n")}\n`;
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
 /**
  * Development is deliberately a live working-tree transport.  The archive is
  * only a one-shot upload envelope for the first transfer; it is neither a
@@ -1353,6 +1349,7 @@ export async function prepareDevelopmentSandboxWorkspace(
   callId: string,
   _compatibility: "full" | "planning" = "full",
 ): Promise<PreparedSandboxWorkspace> {
+  void _compatibility;
   // Development snapshots are inputs, not candidates for a template
   // certification gate. Run the repository and react to its real command
   // failures instead of predicting compatibility from an expected shape.

@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
 
-import { githubSandboxCredentialPolicy } from "./github-sandbox-credentials";
-
 import type {
   CanonicalTemplateSnapshot,
   SourceReceipt,
@@ -16,12 +14,10 @@ import {
 } from "./supported-template";
 import { parseCanonicalTemplateSnapshot } from "./source-receipt";
 import {
-  assertExactImmutableGitHubSourceReceipt,
   type ImmutableGitHubSourceReceipt,
 } from "./github-publication";
 
 const SHA = /^[0-9a-f]{40}$/u;
-const DIGEST = /^[0-9a-f]{64}$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}$/u;
 const BRANCH =
   /^(?![./])(?!.*(?:\.\.|@\{))(?!.*(?:[/.]|\.lock)$)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u;
@@ -70,6 +66,9 @@ function parseBranch(input: string) {
   return input;
 }
 
+// Kept temporarily for stored receipt parsing while the legacy inspection
+// writer is removed from the active source path.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const sandboxCloneInspectionProgram = String.raw`
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
@@ -307,6 +306,7 @@ function sandboxGitHubSourceReinspectionCommand(input: {
   return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceReinspectionProgram)} ${shellQuote(expected)}`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function reinspectGitHubSourceWorkspace(input: {
   sandbox: SandboxSession;
   remote: string;

@@ -5,7 +5,6 @@ import { isAbsolute } from "node:path";
 
 import {
   inspectBuilderOwnedSupportedRepository,
-  inspectSupportedTemplateSnapshot,
   SUPPORTED_TEMPLATE_ADAPTER,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
   type SupportedTemplateSnapshot,
@@ -466,35 +465,6 @@ export async function inspectClonedTemplateSourceReceipt(input: {
     digest: sourceReceiptDigest(evidence),
     sourcePath: eligibility.sourcePath,
   });
-}
-
-function contractDigestFromSnapshot(
-  contract: CanonicalTemplateSnapshot["contract"],
-  expectedPaths: readonly string[] = SUPPORTED_TEMPLATE_INPUT_PATHS,
-): string {
-  if (contract.length !== expectedPaths.length)
-    throw new Error("Canonical template contract receipt is invalid.");
-  const paths = new Set<string>();
-  const normalized = contract.map((entry, index) => {
-    const expectedPath = expectedPaths[index];
-    if (
-      expectedPath === undefined ||
-      entry.path !== expectedPath ||
-      paths.has(entry.path) ||
-      !["100644", "100755"].includes(entry.mode) ||
-      !isGitObjectId(entry.objectId) ||
-      !isDigest(entry.sha256)
-    )
-      throw new Error("Canonical template contract receipt is invalid.");
-    paths.add(entry.path);
-    return {
-      path: entry.path,
-      mode: entry.mode,
-      objectId: entry.objectId,
-      sha256: entry.sha256,
-    };
-  });
-  return sha256(JSON.stringify(normalized));
 }
 
 /**

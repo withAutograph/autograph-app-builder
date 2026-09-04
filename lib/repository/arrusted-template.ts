@@ -399,6 +399,9 @@ async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
   }
 }
 
+// Legacy clone implementation retained only while callers finish moving to
+// the direct Vercel source API.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function cloneCanonicalArrustedWorkspace(input: {
   sandbox: SandboxSession;
   token: string;
