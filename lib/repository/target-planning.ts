@@ -226,8 +226,12 @@ function parseOutput<T>(
     Buffer.byteLength(result.stderr) > TARGET_COMMAND_OUTPUT_BYTES
   )
     throw new Error(`${label} output exceeded the fixed size limit.`);
-  if (result.exitCode !== 0)
-    throw new Error(`${label} failed with exit code ${result.exitCode}.`);
+  if (result.exitCode !== 0) {
+    const diagnostic = result.stderr.trim() || result.stdout.trim();
+    throw new Error(
+      `${label} failed with exit code ${result.exitCode}${diagnostic.length === 0 ? "." : `: ${diagnostic.slice(0, 2_000)}`}`,
+    );
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout) as unknown;
