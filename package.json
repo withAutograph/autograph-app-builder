@@ -105,7 +105,7 @@
     "eslint-config-next": "16.3.3",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-storybook": "^10.5.10",
-    "fflate": "0.8.2",
+    "fflate": "0.8.3",
     "jsdom": "26.1.0",
     "just-bash": "3.4.2",
     "microsandbox": "0.5.10",
