@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
-import { DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS } from "@/lib/sandbox/development-toolchain";
+import { DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS } from "../sandbox/development-toolchain";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
