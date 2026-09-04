@@ -108,10 +108,12 @@ describe("hosted Vercel Sandbox toolchain", () => {
     );
     expect(command).toContain("sha256sum --check --strict");
     expect(command).toContain("sudo install --owner=root --group=root");
-    expect(command).toContain("mise --version");
+    expect(command).toContain('export TERM="${TERM:-dumb}"');
+    expect(command).toContain("mise --no-config version");
     expect(command).toContain("bun --version");
     expect(command).toContain("node --version");
     expect(command).toContain("node -e 'const fs=require");
+    expect(command).toContain("hosted_dependency_manifest_mismatch:");
     expect(command).toContain("cargo --version");
     expect(command).toContain("rustc --version");
     expect(command).toContain(
@@ -198,9 +200,9 @@ describe("hosted Vercel Sandbox toolchain", () => {
   });
 
   it("binds snapshot revalidation to the contract, inputs, and exact command bytes", () => {
-    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(5);
+    expect(HOSTED_TOOLCHAIN_CONTRACT_VERSION).toBe(7);
     expect(hostedToolchainRevalidationKey()).toMatch(
-      /^autograph-app-builder-vercel-toolchain-v5:[0-9a-f]{64}$/u,
+      /^autograph-app-builder-vercel-toolchain-v7:[0-9a-f]{64}$/u,
     );
     expect(hostedToolchainRevalidationKey()).toBe(
       hostedToolchainRevalidationKey(),
@@ -243,10 +245,11 @@ describe("hosted Vercel Sandbox toolchain", () => {
     expect(definition).toContain("HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS");
     expect(definition).toContain("useHostedArtifactProof");
     expect(definition).toContain(
-      "revalidationKey: () => sandboxRevalidationKey(undefined, plan.kind)",
+      "`${sandboxRevalidationKey(undefined, plan.kind)}:${hostedToolchainRevalidationKey()}`",
     );
-    expect(definition).toContain("await use();");
-    expect(definition).not.toContain("hostedToolchainBootstrapCommand");
+    expect(definition).toContain("const sandbox = await use();");
+    expect(definition).toContain("hostedToolchainBootstrapCommand()");
+    expect(definition).toContain("HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS");
   });
 
   it("selects the environment before constructing any sandbox backend", () => {

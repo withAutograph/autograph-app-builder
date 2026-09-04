@@ -14,7 +14,7 @@ export const HOSTED_MISE_VERSION = "2026.8.12";
 export const HOSTED_BUN_VERSION = "1.3.14";
 export const HOSTED_NODE_VERSION = "24.18.0";
 export const HOSTED_RUST_VERSION = "1.97.1";
-export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 5;
+export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 7;
 export const HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS = 900_000;
 
 export const hostedToolchainArtifacts = {
@@ -152,6 +152,15 @@ PY
 
 export function hostedToolchainBootstrapCommand(): string {
   return `set -euo pipefail
+export TERM="\${TERM:-dumb}"
+if command -v mise >/dev/null && command -v bun >/dev/null && command -v node >/dev/null && command -v cargo >/dev/null && command -v rustc >/dev/null && test -r /opt/app-builder/dependency-cache/manifest.json && test -r /opt/app-builder/dependency-cache/node-modules.tar.gz; then
+  mise --no-config version | grep -E '^2026[.]8[.]12($| )' >/dev/null
+  bun --version | grep -E '^1[.]3[.]14$' >/dev/null
+  node --version | grep -E '^v24[.]18[.]0$' >/dev/null
+  cargo --version | grep -E '^cargo 1[.]97[.]1 ' >/dev/null
+  rustc --version | grep -E '^rustc 1[.]97[.]1 ' >/dev/null
+  exit 0
+fi
 case "$(uname -m)" in
   ${artifactCase("aarch64")}
   ${artifactCase("x86_64")}
@@ -239,12 +248,12 @@ sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/m
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
 stage='toolchain-readback'
 git --version
-mise --version | grep -E '^2026[.]8[.]12($| )'
+mise --no-config version | grep -E '^2026[.]8[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '
 rustc --version | grep -E '^rustc 1[.]97[.]1 '
-node -e 'const fs=require("node:fs"); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="d378904a05e1bc2c0896886e6fbd3b816babaee2"||cache.target.tree!=="6735f4b45cc2b29a139531a41dac990c925e0d39") process.exit(1)'`;
+node -e 'const fs=require("node:fs"); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); const actual={platform:cache.platform,scope:cache.scope,sha:cache.target?.sha,tree:cache.target?.tree}; const expected={platform:"linux/x86_64",scope:"builder-execution",sha:"d378904a05e1bc2c0896886e6fbd3b816babaee2",tree:"6735f4b45cc2b29a139531a41dac990c925e0d39"}; if(JSON.stringify(actual)!==JSON.stringify(expected)){console.error("hosted_dependency_manifest_mismatch:"+JSON.stringify(actual));process.exit(1)}'`;
 }
 
 export function hostedArtifactWorkspaceInstallCommand(): string {
