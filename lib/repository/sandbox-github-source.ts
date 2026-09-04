@@ -497,6 +497,14 @@ export async function cloneGitHubSourceWorkspace(input: {
 
   let result;
   try {
+    // The workspace belongs to this build. A prior interrupted clone may have
+    // left a file, symlink, or partial directory at the checkout path; clear
+    // only that builder-owned entry before normal Git setup recreates it.
+    await input.sandbox.removePath({
+      path: "repository",
+      recursive: true,
+      force: true,
+    });
     await input.sandbox.setNetworkPolicy(
       githubSandboxCredentialPolicy(input.token),
     );

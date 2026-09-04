@@ -248,6 +248,11 @@ describe("sandbox GitHub source transport", () => {
       "credential.helper=store",
     );
     expect(run.mock.calls[0]?.[0].command).not.toContain("ASKPASS_TOKEN");
+    expect(sandbox.removePath).toHaveBeenCalledWith({
+      path: "repository",
+      recursive: true,
+      force: true,
+    });
   });
 
   it("restores deny-all after a clone failure without staged credentials", async () => {
@@ -281,7 +286,11 @@ describe("sandbox GitHub source transport", () => {
         expectedTree: sourceTree,
       }),
     ).rejects.toThrow("run failed");
-    expect(removePath).toHaveBeenCalledTimes(0);
+    expect(removePath).toHaveBeenCalledWith({
+      path: "repository",
+      recursive: true,
+      force: true,
+    });
     expect(setNetworkPolicy).toHaveBeenLastCalledWith("deny-all");
     expect(
       [...files.keys()].some((path) => path.includes("reader-token")),
