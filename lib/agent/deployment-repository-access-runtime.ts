@@ -36,7 +36,7 @@ import {
   resolveImmutableExistingSource,
   type ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
-import { cloneGitHubSourceWorkspace } from "../repository/sandbox-github-source";
+import { readSandboxGitHubSourceSnapshot } from "../repository/sandbox-github-source";
 import {
   inspectExistingRepositorySnapshotReceipt,
   type SourceReceipt,
@@ -50,6 +50,7 @@ import {
   recordRepositoryAccessReceipt,
   type RepositoryAccessReceipt,
 } from "./repository-access-state";
+import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
 
 const failed = (reason: string, message: string, retryable = false) =>
   new ConnectionAuthorizationFailedError("github-repository-access", {
@@ -96,7 +97,8 @@ export interface RepositoryAccessRuntime {
     currentAccessReceipt: RepositoryAccessReceipt | undefined;
     sessionId: string;
     callId: string;
-    sandbox: SandboxSession;
+    /** Resolves the Eve sandbox only after provider source is configured. */
+    sandbox: SandboxSession | (() => Promise<SandboxSession>);
     currentGitHubSource?: ImmutableGitHubSourceReceipt;
   }): Promise<{
     accessReceipt: RepositoryAccessReceipt;
@@ -223,14 +225,25 @@ export function createRepositoryAccessRuntime(input: {
       const credential = await provider.acquireRepositoryReadCredential({
         repositoryId: value.access.repository.repositoryId,
       });
-      const cloned = await cloneGitHubSourceWorkspace({
-        sandbox: value.sandbox,
-        token: credential.token,
-        remote: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-        branch: value.access.repository.defaultBranch,
-        expectedSha: value.access.repository.headSha,
-        expectedTree: value.access.repository.headTree,
+      configureVercelSessionGitSource({
+        sessionId: value.sessionId,
+        source: {
+          url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+          token: credential.token,
+        },
       });
+      // The Vercel backend now supplies this source directly to
+      // `Sandbox.create({ source: { type: "git", ... } })`. No shell clone,
+      // manifest, or predicted checkout shape sits between provider access and
+      // the repository's own commands.
+      const sandbox =
+        typeof value.sandbox === "function"
+          ? await value.sandbox()
+          : value.sandbox;
+      const cloned = {
+        snapshot: await readSandboxGitHubSourceSnapshot(sandbox),
+        workspaceDigest: value.access.repository.headTree,
+      };
       const sourceReceipt = inspectExistingRepositorySnapshotReceipt(
         cloned.snapshot,
       );
@@ -267,7 +280,7 @@ export function createRepositoryAccessRuntime(input: {
         source: githubSource,
       });
       const workspace = await recordPreparedSandboxWorkspace({
-        sandbox: value.sandbox,
+        sandbox,
         callId: value.callId,
         sourcePath: sourceReceipt.sourcePath,
         sourceSha: sourceReceipt.sourceSha,

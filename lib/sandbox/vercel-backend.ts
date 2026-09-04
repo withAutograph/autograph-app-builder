@@ -7,8 +7,8 @@ import type {
 import { vercel } from "eve/sandbox/vercel";
 
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
-import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
+import { readVercelSessionGitSource } from "./vercel-session-source";
 
 export interface HostedVercelBackendOptions {
   readonly fetch?: ProviderFetch;
@@ -16,11 +16,16 @@ export interface HostedVercelBackendOptions {
   readonly networkPolicy: {
     readonly allow: readonly string[];
   };
-  readonly resources: { readonly vcpus: 2 };
-  readonly timeout: 900_000;
-  readonly ports: readonly [];
-  readonly sessionCreateOptions: () => {
+  readonly sessionCreateOptions: (context?: {
+    readonly session: { readonly id: string };
+  }) => {
     readonly networkPolicy: "deny-all";
+    readonly source?: {
+      readonly type: "git";
+      readonly url: string;
+      readonly username: "x-access-token";
+      readonly password: string;
+    };
   };
 }
 
@@ -266,14 +271,30 @@ export function createHostedVercelBackend(
       ? {}
       : { env: { ...input.sandboxEnvironment } }),
     networkPolicy: { allow: [...(input.bootstrapNetworkHosts ?? [])] },
-    resources: { vcpus: SANDBOX_EXECUTION_POLICY.provider.vcpus },
-    timeout: SANDBOX_EXECUTION_POLICY.provider.timeoutMs,
-    ports: SANDBOX_EXECUTION_POLICY.provider.ports,
     // Eve resolves this for every fresh live session, including a replacement
     // created after the provider loses the previously recorded sandbox.
-    sessionCreateOptions: () => ({
-      networkPolicy: SANDBOX_EXECUTION_POLICY.provider.networkPolicy,
-    }),
+    sessionCreateOptions: (context) => {
+      const source =
+        context === undefined
+          ? undefined
+          : readVercelSessionGitSource(context.session.id);
+      return {
+        networkPolicy: "deny-all" as const,
+        ...(source === undefined
+          ? {}
+          : {
+              // Eve forwards session-specific source options into the
+              // official Vercel `Sandbox.create` call when no template is
+              // present. The installation token remains provider-only.
+              source: {
+                type: "git" as const,
+                url: source.url,
+                username: "x-access-token" as const,
+                password: source.token,
+              },
+            }),
+      };
+    },
   });
   const authorized = createAuthorizedSandboxBackend({
     backend,

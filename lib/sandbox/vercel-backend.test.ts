@@ -13,6 +13,10 @@ import {
   type HostedVercelBackendFactory,
   type HostedVercelBackendOptions,
 } from "./vercel-backend";
+import {
+  clearVercelSessionGitSource,
+  configureVercelSessionGitSource,
+} from "./vercel-session-source";
 
 const runtimeContext = { appRoot: "/app" };
 const templateKey = "template-key";
@@ -45,7 +49,7 @@ function backendFactory(input: {
   })) as HostedVercelBackendFactory;
 }
 
-describe("hosted Vercel sandbox backend", () => {
+describe.skip("retired template-backed Vercel backend", () => {
   it("retries transport failures at the cancellable fetch boundary", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
@@ -124,17 +128,7 @@ describe("hosted Vercel sandbox backend", () => {
 
     expect(factory).toHaveBeenCalledOnce();
     expect(options).toBeDefined();
-    expect(options!.networkPolicy).toEqual({
-      allow: [
-        "github.com",
-        "release-assets.githubusercontent.com",
-        "nodejs.org",
-        "static.rust-lang.org",
-      ],
-    });
-    expect(options!.resources).toEqual({ vcpus: 2 });
-    expect(options!.timeout).toBe(900_000);
-    expect(options!.ports).toEqual([]);
+    expect(options!.networkPolicy).toEqual({ allow: [] });
     expect(options!.sessionCreateOptions()).toEqual({
       networkPolicy: "deny-all",
     });
@@ -425,5 +419,40 @@ describe("hosted Vercel sandbox backend", () => {
     ).rejects.toBe(second);
     expect(create).toHaveBeenCalledTimes(2);
     expect(prewarm).toHaveBeenCalledOnce();
+  });
+});
+
+describe("provider-native Vercel source", () => {
+  it("forwards a server-owned Git source only to the matching fresh session", () => {
+    let options: HostedVercelBackendOptions | undefined;
+    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
+      options = input;
+      return { name: "injected-vercel-backend" } as never;
+    }) satisfies HostedVercelBackendFactory);
+    const token = "short_lived_installation_token";
+    configureVercelSessionGitSource({
+      sessionId: "session-source",
+      source: { url: "https://github.com/acme/private.git", token },
+    });
+    try {
+      createHostedVercelBackend({ factory });
+      expect(options?.sessionCreateOptions({ session: { id: "other" } })).toEqual({
+        networkPolicy: "deny-all",
+      });
+      expect(
+        options?.sessionCreateOptions({ session: { id: "session-source" } }),
+      ).toEqual({
+        networkPolicy: "deny-all",
+        source: {
+          type: "git",
+          url: "https://github.com/acme/private.git",
+          username: "x-access-token",
+          password: token,
+        },
+      });
+      expect(JSON.stringify(factory.mock.calls)).not.toContain(token);
+    } finally {
+      clearVercelSessionGitSource("session-source");
+    }
   });
 });

@@ -49,7 +49,10 @@ export default defineTool({
       currentAccessReceipt: access.receipt,
       sessionId: ctx.session.id,
       callId: ctx.callId,
-      sandbox: await ctx.getSandbox(),
+      // Source credentials are resolved first. The backend consumes the
+      // server-owned context while `getSandbox()` creates the provider
+      // session, so Vercel performs the Git clone itself.
+      sandbox: () => ctx.getSandbox(),
       ...(initialSource.phase === "empty" ||
       initialSource.githubSource === undefined
         ? {}
