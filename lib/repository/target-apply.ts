@@ -595,14 +595,8 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
-    const trust = await sandbox.run({
-      command: "mise trust --yes",
-      workingDirectory: applyRoot,
-      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-    });
-    if (trust.exitCode !== 0) return trust;
     return await sandbox.run({
-      command: `mise run create:app -- --proposal ${proposalPath}`,
+      command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
