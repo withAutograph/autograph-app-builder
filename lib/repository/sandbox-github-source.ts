@@ -13,9 +13,7 @@ import {
   type PreparedSandboxWorkspace,
 } from "./supported-template";
 import { parseCanonicalTemplateSnapshot } from "./source-receipt";
-import {
-  type ImmutableGitHubSourceReceipt,
-} from "./github-publication";
+import { type ImmutableGitHubSourceReceipt } from "./github-publication";
 
 const SHA = /^[0-9a-f]{40}$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}$/u;
