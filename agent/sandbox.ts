@@ -1,4 +1,5 @@
 import { defineSandbox } from "eve/sandbox";
+import { justbash } from "eve/sandbox/just-bash";
 
 import {
   DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
@@ -6,8 +7,14 @@ import {
   developmentPinnedToolchainCommand,
 } from "@/lib/sandbox/development-toolchain";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 function createVercelDefinition() {
+  // Deterministic evals exercise fixture target behavior and must not acquire
+  // provider credentials. Production and development continue to use Vercel.
+  if (hasTestCapability("simulated-target")) {
+    return defineSandbox({ backend: justbash({ autoInstall: false }) });
+  }
   return defineSandbox({
     backend: createHostedVercelBackend({
       ...(process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development"
