@@ -19,7 +19,10 @@ const repositoryPath = z
   .string()
   .refine(safeSourcePath, "path must remain inside the apply overlay");
 
-export const TARGET_APPLY_TIMEOUT_MS = 300_000;
+// Applying a generated app can include the repository's own install/build
+// steps. Keep a generous provider-side ceiling, but do not turn a normal slow
+// command into a synthetic failure at five minutes.
+export const TARGET_APPLY_TIMEOUT_MS = 900_000;
 export const TARGET_APPLY_OUTPUT_BYTES = 1_048_576;
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
@@ -784,7 +787,10 @@ export async function executeProposalBoundApply(input: {
     command = {
       exitCode: -1,
       stdout: "",
-      stderr: error instanceof Error ? error.name : "TargetApplyError",
+      stderr:
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : "TargetApplyError",
     };
   }
   let outputExceeded = false;

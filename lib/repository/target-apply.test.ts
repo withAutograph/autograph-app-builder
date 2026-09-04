@@ -24,6 +24,7 @@ import {
   overlayChanges,
   overlaySnapshotCommand,
   sandboxApplyCommandExecutor,
+  TARGET_APPLY_TIMEOUT_MS,
   type OverlaySnapshot,
   type TargetApplyBinding,
   type TargetApplyCommandReceipt,
@@ -225,6 +226,9 @@ async function withRealSandbox<T>(run: () => Promise<T>): Promise<T> {
 }
 
 describe("proposal-bound target apply", () => {
+  it("allows repository commands longer than the normal local iteration window", () => {
+    expect(TARGET_APPLY_TIMEOUT_MS).toBeGreaterThanOrEqual(900_000);
+  });
   it.each([
     ["path-less historical V1", { ...binding, version: 1 }],
     ["path-present wrong version", { ...binding, version: 1 }],
