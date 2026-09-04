@@ -405,7 +405,7 @@ export function sandboxTargetCommandExecutor(
     try {
       const setup = await sandbox.run({
         command:
-          "bun install --frozen-lockfile --filter @autograph/platform-microfrontends",
+          "bun install --frozen-lockfile --ignore-scripts --filter @autograph/platform-microfrontends",
         workingDirectory: planningRoot,
         abortSignal: AbortSignal.timeout(300_000),
       });
