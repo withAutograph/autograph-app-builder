@@ -651,11 +651,18 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       });
       return install;
     }
-    return await sandbox.run({
-      command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
-      workingDirectory: applyRoot,
-      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+    await sandbox.setNetworkPolicy({
+      allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
     });
+    try {
+      return await sandbox.run({
+        command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
+        workingDirectory: applyRoot,
+        abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+      });
+    } finally {
+      await sandbox.setNetworkPolicy("deny-all");
+    }
   };
 }
 
