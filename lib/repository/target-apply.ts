@@ -6,7 +6,6 @@ import type { SandboxSession } from "eve/sandbox";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import {
-  materializeExecutionDependencyView,
   planningOverlayRoot,
   type ExecutionDependencyLayout,
 } from "./dependency-cache";
@@ -721,12 +720,20 @@ export async function executeProposalBoundApply(input: {
   });
   if (input.dependencyLayout !== undefined)
     try {
-      await materializeExecutionDependencyView({
-        sandbox: input.sandbox,
-        layout: input.dependencyLayout,
-        overlayRoot: "repository",
-        viewKey: input.binding.proposalDigest,
-      });
+      for (const root of input.dependencyLayout.roots) {
+        const target = `repository/${root.path}`;
+        await input.sandbox.removePath({
+          path: target,
+          recursive: true,
+          force: true,
+        });
+        const linked = await input.sandbox.run({
+          command: `ln -s ${root.cachePath} ${root.path}`,
+          workingDirectory: "/workspace/repository",
+          abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
+        });
+        if (linked.exitCode !== 0) throw new Error("dependency cache miss");
+      }
     } catch {
       // The repository command remains authoritative. A missing or stale cache
       // is an optimization miss, not a reason to block the build.
