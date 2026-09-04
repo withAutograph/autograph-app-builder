@@ -620,7 +620,27 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
-    if (install.exitCode !== 0) return install;
+    if (install.exitCode !== 0) {
+      const output = `${install.stderr}\n${install.stdout}`;
+      const reason = /lockfile had changes|frozen lockfile/iu.test(output)
+        ? "frozen-lockfile"
+        : /ENOSPC|no space left/iu.test(output)
+          ? "disk-space"
+          : /EACCES|permission denied/iu.test(output)
+            ? "permissions"
+            : /timed? out|timeout/iu.test(output)
+              ? "network-timeout"
+              : /failed to resolve|package not found|module not found/iu.test(output)
+                ? "package-resolution"
+                : /fetch|connection|certificate|network/iu.test(output)
+                  ? "network"
+                  : "unclassified";
+      console.error("[app-builder apply] repository install failed", {
+        exitCode: install.exitCode,
+        reason,
+      });
+      return install;
+    }
     return await sandbox.run({
       command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
