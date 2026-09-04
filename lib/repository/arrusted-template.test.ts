@@ -306,7 +306,7 @@ describe("canonical Arrusted template readiness", () => {
     );
     expect(cloneCommand).toContain("git -C /workspace/repository init");
     expect(cloneCommand).toContain(
-      "fetch --depth 1 --no-recurse-submodules origin refs/heads/main",
+      "fetch --quiet --depth 1 --no-recurse-submodules origin refs/heads/main",
     );
     expect(cloneCommand).toContain("checkout --detach");
     expect(cloneCommand).toContain(

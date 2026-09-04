@@ -355,7 +355,7 @@ function sandboxCloneCommand() {
     'echo "AUTOGRAPH_CLONE_STAGE=configure-remote" >&2',
     `git -C ${SANDBOX_WORKSPACE} remote add origin ${ARRUSTED_TEMPLATE_REPOSITORY}`,
     'echo "AUTOGRAPH_CLONE_STAGE=clone" >&2',
-    `git -C ${SANDBOX_WORKSPACE} -c credential.helper= fetch --depth 1 --no-recurse-submodules origin ${ARRUSTED_TEMPLATE_REF}`,
+    `git -C ${SANDBOX_WORKSPACE} -c credential.helper= fetch --quiet --depth 1 --no-recurse-submodules origin ${ARRUSTED_TEMPLATE_REF}`,
     'echo "AUTOGRAPH_CLONE_STAGE=resolve-ref" >&2',
     `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse FETCH_HEAD)"`,
     'echo "AUTOGRAPH_CLONE_STAGE=checkout" >&2',
