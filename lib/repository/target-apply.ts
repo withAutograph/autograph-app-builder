@@ -616,7 +616,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // before invoking its generator, and treat Bun's real result as authority.
     const install = await sandbox.run({
       command:
-        "bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent",
+        "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
