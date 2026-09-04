@@ -378,16 +378,14 @@ export function sandboxTargetCommandExecutor(
     contractPath,
   }) => {
     const abortSignal = AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS);
-    const mise =
-      "MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools repository:exec --";
     const request =
       command === "identity"
         ? {
-            command: `${mise} app-identity.ts --app ${requestedAppId}`,
+            command: `node --experimental-strip-types .config/mise/scripts/repository/app-identity.ts --app ${requestedAppId}`,
             workingDirectory: planningRoot,
           }
         : {
-            command: `${mise} app-contract.ts --contract ${contractPath} --root ${planningRoot}`,
+            command: `node --experimental-strip-types .config/mise/scripts/repository/app-contract.ts --contract ${contractPath} --root ${planningRoot}`,
             workingDirectory: planningRoot,
           };
     const result = await sandbox.run({ ...request, abortSignal });
