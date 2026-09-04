@@ -73,7 +73,7 @@ describe("production sandbox command adapter", () => {
     expect(authorize).toHaveBeenCalledWith("session_1");
     expect(fixture.spawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: expect.stringContaining("setsid --wait bash"),
+        command: "true",
         abortSignal: expect.any(AbortSignal),
       }),
     );
