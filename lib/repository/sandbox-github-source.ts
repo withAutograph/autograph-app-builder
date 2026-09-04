@@ -296,38 +296,6 @@ console.log(JSON.stringify({
 }));
 `;
 
-function sandboxCloneCommand(input: {
-  remote: string;
-  branch: string;
-  expectedSha?: string;
-  expectedTree?: string;
-}) {
-  const remote = shellQuote(input.remote);
-  const branch = shellQuote(input.branch);
-  const expectedSha = shellQuote(input.expectedSha ?? "");
-  const expectedTree = shellQuote(input.expectedTree ?? "");
-  const remoteRef = shellQuote(`refs/remotes/origin/${input.branch}`);
-  const script = [
-    "set -eu",
-    `rm -rf ${SANDBOX_WORKSPACE}`,
-    `git -c protocol.allow=never -c protocol.https.allow=always -c credential.helper= -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --no-checkout --no-recurse-submodules --single-branch --branch ${branch} ${remote} ${SANDBOX_WORKSPACE}`,
-    `test "$(git -C ${SANDBOX_WORKSPACE} config --get remote.origin.url)" = ${remote}`,
-    `remote_ref=${remoteRef}`,
-    `resolved_sha="$(git -C ${SANDBOX_WORKSPACE} rev-parse "$remote_ref")"`,
-    `expected_sha=${expectedSha}`,
-    'test -z "$expected_sha" || test "$resolved_sha" = "$expected_sha"',
-    `resolved_tree="$(git -C ${SANDBOX_WORKSPACE} rev-parse "$resolved_sha^{tree}")"`,
-    `expected_tree=${expectedTree}`,
-    'test -z "$expected_tree" || test "$resolved_tree" = "$expected_tree"',
-    `git -C ${SANDBOX_WORKSPACE} checkout --detach --quiet "$resolved_sha"`,
-    `test -z "$(git -C ${SANDBOX_WORKSPACE} status --porcelain=v1)"`,
-    `test ! -e ${SANDBOX_WORKSPACE}/.gitmodules`,
-    `! git -C ${SANDBOX_WORKSPACE} ls-tree -r --full-tree "$resolved_sha" | awk '$1 == "160000" { found = 1 } END { exit !found }'`,
-    `node -e ${shellQuote(sandboxCloneInspectionProgram)}`,
-  ].join("\n");
-  return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
-}
-
 function sandboxGitHubSourceReinspectionCommand(input: {
   remote: string;
   branch: string;
@@ -459,50 +427,4 @@ export async function readSandboxGitHubSourceSnapshot(
     contents: {},
     contract: [],
   };
-}
-
-export async function cloneGitHubSourceWorkspace(input: {
-  sandbox: SandboxSession;
-  token: string;
-  remote: string;
-  branch: string;
-  expectedSha?: string;
-  expectedTree?: string;
-}): Promise<{
-  snapshot: CanonicalTemplateSnapshot;
-  workspaceDigest: string;
-}> {
-  // GitHub itself decides whether the short-lived installation credential can
-  // read this repository. Do not turn branch shape, anticipated revisions,
-  // package layout, or an existing writable checkout into a local gate.
-  const remote = parseRemote(input.remote);
-  const branch = parseBranch(input.branch);
-  let result: Awaited<ReturnType<SandboxSession["run"]>>;
-  try {
-    await input.sandbox.setNetworkPolicy(
-      githubSandboxCredentialPolicy(input.token),
-    );
-    result = await input.sandbox.run({
-      // The token stays in the Vercel credential broker. It is never placed
-      // in the command, environment, checkout, or workflow state.
-      command: `git clone --branch ${shellQuote(branch)} ${shellQuote(remote)} ${shellQuote(SANDBOX_WORKSPACE)}`,
-      workingDirectory: "/workspace",
-    });
-  } finally {
-    await input.sandbox.setNetworkPolicy("deny-all");
-  }
-  if (result.exitCode !== 0) {
-    // A resumed ephemeral Sandbox can legitimately still have a writable
-    // checkout. Observe it instead of deleting it or rejecting normal edits.
-    try {
-      const existing = await readSandboxGitHubSourceSnapshot(input.sandbox);
-      return { snapshot: existing, workspaceDigest: existing.sourceTree };
-    } catch {
-      throw new Error(
-        result.stderr.trim() || "GitHub could not clone this repository.",
-      );
-    }
-  }
-  const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
-  return { snapshot, workspaceDigest: snapshot.sourceTree };
 }
