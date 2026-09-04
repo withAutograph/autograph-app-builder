@@ -279,7 +279,10 @@ export function createHostedVercelBackend(
           ? undefined
           : readVercelSessionGitSource(context.session.id);
       return {
-        networkPolicy: "deny-all" as const,
+        networkPolicy:
+          input.sandboxEnvironment === undefined
+            ? ("deny-all" as const)
+            : ("allow-all" as const),
         ...(source === undefined
           ? {}
           : {

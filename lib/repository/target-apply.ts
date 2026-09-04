@@ -615,9 +615,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
     // before invoking its generator, and treat Bun's real result as authority.
-    await sandbox.setNetworkPolicy({
-      allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
-    });
+    const localDevelopment =
+      process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+    if (!localDevelopment)
+      await sandbox.setNetworkPolicy({
+        allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
+      });
     const install = await (async () => {
       try {
         return await sandbox.run({
@@ -627,7 +630,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
           abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
         });
       } finally {
-        await sandbox.setNetworkPolicy("deny-all");
+        if (!localDevelopment) await sandbox.setNetworkPolicy("deny-all");
       }
     })();
     if (install.exitCode !== 0) {
@@ -651,9 +654,10 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       });
       return install;
     }
-    await sandbox.setNetworkPolicy({
-      allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
-    });
+    if (!localDevelopment)
+      await sandbox.setNetworkPolicy({
+        allow: [...DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS],
+      });
     try {
       return await sandbox.run({
         command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
@@ -661,7 +665,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
       });
     } finally {
-      await sandbox.setNetworkPolicy("deny-all");
+      if (!localDevelopment) await sandbox.setNetworkPolicy("deny-all");
     }
   };
 }

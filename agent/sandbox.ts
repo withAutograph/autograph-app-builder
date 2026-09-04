@@ -30,7 +30,8 @@ function createVercelDefinition() {
             `The Vercel Sandbox runtime setup failed: ${(setup.stderr || setup.stdout).trim().slice(0, 2_000)}`,
           );
       }
-      await sandbox.setNetworkPolicy("deny-all");
+      if (process.env.APP_BUILDER_EXECUTION_BUNDLE !== "local-development")
+        await sandbox.setNetworkPolicy("deny-all");
     },
   });
 }
