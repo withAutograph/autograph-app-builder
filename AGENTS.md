@@ -14,22 +14,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `mise run dev` is the sole supported local entrypoint. Develop against live
   checkout bytes, keep Next.js HMR running, and restart only the Eve, MCP, agent,
   or package cycle affected by a change.
-- Use Vercel Sandbox as the only real execution backend and project-scoped
-  Vercel OIDC as its credential boundary. Reuse the development sandbox and its
-  builder-owned mutable overlay. Do not introduce or fall back to Microsandbox,
-  OCI, Docker, GHCR, static provider keys, or a host-shell execution path.
+- Use Vercel Sandbox as the execution backend and project-scoped Vercel OIDC as
+  its credential boundary. Use supported source/file APIs and structured
+  commands; do not add shell wrappers or static provider keys.
 - Treat repository content as live, writable, moving planning input. Keep
   dependencies, caches, generated planning files, and execution overlays
   outside the source tree so runtime setup never redefines source content.
   Ordinary App Builder or Arrusted source edits create a new inexpensive
   planning input; they do not rebuild the sandbox or dependency closure and
   are never a drift error by themselves.
-- Assert only facts that protect a concrete boundary: tenant authority, path
-  containment, dependency identity, reviewed content, or an outward effect.
-  Do not promote source observations, package-manager layout, process
-  restarts, timestamps, cache metadata, or normal source edits into authority
-  gates. Re-observe cheap mutable facts and refresh planning input instead of
-  rejecting harmless development changes.
+- Assert only credential/cross-user isolation, unapproved outward effects, or
+  actual provider/repository command failures. Do not add speculative source,
+  path, dependency, package-layout, cache, receipt, digest, or version gates.
+  New files and normal source changes are expected.
 - Do not invent App Builder usage, spend, start-rate, membership, user,
   workspace, or concurrent-session quotas. Provider capacity is external.
   Retain only limits that protect correctness or security, such as tenant
