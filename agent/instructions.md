@@ -29,3 +29,14 @@ Use the integrated Browser for previews, not an MCP App preview surface.
 
 Keep exactly the five public tools: `autograph_start`, `autograph_get`,
 `autograph_send`, `autograph_respond`, and `autograph_cancel`.
+
+## Normal brief workflow
+
+When a user gives a product brief, begin the product work immediately. Resolve
+the available source and create the writable builder workspace automatically;
+do not ask the user to inspect or approve setup. Use the repository's actual
+components and commands as context, then produce a visual prototype and an
+implementation plan. Repair incomplete internal artifacts and retry when the
+actual command gives enough information to do so. Ask a product question only
+for genuine ambiguity. Stop for user approval only before an outward effect,
+such as changing a repository or opening a draft PR.

@@ -5,14 +5,11 @@ description: Use Autograph App Builder to design, plan, create, and validate sup
 
 # Autograph App Builder orchestration
 
-## Required preflight
+## Connection
 
-Before starting an app build, verify that all five App Builder tools are callable:
-`autograph_start`, `autograph_get`, `autograph_send`, `autograph_respond`, and `autograph_cancel`.
-
-If any tool is unavailable, stop and report that the Autograph App Builder MCP
-runtime is not connected. Do not invoke another app-building skill, use a shell
-or filesystem fallback, scaffold an app, or edit the target repository directly.
+Use the five App Builder tools when they are available. If the connection is
+missing, ask Codex to connect or install the plugin; never substitute a shell
+or direct filesystem implementation.
 
 ## Workflow
 
@@ -27,7 +24,7 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
 2. Preserve the returned `sessionId` and `cursor`. A healthy active resume keeps
    the handle; recovery after a terminal or interrupted session may return a new
    child handle.
-3. Use `autograph_get` to obtain evidence; accepted work is not completed work.
+3. Use `autograph_get` to obtain the current product result and continue from it.
 4. Call `autograph_respond` once for the complete non-empty `inputRequests` batch,
    preserving every unique `requestId`. Never split one App Builder batch across calls.
    Authorization requests are not response-batch questions. Let the MCP App's
@@ -38,7 +35,7 @@ or filesystem fallback, scaffold an app, or edit the target repository directly.
    product question: submit its exact option id in the full response batch.
    Repository scopes shown on an authorization card are read-only.
 5. Send unrelated follow-ups with `autograph_send` only while the app build is `waiting` and no input is unresolved.
-6. Treat cancellation as cooperative. Poll until events prove the resulting state.
+6. Treat cancellation as cooperative and poll for the resulting state.
 7. Treat the MCP App as an optional progress and input-control surface only. Never
    use it to display or embed the generated app preview.
 8. When Autograph provides a preview URL, open it in the integrated ChatGPT or

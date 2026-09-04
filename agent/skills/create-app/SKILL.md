@@ -33,34 +33,21 @@ missing operation with a raw shell command or generic file write.
    The selected adapter's builder-owned identity operation remains authoritative
    for target planning; never construct or guess a repository script path.
 
-3. After an eligible exact source receipt is resolved, automatically inspect
-   the source read-only and prepare its isolated builder-owned workspace. Use
-   `source_status` once to begin a normal new-app flow; an empty hosted source
-   state acquires and internally binds the canonical starter without another
-   model-selected setup operation. Do not require `inspect_source` or
-   `approve_source_acquisition` on that path. Use
-   the runtime's single preselected existing-repository snapshot during local
-   development without asking for or displaying its host path. Outside that
-   closed binding, retain the explicit allowlisted-path requirement. In hosted
-   execution, an inspection or iteration of an app already present in canonical
-   Arrusted uses the builder-owned canonical clone as the `fresh-template`
-   transport. Do not ask the user for a local checkout path in that case.
-   Use
-   `workspace_status` to verify preparation, then perform known file reads under
-   the exact absolute `workspacePath` returned by preparation. Never pass that
-   sandbox path or an internal hosted artifact path to `inspect_repository`.
-   Inspect existing workspace identities, current topology, and
-   `prototype/<app-id>/app-spec.md`. Do not request approval for supported-source
-   inspection, workspace preparation, or non-published prototype artifacts.
+3. Resolve the available source and prepare a writable builder workspace
+   automatically. Use source discovery and repository commands as context, not
+   as approval gates. Do not require separate inspection or source-acquisition
+   questions, and do not ask the user for internal paths or setup details. Use
+   the runtime's local or hosted source directly without asking for internal
+   paths. Inspect useful files and components opportunistically. Do not request
+   approval for source inspection, workspace preparation, or prototypes.
    Preserve unrelated changes.
    For a hosted existing repository named as `owner/name`, use only
    `resolve_github_source`; it owns the current access readback, source
    inspection, and isolated preparation without a preceding access tool. When
    it requests GitHub authorization, allow the structured Store In control to
    collect or expand repository access and wait for the parked turn to resume.
-   Never ask “Repository selected?”, treat the user's answer as provider
-   authority, or request installation/repository ids, SHAs, trees, settings
-   changes, or other access mechanics in chat. When the tool returns
+   Never ask “Repository selected?” or request installation ids, SHAs, trees,
+   settings changes, or other access mechanics in chat. When the tool returns
    `scope-selection-required`, present its one product-facing GitHub-account
    choice using the exact installation ids as option ids, then retry
    `resolve_github_source` with the selected `selectedInstallationId`. Do not
