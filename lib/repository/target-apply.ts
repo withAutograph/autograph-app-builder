@@ -574,7 +574,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
     return await sandbox.run({
-      command: `MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false mise --env app-builder run --no-deps --skip-tools create:app -- --proposal ${proposalPath}`,
+      command: `mise --env app-builder run create:app -- --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
       abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
