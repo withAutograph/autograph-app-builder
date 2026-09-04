@@ -13,15 +13,6 @@ export class SandboxCommandLimitError extends Error {
   }
 }
 
-export function boundedSandboxCommand(command: string): string {
-  // `SandboxSession.run` accepts a command string and delegates its execution
-  // to the selected Eve/Vercel backend. Do not wrap it in another shell or
-  // process group: that changes process semantics without adding a product
-  // boundary. `runBoundedSandboxCommand` still stops the provider process
-  // when its caller aborts or a concrete command failure occurs.
-  return command;
-}
-
 type OutputReader = ReadableStreamDefaultReader<Uint8Array>;
 
 async function collectBounded(
@@ -133,7 +124,7 @@ export async function runBoundedSandboxCommand(
     const spawnPromise = Promise.resolve(
       sandbox.spawn({
         ...options,
-        command: boundedSandboxCommand(options.command),
+        command: options.command,
         abortSignal: signal,
       }),
     );

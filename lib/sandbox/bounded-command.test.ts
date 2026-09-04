@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxProcess } from "eve/sandbox";
-import {
-  boundedSandboxCommand,
-  runBoundedSandboxCommand,
-} from "./bounded-command";
+import { runBoundedSandboxCommand } from "./bounded-command";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
 const stream = (...chunks: string[]) =>
@@ -27,21 +24,7 @@ function processFixture(stdout: string[], stderr: string[] = []) {
 }
 
 describe("bounded sandbox command", () => {
-  it("passes the authored command directly to the sandbox backend", () => {
-    const command = boundedSandboxCommand("mise run check");
-    expect(command).toBe("mise run check");
-    for (const removedControl of [
-      "setsid",
-      "kill -TERM",
-      "bash -lc",
-      "ulimit",
-      "node -e",
-      "workspace_quota",
-    ])
-      expect(command).not.toContain(removedControl);
-  });
-
-  it("collects bounded output through spawn rather than buffered run", async () => {
+  it("passes the authored command directly to spawn", async () => {
     const fixture = processFixture(["hello"], ["warning"]);
     const spawn = vi.fn(async (options: unknown) => {
       void options;
