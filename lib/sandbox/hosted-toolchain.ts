@@ -177,20 +177,20 @@ command -v unzip >/dev/null
 stage='prepare-workspace'
 install -d -m 0755 /workspace/.app-builder
 stage='artifact-download'
-curl --fail --location --silent --show-error '${HOSTED_ARTIFACT_URL}' --output "$seed" &
+curl --fail --location --show-error --progress-bar '${HOSTED_ARTIFACT_URL}' --output "$seed" &
 artifact_download=$!
 stage='toolchain-download'
-curl --fail --location --silent --show-error "$mise_url" --output "$work/mise" &
+curl --fail --location --show-error --progress-bar "$mise_url" --output "$work/mise" &
 mise_download=$!
-curl --fail --location --silent --show-error "$bun_url" --output "$work/bun.zip" &
+curl --fail --location --show-error --progress-bar "$bun_url" --output "$work/bun.zip" &
 bun_download=$!
-curl --fail --location --silent --show-error "$node_url" --output "$work/node.tar.gz" &
+curl --fail --location --show-error --progress-bar "$node_url" --output "$work/node.tar.gz" &
 node_download=$!
-curl --fail --location --silent --show-error "$cargo_url" --output "$work/cargo.tar.xz" &
+curl --fail --location --show-error --progress-bar "$cargo_url" --output "$work/cargo.tar.xz" &
 cargo_download=$!
-curl --fail --location --silent --show-error "$rustc_url" --output "$work/rustc.tar.xz" &
+curl --fail --location --show-error --progress-bar "$rustc_url" --output "$work/rustc.tar.xz" &
 rustc_download=$!
-curl --fail --location --silent --show-error "$rust_std_url" --output "$work/rust-std.tar.xz" &
+curl --fail --location --show-error --progress-bar "$rust_std_url" --output "$work/rust-std.tar.xz" &
 rust_std_download=$!
 stage='artifact-verification'
 wait "$artifact_download"
