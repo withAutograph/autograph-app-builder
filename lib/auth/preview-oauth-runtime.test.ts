@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   authRateLimitForLocalEmulation,
+  fetchVerifiedGitHubUserInfo,
   fetchVerifiedVercelUserInfo,
   readPreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
@@ -78,6 +79,63 @@ describe("Preview OAuth runtime configuration", () => {
         headers: { Authorization: "Bearer sensitive-access-token" },
       }),
     );
+  });
+
+  it("uses GitHub's verified primary email when the public profile omits email", async () => {
+    const fetchImplementation = vi.fn(async (url: string | URL) => {
+      if (String(url) === "https://api.github.com/user") {
+        return Response.json({
+          id: 123,
+          login: "autograph-user",
+          email: null,
+          avatar_url: "https://avatars.example.test/user.png",
+        });
+      }
+      return Response.json([
+        { email: "other@example.com", primary: false, verified: true },
+        { email: "USER@EXAMPLE.COM", primary: true, verified: true },
+      ]);
+    });
+
+    await expect(
+      fetchVerifiedGitHubUserInfo(
+        { accessToken: "sensitive-access-token" },
+        fetchImplementation as typeof fetch,
+      ),
+    ).resolves.toMatchObject({
+      user: {
+        name: "autograph-user",
+        email: "user@example.com",
+        emailVerified: true,
+      },
+      data: { id: 123, email: "user@example.com" },
+    });
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      "https://api.github.com/user/emails",
+      expect.objectContaining({
+        redirect: "error",
+        headers: expect.objectContaining({
+          Authorization: "Bearer sensitive-access-token",
+        }),
+      }),
+    );
+  });
+
+  it("rejects GitHub identities without a verified email", async () => {
+    const fetchImplementation = vi.fn(async (url: string | URL) =>
+      String(url) === "https://api.github.com/user"
+        ? Response.json({ id: 123, login: "autograph-user" })
+        : Response.json([
+            { email: "user@example.com", primary: true, verified: false },
+          ]),
+    );
+
+    await expect(
+      fetchVerifiedGitHubUserInfo(
+        { accessToken: "sensitive-access-token" },
+        fetchImplementation as typeof fetch,
+      ),
+    ).resolves.toBeNull();
   });
 
   it.each([
