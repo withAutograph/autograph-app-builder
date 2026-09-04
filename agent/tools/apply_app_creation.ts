@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import {
@@ -16,8 +17,11 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
   description:
-    "Apply the current implementation plan in the writable builder checkout. It runs the repository's actual apply command and reports real command failures. It does not publish or otherwise change an external repository.",
-  inputSchema: z.object({}),
+    "Build this app in the private preview checkout, then validate it for review. This does not publish, deploy, provision resources, or change the user's repository.",
+  approval: always(),
+  inputSchema: z.object({
+    productSummary: z.string().trim().min(1).max(600).optional(),
+  }),
   async execute(_input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (

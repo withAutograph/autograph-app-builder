@@ -22,7 +22,8 @@ export async function prepareReviewedWorkflow(
   await t.send("Run target identity and planning.");
 
   const apply = await t.send("Apply the current creation proposal.");
-  apply.notEvent("input.requested");
+  apply.requireInputRequest({ toolName: "apply_app_creation" });
+  await t.respondAll("approve");
 
   const validation = await t.send("Validate the applied creation.");
   validation.notEvent("input.requested");

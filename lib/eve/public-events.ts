@@ -37,7 +37,6 @@ export type InternalEveEvent = {
 const progressStates = new Set(["started", "completed", "failed"]);
 const silentInternalApprovalTools = new Set([
   "accept_app_spec",
-  "apply_app_creation",
   "validate_app_creation",
   "accept_change_set",
 ]);
@@ -420,6 +419,7 @@ function inputRequest(request: {
   };
 }): PublicInputRequest | undefined {
   const approvalTitles = {
+    apply_app_creation: "Build this app?",
     publish_github_draft_pr: "Approve draft PR publication",
   } as const;
   const toolName = request.action?.toolName;
@@ -436,15 +436,21 @@ function inputRequest(request: {
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   const description =
-    request.kind === "tool-approval" &&
-    toolName !== undefined &&
-    toolName in approvalTitles
-      ? publicApprovalDescription(request.action?.input, toolName)
-      : undefined;
+    request.kind === "tool-approval" && toolName === "apply_app_creation"
+      ? (z
+          .object({ productSummary: z.string().trim().min(1).max(600) })
+          .safeParse(request.action?.input).data?.productSummary ??
+        "Build and validate the preview shown above. This changes only the private App Builder workspace.")
+      : request.kind === "tool-approval" &&
+          toolName !== undefined &&
+          toolName in approvalTitles
+        ? publicApprovalDescription(request.action?.input, toolName)
+        : undefined;
   if (
     request.kind === "tool-approval" &&
     toolName !== undefined &&
     toolName in approvalTitles &&
+    toolName !== "apply_app_creation" &&
     description === undefined
   )
     return undefined;

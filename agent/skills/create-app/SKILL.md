@@ -77,10 +77,17 @@ then call the same operation with the intended app-owned changes.
    replacements, and retry planning without resolving or preparing the source
    again. Never expose this repair or substitute prose. Return only product
    blockers without workarounds or internal validator mechanics.
-6. Present the usable prototype and complete proposal, then continue through
-   builder-owned preparation, checks, and review automatically and silently.
-   Never invoke the target command through generic shell access.
-7. Use only the discovered `apply_app_creation` tool. It must rerun readiness,
+6. Present the usable Browser prototype and a concise product summary, then call
+   `apply_app_creation` with that summary. This produces the first normal user
+   prompt: **Build this app?** Do not request approval before this point for
+   session work, source access, inspection, design, prototypes, internal
+   drafting, or planning. Never invoke the target command through generic shell
+   access.
+7. Treat approval of **Build this app?** as permission to edit and validate only
+   the private App Builder checkout. It is not permission to create or modify a
+   repository, push a branch, open a pull request, deploy, provision resources,
+   publish a package, or release anything. Use only the discovered
+   `apply_app_creation` tool. It must rerun readiness,
    bind the exact proposal and earlier receipts, and write only its fresh
    builder-owned overlay. If it records partial failure, stop in
    recovery-required state without automatic retry.

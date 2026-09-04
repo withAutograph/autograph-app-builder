@@ -429,7 +429,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "apply_app_creation",
-            input: { expectedProposalDigest: planned.digest },
+            input: {
+              expectedProposalDigest: planned.digest,
+              productSummary:
+                "Build the operations review queue, vendor detail panel, and conditional Finance tax-verification workflow shown in the preview.",
+            },
           },
         ],
       };
