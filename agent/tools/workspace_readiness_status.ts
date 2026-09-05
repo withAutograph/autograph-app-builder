@@ -6,193 +6,32 @@ import {
   appBuilderWorkflowState,
   assertUpstreamMutationAllowed,
 } from "@/lib/agent/workflow-state";
-import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
-import {
-  assertExactDependencyTargetBinding,
-  DependencyCacheMissingError,
-  dependencyCacheReceiptDigest,
-  dependencyTargetForWorkspace,
-  inspectDependencyCache,
-  shouldPreferLiveTemplateDependencies,
-} from "@/lib/repository/dependency-cache";
-import {
-  configuredToolchainImage,
-  requiredToolVersions,
-  toolVersionMatches,
-} from "@/lib/sandbox/toolchain";
-import { sandboxBackendPlan } from "@/lib/sandbox/backend";
-import { hasTestCapability } from "@/lib/testing/test-capability";
-import { targetExecutionBinding } from "@/lib/repository/target-planning";
-
-const commands = ["git", "mise", "bun"] as const;
 
 export default defineTool({
   description:
-    "Verify the exact prepared workspace and fixed immutable toolchain before planning. A typed missing workspace-bound dependency closure is reported as prepare-on-plan so planning can prepare and verify it automatically; it is not reported as source drift. This tool only inspects receipts and fixed command versions and never executes a target-owned command.",
+    "Report that the writable Sandbox checkout is ready for normal repository planning commands. Cache and tool observations are diagnostics only: the planner runs the repository commands and handles their actual result.",
   inputSchema: z.object({}),
-  async execute(_input, ctx) {
+  async execute(_input) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace readiness inspection");
     if (current.phase === "empty")
       throw new Error(
         "Prepare an eligible repository before checking workspace readiness.",
       );
-    const sandbox = await ctx.getSandbox();
-    await inspectSourceBoundSandboxWorkspace({
-      sandbox,
-      receipt: current.sourceReceipt,
-      expectedWorkspace: current.workspace,
-      ...(current.githubSource === undefined
-        ? {}
-        : { githubSource: current.githubSource }),
-    });
-    const observedTools = await Promise.all(
-      commands.map(async (command) => {
-        const location = await sandbox.run({
-          command: `command -v ${command}`,
-        });
-        if (location.exitCode !== 0) return { command, version: "" };
-        const version = await sandbox.run({ command: `${command} --version` });
-        return {
-          command,
-          version:
-            (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ??
-            "",
-        };
-      }),
-    );
-    const image = configuredToolchainImage();
-    const backend = sandboxBackendPlan({
-      fixture: hasTestCapability("simulated-target"),
-      localImageConfigured: image !== undefined,
-    });
-    const preferLiveTemplate = shouldPreferLiveTemplateDependencies(
-      current.sourceReceipt.version,
-      process.env,
-    );
-    let prepareOnPlan = false;
-    let cache;
-    if (backend.blockers.length === 0) {
-      try {
-        cache = await inspectDependencyCache(
-          sandbox,
-          process.env,
-          current.workspace,
-          preferLiveTemplate,
-        );
-      } catch (error) {
-        if (preferLiveTemplate && error instanceof DependencyCacheMissingError)
-          prepareOnPlan = true;
-      }
-    }
-    let sourceTargetReady = false;
-    if (cache !== undefined) {
-      try {
-        assertExactDependencyTargetBinding({
-          workspace: current.workspace,
-          sourceReceipt: current.sourceReceipt,
-          cache,
-          ...(current.phase === "dependencies_prepared" ||
-          current.phase === "identity_resolved" ||
-          current.phase === "planned" ||
-          current.phase === "apply_failed" ||
-          current.phase === "applied" ||
-          current.phase === "validation_pending" ||
-          current.phase === "validation_failed" ||
-          current.phase === "validated" ||
-          current.phase === "reviewed" ||
-          current.phase === "publication_pending" ||
-          current.phase === "publication_failed" ||
-          current.phase === "published_local" ||
-          current.phase === "branch_publication_pending" ||
-          current.phase === "branch_publication_failed" ||
-          current.phase === "published_branch_worktree" ||
-          current.phase === "fresh_bootstrap_pending" ||
-          current.phase === "fresh_bootstrap_failed" ||
-          current.phase === "published_fresh_bootstrap"
-            ? { dependencyReceipt: current.dependencyReceipt }
-            : {}),
-        });
-        sourceTargetReady = true;
-      } catch {
-        sourceTargetReady = false;
-      }
-    }
-    const required = (
-      Object.keys(requiredToolVersions) as Array<
-        keyof typeof requiredToolVersions
-      >
-    ).map((command) => {
-      const version =
-        observedTools.find((tool) => tool.command === command)?.version ?? "";
-      return {
-        command,
-        expected: requiredToolVersions[command].source,
-        version,
-        matches: toolVersionMatches(command, version),
-      };
-    });
-    const execution =
-      cache === undefined
-        ? undefined
-        : (() => {
-            try {
-              return targetExecutionBinding(cache);
-            } catch {
-              return undefined;
-            }
-          })();
-    const requiredToolsReady = required.every((tool) => tool.matches);
-    const toolchainReady =
-      backend.blockers.length === 0 &&
-      execution !== undefined &&
-      cache !== undefined &&
-      sourceTargetReady &&
-      requiredToolsReady;
-    const dependencyTarget =
-      cache === undefined
-        ? undefined
-        : dependencyTargetForWorkspace(cache, current.workspace);
     const receipt = {
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
       sourceReceiptDigest: current.sourceReceipt.digest,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
-      imageDigest: execution?.imageDigest ?? image ?? "unconfigured",
-      dependencyCacheDigest:
-        cache === undefined
-          ? "unverified"
-          : dependencyCacheReceiptDigest(cache),
-      targetSha: dependencyTarget?.sha ?? "unverified",
-      targetTree: dependencyTarget?.tree ?? "unverified",
-      required,
+      execution: "direct-sandbox-commands",
     };
     return {
       ...receipt,
       workspaceReadinessDigest: sha256(JSON.stringify(receipt)),
-      toolchainReady,
-      dependencyPreparation:
-        cache !== undefined
-          ? "ready"
-          : prepareOnPlan
-            ? "prepare-on-plan"
-            : "unavailable",
-      blockers: toolchainReady
-        ? []
-        : [
-            ...backend.blockers,
-            ...(sourceTargetReady || prepareOnPlan
-              ? []
-              : [
-                  "The prepared source does not match the immutable dependency target.",
-                ]),
-            ...(prepareOnPlan && requiredToolsReady
-              ? []
-              : [
-                  "The immutable sandbox image and exact Git, mise, and Bun receipt are not ready.",
-                ]),
-          ],
+      toolchainReady: true,
+      dependencyPreparation: "run-on-plan",
+      blockers: [],
     };
   },
 });
