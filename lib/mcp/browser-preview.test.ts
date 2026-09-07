@@ -100,8 +100,10 @@ describe("Browser prototype preview", () => {
     expect(response.headers.get("content-security-policy")).toBe(
       prototypePreviewContentSecurityPolicy,
     );
+    // Forms must dispatch their local submit event so generated prototypes can
+    // handle it with preventDefault(); CSP still rejects every navigation.
     expect(prototypePreviewContentSecurityPolicy).toContain(
-      "sandbox allow-scripts",
+      "sandbox allow-forms allow-scripts",
     );
     expect(prototypePreviewContentSecurityPolicy).not.toContain(
       "allow-same-origin",
