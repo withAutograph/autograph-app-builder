@@ -5,13 +5,14 @@ import {
   APP_BUILDER_SOURCE_VERSION,
   sourceWorkflowState,
 } from "@/lib/agent/source-state";
-import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
 import {
   canAutoSelectDevelopmentSource,
   developmentSourceReceipt,
 } from "@/lib/repository/development-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { isHostedVercelRuntime } from "@/lib/sandbox/backend";
+import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
 export default defineTool({
   description:
@@ -52,16 +53,24 @@ export default defineTool({
       !(hasTestCapability("simulated-target") && path !== undefined)
     )
       receipt = await acquireCanonicalArrustedTemplate({
-        sandbox: await ctx.getSandbox(),
+        sandbox: () => ctx.getSandbox(),
+        sessionId: ctx.session.id,
         callId: ctx.callId,
       });
-    if (receipt === undefined) {
-      if (path === undefined)
-        throw new Error(
-          "Existing repositories require an allowlisted local path.",
-        );
-      receipt = await inspectSourceReceipt(sourceKind, path);
+    if (receipt === undefined && isHostedVercelRuntime(process.env)) {
+      const selected = sourceWorkflowState.get();
+      if (selected.phase !== "empty") receipt = selected.receipt;
     }
+    if (
+      receipt === undefined &&
+      path !== undefined &&
+      !isHostedVercelRuntime(process.env)
+    )
+      receipt = await inspectSourceReceipt(sourceKind, path);
+    if (receipt === undefined)
+      throw new Error(
+        "The selected source is not available in this app build session.",
+      );
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",

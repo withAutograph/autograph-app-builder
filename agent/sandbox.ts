@@ -5,8 +5,14 @@ import {
   DEVELOPMENT_SANDBOX_ENVIRONMENT,
   developmentPinnedToolchainCommand,
 } from "@/lib/sandbox/development-toolchain";
+import {
+  HOSTED_BUN_RUNTIME_ENVIRONMENT,
+  createHostedBunRuntimeInstaller,
+} from "@/lib/sandbox/hosted-bun-runtime";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+
+const installHostedBunRuntime = createHostedBunRuntimeInstaller();
 
 function createVercelDefinition() {
   // Deterministic evals exercise fixture target behavior and must not acquire
@@ -20,7 +26,7 @@ function createVercelDefinition() {
         ? {
             sandboxEnvironment: DEVELOPMENT_SANDBOX_ENVIRONMENT,
           }
-        : {}),
+        : { sandboxEnvironment: HOSTED_BUN_RUNTIME_ENVIRONMENT }),
     }),
     async onSession({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
@@ -34,6 +40,8 @@ function createVercelDefinition() {
           throw new Error(
             `The Vercel Sandbox runtime setup failed: ${(setup.stderr || setup.stdout).trim().slice(0, 2_000)}`,
           );
+      } else {
+        await installHostedBunRuntime(sandbox);
       }
     },
   });

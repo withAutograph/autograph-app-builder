@@ -294,8 +294,6 @@ export function targetExecutionBinding(
   } as const;
 }
 
-type SourceFile = { path: string };
-
 export async function materializePlanningOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
@@ -304,33 +302,19 @@ export async function materializePlanningOverlay(input: {
   appSpecDigest: string;
 }) {
   planningMarker("planning-overlay", "start");
-  const manifest = await input.sandbox.readTextFile({
-    path: ".app-builder/source-files.json",
-  });
-  if (manifest === null)
-    throw new Error("Prepared source manifest is missing.");
-  const parsed = JSON.parse(manifest) as unknown;
-  if (!Array.isArray(parsed))
-    throw new Error("Prepared source manifest is invalid.");
-  const files = parsed as SourceFile[];
   const root = planningOverlayRoot(input.artifactRevision);
-  for (const file of files) {
-    if (typeof file.path !== "string" || !safeSourcePath(file.path))
-      throw new Error("Prepared source manifest is invalid.");
-  }
   // The overlay is builder-owned scratch state. Recreate it from the current
-  // source allowlist so files removed or renamed in the live checkout cannot
-  // survive from an earlier planning generation.
+  // checkout, including files generated since cloning. An inspection manifest
+  // is optional diagnostic data, not a prerequisite for repository commands.
   await input.sandbox.removePath({ path: root, recursive: true, force: true });
   await ensureSandboxDirectories(input.sandbox, [
     root,
     `${root}/prototype/${input.appId}`,
     `.app-builder/target-inputs/${input.artifactRevision}`,
   ]);
-  // `repository/` is already the contained, sanitized source tree produced by
-  // workspace preparation. Copy it inside the sandbox in one operation so a
-  // large repository does not require one remote read and write per file. The
-  // validated manifest remains the closed description of the prepared tree.
+  // Copy the current writable checkout in one operation. Let the filesystem
+  // report a real missing-checkout or copy failure instead of predicting one
+  // from a stale or absent inventory.
   const copy = await input.sandbox.run({
     command: `cp -R /workspace/repository/. /workspace/${root}/`,
     workingDirectory: "/workspace",
