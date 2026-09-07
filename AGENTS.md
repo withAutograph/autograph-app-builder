@@ -17,6 +17,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Use Vercel Sandbox as the execution backend and project-scoped Vercel OIDC as
   its credential boundary. Use supported source/file APIs and structured
   commands; do not add shell wrappers or static provider keys.
+- Use `allow-all` networking in local, Preview, and Production Sandbox paths,
+  including setup and dependency installation. Do not force package managers
+  offline or restore network restrictions after a command. Keep credentials
+  protected and require approval for outward effects.
 - Treat repository content as live, writable, moving planning input. Keep
   dependencies, caches, generated planning files, and execution overlays
   outside the source tree so runtime setup never redefines source content.

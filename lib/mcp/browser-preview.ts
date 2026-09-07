@@ -68,7 +68,7 @@ export function prototypePreviewRequestUrl(input: {
 }
 
 export const prototypePreviewContentSecurityPolicy = [
-  "sandbox allow-scripts",
+  "sandbox allow-forms allow-scripts",
   "default-src 'none'",
   "base-uri 'none'",
   "connect-src 'none'",

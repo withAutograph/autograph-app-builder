@@ -17,7 +17,7 @@ describe("generic sandbox tool boundaries", () => {
     },
   );
 
-  it("routes existing application reads through the manifest-bound inspector", async () => {
+  it("routes existing application reads through the sandbox-bound inspector", async () => {
     const [router, inspector] = await Promise.all([
       readFile(
         resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
@@ -31,11 +31,10 @@ describe("generic sandbox tool boundaries", () => {
 
     expect(router).toContain("inspect_existing_app");
     expect(router).not.toContain("and read_file respectively");
-    expect(inspector).toContain("inspectSourceBoundSandboxWorkspace");
-    expect(inspector).toContain("githubSource: state.githubSource");
-    expect(
-      inspector.indexOf("inspectSourceBoundSandboxWorkspace"),
-    ).toBeLessThan(inspector.indexOf(".app-builder/source-files.json"));
+    expect(inspector).toContain("await ctx.getSandbox()");
+    expect(inspector).not.toContain("inspectSourceBoundSandboxWorkspace");
+    expect(inspector).toContain("path: `repository/${path}`");
+    expect(inspector).not.toContain("allowed.has(path)");
   });
 
   it("prepares the configured development source when a model inspects its sandbox path", async () => {

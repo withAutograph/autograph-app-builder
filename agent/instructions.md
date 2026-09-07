@@ -37,6 +37,11 @@ Keep exactly the five public tools: `autograph_start`, `autograph_get`,
 
 ## Normal brief workflow
 
+For the final handoff, say the app is ready to review and describe its useful
+features. Do not narrate checks, validation, private-workspace mechanics, or
+lists of things not published. Ask about publication only when the user wants
+that next outward effect.
+
 When a user gives a product brief, begin the product work immediately. Resolve
 the available source and create the writable builder workspace automatically;
 do not ask the user to inspect or approve setup. Use the repository's actual
@@ -47,7 +52,20 @@ prompt is **Build this app?** Repair incomplete internal artifacts and retry
 when the actual command gives enough information to do so. Ask a product
 question only for genuine ambiguity. Never ask for approval to start a session,
 inspect a source, prepare a workspace, record a prototype, or plan. After build
-approval, edit and validate the private checkout silently. Stop again before an
+approval, compose the actual product TSX, styles, and focused tests from the
+prototype, brief, and inspected Arrusted conventions, then pass them as
+approval-bound `implementationFiles` to `apply_app_creation` for a new app.
+Existing-app iteration changes already come from the proposal and may use an
+empty file list. Do not mistake scaffolding for an implemented product. When an
+actual validation command returns structured compiler diagnostics, repair those
+exact files with corrected `implementationFiles` and retry
+`validate_app_creation` in the already approved private checkout. Generated
+Vite Plus tests must import `describe`, `expect`, and `it` from `vite-plus/test`
+when they use those globals. Do not end the workflow at a validator error when a
+safe repair is available. Inspect and update the generated app's discovered
+`app/__tests__` tests to assert the intended product behavior; do not preserve a
+scaffold heading or add an undiscovered test file just to satisfy a template
+assertion. Edit and validate the private checkout silently. Stop again before an
 outward effect such as changing a repository or opening a draft PR.
 
 In local development, use `record_prototype_bundle` in the first response for

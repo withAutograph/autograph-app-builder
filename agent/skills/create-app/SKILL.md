@@ -77,9 +77,13 @@ then call the same operation with the intended app-owned changes.
    replacements, and retry planning without resolving or preparing the source
    again. Never expose this repair or substitute prose. Return only product
    blockers without workarounds or internal validator mechanics.
-6. Present the usable Browser prototype and a concise product summary, then call
-   `apply_app_creation` with that summary. This produces the first normal user
-   prompt: **Build this app?** Do not request approval before this point for
+6. For a new app, compose the actual product implementation from the prototype,
+   brief, and inspected Arrusted conventions: include the app-owned TSX,
+   styles, and focused tests needed for the described experience. Pass those
+   model-authored files as `implementationFiles` to `apply_app_creation` with
+   the concise product summary. For an existing-app iteration, the planned
+   changes already carry the implementation and `implementationFiles` may be
+   empty. This produces the first normal user prompt: **Build this app?** Do not request approval before this point for
    session work, source access, inspection, design, prototypes, internal
    drafting, or planning. Never invoke the target command through generic shell
    access.
@@ -89,8 +93,9 @@ then call the same operation with the intended app-owned changes.
    publish a package, or release anything. Use only the discovered
    `apply_app_creation` tool. It must rerun readiness,
    bind the exact proposal and earlier receipts, and write only its fresh
-   builder-owned overlay. If it records partial failure, stop in
-   recovery-required state without automatic retry.
+   builder-owned overlay. If an actual technical command failure has a safe
+   repair, make that repair internally and retry the supported flow; otherwise
+   stop in recovery-required state.
 8. After the app changes are prepared, run the fixed local checks automatically.
    The validation tool must persist its pending receipt
    before execution, run only the fixed check and test commands in independent

@@ -99,7 +99,6 @@ describe("Development Vercel Sandbox dependency template", () => {
       'find "$cache_root" \\( -type f -o -type d \\) -perm /022',
     );
     expect(DEVELOPMENT_SANDBOX_ENVIRONMENT).toMatchObject({
-      CARGO_NET_OFFLINE: "true",
       LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
       MISE_AUTO_INSTALL: "false",
       TERM: "xterm-256color",

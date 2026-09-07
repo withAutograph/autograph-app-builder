@@ -14,6 +14,10 @@ import {
   sandboxApplyCommandExecutor,
 } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import {
+  implementationFilesSchema,
+  withImplementationFiles,
+} from "@/lib/agent/apply-implementation-files";
 
 export default defineTool({
   description:
@@ -21,8 +25,9 @@ export default defineTool({
   approval: always(),
   inputSchema: z.object({
     productSummary: z.string().trim().min(1).max(600).optional(),
+    implementationFiles: implementationFilesSchema.default([]),
   }),
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
       current.phase !== "planned" &&
@@ -62,9 +67,10 @@ export default defineTool({
     };
     const result = await executeProposalBoundApply({
       sandbox,
-      executor: fixture
-        ? fixtureApplyCommandExecutor()
-        : sandboxApplyCommandExecutor(),
+      executor: withImplementationFiles(
+        fixture ? fixtureApplyCommandExecutor() : sandboxApplyCommandExecutor(),
+        input.implementationFiles,
+      ),
       ...(fixture
         ? {
             snapshotter: (fixtureSandbox, applyRoot) =>

@@ -402,15 +402,9 @@ export function sandboxTargetCommandExecutor(
       return result;
 
     await sandbox.setNetworkPolicy("allow-all");
-    const tools = await sandbox.run({
-      command: "mise install",
-      workingDirectory: planningRoot,
-      abortSignal: AbortSignal.timeout(300_000),
-    });
-    if (tools.exitCode !== 0) return tools;
     const setup = await sandbox.run({
       command:
-        "mise exec -- bun install --ignore-scripts --filter @autograph/platform-microfrontends",
+        "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
       workingDirectory: planningRoot,
       abortSignal: AbortSignal.timeout(300_000),
     });

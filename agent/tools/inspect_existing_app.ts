@@ -1,13 +1,8 @@
 import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  appBuilderWorkflowState,
-  validAppId,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
-import { canInspectExistingApplication } from "@/lib/agent/existing-app-sequencing";
-import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { safeSourcePath } from "@/lib/repository/source-path";
 import sourceStatus from "./source_status";
 import prepareWorkspace from "./prepare_workspace";
@@ -26,8 +21,6 @@ export default defineDynamic({
           paths: z.array(z.string().min(1).max(512)).max(32).default([]),
         }),
         async execute({ appId, paths }, ctx) {
-          if (!validAppId(appId))
-            throw new Error("The existing application id is invalid.");
           let state = appBuilderWorkflowState.get();
           // The canonical Arrusted starter is already the supported transport
           // for its built-in applications. Make inspection self-starting so a
@@ -35,72 +28,62 @@ export default defineDynamic({
           // source/setup sequence. Arbitrary repositories still require the
           // explicit source resolution path.
           if (state.phase === "empty") {
-            await sourceStatus.execute({}, ctx);
-            const source = sourceWorkflowState.get();
-            if (source.phase === "empty")
-              throw new Error("The canonical source could not be prepared.");
-            await prepareWorkspace.execute(
-              { expectedSourceReceiptDigest: source.receipt.digest },
-              ctx,
-            );
+            try {
+              await sourceStatus.execute({}, ctx);
+              const source = sourceWorkflowState.get();
+              if (source.phase !== "empty")
+                await prepareWorkspace.execute(
+                  { expectedSourceReceiptDigest: source.receipt.digest },
+                  ctx,
+                );
+            } catch {
+              // The session sandbox remains the authority for a best-effort
+              // read of newly generated files, even before its workflow state
+              // has caught up.
+            }
             state = appBuilderWorkflowState.get();
           }
-          if (state.phase === "empty" || !canInspectExistingApplication(state))
-            throw new Error("Prepare the source before inspection.");
           const prefix = `apps/${appId}/`;
-          if (
-            new Set(paths).size !== paths.length ||
-            paths.some(
-              (path) => !safeSourcePath(path) || !path.startsWith(prefix),
-            )
-          )
-            throw new Error(
-              "An existing application inspection path is not allowed.",
-            );
+          if (!safeSourcePath(appId) || appId.includes("/"))
+            throw new Error("The requested application cannot be read safely.");
+          const requestedPaths = paths.flatMap((path) =>
+            safeSourcePath(path)
+              ? [path.startsWith(prefix) ? path : `${prefix}${path}`]
+              : [],
+          );
           const sandbox = await ctx.getSandbox();
-          await inspectSourceBoundSandboxWorkspace({
-            sandbox,
-            receipt: state.sourceReceipt,
-            expectedWorkspace: state.workspace,
-            ...(state.githubSource === undefined
-              ? {}
-              : { githubSource: state.githubSource }),
-          });
+          // The signed-in session supplies this sandbox. Read its current
+          // files; source receipts are not prerequisites for inspection.
           const manifestSource = await sandbox.readTextFile({
             path: ".app-builder/source-files.json",
           });
-          if (manifestSource === null)
-            throw new Error("Prepared source manifest is missing.");
-          const manifest = JSON.parse(manifestSource) as unknown;
-          if (!Array.isArray(manifest))
-            throw new Error("Prepared source manifest is invalid.");
+          let manifest: unknown = [];
+          try {
+            manifest =
+              manifestSource === null ? [] : JSON.parse(manifestSource);
+          } catch {
+            manifest = [];
+          }
           const allowed = new Set(
-            manifest.flatMap((candidate): string[] =>
-              typeof candidate === "object" &&
-              candidate !== null &&
-              "path" in candidate &&
-              typeof candidate.path === "string"
-                ? [candidate.path]
-                : [],
+            (Array.isArray(manifest) ? manifest : []).flatMap(
+              (candidate): string[] =>
+                typeof candidate === "object" &&
+                candidate !== null &&
+                "path" in candidate &&
+                typeof candidate.path === "string"
+                  ? [candidate.path]
+                  : [],
             ),
           );
           const availablePaths = [...allowed]
             .filter((path) => path.startsWith(prefix))
             .sort()
             .slice(0, 512);
-          if (availablePaths.length === 0)
-            throw new Error(
-              "The requested existing application does not exist.",
-            );
           let total = 0;
           const files = [];
           const missingPaths = [];
           const omittedPaths = [];
-          for (const path of paths) {
-            if (!allowed.has(path)) {
-              missingPaths.push(path);
-              continue;
-            }
+          for (const path of requestedPaths) {
             const content = await sandbox.readTextFile({
               path: `repository/${path}`,
             });

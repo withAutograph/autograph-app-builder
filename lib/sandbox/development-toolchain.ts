@@ -34,7 +34,6 @@ export const DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS = [
 ] as const;
 export const DEVELOPMENT_SANDBOX_ENVIRONMENT = {
   CARGO_HOME: "/workspace/.app-builder/toolchain/cargo-home",
-  CARGO_NET_OFFLINE: "true",
   MISE_AUTO_INSTALL: "false",
   MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data",
   MISE_EXEC_AUTO_INSTALL: "false",
@@ -472,7 +471,6 @@ CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-clos
 sed -i "s#$work/cargo-closure/vendor#${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor#g" "$work/cargo-closure/config.toml"
 grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
 if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
-printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
 stage='cache-installation'
 install -d -m 0755 "$cache_root"
 test "$(realpath "$cache_root")" = "$cache_root"
@@ -552,7 +550,6 @@ CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-clos
 sed -i "s#$work/cargo-closure/vendor#${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor#g" "$work/cargo-closure/config.toml"
 grep -F 'directory = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/vendor"' "$work/cargo-closure/config.toml" >/dev/null
 if grep -F "$work" "$work/cargo-closure/config.toml" >/dev/null; then exit 1; fi
-printf '\n[net]\noffline = true\n' >> "$work/cargo-closure/config.toml"
 stage='cache-installation'
 cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
 cache_dependencies="$cache_root/dependencies/${dependencyKey}"

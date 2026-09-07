@@ -18,13 +18,17 @@ export default defineTool({
       throw new Error(
         "Run the repository validation before reviewing its changes.",
       );
-    const changeSet = await exactNormalizedChangeSet({ state });
+    const changeSet = await exactNormalizedChangeSet({
+      state,
+      sandbox: await ctx.getSandbox(),
+    });
     if (state.phase === "reviewed") {
       const expectedReceipt = createReviewedChangeSetReceipt(
         changeSet,
         state.reviewReceipt.reviewedByCallId,
       );
-      return { ...expectedReceipt, reused: true };
+      if (expectedReceipt.digest === state.reviewReceipt.digest)
+        return { ...state.reviewReceipt, reused: true };
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update(() => ({
