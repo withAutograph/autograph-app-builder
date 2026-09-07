@@ -17,7 +17,7 @@ describe("generic sandbox tool boundaries", () => {
     },
   );
 
-  it("routes existing application reads through the sandbox-bound inspector", async () => {
+  it("keeps repository inspection separate from existing-application reads", async () => {
     const [router, inspector] = await Promise.all([
       readFile(
         resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
@@ -29,7 +29,7 @@ describe("generic sandbox tool boundaries", () => {
       ),
     ]);
 
-    expect(router).toContain("inspect_existing_app");
+    expect(router).not.toContain("inspect_existing_app");
     expect(router).not.toContain("and read_file respectively");
     expect(inspector).toContain("await ctx.getSandbox()");
     expect(inspector).not.toContain("inspectSourceBoundSandboxWorkspace");
@@ -50,5 +50,8 @@ describe("generic sandbox tool boundaries", () => {
     expect(router).toContain("prepareDevelopmentSandboxWorkspace(");
     expect(router).toContain('"planning",');
     expect(router).toContain("sourceWorkflowState.update");
+    expect(router).toContain("await ctx.getSandbox()");
+    expect(router).toContain("const sandboxOverviewPaths");
+    expect(router).toContain("path: `repository/${overviewPath}`");
   });
 });

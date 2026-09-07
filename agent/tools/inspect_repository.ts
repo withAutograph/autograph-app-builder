@@ -21,10 +21,16 @@ import {
 } from "@/lib/repository/supported-template";
 
 const developmentWorkspacePath = "/workspace/repository";
+const sandboxOverviewPaths = [
+  "README.md",
+  "AGENTS.md",
+  "package.json",
+  "docs/README.md",
+] as const;
 
 export default defineTool({
   description:
-    "Check an allowlisted checkout visible to the app runtime against the pinned supported-template adapter without executing target-owned commands. Never pass /opt or /workspace paths; hosted source identity and prepared-workspace verification belong to inspect_source and workspace_status, while existing app file inspection belongs to inspect_existing_app.",
+    "Provide a no-content overview of the current session's repository without executing target-owned commands. Hosted inspection uses only the fixed session repository root; the input path remains a local-development checkout hint.",
   inputSchema: z.object({ path: z.string().min(1) }),
   async execute({ path }, ctx) {
     // Some models use the runtime-visible workspace path for their first
@@ -66,6 +72,23 @@ export default defineTool({
       }
       return inspectSupportedRepository(receipt.sourcePath);
     }
-    return inspectSupportedRepository(path);
+    if (canAutoSelectDevelopmentSource())
+      return inspectSupportedRepository(path);
+
+    const sandbox = await ctx.getSandbox();
+    const availablePaths: string[] = [];
+    const missingPaths: string[] = [];
+    for (const overviewPath of sandboxOverviewPaths) {
+      const content = await sandbox.readTextFile({
+        path: `repository/${overviewPath}`,
+      });
+      if (content === null) missingPaths.push(overviewPath);
+      else availablePaths.push(overviewPath);
+    }
+    return {
+      workspacePath: developmentWorkspacePath,
+      availablePaths,
+      ...(missingPaths.length === 0 ? {} : { missingPaths }),
+    };
   },
 });
