@@ -1,0 +1,19 @@
+{
+  "name": "vercel-project",
+  "interface": {
+    "displayName": "Project Vercel"
+  },
+  "plugins": [
+    {
+      "name": "vercel",
+      "source": {
+        "source": "local",
+        "path": "./vercel"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      }
+    }
+  ]
+}
