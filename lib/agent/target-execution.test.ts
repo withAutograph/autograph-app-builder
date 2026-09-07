@@ -234,7 +234,7 @@ describe("target command readiness", () => {
     ).toEqual([
       "Hosted artifact is unavailable.",
       "No immutable sandbox image is configured.",
-      "The sandbox does not prove the exact required Git, mise, and Bun toolchain.",
+      "The sandbox execution environment or a required command is unavailable.",
     ]);
   });
 });
