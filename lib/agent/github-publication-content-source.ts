@@ -44,9 +44,9 @@ export function publicationContentSourceForReviewedWorkflow(input: {
             input.sandbox,
             input.state.applyReceipt.applyRoot,
           );
-      if (observed.treeDigest !== input.state.applyReceipt.postTreeDigest)
+      if (observed.treeDigest !== input.state.reviewReceipt.postTreeDigest)
         throw new Error(
-          "The validated apply overlay changed before GitHub publication.",
+          "The reviewed apply overlay changed before GitHub publication.",
         );
       return new Map(observed.files.map((file) => [file.path, file]));
     })());
