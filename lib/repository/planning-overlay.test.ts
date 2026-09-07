@@ -16,7 +16,11 @@ describe("planning from the current checkout", () => {
     });
     const executor = vi.fn(fixtureTargetCommandExecutor());
     const sandbox = {
-      run: vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" })),
+      run: vi.fn(async ({ command }: { command: string }) => ({
+        exitCode: command.startsWith("test -d") ? 1 : 0,
+        stdout: "",
+        stderr: "",
+      })),
       readTextFile,
       writeTextFile: vi.fn(async () => undefined),
       removePath: vi.fn(async () => undefined),
@@ -36,7 +40,41 @@ describe("planning from the current checkout", () => {
     ]);
   });
 
-  it("plans explicit existing-app edits from current bytes without an inventory", async () => {
+  it("runs creation planning when new-app drafts are supplied", async () => {
+    const executor = vi.fn(fixtureTargetCommandExecutor());
+    const sandbox = {
+      run: vi.fn(async ({ command }: { command: string }) => ({
+        exitCode: command.startsWith("test -d") ? 1 : 0,
+        stdout: "",
+        stderr: "",
+      })),
+      writeTextFile: vi.fn(async () => undefined),
+      removePath: vi.fn(async () => undefined),
+    } as unknown as SandboxSession;
+
+    const result = await executeTargetIdentityAndPlanning({
+      sandbox,
+      executor,
+      appId: "stock-exceptions",
+      artifactRevision: "a".repeat(64),
+      appSpecDigest: "b".repeat(64),
+      appSpecContent: "Stock Exceptions product design",
+      existingAppChanges: [
+        {
+          path: "apps/stock-exceptions/app/page.tsx",
+          content: "new component",
+        },
+      ],
+    });
+
+    expect(result.proposal).not.toHaveProperty("operation");
+    expect(executor.mock.calls.map(([request]) => request.command)).toEqual([
+      "identity",
+      "planning",
+    ]);
+  });
+
+  it("plans explicit existing-app edits from the actual checkout", async () => {
     const before = Buffer.from("old component");
     const sandbox = {
       run: vi.fn(async ({ command }: { command: string }) => ({
