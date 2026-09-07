@@ -5,7 +5,6 @@ import {
   APP_BUILDER_SOURCE_VERSION,
   sourceWorkflowState,
 } from "@/lib/agent/source-state";
-import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
 import {
   canAutoSelectDevelopmentSource,
@@ -55,13 +54,10 @@ export default defineTool({
         sandbox: await ctx.getSandbox(),
         callId: ctx.callId,
       });
-    if (receipt === undefined) {
-      if (path === undefined)
-        throw new Error(
-          "Existing repositories require an allowlisted local path.",
-        );
-      receipt = await inspectSourceReceipt(sourceKind, path);
-    }
+    if (receipt === undefined)
+      throw new Error(
+        "The selected source is not available in this app build session.",
+      );
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",

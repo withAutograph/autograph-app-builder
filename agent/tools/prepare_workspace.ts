@@ -15,10 +15,10 @@ import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github
 import {
   prepareDevelopmentSandboxWorkspace,
   prepareSupportedSandboxWorkspace,
+  readPreparedSandboxWorkspaceRecord,
 } from "@/lib/repository/supported-template";
 import {
   inspectGitHubSourceSandboxWorkspace,
-  readSandboxGitHubSourceSnapshot,
 } from "@/lib/repository/sandbox-github-source";
 
 export default defineTool({
@@ -41,17 +41,10 @@ export default defineTool({
       ? undefined
       : source.receipt.version === SOURCE_RECEIPT_VERSION
         ? await (async () => {
-            const observed = await readSandboxGitHubSourceSnapshot(sandbox);
-            return {
-              workspaceId: sandbox.id,
-              workspacePath: "/workspace/repository" as const,
-              sourcePath: "/workspace/repository" as const,
-              sourceSha: observed.sourceSha,
-              sourceTree: observed.sourceTree,
-              workspaceDigest: source.receipt.eligibilityDigest,
-              adapter: source.receipt.adapter,
-              eligibilityDigest: source.receipt.eligibilityDigest,
-            };
+            const observed = await readPreparedSandboxWorkspaceRecord(sandbox);
+            if (observed === undefined)
+              throw new Error("The canonical Arrusted workspace is missing.");
+            return observed;
           })()
         : undefined;
     const githubWorkspace = development

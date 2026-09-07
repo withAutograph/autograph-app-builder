@@ -42,7 +42,6 @@ const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
-const SANDBOX_REINSPECTOR = ".arrusted-template-reinspect.cjs";
 
 export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
 
@@ -229,126 +228,6 @@ writeFileSync(
 console.log(JSON.stringify({ sourceSha, sourceTree, workspaceDigest: sha256(JSON.stringify(files)) }));
 `;
 
-const sandboxCloneReinspectionProgram = String.raw`
-const { execFileSync, spawnSync } = require("node:child_process");
-const { createHash } = require("node:crypto");
-const { existsSync, readFileSync } = require("node:fs");
-const { isAbsolute, resolve } = require("node:path");
-
-const root = "/workspace/repository";
-const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const gitArgs = [
-  "-c", "protocol.allow=never",
-  "-c", "credential.helper=",
-  "-c", "core.hooksPath=/dev/null",
-  "-c", "core.fsmonitor=false",
-  "-C", root,
-];
-const git = (args, encoding = "utf8") => execFileSync(
-  "git",
-  [...gitArgs, ...args],
-  { encoding, maxBuffer: 32 * 1024 * 1024 },
-);
-const safeSourcePath = (value) =>
-  value !== "" &&
-  !isAbsolute(value) &&
-  !value.includes("\\") &&
-  !/[\r\n]/.test(value) &&
-  !value.split("/").some((segment) => segment === "." || segment === "..");
-const sourceSha = git(["rev-parse", "HEAD"]).trim();
-if (!/^[0-9a-f]{40}$/.test(sourceSha)) throw new Error("invalid source SHA");
-const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
-if (!/^[0-9a-f]{40}$/.test(sourceTree)) throw new Error("invalid source tree");
-const remote = git(["config", "--get", "remote.origin.url"]).trim();
-const resolvedRef = git(["rev-parse", "refs/remotes/origin/main"]).trim();
-const symbolicRef = spawnSync(
-  "git",
-  [...gitArgs, "symbolic-ref", "-q", "HEAD"],
-  { encoding: "utf8", maxBuffer: 1024 * 1024 },
-);
-if (symbolicRef.error || ![0, 1].includes(symbolicRef.status))
-  throw new Error("invalid checkout state");
-const detached = symbolicRef.status === 1 && symbolicRef.stdout.trim() === "";
-const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
-const gitlinks = [];
-const files = output
-  .toString("utf8")
-  .split("\0")
-  .filter(Boolean)
-  .flatMap((entry) => {
-    const match = /^(100644|100755) blob ([0-9a-f]{40})\t([^\r\n]+)$/.exec(entry);
-    if (match === null) {
-      const gitlink = /^160000 commit [0-9a-f]{40}\t([^\r\n]+)$/.exec(entry);
-      if (gitlink !== null && safeSourcePath(gitlink[1])) {
-        gitlinks.push(gitlink[1]);
-        return [];
-      }
-      throw new Error("unsupported cloned source entry");
-    }
-    if (!safeSourcePath(match[3])) throw new Error("unsafe cloned source entry");
-    const path = match[3];
-    const file = resolve(root, path);
-    if (!file.startsWith(root + "/"))
-      throw new Error("cloned source path escaped its workspace");
-    return [{
-      mode: match[1],
-      objectId: match[2],
-      path,
-      sha256: sha256(readFileSync(file)),
-    }];
-  });
-if (files.length === 0) throw new Error("cloned source tree is empty");
-const appBuilder = "/workspace/.app-builder";
-const manifestMatches = readFileSync(appBuilder + "/source-files.json", "utf8") ===
-  JSON.stringify(files, null, 2) + "\n";
-const checksumsMatch = readFileSync(appBuilder + "/source-checksums.sha256", "utf8") ===
-  files.map((file) => file.sha256 + "  repository/" + file.path).join("\n") + "\n";
-const inputPaths = ${JSON.stringify(SUPPORTED_TEMPLATE_INPUT_PATHS)};
-const contents = {};
-for (const path of [...inputPaths, ".config/repository-template.json"]) {
-  const file = resolve(root, path);
-  try {
-    contents[path] = readFileSync(file, "utf8");
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-  }
-}
-const filesByPath = new Map(files.map((file) => [file.path, file]));
-const contract = inputPaths.map((path) => {
-  const file = filesByPath.get(path);
-  if (file === undefined)
-    throw new Error("canonical template contract path is not a regular blob");
-  return {
-    path,
-    mode: file.mode,
-    objectId: file.objectId,
-    sha256: sha256(git(["show", sourceSha + ":" + path], "buffer")),
-  };
-});
-const dirtyPaths = git(["status", "--porcelain=v1", "--untracked-files=all"])
-  .split("\n")
-  .filter(Boolean)
-  .map((line) => line.slice(3));
-console.log(JSON.stringify({
-  remote,
-  resolvedRef,
-  detached,
-  hasGitmodules: existsSync(root + "/.gitmodules"),
-  gitlinks,
-  manifestMatches,
-  checksumsMatch,
-  workspaceDigest: sha256(JSON.stringify(files)),
-  snapshot: {
-    sourcePath: root,
-    sourceSha,
-    sourceTree,
-    dirtyPaths,
-    contents,
-    contract,
-  },
-}));
-`;
-
 function sandboxCloneCommand() {
   const script = [
     "set -eu",
@@ -380,10 +259,6 @@ function sandboxCloneCommand() {
     "fi",
   ].join("\n");
   return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
-}
-
-function sandboxCloneReinspectionCommand() {
-  return `exec env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=dumb GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node /workspace/${SANDBOX_REINSPECTOR}`;
 }
 
 async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
@@ -606,70 +481,6 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     observed.eligibilityDigest !== receipt.eligibilityDigest
   )
     throw new Error("The canonical Arrusted workspace drifted.");
-  let result;
-  try {
-    await input.sandbox.writeTextFile({
-      path: SANDBOX_REINSPECTOR,
-      content: sandboxCloneReinspectionProgram,
-    });
-    result = await input.sandbox.run({
-      command: sandboxCloneReinspectionCommand(),
-      workingDirectory: "/workspace",
-      env: { TERM: "dumb" },
-      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
-    });
-  } finally {
-    await input.sandbox.removePath({
-      path: SANDBOX_REINSPECTOR,
-      force: true,
-    });
-  }
-  if (
-    Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
-    Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-    result.exitCode !== 0
-  )
-    throw new Error("The canonical Arrusted workspace could not be verified.");
-  let inspection: {
-    remote?: unknown;
-    resolvedRef?: unknown;
-    detached?: unknown;
-    hasGitmodules?: unknown;
-    gitlinks?: unknown;
-    manifestMatches?: unknown;
-    checksumsMatch?: unknown;
-    workspaceDigest?: unknown;
-    snapshot?: unknown;
-  };
-  try {
-    inspection = JSON.parse(result.stdout) as typeof inspection;
-  } catch (error) {
-    throw new Error("The canonical Arrusted workspace receipt is invalid.", {
-      cause: error,
-    });
-  }
-  const snapshot = parseCanonicalTemplateSnapshot(inspection.snapshot);
-  if (
-    inspection.remote !== ARRUSTED_TEMPLATE_REPOSITORY ||
-    inspection.resolvedRef !== receipt.sourceSha ||
-    inspection.detached !== true ||
-    inspection.hasGitmodules !== false ||
-    !Array.isArray(inspection.gitlinks) ||
-    inspection.gitlinks.length !== 0 ||
-    inspection.manifestMatches !== true ||
-    inspection.checksumsMatch !== true ||
-    inspection.workspaceDigest !== observed.workspaceDigest ||
-    snapshot.sourceSha !== receipt.sourceSha ||
-    snapshot.sourceTree !== receipt.sourceTree ||
-    snapshot.dirtyPaths.length !== 0
-  )
-    throw new Error("The canonical Arrusted workspace drifted.");
-  const currentReceipt = inspectCanonicalTemplateSnapshotReceipt({
-    snapshot,
-    readinessDigest: receipt.provenance.readinessDigest,
-  });
-  if (currentReceipt.digest !== receipt.digest)
-    throw new Error("The canonical Arrusted source changed after review.");
   return observed;
 }
 
