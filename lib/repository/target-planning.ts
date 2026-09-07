@@ -104,7 +104,7 @@ const iterationChangeSchema = z.strictObject({
   after: z.strictObject({
     mode: z.string().regex(/^[0-7]{3,4}$/u),
     digest,
-    content: z.string().max(262_144),
+    content: z.string(),
   }),
 });
 
@@ -113,7 +113,7 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
     .extend({
       operation: z.literal("iterate-existing-app"),
       iteration: z.strictObject({
-        changes: z.array(iterationChangeSchema).min(1).max(32),
+        changes: z.array(iterationChangeSchema).min(1),
         digest,
       }),
     })
@@ -180,7 +180,6 @@ export function targetContractDigest(
 }
 
 export const TARGET_COMMAND_TIMEOUT_MS = 30_000;
-export const TARGET_COMMAND_OUTPUT_BYTES = 1_048_576;
 export const TARGET_PLANNING_MISE_PROFILE = `[settings]
 exec_auto_install = false
 not_found_auto_install = false
@@ -221,11 +220,6 @@ function parseOutput<T>(
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
     .replace(/\r/gu, "")
     .trim();
-  if (
-    Buffer.byteLength(stdout) > TARGET_COMMAND_OUTPUT_BYTES ||
-    Buffer.byteLength(result.stderr) > TARGET_COMMAND_OUTPUT_BYTES
-  )
-    throw new Error(`${label} output exceeded the fixed size limit.`);
   if (result.exitCode !== 0) {
     const diagnostic = result.stderr.trim() || result.stdout.trim();
     throw new Error(
@@ -530,12 +524,6 @@ export async function executeTargetIdentityAndPlanning(input: {
     }
     if (changes.length === 0)
       throw new Error("At least one existing-app change is required.");
-    const topologyBytes = await input.sandbox.readBinaryFile({
-      path: "repository/microfrontends.json",
-    });
-    if (topologyBytes === null)
-      throw new Error("The existing application topology is missing.");
-    const topologyDigest = sha256(topologyBytes);
     const contract = {
       version: 1 as const,
       appId: input.appId,
@@ -569,8 +557,6 @@ export async function executeTargetIdentityAndPlanning(input: {
           projectName: identity.projectName,
           packageName: identity.packageName,
           routes: identity.baseRoutes,
-          currentDigest: topologyDigest,
-          proposedDigest: topologyDigest,
         },
       },
       blockers: [],

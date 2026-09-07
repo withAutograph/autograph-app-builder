@@ -16,4 +16,9 @@ Use supported Vercel Sandbox APIs and structured commands. Do not add shell wrap
 
 For local development, use `mise run dev` with live code and fast retries. Focused checks are for concrete repairs; broad acceptance belongs at the end of the local loop or in CI, not after every edit.
 
+Repository installation, generation, and checks MUST NOT acquire an additional
+App Builder wall-clock deadline. Let the provider report execution failures;
+preserve explicit user cancellation. A slow successful command is not a failed
+build merely because it exceeded an estimate.
+
 Any new blocking assertion requires documented user-visible failure, prevented effect, and recovery path. Otherwise it is prohibited.
