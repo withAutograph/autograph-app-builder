@@ -153,21 +153,23 @@ describe("target validation", () => {
         path: "apps/stock-exceptions/app/page.test.tsx",
         line: 1,
         column: 1,
-        message: "Cannot find name 'describe'.",
+        message:
+          "A referenced name is missing; inspect its declaration or import.",
       },
       {
         code: "TS2304",
         path: "apps/stock-exceptions/app/page.test.tsx",
         line: 2,
         column: 1,
-        message: "Cannot find name 'process.env.TOKEN=[redacted]",
+        message:
+          "A referenced name is missing; inspect its declaration or import.",
       },
       {
         code: "VITEST",
         path: "apps/stock-exceptions/app/__tests__/page.test.tsx",
         line: 8,
         column: 5,
-        message: "renders the exception queue",
+        message: "Test assertion failed at this location.",
       },
     ]);
   });

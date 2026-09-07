@@ -31,11 +31,8 @@ describe("generic sandbox tool boundaries", () => {
 
     expect(router).toContain("inspect_existing_app");
     expect(router).not.toContain("and read_file respectively");
-    expect(inspector).toContain("inspectSourceBoundSandboxWorkspace");
-    expect(inspector).toContain("githubSource: state.githubSource");
-    expect(
-      inspector.indexOf("inspectSourceBoundSandboxWorkspace"),
-    ).toBeLessThan(inspector.indexOf(".app-builder/source-files.json"));
+    expect(inspector).toContain("await ctx.getSandbox()");
+    expect(inspector).not.toContain("inspectSourceBoundSandboxWorkspace");
     expect(inspector).toContain("path: `repository/${path}`");
     expect(inspector).not.toContain("allowed.has(path)");
   });

@@ -149,14 +149,15 @@ function safeDiagnosticPath(value: string): string | undefined {
   return path;
 }
 
-function redactDiagnosticMessage(value: string): string {
-  return value
-    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/giu, "[redacted]")
-    .replace(
-      /\b((?:api[_-]?key|authorization|credential|password|secret|token)\s*[:=]\s*)\S+/giu,
-      "$1[redacted]",
-    )
-    .slice(0, 1_000);
+function diagnosticMessage(code: TargetValidationDiagnostic["code"]): string {
+  // Command text may contain source literals or credentials. Keep the actual
+  // compiler code and location, but generate the explanation ourselves.
+  if (code === "VITEST") return "Test assertion failed at this location.";
+  if (code === "TS2304" || code === "TS2593")
+    return "A referenced name is missing; inspect its declaration or import.";
+  if (code === "TS2532" || code === "TS18048")
+    return "A value may be undefined; handle the empty case.";
+  return "Compiler error at this location; inspect the reported code and file.";
 }
 
 export function compilerDiagnostics(
@@ -171,7 +172,7 @@ export function compilerDiagnostics(
     pathValue: string,
     lineValue: string,
     columnValue: string,
-    message: string,
+    _message: string,
   ) => {
     const path = safeDiagnosticPath(pathValue);
     const line = Number(lineValue);
@@ -187,7 +188,7 @@ export function compilerDiagnostics(
       path,
       line,
       column,
-      message: redactDiagnosticMessage(message),
+      message: diagnosticMessage(code),
     };
     const key = JSON.stringify(diagnostic);
     if (!seen.has(key) && diagnostics.length < 50) diagnostics.push(diagnostic);

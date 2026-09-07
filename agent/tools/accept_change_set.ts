@@ -27,7 +27,8 @@ export default defineTool({
         changeSet,
         state.reviewReceipt.reviewedByCallId,
       );
-      return { ...expectedReceipt, reused: true };
+      if (expectedReceipt.digest === state.reviewReceipt.digest)
+        return { ...state.reviewReceipt, reused: true };
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update(() => ({
