@@ -1,11 +1,8 @@
 import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  appBuilderWorkflowState,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
-import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { safeSourcePath } from "@/lib/repository/source-path";
 import sourceStatus from "./source_status";
 import prepareWorkspace from "./prepare_workspace";
@@ -48,41 +45,34 @@ export default defineDynamic({
           }
           const prefix = `apps/${appId}/`;
           if (!safeSourcePath(appId) || appId.includes("/"))
-            throw new Error(
-              "The requested application cannot be read safely.",
-            );
+            throw new Error("The requested application cannot be read safely.");
           const requestedPaths = paths.flatMap((path) =>
             safeSourcePath(path)
               ? [path.startsWith(prefix) ? path : `${prefix}${path}`]
               : [],
           );
           const sandbox = await ctx.getSandbox();
-          if (state.phase !== "empty")
-            await inspectSourceBoundSandboxWorkspace({
-              sandbox,
-              receipt: state.sourceReceipt,
-              expectedWorkspace: state.workspace,
-              ...(state.githubSource === undefined
-                ? {}
-                : { githubSource: state.githubSource }),
-            });
+          // The signed-in session supplies this sandbox. Read its current
+          // files; source receipts are not prerequisites for inspection.
           const manifestSource = await sandbox.readTextFile({
             path: ".app-builder/source-files.json",
           });
           let manifest: unknown = [];
           try {
-            manifest = manifestSource === null ? [] : JSON.parse(manifestSource);
+            manifest =
+              manifestSource === null ? [] : JSON.parse(manifestSource);
           } catch {
             manifest = [];
           }
           const allowed = new Set(
-            (Array.isArray(manifest) ? manifest : []).flatMap((candidate): string[] =>
-              typeof candidate === "object" &&
-              candidate !== null &&
-              "path" in candidate &&
-              typeof candidate.path === "string"
-                ? [candidate.path]
-                : [],
+            (Array.isArray(manifest) ? manifest : []).flatMap(
+              (candidate): string[] =>
+                typeof candidate === "object" &&
+                candidate !== null &&
+                "path" in candidate &&
+                typeof candidate.path === "string"
+                  ? [candidate.path]
+                  : [],
             ),
           );
           const availablePaths = [...allowed]

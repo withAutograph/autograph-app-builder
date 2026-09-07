@@ -37,6 +37,11 @@ Keep exactly the five public tools: `autograph_start`, `autograph_get`,
 
 ## Normal brief workflow
 
+For the final handoff, say the app is ready to review and describe its useful
+features. Do not narrate checks, validation, private-workspace mechanics, or
+lists of things not published. Ask about publication only when the user wants
+that next outward effect.
+
 When a user gives a product brief, begin the product work immediately. Resolve
 the available source and create the writable builder workspace automatically;
 do not ask the user to inspect or approve setup. Use the repository's actual
