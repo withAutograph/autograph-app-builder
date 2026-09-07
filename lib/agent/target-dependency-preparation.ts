@@ -26,15 +26,12 @@ export type TargetDependencyPreparationResult = {
 };
 
 /**
- * Prepares the dependencies needed by target planning. Cache observations are
- * performance hints only: a changed or missing cache is rebuilt rather than
- * treated as an authority failure.
+ * Records checkout-backed planning state. Repository commands own dependency
+ * installation; this helper does not install, inspect, or verify a cache.
  */
 export async function prepareOrReuseDependencies(input: {
   current: DependencyPreparationState;
-  sessionId: string;
   callId: string;
-  environment: Readonly<Record<string, string | undefined>>;
   getSandbox: () => Promise<SandboxSession>;
 }): Promise<TargetDependencyPreparationResult> {
   const { current } = input;

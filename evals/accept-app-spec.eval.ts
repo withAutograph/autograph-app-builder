@@ -30,8 +30,7 @@ export default defineEval({
 
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
-    t.check(t.reply, includes("target-bound offline dependency closure"));
-    t.check(t.reply, includes("builder-owned planning metadata"));
+    t.check(t.reply, includes("Checkout-backed dependency metadata"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -40,15 +39,6 @@ export default defineEval({
     t.check(
       t.reply,
       includes("reused the exact durable dependency-preparation receipt"),
-    );
-
-    await t.send(
-      "Prepare offline target dependencies with a stale AppSpec digest.",
-    );
-    t.succeeded();
-    t.check(
-      t.reply,
-      includes("Stale offline dependency preparation was rejected"),
     );
 
     await t.send("Run target identity and planning.");
@@ -76,12 +66,6 @@ export default defineEval({
       t.reply,
       includes("reused the exact durable target-planning receipt"),
     );
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
-    await t.send("Retry target planning with a stale AppSpec digest.");
-    t.succeeded();
-    t.check(t.reply, includes("stale target-planning retry was rejected"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

@@ -252,14 +252,6 @@ export function compilerDiagnostics(
   return diagnostics;
 }
 
-export function validationOverlayRoot(
-  applyDigest: string,
-  name: TargetValidationCommandName,
-): string {
-  void applyDigest;
-  return `/workspace/.app-builder/validation/${name}/repository`;
-}
-
 export function validationBinding(
   apply: TargetApplyReceipt,
 ): TargetValidationBinding {

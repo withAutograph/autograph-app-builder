@@ -32,10 +32,7 @@ export default defineDynamic({
               await sourceStatus.execute({}, ctx);
               const source = sourceWorkflowState.get();
               if (source.phase !== "empty")
-                await prepareWorkspace.execute(
-                  { expectedSourceReceiptDigest: source.receipt.digest },
-                  ctx,
-                );
+                await prepareWorkspace.execute({}, ctx);
             } catch {
               // The session sandbox remains the authority for a best-effort
               // read of newly generated files, even before its workflow state

@@ -8,7 +8,6 @@ import {
   compilerDiagnostics,
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
-  validationOverlayRoot,
 } from "./target-validation";
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
@@ -226,11 +225,5 @@ describe("target validation", () => {
       "bun run --cwd apps/example check",
       "bun run --cwd apps/example build",
     ]);
-  });
-
-  it("uses a writable validation directory without binding it to an apply digest", () => {
-    expect(validationOverlayRoot("any-current-value", "check-build")).toBe(
-      "/workspace/.app-builder/validation/check-build/repository",
-    );
   });
 });
