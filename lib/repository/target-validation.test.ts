@@ -5,7 +5,9 @@ import type { SandboxSession } from "eve/sandbox";
 import type { TargetApplyReceipt } from "./target-apply";
 import {
   createTargetValidationAttempt,
+  compilerDiagnostics,
   executeProposalBoundValidation,
+  sandboxValidationCommandExecutor,
   validationOverlayRoot,
 } from "./target-validation";
 
@@ -133,8 +135,71 @@ describe("target validation", () => {
 
     expect(result).toMatchObject({
       ok: false,
-      receipt: { reason: "command-failed" },
+      receipt: {
+        reason: "command-failed",
+        commandFailure: { name: "check-build", exitCode: 1 },
+      },
     });
+  });
+
+  it("returns only safe structured TypeScript diagnostics from a failed command", () => {
+    expect(
+      compilerDiagnostics(
+        "\u001B[31mx typescript(TS2593): Cannot find name 'describe'.\n   ,-[apps/stock-exceptions/app/page.test.tsx:1:1]\n   `----\n\napps/stock-exceptions/app/page.test.tsx(2,1): error TS2304: Cannot find name 'process.env.TOKEN=secret-value'.\n FAIL  apps/stock-exceptions/app/__tests__/page.test.tsx > renders the exception queue\n ❯ apps/stock-exceptions/app/__tests__/page.test.tsx:8:5",
+      ),
+    ).toEqual([
+      {
+        code: "TS2593",
+        path: "apps/stock-exceptions/app/page.test.tsx",
+        line: 1,
+        column: 1,
+        message: "Cannot find name 'describe'.",
+      },
+      {
+        code: "TS2304",
+        path: "apps/stock-exceptions/app/page.test.tsx",
+        line: 2,
+        column: 1,
+        message: "Cannot find name 'process.env.TOKEN=[redacted]",
+      },
+      {
+        code: "VITEST",
+        path: "apps/stock-exceptions/app/__tests__/page.test.tsx",
+        line: 8,
+        column: 5,
+        message: "renders the exception queue",
+      },
+    ]);
+  });
+
+  it("repairs only the reported formatter failure before rerunning check and build", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "package.json Formatting issues found",
+        stderr: "Formatting issues found",
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "fixed", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "checked", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "built", stderr: "" });
+    const sandbox = { run } as unknown as SandboxSession;
+    const executor = sandboxValidationCommandExecutor();
+
+    const result = await executor({
+      sandbox,
+      appId: "example",
+      command: "mise run app:check-build example",
+      validationRoot: "/workspace/repository",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(run.mock.calls.map(([input]) => input.command)).toEqual([
+      "bun run --cwd apps/example check",
+      "bun run --cwd apps/example check -- --fix",
+      "bun run --cwd apps/example check",
+      "bun run --cwd apps/example build",
+    ]);
   });
 
   it("uses a writable validation directory without binding it to an apply digest", () => {

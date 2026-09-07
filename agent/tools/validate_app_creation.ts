@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { implementationFilesSchema } from "@/lib/agent/apply-implementation-files";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -16,8 +17,10 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 export default defineTool({
   description:
     "Run the repository's normal validation commands against the current applied app. Command exit status is the validation result. This does not publish or otherwise change an external repository.",
-  inputSchema: z.object({}),
-  async execute(_input, ctx) {
+  inputSchema: z.object({
+    implementationFiles: implementationFilesSchema.default([]),
+  }),
+  async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
       current.phase !== "applied" &&
@@ -36,6 +39,15 @@ export default defineTool({
       };
     }
     const sandbox = await ctx.getSandbox();
+    const relativeApplyRoot = current.applyReceipt.applyRoot.replace(
+      /^\/workspace\//u,
+      "",
+    );
+    for (const file of input.implementationFiles)
+      await sandbox.writeTextFile({
+        path: `${relativeApplyRoot}/${file.path}`,
+        content: file.content,
+      });
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(
       current.applyReceipt,
@@ -77,9 +89,11 @@ export default defineTool({
         phase: "validation_failed",
         validationFailure: result.receipt,
       }));
-      throw new Error(
-        "The repository validation command failed. Fix the reported command error and try again.",
-      );
+      return {
+        status: "needs_repair" as const,
+        diagnostics: result.receipt.diagnostics ?? [],
+        reused: false,
+      };
     }
     appBuilderWorkflowState.update(() => ({
       ...base,

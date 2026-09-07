@@ -98,7 +98,20 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
   status: "failed";
   reason: TargetValidationFailureReason;
   recoveryRequired: true;
+  diagnostics?: readonly TargetValidationDiagnostic[];
+  commandFailure?: {
+    name: TargetValidationCommandName;
+    exitCode: number;
+  };
   digest: string;
+};
+
+export type TargetValidationDiagnostic = {
+  code: `TS${number}` | "VITEST";
+  path: string;
+  line: number;
+  column: number;
+  message: string;
 };
 
 export type TargetValidationResult =
@@ -107,6 +120,136 @@ export type TargetValidationResult =
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+const compilerDiagnosticPatterns = [
+  /^(.*?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)$/u,
+  /^(.*?):(\d+):(\d+)\s*-\s*error\s+(TS\d+):\s*(.+)$/u,
+] as const;
+const oxcCompilerHeaderPattern = /^\s*x\s+typescript\((TS\d+)\):\s*(.+)$/u;
+const sourceLocationPattern = /^\s*,-\[(.+?):(\d+):(\d+)\]$/u;
+const vitestFailurePattern = /^\s*FAIL\s+(.+?)\s*>\s*(.+)$/u;
+const vitestLocationPattern = /^\s*❯\s+(.+?):(\d+):(\d+)$/u;
+
+function safeDiagnosticPath(value: string): string | undefined {
+  const normalized = value.replaceAll("\\", "/");
+  const appsOffset = normalized.indexOf("apps/");
+  const path = appsOffset >= 0 ? normalized.slice(appsOffset) : normalized;
+  if (
+    path.length === 0 ||
+    path.length > 500 ||
+    path.startsWith("/") ||
+    path
+      .split("/")
+      .some(
+        (segment) => segment === "" || segment === "." || segment === "..",
+      ) ||
+    !/^[A-Za-z0-9._@/-]+$/u.test(path)
+  )
+    return undefined;
+  return path;
+}
+
+function redactDiagnosticMessage(value: string): string {
+  return value
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/giu, "[redacted]")
+    .replace(
+      /\b((?:api[_-]?key|authorization|credential|password|secret|token)\s*[:=]\s*)\S+/giu,
+      "$1[redacted]",
+    )
+    .slice(0, 1_000);
+}
+
+export function compilerDiagnostics(
+  output: string,
+): TargetValidationDiagnostic[] {
+  const diagnostics: TargetValidationDiagnostic[] = [];
+  const seen = new Set<string>();
+  let pendingCompiler: { code: `TS${number}`; message: string } | undefined;
+  let pendingVitestMessage: string | undefined;
+  const append = (
+    code: TargetValidationDiagnostic["code"],
+    pathValue: string,
+    lineValue: string,
+    columnValue: string,
+    message: string,
+  ) => {
+    const path = safeDiagnosticPath(pathValue);
+    const line = Number(lineValue);
+    const column = Number(columnValue);
+    if (
+      path === undefined ||
+      !Number.isSafeInteger(line) ||
+      !Number.isSafeInteger(column)
+    )
+      return false;
+    const diagnostic = {
+      code,
+      path,
+      line,
+      column,
+      message: redactDiagnosticMessage(message),
+    };
+    const key = JSON.stringify(diagnostic);
+    if (!seen.has(key) && diagnostics.length < 50) diagnostics.push(diagnostic);
+    seen.add(key);
+    return true;
+  };
+  for (const sourceLine of output
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .split("\n")) {
+    const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
+    if (oxcHeader !== null) {
+      pendingCompiler = {
+        code: oxcHeader[1] as `TS${number}`,
+        message: oxcHeader[2],
+      };
+      continue;
+    }
+    const location = sourceLocationPattern.exec(sourceLine);
+    if (location !== null && pendingCompiler !== undefined) {
+      append(
+        pendingCompiler.code,
+        location[1],
+        location[2],
+        location[3],
+        pendingCompiler.message,
+      );
+      pendingCompiler = undefined;
+      continue;
+    }
+    const vitestFailure = vitestFailurePattern.exec(sourceLine);
+    if (vitestFailure !== null) {
+      pendingVitestMessage = vitestFailure[2];
+      continue;
+    }
+    const vitestLocation = vitestLocationPattern.exec(sourceLine);
+    if (vitestLocation !== null && pendingVitestMessage !== undefined) {
+      const recorded = append(
+        "VITEST",
+        vitestLocation[1],
+        vitestLocation[2],
+        vitestLocation[3],
+        pendingVitestMessage,
+      );
+      if (recorded) pendingVitestMessage = undefined;
+      continue;
+    }
+    for (const pattern of compilerDiagnosticPatterns) {
+      const match = pattern.exec(sourceLine);
+      if (match === null) continue;
+      if (/^TS\d+$/u.test(match[4]))
+        append(
+          match[4] as `TS${number}`,
+          match[1],
+          match[2],
+          match[3],
+          match[5],
+        );
+      break;
+    }
+  }
+  return diagnostics;
+}
 
 export function validationOverlayRoot(
   applyDigest: string,
@@ -193,17 +336,25 @@ function attemptBinding(
 
 export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
   return async ({ sandbox, appId, command, validationRoot }) => {
-    const run = (script: "check" | "build" | "test") =>
+    const run = (script: "check" | "build" | "test", args = "") =>
       sandbox.run({
         command:
           script === "test"
             ? `bun run --cwd apps/${appId} test -- --shard=1/1`
-            : `bun run --cwd apps/${appId} ${script}`,
+            : `bun run --cwd apps/${appId} ${script}${args}`,
         workingDirectory: validationRoot,
         abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
       });
     if (command.startsWith("mise run app:check-build ")) {
-      const checked = await run("check");
+      let checked = await run("check");
+      if (
+        checked.exitCode !== 0 &&
+        /Formatting issues found/u.test(`${checked.stderr}\n${checked.stdout}`)
+      ) {
+        const formatted = await run("check", " -- --fix");
+        if (formatted.exitCode !== 0) return formatted;
+        checked = await run("check");
+      }
       if (checked.exitCode !== 0) return checked;
       const built = await run("build");
       return {
@@ -228,6 +379,8 @@ function failureReceipt(
   attempt: TargetValidationAttemptReceipt,
   commands: readonly TargetValidationCommandReceipt[],
   reason: TargetValidationFailureReason,
+  commandFailure?: TargetValidationFailureReceipt["commandFailure"],
+  diagnostics?: readonly TargetValidationDiagnostic[],
 ): TargetValidationFailureReceipt {
   const unsigned = {
     version: 3 as const,
@@ -238,6 +391,10 @@ function failureReceipt(
     validatedByCallId: attempt.startedByCallId,
     reason,
     recoveryRequired: true as const,
+    ...(commandFailure === undefined ? {} : { commandFailure }),
+    ...(diagnostics === undefined || diagnostics.length === 0
+      ? {}
+      : { diagnostics }),
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
@@ -284,7 +441,16 @@ export async function executeProposalBoundValidation(input: {
     if (result.exitCode !== 0)
       return {
         ok: false,
-        receipt: failureReceipt(input.attempt, commands, "command-failed"),
+        receipt: failureReceipt(
+          input.attempt,
+          commands,
+          "command-failed",
+          {
+            name: planned.name,
+            exitCode: result.exitCode,
+          },
+          compilerDiagnostics(`${result.stderr}\n${result.stdout}`),
+        ),
       };
   }
   const unsigned = {

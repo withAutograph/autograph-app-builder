@@ -17,7 +17,7 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
   implementationFilesSchema,
   withImplementationFiles,
-} from "./apply-implementation-files";
+} from "@/lib/agent/apply-implementation-files";
 
 export default defineTool({
   description:
@@ -68,9 +68,7 @@ export default defineTool({
     const result = await executeProposalBoundApply({
       sandbox,
       executor: withImplementationFiles(
-        fixture
-          ? fixtureApplyCommandExecutor()
-          : sandboxApplyCommandExecutor(),
+        fixture ? fixtureApplyCommandExecutor() : sandboxApplyCommandExecutor(),
         input.implementationFiles,
       ),
       ...(fixture

@@ -5,7 +5,6 @@ import type { ApplyCommandExecutor } from "@/lib/repository/target-apply";
 const implementationFilePathSchema = z
   .string()
   .min(1)
-  .max(500)
   .superRefine((value, context) => {
     if (value.startsWith("/") || value.includes("\\") || value.includes("\0")) {
       context.addIssue({
@@ -14,10 +13,17 @@ const implementationFilePathSchema = z
       });
       return;
     }
-    if (value.split("/").some((segment) => segment === "" || segment === "." || segment === ".."))
+    if (
+      value
+        .split("/")
+        .some(
+          (segment) => segment === "" || segment === "." || segment === "..",
+        )
+    )
       context.addIssue({
         code: "custom",
-        message: "Implementation file paths must stay inside the repository checkout.",
+        message:
+          "Implementation file paths must stay inside the repository checkout.",
       });
   });
 
@@ -25,10 +31,9 @@ export const implementationFilesSchema = z
   .array(
     z.strictObject({
       path: implementationFilePathSchema,
-      content: z.string().max(1_000_000),
+      content: z.string(),
     }),
   )
-  .max(100)
   .superRefine((files, context) => {
     const paths = new Set<string>();
     for (const [index, file] of files.entries()) {
@@ -42,7 +47,9 @@ export const implementationFilesSchema = z
     }
   });
 
-export type ImplementationFile = z.infer<typeof implementationFilesSchema>[number];
+export type ImplementationFile = z.infer<
+  typeof implementationFilesSchema
+>[number];
 
 export function withImplementationFiles(
   executor: ApplyCommandExecutor,

@@ -8,10 +8,17 @@ import {
 describe("approval-bound implementation files", () => {
   it("writes validated files into the successful apply overlay only", async () => {
     const files = implementationFilesSchema.parse([
-      { path: "apps/stock-exceptions/app/page.tsx", content: "export default null" },
+      {
+        path: "apps/stock-exceptions/app/page.tsx",
+        content: "export default null",
+      },
     ]);
     const writeTextFile = vi.fn(async () => undefined);
-    const executor = vi.fn(async () => ({ exitCode: 0, stdout: "receipt", stderr: "" }));
+    const executor = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: "receipt",
+      stderr: "",
+    }));
     const wrapped = withImplementationFiles(executor, files);
 
     await expect(
