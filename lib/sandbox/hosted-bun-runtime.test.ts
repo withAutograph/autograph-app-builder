@@ -8,7 +8,11 @@ import {
 
 describe("hosted Bun runtime", () => {
   it("installs Bun once per sandbox and exposes its binary path", async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0 });
+    // Eve exposes a PromiseLike command, not a native Promise with .catch().
+    const run = vi.fn(() => {
+      const result = Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      return { then: result.then.bind(result) };
+    });
     const install = createHostedBunRuntimeInstaller();
     const sandbox = { id: "sandbox-1", run };
 
