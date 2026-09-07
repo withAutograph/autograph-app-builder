@@ -80,6 +80,27 @@ function sandboxFixture() {
 }
 
 describe("target validation", () => {
+  it("reports a missing package script without echoing command output", async () => {
+    const { sandbox } = sandboxFixture();
+    const result = await executeProposalBoundValidation({
+      sandbox,
+      apply,
+      appId: "example",
+      attempt: createTargetValidationAttempt(apply, "missing-script"),
+      executor: async () => ({
+        exitCode: 1,
+        stdout: "",
+        stderr: 'error: Script not found "check"\nsecret-test-value',
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected a command failure");
+    expect(result.receipt.commandFailure).toMatchObject({
+      exitCode: 1,
+      hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
+    });
+    expect(JSON.stringify(result)).not.toContain("secret-test-value");
+  });
   it("runs repository commands without receipt or source preflight", async () => {
     const { sandbox } = sandboxFixture();
     const currentApply = { ...apply, digest: "current-worktree" };

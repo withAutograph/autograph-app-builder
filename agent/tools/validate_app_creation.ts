@@ -91,6 +91,8 @@ export default defineTool({
       }));
       return {
         status: "needs_repair" as const,
+        reason: result.receipt.reason,
+        commandFailure: result.receipt.commandFailure,
         diagnostics: result.receipt.diagnostics ?? [],
         reused: false,
       };

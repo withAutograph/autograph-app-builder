@@ -102,6 +102,7 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
   commandFailure?: {
     name: TargetValidationCommandName;
     exitCode: number;
+    hint?: string;
   };
   digest: string;
 };
@@ -449,6 +450,13 @@ export async function executeProposalBoundValidation(input: {
           {
             name: planned.name,
             exitCode: result.exitCode,
+            ...(/(?:script not found|missing script)/iu.test(
+              `${result.stderr}\n${result.stdout}`,
+            )
+              ? {
+                  hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
+                }
+              : {}),
           },
           compilerDiagnostics(`${result.stderr}\n${result.stdout}`),
         ),
