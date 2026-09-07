@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  inspectCanonicalArrustedSandboxWorkspace,
-} from "./arrusted-template";
+import { inspectCanonicalArrustedSandboxWorkspace } from "./arrusted-template";
 import { inspectCanonicalTemplateSnapshotReceipt } from "./source-receipt";
 
 describe("canonical Arrusted source preparation", () => {

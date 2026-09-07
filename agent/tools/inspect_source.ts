@@ -11,6 +11,8 @@ import {
   developmentSourceReceipt,
 } from "@/lib/repository/development-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { isHostedVercelRuntime } from "@/lib/sandbox/backend";
+import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
 export default defineTool({
   description:
@@ -51,9 +53,20 @@ export default defineTool({
       !(hasTestCapability("simulated-target") && path !== undefined)
     )
       receipt = await acquireCanonicalArrustedTemplate({
-        sandbox: await ctx.getSandbox(),
+        sandbox: () => ctx.getSandbox(),
+        sessionId: ctx.session.id,
         callId: ctx.callId,
       });
+    if (receipt === undefined && isHostedVercelRuntime(process.env)) {
+      const selected = sourceWorkflowState.get();
+      if (selected.phase !== "empty") receipt = selected.receipt;
+    }
+    if (
+      receipt === undefined &&
+      path !== undefined &&
+      !isHostedVercelRuntime(process.env)
+    )
+      receipt = await inspectSourceReceipt(sourceKind, path);
     if (receipt === undefined)
       throw new Error(
         "The selected source is not available in this app build session.",
