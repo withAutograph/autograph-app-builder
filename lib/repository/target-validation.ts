@@ -15,7 +15,6 @@ import {
   type TargetApplyReceipt,
 } from "./target-apply";
 
-export const TARGET_VALIDATION_TIMEOUT_MS = 300_000;
 export type TargetValidationCommand =
   | `mise run app:check-build ${string}`
   | `mise run app:test ${string} ${string}`;
@@ -345,7 +344,6 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
             ? `bun run --cwd apps/${appId} test -- --shard=1/1`
             : `bun run --cwd apps/${appId} ${script}${args}`,
         workingDirectory: validationRoot,
-        abortSignal: AbortSignal.timeout(TARGET_VALIDATION_TIMEOUT_MS),
       });
     if (command.startsWith("mise run app:check-build ")) {
       let checked = await run("check");

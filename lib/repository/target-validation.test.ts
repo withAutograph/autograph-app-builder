@@ -217,6 +217,9 @@ describe("target validation", () => {
     });
 
     expect(result.exitCode).toBe(0);
+    expect(
+      run.mock.calls.every(([input]) => input.abortSignal === undefined),
+    ).toBe(true);
     expect(run.mock.calls.map(([input]) => input.command)).toEqual([
       "bun run --cwd apps/example check",
       "bun run --cwd apps/example check -- --fix",

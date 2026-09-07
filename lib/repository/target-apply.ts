@@ -19,7 +19,6 @@ const repositoryPath = z
 // Applying a generated app can include the repository's own install/build
 // steps. Keep a generous provider-side ceiling, but do not turn a normal slow
 // command into a synthetic failure at five minutes.
-export const TARGET_APPLY_TIMEOUT_MS = 900_000;
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   version: z.literal(1),
@@ -376,7 +375,6 @@ export async function inspectApplyOverlay(
   const result = await sandbox.run({
     command: overlaySnapshotCommand(),
     workingDirectory: applyRoot,
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
   if (result.exitCode !== 0)
     throw new Error("The proposal apply overlay could not be inspected.");
@@ -612,7 +610,6 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     const install = await sandbox.run({
       command: "bun install",
       workingDirectory: applyRoot,
-      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
     if (install.exitCode !== 0) {
       const output = `${install.stderr}\n${install.stdout}`;
@@ -640,7 +637,6 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     const generated = await sandbox.run({
       command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
       workingDirectory: applyRoot,
-      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
     if (generated.exitCode !== 0) {
       const output = `${generated.stderr}\n${generated.stdout}`;
@@ -784,7 +780,6 @@ export async function executeProposalBoundApply(input: {
         const linked = await input.sandbox.run({
           command: `ln -s ${root.cachePath} ${root.path}`,
           workingDirectory: "/workspace/repository",
-          abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
         });
         if (linked.exitCode !== 0) throw new Error("dependency cache miss");
       }
