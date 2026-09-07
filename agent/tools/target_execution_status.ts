@@ -9,7 +9,7 @@ import {
 
 export default defineTool({
   description:
-    "Verify whether the exact planned proposal is eligible for a future typed target command. This tool only rechecks durable receipts and a fixed tool allowlist; it never executes target-owned commands.",
+    "Inspect the selected plan and report execution diagnostics without running its build commands. Version and cache observations are diagnostic information, not a substitute for executing the repository's commands. This does not approve building or publishing changes.",
   inputSchema: z.object({
     expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),

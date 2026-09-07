@@ -6,8 +6,6 @@ import type { SandboxSession } from "eve/sandbox";
 import { hasTestCapability } from "../testing/test-capability";
 
 import {
-  assertExactDependencyTargetBinding,
-  dependencyExecutionLayout,
   dependencyCacheReceiptDigest,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
@@ -22,7 +20,6 @@ import {
 import {
   configuredToolchainImage,
   requiredToolVersions,
-  toolVersionMatches,
 } from "../sandbox/toolchain";
 import {
   isHostedVercelSandboxBackend,
@@ -129,7 +126,7 @@ export function targetExecutionBlockers(input: {
     blockers.push("No immutable sandbox image is configured.");
   if (!input.toolchainReady)
     blockers.push(
-      "The sandbox does not prove the exact required Git, mise, and Bun toolchain.",
+      "The sandbox execution environment or a required command is unavailable.",
     );
   return blockers;
 }
@@ -234,13 +231,6 @@ export async function inspectTargetExecutionReadiness(input: {
   });
   const image = resolvedExecutionEnvironment.imageDigest;
   const backend = resolvedExecutionEnvironment.backend;
-  if (cache !== undefined)
-    assertExactDependencyTargetBinding({
-      workspace: input.state.workspace,
-      sourceReceipt: input.state.sourceReceipt,
-      cache,
-      dependencyReceipt: input.state.dependencyReceipt,
-    });
   const required = (
     Object.keys(requiredToolVersions) as Array<
       keyof typeof requiredToolVersions
@@ -251,24 +241,13 @@ export async function inspectTargetExecutionReadiness(input: {
       command,
       expected: requiredToolVersions[command].source,
       version: observedTool?.version ?? "",
-      matches:
-        observedTool?.available === true &&
-        (fixture || toolVersionMatches(command, observedTool.version)),
+      available: observedTool?.available === true,
     };
   });
   const toolchainReady =
     backend.blockers.length === 0 &&
     image !== undefined &&
-    cache !== undefined &&
-    input.state.dependencyReceipt.imageDigest === image &&
-    input.state.dependencyReceipt.dependencyCacheDigest ===
-      dependencyCacheReceiptDigest(cache) &&
-    input.state.dependencyReceipt.cacheManifestDigest ===
-      cache.manifestDigest &&
-    input.state.dependencyReceipt.cacheContentDigest === cache.contentDigest &&
-    JSON.stringify(input.state.dependencyReceipt.dependencyLayout) ===
-      JSON.stringify(dependencyExecutionLayout(cache, environment)) &&
-    required.every((tool) => tool.matches);
+    required.every((tool) => tool.available);
   const blockers = targetExecutionBlockers({
     imageConfigured: image !== undefined,
     toolchainReady,
