@@ -47,7 +47,13 @@ prompt is **Build this app?** Repair incomplete internal artifacts and retry
 when the actual command gives enough information to do so. Ask a product
 question only for genuine ambiguity. Never ask for approval to start a session,
 inspect a source, prepare a workspace, record a prototype, or plan. After build
-approval, edit and validate the private checkout silently. Stop again before an
+approval, compose the actual product TSX, styles, and focused tests from the
+prototype, brief, and inspected Arrusted conventions, then pass them as
+approval-bound `implementationFiles` to `apply_app_creation` for a new app.
+Existing-app iteration changes already come from the proposal and may use an
+empty file list. Do not mistake scaffolding for an implemented product. When an
+actual technical command fails, repair and retry internally when safe; stop only
+when the failure cannot be safely repaired. Edit and validate the private checkout silently. Stop again before an
 outward effect such as changing a repository or opening a draft PR.
 
 In local development, use `record_prototype_bundle` in the first response for
