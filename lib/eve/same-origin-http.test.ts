@@ -639,7 +639,45 @@ describe("same-origin canonical Eve transport", () => {
     ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
   });
 
-  it("rejects non-origin configuration and oversized durable tails", async () => {
+  it("reads generated-code histories larger than 2 MiB without exposing tool input", async () => {
+    const generatedSource = "private-generated-source".repeat(140_000);
+    const events = [
+      {
+        type: "actions.requested",
+        data: {
+          actions: [
+            {
+              kind: "tool-call",
+              callId: "apply_1",
+              toolName: "apply_target_proposal",
+              input: {
+                implementationFiles: [
+                  {
+                    path: "apps/stock-exceptions/app/page.tsx",
+                    content: generatedSource,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      { type: "session.waiting", data: {} },
+    ];
+    const transport = createSameOriginEveTransport({
+      config,
+      workloadIdentity: identity(),
+      fetchImplementation: vi.fn(async () => stream(events)),
+    });
+    const result = await transport.get({
+      principal,
+      adapterSessionId: "wrun_1",
+    });
+    expect(result.status).toBe("waiting");
+    expect(JSON.stringify(result)).not.toContain("private-generated-source");
+  });
+
+  it("rejects non-origin configuration and invalid durable tail numbers", async () => {
     expect(() =>
       createSameOriginEveTransport({
         config: { baseUrl: "https://user@example.test/path" },
@@ -658,7 +696,7 @@ describe("same-origin canonical Eve transport", () => {
               "content-type": "application/x-ndjson; charset=utf-8",
               "x-eve-session-id": "wrun_1",
               "x-eve-stream-format": "ndjson",
-              "x-eve-stream-tail-index": "100000",
+              "x-eve-stream-tail-index": "9007199254740992",
               "x-eve-stream-version": "23",
             },
           }),
