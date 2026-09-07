@@ -220,7 +220,7 @@ describe("target command readiness", () => {
       }),
     ).toEqual([
       "No immutable sandbox image is configured.",
-      "The sandbox does not prove the exact required Git, mise, and Bun toolchain.",
+      "The sandbox execution environment or a required command is unavailable.",
     ]);
     expect(
       targetExecutionBlockers({ imageConfigured: true, toolchainReady: true }),
@@ -234,7 +234,7 @@ describe("target command readiness", () => {
     ).toEqual([
       "Hosted artifact is unavailable.",
       "No immutable sandbox image is configured.",
-      "The sandbox does not prove the exact required Git, mise, and Bun toolchain.",
+      "The sandbox execution environment or a required command is unavailable.",
     ]);
   });
 });
