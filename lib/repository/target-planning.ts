@@ -480,31 +480,13 @@ export async function executeTargetIdentityAndPlanning(input: {
   };
   if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity))
     throw new Error("Target identity did not match the accepted AppSpec.");
-  const manifestSource = await input.sandbox.readTextFile({
-    path: ".app-builder/source-files.json",
-  });
-  if (manifestSource === null)
-    throw new Error("Prepared source manifest is missing.");
-  const manifest = JSON.parse(manifestSource) as unknown;
-  if (!Array.isArray(manifest))
-    throw new Error("Prepared source manifest is invalid.");
-  const files = new Map(
-    manifest.flatMap((candidate): [string, { mode: string }][] => {
-      if (
-        typeof candidate !== "object" ||
-        candidate === null ||
-        !("path" in candidate) ||
-        typeof candidate.path !== "string" ||
-        !("mode" in candidate) ||
-        typeof candidate.mode !== "string"
-      )
-        return [];
-      return [[candidate.path, { mode: candidate.mode.replace(/^100/u, "") }]];
-    }),
-  );
-  const existingApplication = [...files.keys()].some((path) =>
-    path.startsWith(`${identity.workspacePath}/`),
-  );
+  // Discover the current checkout, not an inventory captured before cloning or
+  // generation. Explicit edits also support apps without a package manifest.
+  const existingApplication =
+    input.existingAppChanges !== undefined ||
+    (await input.sandbox.readTextFile({
+      path: `repository/${identity.workspacePath}/package.json`,
+    })) !== null;
   if (existingApplication && input.existingAppChanges === undefined)
     throw new ExistingApplicationChangesRequiredError();
   if (existingApplication && input.existingAppChanges !== undefined) {
@@ -519,22 +501,27 @@ export async function executeTargetIdentityAndPlanning(input: {
       )
         throw new Error("An existing-app change path is not allowed.");
       seen.add(requested.path);
-      const entry = files.get(requested.path);
-      const before =
-        entry === undefined
-          ? null
-          : await input.sandbox.readBinaryFile({
-              path: `repository/${requested.path}`,
+      const before = await input.sandbox.readBinaryFile({
+        path: `repository/${requested.path}`,
+      });
+      const observedMode =
+        before === null
+          ? undefined
+          : await input.sandbox.run({
+              command: `stat -c %a /workspace/repository/${requested.path}`,
             });
-      if (entry !== undefined && before === null)
-        throw new Error("An existing-app source file became unavailable.");
+      const mode =
+        observedMode?.exitCode === 0 &&
+        /^[0-7]{3,4}$/u.test(observedMode.stdout.trim())
+          ? observedMode.stdout.trim()
+          : "644";
       changes.push({
         path: requested.path,
-        ...(entry === undefined
+        ...(before === null
           ? {}
-          : { before: { mode: entry.mode, digest: sha256(before!) } }),
+          : { before: { mode, digest: sha256(before) } }),
         after: {
-          mode: entry?.mode ?? "644",
+          mode,
           digest: sha256(requested.content),
           content: requested.content,
         },

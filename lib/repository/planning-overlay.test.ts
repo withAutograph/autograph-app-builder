@@ -1,9 +1,79 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
-import { materializePlanningOverlay } from "./target-planning";
+import {
+  executeTargetIdentityAndPlanning,
+  fixtureTargetCommandExecutor,
+  materializePlanningOverlay,
+} from "./target-planning";
 
 describe("planning from the current checkout", () => {
+  it("completes identity and planning without a source inventory", async () => {
+    const readTextFile = vi.fn(async ({ path }: { path: string }) => {
+      if (path.includes("source-files"))
+        throw new Error("Inventory must not be required");
+      return null;
+    });
+    const executor = vi.fn(fixtureTargetCommandExecutor());
+    const sandbox = {
+      run: vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" })),
+      readTextFile,
+      writeTextFile: vi.fn(async () => undefined),
+      removePath: vi.fn(async () => undefined),
+    } as unknown as SandboxSession;
+    const result = await executeTargetIdentityAndPlanning({
+      sandbox,
+      executor,
+      appId: "stock-exceptions",
+      artifactRevision: "a".repeat(64),
+      appSpecDigest: "b".repeat(64),
+      appSpecContent: "Stock Exceptions product design",
+    });
+    expect(result.proposal.contract.appId).toBe("stock-exceptions");
+    expect(executor.mock.calls.map(([request]) => request.command)).toEqual([
+      "identity",
+      "planning",
+    ]);
+  });
+
+  it("plans explicit existing-app edits from current bytes without an inventory", async () => {
+    const before = Buffer.from("old component");
+    const sandbox = {
+      run: vi.fn(async ({ command }: { command: string }) => ({
+        exitCode: 0,
+        stdout: command.startsWith("stat ") ? "755\n" : "",
+        stderr: "",
+      })),
+      readTextFile: vi.fn(async () => null),
+      readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
+        path.endsWith("microfrontends.json") ? Buffer.from("{}") : before,
+      ),
+      writeTextFile: vi.fn(async () => undefined),
+      removePath: vi.fn(async () => undefined),
+    } as unknown as SandboxSession;
+    const result = await executeTargetIdentityAndPlanning({
+      sandbox,
+      executor: fixtureTargetCommandExecutor(),
+      appId: "vendor",
+      artifactRevision: "a".repeat(64),
+      appSpecDigest: "b".repeat(64),
+      appSpecContent: "Improve Vendor",
+      existingAppChanges: [
+        { path: "apps/vendor/app/page.tsx", content: "new component" },
+      ],
+    });
+    expect(result.proposal).toMatchObject({
+      operation: "iterate-existing-app",
+      iteration: {
+        changes: [
+          {
+            before: { mode: "755" },
+            after: { mode: "755", content: "new component" },
+          },
+        ],
+      },
+    });
+  });
   it.each([null, "invalid old inventory"])(
     "copies current files without requiring an inspection manifest (%s)",
     async (manifest) => {
