@@ -20,7 +20,6 @@ import {
 } from "./public-events";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
-const MAX_STREAM_EVENTS = 100_000;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
 const EVE_STREAM_FORMAT = "ndjson";
@@ -258,7 +257,7 @@ async function readInstalledSnapshot(input: {
     throw new Error("Canonical Eve omitted its durable stream tail.");
   }
   const tail = Number(tailValue);
-  if (!Number.isSafeInteger(tail) || tail < -1 || tail >= MAX_STREAM_EVENTS) {
+  if (!Number.isSafeInteger(tail) || tail < -1) {
     throw new Error("Canonical Eve returned an invalid durable stream tail.");
   }
   if (tail === -1) {
@@ -273,7 +272,6 @@ async function readInstalledSnapshot(input: {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const events: MessageStreamEvent[] = [];
   let buffered = "";
-  let receivedBytes = 0;
   try {
     while (events.length <= tail) {
       const chunk = await reader.read();
@@ -289,10 +287,8 @@ async function readInstalledSnapshot(input: {
         }
         break;
       }
-      receivedBytes += chunk.value.byteLength;
-      if (receivedBytes > MAX_RESPONSE_BYTES) {
-        throw new Error("Canonical Eve stream is too large.");
-      }
+      // Generated files make a legitimate session history large. Read through
+      // the provider's observed tail rather than imposing a lifetime byte quota.
       buffered += decoder.decode(chunk.value, { stream: true });
       let newline = buffered.indexOf("\n");
       while (newline !== -1 && events.length <= tail) {
