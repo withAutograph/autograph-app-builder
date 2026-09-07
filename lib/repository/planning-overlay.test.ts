@@ -83,9 +83,7 @@ describe("planning from the current checkout", () => {
         stderr: "",
       })),
       readTextFile: vi.fn(async () => null),
-      readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
-        path.endsWith("microfrontends.json") ? Buffer.from("{}") : before,
-      ),
+      readBinaryFile: vi.fn(async () => before),
       writeTextFile: vi.fn(async () => undefined),
       removePath: vi.fn(async () => undefined),
     } as unknown as SandboxSession;
@@ -110,6 +108,12 @@ describe("planning from the current checkout", () => {
           },
         ],
       },
+    });
+    expect(sandbox.readBinaryFile).toHaveBeenCalledWith({
+      path: "repository/apps/vendor/app/page.tsx",
+    });
+    expect(sandbox.readBinaryFile).not.toHaveBeenCalledWith({
+      path: "repository/microfrontends.json",
     });
   });
   it.each([null, "invalid old inventory"])(
