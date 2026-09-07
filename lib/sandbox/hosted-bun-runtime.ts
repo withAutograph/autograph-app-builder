@@ -3,7 +3,7 @@ import type { SandboxSession } from "eve/sandbox";
 export const HOSTED_BUN_RUNTIME_PREFIX = "/workspace/.app-builder/runtime";
 
 export const HOSTED_BUN_RUNTIME_ENVIRONMENT = {
-  PATH: `${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin:/usr/bin:/bin`,
+  PATH: `${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
 } as const;
 
 const hostedBunRuntimeInstallRequest = {
