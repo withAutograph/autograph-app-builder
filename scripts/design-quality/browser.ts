@@ -311,6 +311,15 @@ export async function measureStyles(
       nodeId: root.nodeId,
       selector: "body,body *",
     });
+    const { nodeIds: interactiveNodeIds } = await session.send(
+      "DOM.querySelectorAll",
+      {
+        nodeId: root.nodeId,
+        selector:
+          "button,input,select,textarea,a[href],[role=button],[role=link]",
+      },
+    );
+    const interactiveNodes = new Set(interactiveNodeIds);
     // Resolve tokens in the active browser theme. A detached element only sees a
     // flattened default cascade and is misleading for dark or inherited themes.
     const normalized = await page.evaluate(
@@ -322,7 +331,7 @@ export async function measureStyles(
         const result: Record<string, string[]> = {};
         for (const prop of Object.keys(properties)) {
           result[prop] = [];
-          for (const [name, value] of Object.entries(tokens)) {
+          for (const [name] of Object.entries(tokens)) {
             const relevant = prop.includes("color")
               ? name.startsWith("--color-")
               : prop.includes("font") ||
@@ -336,7 +345,7 @@ export async function measureStyles(
                     : /spacing|space|radius|border/.test(name);
             if (!relevant) continue;
             el.style.removeProperty(prop);
-            el.style.setProperty(prop, value);
+            el.style.setProperty(prop, `var(${name})`);
             if (el.style.getPropertyValue(prop))
               result[prop].push(getComputedStyle(el).getPropertyValue(prop));
           }
@@ -352,6 +361,7 @@ export async function measureStyles(
       nodeId: number;
       model: { width: number; height: number; content: number[] };
       region: "top" | "middle" | "bottom";
+      interactive: boolean;
     }> = [];
     for (const nodeId of nodeIds) {
       const { model } = await session
@@ -363,22 +373,36 @@ export async function measureStyles(
         nodeId,
         model,
         region: y < 300 ? "top" : y < 1000 ? "middle" : "bottom",
+        interactive: interactiveNodes.has(nodeId),
       });
     }
     const selected: typeof candidates = [];
-    for (const region of ["top", "middle", "bottom"] as const) {
-      for (const candidate of candidates.filter(
-        (item) => item.region === region,
-      )) {
-        if (selected.length >= 120) break;
-        selected.push(candidate);
-      }
+    const regions = ["top", "middle", "bottom"] as const;
+    const buckets = regions.flatMap((region) =>
+      [true, false].map((interactive) =>
+        candidates.filter(
+          (item) => item.region === region && item.interactive === interactive,
+        ),
+      ),
+    );
+    // Reserve controls before using a round-robin budget across each rendered
+    // region and control/non-control bucket.
+    for (const bucket of buckets.filter((bucket) => bucket[0]?.interactive)) {
+      const candidate = bucket.shift();
+      if (candidate) selected.push(candidate);
     }
-    // Fill unused capacity deterministically from every region rather than only
-    // the first DOM subtree.
-    for (const candidate of candidates)
-      if (selected.length < 120 && !selected.includes(candidate))
-        selected.push(candidate);
+    while (selected.length < 120) {
+      let added = false;
+      for (const bucket of buckets) {
+        if (selected.length >= 120) break;
+        const candidate = bucket.shift();
+        if (candidate) {
+          selected.push(candidate);
+          added = true;
+        }
+      }
+      if (!added) break;
+    }
     const observations: BrowserStyleObservation[] = [];
     for (const { nodeId, model } of selected) {
       const computed = await session.send("CSS.getComputedStyleForNode", {
@@ -441,7 +465,7 @@ export async function measureStyles(
         const generated = generatedSource(path, generatedSourcePaths);
         const inheritedDeclaration =
           !inline.length && !own.length && declarationEntries.length > 0;
-        let classification = classifyStyle(
+        let classification: string = classifyStyle(
           declarations,
           cv[property] ?? "",
           normalized[property] ?? [],
@@ -455,12 +479,7 @@ export async function measureStyles(
           classification = "unassessed";
         if (classification === "token-reference")
           classification = "semantic-token-reference";
-        if (
-          generated &&
-          classification !== "semantic-token-reference" &&
-          classification !== "matching-literal" &&
-          classification !== "structural"
-        )
+        if (generated && classification === "unmatched-literal")
           classification = "generated-override";
         if (
           !generated &&
@@ -475,6 +494,9 @@ export async function measureStyles(
           classification === "unmatched-literal"
         )
           classification = "unknown";
+        // Structural layout values are not adherence evidence, so exclude them
+        // entirely rather than allowing downstream global scores to count them.
+        if (classification === "structural") continue;
         const provenance: Observation["provenance"] = generated
           ? "generated"
           : arrustedSharedSource(path)
@@ -490,13 +512,8 @@ export async function measureStyles(
         const source = path
           ? {
               path,
-              line:
-                (rule?.style?.range?.startLine ?? rule?.range?.startLine ?? 0) +
-                1,
-              column:
-                (rule?.style?.range?.startColumn ??
-                  rule?.range?.startColumn ??
-                  0) + 1,
+              line: (rule?.style?.range?.startLine ?? 0) + 1,
+              column: (rule?.style?.range?.startColumn ?? 0) + 1,
             }
           : undefined;
         observations.push({
@@ -676,6 +693,7 @@ export async function capturePreview(input: {
         if (styles)
           styles.observations.forEach((observation) => {
             observation.capture = name;
+            observation.id = `${name}-${observation.id}`;
           });
         const path = join(input.output, `${name}.png`);
         await page.screenshot({ path, fullPage: true });
