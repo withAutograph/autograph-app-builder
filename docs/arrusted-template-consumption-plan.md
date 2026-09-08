@@ -93,6 +93,13 @@ Keep persistent record state separate from action outcomes: an order simulation
 does not change an inventory exception's severity. Present the result in its
 own message or action state instead of replacing the severity indicator.
 
+The refined card example uses the existing `StatusPill` neutral tone for readable
+severity text, with urgency still explicit in the label and lowest-cover sort.
+This trades colored urgency cues for readable text without changing the palette
+or restyling the shared primitive; it is an option, not a required tone for other
+apps. Use an element that supports `role="radiogroup"` (such as a `div`) for the
+shared radio cards. Do not put that role on a named `section` landmark.
+
 For a stock-review list, Product, Severity, and Cover may be enough alongside
 the supported selection control. Location remains available in the filter and
 selected record subtitle; on-hand and reorder quantities remain in Stock

@@ -177,3 +177,25 @@ analysis is reproducible with `readReference`, `analyzeSource`, and
 observations, and the selected Arrusted checkout. Focused fixtures cover
 recursive unions, reliable full unions, unresolved members, and equivalent raw
 versus expression-wrapped JSX strings. No scoring formula or palette changed.
+
+## Incremental update: readable status and honest action outcome
+
+[The next report](stock-exceptions-readable-outcome-195532570Z/README.md) scored
+**85/100**, down from 90, using the unchanged model and rubric. All nine fixture
+checks passed and no layout measurement findings were reported. The invalid
+radio-group container was repaired; shared muted-text contrast observations
+remain informational.
+
+![Severity remains visible after the simulation](stock-exceptions-readable-outcome-195532570Z/desktop-window-2.png)
+
+The simulation now retains the record's original severity and separately says
+that stock levels are unchanged. A narrower desktop window keeps both panes
+visible. Supported neutral status pills improve the readability of labels, but
+the reviewer found that the lost color distinction slows urgency scanning. It
+also found that the fixed-width filter row straddles the narrower list/detail
+boundary, and that the outcome message is too similar to muted metadata.
+
+These are useful next changes, not a reason to reroll the judge. This report is
+preserved alongside the stronger 90-point variant. No palette values, scoring
+weights, or historical reports changed. The UI is still a manually refined
+generated example, not evidence that every new generation reaches this quality.

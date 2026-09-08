@@ -86,6 +86,8 @@ Design reports remain on demand: no automatic score threshold or polish loop.
 For list/detail workflows, keep the list focused on fields needed to choose a
 record; put supporting information in the detail panel. Preserve selection when
 adapting the layout to a narrower desktop window. Keep the primary action
+outcome separate from persistent record facts; simulating an action must not
+replace a warning or imply that underlying data changed. Keep the primary action
 reachable using supported panel props and ordinary layout sizing; inspect the
 actual scrolling body and footer rather than inventing a panel variant. Use only
 the current table spec fields: do not infer responsive or colored-cell options
