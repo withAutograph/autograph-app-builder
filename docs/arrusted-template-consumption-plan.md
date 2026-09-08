@@ -125,14 +125,32 @@ selected record subtitle; on-hand and reorder quantities remain in Stock
 position. Right-align Cover using the column's `align` field. This is an example
 of choosing task-relevant columns, not a required three-column template.
 
-Keep replenishment in the shared detail `actions`/`onAction` API, with its visible
-fixture outcome. The tabbed example keeps Stock position and Supplier details
+When using `RecordDetailPanel`, keep replenishment in its shared
+`actions`/`onAction` API, with its visible fixture outcome. The tabbed example
+keeps Stock position and Supplier details
 in separate shared panel views; a shorter record can instead use the existing
 Supplier disclosure. Retain the stock facts and preview-only disclosure needed
 to understand the action. Show severity through the supported detail `status`
 tone or shared subtitle `StatusPill`. Plain severity text in the table is preferable to an
 invented tone-cell prop or a palette override. A reusable semantic table-cell
 capability belongs in Arrusted if the workflow needs it.
+
+A short, read-only record does not necessarily need the full detail composition.
+The current public `Card`, `Typography`, `SegmentedControl`, `Divider`, and
+`Button` can compose a smaller view without overriding any component internals.
+Use semantic `dl`/`dt`/`dd` structure and ordinary grid layout for label/value
+relationships, with the text rendered by `Typography`'s supported variants.
+That is layout composition, not a new visual control. Preserve selection, the
+same product facts, accessible view switching, and the action's visible outcome.
+Do not replace a richer shared composition if the task actually needs its edit,
+validation, long-record, or section capabilities.
+
+For this short example, a `StatusPill` in each `DecisionOptionCard` tag and the
+numeric cover immediately beneath it make individual rows easier to scan. The
+neutral variant preserves readable text without a palette change; grouping still
+communicates priority. Compact detail spacing puts the primary action and its
+simulation result together above the fold in the evaluated short desktop window.
+This is an observed benefit, not a new always-visible-action runtime requirement.
 
 Review initial and changed selection, filtered results, and the action outcome
 in the narrower desktop layout. These examples guide composition choices;
