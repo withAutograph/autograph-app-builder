@@ -45,6 +45,7 @@ describe("analyzeSource", () => {
           Button: {
             props: {
               variant: { required: false, values: ["primary", "secondary"] },
+              label: { required: false, primitiveKinds: ["string"] },
             },
           },
         },
@@ -152,6 +153,33 @@ describe("analyzeSource", () => {
     expect(report.observations.some((o) => o.summary.includes("320px"))).toBe(
       false,
     );
+  });
+
+  it("credits only TypeScript-proven static primitive prop values", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        export function Page() { const data = "x"; return <><Button label="OK" /><Button label={2} /><Button label={data} /></>; }
+      `,
+        },
+      ],
+    });
+    const labels = report.observations.filter(
+      (o) =>
+        o.dimension === "api" &&
+        o.classification === "prop" &&
+        o.summary.includes("label"),
+    );
+    expect(labels.map((o) => o.verdict).sort()).toEqual([
+      "conforming",
+      "nonconforming",
+      "unassessed",
+    ]);
   });
 
   it("reports JSX imports, token evidence, and literal classifications", () => {

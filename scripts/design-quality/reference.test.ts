@@ -76,7 +76,7 @@ describe("readReference", () => {
       reference.modules["@autograph/components"].exports.Button.props,
     ).toEqual({
       variant: { required: false, values: ["primary", "secondary"] },
-      label: { required: true },
+      label: { required: true, primitiveKinds: ["string"] },
     });
     expect(reference.modules["@autograph/components"].exports.helper).toEqual(
       {},

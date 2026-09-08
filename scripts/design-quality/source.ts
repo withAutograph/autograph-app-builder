@@ -150,6 +150,48 @@ function staticLiteral(attribute: ts.JsxAttribute): string | undefined {
   return jsxAttributeText(attribute);
 }
 
+function literalKind(
+  attribute: ts.JsxAttribute,
+): "string" | "number" | "boolean" | undefined {
+  if (!attribute.initializer) return "boolean";
+  if (ts.isStringLiteral(attribute.initializer)) return "string";
+  if (
+    !ts.isJsxExpression(attribute.initializer) ||
+    !attribute.initializer.expression
+  )
+    return undefined;
+  const expression = attribute.initializer.expression;
+  if (
+    ts.isStringLiteral(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression)
+  )
+    return "string";
+  if (ts.isNumericLiteral(expression)) return "number";
+  if (
+    expression.kind === ts.SyntaxKind.TrueKeyword ||
+    expression.kind === ts.SyntaxKind.FalseKeyword
+  )
+    return "boolean";
+  return undefined;
+}
+
+function containsJsx(node: ts.Node): boolean {
+  let found = false;
+  const inspect = (child: ts.Node) => {
+    if (
+      ts.isJsxElement(child) ||
+      ts.isJsxSelfClosingElement(child) ||
+      ts.isJsxFragment(child)
+    ) {
+      found = true;
+      return;
+    }
+    if (!found) ts.forEachChild(child, inspect);
+  };
+  inspect(node);
+  return found;
+}
+
 function isStaticallyFalse(expression: ts.Expression | undefined): boolean {
   return Boolean(
     expression &&
@@ -449,7 +491,8 @@ export function analyzeSource({
         return;
       if (
         ts.isConditionalExpression(node) &&
-        !isStaticallyFalse(node.condition)
+        !isStaticallyFalse(node.condition) &&
+        (containsJsx(node.whenTrue) || containsJsx(node.whenFalse))
       ) {
         observations.push(
           observation(
@@ -657,22 +700,36 @@ export function analyzeSource({
             } else if (declaration.props?.[name]) {
               const value = staticLiteral(attribute);
               const allowed = declaration.props[name].values;
+              const acceptedPrimitives = declaration.props[name].primitiveKinds;
+              const kind = literalKind(attribute);
               observations.push(
                 observation(
                   `api:prop:${file.path}:${attribute.getStart(source)}:${name}`,
                   "api",
-                  value === undefined || !allowed
+                  value === undefined || !kind
                     ? "unassessed"
-                    : allowed.includes(value)
-                      ? "conforming"
-                      : "nonconforming",
+                    : allowed
+                      ? allowed.includes(value)
+                        ? "conforming"
+                        : "nonconforming"
+                      : acceptedPrimitives
+                        ? acceptedPrimitives.includes(kind)
+                          ? "conforming"
+                          : "nonconforming"
+                        : "unassessed",
                   value === undefined
                     ? `${item.name}.${name} is dynamic or spread-derived; its public variant cannot be verified statically.`
-                    : !allowed
-                      ? `${item.name}.${name} is a public prop; its value is not a finite literal variant.`
-                      : allowed.includes(value)
-                        ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
-                        : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`,
+                    : !kind
+                      ? `${item.name}.${name} is not a static primitive literal.`
+                      : !allowed && !acceptedPrimitives
+                        ? `${item.name}.${name}'s primitive type cannot be resolved.`
+                        : !allowed && acceptedPrimitives?.includes(kind)
+                          ? `${item.name}.${name} accepts static ${kind} values.`
+                          : !allowed
+                            ? `${item.name}.${name} does not accept static ${kind} values.`
+                            : allowed.includes(value)
+                              ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
+                              : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`,
                   position(source, attribute),
                   "prop",
                 ),

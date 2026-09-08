@@ -7,6 +7,8 @@ export type PublicProp = {
   required: boolean;
   /** Literal values accepted by a union-typed prop, when TypeScript can prove them. */
   values?: string[];
+  /** Broad primitive kinds proven by TypeScript; any and unknown are omitted. */
+  primitiveKinds?: Array<"string" | "number" | "boolean">;
 };
 
 export type PublicExport = {
@@ -96,17 +98,17 @@ async function aliasEntryPoints(
   }
   const paths = parsed.options.paths ?? {};
   const entries: EntryPoint[] = [];
-  for (const module of [
+  for (const moduleName of [
     "@autograph/components",
     "@autograph/compositions",
     "@autograph/icons",
   ]) {
-    const target = paths[module]?.[0];
+    const target = paths[moduleName]?.[0];
     const path = target && sourcePath(root, target);
-    if (path) entries.push({ module, path });
+    if (path) entries.push({ module: moduleName, path });
     else if (target)
       limitations.push(
-        `Could not resolve tsconfig path for ${module}; its public types are unassessed.`,
+        `Could not resolve tsconfig path for ${moduleName}; its public types are unassessed.`,
       );
   }
   return entries;
@@ -125,10 +127,7 @@ function sourcePath(packageRoot: string, target: string): string | undefined {
   return possibilities.find(existsSync);
 }
 
-function literalValues(
-  type: ts.Type,
-  checker: ts.TypeChecker,
-): string[] | undefined {
+function literalValues(type: ts.Type): string[] | undefined {
   const members = (type.isUnion() ? type.types : [type]).filter(
     (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)),
   );
@@ -144,6 +143,29 @@ function literalValues(
   return values.length === members.length && members.length
     ? [...new Set(values)].sort()
     : undefined;
+}
+
+function primitiveKinds(type: ts.Type): PublicProp["primitiveKinds"] {
+  const members = (type.isUnion() ? type.types : [type]).filter(
+    (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)),
+  );
+  if (
+    !members.length ||
+    members.some(
+      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
+    )
+  )
+    return undefined;
+  const kinds = new Set<"string" | "number" | "boolean">();
+  for (const member of members) {
+    if (member.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral))
+      kinds.add("string");
+    else if (member.flags & (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral))
+      kinds.add("number");
+    else if (member.flags & ts.TypeFlags.BooleanLike) kinds.add("boolean");
+    else return undefined;
+  }
+  return [...kinds].sort() as PublicProp["primitiveKinds"];
 }
 
 function propsForExport(
@@ -164,11 +186,12 @@ function propsForExport(
       property,
       declaration,
     );
+    const values = literalValues(propertyType);
+    const primitive = values ? undefined : primitiveKinds(propertyType);
     props[property.getName()] = {
       required: !(property.flags & ts.SymbolFlags.Optional),
-      ...(literalValues(propertyType, checker)
-        ? { values: literalValues(propertyType, checker) }
-        : {}),
+      ...(values ? { values } : {}),
+      ...(primitive ? { primitiveKinds: primitive } : {}),
     };
   }
   return Object.keys(props).length ? { props } : {};
