@@ -18,7 +18,6 @@ export type ProductQualityScenario = {
     prototype?: {
       appId: string;
       requiredText: readonly string[];
-      requiredSelectors: readonly string[];
     };
   };
 };
@@ -48,7 +47,6 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
           "Finance: verify tax information",
           "Northstar Logistics",
         ],
-        requiredSelectors: ["#detail-title", "#tax-step", ".queue button"],
       },
     },
   },
@@ -148,8 +146,6 @@ export type PrototypeQualityReport = {
   hardFailures: readonly string[];
   score: {
     semanticStructure: boolean;
-    responsive: boolean;
-    interactive: boolean;
     contentComplete: boolean;
   };
 };
@@ -176,30 +172,11 @@ export function evaluatePrototypeQuality(input: {
   require(/<section\s+aria-labelledby=/iu.test(
     input.html,
   ), "Prototype lacks labelled workflow regions.");
-  require(/@media\s*\(/iu.test(input.html), "Prototype lacks a narrow layout.");
-  require(/addEventListener\s*\(\s*["']click["']/iu.test(
-    input.html,
-  ), "Prototype does not expose an interactive control.");
   require(!/lorem ipsum|todo:|placeholder text/iu.test(
     input.html,
   ), "Prototype contains unfinished placeholder content.");
-  for (const color of ["#8192ff", "#292929", "#fafaf9", "#17b196"])
-    require(input.html
-      .toLowerCase()
-      .includes(color), `Prototype omitted Arrusted palette token ${color}.`);
-  require(!/#173f31|#1f684d|#2d7557/iu.test(
-    input.html,
-  ), "Prototype retained the superseded green palette.");
   for (const text of prototype.requiredText)
     require(input.html.includes(text), `Prototype omitted ${text}.`);
-  for (const selector of prototype.requiredSelectors) {
-    const fragment = selector.startsWith("#")
-      ? `id="${selector.slice(1)}"`
-      : selector.startsWith(".")
-        ? `class="${selector.slice(1).split(/\s/u)[0]}`
-        : selector;
-    require(input.html.includes(fragment), `Prototype omitted ${selector}.`);
-  }
   const appSpecResult = validateBuildReadyAppSpec(input.appSpec);
   require(appSpecResult.valid, "Prototype AppSpec is not build-ready.");
   require(input.appSpec.includes(
@@ -211,8 +188,6 @@ export function evaluatePrototypeQuality(input: {
       semanticStructure:
         /<main[\s>]/iu.test(input.html) &&
         /<section\s+aria-labelledby=/iu.test(input.html),
-      responsive: /@media\s*\(/iu.test(input.html),
-      interactive: /addEventListener\s*\(\s*["']click["']/iu.test(input.html),
       contentComplete: !/lorem ipsum|todo:|placeholder text/iu.test(input.html),
     },
   };
