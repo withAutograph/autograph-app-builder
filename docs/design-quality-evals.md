@@ -1,5 +1,21 @@
 # Design-quality evaluations
 
+## Share reports through Git
+
+See the [report archive](reports/design-quality/README.md). Generate locally,
+review the screenshots and report for sensitive information, then run:
+
+```sh
+mise run eval:design-archive -- --report-dir .artifacts/design-quality/RUN --name stock-exceptions
+```
+
+This copies the report and all screenshots to
+`docs/reports/design-quality/YYYY-MM-DD/<app-name>-HHmmssSSSZ/`, using the
+evaluation time in UTC. Each run includes a GitHub-readable summary, portable
+HTML, JSON, and relative screenshot links. It updates the archive index without
+overwriting earlier runs. Commit the folder and index together. This does not
+automatically push or publish a website.
+
 Implementation: `scripts/eval-design.mts` orchestrates the read-only browser
 collector, generated-source analysis, and screenshot judge in
 `scripts/design-quality/`. No agent tools or generation transitions depend on it.

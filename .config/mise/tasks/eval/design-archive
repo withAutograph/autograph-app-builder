@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Archive a reviewed design report and screenshots in Git"
+set -eu
+exec "$(mise which node)" --import tsx scripts/design-quality/archive.mts "$@"
