@@ -972,24 +972,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return `The completed app changes are ready for review across ${String(output?.changes?.length ?? 0)} files.`;
     }
     if (accepted.length < requiredAccepts) {
-      const output = proposal.output as
-        | {
-            digest?: string;
-            approvedPaths?: readonly string[];
-            changes?: readonly unknown[];
-          }
-        | undefined;
       return {
         toolCalls: [
           {
             name: "accept_change_set",
-            input: {
-              changeSet: {
-                digest: stale ? "0".repeat(64) : output?.digest,
-                approvedPaths: output?.approvedPaths,
-                changes: output?.changes,
-              },
-            },
+            input: {},
           },
         ],
       };
@@ -1377,17 +1364,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (proposal.isError || proposal.output === undefined) {
       if (message.includes("dirty overlap"))
         return "Local publication preconditions were rejected before approval or destination mutation.";
-      return {
-        toolCalls: [
-          {
-            name: "local_publication_status",
-            input: {
-              destinationPath,
-              expectedReviewDigest: reviewDigest,
-            },
-          },
-        ],
-      };
+      return "Local publication could not be prepared; inspect the tool's actual error before retrying.";
     }
     const publicationState = proposal.output as {
       status?: string;
