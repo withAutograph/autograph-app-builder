@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { classifyStyle, scenariosSchema } from "./browser";
+import {
+  arrustedSharedSource,
+  classifyStyle,
+  generatedSource,
+  scenariosSchema,
+  sourcePath,
+} from "./browser";
 import { escapeHtml, renderReport } from "./report";
 describe("conservative design measurements", () => {
   it("keeps token references distinct from lookalikes", () => {
@@ -27,6 +33,26 @@ describe("conservative design measurements", () => {
         { name: "test", steps: [{ action: "publish", selector: "button" }] },
       ]).success,
     ).toBe(false);
+  });
+  it("attributes a stylesheet only when its source URL matches an explicit generated path", () => {
+    expect(
+      sourcePath("https://preview.example/app.css?token=secret#hash"),
+    ).toBe("/app.css");
+    expect(
+      generatedSource("/workspace/apps/generated/app.css", [
+        "apps/generated/app.css",
+      ]),
+    ).toBe(true);
+    expect(
+      generatedSource("/workspace/packages/design-systems/theme.css", [
+        "apps/generated/app.css",
+      ]),
+    ).toBe(false);
+    expect(generatedSource(undefined, ["apps/generated/app.css"])).toBe(false);
+    expect(
+      arrustedSharedSource("/workspace/packages/design-systems/theme.css"),
+    ).toBe(true);
+    expect(arrustedSharedSource("/workspace/apps/preview/app.css")).toBe(false);
   });
   it("escapes untrusted model/page copy in reports", () => {
     expect(escapeHtml('<script>"&')).toBe("&lt;script&gt;&quot;&amp;");

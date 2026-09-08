@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { analyzeSource, parseTokens } from "./source";
+import type { Reference } from "./reference";
 
 const tokenCss = `
   @theme {
@@ -36,6 +37,151 @@ describe("parseTokens", () => {
 });
 
 describe("analyzeSource", () => {
+  const reference: Reference = {
+    limitations: [],
+    modules: {
+      "@autograph/components": {
+        exports: {
+          Button: {
+            props: {
+              variant: { required: false, values: ["primary", "secondary"] },
+              label: { required: false, primitiveKinds: ["string"] },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  it("uses selected public types, skips false branches, and labels unknown paths", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        export function Page() { return <>{false ? <button /> : null}{ready ? <Button variant="other" {...props} /> : null}</>; }
+      `,
+        },
+      ],
+    });
+    expect(
+      report.observations.some((o) => o.classification === "local-control"),
+    ).toBe(false);
+    expect(report.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dimension: "api",
+          verdict: "nonconforming",
+          classification: "prop",
+        }),
+        expect.objectContaining({
+          dimension: "api",
+          verdict: "unassessed",
+          classification: "spread-props",
+        }),
+        expect.objectContaining({
+          dimension: "component",
+          verdict: "unassessed",
+          classification: "dynamic-reachability",
+        }),
+      ]),
+    );
+  });
+
+  it("does not score dead branches or unresolved imports as local replacements", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        import { FancyControl } from "some-library";
+        function LocalControl() { return <button />; }
+        export function Page() { return <>{false && <Button variant="other" />}{true && <FancyControl />}</>; }
+      `,
+        },
+      ],
+    });
+    expect(
+      report.observations.some((o) =>
+        o.summary.includes("outside the public variants"),
+      ),
+    ).toBe(false);
+    expect(report.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          classification: "unresolved-component",
+          verdict: "unassessed",
+        }),
+      ]),
+    );
+    expect(
+      report.observations.some((o) =>
+        o.summary.includes("Local custom visual control"),
+      ),
+    ).toBe(false);
+  });
+
+  it("reports public component color overrides and excludes responsive dimensions", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        export function Page() { return <Button style={{ color: "var(--color-bg-page)", maxWidth: "320px", gridTemplateColumns: "1fr 2fr" }} />; }
+      `,
+        },
+      ],
+    });
+    expect(report.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          classification: "token-reference",
+          verdict: "nonconforming",
+          summary: expect.stringContaining("color treatment override"),
+        }),
+      ]),
+    );
+    expect(report.observations.some((o) => o.summary.includes("320px"))).toBe(
+      false,
+    );
+  });
+
+  it("credits only TypeScript-proven static primitive prop values", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        export function Page() { const data = "x"; return <><Button label="OK" /><Button label={2} /><Button label={data} /></>; }
+      `,
+        },
+      ],
+    });
+    const labels = report.observations.filter(
+      (o) =>
+        o.dimension === "api" &&
+        o.classification === "prop" &&
+        o.summary.includes("label"),
+    );
+    expect(labels.map((o) => o.verdict).sort()).toEqual([
+      "conforming",
+      "nonconforming",
+      "unassessed",
+    ]);
+  });
+
   it("reports JSX imports, token evidence, and literal classifications", () => {
     const report = analyzeSource({
       tokenCss,

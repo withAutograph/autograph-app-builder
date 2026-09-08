@@ -3,11 +3,20 @@ import {
   mkdir,
   readFile,
   readdir,
-  writeFile,
+  writeFile as writeRawFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { renderReport } from "./report";
+import { captureFilename } from "./archive-path";
+import { format, resolveConfig } from "prettier";
+
+async function writeFile(path: string, content: string) {
+  await writeRawFile(
+    path,
+    await format(content, { ...(await resolveConfig(path)), filepath: path }),
+  );
+}
 
 const { values } = parseArgs({
   options: {
@@ -40,9 +49,7 @@ await mkdir(join(archiveRoot, date), { recursive: true });
 // A report is a historical observation: never silently replace an existing run.
 await mkdir(destination);
 for (const capture of report.captures) {
-  if (!/^[a-z]+-\d+$/.test(capture.name))
-    throw new Error("Unexpected screenshot filename");
-  const filename = `${capture.name}.png`;
+  const filename = captureFilename(capture.name);
   await copyFile(join(input, filename), join(destination, filename));
   capture.path = filename;
 }
@@ -78,6 +85,30 @@ const lines = [
   "| Dimension | Score | Reason |",
   "| --- | --- | --- |",
 ];
+if (report.adherence) {
+  const a = report.adherence;
+  lines.splice(
+    8,
+    0,
+    `**Arrusted adherence:** ${a.score ?? "unassessed"}/100 (${a.status}); evidence coverage ${a.coveragePercent ?? "unassessed"}%. Evaluator ${a.version}.`,
+    "",
+    "| Dimension | Conforming | Nonconforming | Unassessed | Adherence |",
+    "| --- | --- | --- | --- | --- |",
+    ...Object.entries(a.dimensions).map(([name, value]) => {
+      const d = value as {
+        conforming: number;
+        nonconforming: number;
+        unassessed: number;
+        assessed: number;
+        percent: number | null;
+      };
+      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : Math.round(d.percent) + "%"} (${d.conforming}/${d.assessed}) |`;
+    }),
+    "",
+    "Scores from different evaluator versions or captured states are not directly comparable.",
+    "",
+  );
+}
 for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
   const r = rating as { score: number; reason: string };
   lines.push(`| ${md(axis)} | ${r.score}/4 | ${md(r.reason)} |`);
@@ -110,7 +141,7 @@ for (const capture of report.captures)
       coveragePercent: number | null;
     };
     lines.push(
-      `| ${md(capture.name)} | ${md(category)} | ${s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
+      `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
     );
   }
 lines.push("", "## Latest-run screenshots", "");
@@ -125,6 +156,8 @@ for (const capture of report.captures)
   );
 lines.push("## Limitations", "");
 for (const limitation of report.judge.limitations ?? [])
+  lines.push(`- ${md(limitation)}`);
+for (const limitation of report.evaluationNotes ?? [])
   lines.push(`- ${md(limitation)}`);
 await writeFile(join(destination, "README.md"), lines.join("\n") + "\n");
 const rows: Array<{

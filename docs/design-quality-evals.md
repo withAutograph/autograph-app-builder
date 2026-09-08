@@ -1,5 +1,37 @@
 # Design-quality evaluations
 
+## Arrusted adherence (evaluator 2)
+
+The report leads with three separate measured dimensions: component usage,
+public API usage, and generated styling. For each, adherence is
+`conforming / (conforming + nonconforming)`. The overall advisory score is the
+equally weighted average of available dimension percentages, rounded once.
+An empty denominator has no score; missing evidence is **partial**, not success.
+Coverage is assessed observations divided by inspected observations. It is not
+coverage of the entire app. Static and browser counts stay visible; the two
+collectors observe different things and are not claims of React runtime tracing.
+
+Supply the source corresponding to the existing preview with `--source-dir`.
+Public package exports and TypeScript prop types come from the selected Arrusted
+checkout, with its existing UI catalog informing the separate subjective review.
+Unused imports and unreachable JSX earn no credit. Dynamic props, spreads and
+unresolved imports remain unassessed. JSX usage does not prove rendering.
+Wiring and ordinary layout values are not replacement controls.
+
+Semantic references, matching literals, generated overrides, inherited shared
+styling and unknown origin are distinct evidence classes. Matching a color literal
+earns no semantic-token credit. Browser token values are resolved in the active
+theme. Sampling spans page regions and interactive controls; sampled and omitted
+coverage are reported. Shared styles are observations, not generated-code defects.
+Do not change the Arrusted palette to improve the report.
+
+Findings link to supplied source lines and screenshot regions when available.
+HTML annotation overlays leave original PNGs untouched. Raw evidence is available
+as JSON and in collapsed sections. Reports may include source excerpts: review
+them before sharing. Reference commit and evaluator/rubric versions are diagnostic,
+never runtime requirements. Historical reports remain unchanged and are not directly
+comparable across scoring versions, reference changes or different captured states.
+
 ## Share reports through Git
 
 See the [report archive](reports/design-quality/README.md). Generate locally,

@@ -1,5 +1,5 @@
 import { expect, test } from "playwright/test";
-import { measurePage } from "./browser";
+import { measurePage, measureStyles } from "./browser";
 
 // Authored calibration candidates, not human-validated aesthetic gold labels.
 test("measurements distinguish concrete defects from intentional layout", async ({
@@ -44,4 +44,35 @@ test("measurements distinguish concrete defects from intentional layout", async 
     body: await page.screenshot(),
     contentType: "image/png",
   });
+});
+
+test("style evidence uses the active theme and reports diversified DOM coverage", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setContent(`<!doctype html><style>
+    :root { --theme-text: rgb(20, 20, 20) }
+    .dark { --theme-text: rgb(230, 230, 230) }
+    .item { color: var(--theme-text) }
+  </style><body class="dark"><main>${Array.from({ length: 130 }, (_, index) => `<button class="item" style="display:block;margin-top:${index === 0 ? 0 : 12}px">Item ${index}</button>`).join("")}</main></body>`);
+  const styles = await measureStyles(page, {
+    "--color-text": "var(--theme-text)",
+    "--theme-text": "var(--theme-text)",
+  });
+  expect(styles.sampledElements).toBe(120);
+  expect(styles.sampling.eligible).toBeGreaterThanOrEqual(130);
+  expect(styles.sampling.regions.top.sampled).toBeGreaterThan(0);
+  expect(
+    styles.observations.some(
+      (item) =>
+        item.computed === "rgb(230, 230, 230)" &&
+        item.classification === "semantic-token-reference",
+    ),
+  ).toBe(true);
+  // No stylesheet URL was supplied by this fixture; browser evidence must not
+  // manufacture generated provenance from a visual token match.
+  expect(
+    styles.observations.some((item) => item.provenance === "generated"),
+  ).toBe(false);
 });
