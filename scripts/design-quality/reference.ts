@@ -25,6 +25,7 @@ type PackageJson = {
   main?: string;
   types?: string;
 };
+type EntryPoint = { module: string; path: string };
 
 const relevantModule = /^@autograph\/(?:components|compositions|icons)(?:$|\/)/;
 const sourceExtensions = [".tsx", ".ts", ".jsx", ".js", ".d.ts"];
@@ -50,6 +51,65 @@ function exportTargets(value: unknown): string[] {
   if (typeof value === "string") return [value];
   if (!value || typeof value !== "object") return [];
   return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
+}
+
+function packageEntryPoints(
+  pkg: PackageJson,
+): Array<{ suffix: string; target: string }> {
+  if (typeof pkg.exports === "string")
+    return [{ suffix: "", target: pkg.exports }];
+  if (pkg.exports && typeof pkg.exports === "object") {
+    const entries = Object.entries(pkg.exports as Record<string, unknown>)
+      .filter(([key]) => key === "." || key.startsWith("./"))
+      .flatMap(([key, value]) =>
+        exportTargets(value).map((target) => ({
+          suffix: key === "." ? "" : key.slice(1),
+          target,
+        })),
+      );
+    if (entries.length) return entries;
+    const root = exportTargets(pkg.exports);
+    if (root.length) return root.map((target) => ({ suffix: "", target }));
+  }
+  return pkg.types || pkg.main
+    ? [{ suffix: "", target: pkg.types ?? pkg.main! }]
+    : [];
+}
+
+async function aliasEntryPoints(
+  root: string,
+  limitations: string[],
+): Promise<EntryPoint[]> {
+  let parsed: ts.ParsedCommandLine;
+  try {
+    const config = ts.readConfigFile(
+      join(root, "tsconfig.json"),
+      ts.sys.readFile,
+    );
+    if (config.error) throw new Error();
+    parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
+  } catch {
+    limitations.push(
+      "Could not read the selected Arrusted tsconfig paths; alias-backed public exports are unassessed.",
+    );
+    return [];
+  }
+  const paths = parsed.options.paths ?? {};
+  const entries: EntryPoint[] = [];
+  for (const module of [
+    "@autograph/components",
+    "@autograph/compositions",
+    "@autograph/icons",
+  ]) {
+    const target = paths[module]?.[0];
+    const path = target && sourcePath(root, target);
+    if (path) entries.push({ module, path });
+    else if (target)
+      limitations.push(
+        `Could not resolve tsconfig path for ${module}; its public types are unassessed.`,
+      );
+  }
+  return entries;
 }
 
 function sourcePath(packageRoot: string, target: string): string | undefined {
@@ -122,6 +182,7 @@ function propsForExport(
 export async function readReference(arrustedRoot: string): Promise<Reference> {
   const modules: Reference["modules"] = {};
   const limitations: string[] = [];
+  const entryPoints = await aliasEntryPoints(arrustedRoot, limitations);
   const manifests = await walk(arrustedRoot);
   for (const manifest of manifests) {
     let pkg: PackageJson;
@@ -132,36 +193,60 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
     }
     if (!pkg.name || !relevantModule.test(pkg.name)) continue;
     const packageRoot = dirname(join(arrustedRoot, manifest));
-    const targets = exportTargets(pkg.exports);
-    if (!targets.length && (pkg.types || pkg.main))
-      targets.push(pkg.types ?? pkg.main!);
-    const entries = targets
-      .map((target) => sourcePath(packageRoot, target))
-      .filter((path): path is string => Boolean(path));
+    const entries = packageEntryPoints(pkg)
+      .map(({ suffix, target }) => ({
+        module: `${pkg.name}${suffix}`,
+        path: sourcePath(packageRoot, target),
+      }))
+      .filter((entry): entry is EntryPoint => Boolean(entry.path));
     if (!entries.length) {
       limitations.push(
         `Could not resolve a TypeScript public entry point for ${pkg.name}.`,
       );
       continue;
     }
-    const program = ts.createProgram(entries, {
-      allowJs: true,
-      jsx: ts.JsxEmit.Preserve,
-      module: ts.ModuleKind.NodeNext,
-      moduleResolution: ts.ModuleResolutionKind.NodeNext,
-      skipLibCheck: true,
-    });
+    const program = ts.createProgram(
+      entries.map((entry) => entry.path),
+      {
+        allowJs: true,
+        jsx: ts.JsxEmit.Preserve,
+        module: ts.ModuleKind.NodeNext,
+        moduleResolution: ts.ModuleResolutionKind.NodeNext,
+        skipLibCheck: true,
+      },
+    );
     const checker = program.getTypeChecker();
-    const exported: Record<string, PublicExport> = {};
     for (const entry of entries) {
-      const source = program.getSourceFile(entry);
+      const source = program.getSourceFile(entry.path);
       if (!source) continue;
       const moduleSymbol = checker.getSymbolAtLocation(source);
       if (!moduleSymbol) continue;
+      const exported: Record<string, PublicExport> = {};
       for (const symbol of checker.getExportsOfModule(moduleSymbol))
         exported[symbol.getName()] = propsForExport(symbol, source, checker);
+      modules[entry.module] = { exports: exported };
     }
-    modules[pkg.name] = { exports: exported };
+  }
+  for (const entry of entryPoints) {
+    if (modules[entry.module]) continue;
+    const program = ts.createProgram([entry.path], {
+      jsx: ts.JsxEmit.Preserve,
+      skipLibCheck: true,
+    });
+    const source = program.getSourceFile(entry.path);
+    const moduleSymbol =
+      source && program.getTypeChecker().getSymbolAtLocation(source);
+    if (!source || !moduleSymbol) {
+      limitations.push(
+        `Could not load TypeScript exports for ${entry.module}; its public types are unassessed.`,
+      );
+      continue;
+    }
+    const checker = program.getTypeChecker();
+    const exported: Record<string, PublicExport> = {};
+    for (const symbol of checker.getExportsOfModule(moduleSymbol))
+      exported[symbol.getName()] = propsForExport(symbol, source, checker);
+    modules[entry.module] = { exports: exported };
   }
   if (!Object.keys(modules).length)
     limitations.push(

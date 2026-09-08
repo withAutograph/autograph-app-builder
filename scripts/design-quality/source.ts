@@ -1,4 +1,5 @@
 import postcss from "postcss";
+import { posix } from "node:path";
 import ts from "typescript";
 
 import type { Observation } from "./evidence";
@@ -229,9 +230,44 @@ export function analyzeSource({
   const imports: SourceAnalysis["imports"] = [];
   const observations: Observation[] = [];
   const limitations: string[] = [...(reference?.limitations ?? [])];
+  const reachableCss = new Set<string>();
+  for (const file of files.filter(
+    (candidate) => !/\.css$/i.test(candidate.path),
+  )) {
+    const source = ts.createSourceFile(
+      file.path,
+      file.content,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    if (!exportedEntries(source).length) continue;
+    for (const statement of source.statements)
+      if (
+        ts.isImportDeclaration(statement) &&
+        ts.isStringLiteral(statement.moduleSpecifier) &&
+        /\.css$/i.test(statement.moduleSpecifier.text)
+      )
+        reachableCss.add(
+          posix.normalize(
+            posix.join(
+              posix.dirname(file.path),
+              statement.moduleSpecifier.text,
+            ),
+          ),
+        );
+  }
 
   for (const file of files) {
     if (/\.css$/i.test(file.path)) {
+      if (!reachableCss.has(posix.normalize(file.path))) {
+        // Preserve the legacy inventory, but do not turn dead CSS into scored evidence.
+        collectCssFile(file.content, tokenRefs, literals);
+        limitations.push(
+          `${file.path} is not statically imported by an exported entry; its CSS is unassessed.`,
+        );
+        continue;
+      }
       collectCssFile(file.content, tokenRefs, literals);
       const css = postcss.parse(file.content, { from: file.path });
       css.walkDecls((declaration) => {
@@ -494,10 +530,21 @@ export function analyzeSource({
                   "export",
                 ),
               );
+            } else if (!declaration.props) {
+              observations.push(
+                observation(
+                  `api:type:${file.path}:${attribute.getStart(source)}:${name}`,
+                  "api",
+                  "unassessed",
+                  `${item.name}'s public prop type could not be resolved; ${name} is not credited or rejected.`,
+                  position(source, attribute),
+                  "type-unresolved",
+                ),
+              );
             } else if (
               name !== "children" &&
               name !== "key" &&
-              !declaration.props?.[name]
+              !declaration.props[name]
             ) {
               observations.push(
                 observation(
