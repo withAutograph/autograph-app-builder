@@ -185,12 +185,29 @@ export async function measurePage(page: Page) {
       region: ReturnType<typeof rect>;
       reviewRequired: boolean;
     }> = [];
-    const scrolling = [...document.querySelectorAll("*")].filter(
-      (el) =>
-        visible(el) &&
+    const scrolling = [...document.querySelectorAll("*")].flatMap((el) => {
+      if (!visible(el)) return [];
+      const style = getComputedStyle(el);
+      const axes: Array<"x" | "y"> = [];
+      if (
         el.scrollWidth > el.clientWidth + 2 &&
-        /auto|scroll/.test(getComputedStyle(el).overflowX),
-    );
+        /auto|scroll/.test(style.overflowX)
+      )
+        axes.push("x");
+      if (
+        el.scrollHeight > el.clientHeight + 2 &&
+        /auto|scroll/.test(style.overflowY)
+      )
+        axes.push("y");
+      return axes.map((axis) => ({
+        el,
+        axis,
+        scrollWidth: el.scrollWidth,
+        scrollHeight: el.scrollHeight,
+        clientWidth: el.clientWidth,
+        clientHeight: el.clientHeight,
+      }));
+    });
     if (document.documentElement.scrollWidth > innerWidth + 2)
       findings.push({
         kind: "document-overflow",
@@ -301,9 +318,16 @@ export async function measurePage(page: Page) {
       documentWidth: document.documentElement.scrollWidth,
       documentHeight: document.documentElement.scrollHeight,
       findings,
-      intentionalScrollContainers: scrolling.map((el) => ({
-        label: label(el),
-        region: rect(el),
+      // Diagnostics only: an intentional scroll region is not an automatic
+      // pass/fail conclusion about the surrounding layout.
+      intentionalScrollContainers: scrolling.map((scrolling) => ({
+        label: label(scrolling.el),
+        axis: scrolling.axis,
+        scrollWidth: scrolling.scrollWidth,
+        scrollHeight: scrolling.scrollHeight,
+        clientWidth: scrolling.clientWidth,
+        clientHeight: scrolling.clientHeight,
+        region: rect(scrolling.el),
       })),
       controls: controls.map((el) => ({
         label: label(el),

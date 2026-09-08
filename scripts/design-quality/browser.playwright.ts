@@ -22,6 +22,9 @@ test("measurements distinguish concrete defects from intentional layout", async 
   ).toEqual([]);
   expect(good.intentionalScrollContainers.length).toBeGreaterThan(0);
   expect(
+    good.intentionalScrollContainers.some((item) => item.axis === "x"),
+  ).toBe(true);
+  expect(
     good.accessibility.violations.some((v) => v.id === "button-name"),
   ).toBe(false);
   await test.info().attach("authored-good-reference", {
@@ -44,6 +47,24 @@ test("measurements distinguish concrete defects from intentional layout", async 
   await test.info().attach("authored-poor-reference", {
     body: await page.screenshot(),
     contentType: "image/png",
+  });
+});
+
+test("reports intentional vertical scrolling as a diagnostic", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setContent(
+    `<!doctype html><main style="height:80px;overflow-y:auto"><div style="height:240px">Scrollable details</div></main>`,
+  );
+  const measured = await measurePage(page);
+  const vertical = measured.intentionalScrollContainers.find(
+    (item) => item.axis === "y",
+  );
+  expect(vertical).toMatchObject({
+    axis: "y",
+    scrollHeight: 240,
+    clientHeight: 80,
   });
 });
 
