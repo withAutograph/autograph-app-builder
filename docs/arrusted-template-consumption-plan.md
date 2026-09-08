@@ -78,6 +78,21 @@ inspect the implementation before acting on a judge's proposed API change.
 
 ### Stock Exceptions example
 
+The selected checkout also exports `DecisionOptionCard` from
+`@autograph/components`. For a short review list where identity, urgency, and a
+few supporting values matter more than column comparisons, compose those cards
+inside a labeled radio group. Use `name`, `value`, `selected`, and `onSelect` for
+native selection, `description` for context, and `tag` with the public
+`StatusPill` for severity. The shared card owns its visual treatment; no custom
+card, badge, or density override is needed. Its standard spacing takes more
+vertical room than a table, so inspect the actual result. Keep a table when
+cross-record column comparison is the user's main task. These are alternatives,
+not a mandatory layout.
+
+Keep persistent record state separate from action outcomes: an order simulation
+does not change an inventory exception's severity. Present the result in its
+own message or action state instead of replacing the severity indicator.
+
 For a stock-review list, Product, Severity, and Cover may be enough alongside
 the supported selection control. Location remains available in the filter and
 selected record subtitle; on-hand and reorder quantities remain in Stock

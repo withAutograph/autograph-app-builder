@@ -123,3 +123,28 @@ PR #339's first CI attempt found missing TypeScript narrowing in the new
 class-evidence helper. The follow-up guards absent initializers and namespaced
 attributes and adds a focused regression. No check or scoring criterion was
 removed.
+
+## Incremental update: shared selectable cards
+
+[The next report](stock-exceptions-shared-cards-192715403Z/README.md) scored
+**90/100** with the same model and rubric. All nine scripted supplier,
+simulation, and filter checks passed. In the integrated Browser, clicking Milk
+and then pressing ArrowDown selected Avocado and updated its detail panel;
+that separate keyboard observation is not claimed as an automated report check.
+
+![Shared selectable cards in a 1024px desktop window](stock-exceptions-shared-cards-192715403Z/desktop-window-0.png)
+
+The saved source now uses the existing public `DecisionOptionCard` and
+`StatusPill`, sorted by lowest cover first. It removes the repeated Select column
+and small table headers while preserving selection and the shared detail tabs.
+This is a genuine composition alternative, not a new custom component or a
+change to Arrusted's palette. The tradeoff is more vertical space; the short
+desktop list scrolls within its panel. The table alternatives remain preserved.
+
+The remaining findings are important: small shared colored status text has weak
+contrast, and the detail's post-action status replaces severity with a mock-order
+outcome. The latter is an actual semantic defect to repair by keeping severity
+and action outcome separate. The former must be addressed, if needed, through
+supported composition and readable redundant text—not palette overrides.
+The evaluator still cannot establish most compiled styling provenance. This
+report is not a claim of 100/100 quality or complete adherence confidence.
