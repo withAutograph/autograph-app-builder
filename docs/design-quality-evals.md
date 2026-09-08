@@ -1,5 +1,30 @@
 # Design-quality evaluations
 
+Implementation: `scripts/eval-design.mts` orchestrates the read-only browser
+collector, generated-source analysis, and screenshot judge in
+`scripts/design-quality/`. No agent tools or generation transitions depend on it.
+
+Token percentages always include assessed/total counts and coverage. A high
+percentage with low coverage is not full adherence. Matched CSS is conservative:
+conflicting declarations, unknown variables, shorthands, and unavailable source
+provenance remain unassessed. Responsive sizes are not policy violations.
+
+The two small layouts in `scripts/design-quality/browser.playwright.ts` are
+authored calibration candidates with known measurable defects. They are **not
+human-labeled aesthetic ground truth**. Before using scores for comparisons,
+review their screenshots, add human ratings using the five rubric dimensions,
+and record reviewer/date/reason. Do not invent human labels or a pass threshold.
+Live-model ratings remain advisory; mock tests validate structure and arithmetic.
+
+After an OIDC interruption, rerun only the judge over saved evidence:
+
+```sh
+mise exec -- node --import tsx scripts/design-quality/rescore.mts REPORT_DIRECTORY BRIEF_FILE
+```
+
+This does not recapture the browser or restart the builder. Reports and source
+inputs can contain product information; keep them local unless sharing is approved.
+
 The design-quality evaluation is an on-demand advisory review for an Arrusted
 preview. It gives a design reviewer structured observations; it is not a CI or
 runtime gate, and it does not automatically rerun.
@@ -24,7 +49,7 @@ partial when `--source-dir` is omitted or the available source cannot support a
 claim; missing source evidence is not treated as a failure.
 
 The AI gives a score from `0` through `4` on five advisory axes: hierarchy,
-layout, readability, interaction clarity, and visual coherence. Scores are
+layout, typography, responsive composition, and product clarity. Scores are
 judgment, not pass/fail requirements. The report records input/output token
 counts and any model limitations.
 

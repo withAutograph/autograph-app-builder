@@ -110,6 +110,7 @@
     "just-bash": "3.4.2",
     "microsandbox": "0.5.10",
     "playwright": "latest",
+    "postcss": "8.5.26",
     "prettier": "3.9.6",
     "storybook": "^10.5.10",
     "tailwindcss": "4.3.3",

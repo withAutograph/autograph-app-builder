@@ -51,9 +51,7 @@ test.afterAll(
 );
 
 test.describe("recorded Vendor Onboarding prototype", () => {
-  test("supports the desktop review flow", async ({
-    page,
-  }) => {
+  test("supports the desktop review flow", async ({ page }) => {
     await page.setViewportSize({ width: 1592, height: 902 });
     await loadPrototype(page);
     await page.getByRole("button", { name: "Kiteworks GmbH" }).click();

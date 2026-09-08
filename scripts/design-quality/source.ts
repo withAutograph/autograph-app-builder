@@ -19,9 +19,12 @@ export type SourceAnalysis = {
 };
 
 const varReference = /var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/g;
-const cssLiteral = /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/g;
-const structuralLiteral = /^(?:0(?:\.0+)?(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/i;
-const autographUiImport = /^@autograph\/(?:components|compositions|icons)(?:\/|$)/;
+const cssLiteral =
+  /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/g;
+const structuralLiteral =
+  /^(?:0(?:\.0+)?(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/i;
+const autographUiImport =
+  /^@autograph\/(?:components|compositions|icons)(?:\/|$)/;
 
 function unique(values: Iterable<string>): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
@@ -56,7 +59,9 @@ export function parseTokens(css: string): Record<string, string> {
 }
 
 function isSemanticToken(name: string): boolean {
-  return /^(?:--color-(?:bg|text|action|border|status|chart)-|--(?:space|radius|shadow|size|text|leading|tracking)-)/.test(name);
+  return /^(?:--color-(?:bg|text|action|border|status|chart)-|--(?:space|radius|shadow|size|text|leading|tracking)-)/.test(
+    name,
+  );
 }
 
 function collectVarReferences(text: string, destination: string[]) {
@@ -73,24 +78,35 @@ function collectCssLiterals(text: string, destination: string[]) {
 
 function jsxAttributeText(attribute: ts.JsxAttribute): string | undefined {
   if (!attribute.initializer) return undefined;
-  if (ts.isStringLiteral(attribute.initializer)) return attribute.initializer.text;
-  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression)
+  if (ts.isStringLiteral(attribute.initializer))
+    return attribute.initializer.text;
+  if (
+    !ts.isJsxExpression(attribute.initializer) ||
+    !attribute.initializer.expression
+  )
     return undefined;
   const expression = attribute.initializer.expression;
-  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))
+  if (
+    ts.isStringLiteral(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression)
+  )
     return expression.text;
   if (ts.isNumericLiteral(expression)) return expression.text;
   return undefined;
 }
 
-function collectStyleExpression(expression: ts.Expression, destination: string[]) {
+function collectStyleExpression(
+  expression: ts.Expression,
+  destination: string[],
+) {
   if (!ts.isObjectLiteralExpression(expression)) return;
   for (const property of expression.properties) {
     if (!ts.isPropertyAssignment(property)) continue;
     const value = property.initializer;
     if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))
       collectCssLiterals(value.text, destination);
-    else if (ts.isNumericLiteral(value)) collectCssLiterals(value.text, destination);
+    else if (ts.isNumericLiteral(value))
+      collectCssLiterals(value.text, destination);
   }
 }
 
@@ -104,7 +120,11 @@ function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
   return ts.isIdentifier(expression) ? expression.text : undefined;
 }
 
-function collectCssFile(content: string, tokenRefs: string[], literals: string[]) {
+function collectCssFile(
+  content: string,
+  tokenRefs: string[],
+  literals: string[],
+) {
   postcss.parse(content).walkDecls((declaration) => {
     collectVarReferences(declaration.value, tokenRefs);
     collectCssLiterals(declaration.value, literals);
@@ -115,7 +135,13 @@ function collectCssFile(content: string, tokenRefs: string[], literals: string[]
  * Inspect generated TSX without applying a policy gate. The report is evidence:
  * callers decide how, or whether, to score it.
  */
-export function analyzeSource({ files, tokenCss }: { files: SourceFile[]; tokenCss: string }): SourceAnalysis {
+export function analyzeSource({
+  files,
+  tokenCss,
+}: {
+  files: SourceFile[];
+  tokenCss: string;
+}): SourceAnalysis {
   const tokens = parseTokens(tokenCss);
   const tokenRefs: string[] = [];
   const literals: string[] = [];
@@ -127,22 +153,39 @@ export function analyzeSource({ files, tokenCss }: { files: SourceFile[]; tokenC
       continue;
     }
     collectVarReferences(file.content, tokenRefs);
-    const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const source = ts.createSourceFile(
+      file.path,
+      file.content,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
     const imported = new Map<string, { source: string; name: string }>();
     const usedInJsx = new Set<string>();
 
     for (const statement of source.statements) {
-      if (!ts.isImportDeclaration(statement) || !statement.importClause) continue;
-      if (!ts.isStringLiteral(statement.moduleSpecifier) || !autographUiImport.test(statement.moduleSpecifier.text)) continue;
+      if (!ts.isImportDeclaration(statement) || !statement.importClause)
+        continue;
+      if (
+        !ts.isStringLiteral(statement.moduleSpecifier) ||
+        !autographUiImport.test(statement.moduleSpecifier.text)
+      )
+        continue;
       const moduleSource = statement.moduleSpecifier.text;
       const bindings = statement.importClause.namedBindings;
       if (statement.importClause.name)
-        imported.set(statement.importClause.name.text, { source: moduleSource, name: "default" });
+        imported.set(statement.importClause.name.text, {
+          source: moduleSource,
+          name: "default",
+        });
       if (bindings && ts.isNamespaceImport(bindings))
         imported.set(bindings.name.text, { source: moduleSource, name: "*" });
       if (bindings && ts.isNamedImports(bindings))
         for (const item of bindings.elements)
-          imported.set(item.name.text, { source: moduleSource, name: item.propertyName?.text ?? item.name.text });
+          imported.set(item.name.text, {
+            source: moduleSource,
+            name: item.propertyName?.text ?? item.name.text,
+          });
     }
 
     const visit = (node: ts.Node) => {
@@ -152,21 +195,33 @@ export function analyzeSource({ files, tokenCss }: { files: SourceFile[]; tokenC
         if (root) usedInJsx.add(root);
         for (const attribute of node.attributes.properties) {
           if (!ts.isJsxAttribute(attribute)) continue;
-          const name = attribute.name.text;
+          const name = attribute.name.getText(source);
           const text = jsxAttributeText(attribute);
           if (name === "className" && text) {
-            for (const bracketed of text.matchAll(/\[([^\]]+)\]/g)) collectCssLiterals(bracketed[1], literals);
+            for (const bracketed of text.matchAll(/\[([^\]]+)\]/g))
+              collectCssLiterals(bracketed[1], literals);
           }
-          if (name === "style" && attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression)
+          if (
+            name === "style" &&
+            attribute.initializer &&
+            ts.isJsxExpression(attribute.initializer) &&
+            attribute.initializer.expression
+          )
             collectStyleExpression(attribute.initializer.expression, literals);
         }
       }
-      if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression))
+      if (
+        ts.isJsxExpression(node) &&
+        node.expression &&
+        ts.isIdentifier(node.expression)
+      )
         usedInJsx.add(node.expression.text);
       ts.forEachChild(node, visit);
     };
     visit(source);
-    for (const localName of unique([...usedInJsx].filter((name) => imported.has(name)))) {
+    for (const localName of unique(
+      [...usedInJsx].filter((name) => imported.has(name)),
+    )) {
       const item = imported.get(localName);
       if (item) imports.push({ path: file.path, localName, ...item });
     }
@@ -174,13 +229,20 @@ export function analyzeSource({ files, tokenCss }: { files: SourceFile[]; tokenC
 
   const resolvedValues = new Set(Object.values(tokens).map(normalise));
   const generatedLiterals = unique(literals);
-  const matchingLiterals = generatedLiterals.filter((value) => resolvedValues.has(normalise(value)));
-  const unknownLiterals = generatedLiterals.filter((value) => !resolvedValues.has(normalise(value)));
+  const matchingLiterals = generatedLiterals.filter((value) =>
+    resolvedValues.has(normalise(value)),
+  );
+  const unknownLiterals = generatedLiterals.filter(
+    (value) => !resolvedValues.has(normalise(value)),
+  );
   const uniqueRefs = unique(tokenRefs);
 
   return {
-    imports: imports.sort((left, right) =>
-      left.path.localeCompare(right.path) || left.source.localeCompare(right.source) || left.localName.localeCompare(right.localName),
+    imports: imports.sort(
+      (left, right) =>
+        left.path.localeCompare(right.path) ||
+        left.source.localeCompare(right.source) ||
+        left.localName.localeCompare(right.localName),
     ),
     tokenRefs: uniqueRefs,
     semanticVarRefs: uniqueRefs.filter(isSemanticToken),

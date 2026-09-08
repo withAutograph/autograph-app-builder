@@ -78,7 +78,7 @@ const report = {
     },
     visual: {
       status: "reported by the Playwright product-quality visual test",
-      baselineUpdatesRequire: "APP_BUILDER_PRODUCT_EVAL_UPDATE_VISUAL=1",
+      note: "Recorded fixture interaction evidence only; use eval:design for generated UI quality.",
     },
   },
   quality: {
