@@ -115,17 +115,20 @@ function imports(content: string) {
 function namedImports(content: string, source: string): string[] {
   const names = new Set<string>();
   const pattern = new RegExp(
-    `import\\s+(?:type\\s+)?\\{([^}]*)\\}\\s+from\\s+["']${source.replace("/", "\\/")}["']`,
+    `import\\s+(type\\s+)?\\{([^}]*)\\}\\s+from\\s+["']${source.replace("/", "\\/")}["']`,
     "gu",
   );
-  for (const match of content.matchAll(pattern))
-    for (const item of (match[1] ?? "").split(",")) {
+  for (const match of content.matchAll(pattern)) {
+    if (match[1]) continue;
+    for (const item of (match[2] ?? "").split(",")) {
+      if (/^type\s/u.test(item.trim())) continue;
       const name = item
         .trim()
-        .split(/\\s+as\\s+/u)[0]
+        .split(/\s+as\s+/u)[0]
         ?.trim();
       if (name) names.add(name);
     }
+  }
   return [...names].toSorted();
 }
 
