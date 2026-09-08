@@ -99,19 +99,19 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const apply = await t.send("Apply the current creation proposal.");
+    await t.send("Apply the current creation proposal.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
-    apply.notEvent("input.requested");
     t.check(t.reply, includes("private preview"));
     t.check(t.reply, includes("quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryApply = await t.send(
-      "Retry target apply after a lost response.",
-    );
+    await t.send("Retry target apply after a lost response.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
-    retryApply.notEvent("input.requested");
     t.check(t.reply, includes("prepared app is unchanged"));
 
     const staleApply = await t.send("Apply with a stale proposal digest.");

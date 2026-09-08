@@ -5,7 +5,8 @@ import {
   sign,
 } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
@@ -218,6 +219,12 @@ export async function runWithTestCapability(options: {
       ...childEnvironment(),
       EVE_DEV_WORKER_APP_ROOT:
         options.profile === "eve" ? repositoryRoot : undefined,
+      // Never recover another eval's unfinished queues. Keep the directory
+      // after exit for failure diagnostics; it is not a dependency cache.
+      WORKFLOW_LOCAL_DATA_DIR:
+        options.profile === "eve"
+          ? mkdtempSync(resolve(tmpdir(), "app-builder-eval-workflow-"))
+          : undefined,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
         options.gateAEvalProfile,
       ),
