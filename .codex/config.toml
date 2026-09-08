@@ -1,0 +1,10 @@
+# Official framework guidance is enabled for this repository only.
+[plugins."vercel@vercel-project"]
+enabled = true
+
+# Development tools belong to their implementation repository.
+[plugins."app-builder@autograph-dev"]
+enabled = true
+
+[plugins."app-builder@autograph"]
+enabled = false

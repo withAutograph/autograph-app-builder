@@ -6,7 +6,7 @@ Classify every question before asking it:
 
 | Class                 | Meaning                                                                          | Behavior                                                                |
 | --------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| HTML blocker          | Missing JTBD, or material ambiguity would create meaningfully different products | Ask one concise question and wait.                                      |
+| UI blocker            | Missing JTBD, or material ambiguity would create meaningfully different products | Ask one concise question and wait.                                      |
 | Prototype-shaping     | Answer materially changes the first visible workflow into a different product    | Ask only when no safe revisable default exists.                         |
 | Discovery-value       | Helps refine realism but does not change the next prototype                      | Record it and ask during feedback, no more than three at once.          |
 | Build blocker         | Production meaning, authority, or data contract cannot be inferred safely        | Ask before the build-ready gate and wait.                               |
@@ -15,7 +15,7 @@ Classify every question before asking it:
 Prefer one question. Ask two or three together only when they concern the same
 visible decision. Explain the assumed default when the question is nonblocking.
 
-## Minimum HTML gate
+## Minimum UI gate
 
 Ask “What is the person trying to accomplish with this app?” only when the job
 to be done is missing. Infer the initial interface from the brief and explicit
@@ -57,7 +57,7 @@ the workflow supports a good default.
   review?”
 - “What evidence should accompany an agent recommendation?”
 
-## Questions during HTML iteration
+## Questions during UI iteration
 
 Anchor questions to visible prototype elements:
 

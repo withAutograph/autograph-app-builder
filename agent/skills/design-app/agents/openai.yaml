@@ -1,4 +1,4 @@
 interface:
   display_name: "Design App"
-  short_description: "Turn product intent into an approved AppSpec"
-  default_prompt: "Use $design-app to explore this product idea as an iterative HTML prototype and build-ready AppSpec."
+  short_description: "Shape product intent through an Arrusted-backed UI"
+  default_prompt: "Use $design-app to explore this product idea as an iterative, component-backed minimum viable UI."

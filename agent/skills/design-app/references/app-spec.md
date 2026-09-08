@@ -97,7 +97,7 @@ prototype interface that demonstrates it or note that it is nonvisual.
 
 Mark build-ready only when:
 
-- HTML experience and interface inventory follow stated preferences or clearly
+- accepted UI revision and interface inventory follow stated preferences or clearly
   labeled safe revisable defaults;
 - integrations and data objects are confirmed or deferred;
 - sources, identities, relationships, and temporal meaning are adequate for the
