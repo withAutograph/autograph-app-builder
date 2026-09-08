@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { HOSTED_MANAGED_SKILL_CONTENTS } from "../sandbox/hosted-managed-seeds.generated";
 
 import {
   APP_CREATION_SKILL_EXPORT_DEPENDENCY_PATHS,
@@ -50,5 +51,29 @@ describe("app-creation skill export", () => {
     await expect(
       exportAppCreationSkills({ repositoryRoot, outputRoot }),
     ).rejects.toThrow("destination must be absent");
+  });
+
+  it("ships the interaction reference unchanged in exports and hosted seeds", async () => {
+    const repositoryRoot = resolve(import.meta.dirname, "../..");
+    const reference = "design-app/references/interactions.md";
+    const source = readFileSync(
+      join(repositoryRoot, "agent/skills", reference),
+      "utf8",
+    );
+    const outputRoot = join(
+      mkdtempSync(join(tmpdir(), "interaction-skill-export-")),
+      "payload",
+    );
+    const manifest = await exportAppCreationSkills({
+      repositoryRoot,
+      outputRoot,
+    });
+
+    expect(manifest.files.some((file) => file.path === reference)).toBe(true);
+    expect(readFileSync(join(outputRoot, reference), "utf8")).toBe(source);
+    expect(
+      HOSTED_MANAGED_SKILL_CONTENTS.find((file) => file.path === reference)
+        ?.content,
+    ).toBe(source);
   });
 });

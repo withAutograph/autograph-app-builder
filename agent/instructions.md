@@ -89,3 +89,13 @@ alternative. Route and fixture wiring may compose existing components, not
 implement replacements. Follow `design-app` for the component-backed Browser
 preview, then record the design and prepare the plan silently. The first normal
 prompt remains **Build this app?**, not a separate UI-finalization decision.
+
+An enabled control promises a working interaction. Follow `design-app`'s
+`references/interactions.md` when wiring navigation and actions: use the preview
+renderer’s route mechanism, implement meaningful fixture-backed state changes,
+and verify every enabled control's visible outcome in the Browser, including
+secondary, row, menu, and dialog actions. A changed URL, selected tab, compiled
+preview, or success toast alone does not prove the intended behavior. Repair
+no-op controls before calling the workflow ready; disable unavailable actions
+with a visible reason. Carry these behaviors into the implementation plan and
+focused product tests.

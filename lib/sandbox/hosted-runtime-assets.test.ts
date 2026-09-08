@@ -47,7 +47,7 @@ process.stdout.write(JSON.stringify({ artifactUrl: artifact.HOSTED_ARTIFACT_URL,
 
     expect(JSON.parse(output)).toEqual({
       artifactUrl: HOSTED_ARTIFACT_URL,
-      seedCount: 12,
+      seedCount: 13,
     });
   });
 });
