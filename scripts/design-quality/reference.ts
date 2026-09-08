@@ -327,6 +327,62 @@ function reliableExpressionType(
   });
 }
 
+function reliableExpectedAssignment(
+  actual: ts.Type,
+  expected: ts.Type,
+  checker: ts.TypeChecker,
+): boolean | undefined {
+  if (!expected.isUnion())
+    return reliableExpressionType(expected, checker)
+      ? checker.isTypeAssignableTo(actual, expected)
+      : undefined;
+  if (
+    expected.types.some(
+      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
+    )
+  )
+    return undefined;
+  if (expected.types.every((member) => reliableExpressionType(member, checker)))
+    return checker.isTypeAssignableTo(actual, expected);
+  const primitiveActual = Boolean(
+    actual.flags &
+    (ts.TypeFlags.String |
+      ts.TypeFlags.StringLiteral |
+      ts.TypeFlags.Number |
+      ts.TypeFlags.NumberLiteral |
+      ts.TypeFlags.Boolean |
+      ts.TypeFlags.BooleanLiteral),
+  );
+  if (!primitiveActual) return undefined;
+  const candidates = expected.types.filter((member) =>
+    reliableExpressionType(member, checker),
+  );
+  if (!candidates.length) return undefined;
+  if (candidates.some((member) => checker.isTypeAssignableTo(actual, member)))
+    return true;
+  return undefined;
+}
+
+function jsxAttributeExpectedType(
+  attribute: ts.JsxAttribute,
+  checker: ts.TypeChecker,
+): ts.Type | undefined {
+  const opening = attribute.parent.parent;
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening))
+    return undefined;
+  const symbol = checker.getSymbolAtLocation(opening.tagName);
+  const component = symbol
+    ? checker.getTypeOfSymbolAtLocation(symbol, opening.tagName)
+    : checker.getTypeAtLocation(opening.tagName);
+  const parameter = checker
+    .getSignaturesOfType(component, ts.SignatureKind.Call)[0]
+    ?.getParameters()[0];
+  if (!parameter) return undefined;
+  const props = checker.getTypeOfSymbolAtLocation(parameter, opening);
+  const prop = checker.getPropertyOfType(props, attribute.name.getText());
+  return prop ? checker.getTypeOfSymbolAtLocation(prop, attribute) : undefined;
+}
+
 /**
  * Type-check generated JSX through a virtual, read-only host configured from
  * the selected Arrusted checkout. This proves assignability only, never render
@@ -401,13 +457,22 @@ export function checkJsxAttributes({
         if (
           ts.isJsxAttribute(node) &&
           node.initializer &&
-          ts.isJsxExpression(node.initializer) &&
-          node.initializer.expression
+          ((ts.isJsxExpression(node.initializer) &&
+            node.initializer.expression) ||
+            ts.isStringLiteral(node.initializer))
         ) {
-          const actual = checker.getTypeAtLocation(node.initializer.expression);
-          const expected = checker.getContextualType(
-            node.initializer.expression,
-          );
+          const expression = ts.isJsxExpression(node.initializer)
+            ? node.initializer.expression!
+            : node.initializer;
+          const actual = ts.isStringLiteral(node.initializer)
+            ? checker.getStringLiteralType(node.initializer.text)
+            : checker.getTypeAtLocation(expression);
+          let expected = checker.getContextualType(expression);
+          if (
+            !expected ||
+            expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+          )
+            expected = jsxAttributeExpectedType(node, checker);
           const key = {
             path:
               files.find(
@@ -438,27 +503,35 @@ export function checkJsxAttributes({
                 )
                 .join("; ")}`,
             });
-          else if (
-            !expected ||
-            !reliableExpressionType(actual, checker) ||
-            !reliableExpressionType(expected, checker)
-          )
+          else if (!expected || !reliableExpressionType(actual, checker))
             attributes.push({
               ...key,
               verdict: "unassessed",
               reason:
                 "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
             });
-          else
-            attributes.push({
-              ...key,
-              verdict: checker.isTypeAssignableTo(actual, expected)
-                ? "conforming"
-                : "nonconforming",
-              reason: checker.isTypeAssignableTo(actual, expected)
-                ? "The static JSX expression is assignable to the selected Arrusted prop type."
-                : "The static JSX expression is not assignable to the selected Arrusted prop type.",
-            });
+          else {
+            const assignable = reliableExpectedAssignment(
+              actual,
+              expected,
+              checker,
+            );
+            if (assignable === undefined)
+              attributes.push({
+                ...key,
+                verdict: "unassessed",
+                reason:
+                  "The expected prop type has no independently reliable branch for this static JSX expression.",
+              });
+            else
+              attributes.push({
+                ...key,
+                verdict: assignable ? "conforming" : "nonconforming",
+                reason: assignable
+                  ? "The static JSX expression is assignable to the selected Arrusted prop type."
+                  : "The static JSX expression is not assignable to the selected Arrusted prop type.",
+              });
+          }
         }
         ts.forEachChild(node, visit);
       };
