@@ -525,9 +525,9 @@ export async function measureStyles(
           declarations: [...new Set(declarations)],
           origin: generated
             ? "generated-rule"
-            : shared && inheritedDeclaration
+            : provenance === "shared" && inheritedDeclaration
               ? "inherited-shared"
-              : shared
+              : provenance === "shared"
                 ? "shared-rule"
                 : inline.length
                   ? "inline"

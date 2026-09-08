@@ -15,6 +15,7 @@ export function renderReport(report: {
   adherence?: Adherence;
   sourceFiles?: Array<{ path: string; content: string }>;
   reference?: unknown;
+  evaluationNotes?: string[];
   judge: unknown;
   captures: Array<{
     name: string;
@@ -27,7 +28,7 @@ export function renderReport(report: {
   }>;
 }) {
   const pretty = (v: unknown) =>
-    `<pre>${escapeHtml(JSON.stringify(v, null, 2))}</pre>`;
+    `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
   const adherence = report.adherence;
   const pct = (n: number | null) =>
     n === null ? "Not assessed" : `${Math.round(n)}%`;
@@ -59,21 +60,26 @@ export function renderReport(report: {
             : o.provenance === group &&
               (group === "shared" || o.verdict === "nonconforming"),
         );
-      return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${entries.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}</details>`;
+      const visible = group === "unknown" ? entries.slice(0, 30) : entries;
+      return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${visible.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}${visible.length < entries.length ? '<p>Showing 30 representative unknowns. <a href="report.json">Download every observation and source location</a>.</p>' : ""}</details>`;
     })
     .join("");
-  const measuredSummary = adherence
-    ? `<h2>Arrusted adherence: ${adherence.score === null ? "Not assessed" : `${adherence.score}/100`} · ${escapeHtml(adherence.status)}</h2><p>Evidence coverage: ${pct(adherence.coveragePercent)}. Evaluator ${adherence.version}. This measures inspected evidence, not all rendered UI.</p><table><thead><tr><th>Dimension</th><th>Conforming</th><th>Nonconforming</th><th>Unassessed</th><th>Adherence</th><th>Static / browser</th></tr></thead><tbody>${Object.entries(
-        adherence.dimensions,
-      )
-        .map(
-          ([name, d]) =>
-            `<tr><th>${escapeHtml(name)}</th><td>${d.conforming}</td><td>${d.nonconforming}</td><td>${d.unassessed}</td><td>${pct(d.percent)} (${d.conforming}/${d.assessed})</td><td>${d.staticCount} / ${d.browserCount}</td></tr>`,
+  const measuredSummary =
+    (report.evaluationNotes?.length
+      ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul></details>`
+      : "") +
+    (adherence
+      ? `<h2>Arrusted adherence: ${adherence.score === null ? "Not assessed" : `${adherence.score}/100`} · ${escapeHtml(adherence.status)}</h2><p>Evidence coverage: ${pct(adherence.coveragePercent)}. Evaluator ${adherence.version}. This measures inspected evidence, not all rendered UI.</p><table><thead><tr><th>Dimension</th><th>Conforming</th><th>Nonconforming</th><th>Unassessed</th><th>Adherence</th><th>Static / browser</th></tr></thead><tbody>${Object.entries(
+          adherence.dimensions,
         )
-        .join(
-          "",
-        )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>${groups}<details><summary>All adherence observations</summary>${pretty(adherence)}</details>`
-    : "<p>Historical report: this evaluation predates measured adherence scoring.</p>";
+          .map(
+            ([name, d]) =>
+              `<tr><th>${escapeHtml(name)}</th><td>${d.conforming}</td><td>${d.nonconforming}</td><td>${d.unassessed}</td><td>${pct(d.percent)} (${d.conforming}/${d.assessed})</td><td>${d.staticCount} / ${d.browserCount}</td></tr>`,
+          )
+          .join(
+            "",
+          )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
+      : "<p>Historical report: this evaluation predates measured adherence scoring.</p>");
   const annotated = (c: {
     name: string;
     state: string;

@@ -149,6 +149,8 @@ for (const capture of report.captures)
 lines.push("## Limitations", "");
 for (const limitation of report.judge.limitations ?? [])
   lines.push(`- ${md(limitation)}`);
+for (const limitation of report.evaluationNotes ?? [])
+  lines.push(`- ${md(limitation)}`);
 await writeFile(join(destination, "README.md"), lines.join("\n") + "\n");
 const rows: Array<{
   path: string;
