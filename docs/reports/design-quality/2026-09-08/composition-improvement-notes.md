@@ -387,3 +387,57 @@ The denominator differs because the generated composition is simpler; it is
 not a loss of evaluator capability. All 5880 unattributed browser styling
 observations remain unknown. The source is retained in the report JSON, and
 all previous reports and screenshots remain unchanged.
+
+## Incremental update: compact public primitives and visible actions
+
+[The compact-primitives report](stock-exceptions-compact-primitives-211034840Z/README.md)
+remains **85/100**: hierarchy 3, layout 4, typography 3, desktop responsiveness
+3, and product clarity 4. All **16 fixture interactions** pass and all **20
+captures** have no reported axe violations or layout findings. This is not a
+claim of complete accessibility compliance or of reaching the 100-point goal.
+
+![Compact detail keeps the supplier action visible](stock-exceptions-compact-primitives-211034840Z/desktop-window-1.png)
+
+The small read-only detail now composes existing public `Card`, `Typography`,
+`SegmentedControl`, `Divider`, and `Button` instead of the larger editable
+`RecordDetailPanel`. Semantic definition-list markup supplies the label/value
+relationships; no new visual component, copied private CSS, palette override,
+or replacement token was added. Severity pills and cover values appear together
+on each selection card. The action outcome sits next to its button, rather than
+being separated from it by the detail body.
+
+Across the supplied windows the supplier action is at **y=549.5–589.5**, compared
+with **y=736–776** in the preceding table report. Stock-view actions are at
+**y=525.5–565.5**. Shorter windows may still scroll the document to see the final
+list records; primary actions no longer require that scroll in these captures.
+The rendered HTML was 483,561 bytes versus 3,020,764 for the prior composition;
+this is an observed artifact size, not a browser performance benchmark.
+
+![Simulation feedback remains beside the disabled action](stock-exceptions-compact-primitives-211034840Z/desktop-custom-900x900-2.png)
+
+Adherence is **100, partial**, with component **24/28**, API **42/48** (87.5%),
+and styling **17/5833** assessed observations. Combined coverage is **1.40%**.
+The composition exposes more inspectable supported props, without changing the
+evaluator or awarding credit to unknown styling. The remaining **5816** browser
+styling observations are still unassessed. This is stronger static evidence, not
+proof of every rendered component's stylesheet origin.
+
+The judge still finds neutral urgency pills visually similar, asks that selected
+severity/cover also appear in the detail header, and identifies the introductory
+“review and replenish” wording as less precise than the actual simulation.
+These are scoped product improvements; they do not authorize recoloring shared
+components, inventing unsupported props, or rerolling an unchanged judge input.
+
+### Brief-scope correction for the next comparison
+
+The saved source brief used for all comparisons above still said “Make it usable
+on phones as well as desktop.” That predates the explicit desktop-only direction.
+Although the evaluator rubric already specifies desktop-only review, this judge
+mentioned the obsolete phone request in its responsiveness reason and limitations.
+No score or historical brief has been rewritten, and this report was not rerun.
+
+[The canonical desktop brief](../briefs/stock-exceptions-desktop.txt) now reflects
+the approved desktop-only scope for future evaluations. It retains the same
+inventory workflow, simulation, and plan request. Any future report using that
+brief must disclose the input correction rather than presenting a score change
+as solely a visual improvement. The scoring rubric and thresholds are unchanged.
