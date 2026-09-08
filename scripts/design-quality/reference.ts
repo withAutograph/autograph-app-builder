@@ -419,17 +419,21 @@ export function checkJsxAttributes({
           };
           const initializerStart = node.initializer.getStart(source);
           const initializerEnd = node.initializer.getEnd();
-          const diagnostic = diagnostics.find((item) => {
+          const attributeDiagnostics = diagnostics.filter((item) => {
             const start = item.start ?? -1;
             const end = start + (item.length ?? 0);
             return start >= initializerStart && end <= initializerEnd;
           });
-          if (diagnostic)
+          if (attributeDiagnostics.length)
             attributes.push({
               ...key,
               verdict: "nonconforming",
-              reason:
-                "TypeScript reports a prop expression diagnostic within this JSX attribute.",
+              reason: `TypeScript prop error: ${attributeDiagnostics
+                .slice(0, 3)
+                .map((item) =>
+                  ts.flattenDiagnosticMessageText(item.messageText, " "),
+                )
+                .join("; ")}`,
             });
           else if (
             !expected ||

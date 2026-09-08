@@ -36,6 +36,7 @@ describe("readReference", () => {
       "nonconforming",
       "unassessed",
     ]);
+    expect(result.attributes[1].reason).toContain("unexpected");
   });
 
   it("keeps public export subpaths separate and resolves selected tsconfig aliases", async () => {
