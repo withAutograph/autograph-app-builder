@@ -3,9 +3,42 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { readReference } from "./reference";
+import { checkJsxAttributes, readReference } from "./reference";
 
 describe("readReference", () => {
+  it("checks finite nested JSX props through selected TypeScript paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "compositions.tsx"),
+      `export type TableSpec = { narrowLayout: "compact" | "full"; columns: Array<{ id: string }> }; export function DataTable(_props: { spec: TableSpec }) { return null; } export function Loose(_props: any) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { DataTable, Loose } from "@autograph/compositions"; const compact = true; export function Page() { return <><DataTable spec={{ narrowLayout: compact ? "compact" : "full", columns: [{ id: "vendor" }] }} /><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }], unexpected: true }} /><Loose label={"untyped"} /></>; }`,
+        },
+      ],
+    });
+    expect(result.limitations).toEqual([]);
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "nonconforming",
+      "unassessed",
+    ]);
+    expect(result.attributes[1].reason).toContain("unexpected");
+  });
+
   it("keeps public export subpaths separate and resolves selected tsconfig aliases", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     const core = join(root, "core");

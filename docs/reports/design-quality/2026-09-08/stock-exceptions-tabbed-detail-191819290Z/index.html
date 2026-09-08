@@ -1,0 +1,3585 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-08T19:18:19.290Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <h2>Arrusted adherence: 100/100 · partial</h2>
+    <p>
+      Evidence coverage: 0.69%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>9</td>
+          <td>0</td>
+          <td>1</td>
+          <td>100% (9/9)</td>
+          <td>10 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>13</td>
+          <td>0</td>
+          <td>20</td>
+          <td>100% (13/13)</td>
+          <td>33 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>8</td>
+          <td>0</td>
+          <td>4269</td>
+          <td>100% (8/8)</td>
+          <td>8 / 4269</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence. Source
+        provenance is unknown unless CDP provides a source URL matching an
+        explicit generated path.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (4290)</summary>
+      <article id="finding-0">
+        <strong>prop · unassessed</strong>
+        <p>PageHeader.title&#39;s primitive type cannot be resolved.</p>
+        <small
+          >static evidence ·
+          <a href="#source-0">src/StockExceptions.tsx:27</a></small
+        >
+        <details id="source-0">
+          <summary>Source location: src/StockExceptions.tsx:27</summary>
+          <pre>
+26:     &lt;div className=&quot;mx-auto grid max-w-[1440px] gap-[var(--space-5)]&quot;&gt;
+27:       &lt;PageHeader title=&quot;Stock exceptions&quot; subtitle={`${visible.length} ${visible.length === 1 ? &quot;product needs&quot; : &quot;products need&quot;} review · Select a product to review and replenish`} /&gt;
+28:       &lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-2 gap-[var(--space-4)] max-w-[680px]&quot;&gt;
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-1">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-1">src/StockExceptions.tsx:27</a></small
+        >
+        <details id="source-1">
+          <summary>Source location: src/StockExceptions.tsx:27</summary>
+          <pre>
+26:     &lt;div className=&quot;mx-auto grid max-w-[1440px] gap-[var(--space-5)]&quot;&gt;
+27:       &lt;PageHeader title=&quot;Stock exceptions&quot; subtitle={`${visible.length} ${visible.length === 1 ? &quot;product needs&quot; : &quot;products need&quot;} review · Select a product to review and replenish`} /&gt;
+28:       &lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-2 gap-[var(--space-4)] max-w-[680px]&quot;&gt;
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-2">
+        <strong>prop · unassessed</strong>
+        <p>FieldFrame.label&#39;s primitive type cannot be resolved.</p>
+        <small
+          >static evidence ·
+          <a href="#source-2">src/StockExceptions.tsx:29</a></small
+        >
+        <details id="source-2">
+          <summary>Source location: src/StockExceptions.tsx:29</summary>
+          <pre>
+28:       &lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-2 gap-[var(--space-4)] max-w-[680px]&quot;&gt;
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+30:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+31:       &lt;/section&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-6">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-6">src/StockExceptions.tsx:29</a></small
+        >
+        <details id="source-6">
+          <summary>Source location: src/StockExceptions.tsx:29</summary>
+          <pre>
+28:       &lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-2 gap-[var(--space-4)] max-w-[680px]&quot;&gt;
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+30:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+31:       &lt;/section&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-7">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-7">src/StockExceptions.tsx:29</a></small
+        >
+        <details id="source-7">
+          <summary>Source location: src/StockExceptions.tsx:29</summary>
+          <pre>
+28:       &lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-2 gap-[var(--space-4)] max-w-[680px]&quot;&gt;
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+30:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+31:       &lt;/section&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-8">
+        <strong>prop · unassessed</strong>
+        <p>FieldFrame.label&#39;s primitive type cannot be resolved.</p>
+        <small
+          >static evidence ·
+          <a href="#source-8">src/StockExceptions.tsx:30</a></small
+        >
+        <details id="source-8">
+          <summary>Source location: src/StockExceptions.tsx:30</summary>
+          <pre>
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+30:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+31:       &lt;/section&gt;
+32:       &lt;div className=&quot;grid items-start gap-[var(--space-5)] lg:grid-cols-2&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-12">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-12">src/StockExceptions.tsx:30</a></small
+        >
+        <details id="source-12">
+          <summary>Source location: src/StockExceptions.tsx:30</summary>
+          <pre>
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+30:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+31:       &lt;/section&gt;
+32:       &lt;div className=&quot;grid items-start gap-[var(--space-5)] lg:grid-cols-2&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-13">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-13">src/StockExceptions.tsx:30</a></small
+        >
+        <details id="source-13">
+          <summary>Source location: src/StockExceptions.tsx:30</summary>
+          <pre>
+29:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+30:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+31:       &lt;/section&gt;
+32:       &lt;div className=&quot;grid items-start gap-[var(--space-5)] lg:grid-cols-2&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-15">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-15">src/StockExceptions.tsx:34</a></small
+        >
+        <details id="source-15">
+          <summary>Source location: src/StockExceptions.tsx:34</summary>
+          <pre>
+33:         &lt;section aria-label=&quot;Low-stock products&quot;&gt;
+34:           &lt;DataTableComposition spec={{type:&quot;data_table&quot;,config:{ariaLabel:&quot;Low-stock products&quot;,columns:[{id:&quot;product&quot;,label:&quot;Product&quot;},{id:&quot;severity&quot;,label:&quot;Severity&quot;},{id:&quot;cover&quot;,label:&quot;Cover&quot;,align:&quot;right&quot;}],rows:visible.map(item=&gt;({id:item.id,product:item.product,severity:item.severity,cover:`${item.daysCover} days`})),density:&quot;regular&quot;,emptyLabel:&quot;No stock exceptions match these filters.&quot;}}} getRowId={row=&gt;String(row.id)} selectedRowId={selected?.id} onRowSelect={id=&gt;{setSelectedId(id);setDetailTab(&quot;stock&quot;);}} selectionLabel=&quot;Review&quot; /&gt;
+35:         &lt;/section&gt;
+36:         &lt;aside aria-label=&quot;Selected stock exception&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-17">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-17">src/StockExceptions.tsx:34</a></small
+        >
+        <details id="source-17">
+          <summary>Source location: src/StockExceptions.tsx:34</summary>
+          <pre>
+33:         &lt;section aria-label=&quot;Low-stock products&quot;&gt;
+34:           &lt;DataTableComposition spec={{type:&quot;data_table&quot;,config:{ariaLabel:&quot;Low-stock products&quot;,columns:[{id:&quot;product&quot;,label:&quot;Product&quot;},{id:&quot;severity&quot;,label:&quot;Severity&quot;},{id:&quot;cover&quot;,label:&quot;Cover&quot;,align:&quot;right&quot;}],rows:visible.map(item=&gt;({id:item.id,product:item.product,severity:item.severity,cover:`${item.daysCover} days`})),density:&quot;regular&quot;,emptyLabel:&quot;No stock exceptions match these filters.&quot;}}} getRowId={row=&gt;String(row.id)} selectedRowId={selected?.id} onRowSelect={id=&gt;{setSelectedId(id);setDetailTab(&quot;stock&quot;);}} selectionLabel=&quot;Review&quot; /&gt;
+35:         &lt;/section&gt;
+36:         &lt;aside aria-label=&quot;Selected stock exception&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-20">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-20">src/StockExceptions.tsx:40</a></small
+        >
+        <details id="source-20">
+          <summary>Source location: src/StockExceptions.tsx:40</summary>
+          <pre>
+39:             className=&quot;max-h-[calc(100dvh-14rem)]&quot;
+40:             title={selected.product}
+41:             subtitle={&lt;div className=&quot;grid gap-[var(--space-2)]&quot;&gt;&lt;span&gt;{selected.sku} · {selected.location}&lt;/span&gt;&lt;div className=&quot;flex flex-wrap items-center gap-[var(--space-3)]&quot;&gt;&lt;StatusPill label={done?&quot;Mock order created&quot;:selected.severity} tone={done?&quot;success&quot;:selected.severity===&quot;Critical&quot;?&quot;danger&quot;:&quot;warning&quot;} /&gt;&lt;span&gt;Preview only · No supplier contacted&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;}
+42:             tabs={[{id:&quot;stock&quot;,label:&quot;Stock position&quot;},{id:&quot;supplier&quot;,label:&quot;Supplier details&quot;}]}</pre>
+        </details>
+      </article>
+      <article id="finding-21">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-21">src/StockExceptions.tsx:41</a></small
+        >
+        <details id="source-21">
+          <summary>Source location: src/StockExceptions.tsx:41</summary>
+          <pre>
+40:             title={selected.product}
+41:             subtitle={&lt;div className=&quot;grid gap-[var(--space-2)]&quot;&gt;&lt;span&gt;{selected.sku} · {selected.location}&lt;/span&gt;&lt;div className=&quot;flex flex-wrap items-center gap-[var(--space-3)]&quot;&gt;&lt;StatusPill label={done?&quot;Mock order created&quot;:selected.severity} tone={done?&quot;success&quot;:selected.severity===&quot;Critical&quot;?&quot;danger&quot;:&quot;warning&quot;} /&gt;&lt;span&gt;Preview only · No supplier contacted&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;}
+42:             tabs={[{id:&quot;stock&quot;,label:&quot;Stock position&quot;},{id:&quot;supplier&quot;,label:&quot;Supplier details&quot;}]}
+43:             activeTabId={detailTab}</pre>
+        </details>
+      </article>
+      <article id="finding-22">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-22">src/StockExceptions.tsx:41</a></small
+        >
+        <details id="source-22">
+          <summary>Source location: src/StockExceptions.tsx:41</summary>
+          <pre>
+40:             title={selected.product}
+41:             subtitle={&lt;div className=&quot;grid gap-[var(--space-2)]&quot;&gt;&lt;span&gt;{selected.sku} · {selected.location}&lt;/span&gt;&lt;div className=&quot;flex flex-wrap items-center gap-[var(--space-3)]&quot;&gt;&lt;StatusPill label={done?&quot;Mock order created&quot;:selected.severity} tone={done?&quot;success&quot;:selected.severity===&quot;Critical&quot;?&quot;danger&quot;:&quot;warning&quot;} /&gt;&lt;span&gt;Preview only · No supplier contacted&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;}
+42:             tabs={[{id:&quot;stock&quot;,label:&quot;Stock position&quot;},{id:&quot;supplier&quot;,label:&quot;Supplier details&quot;}]}
+43:             activeTabId={detailTab}</pre>
+        </details>
+      </article>
+      <article id="finding-26">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-26">src/StockExceptions.tsx:44</a></small
+        >
+        <details id="source-26">
+          <summary>Source location: src/StockExceptions.tsx:44</summary>
+          <pre>
+43:             activeTabId={detailTab}
+44:             onTabChange={setDetailTab}
+45:             sections={detailTab===&quot;stock&quot; ? [
+46:               {id:&quot;stock&quot;,title:&quot;Replenishment summary&quot;,collapsible:false,items:[{type:&quot;field&quot;,id:&quot;cover&quot;,label:&quot;Estimated cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot;,id:&quot;on-hand&quot;,label:&quot;On hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot;,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot;,id:&quot;suggested&quot;,label:&quot;Suggested order&quot;,value:`${selected.suggested} units`}]},</pre>
+        </details>
+      </article>
+      <article id="finding-27">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-27">src/StockExceptions.tsx:45</a></small
+        >
+        <details id="source-27">
+          <summary>Source location: src/StockExceptions.tsx:45</summary>
+          <pre>
+44:             onTabChange={setDetailTab}
+45:             sections={detailTab===&quot;stock&quot; ? [
+46:               {id:&quot;stock&quot;,title:&quot;Replenishment summary&quot;,collapsible:false,items:[{type:&quot;field&quot;,id:&quot;cover&quot;,label:&quot;Estimated cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot;,id:&quot;on-hand&quot;,label:&quot;On hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot;,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot;,id:&quot;suggested&quot;,label:&quot;Suggested order&quot;,value:`${selected.suggested} units`}]},
+47:             ] : [</pre>
+        </details>
+      </article>
+      <article id="finding-28">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-28">src/StockExceptions.tsx:50</a></small
+        >
+        <details id="source-28">
+          <summary>Source location: src/StockExceptions.tsx:50</summary>
+          <pre>
+49:             ]}
+50:             actions={[{id:&quot;replenish&quot;,label:done?&quot;Simulated — no order sent&quot;:`Simulate ${selected.suggested}-unit order`,intent:&quot;primary&quot;,disabled:done}]}
+51:             onAction={()=&gt;setReplenished(current=&gt;[...current,selected.id])}
+52:           /&gt; : &lt;RecordDetailPanel title=&quot;No products to review&quot; subtitle=&quot;Try a different location or severity.&quot; sections={[]} /&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-29">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-29">src/StockExceptions.tsx:51</a></small
+        >
+        <details id="source-29">
+          <summary>Source location: src/StockExceptions.tsx:51</summary>
+          <pre>
+50:             actions={[{id:&quot;replenish&quot;,label:done?&quot;Simulated — no order sent&quot;:`Simulate ${selected.suggested}-unit order`,intent:&quot;primary&quot;,disabled:done}]}
+51:             onAction={()=&gt;setReplenished(current=&gt;[...current,selected.id])}
+52:           /&gt; : &lt;RecordDetailPanel title=&quot;No products to review&quot; subtitle=&quot;Try a different location or severity.&quot; sections={[]} /&gt;}
+53:         &lt;/aside&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-30">
+        <strong>prop · unassessed</strong>
+        <p>RecordDetailPanel.title&#39;s primitive type cannot be resolved.</p>
+        <small
+          >static evidence ·
+          <a href="#source-30">src/StockExceptions.tsx:52</a></small
+        >
+        <details id="source-30">
+          <summary>Source location: src/StockExceptions.tsx:52</summary>
+          <pre>
+51:             onAction={()=&gt;setReplenished(current=&gt;[...current,selected.id])}
+52:           /&gt; : &lt;RecordDetailPanel title=&quot;No products to review&quot; subtitle=&quot;Try a different location or severity.&quot; sections={[]} /&gt;}
+53:         &lt;/aside&gt;
+54:       &lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-31">
+        <strong>prop · unassessed</strong>
+        <p>
+          RecordDetailPanel.subtitle&#39;s primitive type cannot be resolved.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-31">src/StockExceptions.tsx:52</a></small
+        >
+        <details id="source-31">
+          <summary>Source location: src/StockExceptions.tsx:52</summary>
+          <pre>
+51:             onAction={()=&gt;setReplenished(current=&gt;[...current,selected.id])}
+52:           /&gt; : &lt;RecordDetailPanel title=&quot;No products to review&quot; subtitle=&quot;Try a different location or severity.&quot; sections={[]} /&gt;}
+53:         &lt;/aside&gt;
+54:       &lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-32">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-32">src/StockExceptions.tsx:52</a></small
+        >
+        <details id="source-32">
+          <summary>Source location: src/StockExceptions.tsx:52</summary>
+          <pre>
+51:             onAction={()=&gt;setReplenished(current=&gt;[...current,selected.id])}
+52:           /&gt; : &lt;RecordDetailPanel title=&quot;No products to review&quot; subtitle=&quot;Try a different location or severity.&quot; sections={[]} /&gt;}
+53:         &lt;/aside&gt;
+54:       &lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-33">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-33">src/StockExceptions.tsx:37</a></small
+        >
+        <details id="source-33">
+          <summary>Source location: src/StockExceptions.tsx:37</summary>
+          <pre>
+36:         &lt;aside aria-label=&quot;Selected stock exception&quot;&gt;
+37:           {selected ? &lt;RecordDetailPanel
+38:             key={selected.id}
+39:             className=&quot;max-h-[calc(100dvh-14rem)]&quot;</pre>
+        </details>
+      </article>
+      <article id="finding-51">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence · <a href="#source-51">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-51">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-52">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence · <a href="#source-52">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-52">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-53">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence · <a href="#source-53">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-53">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-54">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence · <a href="#source-54">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-54">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-55">
+        <strong>unknown · unassessed</strong>
+        <p>padding-right: unknown</p>
+        <small
+          >browser evidence · <a href="#source-55">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-55">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-56">
+        <strong>unknown · unassessed</strong>
+        <p>column-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-57">
+        <strong>unknown · unassessed</strong>
+        <p>row-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-58">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence · <a href="#source-58">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-58">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-59">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-width: unknown</p>
+        <small
+          >browser evidence · <a href="#source-59">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-59">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 80/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>3/4</td>
+          <td>
+            The page establishes a clear title, filter, exception-list, and
+            selected-detail sequence. Row tint, the detail heading, tabs, and
+            the primary mock action make the current focus easy to follow,
+            although critical items are not strongly prioritized within the list
+            because severity is presented as ordinary body text.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>3/4</td>
+          <td>
+            The two-column master-detail composition is consistently aligned and
+            comfortably spaced at 1920, 1440, and 1024 pixels. Filters align
+            with the list and the action remains visible, but the dedicated
+            Review column uses valuable list width for repetitive Select labels
+            rather than inventory evidence.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>3/4</td>
+          <td>
+            Heading levels, field labels, table text, and detail values are
+            visually consistent and readable. The 12px uppercase table headers
+            and compact status labels are comparatively faint; supplied checks
+            also flag marginal header and status-text contrast, so these
+            elements have less legibility than the main content.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>3/4</td>
+          <td>
+            The composition remains usable without documented overflow at all
+            supplied desktop widths, including the 1024px window where the
+            table, tabs, details, and action remain visible. The narrower view
+            becomes dense, and no capture below 1024px or constrained desktop
+            panel state was supplied, so further adaptation cannot be confirmed.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>4/4</td>
+          <td>
+            The task is immediately understandable: filter exceptions, select a
+            product, inspect stock or supplier data, and run a clearly labeled
+            simulation. Product identity, location, severity, order quantity,
+            preview-only context, and the post-action &#39;no order sent&#39;
+            state make the prototype&#39;s non-production behavior explicit.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        The location and severity filters are prominent, plainly labeled, and
+        update the visible result count.
+      </li>
+      <li>
+        Selection is carried consistently from the highlighted list row into the
+        product title, metadata, status, and suggested order.
+      </li>
+      <li>
+        Stock position and supplier details are separated into two concise tabs
+        rather than being mixed into one dense panel.
+      </li>
+      <li>
+        The mock replenishment action includes the recommended quantity and
+        gives persistent confirmation that no real order was sent.
+      </li>
+      <li>
+        The centered maximum-width layout remains orderly on wide displays while
+        preserving a useful side-by-side workflow at 1024px.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        A dedicated Review column repeats Select or Selected in every row,
+        making users scan an action label before the more meaningful product
+        identity and consuming scarce width in the 1024px composition.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use the supported table selection treatment to
+        make the row or product cell the primary selection affordance while
+        retaining the selected-row tint. If the column must remain, rename it
+        Action so its purpose is explicit.
+      </p>
+      <small>Screenshot region: x 24, y 198, width 126, height 288</small>
+    </article>
+    <article id="design-1">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        Critical and Warning values use the same ordinary text treatment, so
+        severity—the main triage signal—is less scannable than the detail-panel
+        status pill.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use the existing supported StatusPill or Tag
+        variant in the severity cells, preserving the Arrusted palette, so
+        critical exceptions can be distinguished during rapid list scanning.
+      </p>
+      <small>Screenshot region: x 449, y 198, width 151, height 288</small>
+    </article>
+    <article id="design-2">
+      <h4>low · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The compact uppercase table headers are visually faint. Supplied
+        accessibility evidence reports approximately 4.25:1 contrast for these
+        12px labels, just below the cited threshold, which may reduce
+        readability despite the otherwise clear typography.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use a supported regular-density table or
+        stronger header typography variant, such as increased size or weight,
+        without overriding the authoritative Arrusted colors.
+      </p>
+      <small>Screenshot region: x 24, y 198, width 686, height 35</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-2&quot;,
+    &quot;desktop-3&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-wide-2&quot;,
+    &quot;desktop-wide-3&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;,
+    &quot;desktop-window-2&quot;,
+    &quot;desktop-window-3&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The page establishes a clear title, filter, exception-list, and selected-detail sequence. Row tint, the detail heading, tabs, and the primary mock action make the current focus easy to follow, although critical items are not strongly prioritized within the list because severity is presented as ordinary body text.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The two-column master-detail composition is consistently aligned and comfortably spaced at 1920, 1440, and 1024 pixels. Filters align with the list and the action remains visible, but the dedicated Review column uses valuable list width for repetitive Select labels rather than inventory evidence.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Heading levels, field labels, table text, and detail values are visually consistent and readable. The 12px uppercase table headers and compact status labels are comparatively faint; supplied checks also flag marginal header and status-text contrast, so these elements have less legibility than the main content.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The composition remains usable without documented overflow at all supplied desktop widths, including the 1024px window where the table, tabs, details, and action remain visible. The narrower view becomes dense, and no capture below 1024px or constrained desktop panel state was supplied, so further adaptation cannot be confirmed.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The task is immediately understandable: filter exceptions, select a product, inspect stock or supplier data, and run a clearly labeled simulation. Product identity, location, severity, order quantity, preview-only context, and the post-action &#39;no order sent&#39; state make the prototype&#39;s non-production behavior explicit.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;The location and severity filters are prominent, plainly labeled, and update the visible result count.&quot;,
+    &quot;Selection is carried consistently from the highlighted list row into the product title, metadata, status, and suggested order.&quot;,
+    &quot;Stock position and supplier details are separated into two concise tabs rather than being mixed into one dense panel.&quot;,
+    &quot;The mock replenishment action includes the recommended quantity and gives persistent confirmation that no real order was sent.&quot;,
+    &quot;The centered maximum-width layout remains orderly on wide displays while preserving a useful side-by-side workflow at 1024px.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 24,
+        &quot;y&quot;: 198,
+        &quot;width&quot;: 126,
+        &quot;height&quot;: 288
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;A dedicated Review column repeats Select or Selected in every row, making users scan an action label before the more meaningful product identity and consuming scarce width in the 1024px composition.&quot;,
+      &quot;improvement&quot;: &quot;Use the supported table selection treatment to make the row or product cell the primary selection affordance while retaining the selected-row tint. If the column must remain, rename it Action so its purpose is explicit.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 449,
+        &quot;y&quot;: 198,
+        &quot;width&quot;: 151,
+        &quot;height&quot;: 288
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;Critical and Warning values use the same ordinary text treatment, so severity—the main triage signal—is less scannable than the detail-panel status pill.&quot;,
+      &quot;improvement&quot;: &quot;Use the existing supported StatusPill or Tag variant in the severity cells, preserving the Arrusted palette, so critical exceptions can be distinguished during rapid list scanning.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 24,
+        &quot;y&quot;: 198,
+        &quot;width&quot;: 686,
+        &quot;height&quot;: 35
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;The compact uppercase table headers are visually faint. Supplied accessibility evidence reports approximately 4.25:1 contrast for these 12px labels, just below the cited threshold, which may reduce readability despite the otherwise clear typography.&quot;,
+      &quot;improvement&quot;: &quot;Use a supported regular-density table or stronger header typography variant, such as increased size or weight, without overriding the authoritative Arrusted colors.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Only static screenshots at 1024px, 1440px, and 1920px were supplied; narrower desktop windows, constrained panels, scrolling, empty results, loading, and long-content behavior were not shown.&quot;,
+    &quot;The brief requests an implementation plan, but no plan artifact is visible in the evidence, so its completeness cannot be evaluated.&quot;,
+    &quot;Passed scripted states demonstrate visible supplier, filtering, and simulation outcomes only; they do not establish backend behavior, persistence, authorization, or publication status.&quot;,
+    &quot;Static source and adherence evidence is incomplete and does not prove every referenced component or dynamic branch rendered.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 80,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 36446,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 36443
+    },
+    &quot;outputTokens&quot;: 2733,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 901,
+      &quot;reasoningTokens&quot;: 1832
+    },
+    &quot;totalTokens&quot;: 39179
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;FieldFrame&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;FieldFrame&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Select&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Select&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;StatusPill&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;StatusPill&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;DataTableComposition&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;DataTableComposition&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordDetailPanel&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordDetailPanel&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [],
+    &quot;matchingLiterals&quot;: [],
+    &quot;unknownLiterals&quot;: [],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 51,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;arrusted-design-quality-20260908&quot;,
+    &quot;commit&quot;: &quot;0237255029a44689bc9b456c9dd41cde1b61e208&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: true
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="A dedicated Review column repeats Select or Selected in every row, making users scan an action label before the more meaningful product identity and consuming scarce width in the 1024px composition."
+          aria-label="A dedicated Review column repeats Select or Selected in every row, making users scan an action label before the more meaningful product identity and consuming scarce width in the 1024px composition."
+          style="left: 1.6666666666666667%; top: 22%; width: 8.75%; height: 32%"
+        ></a
+        ><a
+          class="region"
+          href="#design-1"
+          title="Critical and Warning values use the same ordinary text treatment, so severity—the main triage signal—is less scannable than the detail-panel status pill."
+          aria-label="Critical and Warning values use the same ordinary text treatment, so severity—the main triage signal—is less scannable than the detail-panel status pill."
+          style="
+            left: 31.180555555555557%;
+            top: 22%;
+            width: 10.48611111111111%;
+            height: 32%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-2"
+          title="The compact uppercase table headers are visually faint. Supplied accessibility evidence reports approximately 4.25:1 contrast for these 12px labels, just below the cited threshold, which may reduce readability despite the otherwise clear typography."
+          aria-label="The compact uppercase table headers are visually faint. Supplied accessibility evidence reports approximately 4.25:1 contrast for these 12px labels, just below the cited threshold, which may reduce readability despite the otherwise clear typography."
+          style="
+            left: 1.6666666666666667%;
+            top: 22%;
+            width: 47.638888888888886%;
+            height: 3.888888888888889%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 757,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1073,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 36-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1214.828125,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 181.171875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 136,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 128,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 94,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 64,
+        &quot;sampled&quot;: 59
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 64,
+        &quot;sampled&quot;: 61
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 108,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 125
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 233,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 94,
+        &quot;matching-literal&quot;: 45,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 421
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 560,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 30,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 235
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 265,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 4,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 116
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 102,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 23
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 125,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1423,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — Select and inspect supplier</h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 Select and inspect supplier screenshot"
+        />
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 757,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1073,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1215.203125,
+          &quot;y&quot;: 615,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Clear Springs Co.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-2">
+      <h2>desktop-2 — Simulate replenishment</h2>
+      <div class="capture">
+        <img
+          src="desktop-2.png"
+          alt="desktop-2 Simulate replenishment screenshot"
+        />
+      </div>
+      <a href="desktop-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 757,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1073,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulated — no order sent&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1191.6875,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 204.3125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Simulated — no order sent&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-3">
+      <h2>desktop-3 — Filter records</h2>
+      <div class="capture">
+        <img src="desktop-3.png" alt="desktop-3 Filter records screenshot" />
+      </div>
+      <a href="desktop-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 757,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1073,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 316,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1214.859375,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Free-range Eggs 12ct&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 588,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 997,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1325,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 36-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1478.828125,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 181.171875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 136,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 128,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 94,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 64,
+        &quot;sampled&quot;: 59
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 64,
+        &quot;sampled&quot;: 61
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 108,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 125
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 233,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 94,
+        &quot;matching-literal&quot;: 45,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 421
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 560,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 30,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 235
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 265,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 4,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 116
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 102,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 23
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 125,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1423,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>desktop-wide-1 — Select and inspect supplier</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 Select and inspect supplier screenshot"
+        />
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 588,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 997,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1325,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1479.203125,
+          &quot;y&quot;: 615,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Clear Springs Co.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-2">
+      <h2>desktop-wide-2 — Simulate replenishment</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-2.png"
+          alt="desktop-wide-2 Simulate replenishment screenshot"
+        />
+      </div>
+      <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 588,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 997,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1325,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulated — no order sent&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1455.6875,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 204.3125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Simulated — no order sent&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-3">
+      <h2>desktop-wide-3 — Filter records</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-3.png"
+          alt="desktop-wide-3 Filter records screenshot"
+        />
+      </div>
+      <a href="desktop-wide-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 588,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 253,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 997,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1325,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 328,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1478.859375,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Free-range Eggs 12ct&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        />
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 549,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 761,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 36-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 798.828125,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 181.171875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 136,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 128,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 94,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 64,
+        &quot;sampled&quot;: 59
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 64,
+        &quot;sampled&quot;: 61
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 108,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 125
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 233,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 94,
+        &quot;matching-literal&quot;: 45,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 421
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 560,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 30,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 235
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 265,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 4,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 116
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 102,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 23
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 125,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1423,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>desktop-window-1 — Select and inspect supplier</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 Select and inspect supplier screenshot"
+        />
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 549,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 761,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 799.203125,
+          &quot;y&quot;: 615,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Clear Springs Co.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-2">
+      <h2>desktop-window-2 — Simulate replenishment</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-2.png"
+          alt="desktop-window-2 Simulate replenishment screenshot"
+        />
+      </div>
+      <a href="desktop-window-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 286,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 328,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 370,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 412,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 454,
+          &quot;width&quot;: 40.625,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 549,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 761,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulated — no order sent&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 775.6875,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 204.3125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .min-w-\\[var\\(--space-0\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Simulated — no order sent&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-3">
+      <h2>desktop-window-3 — Filter records</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-3.png"
+          alt="desktop-window-3 Filter records screenshot"
+        />
+      </div>
+      <a href="desktop-window-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 372,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 332,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review: Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 243.75,
+          &quot;width&quot;: 56.8125,
+          &quot;height&quot;: 21
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 549,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 761,
+          &quot;y&quot;: 357,
+          &quot;width&quot;: 212,
+          &quot;height&quot;: 36
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 798.859375,
+          &quot;y&quot;: 655,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].grid &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].items-center.flex-wrap &gt; span:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Free-range Eggs 12ct&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>

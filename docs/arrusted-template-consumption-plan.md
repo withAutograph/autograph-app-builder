@@ -38,6 +38,66 @@ These are examples, not mandatory layouts. Choose by the actual product task.
 Wide comparative data can scroll intentionally; a record-review task may benefit
 from a compact presentation that keeps essential fields and actions together.
 
+### List and detail in resized desktop windows
+
+Keep columns that help the user choose the next record. Supporting attributes
+can live in the selected detail panel instead of competing for list width.
+`DataTableComposition` supports column `width` and `align`, plus `density` and
+`frame` in `spec.config`. Width is a sizing hint, not a promise that all content
+will fit: its table retains intrinsic content width and an overflow container.
+Use only fields supported by the inspected implementation. In particular,
+`narrowLayout` is not a supported spec field; there is no inferred stack mode,
+colored string-cell option, or arbitrary cell renderer. Keep row data serializable.
+
+When the inspected table supplies `getRowId`, `selectedRowId`, and `onRowSelect`,
+keep stable record identity and selection in route state. Preserve that state
+when the desktop layout changes. If detail moves below the list, route wiring
+can bring the selected detail into view and focus its labeled wrapper. Removing
+selection to make a layout fit loses the review workflow.
+
+`RecordDetailPanel` accepts ordinary layout sizing through `className`. Its
+existing body scrolls and its actions footer sits outside that body. A bounded
+panel height can keep the action reachable while the details scroll; choose the
+height for the surrounding layout and inspect the result in a shorter desktop
+window. This is layout composition, not a new `panel-scroll` variant. Sections
+support `collapsible` and `defaultOpen` when secondary information benefits from
+disclosure. Do not hide essential decision context simply to shorten the panel.
+The existing `tabs`, `activeTabId`, and `onTabChange` props are another option
+when users switch between distinct groups of details. Supply the selected
+group's sections from route state; tabs do not filter sections automatically.
+Keep the action in the shared footer and retain enough context to understand
+it from either view. Prefer this over a tall stack of mostly secondary sections
+when the actual workflow benefits; tabs are not a requirement for every record.
+
+When a long record title competes with the header status, the supported
+ReactNode `subtitle` can compose the shared `StatusPill` with metadata below
+the title. Use the public component and its tone props, not a bespoke badge.
+Decision-critical quantities should use normal detail fields rather than tiny
+metadata text. Table `density` changes row spacing, not header typography;
+inspect the implementation before acting on a judge's proposed API change.
+
+### Stock Exceptions example
+
+For a stock-review list, Product, Severity, and Cover may be enough alongside
+the supported selection control. Location remains available in the filter and
+selected record subtitle; on-hand and reorder quantities remain in Stock
+position. Right-align Cover using the column's `align` field. This is an example
+of choosing task-relevant columns, not a required three-column template.
+
+Keep replenishment in the shared detail `actions`/`onAction` API, with its visible
+fixture outcome. The tabbed example keeps Stock position and Supplier details
+in separate shared panel views; a shorter record can instead use the existing
+Supplier disclosure. Retain the stock facts and preview-only disclosure needed
+to understand the action. Show severity through the supported detail `status`
+tone or shared subtitle `StatusPill`. Plain severity text in the table is preferable to an
+invented tone-cell prop or a palette override. A reusable semantic table-cell
+capability belongs in Arrusted if the workflow needs it.
+
+Review initial and changed selection, filtered results, and the action outcome
+in the narrower desktop layout. These examples guide composition choices;
+they add no runtime eligibility check, minimum width, score threshold, or
+phone/tablet requirement.
+
 ## Component-only UI
 
 Generated apps compose current public Arrusted components and compositions.

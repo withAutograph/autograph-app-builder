@@ -3,7 +3,7 @@ import { posix } from "node:path";
 import ts from "typescript";
 
 import type { Observation } from "./evidence";
-import type { Reference } from "./reference";
+import { checkJsxAttributes, type Reference } from "./reference";
 
 export type SourceFile = { path: string; content: string };
 
@@ -284,6 +284,16 @@ export function analyzeSource({
   const imports: SourceAnalysis["imports"] = [];
   const observations: Observation[] = [];
   const limitations: string[] = [...(reference?.limitations ?? [])];
+  const typedJsx = reference?.arrustedRoot
+    ? checkJsxAttributes({ arrustedRoot: reference.arrustedRoot, files })
+    : undefined;
+  if (typedJsx) limitations.push(...typedJsx.limitations);
+  const typedAttributes = new Map(
+    typedJsx?.attributes.map((attribute) => [
+      `${attribute.path}:${attribute.start}`,
+      attribute,
+    ]),
+  );
   const reachableCss = new Set<string>();
   const referencedClasses = new Set<string>();
   for (const file of files.filter(
@@ -698,6 +708,9 @@ export function analyzeSource({
                 ),
               );
             } else if (declaration.props?.[name]) {
+              const typed = typedAttributes.get(
+                `${file.path}:${attribute.getStart(source)}`,
+              );
               const value = staticLiteral(attribute);
               const allowed = declaration.props[name].values;
               const acceptedPrimitives = declaration.props[name].primitiveKinds;
@@ -706,30 +719,34 @@ export function analyzeSource({
                 observation(
                   `api:prop:${file.path}:${attribute.getStart(source)}:${name}`,
                   "api",
-                  value === undefined || !kind
-                    ? "unassessed"
-                    : allowed
-                      ? allowed.includes(value)
-                        ? "conforming"
-                        : "nonconforming"
-                      : acceptedPrimitives
-                        ? acceptedPrimitives.includes(kind)
+                  typed
+                    ? typed.verdict
+                    : value === undefined || !kind
+                      ? "unassessed"
+                      : allowed
+                        ? allowed.includes(value)
                           ? "conforming"
                           : "nonconforming"
-                        : "unassessed",
-                  value === undefined
-                    ? `${item.name}.${name} is dynamic or spread-derived; its public variant cannot be verified statically.`
-                    : !kind
-                      ? `${item.name}.${name} is not a static primitive literal.`
-                      : !allowed && !acceptedPrimitives
-                        ? `${item.name}.${name}'s primitive type cannot be resolved.`
-                        : !allowed && acceptedPrimitives?.includes(kind)
-                          ? `${item.name}.${name} accepts static ${kind} values.`
-                          : !allowed
-                            ? `${item.name}.${name} does not accept static ${kind} values.`
-                            : allowed.includes(value)
-                              ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
-                              : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`,
+                        : acceptedPrimitives
+                          ? acceptedPrimitives.includes(kind)
+                            ? "conforming"
+                            : "nonconforming"
+                          : "unassessed",
+                  typed
+                    ? typed.reason
+                    : value === undefined
+                      ? `${item.name}.${name} is dynamic or spread-derived; its public variant cannot be verified statically.`
+                      : !kind
+                        ? `${item.name}.${name} is not a static primitive literal.`
+                        : !allowed && !acceptedPrimitives
+                          ? `${item.name}.${name}'s primitive type cannot be resolved.`
+                          : !allowed && acceptedPrimitives?.includes(kind)
+                            ? `${item.name}.${name} accepts static ${kind} values.`
+                            : !allowed
+                              ? `${item.name}.${name} does not accept static ${kind} values.`
+                              : allowed.includes(value)
+                                ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
+                                : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`,
                   position(source, attribute),
                   "prop",
                 ),

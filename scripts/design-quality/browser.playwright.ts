@@ -1,5 +1,6 @@
 import { expect, test } from "playwright/test";
 import { measurePage, measureStyles } from "./browser";
+import { collectIntrinsicClassSignatures } from "./class-evidence";
 
 // Authored calibration candidates, not human-validated aesthetic gold labels.
 test("measurements distinguish concrete defects from intentional layout", async ({
@@ -20,6 +21,9 @@ test("measurements distinguish concrete defects from intentional layout", async 
     ),
   ).toEqual([]);
   expect(good.intentionalScrollContainers.length).toBeGreaterThan(0);
+  expect(
+    good.intentionalScrollContainers.some((item) => item.axis === "x"),
+  ).toBe(true);
   expect(
     good.accessibility.violations.some((v) => v.id === "button-name"),
   ).toBe(false);
@@ -43,6 +47,24 @@ test("measurements distinguish concrete defects from intentional layout", async 
   await test.info().attach("authored-poor-reference", {
     body: await page.screenshot(),
     contentType: "image/png",
+  });
+});
+
+test("reports intentional vertical scrolling as a diagnostic", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setContent(
+    `<!doctype html><main style="height:80px;overflow-y:auto"><div style="height:240px">Scrollable details</div></main>`,
+  );
+  const measured = await measurePage(page);
+  const vertical = measured.intentionalScrollContainers.find(
+    (item) => item.axis === "y",
+  );
+  expect(vertical).toMatchObject({
+    axis: "y",
+    scrollHeight: 240,
+    clientHeight: 80,
   });
 });
 
@@ -75,4 +97,62 @@ test("style evidence uses the active theme and reports diversified DOM coverage"
   expect(
     styles.observations.some((item) => item.provenance === "generated"),
   ).toBe(false);
+});
+
+test("browser signature attribution is reviewer evidence, not score provenance", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setContent(`<!doctype html><style>
+    :root { --color-text-primary: rgb(20, 20, 20) }
+    .generated-card { color: var(--color-text-primary) }
+  </style><section class="generated-card tokenized">Stock</section>`);
+  const generated = collectIntrinsicClassSignatures([
+    {
+      path: "src/Stock.tsx",
+      content:
+        'export function Stock(){ return <section className="generated-card tokenized">Stock</section> }',
+    },
+  ]);
+  const candidate = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    generated,
+    [],
+  );
+  expect(
+    candidate.observations.some(
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "unknown" &&
+        item.verdict === "unassessed" &&
+        item.originCandidate?.provenance === "generated",
+    ),
+  ).toBe(true);
+  const sharedDynamic = collectIntrinsicClassSignatures([
+    {
+      path: "packages/design-systems/Card.tsx",
+      content:
+        'const classes = "generated-card tokenized"; export function Card(){ return <section className={classes}>Shared</section> }',
+    },
+  ]);
+  // Dynamic shared classes do not appear in the static inventory, which is why
+  // a matching generated signature remains only a reviewer candidate.
+  expect(sharedDynamic).toEqual([]);
+  const collision = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    generated,
+    sharedDynamic,
+  );
+  expect(
+    collision.observations.some(
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "unknown" &&
+        item.verdict === "unassessed",
+    ),
+  ).toBe(true);
 });

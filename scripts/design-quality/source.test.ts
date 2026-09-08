@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { analyzeSource, parseTokens } from "./source";
 import type { Reference } from "./reference";
@@ -180,6 +183,50 @@ describe("analyzeSource", () => {
       "nonconforming",
       "unassessed",
     ]);
+  });
+
+  it("uses selected Arrusted types for nested object props", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-types-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "compositions.tsx"),
+      `export function DataTable(_props: { spec: { narrowLayout: "compact" | "full" } }) { return null; }`,
+    );
+    const report = analyzeSource({
+      tokenCss,
+      reference: {
+        arrustedRoot: root,
+        limitations: [],
+        modules: {
+          "@autograph/compositions": {
+            exports: { DataTable: { props: { spec: { required: true } } } },
+          },
+        },
+      },
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { DataTable } from "@autograph/compositions"; export function Page() { return <DataTable spec={{ narrowLayout: "wide" }} />; }`,
+        },
+      ],
+    });
+    expect(report.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dimension: "api",
+          verdict: "nonconforming",
+          classification: "prop",
+        }),
+      ]),
+    );
   });
 
   it("reports JSX imports, token evidence, and literal classifications", () => {

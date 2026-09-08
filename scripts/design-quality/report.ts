@@ -31,9 +31,13 @@ export function renderReport(report: {
     `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
   const adherence = report.adherence;
   const pct = (n: number | null) =>
-    n === null ? "Not assessed" : `${Math.round(n)}%`;
+    n === null ? "Not assessed" : `${Math.round(n * 100) / 100}%`;
   const observations = adherence?.observations ?? [];
   const location = (o: Observation, index: number) => {
+    const candidate = o.originCandidate;
+    const candidateNote = candidate
+      ? `<p>Possible generated source (unassessed): ${escapeHtml(candidate.source.path)}:${candidate.source.line}. ${escapeHtml(candidate.reason)}</p>`
+      : "";
     const file = report.sourceFiles?.find((f) => f.path === o.source?.path);
     const line = o.source?.line ?? 1;
     const excerpt = file?.content
@@ -41,7 +45,7 @@ export function renderReport(report: {
       .slice(Math.max(0, line - 2), line + 2)
       .map((text, offset) => `${Math.max(1, line - 1) + offset}: ${text}`)
       .join("\n");
-    return `<article id="finding-${index}"><strong>${escapeHtml(o.classification ?? o.dimension)} · ${escapeHtml(o.verdict)}</strong><p>${escapeHtml(o.summary)}</p><small>${escapeHtml(o.evidence)} evidence${o.source ? ` · <a href="#source-${index}">${escapeHtml(o.source.path)}:${o.source.line}</a>` : ""}${o.capture ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>` : ""}</small>${o.source ? `<details id="source-${index}"><summary>Source location: ${escapeHtml(o.source.path)}:${o.source.line}</summary>${excerpt ? `<pre>${escapeHtml(excerpt)}</pre>` : "Source text not supplied; location only."}</details>` : ""}</article>`;
+    return `<article id="finding-${index}"><strong>${escapeHtml(o.classification ?? o.dimension)} · ${escapeHtml(o.verdict)}</strong><p>${escapeHtml(o.summary)}</p>${candidateNote}<small>${escapeHtml(o.evidence)} evidence${o.source ? ` · <a href="#source-${index}">${escapeHtml(o.source.path)}:${o.source.line}</a>` : ""}${o.capture ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>` : ""}</small>${o.source ? `<details id="source-${index}"><summary>Source location: ${escapeHtml(o.source.path)}:${o.source.line}</summary>${excerpt ? `<pre>${escapeHtml(excerpt)}</pre>` : "Source text not supplied; location only."}</details>` : ""}</article>`;
   };
   const groups = (
     [

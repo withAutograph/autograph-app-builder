@@ -10,9 +10,14 @@ export type Observation = {
   capture?: string;
   region?: { x: number; y: number; width: number; height: number };
   classification?: string;
+  originCandidate?: {
+    provenance: "generated";
+    reason: string;
+    source: { path: string; line: number; column?: number };
+  };
 };
 
-export const evaluatorVersion = 2;
+export const evaluatorVersion = 3;
 export const dimensions: Dimension[] = ["component", "api", "styling"];
 
 export function scoreAdherence(
@@ -83,7 +88,9 @@ export function scoreAdherence(
           available.reduce((n, d) => n + d.percent!, 0) / available.length,
         )
       : null,
-    coveragePercent: total ? Math.round((100 * assessed) / total) : null,
+    coveragePercent: total
+      ? Math.round((10_000 * assessed) / total) / 100
+      : null,
     dimensions: scores,
     observations: unique,
     limitations,
