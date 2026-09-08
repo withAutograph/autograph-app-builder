@@ -1,5 +1,22 @@
 # Stock Exceptions composition and evidence improvement
 
+## Latest reviewer note: semantic severity
+
+The [semantic-severity report](stock-exceptions-semantic-severity-234749774Z/README.md)
+scored 90/100. Its claim that the first narrow-list record omits its location is
+incorrect: `desktop-custom-700x900-0.png` visibly shows “Riverside” beneath
+“Free-range Eggs 12ct”. The original judgment and score are preserved, not edited
+or rerolled. This reviewer correction is separate evidence.
+
+The measured severity-text contrast concern is real and comes from the existing
+shared `danger`/`warning` variants. No palette changes were made. The stale
+selection instruction in detail-only mode is a confirmed generated-copy defect.
+
+Remaining dynamic callback, ReactNode, and branch observations remain unassessed
+under the current evaluator rules; public types alone do not prove runtime
+rendering or browser style ownership. A partial 100 adherence score must not be
+presented as complete coverage.
+
 The evaluator/report changes landed through [PR #338](https://github.com/withAutograph/autograph-app-builder/pull/338)
 at `296452aec61bbfcd8e4f3ed7f70fc8770af0908b`. Both exact-head and resulting-main
 CI passed. The subsequent improvement work is a local candidate, not a production
