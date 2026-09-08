@@ -1,0 +1,52 @@
+{
+  "kind": "saved-source-reanalysis",
+  "evaluatorImplementationCommit": "dc513ff3",
+  "method": "Reuse sourceFiles, selected reference, token CSS and all saved browser observations. Recompute static observations with analyzeSource and aggregate with scoreAdherence. Do not recapture or rerun the judge.",
+  "reports": [
+    {
+      "report": "stock-exceptions-delivery-context-201919952Z/report.json",
+      "subjectiveScoreUnchanged": 90,
+      "beforeApi": { "conforming": 34, "nonconforming": 0, "unassessed": 12 },
+      "afterApi": { "conforming": 37, "nonconforming": 0, "unassessed": 9 },
+      "componentUnchanged": {
+        "conforming": 15,
+        "nonconforming": 0,
+        "unassessed": 4
+      },
+      "stylingUnchanged": {
+        "conforming": 12,
+        "nonconforming": 0,
+        "unassessed": 5880
+      },
+      "combinedCoverageBefore": 1.02,
+      "combinedCoverageAfter": 1.07,
+      "adherenceScoreUnchanged": 100,
+      "status": "partial"
+    },
+    {
+      "report": "stock-exceptions-compact-context-203050797Z/report.json",
+      "subjectiveScoreUnchanged": 85,
+      "beforeApi": { "conforming": 34, "nonconforming": 0, "unassessed": 12 },
+      "afterApi": { "conforming": 37, "nonconforming": 0, "unassessed": 9 },
+      "componentUnchanged": {
+        "conforming": 15,
+        "nonconforming": 0,
+        "unassessed": 4
+      },
+      "stylingUnchanged": {
+        "conforming": 13,
+        "nonconforming": 0,
+        "unassessed": 5880
+      },
+      "combinedCoverageBefore": 1.04,
+      "combinedCoverageAfter": 1.09,
+      "adherenceScoreUnchanged": 100,
+      "status": "partial"
+    }
+  ],
+  "limitations": [
+    "Static assignability does not prove rendering or interaction behavior.",
+    "The 5880 unknown browser styling observations remain unknown.",
+    "Historical reports, screenshots, scores and palette values are unchanged."
+  ]
+}
