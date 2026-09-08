@@ -2,6 +2,15 @@
 
 This is an advisory comparison, not a generation gate or a target score.
 
+## Superseding product direction
+
+The user subsequently confirmed desktop-only apps and the existing Arrusted
+palette as authoritative. The primary Button adjustment and phone-only stacked
+table API from this experiment are reverted in the coordinated PRs. Mobile,
+tablet, touch-target and palette-change findings below are historical observations,
+not current requirements or a repair backlog. Current evaluation samples desktop
+windows/panels only. Preserve palette tokens and component variants verbatim.
+
 ## Changes exercised
 
 - Arrusted `eb5efee4`: existing DataTable selection, keyboard interaction and optional narrow stacked records; stronger primary-action and detail-label contrast; current catalog and workflow examples.

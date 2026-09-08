@@ -92,7 +92,7 @@ async function main() {
     ? scenariosSchema.parse(JSON.parse(await readFile(values.scenario, "utf8")))
     : [];
   console.log(
-    "Capturing existing preview at desktop, tablet and mobile sizes…",
+    "Capturing existing preview across desktop window sizes…",
   );
   const captures = await capturePreview({
     url: url.href,

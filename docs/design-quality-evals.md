@@ -51,8 +51,9 @@ Run it with a preview URL, the Arrusted checkout, and the design brief:
 mise run eval:design -- --preview-url URL --arrusted-root ROOT --brief-file FILE [--source-dir DIR] [--scenario FILE --fixture-interactions] [--measurements-only] [--output-dir DIR]
 ```
 
-The evaluator captures three fixed viewports: desktop `1440x900`, tablet
-`768x1024`, and mobile `390x844`. It writes an advisory report to the selected
+The evaluator samples desktop-class windows at `1440x900`, `1920x1080`, and
+`1024x768`. These samples do not impose a minimum supported width. Phone/tablet
+layouts and touch-target acceptance are out of scope. It writes an advisory report to the selected
 output directory (or its default) and does not update screenshot baselines or
 compare exact PNG bytes.
 
@@ -66,7 +67,10 @@ claim; missing source evidence is not treated as a failure.
 
 The AI gives a score from `0` through `4` on five advisory axes: hierarchy,
 layout, typography, responsive composition, and product clarity. Scores are
-judgment, not pass/fail requirements. The report records input/output token
+judgment, not pass/fail requirements. Preserve Arrusted's existing palette verbatim
+through semantic tokens and supported variants; contrast findings must not trigger
+palette adjustments or generated color overrides. Historical mobile findings are
+history, not current requirements. The report records input/output token
 counts and any model limitations.
 
 ## Optional fixture interactions

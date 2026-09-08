@@ -37,7 +37,9 @@ private components, replacement tokens, or a second styling system. A catalog
 gap is a reason to adapt the design using available components, not permission
 to invent one. Offer a product-level alternative if the gap changes what the
 user can accomplish. Import the current target-owned token entrypoint directly;
-do not approximate the theme with hand-authored colors.
+do not approximate the theme with hand-authored colors. Use Arrusted's existing
+palette verbatim through semantic tokens and supported variants. Do not change
+colors or override component treatments to chase contrast or design scores.
 
 Choose by capability, not component name. A display-only table is not an
 interactive review queue. Prefer a supported record-review composition for
@@ -47,7 +49,9 @@ layouts. Read the selected API and example rather than browsing the whole catalo
 Missing or stale documentation is not a blocker: inspect current public exports
 and try the renderer. See `references/target-repository-routing.md` for sources.
 
-Plan narrow-screen behavior with the first composition. Keep the selected record
+These apps are desktop-only. Plan for resizing desktop windows and panels, not
+phone/tablet layouts, mobile breakpoints, or touch-target acceptance. Do not
+impose a minimum viewport width. Keep the selected record
 and its primary action understandable; use supported compact/list presentations
 where comparison columns would hide essential information. Intentional scrolling
 is appropriate for wide comparisons, not a universal failure. Use component
@@ -98,7 +102,7 @@ preflight steps or approval gates:
 - a suitable public composition was not replaced by local UI;
 - fixture values agree across screens and the manifest;
 - assumptions remain distinct from accepted decisions;
-- desktop and narrow layouts preserve hierarchy, selection, ordering, and
+- desktop windows and panels preserve hierarchy, selection, ordering, and
   overflow behavior;
 - labels, focus, keyboard operation, contrast, and semantic structure work;
 - no fake live integration or backend behavior is implied; and
@@ -126,7 +130,8 @@ redesigning the UI from the prose brief. Load the same required providers and
 font/theme foundation in both surfaces.
 
 Design scoring is on demand only. Do not run a judge, impose a score threshold,
-or start an automatic polish loop before showing the prototype. Report shared
+or start an automatic polish loop before showing the prototype. Advisory contrast
+findings do not authorize palette changes. Report shared
 component defects for repair in Arrusted instead of covering them with a new
 generated styling system.
 
