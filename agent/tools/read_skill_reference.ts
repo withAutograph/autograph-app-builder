@@ -7,6 +7,7 @@ export const readSkillReferenceInputSchema = z.discriminatedUnion("skill", [
     skill: z.literal("design-app"),
     reference: z.enum([
       "references/app-spec.md",
+      "references/interactions.md",
       "references/questions.md",
       "references/target-repository-routing.md",
     ]),

@@ -81,7 +81,12 @@ app-owned files and reuse the same component-backed preview flow.
 6. For a new app, compose the actual product implementation from the prototype,
    brief, and inspected Arrusted conventions, using only existing public
    components and compositions without local replacement components. Include the app-owned TSX,
-   styles, and focused tests needed for the described experience. Pass those
+   styles, and focused tests needed for the described experience. Preserve the
+   prototype's navigation and action outcomes from `design-app`'s interaction
+   walkthrough, adapting preview hash routes to the generated app's actual
+   router. Test visible state changes, form validation/cancellation, and
+   cross-screen consistency; do not replace working prototype actions with
+   inert buttons or toast-only success. Pass those
    model-authored files as `implementationFiles` to `apply_app_creation` with
    the concise product summary. For an existing-app iteration, the planned
    changes already carry the implementation and `implementationFiles` may be

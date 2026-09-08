@@ -8,7 +8,9 @@ production authority.
 
 ## Inventory the interaction contract
 
-Inventory every visible control before presenting the revision. For each
+Inventory every visible control in the AppSpec's existing Controls and behavior
+and Acceptance walkthrough sections before presenting the revision. Keep this
+as planning prose; do not invent new required preview-manifest fields. For each
 control, record:
 
 - the control and where it appears;
@@ -31,6 +33,13 @@ manifest. Link to the exact registered hash route expected by the renderer,
 preserving the preview's existing base URL. Do not replace the base URL or emit
 a path that bypasses the hash router.
 
+For the current renderer, use `location.hash = "/employees"` for a manifest
+route of `/employees`, or an anchor with `href="#/employees"`. Use `#/` when the
+registered overview route is `/`; a label such as Overview is not a route id.
+The renderer listens to `hashchange`. Calling `history.pushState` alone does not
+notify it, even if a tab's internal selection changes. Derive the selected tab
+from the active registered route rather than separate unsynchronized state.
+
 Keep the selected navigation item, visible page, URL, and in-memory state in
 agreement. Browser Back and Forward must restore the corresponding route and
 selection. A direct visit to any registered hash route must render the intended
@@ -40,7 +49,10 @@ documented fallback; visible controls must never intentionally target one.
 Use real public component or composition event APIs for links, menus, rows,
 dialogs, selection, and forms. Do not place an inert wrapper over a component to
 simulate interaction. Shared fixture state should live at the route shell or
-other common in-memory owner so related screens show the same facts.
+other common in-memory owner so related screens show the same facts. Check the
+renderer lifecycle: changing screen component types can remount a shell. Keep
+shared data in an owner that survives that transition rather than resetting
+each screen from its initial fixture.
 
 When an action changes data, update every dependent count, total, badge, table,
 summary, or selection in the same interaction. Preserve those changes while
@@ -67,8 +79,9 @@ Concrete compensation examples:
   values show correctable validation.
 - **Create salary band:** submitting valid bounds adds the band to its list and
   updates any coverage count or unassigned-employee summary. Cancel preserves
-  the prior bands. An inverted or overlapping range shows a fixture-backed
-  validation result rather than a success toast.
+  the prior bands. An inverted range shows a fixture-backed validation result
+  rather than a success toast; apply other constraints only when the product
+  defines them.
 - **Submit for approval:** when its fixture preconditions are met, submission
   changes the item to a pending state and updates the relevant queue or badge.
   A cancel or unavailable path leaves the item unchanged and explains what is

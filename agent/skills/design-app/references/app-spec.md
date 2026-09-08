@@ -31,7 +31,10 @@ non-goal rather than silently omitting the decision.
 3. `## Interfaces and navigation`: approved interfaces, navigation, and
    first-use path.
 4. `## Controls and behavior`: visible controls, actions, states, and
-   cross-interface behavior.
+   cross-interface behavior. Record each control's precondition, observable
+   result, cancellation/error behavior, and any explained unavailable state
+   using `references/interactions.md`; distinguish simulated effects from
+   intended production behavior.
 5. `## Data model`: data objects, identities, fields, and relationships.
 6. `## Integrations and reconciliation`: integrations, imports, refresh,
    source-of-truth, and reconciliation policy.
@@ -46,7 +49,9 @@ non-goal rather than silently omitting the decision.
     behavior.
 12. `## Defaults, non-goals, and risks`: accepted defaults, non-goals,
     explicit deferrals, risks, and unresolved questions.
-13. `## Acceptance walkthrough`: the plain-language acceptance walkthrough.
+13. `## Acceptance walkthrough`: the plain-language acceptance walkthrough,
+    including every enabled navigation and action path, expected visible state
+    changes, and any behavior not yet verified in the Browser.
 14. For a build-ready AppSpec, one strict `## Build handoff` block using the
     shape below.
 
@@ -106,7 +111,9 @@ Mark build-ready only when:
 - integrations and data objects are confirmed or deferred;
 - sources, identities, relationships, and temporal meaning are adequate for the
   first workflow;
-- every visible control and action has host-owned behavior;
+- every enabled control and action has demonstrated fixture-backed behavior,
+  unavailable actions have visible reasons, and the production implementation
+  meaning is recorded; a button label or attached handler is not proof;
 - writes, review, provenance, access, and agent authority are settled;
 - blocking inference labels have become confirmed, defaulted, deferred, or
   non-goals; and

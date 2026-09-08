@@ -138,7 +138,7 @@ References are bundled files, not skills. Never pass a reference path to
 
 - `design-app` and `references/questions.md` before asking discovery questions;
 - `design-app` and `references/target-repository-routing.md` before inspecting
-  prepared Arrusted source; and
+  prepared Arrusted source;
 - `design-app` and `references/interactions.md` when wiring routes and actions,
   and before presenting a material revision; and
 - `design-app` and `references/app-spec.md` when deriving the implementation
