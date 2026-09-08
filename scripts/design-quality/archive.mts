@@ -3,12 +3,20 @@ import {
   mkdir,
   readFile,
   readdir,
-  writeFile,
+  writeFile as writeRawFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { renderReport } from "./report";
 import { captureFilename } from "./archive-path";
+import { format, resolveConfig } from "prettier";
+
+async function writeFile(path: string, content: string) {
+  await writeRawFile(
+    path,
+    await format(content, { ...(await resolveConfig(path)), filepath: path }),
+  );
+}
 
 const { values } = parseArgs({
   options: {

@@ -8,11 +8,11 @@ GitHub renders this summary and the screenshots. Download or clone this folder t
 
 **Arrusted adherence:** 100/100 (partial); evidence coverage 1%. Evaluator 2.
 
-| Dimension | Conforming | Nonconforming | Unassessed | Adherence |
-| --- | --- | --- | --- | --- |
-| component | 7 | 0 | 1 | 100% (7/7) |
-| api | 5 | 0 | 22 | 100% (5/5) |
-| styling | 17 | 0 | 4226 | 100% (17/17) |
+| Dimension | Conforming | Nonconforming | Unassessed | Adherence    |
+| --------- | ---------- | ------------- | ---------- | ------------ |
+| component | 7          | 0             | 1          | 100% (7/7)   |
+| api       | 5          | 0             | 22         | 100% (5/5)   |
+| styling   | 17         | 0             | 4226       | 100% (17/17) |
 
 Scores from different evaluator versions or captured states are not directly comparable.
 
@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, exception count, filters, selected row, and detail panel form a clear review sequence. Selection highlighting and the prominent replenishment action establish priority well, though severity is plain text in the list and therefore less scannable than it is in the detail status pill. |
-| layout | 3/4 | Desktop views use consistent alignment, restrained spacing, and an effective list-detail composition. The 1920px view remains comfortably centered, but the 1024px view becomes substantially taller as table cells and detail fields wrap, reducing information density and pushing the action well below the initial viewport. |
-| typography | 3/4 | Heading levels, field labels, values, and table text are visually consistent and generally readable. At 1024px, product names, cover values, and detail metadata break across several lines, while the small table headers and estimated-cover metadata have relatively weak emphasis. |
-| responsive | 2/4 | Across the supplied desktop widths, controls remain usable and there is no visible horizontal clipping. However, at the 1024×768 measured viewport the document reaches 1184px and the replenishment action begins around y=1108, requiring significant page scrolling; the table and detail panel also lose considerable density. No narrower desktop-panel evidence was supplied. |
-| productClarity | 4/4 | The interface clearly communicates that six low-stock products need review, provides the requested location and severity filters, exposes stock and supplier evidence for the selected product, and explicitly labels the replenishment as a preview that will not contact the supplier. Row-selection controls and the quantity-specific action label are understandable, although the mock action result was not demonstrated. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page title, exception count, filters, selected row, and detail panel form a clear review sequence. Selection highlighting and the prominent replenishment action establish priority well, though severity is plain text in the list and therefore less scannable than it is in the detail status pill.                                                                                                                       |
+| layout         | 3/4   | Desktop views use consistent alignment, restrained spacing, and an effective list-detail composition. The 1920px view remains comfortably centered, but the 1024px view becomes substantially taller as table cells and detail fields wrap, reducing information density and pushing the action well below the initial viewport.                                                                                                 |
+| typography     | 3/4   | Heading levels, field labels, values, and table text are visually consistent and generally readable. At 1024px, product names, cover values, and detail metadata break across several lines, while the small table headers and estimated-cover metadata have relatively weak emphasis.                                                                                                                                           |
+| responsive     | 2/4   | Across the supplied desktop widths, controls remain usable and there is no visible horizontal clipping. However, at the 1024×768 measured viewport the document reaches 1184px and the replenishment action begins around y=1108, requiring significant page scrolling; the table and detail panel also lose considerable density. No narrower desktop-panel evidence was supplied.                                              |
+| productClarity | 4/4   | The interface clearly communicates that six low-stock products need review, provides the requested location and severity filters, exposes stock and supplier evidence for the selected product, and explicitly labels the replenishment as a preview that will not contact the supplier. Row-selection controls and the quantity-specific action label are understandable, although the mock action result was not demonstrated. |
 
 ## Strengths
 
@@ -48,26 +48,26 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/232) |
-| desktop-0 | typography | 0/0 | 0% (0/556) |
-| desktop-0 | spacing | 0/0 | 0% (0/255) |
-| desktop-0 | radius | 0/0 | 0% (0/120) |
-| desktop-0 | border | 0/0 | 0% (0/126) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/232) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/556) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/255) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/120) |
-| desktop-wide-0 | border | 0/0 | 0% (0/126) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/232) |
-| desktop-window-0 | typography | 0/0 | 0% (0/553) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/255) |
-| desktop-window-0 | radius | 0/0 | 0% (0/120) |
-| desktop-window-0 | border | 0/0 | 0% (0/128) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| Viewport         | Category   | Token references / assessed | Coverage   |
+| ---------------- | ---------- | --------------------------- | ---------- |
+| desktop-0        | color      | 0/0                         | 0% (0/232) |
+| desktop-0        | typography | 0/0                         | 0% (0/556) |
+| desktop-0        | spacing    | 0/0                         | 0% (0/255) |
+| desktop-0        | radius     | 0/0                         | 0% (0/120) |
+| desktop-0        | border     | 0/0                         | 0% (0/126) |
+| desktop-0        | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0   | color      | 0/0                         | 0% (0/232) |
+| desktop-wide-0   | typography | 0/0                         | 0% (0/556) |
+| desktop-wide-0   | spacing    | 0/0                         | 0% (0/255) |
+| desktop-wide-0   | radius     | 0/0                         | 0% (0/120) |
+| desktop-wide-0   | border     | 0/0                         | 0% (0/126) |
+| desktop-wide-0   | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0 | color      | 0/0                         | 0% (0/232) |
+| desktop-window-0 | typography | 0/0                         | 0% (0/553) |
+| desktop-window-0 | spacing    | 0/0                         | 0% (0/255) |
+| desktop-window-0 | radius     | 0/0                         | 0% (0/120) |
+| desktop-window-0 | border     | 0/0                         | 0% (0/128) |
+| desktop-window-0 | shadow     | 0/0                         | 0% (0/120) |
 
 ## Latest-run screenshots
 

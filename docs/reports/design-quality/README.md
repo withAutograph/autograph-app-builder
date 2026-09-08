@@ -18,10 +18,10 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 ## History
 
-| Evaluated (UTC) | App | Subjective score / 100 |
-| --- | --- | --- |
-| 2026-09-08T18:14:23.365Z | [stock-exceptions-adherence-v2](2026-09-08/stock-exceptions-adherence-v2-181423365Z/README.md) | 75 |
-| 2026-09-08T16:00:06.674Z | [equipment-request](2026-09-08/equipment-request-160006674Z/README.md) | 75 |
-| 2026-09-08T15:56:46.883Z | [equipment-request](2026-09-08/equipment-request-155646883Z/README.md) | 75 |
-| 2026-09-08T15:50:03.870Z | [stock-exceptions](2026-09-08/stock-exceptions-155003870Z/README.md) | 75 |
-| 2026-09-08T11:39:04.457Z | [stock-exceptions](2026-09-08/stock-exceptions-113904457Z/README.md) | 60 |
+| Evaluated (UTC)          | App                                                                                            | Subjective score / 100 |
+| ------------------------ | ---------------------------------------------------------------------------------------------- | ---------------------- |
+| 2026-09-08T18:14:23.365Z | [stock-exceptions-adherence-v2](2026-09-08/stock-exceptions-adherence-v2-181423365Z/README.md) | 75                     |
+| 2026-09-08T16:00:06.674Z | [equipment-request](2026-09-08/equipment-request-160006674Z/README.md)                         | 75                     |
+| 2026-09-08T15:56:46.883Z | [equipment-request](2026-09-08/equipment-request-155646883Z/README.md)                         | 75                     |
+| 2026-09-08T15:50:03.870Z | [stock-exceptions](2026-09-08/stock-exceptions-155003870Z/README.md)                           | 75                     |
+| 2026-09-08T11:39:04.457Z | [stock-exceptions](2026-09-08/stock-exceptions-113904457Z/README.md)                           | 60                     |
