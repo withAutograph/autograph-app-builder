@@ -441,3 +441,36 @@ the approved desktop-only scope for future evaluations. It retains the same
 inventory workflow, simulation, and plan request. Any future report using that
 brief must disclose the input correction rather than presenting a score change
 as solely a visual improvement. The scoring rubric and thresholds are unchanged.
+
+## Incremental update: selected context and precise simulation language
+
+[The selected-context report](stock-exceptions-selected-context-211854599Z/README.md)
+records **85/100**, with hierarchy and typography now **4/4**, and layout,
+desktop responsiveness, and product clarity **3/4**. All **16 fixture
+interactions** pass across **20 screenshots**, with no captured axe or layout
+findings. The overall score remains unchanged and the goal is not complete.
+
+![Urgency and cover remain visible in the supplier view](stock-exceptions-selected-context-211854599Z/desktop-window-1.png)
+
+The selected detail header now retains urgency and current cover across both
+views. Critical pill labels use the public `Typography` body-strong variant,
+while warning labels use body. The `StatusPill` label slot supplies that shared
+component content without generated color CSS or palette changes. The opening
+copy now says “review and simulate replenishment.”
+
+This is the first report using the corrected desktop-only brief linked above.
+The rubric and model remain unchanged. It must not be presented as a controlled
+visual-only comparison with earlier reports whose brief asked for phone support.
+The original reports and their judge findings remain unchanged.
+
+Adherence is **100, partial**, with **28/32** component, **48/56** API, and
+**18/5826** styling observations assessed; combined coverage is **1.59%**.
+Eight dynamic API observations and 5808 browser styling observations remain
+unknown rather than being awarded positive evidence.
+
+The judge identifies two actionable issues: standard selection cards consume
+substantial vertical space for six records, and the mock order's assumed
+delivery time is not stated beside the action. A reusable compact density option
+is being developed in Arrusted, rather than adding generated primitive overrides.
+Delivery assumptions are a product-copy change. Neither improvement is claimed
+as present in this archived screenshot set.
