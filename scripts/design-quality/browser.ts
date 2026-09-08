@@ -89,6 +89,11 @@ type BrowserStyleObservation = Observation & {
   origin: string;
   selector?: string;
   cssSource?: { path: string; line: number; column?: number };
+  originCandidate?: {
+    provenance: "generated" | "shared";
+    reason: string;
+    source: { path: string; line: number; column: number };
+  };
 };
 
 function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
@@ -519,8 +524,10 @@ export async function measureStyles(
         const signatureGenerated =
           signatureOrigin.provenance === "generated" &&
           generatedSignatureSelector(generatedSignature, selector);
-        const generated =
-          generatedSource(path, generatedSourcePaths) || signatureGenerated;
+        // A shared component can assemble the same classes at runtime (including
+        // through spreads), so a signature is reviewer evidence, never scored
+        // declaration provenance. A direct stylesheet source is required.
+        const generated = generatedSource(path, generatedSourcePaths);
         const inheritedDeclaration =
           !inline.length && !own.length && declarationEntries.length > 0;
         let classification: string = classifyStyle(
@@ -557,8 +564,7 @@ export async function measureStyles(
         if (classification === "structural") continue;
         const provenance: Observation["provenance"] = generated
           ? "generated"
-          : signatureOrigin.provenance === "shared" ||
-              arrustedSharedSource(path)
+          : arrustedSharedSource(path)
             ? "shared"
             : "unknown";
         const quad = model.content;
@@ -575,7 +581,16 @@ export async function measureStyles(
               column: (rule?.style?.range?.startColumn ?? 0) + 1,
             }
           : undefined;
-        const source = signatureGenerated ? signatureOrigin.source : cssSource;
+        const originCandidate =
+          signatureGenerated && signatureOrigin.source
+            ? {
+                provenance: "generated" as const,
+                reason:
+                  "Exact rendered intrinsic tag/class signature and simple matched class selector match generated source; shared runtime assembly remains possible.",
+                source: signatureOrigin.source,
+              }
+            : undefined;
+        const source = cssSource;
         observations.push({
           node: `node-${nodeId}`,
           property,
@@ -584,9 +599,7 @@ export async function measureStyles(
           classification,
           declarations: [...new Set(declarations)],
           origin: generated
-            ? signatureGenerated
-              ? "generated-intrinsic-signature"
-              : "generated-rule"
+            ? "generated-rule"
             : provenance === "shared" && inheritedDeclaration
               ? "inherited-shared"
               : provenance === "shared"
@@ -607,10 +620,13 @@ export async function measureStyles(
                 : "unassessed",
           provenance,
           evidence: "browser",
-          summary: `${property}: ${classification}`,
+          summary: originCandidate
+            ? `${property}: ${classification}; generated origin candidate requires review.`
+            : `${property}: ${classification}`,
           source,
           selector,
           cssSource,
+          originCandidate,
           region,
         });
       }
@@ -685,7 +701,7 @@ export async function measureStyles(
         "Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.",
         "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.",
         "A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.",
-        "Intrinsic tag/class evidence is eligible only with a selected Arrusted shared-signature inventory and no signature collision; without that inventory it remains unknown.",
+        "Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.",
       ],
     };
   } finally {

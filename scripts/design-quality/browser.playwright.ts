@@ -78,7 +78,7 @@ test("style evidence uses the active theme and reports diversified DOM coverage"
   ).toBe(false);
 });
 
-test("browser attribution requires a unique generated intrinsic signature", async ({
+test("browser signature attribution is reviewer evidence, not score provenance", async ({
   page,
 }) => {
   await page.goto("about:blank");
@@ -93,7 +93,7 @@ test("browser attribution requires a unique generated intrinsic signature", asyn
         'export function Stock(){ return <section className="generated-card tokenized">Stock</section> }',
     },
   ]);
-  const proved = await measureStyles(
+  const candidate = await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
     [],
@@ -101,29 +101,37 @@ test("browser attribution requires a unique generated intrinsic signature", asyn
     [],
   );
   expect(
-    proved.observations.some(
+    candidate.observations.some(
       (item) =>
         item.property === "color" &&
-        item.provenance === "generated" &&
-        item.origin === "generated-intrinsic-signature",
+        item.provenance === "unknown" &&
+        item.verdict === "unassessed" &&
+        item.originCandidate?.provenance === "generated",
     ),
   ).toBe(true);
+  const sharedDynamic = collectIntrinsicClassSignatures([
+    {
+      path: "packages/design-systems/Card.tsx",
+      content:
+        'const classes = "generated-card tokenized"; export function Card(){ return <section className={classes}>Shared</section> }',
+    },
+  ]);
+  // Dynamic shared classes do not appear in the static inventory, which is why
+  // a matching generated signature remains only a reviewer candidate.
+  expect(sharedDynamic).toEqual([]);
   const collision = await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
     [],
     generated,
-    collectIntrinsicClassSignatures([
-      {
-        path: "packages/design-systems/Card.tsx",
-        content:
-          'export function Card(){ return <section className="generated-card tokenized">Shared</section> }',
-      },
-    ]),
+    sharedDynamic,
   );
   expect(
     collision.observations.some(
-      (item) => item.property === "color" && item.provenance === "generated",
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "unknown" &&
+        item.verdict === "unassessed",
     ),
-  ).toBe(false);
+  ).toBe(true);
 });
