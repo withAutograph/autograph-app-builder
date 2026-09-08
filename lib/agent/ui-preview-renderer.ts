@@ -2,9 +2,30 @@ import type { SandboxSession } from "eve/sandbox";
 
 import { type UiPreviewInput, uiPreviewSourceDigest } from "./ui-preview";
 
+const chartCompositions = new Set([
+  "AgChartsHost",
+  "ChartComposition",
+  "BreakdownChart",
+  "CombinedBarLineChart",
+  "DonutChart",
+  "HeatmapChart",
+  "RangeMarkerChart",
+  "ScatterChart",
+  "StackedTimelineChart",
+  "WaterfallChart",
+]);
+
 /** Compile the submitted interface against the actual checkout, not substitutes. */
 export function uiPreviewRendererFiles(input: UiPreviewInput) {
   const root = `.builder-preview/${uiPreviewSourceDigest(input)}`;
+  // These public compositions use Arrusted's AG Charts runtime. Match its
+  // Storybook setup only when the submitted interface actually uses charts.
+  const chartInitialization = input.manifest.productionCompositions.some(
+    ({ name }) => chartCompositions.has(name),
+  )
+    ? `import { bootstrapAgCharts } from "@autograph/compositions";
+bootstrapAgCharts({ allowMissingLicense: true });`
+    : "";
   const imports = input.manifest.screens
     .map(
       (screen, index) =>
@@ -17,6 +38,7 @@ export function uiPreviewRendererFiles(input: UiPreviewInput) {
   const entry = `${imports}
 import React from "react";
 import { createRoot } from "react-dom/client";
+${chartInitialization}
 const screens = {${routes}};
 const root = createRoot(document.getElementById("root"));
 function render() {
