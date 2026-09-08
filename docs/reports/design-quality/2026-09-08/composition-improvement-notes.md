@@ -474,3 +474,37 @@ delivery time is not stated beside the action. A reusable compact density option
 is being developed in Arrusted, rather than adding generated primitive overrides.
 Delivery assumptions are a product-copy change. Neither improvement is claimed
 as present in this archived screenshot set.
+
+## Incremental update: shared compact choices and delivery assumptions
+
+[The compact-delivery report](stock-exceptions-compact-delivery-213406461Z/README.md)
+records **85/100** with **20/20 fixture interactions** across **24 screenshots**.
+Layout and typography score 4/4; hierarchy, desktop responsiveness, and product
+clarity score 3/4. No captured axe violations or measured layout findings were
+reported. These observations are not a full accessibility or backend proof.
+
+![Compact choices and the delivery assumption beside the action](stock-exceptions-compact-delivery-213406461Z/desktop-window-5.png)
+
+The fixture uses Arrusted's optional `DecisionOptionCard density="compact"`
+capability from [PR #1309](https://github.com/withAutograph/arrusted-development/pull/1309),
+which is still a candidate rather than a claimed landed dependency. Shared
+spacing tokens change; palette, typography, and selection semantics do not.
+The delivery assumption and its stock-cover consequence now appear beside the
+simulation action in both tabs. At 1024×768, the unfiltered document height is
+802px rather than 850px in the selected-context capture. Ordinary vertical page
+scrolling remains acceptable; this comparison does not introduce a viewport-fit
+gate or a minimum-width requirement.
+
+Adherence remains **100, partial**: 28/31 component, 49/57 API, and 17/5825
+styling observations are assessed. Combined coverage is **1.59%** (94/5913).
+The 5808 browser styling observations still lack sufficient source attribution.
+They remain unknown; visual resemblance, matching values, or class names are
+not promoted to evidence of generated-versus-inherited ownership.
+
+The judge's actionable product finding is that the Supplier details tab should
+retain a suggested-order summary near its action. It also suggests stronger
+non-color urgency hierarchy. These are future refinements, not completed fixes.
+The model, rubric, and desktop-only brief are unchanged from selected-context;
+one delivery-assumption scenario was added. Historical reports are preserved.
+This is a manually refined, component-backed fixture, not proof that every new
+generation now produces the same quality. The 100-point design goal is not met.
