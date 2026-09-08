@@ -11,12 +11,18 @@ permissions:
   deployments: read
   id-token: write
 
+env:
+  # Pin a published release: the upstream VERSION endpoint can precede its assets.
+  CI_MISE_VERSION: "2026.9.2"
+
 jobs:
   repository:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
@@ -31,6 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
@@ -44,6 +52,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
@@ -64,6 +74,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
@@ -77,6 +89,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
@@ -106,6 +120,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
@@ -212,6 +228,8 @@ jobs:
           fi
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         if: steps.release_state.outputs.publish == 'true'
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
       - uses: actions/setup-node@v4
         if: steps.release_state.outputs.publish == 'true'
         with:

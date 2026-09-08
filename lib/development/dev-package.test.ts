@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -82,73 +82,89 @@ describe("development Codex package", () => {
     }
   });
 
-  it("replaces the development marketplace and installs its one plugin", async () => {
+  it("installs development guidance without enabling it globally", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "codex-scope-"));
     const commands: Array<{
       args: readonly string[];
       allowFailure: boolean;
     }> = [];
-    await registerDevelopmentPackage({
-      codexBin: "/mise/bin/codex",
-      codexHome: "/private/dev/codex-home",
-      marketplaceRoot: "/private/dev/marketplace",
-      version: "0.0.0-development.3210",
-      runner: async (args, options) => {
-        commands.push({ args, allowFailure: options.allowFailure ?? false });
-        return {
-          stdout: args.includes("list")
-            ? JSON.stringify({
-                installed: [
-                  {
-                    pluginId: "app-builder@autograph-dev",
-                    name: "app-builder",
-                    marketplaceName: "autograph-dev",
-                    version: "0.0.0-development.3210",
-                    installed: true,
-                    enabled: true,
-                    source: {
-                      source: "local",
-                      path: "/private/dev/marketplace/plugins/app-builder",
+    try {
+      await registerDevelopmentPackage({
+        codexBin: "/mise/bin/codex",
+        codexHome,
+        marketplaceRoot: "/private/dev/marketplace",
+        version: "0.0.0-development.3210",
+        runner: async (args, options) => {
+          commands.push({ args, allowFailure: options.allowFailure ?? false });
+          if (args[0] === "plugin" && args[1] === "add") {
+            await writeFile(
+              join(codexHome, "config.toml"),
+              'model = "gpt-6-astra"\n[plugins."app-builder@autograph-dev"]\nenabled = true\n[plugins."app-builder@autograph"]\nenabled = true\n',
+            );
+          }
+          if (args.includes("list")) {
+            expect(await readFile(join(codexHome, "config.toml"), "utf8")).toBe(
+              'model = "gpt-6-astra"\n[plugins."app-builder@autograph-dev"]\nenabled = false\n[plugins."app-builder@autograph"]\nenabled = true\n',
+            );
+          }
+          return {
+            stdout: args.includes("list")
+              ? JSON.stringify({
+                  installed: [
+                    {
+                      pluginId: "app-builder@autograph-dev",
+                      name: "app-builder",
+                      marketplaceName: "autograph-dev",
+                      version: "0.0.0-development.3210",
+                      installed: true,
+                      enabled: true,
+                      source: {
+                        source: "local",
+                        path: "/private/dev/marketplace/plugins/app-builder",
+                      },
+                      marketplaceSource: {
+                        sourceType: "local",
+                        source: "/private/dev/marketplace",
+                      },
                     },
-                    marketplaceSource: {
-                      sourceType: "local",
-                      source: "/private/dev/marketplace",
-                    },
-                  },
-                ],
-              })
-            : "{}",
-          stderr: "",
-        };
-      },
-    });
-    expect(commands).toEqual([
-      {
-        args: ["plugin", "remove", "app-builder@autograph-dev", "--json"],
-        allowFailure: true,
-      },
-      {
-        args: ["plugin", "marketplace", "remove", "autograph-dev", "--json"],
-        allowFailure: true,
-      },
-      {
-        args: [
-          "plugin",
-          "marketplace",
-          "add",
-          "/private/dev/marketplace",
-          "--json",
-        ],
-        allowFailure: false,
-      },
-      {
-        args: ["plugin", "add", "app-builder@autograph-dev", "--json"],
-        allowFailure: false,
-      },
-      {
-        args: ["plugin", "list", "--marketplace", "autograph-dev", "--json"],
-        allowFailure: false,
-      },
-    ]);
+                  ],
+                })
+              : "{}",
+            stderr: "",
+          };
+        },
+      });
+      expect(commands).toEqual([
+        {
+          args: ["plugin", "remove", "app-builder@autograph-dev", "--json"],
+          allowFailure: true,
+        },
+        {
+          args: ["plugin", "marketplace", "remove", "autograph-dev", "--json"],
+          allowFailure: true,
+        },
+        {
+          args: [
+            "plugin",
+            "marketplace",
+            "add",
+            "/private/dev/marketplace",
+            "--json",
+          ],
+          allowFailure: false,
+        },
+        {
+          args: ["plugin", "add", "app-builder@autograph-dev", "--json"],
+          allowFailure: false,
+        },
+        {
+          args: ["plugin", "list", "--marketplace", "autograph-dev", "--json"],
+          allowFailure: false,
+        },
+      ]);
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
   });
 
   it("closes every publication, hosted, provider, and release capability", () => {
