@@ -19,7 +19,7 @@ import prepareWorkspace from "./prepare_workspace";
 
 export default defineTool({
   description:
-    "Create or revise the Browser prototype from React source composed only from current Arrusted public components and compositions. Export a default screen component from each screen entry. This automatically compiles the submitted source and actual Arrusted theme; it never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
+    "Create or revise the Browser prototype from React source composed only from current Arrusted public components and compositions. Export a default screen component from each screen entry. The renderer includes the actual Arrusted theme automatically: do not invent or import components/styles.css or components/tokens.css. It installs missing repository dependencies automatically when compilation requires them, and never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
   inputSchema: uiPreviewInputSchema,
   async execute(input, ctx) {
     validateUiPreview(input);
@@ -33,12 +33,10 @@ export default defineTool({
       throw new Error(
         "Prepare the Arrusted source before creating a UI preview.",
       );
-    if (
-      current.phase !== "prepared" &&
-      current.phase !== "ui_previewed" &&
-      current.phase !== "ui_accepted"
-    )
-      throw new Error("The current workflow cannot return to UI preview work.");
+    if (current.phase === "validation_pending")
+      throw new Error(
+        "Finish the running build check before revising the preview.",
+      );
     const prior = "uiPreview" in current ? current.uiPreview : undefined;
     if (
       prior !== undefined &&

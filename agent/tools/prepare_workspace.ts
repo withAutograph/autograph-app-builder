@@ -18,6 +18,7 @@ import {
   readPreparedSandboxWorkspaceRecord,
 } from "@/lib/repository/supported-template";
 import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
+import sourceStatus from "./source_status";
 
 export default defineTool({
   description:
@@ -27,6 +28,8 @@ export default defineTool({
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");
+    if (development && sourceWorkflowState.get().phase === "empty")
+      await sourceStatus.execute({}, ctx);
     const source = sourceWorkflowState.get();
     if (source.phase === "empty") throw new Error("No source was reviewed.");
     if (!development && source.githubSource !== undefined) {

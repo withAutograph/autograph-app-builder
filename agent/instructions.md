@@ -69,6 +69,10 @@ assertion. Edit and validate the private checkout silently. Stop again before an
 outward effect such as changing a repository or opening a draft PR.
 
 Use `record_ui_preview` for visual creation in both local and hosted execution.
+Read current public exports, selected component implementations, and relevant
+stories with `inspect_repository({ paths: [...] })` before using their APIs.
+This tool reads repository-relative files, including packages and documentation.
+Do not infer component props from another UI library.
 Compose route UI only from current Arrusted public components and compositions,
 using its actual token entrypoint. Inspect relevant exports, stories, and app
 consumers for context; do not substitute standalone HTML, approximate colors,

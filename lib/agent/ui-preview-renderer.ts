@@ -77,10 +77,30 @@ export async function renderUiPreview(
     });
   // The command contains only a fixed executable and a builder-generated hex
   // directory. Submitted source is file content, never shell interpolation.
-  const result = await sandbox.run({
-    command: `bun ${bundle.root}/render.mts`,
-    workingDirectory: "/workspace/repository",
-  });
+  const compile = () =>
+    sandbox.run({
+      command: `bun ${bundle.root}/render.mts`,
+      workingDirectory: "/workspace/repository",
+    });
+  let result = await compile();
+  if (
+    result.exitCode !== 0 &&
+    /could not resolve|cannot find (?:module|package)/iu.test(
+      `${result.stderr}\n${result.stdout}`,
+    )
+  ) {
+    const installation = await sandbox.run({
+      command: "bun install",
+      workingDirectory: "/workspace/repository",
+    });
+    if (installation.exitCode !== 0)
+      throw new Error(
+        installation.stderr ||
+          installation.stdout ||
+          "Dependency installation failed.",
+      );
+    result = await compile();
+  }
   if (result.exitCode !== 0)
     throw new Error(
       result.stderr || result.stdout || "The preview compiler failed.",
