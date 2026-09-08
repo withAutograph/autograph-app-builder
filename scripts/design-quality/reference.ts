@@ -298,15 +298,18 @@ function reliableExpressionType(
     (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter)
   )
     return false;
-  seen.add(type);
+  const nextSeen = new Set(seen);
+  nextSeen.add(type);
   if (type.isUnion() || type.isIntersection())
     return type.types.every((member) =>
-      reliableExpressionType(member, checker, depth + 1, seen),
+      reliableExpressionType(member, checker, depth + 1, nextSeen),
     );
   if (checker.isArrayType(type) || checker.isTupleType(type))
     return checker
       .getTypeArguments(type as ts.TypeReference)
-      .every((item) => reliableExpressionType(item, checker, depth + 1, seen));
+      .every((item) =>
+        reliableExpressionType(item, checker, depth + 1, nextSeen),
+      );
   if (type.getCallSignatures().length || type.getConstructSignatures().length)
     return false;
   if (!(type.flags & ts.TypeFlags.Object)) return true;
@@ -318,7 +321,7 @@ function reliableExpressionType(
         checker.getTypeOfSymbolAtLocation(property, declaration!),
         checker,
         depth + 1,
-        seen,
+        nextSeen,
       )
     );
   });

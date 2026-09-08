@@ -26,7 +26,7 @@ describe("readReference", () => {
       files: [
         {
           path: "app/page.tsx",
-          content: `import { DataTable, Loose } from "@autograph/compositions"; export function Page() { return <><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }] }} /><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }], unexpected: true }} /><Loose label={"untyped"} /></>; }`,
+          content: `import { DataTable, Loose } from "@autograph/compositions"; const compact = true; export function Page() { return <><DataTable spec={{ narrowLayout: compact ? "compact" : "full", columns: [{ id: "vendor" }] }} /><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }], unexpected: true }} /><Loose label={"untyped"} /></>; }`,
         },
       ],
     });
