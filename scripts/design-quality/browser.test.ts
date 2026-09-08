@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  arrustedSharedSource,
   classifyStyle,
   generatedSource,
   scenariosSchema,
@@ -48,6 +49,10 @@ describe("conservative design measurements", () => {
       ]),
     ).toBe(false);
     expect(generatedSource(undefined, ["apps/generated/app.css"])).toBe(false);
+    expect(
+      arrustedSharedSource("/workspace/packages/design-systems/theme.css"),
+    ).toBe(true);
+    expect(arrustedSharedSource("/workspace/apps/preview/app.css")).toBe(false);
   });
   it("escapes untrusted model/page copy in reports", () => {
     expect(escapeHtml('<script>"&')).toBe("&lt;script&gt;&quot;&amp;");

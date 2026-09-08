@@ -111,6 +111,13 @@ export const generatedSource = (
   });
 };
 
+// A stylesheet URL alone is not provenance. The only shared source family we
+// recognise in browser evidence is the checked-in Arrusted design-system tree.
+export const arrustedSharedSource = (path: string | undefined) =>
+  Boolean(
+    path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/),
+  );
+
 export async function measurePage(page: Page) {
   await page.addScriptTag({ content: axe.source });
   return page.evaluate(async () => {
@@ -457,7 +464,7 @@ export async function measureStyles(
           classification = "generated-override";
         if (
           !generated &&
-          (inheritedDeclaration || declarations.length > 0) &&
+          arrustedSharedSource(path) &&
           classification !== "semantic-token-reference" &&
           classification !== "matching-literal" &&
           classification !== "structural"
@@ -470,7 +477,7 @@ export async function measureStyles(
           classification = "unknown";
         const provenance: Observation["provenance"] = generated
           ? "generated"
-          : path || inheritedDeclaration
+          : arrustedSharedSource(path)
             ? "shared"
             : "unknown";
         const quad = model.content;
@@ -512,10 +519,13 @@ export async function measureStyles(
           dimension: "styling",
           verdict:
             provenance === "generated" &&
-            (classification === "semantic-token-reference" ||
-              classification === "matching-literal")
+            classification === "semantic-token-reference"
               ? "conforming"
-              : "unassessed",
+              : provenance === "generated" &&
+                  (classification === "matching-literal" ||
+                    classification === "generated-override")
+                ? "nonconforming"
+                : "unassessed",
           provenance,
           evidence: "browser",
           summary: `${property}: ${classification}`,
@@ -542,10 +552,7 @@ export async function measureStyles(
           ]),
         );
         const assessed = items.filter(
-          (item) =>
-            item.provenance === "generated" &&
-            (item.classification === "semantic-token-reference" ||
-              item.classification === "matching-literal"),
+          (item) => item.verdict !== "unassessed",
         ).length;
         return [
           category,
