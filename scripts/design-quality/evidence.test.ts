@@ -53,3 +53,12 @@ it("shows no fabricated score for absent evidence", () => {
     coveragePercent: 0,
   });
 });
+it("does not round sparse evidence down to zero coverage", () => {
+  const observations = [
+    row("known", "styling", "conforming"),
+    ...Array.from({ length: 299 }, (_, i) =>
+      row(`unknown-${i}`, "styling", "unassessed"),
+    ),
+  ];
+  expect(scoreAdherence(observations).coveragePercent).toBe(0.33);
+});

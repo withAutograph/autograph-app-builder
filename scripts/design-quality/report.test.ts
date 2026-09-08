@@ -50,4 +50,32 @@ describe("adherence report", () => {
     );
     expect(renderReport(base)).toContain("Historical report");
   });
+  it("shows candidate provenance without giving it adherence credit", () => {
+    const adherence = scoreAdherence([
+      {
+        id: "candidate",
+        dimension: "styling",
+        verdict: "unassessed",
+        provenance: "unknown",
+        evidence: "browser",
+        summary: "Requires review",
+        originCandidate: {
+          provenance: "generated",
+          reason: "May be shared <script>",
+          source: { path: "app.tsx", line: 4 },
+        },
+      },
+    ]);
+    const html = renderReport({
+      createdAt: "today",
+      source: {},
+      judge: {},
+      captures: [],
+      adherence,
+    });
+    expect(adherence.score).toBeNull();
+    expect(html).toContain("Possible generated source (unassessed): app.tsx:4");
+    expect(html).toContain("May be shared &lt;script&gt;");
+    expect(html).not.toContain("May be shared <script>");
+  });
 });
