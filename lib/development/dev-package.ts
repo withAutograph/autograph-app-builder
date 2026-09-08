@@ -274,6 +274,7 @@ export async function registerDevelopmentPackage(input: {
   );
   await runner(["plugin", "marketplace", "add", marketplaceRoot, "--json"], {});
   await runner(["plugin", "add", DEVELOPMENT_PLUGIN_SELECTOR, "--json"], {});
+  await disableGlobalDevelopmentPackage(codexHome);
   const listed = await runner(
     ["plugin", "list", "--marketplace", DEVELOPMENT_MARKETPLACE_NAME, "--json"],
     {},
@@ -307,9 +308,37 @@ export async function registerDevelopmentPackage(input: {
     installed.marketplaceSource.source !== marketplaceRoot
   )
     throw new Error(
-      `Codex did not report the exact enabled ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
     );
   return { selector: DEVELOPMENT_PLUGIN_SELECTOR, marketplaceRoot };
+}
+
+// `codex plugin add` writes this canonical table to the user config. Keep the
+// installed package available, but let the repository config enable it.
+async function disableGlobalDevelopmentPackage(codexHome: string) {
+  const configPath = join(codexHome, "config.toml");
+  const config = await readFile(configPath, "utf8");
+  let inPlugin = false;
+  let updated = false;
+  const scoped = config
+    .split("\n")
+    .map((line) => {
+      if (line.trimStart().startsWith("[")) {
+        inPlugin = line.trim() === `[plugins."${DEVELOPMENT_PLUGIN_SELECTOR}"]`;
+      }
+      if (inPlugin && /^\s*enabled\s*=\s*(true|false)\s*$/.test(line)) {
+        updated = true;
+        return "enabled = false";
+      }
+      return line;
+    })
+    .join("\n");
+  if (!updated) {
+    throw new Error(
+      "Codex did not write the development plugin enablement setting.",
+    );
+  }
+  await writeFile(configPath, scoped);
 }
 
 export function developmentLaunchEnvironment(input: {

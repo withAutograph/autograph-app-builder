@@ -32,7 +32,8 @@ Options:
 
 The command snapshots Arrusted, starts loopback /mcp, verifies exactly five
 autograph_* tools, and installs app-builder@autograph-dev in the active
-CODEX_HOME. Development mode cannot publish, deploy, or mutate providers.
+CODEX_HOME, disabled globally and enabled by this repository's .codex/config.toml.
+Development mode cannot publish, deploy, or mutate providers.
 EOF
     exit 0
     ;;

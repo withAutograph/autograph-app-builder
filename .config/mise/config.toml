@@ -3,7 +3,7 @@
 docker-cli = "29.4.0"
 gh = "2.98.0"
 "npm:microsandbox" = "0.5.10"
-"npm:@openai/codex" = "0.151.0"
+"npm:@openai/codex" = "0.153.4"
 node = "24.18.0"
 pnpm = "11.7.0"
 "npm:vercel" = "59.10.0"
