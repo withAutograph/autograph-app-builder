@@ -229,3 +229,42 @@ scan. The reviewer has not seen narrower desktop windows. Do not invent supplier
 data, a nonexistent compact-card prop, or a minimum-width requirement in response.
 Further changes should improve the actual workflow, not merely fill whitespace
 or chase a score. No automatic evaluator or repair loop has been introduced.
+
+## Incremental update: delivery context and wider evidence
+
+[The delivery-context report](stock-exceptions-delivery-context-201919952Z/README.md)
+remains **90/100** with the same model and rubric. It adds a fourth, optional
+desktop capture at 900×900 and a delivery-within-cover scenario. All **16 fixture
+interactions passed**, and all **20 screenshots** are saved. The extra window is
+an observation, not a minimum-width policy; the three default windows are unchanged.
+
+![Delivery context in the shorter desktop window](stock-exceptions-delivery-context-201919952Z/desktop-window-1.png)
+
+![Delivery fits current cover in the optional desktop window](stock-exceptions-delivery-context-201919952Z/desktop-custom-900x900-4.png)
+
+The example makes days of cover prominent, provides a scroll cue when the list
+actually overflows, and derives delivery guidance from the fixture's existing
+lead time and cover values. It does not invent supplier information. A supported
+detail-note item presents the guidance, and simulation remains separate from
+inventory state. These remain manual refinements of saved generated code, not a
+claim of improved model generation or a working supplier backend.
+
+The larger evidence set exposed actual accessibility problems: supplier notes
+produce a nested complementary landmark, and the supplier body in the 1024×768
+window scrolls without keyboard focus. No document-overflow or other layout
+measurement finding was reported, but that does not negate these axe findings.
+They remain in the report. The subjective reviewer also found lost list-heading
+context after selection, slight detail overflow, and dense advisory copy. These
+are the next concrete fixes—not reasons to reroll an unchanged screenshot set.
+
+Adherence remains **100, partial**: component **15/19**, API **34/46**, and styling
+**12/5892** assessed observations. Combined evidence coverage is **1.02%**. It
+decreases because the extra browser window adds unknown styling observations;
+this is not evidence that code quality regressed. Static JSX and prop evidence
+still do not prove browser styling provenance. The 5880 unknown browser
+observations receive no positive credit. Previous reports remain unchanged.
+
+The optional `--additional-desktop-size WIDTHxHEIGHT` evaluator flag and archive
+filename support are covered by eight focused tests. It does not change scoring,
+the palette, runtime generation, or any default capture size. Broad verification
+belongs to this increment's exact-head CI.
