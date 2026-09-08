@@ -1,209 +1,83 @@
----
-title: "App Builder consumption of the Arrusted template"
-created_at: 2026-08-31
-type: implementation-plan
-topic: arrusted-template-consumption
-status: active
----
+# App Builder consumption of Arrusted
 
-# App Builder consumption of the Arrusted template
+Autograph App Builder uses the changing Arrusted repository as its starter and
+reuses its public design system for both Browser previews and generated apps.
+Selecting the repository alone does not make a generated interface inherit its
+design: the route must actually render its components, compositions, tokens,
+and required providers.
 
-Every new App Builder application starts with a detached clone of the private
-`https://github.com/withAutograph/arrusted-development.git` at
-`refs/heads/main`. The source transport resolves that ref once, records the
-observed commit/tree, verifies the successful Arrusted `Template readiness`
-GitHub Check Run for that exact SHA, and runs the repository-owned planning,
-generation, and validation contract from that exact source. App Builder does
-not reconstruct a starter project from a generic internal template.
+## Source and execution
 
-## Clone boundary
+New apps use `withAutograph/arrusted-development`; existing-app work uses the
+selected repository. Local development uses the live checkout supplied to
+`mise run dev`. Vercel Sandbox is the execution backend. Its checkout is
+writable: dependencies, new files, prototypes, and application edits are normal.
 
-The canonical remote and ref are constants, never user input. The source
-transport mints one per-acquisition installation token through the existing
-Autograph GitHub App. Its only deployment configuration beyond the existing
-`GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` is
-`APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID`. It is never selected from a
-user’s publishing installation. The current deployment-owned installation may
-retain all-repositories access while the existing App supports publication;
-each reader token is explicitly minted for only the fixed
-`withAutograph/arrusted-development` repository ID and cannot access another
-repository through this reader path.
+Inspect repository documentation and run the actual commands. Source metadata
+is diagnostic; this document does not require readiness attestations, frozen
+commits, clean trees, receipt chains, or offline dependency inventories.
+Cache misses fall back to normal execution. Preserve user isolation and
+credential protection, and ask before outward effects.
 
-This deliberately accepts the existing App private key’s shared-registration
-blast radius. An all-repositories installation is weaker than the planned
-dedicated selected-repositories installation: possession of the App private key
-could mint a broader installation token outside this code path. The runtime
-reader token restriction is defense in depth, not a replacement for a dedicated
-reader App.
+## Choose a composition, not a lookalike
 
-The token request is constrained to `Contents: read` and `Checks: read`.
-App Builder validates that those capabilities are present and that every
-returned capability is read-only; an additional read-only permission does not
-invalidate an otherwise repository-scoped token. It also validates the
-installation’s live repository inventory before cloning. It uses the token only
-to validate that inventory, make the one direct workspace clone, and read Check
-Runs for the resolved SHA. The source transport writes it only to a temporary owner-only
-askpass credential file, removes the file on every success or failure path,
-and leaves Vercel Sandbox networking available after cloning. It disables prompts,
-inherited Git configuration, hooks, SSH/file protocols, and submodules, and
-refuses an origin, ref, tree, or clean-worktree mismatch. The token, reader
-installation ID, authorization header, and credential digest never appear in
-the receipt, Git remote/config, persisted sandbox files, or command output.
+Start with Arrusted's existing `docs/app-builder-ui-catalog.json` and its linked
+examples. Read only the relevant current APIs, stories, and app consumers.
+The catalog is guidance, not permission: missing or stale examples mean inspect
+current public exports and adapt to the renderer's actual errors.
 
-An existing repository remains an explicit allowlisted local source. It never
-falls through to the fresh-template clone path.
+- **Record review:** choose a supported selectable record/table composition and
+  detail panel. Use its selection and compact presentation props rather than
+  turning a collection of Buttons into a custom fixed-width grid.
+- **Forms:** use existing form/field compositions, supported labels, errors,
+  grouping, and action variants. Preserve a clear narrow-screen submit path.
+- **Overview/detail:** show the information needed to select the next action,
+  then reveal details. Do not add metrics or charts merely to fill the page.
 
-## Provenance and execution
+These are examples, not mandatory layouts. Choose by the actual product task.
+Wide comparative data can scroll intentionally; a record-review task may benefit
+from a compact presentation that keeps essential fields and actions together.
 
-New template clones produce source-receipt V4. The receipt binds the canonical
-repository, requested ref, source SHA/tree, adapter eligibility and contract
-digests, and a digest of the successful readiness Check Run's immutable
-metadata (ID, name, completion time, and conclusion). Before fixed target
-commands, the locked dependency closure is bootstrapped once under a fixed
-allowlist, keyed by source SHA and sandbox platform, made read-only, and
-without an App Builder-managed network-policy restriction. V3 receipts remain readable
-for sessions that began before clone provenance existed.
+## Component-only UI
 
-## Readiness admission
+Generated apps compose current public Arrusted components and compositions.
+They do not invent visual primitives, copy private components, replace tokens,
+or create a separate styling system. Route entries may bind data, state, event
+handlers, navigation, and supported component props. Ordinary layout glue is
+allowed; extensive overrides that reconstruct another control are not reuse.
 
-Arrusted CI runs `mise run repository:template-readiness -- --expected-sha <sha>`
-in its `Template readiness` job. It produces its own sanitized JSON attestation,
-while App Builder independently checks the completed successful Check Run through
-GitHub's commit Check Runs API using the reader token and records the metadata
-digest above. The Check Run is admission evidence only; it is not a control
-file, provider credential, or authorization for any App Builder provider
-mutation.
+When the catalog lacks a needed visual capability, use a supported alternative
+and record the reusable improvement for Arrusted. Do not introduce a runtime
+catalog gate or require a new shared release merely to produce a useful preview.
 
-A newly pushed Arrusted `main` commit is unavailable to new-app sessions until
-that exact commit's `Template readiness` job has completed successfully. The
-resolver stops before dependency bootstrap or target commands when the evidence
-is missing, pending, failed, malformed, or bound to another SHA/tree. This
-makes the Arrusted push and its CI proof an ordered deployment boundary rather
-than treating a default-branch update as readiness by itself.
+Use the target-owned theme, fonts, and required providers. If a shared component
+has a confirmed visual defect, fix it in Arrusted rather than compensating with
+generated overrides. A matching color literal is not evidence of token use;
+token use itself is not evidence of accessible contrast or a good layout.
 
-App Builder performs one fixed HTTPS detached clone directly into the
-session-owned `/workspace/repository`. That checkout resolves the ref, emits
-the closed source-inspection snapshot used for the V4 receipt, and becomes the
-prepared workspace after exact-SHA readiness admission. It verifies the
-remote, ref, SHA, tree, clean status, and submodule absence before recording
-the prepared-workspace manifest. Approval and preparation re-verify that same
-checkout; they do not fetch, clone, or reconstruct it. All fixed repository
-planning, generation, apply, and validation commands run from this detached
-workspace clone. It is never mutated by user work or published directly.
+## Preview to implementation
 
-Fresh-repository publication still requires its own approval and provider
-read-back. Its result is a new parentless `main` commit containing the reviewed
-generated workspace, not Arrusted history or an upstream remote.
+`record_ui_preview` compiles actual route TSX against the prepared repository.
+Browser HTML is compiled transport, not a separately authored mock interface.
+Keep the preview product-facing and fixture-backed. Internal recording and
+planning happen without setup or acceptance questions.
 
-## Possible improvement: visual inheritance
+The first normal prompt is **Build this app?** Once approved, carry the reviewed
+route composition, responsive decisions, theme, and providers into the app;
+replace fixture bindings with the intended application behavior instead of
+redesigning from the prose brief. The preview is not proof of a built backend.
+Repository publication, deployment, and other outward effects still need their
+own approval.
 
-The repository starter and the visual prototype are separate surfaces. App
-Builder currently consumes the complete Arrusted repository for eligibility,
-planning, generation, apply, and validation, but the first Browser preview is
-a self-contained HTML design artifact. It is not the rendered output of the
-generated Arrusted application and must not be presented as evidence that the
-production application already inherits Arrusted's visual system.
+## Advisory comparison
 
-The Arrusted app generator also provides a deliberately minimal Next.js
-workspace today. Its initial page contains only the generated application
-title, and its package manifest does not automatically depend on the Arrusted
-design-system package or install a shared application shell. Builder guidance
-directs the agent to inspect current semantic tokens, Storybook stories,
-package exports, and working applications, but that guidance alone does not
-structurally guarantee visual consistency. A visually unrelated prototype is
-therefore possible even when source selection and repository generation are
-correct.
+Use [on-demand design evaluation](design-quality-evals.md) after an intentional
+comparison run, not on save or before every preview. Compare screenshots,
+interaction behavior, and evidence coverage as well as subjective findings.
+No minimum score, automatic polish loop, or catalog eligibility check is part
+of generation. Keep reports under `docs/reports/design-quality/` when sharing
+them with teammates.
 
-The component-backed preview correction supersedes the earlier proposal to
-retain a disposable standalone HTML prototype. Local and hosted creation use
-`record_ui_preview` with actual current Arrusted public components/compositions
-and the target-owned semantic token entrypoint. A green functional walkthrough
-or an approximately matching palette does not prove visual inheritance. The
-remaining Arrusted starter improvement should:
-
-1. define an Arrusted-owned route-app starter surface containing the supported
-   shell, semantic tokens, and public component dependencies;
-2. update the canonical Arrusted generator to consume that surface without
-   copying private app-specific workflow or stale token values;
-3. require planning to name the current target-owned tokens, exports, stories,
-   or reference application patterns used by the generated UI;
-4. render the applied generated app in the integrated Browser using the same
-   public components and semantic token entrypoint as the initial preview; and
-5. add focused checks proving the generated app uses the declared public shell
-   and design-system entrypoints rather than merely approximating their look.
-
-Acceptance should distinguish three independent facts: the full Arrusted tree
-was selected, the repository-owned generator and validation commands ran, and
-the resulting application uses the supported Arrusted visual foundation. None
-of those facts should be inferred from either of the others.
-
-The preview-path correction is approved App Builder work. Changes to the
-Arrusted generator or its design-system API remain separate follow-up work.
-
-## Component-only application UI
-
-App Builder MUST construct application
-interfaces exclusively by composing components that already exist in the exact
-Arrusted source selected for the build. The builder must not design, generate,
-copy, fork, or restyle a custom UI component to fill a catalog gap. It must not
-treat a familiar component name, a screenshot, generated JSX, or a component
-available from an unrelated package as proof that Arrusted provides it.
-
-An eligible component must be verifiable from the selected Arrusted tree and
-must be exposed through a supported public package entrypoint or an explicitly
-documented application-composition surface. Existing private implementation
-files are not a reusable API. The builder may supply product-specific content,
-data bindings, routes, event handlers, permissions, and configuration through
-the public component contracts, but it must not create new visual primitives,
-component-local styling systems, replacement design tokens, or copied variants
-inside the generated application.
-
-The composition-only workflow must:
-
-1. inventory current public component exports, supported compositions,
-   Storybook stories, required providers, and semantic tokens from the exact
-   selected Arrusted tree before producing the interface plan;
-2. express every visible interface region as a reference to one of those
-   verified components or compositions, including its public import path and
-   supported variant or properties;
-3. generate route and data-wiring code that imports the existing components
-   directly instead of emitting new component implementations;
-4. render the early Browser prototype with the actual public components and
-   target-owned token entrypoint, not a lookalike HTML representation;
-5. adapt a requested interaction to the closest available composition when it
-   cannot be expressed directly, offer a product-level alternative if needed, and
-   record any genuinely missing reusable component as separate Arrusted work;
-   and
-6. keep the missing-component work outside the generated app so a one-off local
-   component cannot silently become the workaround.
-
-Focused acceptance checks should prove that every application UI import resolves
-to an approved Arrusted public entrypoint, every declared component exists at
-the selected source tree, and the generated app adds no local React component
-definitions or app-owned visual CSS beyond explicitly allowlisted route-layout
-glue. The Browser preview and applied application should share the same
-component-composition manifest so the prototype cannot promise an interface the
-generated app implements differently.
-
-This policy intentionally favors consistency and reuse over unconstrained UI
-generation. If the existing Arrusted catalog cannot deliver a material product
-requirement, App Builder should explain the visible limitation and offer a
-supported alternative; it must not invent a component. Adding a reusable
-component to Arrusted is a separately reviewed prerequisite, after which a new
-build may consume it from the updated exact source.
-
-This is the current App Builder design policy, not permission to expand the
-component catalog or change the Arrusted generator. Preparation, rendering,
-internal design recording, and planning proceed automatically. The first normal
-prompt remains **Build this app?**; outward effects require separate approval.
-
-## Validation
-
-The source boundary is tested for required read-only reader permissions and
-exact repository scope, rejection of unavailable, write-capable, or mismatched
-reader tokens, canonical origin/ref resolution, detached checkout state,
-immutable V4 receipt validation, clone drift rejection, and token cleanup on
-success and failure. Explicit existing repository behavior remains unchanged. Local and
-hosted runtime paths use the same clone provenance contract and fail closed
-before bootstrap when reader configuration, token minting, cloning, or readiness
-evidence is unavailable.
+The initial comparison is a fresh Stock Exceptions preview and a contrasting
+form-oriented preview. Check meaningful selection, narrow-screen actions, and
+confirmed shared contrast fixes. Preserve different layouts for different jobs.
