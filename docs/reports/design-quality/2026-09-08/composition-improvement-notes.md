@@ -441,3 +441,70 @@ the approved desktop-only scope for future evaluations. It retains the same
 inventory workflow, simulation, and plan request. Any future report using that
 brief must disclose the input correction rather than presenting a score change
 as solely a visual improvement. The scoring rubric and thresholds are unchanged.
+
+## Incremental update: selected context and precise simulation language
+
+[The selected-context report](stock-exceptions-selected-context-211854599Z/README.md)
+records **85/100**, with hierarchy and typography now **4/4**, and layout,
+desktop responsiveness, and product clarity **3/4**. All **16 fixture
+interactions** pass across **20 screenshots**, with no captured axe or layout
+findings. The overall score remains unchanged and the goal is not complete.
+
+![Urgency and cover remain visible in the supplier view](stock-exceptions-selected-context-211854599Z/desktop-window-1.png)
+
+The selected detail header now retains urgency and current cover across both
+views. Critical pill labels use the public `Typography` body-strong variant,
+while warning labels use body. The `StatusPill` label slot supplies that shared
+component content without generated color CSS or palette changes. The opening
+copy now says “review and simulate replenishment.”
+
+This is the first report using the corrected desktop-only brief linked above.
+The rubric and model remain unchanged. It must not be presented as a controlled
+visual-only comparison with earlier reports whose brief asked for phone support.
+The original reports and their judge findings remain unchanged.
+
+Adherence is **100, partial**, with **28/32** component, **48/56** API, and
+**18/5826** styling observations assessed; combined coverage is **1.59%**.
+Eight dynamic API observations and 5808 browser styling observations remain
+unknown rather than being awarded positive evidence.
+
+The judge identifies two actionable issues: standard selection cards consume
+substantial vertical space for six records, and the mock order's assumed
+delivery time is not stated beside the action. A reusable compact density option
+is being developed in Arrusted, rather than adding generated primitive overrides.
+Delivery assumptions are a product-copy change. Neither improvement is claimed
+as present in this archived screenshot set.
+
+## Incremental update: shared compact choices and delivery assumptions
+
+[The compact-delivery report](stock-exceptions-compact-delivery-213406461Z/README.md)
+records **85/100** with **20/20 fixture interactions** across **24 screenshots**.
+Layout and typography score 4/4; hierarchy, desktop responsiveness, and product
+clarity score 3/4. No captured axe violations or measured layout findings were
+reported. These observations are not a full accessibility or backend proof.
+
+![Compact choices and the delivery assumption beside the action](stock-exceptions-compact-delivery-213406461Z/desktop-window-5.png)
+
+The fixture uses Arrusted's optional `DecisionOptionCard density="compact"`
+capability from [PR #1309](https://github.com/withAutograph/arrusted-development/pull/1309),
+which is still a candidate rather than a claimed landed dependency. Shared
+spacing tokens change; palette, typography, and selection semantics do not.
+The delivery assumption and its stock-cover consequence now appear beside the
+simulation action in both tabs. At 1024×768, the unfiltered document height is
+802px rather than 850px in the selected-context capture. Ordinary vertical page
+scrolling remains acceptable; this comparison does not introduce a viewport-fit
+gate or a minimum-width requirement.
+
+Adherence remains **100, partial**: 28/31 component, 49/57 API, and 17/5825
+styling observations are assessed. Combined coverage is **1.59%** (94/5913).
+The 5808 browser styling observations still lack sufficient source attribution.
+They remain unknown; visual resemblance, matching values, or class names are
+not promoted to evidence of generated-versus-inherited ownership.
+
+The judge's actionable product finding is that the Supplier details tab should
+retain a suggested-order summary near its action. It also suggests stronger
+non-color urgency hierarchy. These are future refinements, not completed fixes.
+The model, rubric, and desktop-only brief are unchanged from selected-context;
+one delivery-assumption scenario was added. Historical reports are preserved.
+This is a manually refined, component-backed fixture, not proof that every new
+generation now produces the same quality. The 100-point design goal is not met.
