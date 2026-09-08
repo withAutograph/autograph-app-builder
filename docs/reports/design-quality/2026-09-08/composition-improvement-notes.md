@@ -508,3 +508,38 @@ The model, rubric, and desktop-only brief are unchanged from selected-context;
 one delivery-assumption scenario was added. Historical reports are preserved.
 This is a manually refined, component-backed fixture, not proof that every new
 generation now produces the same quality. The 100-point design goal is not met.
+
+## Incremental update: persistent decision context
+
+[The action-context report](stock-exceptions-action-context-214152809Z/README.md)
+records **90/100**, with hierarchy, typography, and product clarity at **4/4**;
+layout and desktop responsiveness remain **3/4**. All **20 fixture interactions**
+pass across **24 screenshots**, with no captured axe or layout findings.
+
+![The supplier view retains the quantity and pack basis](stock-exceptions-action-context-214152809Z/desktop-window-1.png)
+
+The suggested quantity and pack basis now remain beside the action in both
+detail views. Urgency groups show their cover range and use existing typography
+variants rather than palette changes. These are product-context refinements,
+not new scoring rules or required layouts for other products.
+
+This capture replaces the optional 900px desktop sample with a **700px resized
+desktop window**, alongside the existing 1024px, 1440px, and 1920px captures.
+It is evidence of resizing, not phone/tablet acceptance or a minimum-width gate.
+The new state exposes a real navigation cost: the selected detail appears after
+the full list when the layout stacks. That remains an open improvement in this
+archived version. The changed capture set prevents a controlled score-only
+comparison; the same rubric, model, and desktop brief were used once.
+
+Adherence is **100, partial**, with **31/34** component, **53/61** API, and
+**18/5793** styling observations assessed (**102/5888 = 1.73%** combined coverage).
+The denominator changed with the fixture and capture set; this is not evidence
+that the evaluator learned to attribute previously unknown browser styles.
+
+A focused attribution review found no CSS source maps in the current bundled
+preview. Separate literal-over-token stylesheet and inline-style fixtures both
+remain unassessed rather than receiving semantic-token credit. Existing unknown
+classifications therefore remain intact. Exporting authored-CSS source maps
+could help future CSS-backed previews, but would not by itself prove ownership
+of Tailwind utilities assembled by shared components. No runtime instrumentation
+or scoring relaxation is added here.

@@ -100,6 +100,13 @@ Keep persistent record state separate from action outcomes: an order simulation
 does not change an inventory exception's severity. Present the result in its
 own message or action state instead of replacing the severity indicator.
 
+Keep the information needed for a decision adjacent to its action across detail
+views. For example, a suggested quantity and its pack basis should remain visible
+when the user switches from stock to supplier information. Explain assumptions
+and visible consequences in product language. Where urgency matters, use
+supported typography variants and meaningful group summaries; do not change
+the palette or invent a replacement status control to chase an advisory score.
+
 The refined card example uses the existing `StatusPill` neutral tone for readable
 severity text, with urgency still explicit in the label and lowest-cover sort.
 This trades colored urgency cues for readable text without changing the palette
