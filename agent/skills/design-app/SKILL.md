@@ -10,7 +10,7 @@ decide what should be built. The prepared Arrusted source is the design
 authority. Bounded overlay source is the authored design; renderer-produced
 Browser assets are transport only. Keep the Browser preview as pure product UI.
 
-## Minimum viable UI gate
+## Minimum viable UI
 
 Require a clear job to be done, then infer a reversible interface pattern and
 show the smallest useful workflow early. Do not block the first UI on a full
@@ -30,14 +30,18 @@ evidence in this order:
 
 A story proves a supported state, not where the element belongs in a product.
 Prefer the cheapest public composition that makes the user's decision visible.
-Do not create a local workflow component until the catalog and relevant
-consumers prove a capability gap. Never copy private components, recreate a
-composition under a local name, define replacement tokens, or introduce a
-second styling system.
+Compose the interface only from existing public Arrusted components and
+compositions. Do not create local workflow components, custom controls, copied
+private components, replacement tokens, or a second styling system. A catalog
+gap is a reason to adapt the design using available components, not permission
+to invent one. Offer a product-level alternative if the gap changes what the
+user can accomplish. Import the current target-owned token entrypoint directly;
+do not approximate the theme with hand-authored colors.
 
 ## Source and manifest contract
 
-Call `record_ui_preview` with bounded React UI source, routes, catalog gaps, and
+In local and hosted execution, call `record_ui_preview` with React route wiring,
+routes, catalog gaps, and
 one synchronized manifest. The manifest must inventory:
 
 - every screen and its source entry;
@@ -48,13 +52,11 @@ one synchronized manifest. The manifest must inventory:
 - unresolved questions that could alter the visible experience; and
 - the future production meaning of visible elements.
 
-Every local file under `src/components/` needs a capability-gap reason, the
-inventoried public primitives it composes, and the semantic Arrusted tokens it
-uses. Local workflow components may arrange product-specific behavior, but may
-not introduce raw replacement controls or reusable design-system APIs. Preserve
-accepted decisions across revisions; update source, fixtures, manifest, and
-production meaning together. Their combined bytes define the immutable UI
-revision.
+Do not add local component implementations under `src/components/` or elsewhere.
+Route entries may wire fixtures, event handlers, and state through the existing
+components' public APIs. Preserve stated decisions across revisions and update
+source, fixtures, manifest, and production meaning together. Never substitute a
+standalone HTML generator for this rendered React preview.
 
 ## Rendering policy
 
@@ -86,18 +88,19 @@ Before presenting a material revision, verify:
 
 ## Review and finalization
 
-Show the UI early and ask the user what feels wrong, missing, unnecessary, or
-unlike their work. Anchor questions to visible choices. Revise only the
-disposable overlay during review and reuse its prepared Arrusted source,
-sandbox, and dependency closure.
+Show the UI early and continue internal design recording and planning from the
+brief and safe revisable defaults. Use `references/app-spec.md` to describe the
+intended behavior. Do not ask for formal UI finalization, artifact acceptance,
+or planning approval. Ask a product question only when no safe revisable default
+can resolve a material ambiguity.
 
-Stay in `ui_previewed` after each revision. Praise such as "looks good" may
-prompt an offer to finalize functionality, but does not authorize it. Only an
-explicit request to finalize functionality accepts the exact current revision.
-Then use `references/app-spec.md` to settle production behavior and enter the
-existing planning flow. Any later UI revision invalidates acceptance and all
-downstream plans. Legacy HTML sessions remain readable, but must be re-rendered
-through this component-backed path before finalization.
+Once the Browser prototype and implementation plan are ready, the first normal
+prompt is **Build this app?**. Approval authorizes editing and validating the
+private App Builder checkout only. Denial preserves the preview for refinement;
+revisions update the plan silently. Publication and other outward effects need
+their own later effect-based approval. Reuse the prepared checkout while
+refining the design, and keep the applied interface on the same public Arrusted
+components and token entrypoint as the preview.
 
 ## References
 
@@ -108,8 +111,8 @@ References are bundled files, not skills. Never pass a reference path to
 - `design-app` and `references/questions.md` before asking discovery questions;
 - `design-app` and `references/target-repository-routing.md` before inspecting
   prepared Arrusted source; and
-- `design-app` and `references/app-spec.md` only after explicit UI finalization
-  or when binding the accepted revision to production behavior.
+- `design-app` and `references/app-spec.md` when deriving the implementation
+  plan from the current preview and product brief, without a finalization prompt.
 
 ## Product-facing conversation
 

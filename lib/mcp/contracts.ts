@@ -149,10 +149,11 @@ export const publicPrototypeSchema = z
     content: z
       .string()
       .min(1)
-      .max(262_144)
+      .max(8 * 1024 * 1024)
       .refine(
-        (content) => new TextEncoder().encode(content).byteLength <= 262_144,
-        "Prototype HTML must be at most 262144 bytes.",
+        (content) =>
+          new TextEncoder().encode(content).byteLength <= 8 * 1024 * 1024,
+        "Prototype HTML must be at most 8 MiB.",
       ),
     digest: sha256DigestSchema,
     revision: sha256DigestSchema,

@@ -2,28 +2,31 @@ import { defineTool } from "eve/tools";
 import { createHash } from "node:crypto";
 
 import {
-  fallbackUiPreviewHtml,
   uiPreviewInputSchema,
   uiPreviewSourceDigest,
   validateUiPreview,
 } from "@/lib/agent/ui-preview";
+import { renderUiPreview } from "@/lib/agent/ui-preview-renderer";
+import { recordPrototypeArtifactRevision } from "@/lib/agent/prototype-artifacts";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   assertUpstreamMutationAllowed,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-
-const localDevelopment =
-  process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+import sourceStatus from "./source_status";
+import prepareWorkspace from "./prepare_workspace";
 
 export default defineTool({
-  description: localDevelopment
-    ? "Diagnostic UI-preview operation. Do not use it for a normal local create or iteration walkthrough; use record_prototype_bundle, which creates the Browser prototype and validated implementation plan in one operation."
-    : "Create or revise a fixture-backed UI preview from React source composed with the prepared Arrusted component catalog. The synchronized internal manifest inventories screens, public components and compositions, fixtures, decisions, assumptions, visible questions, and production meaning. This writes only builder-owned preview state and keeps Browser transport product-only. It must not plan, scaffold, validate, or implement backend behavior.",
+  description:
+    "Create or revise the Browser prototype from React source composed only from current Arrusted public components and compositions. Export a default screen component from each screen entry. This automatically compiles the submitted source and actual Arrusted theme; it never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
   inputSchema: uiPreviewInputSchema,
   async execute(input, ctx) {
     validateUiPreview(input);
+    if (appBuilderWorkflowState.get().phase === "empty") {
+      await sourceStatus.execute({}, ctx);
+      await prepareWorkspace.execute({}, ctx);
+    }
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "UI preview recording");
     if (current.phase === "empty")
@@ -45,7 +48,15 @@ export default defineTool({
       throw new Error("The UI preview revision is stale.");
     const sourceDigest = uiPreviewSourceDigest(input);
     const revision = sourceDigest;
-    const previewHtml = fallbackUiPreviewHtml(input);
+    const previewHtml = await renderUiPreview(input, await ctx.getSandbox());
+    const recorded = recordPrototypeArtifactRevision({
+      artifacts: current.artifacts,
+      path: `prototype/${input.appId}/index.html`,
+      mediaType: "text/html",
+      content: previewHtml,
+      sessionId: ctx.session.id,
+      callId: ctx.callId,
+    });
     const uiPreview = {
       appId: input.appId,
       revision,
@@ -76,7 +87,7 @@ export default defineTool({
         ...(current.githubSource === undefined
           ? {}
           : { githubSource: current.githubSource }),
-        artifacts: current.artifacts,
+        artifacts: recorded.artifacts,
         uiPreview,
       }),
     });

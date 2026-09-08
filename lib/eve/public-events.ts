@@ -44,7 +44,7 @@ const unavailableConfirmationMessage =
   "I couldn't verify this action, so it was not run.";
 const unavailableContinuationMessage =
   "I couldn't finish preparing your app. Your progress is saved, so you can try again.";
-const maximumPrototypeBytes = 262_144;
+const maximumPrototypeBytes = 8 * 1024 * 1024;
 const prototypePathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -74,14 +74,6 @@ const prototypeResultSchema = z
     invalidated: z.boolean().optional(),
   })
   .strict();
-const prototypeBundleResultSchema = z
-  .object({
-    prototype: publicPrototypeSchema,
-  })
-  .passthrough();
-const prototypeBundlePlanResultSchema = z
-  .object({ implementationPlan: publicImplementationPlanSchema })
-  .passthrough();
 const uiPreviewResultSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -206,17 +198,12 @@ export function latestInstalledImplementationPlan(
   events: readonly MessageStreamEvent[],
 ): PublicImplementationPlan | undefined {
   const requested = new Map<string, z.infer<typeof planRequestSchema>>();
-  const requestedBundles = new Set<string>();
   let latest: PublicImplementationPlan | undefined;
 
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") continue;
-        if (action.toolName === "record_prototype_bundle") {
-          requestedBundles.add(action.callId);
-          continue;
-        }
         if (action.toolName !== "plan_app_creation") {
           requested.delete(action.callId);
           continue;
@@ -236,14 +223,6 @@ export function latestInstalledImplementationPlan(
     )
       continue;
 
-    if (event.data.result.toolName === "record_prototype_bundle") {
-      if (!requestedBundles.has(event.data.result.callId)) continue;
-      const output = prototypeBundlePlanResultSchema.safeParse(
-        event.data.result.output,
-      );
-      if (output.success) latest = output.data.implementationPlan;
-      continue;
-    }
     if (event.data.result.toolName === "record_prototype_artifact") {
       const output = event.data.result.output;
       if (
@@ -280,17 +259,12 @@ export function latestInstalledPrototype(
   events: readonly MessageStreamEvent[],
 ): PublicPrototype | undefined {
   const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
-  const requestedBundles = new Set<string>();
   let latest: PublicPrototype | undefined;
 
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") continue;
-        if (action.toolName === "record_prototype_bundle") {
-          requestedBundles.add(action.callId);
-          continue;
-        }
         if (action.toolName !== "record_prototype_artifact") {
           requested.delete(action.callId);
           continue;
@@ -310,14 +284,6 @@ export function latestInstalledPrototype(
     )
       continue;
 
-    if (event.data.result.toolName === "record_prototype_bundle") {
-      if (!requestedBundles.has(event.data.result.callId)) continue;
-      const output = prototypeBundleResultSchema.safeParse(
-        event.data.result.output,
-      );
-      if (output.success) latest = output.data.prototype;
-      continue;
-    }
     if (event.data.result.toolName === "record_ui_preview") {
       const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
       if (

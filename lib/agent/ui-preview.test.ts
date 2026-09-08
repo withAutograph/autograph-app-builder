@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  fallbackUiPreviewHtml,
-  uiPreviewSourceDigest,
-  validateUiPreview,
-} from "./ui-preview";
+import { uiPreviewSourceDigest, validateUiPreview } from "./ui-preview";
+import { uiPreviewRendererFiles } from "./ui-preview-renderer";
 
 const preview = {
   appId: "review-inbox",
@@ -97,7 +94,7 @@ describe("component-backed UI preview policy", () => {
     ).toThrow(message);
   });
 
-  it("requires a catalog gap for a local workflow composition", () => {
+  it("rejects replacement workflow components", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
@@ -109,7 +106,7 @@ describe("component-backed UI preview policy", () => {
           },
         ],
       }),
-    ).toThrow(/catalog gap/u);
+    ).toThrow(/do not define replacement components/u);
   });
 
   it("requires every public component and composition import in the manifest", () => {
@@ -147,14 +144,15 @@ describe("component-backed UI preview policy", () => {
   });
 
   it("keeps internal context and draft behavior out of Browser transport", () => {
-    const html = fallbackUiPreviewHtml(preview);
+    const bundle = uiPreviewRendererFiles(preview);
+    const html = bundle.files.find(({ path }) => path === "entry.tsx")!.content;
     expect(html).not.toContain("Context");
     expect(html).not.toContain("Draft spec");
     expect(html).not.toContain("implementationNotes");
     expect(html).not.toContain("queue-first");
   });
 
-  it("requires local workflow components to document capability, primitives, and tokens", () => {
+  it("does not make documented catalog gaps a custom-component escape hatch", () => {
     const local = {
       path: "src/components/ReviewRail.tsx",
       content:
@@ -173,19 +171,19 @@ describe("component-backed UI preview policy", () => {
           },
         ],
       }),
-    ).not.toThrow();
+    ).toThrow(/existing Arrusted components/u);
   });
 
   it.each([
     [
       "decorative gradient",
       'export default function Page() { return <div className="bg-[linear-gradient(red,blue)]" />; }',
-      /decorative gradients/u,
+      /existing Arrusted components/u,
     ],
     [
       "raw replacement control",
       "export const ReviewRail = () => <button>Review</button>;",
-      /public Arrusted primitives/u,
+      /existing Arrusted components/u,
     ],
   ])("rejects %s in component-backed previews", (_name, content, message) => {
     expect(() =>
