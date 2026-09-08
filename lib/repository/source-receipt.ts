@@ -399,6 +399,13 @@ export function parseSourceReceipt(value: unknown): SourceReceipt {
   return { ...parseSourceReceiptEvidence(evidenceInput), sourcePath };
 }
 
+export function sourceIdentityDigest(
+  sourceSha: string,
+  sourceTree: string,
+): string {
+  return sha256(JSON.stringify({ sourceSha, sourceTree }));
+}
+
 export async function inspectSourceReceipt(
   sourceKind: SourceKind,
   path: string,
@@ -409,7 +416,7 @@ export async function inspectSourceReceipt(
     ["rev-parse", `${sourceSha}^{tree}`],
     "utf8",
   ).trim();
-  const observedDigest = sha256(JSON.stringify({ sourceSha, sourceTree }));
+  const observedDigest = sourceIdentityDigest(sourceSha, sourceTree);
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
     sourceKind,
