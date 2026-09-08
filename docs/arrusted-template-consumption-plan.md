@@ -91,8 +91,13 @@ few supporting values matter more than column comparisons, compose those cards
 inside a labeled radio group. Use `name`, `value`, `selected`, and `onSelect` for
 native selection, `description` for context, and `tag` with the public
 `StatusPill` for severity. The shared card owns its visual treatment; no custom
-card, badge, or density override is needed. Its standard spacing takes more
-vertical room than a table, so inspect the actual result. Keep a table when
+card, badge, or generated density override is needed. Arrusted's optional
+`density="compact"` uses shared spacing tokens; `"comfortable"` remains the
+default. Choose the supported variant for the information density rather than
+overriding primitive padding. This capability landed in
+[Arrusted PR #1309](https://github.com/withAutograph/arrusted-development/pull/1309).
+Cards can still take more vertical room than a table, so inspect the actual
+result. Keep a table when
 cross-record column comparison is the user's main task. These are alternatives,
 not a mandatory layout.
 
