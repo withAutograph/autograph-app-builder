@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -75,7 +75,9 @@ export function createSupportedRepositoryFixture(): string {
       recursive: true,
       mode: 0o700,
     });
-  const root = mkdtempSync(join(tmpdir(), "app-builder-eval-repository-"));
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "app-builder-eval-repository-")),
+  );
   const files: Record<string, string> = {
     ".config/mise/config.toml": [
       '[tasks."create:app"]',

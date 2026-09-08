@@ -28,7 +28,6 @@ import planAppCreation from "./plan_app_creation";
  * it again once the accepted design has already produced a proposal.
  */
 async function planAcceptedAppSpec(
-  digest: string,
   ctx: Parameters<typeof planAppCreation.execute>[1],
   existingAppChanges?: { path: string; content: string }[],
 ) {
@@ -46,7 +45,6 @@ async function planAcceptedAppSpec(
     plan: async () => {
       await planAppCreation.execute(
         {
-          expectedAppSpecDigest: digest,
           ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
         },
         ctx,
@@ -129,11 +127,7 @@ export default defineTool({
       current.appSpec.digest === accepted.digest &&
       current.appSpec.appId === accepted.appId
     ) {
-      await planAcceptedAppSpec(
-        current.appSpec.digest,
-        ctx,
-        existingAppChanges,
-      );
+      await planAcceptedAppSpec(ctx, existingAppChanges);
       return { ...current.appSpec, reused: true };
     }
     updateExactWorkflow({
@@ -154,7 +148,7 @@ export default defineTool({
         };
       },
     });
-    await planAcceptedAppSpec(accepted.digest, ctx, existingAppChanges);
+    await planAcceptedAppSpec(ctx, existingAppChanges);
     return { ...accepted, reused: false };
   },
 });

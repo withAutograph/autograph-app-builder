@@ -204,7 +204,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    const source = inspection.output as { digest?: string } | undefined;
     const preparation = toolResults.find(
       ({ name }) => name === "prepare_workspace",
     );
@@ -213,7 +212,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "prepare_workspace",
-            input: { expectedSourceReceiptDigest: source?.digest },
+            input: {},
           },
         ],
       };
@@ -273,7 +272,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "prepare_workspace",
-            input: { expectedSourceReceiptDigest: source.digest },
+            input: {},
           },
         ],
       };
@@ -408,7 +407,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: { expectedAppSpecDigest: accepted.digest },
+            input: {},
           },
         ],
       };
@@ -593,11 +592,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return "The existing Vendor application is ready for a bounded product iteration.";
   }
   if (message.includes("retry target planning")) {
-    const stale = message.includes("stale");
     const planResults = toolResults.filter(
       ({ name }) => name === "plan_app_creation",
     );
-    const requiredResults = stale ? 3 : 2;
+    const requiredResults = 2;
     const statusResult = [...toolResults]
       .reverse()
       .find(({ name }) => name === "workspace_status");
@@ -617,25 +615,20 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: {
-              expectedAppSpecDigest: stale
-                ? "0".repeat(64)
-                : status.appSpec.digest,
-            },
+            input: {},
           },
         ],
       };
     if (planResult === undefined)
       return "The target-planning retry result is unavailable.";
     if (planResult.isError)
-      return "The stale target-planning retry was rejected without changing its durable receipt.";
+      return "The target-planning retry failed; inspect its actual error.";
     const output = planResult.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
       : "The target-planning retry did not reuse its durable receipt.";
   }
   if (message.includes("prepare offline target dependencies")) {
-    const stale = message.includes("stale appspec digest");
     const lostResponse = message.includes("lost response");
     const statusResult = [...toolResults]
       .reverse()
@@ -653,11 +646,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
     if (status?.phase === "planned") {
-      if (stale)
-        return "Stale offline dependency preparation was rejected; the completed product plan was preserved.";
       return lostResponse
         ? "The lost-response retry reused the exact durable dependency-preparation receipt."
-        : "The target-bound offline dependency closure is already available in builder-owned planning metadata.";
+        : "Checkout-backed dependency metadata is already recorded for planning.";
     }
     if (
       status?.phase !== "app_spec_accepted" &&
@@ -669,17 +660,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const preparations = toolResults.filter(
       ({ name }) => name === "prepare_target_dependencies",
     );
-    const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
+    const requiredResults = lostResponse ? 2 : 1;
     if (preparations.length < requiredResults)
       return {
         toolCalls: [
           {
             name: "prepare_target_dependencies",
-            input: {
-              expectedAppSpecDigest: stale
-                ? "0".repeat(64)
-                : status.appSpec.digest,
-            },
+            input: {},
           },
         ],
       };
@@ -687,13 +674,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (preparation === undefined)
       return "The dependency-preparation result is unavailable.";
     if (preparation.isError)
-      return stale
-        ? "Stale offline dependency preparation was rejected; the exact durable receipt was preserved."
-        : "Offline dependency preparation was canceled or rejected; accepted AppSpec state was preserved.";
+      return "Dependency setup failed; inspect its actual error.";
     const output = preparation.output as { reused?: boolean } | undefined;
     return output?.reused === true
-      ? "The lost-response retry reused the exact durable dependency-preparation receipt after re-verifying the cache."
-      : "The approved target-bound offline dependency closure was verified and materialized only in builder-owned planning metadata; request target planning separately.";
+      ? "The lost-response retry reused the exact durable dependency-preparation receipt."
+      : "Checkout-backed dependency metadata was recorded for planning.";
   }
   if (message.includes("run target identity and planning")) {
     const statusResult = [...toolResults]
@@ -738,7 +723,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             name: "plan_app_creation",
             input: {
-              expectedAppSpecDigest: status.appSpec.digest,
               ...(existingAppChanges === undefined ||
               existingAppChanges.length === 0
                 ? {}
@@ -988,24 +972,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return `The completed app changes are ready for review across ${String(output?.changes?.length ?? 0)} files.`;
     }
     if (accepted.length < requiredAccepts) {
-      const output = proposal.output as
-        | {
-            digest?: string;
-            approvedPaths?: readonly string[];
-            changes?: readonly unknown[];
-          }
-        | undefined;
       return {
         toolCalls: [
           {
             name: "accept_change_set",
-            input: {
-              changeSet: {
-                digest: stale ? "0".repeat(64) : output?.digest,
-                approvedPaths: output?.approvedPaths,
-                changes: output?.changes,
-              },
-            },
+            input: {},
           },
         ],
       };
@@ -1393,17 +1364,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (proposal.isError || proposal.output === undefined) {
       if (message.includes("dirty overlap"))
         return "Local publication preconditions were rejected before approval or destination mutation.";
-      return {
-        toolCalls: [
-          {
-            name: "local_publication_status",
-            input: {
-              destinationPath,
-              expectedReviewDigest: reviewDigest,
-            },
-          },
-        ],
-      };
+      return "Local publication could not be prepared; inspect the tool's actual error before retrying.";
     }
     const publicationState = proposal.output as {
       status?: string;
@@ -1735,10 +1696,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
               appId,
               expectedArtifactDigest: artifact.digest,
               expectedArtifactRevision: artifact.revision,
-              expectedSourceSha: workspace.sourceSha,
-              expectedSourceTree: workspace.sourceTree,
-              expectedEligibilityDigest: workspace.eligibilityDigest,
-              expectedWorkspaceDigest: workspace.workspaceDigest,
             },
           },
         ],
@@ -1827,9 +1784,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "prepare_workspace",
-            input: {
-              expectedSourceReceiptDigest: inspected.digest,
-            },
+            input: {},
           },
         ],
       };

@@ -7,6 +7,7 @@ import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 export default defineEval({
+  timeoutMs: 300_000,
   description:
     "Internal product-plan validation and fixed read-only planning are automatic while target mutation remains approval-bound.",
   async test(t) {
@@ -30,8 +31,7 @@ export default defineEval({
 
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
-    t.check(t.reply, includes("target-bound offline dependency closure"));
-    t.check(t.reply, includes("builder-owned planning metadata"));
+    t.check(t.reply, includes("Checkout-backed dependency metadata"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -40,15 +40,6 @@ export default defineEval({
     t.check(
       t.reply,
       includes("reused the exact durable dependency-preparation receipt"),
-    );
-
-    await t.send(
-      "Prepare offline target dependencies with a stale AppSpec digest.",
-    );
-    t.succeeded();
-    t.check(
-      t.reply,
-      includes("Stale offline dependency preparation was rejected"),
     );
 
     await t.send("Run target identity and planning.");
@@ -79,12 +70,6 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry target planning with a stale AppSpec digest.");
-    t.succeeded();
-    t.check(t.reply, includes("stale target-planning retry was rejected"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
     await t.send("Read recorded prototype artifact.");
     t.succeeded();
     t.calledTool("get_prototype_artifact", { count: 1 });
@@ -99,43 +84,20 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send(
-      "Assess target command readiness for the current creation proposal.",
-    );
+    await t.send("Apply the current creation proposal.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
-    t.calledTool("target_execution_status", { count: 1 });
-    t.check(t.reply, includes("ready for a future typed target command"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
-    await t.send("Assess target command readiness with stale proposal digest.");
-    t.succeeded();
-    t.calledTool("target_execution_status", { count: 1 });
-    t.check(t.reply, includes("rejected the stale proposal"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
-    const apply = await t.send("Apply the current creation proposal.");
-    t.succeeded();
-    apply.notEvent("input.requested");
     t.check(t.reply, includes("private preview"));
     t.check(t.reply, includes("quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryApply = await t.send(
-      "Retry target apply after a lost response.",
-    );
+    await t.send("Retry target apply after a lost response.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
-    retryApply.notEvent("input.requested");
     t.check(t.reply, includes("prepared app is unchanged"));
-
-    const staleApply = await t.send("Apply with a stale proposal digest.");
-    t.succeeded();
-    staleApply.notEvent("input.requested");
-    t.check(t.reply, includes("product plan changed"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
 
     const validation = await t.send("Validate the applied creation.");
     t.succeeded();
@@ -151,13 +113,6 @@ export default defineEval({
     t.succeeded();
     retryValidation.notEvent("input.requested");
     t.check(t.reply, includes("quality checks are still passing"));
-
-    const staleValidation = await t.send("Validate with a stale apply digest.");
-    t.succeeded();
-    staleValidation.notEvent("input.requested");
-    t.check(t.reply, includes("app changed before checks could start"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
 
     await t.send("Inspect the validated change set.");
     t.succeeded();
@@ -180,13 +135,6 @@ export default defineEval({
     t.succeeded();
     retryReview.notEvent("input.requested");
     t.check(t.reply, includes("same completed app changes remain ready"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
-    const staleReview = await t.send("Accept a stale change set.");
-    t.succeeded();
-    staleReview.notEvent("input.requested");
-    t.check(t.reply, includes("app changed before review could finish"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

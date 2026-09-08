@@ -22,9 +22,7 @@ import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-gi
 export default defineTool({
   description:
     "Prepare the current writable repository checkout for product work. This is automatic and records the provider-created checkout without treating normal source or layout changes as failures.",
-  inputSchema: z.object({
-    expectedSourceReceiptDigest: z.string().optional(),
-  }),
+  inputSchema: z.object({}),
   async execute(_input, ctx) {
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();

@@ -87,10 +87,7 @@ export default defineTool({
       const source = sourceWorkflowState.get();
       if (source.phase === "empty")
         throw new Error("The supported builder source is unavailable.");
-      await prepareWorkspace.execute(
-        { expectedSourceReceiptDigest: source.receipt.digest },
-        ctx,
-      );
+      await prepareWorkspace.execute({}, ctx);
       current = appBuilderWorkflowState.get();
     }
     if (current.phase === "empty")
