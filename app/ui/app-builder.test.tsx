@@ -900,7 +900,7 @@ describe("Vercel-faithful App Builder flow", () => {
     await act(async () => Promise.resolve());
     expect(request).toHaveBeenCalledOnce();
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Use the Autograph App Builder plugin"),
+      expect.stringContaining("Use the official Autograph App Builder plugin"),
     );
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -914,7 +914,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(copiedPrompt).not.toContain("support-app");
     expect(copiedPrompt).not.toContain("Help customers resolve");
     expect(copiedPrompt).not.toMatch(
-      /Installation|Repository ID|Head SHA|digest/iu,
+      /Installation[ _-]?ID|Repository ID|Head SHA|digest/iu,
     );
     expect(open).toHaveBeenCalledWith(
       expect.stringMatching(/^codex:\/\/new\?prompt=/u),

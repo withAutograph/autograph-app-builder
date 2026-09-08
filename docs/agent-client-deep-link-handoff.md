@@ -54,13 +54,18 @@ requested action before execution.
 Codex can be instructed to install a plugin, but installation cannot reliably
 happen invisibly through the deep link.
 
-A pre-filled task instructs the client to use App Builder when it is available.
-When it is missing, the same prompt includes the official marketplace install
-commands and asks Codex to return a concise, product-facing handoff:
+A pre-filled task checks whether the official `app-builder@autograph` plugin is
+installed, enabled, and exposes a callable `autograph_start`. A working plugin is
+used immediately with the opaque handoff ID and a unique `clientRequestId`.
 
-```text
-Autograph App Builder is ready. Open a fresh Codex task and resend this app brief to begin.
-```
+The prompt authorizes the agent to run necessary installation, enablement, or
+update commands itself. It does not ask the user to run those commands. An
+installed, enabled plugin whose tools are unavailable is treated as a connection
+or tool-loading problem, not evidence that an update is needed. The agent uses
+supported reconnect or reload capabilities and retries discovery. If a user-only
+action remains necessary, it explains the specific blocker and asks only for that
+action. It must not claim the handoff started before `autograph_start` succeeds,
+substitute a development plugin or another builder, or edit a repository directly.
 
 Installation may still require:
 
@@ -79,8 +84,7 @@ codex plugin add app-builder@autograph
 ```
 
 Command output, versions, endpoint details, and repository diagnostics belong
-under an optional **Details** section. They must not replace the concise success
-message above.
+under an optional **Details** section. They must not replace a concise explanation of the actual handoff status.
 
 OpenAI's plugin guidance also states that installation and any required
 authorization must be completed before the plugin can be used.
@@ -92,9 +96,10 @@ authorization must be completed before the plugin can be used.
 3. Autograph opens `codex://new?prompt=<URL-encoded-app-builder-prompt>`.
 4. Codex opens a new task with the prompt pre-filled.
 5. The user reviews and sends it.
-6. If the plugin is missing, Codex is instructed to stop and explain how to
-   install it; the UI also provides the installation command.
-7. The user starts a fresh task if Codex requires a reload after installation.
+6. Codex performs any necessary official plugin setup itself, verifies enablement,
+   rediscovers the tools, and starts the prepared handoff.
+7. If tools remain unavailable, Codex attempts supported connection recovery and
+   requests a user action only when it cannot perform that action itself.
 
 ## Cursor handoff
 

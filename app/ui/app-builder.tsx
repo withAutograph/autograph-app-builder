@@ -130,19 +130,25 @@ function providerSetupMessage(
 
 export function buildAppHandoffPrompt(handoffId: string) {
   if (!uuidPattern.test(handoffId)) throw new Error("handoff-id-invalid");
-  return `Use the Autograph App Builder plugin to create this app.
+  return `Use the official Autograph App Builder plugin to create this app.
 
-If Autograph App Builder is unavailable, install the official plugin first:
+Handoff ID: ${handoffId}
+
+First check whether app-builder@autograph is installed and enabled and whether its autograph_start tool is callable.
+
+If the official tool is callable, immediately call autograph_start with the handoffId and a unique clientRequestId. Do not reinstall or upgrade a working plugin.
+
+If the official plugin is missing, disabled, or outdated, you are authorized to install, enable, or update it automatically. Run the necessary commands yourself:
 
 codex plugin marketplace add withAutograph/marketplace --ref main
 codex plugin marketplace upgrade autograph
 codex plugin add app-builder@autograph
 
-Verify that app-builder@autograph is enabled, then continue the prepared app with this handoff ID:
+Verify that app-builder@autograph is enabled, then rediscover its tools and continue with autograph_start.
 
-${handoffId}
+If the official plugin is installed and enabled but its tools remain unavailable, treat this as a connection or tool-loading problem, not proof that an update is needed. Use available supported reconnect or reload capabilities and retry discovery. Do not substitute the development plugin or another app builder, and do not edit a repository directly.
 
-Use autograph_start with the handoffId. Do not use another app builder or edit a repository directly. If autograph_start is unavailable, stop and explain how to install the official plugin.`;
+Do not ask the user to run installation or upgrade commands. If recovery requires a user-only action, explain the specific blocker and request only that minimal action. Never claim the handoff has started until autograph_start succeeds.`;
 }
 
 function buildAppHandoffUrl(destination: BuildDestination, handoffId: string) {
