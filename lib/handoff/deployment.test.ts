@@ -108,7 +108,7 @@ const validBody = {
   appName: "Vendor Review",
   repository: { name: "vendor-review", private: true },
   brief: "Review new vendors before activation.",
-  modelId: "openai/gpt-5.6-sol",
+  modelId: "openai/gpt-5.6-terra",
   connections: [],
 };
 

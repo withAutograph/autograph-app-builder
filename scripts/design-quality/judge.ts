@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { generateText, createGateway, Output } from "ai";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
-import { activeBuilderModelId } from "../../lib/integrations/active-model";
+import { builderValidationModelId } from "../../lib/integrations/active-model";
 
 export const axes = [
   "hierarchy",
@@ -107,7 +107,7 @@ export async function judgeDesign(
     else {
       const gateway = createGateway({ apiKey: token });
       const result = await generateText({
-        model: gateway(activeBuilderModelId),
+        model: gateway(builderValidationModelId),
         system: rubric,
         maxRetries: 0,
         output: Output.object({ schema: judgmentSchema }),
