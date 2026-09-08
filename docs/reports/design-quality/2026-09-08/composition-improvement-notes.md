@@ -177,3 +177,55 @@ analysis is reproducible with `readReference`, `analyzeSource`, and
 observations, and the selected Arrusted checkout. Focused fixtures cover
 recursive unions, reliable full unions, unresolved members, and equivalent raw
 versus expression-wrapped JSX strings. No scoring formula or palette changed.
+
+## Incremental update: readable status and honest action outcome
+
+[The next report](stock-exceptions-readable-outcome-195532570Z/README.md) scored
+**85/100**, down from 90, using the unchanged model and rubric. All nine fixture
+checks passed and no layout measurement findings were reported. The invalid
+radio-group container was repaired; shared muted-text contrast observations
+remain informational.
+
+![Severity remains visible after the simulation](stock-exceptions-readable-outcome-195532570Z/desktop-window-2.png)
+
+The simulation now retains the record's original severity and separately says
+that stock levels are unchanged. A narrower desktop window keeps both panes
+visible. Supported neutral status pills improve the readability of labels, but
+the reviewer found that the lost color distinction slows urgency scanning. It
+also found that the fixed-width filter row straddles the narrower list/detail
+boundary, and that the outcome message is too similar to muted metadata.
+
+These are useful next changes, not a reason to reroll the judge. This report is
+preserved alongside the stronger 90-point variant. No palette values, scoring
+weights, or historical reports changed. The UI is still a manually refined
+generated example, not evidence that every new generation reaches this quality.
+
+## Incremental update: grouped urgency and supported typography
+
+[The grouped-outcome report](stock-exceptions-grouped-outcome-200226952Z/README.md)
+returns to **90/100** with the unchanged rubric: hierarchy 4, layout 3,
+typography 4, desktop responsiveness 3, and product clarity 4. All nine fixture
+interactions passed; the twelve captured states reported no axe violations or
+layout findings. This is not a claim of complete accessibility compliance.
+
+![Grouped urgency and a distinct action result](stock-exceptions-grouped-outcome-200226952Z/desktop-window-2.png)
+
+The filters now follow the same grid tracks as the list. Priority headings add
+structure without recoloring the shared pills. Existing `Typography` variants
+make supporting information readable and distinguish the action outcome; no
+palette values or component CSS were modified. The source and screenshots are
+included in the report, and the 85-point experiment remains unchanged.
+
+Current source evidence assesses **14/17 component observations** and **32/44
+API observations**. Styling assesses **11/4421** observations; combined coverage
+is **1.27%**. The advisory adherence score is still **100, partial**, not proof
+of complete browser provenance. The new composition changes denominators, so
+use the unchanged-source comparison above to isolate evaluator improvement.
+
+Remaining subjective findings: the short-window list needs a clearer cue that
+more records can be scrolled into view, supplier details could offer more
+decision support from available data, and item-level urgency could be easier to
+scan. The reviewer has not seen narrower desktop windows. Do not invent supplier
+data, a nonexistent compact-card prop, or a minimum-width requirement in response.
+Further changes should improve the actual workflow, not merely fill whitespace
+or chase a score. No automatic evaluator or repair loop has been introduced.

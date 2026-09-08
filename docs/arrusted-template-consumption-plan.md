@@ -93,6 +93,25 @@ Keep persistent record state separate from action outcomes: an order simulation
 does not change an inventory exception's severity. Present the result in its
 own message or action state instead of replacing the severity indicator.
 
+The refined card example uses the existing `StatusPill` neutral tone for readable
+severity text, with urgency still explicit in the label and lowest-cover sort.
+This trades colored urgency cues for readable text without changing the palette
+or restyling the shared primitive; it is an option, not a required tone for other
+apps. Use an element that supports `role="radiogroup"` (such as a `div`) for the
+shared radio cards. Do not put that role on a named `section` landmark.
+
+When neutral severity labels lose scanability, group records by the product's
+meaningful priority and show a count with the existing `Typography` heading.
+Keep lowest-cover ordering within each group. This is appropriate for this
+exception-review example, not a requirement to group every list. Size the
+filter row with the same grid tracks as the list so its controls remain aligned
+as a desktop window narrows.
+
+`Typography` also exposes `body`, `body-strong`, and `primary`/`secondary` tones.
+Use those actual props for supporting text and important action feedback when
+the shared panel accepts ReactNode content. The component owns the typography
+and semantic color; do not add a color override to the panel, badge, or Button.
+
 For a stock-review list, Product, Severity, and Cover may be enough alongside
 the supported selection control. Location remains available in the filter and
 selected record subtitle; on-hand and reorder quantities remain in Stock
