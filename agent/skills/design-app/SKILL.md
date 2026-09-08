@@ -72,6 +72,10 @@ components' public APIs. Preserve stated decisions across revisions and update
 source, fixtures, manifest, and production meaning together. Never substitute a
 standalone HTML generator for this rendered React preview.
 
+Every enabled visible control must have meaningful fixture-backed behavior.
+When the prototype cannot support an action, disable the control and show a
+product-facing reason instead of leaving a no-op handler or broken destination.
+
 ## Rendering policy
 
 Use realistic, internally consistent fixture data. Pages, navigation, filters,
@@ -135,6 +139,8 @@ References are bundled files, not skills. Never pass a reference path to
 - `design-app` and `references/questions.md` before asking discovery questions;
 - `design-app` and `references/target-repository-routing.md` before inspecting
   prepared Arrusted source; and
+- `design-app` and `references/interactions.md` when wiring routes and actions,
+  and before presenting a material revision; and
 - `design-app` and `references/app-spec.md` when deriving the implementation
   plan from the current preview and product brief, without a finalization prompt.
 
