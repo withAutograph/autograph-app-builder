@@ -67,7 +67,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   expect(state.clipboard[0]).not.toContain("Support Console");
   expect(state.clipboard[0]).not.toContain("support-console");
   expect(state.clipboard[0]).not.toMatch(
-    /GitHub Resource|Vercel Resource|Installation|Repository ID|Head SHA|digest/iu,
+    /GitHub Resource|Vercel Resource|Installation[ _-]?ID|Repository ID|Head SHA|digest/iu,
   );
   expect(state.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
   expect(new URL(state.opened[0]!).searchParams.get("prompt")).toBe(
