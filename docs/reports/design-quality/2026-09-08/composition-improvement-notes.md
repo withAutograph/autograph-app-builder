@@ -148,3 +148,32 @@ and action outcome separate. The former must be addressed, if needed, through
 supported composition and readable redundant text—not palette overrides.
 The evaluator still cannot establish most compiled styling provenance. This
 report is not a claim of 100/100 quality or complete adherence confidence.
+
+## Incremental update: stronger API evidence on unchanged source
+
+The JSX checker now assesses reliable branches of recursive union types and
+checks raw string attributes against the selected component's TypeScript props.
+It does not assume that an unresolved type is valid, or that statically valid
+JSX rendered in the browser.
+
+Reanalyzing the **same source files saved in the shared-card report**, without
+capturing screenshots again or rerunning the AI judge, changed these counts:
+
+| Dimension       | Before assessed / total | After assessed / total | Remaining unknown |
+| --------------- | ----------------------- | ---------------------- | ----------------- |
+| Component usage | 10 / 11                 | 10 / 11                | 1                 |
+| API usage       | 14 / 37                 | 25 / 37                | 12                |
+| Styling         | 9 / 4419                | 9 / 4419               | 4410              |
+
+API evidence coverage rises from **37.84% to 67.57%**. All assessed observations
+conform, so the advisory adherence score remains **100, partial**. Combined
+coverage is only **0.99%**, because unknown browser styling dominates the
+denominator. The subjective design score remains **90/100**; this evidence
+improvement is not a new visual-quality result.
+
+The archived report and its original screenshots remain unchanged. The source
+analysis is reproducible with `readReference`, `analyzeSource`, and
+`scoreAdherence`, using that report's `sourceFiles`, its existing browser
+observations, and the selected Arrusted checkout. Focused fixtures cover
+recursive unions, reliable full unions, unresolved members, and equivalent raw
+versus expression-wrapped JSX strings. No scoring formula or palette changed.
