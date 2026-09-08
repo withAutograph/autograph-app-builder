@@ -39,6 +39,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Iteration and validation
 
+- Generated apps are desktop-only. Preserve resizing within desktop windows and
+  panels without phone/tablet acceptance or an arbitrary minimum width. Use the
+  existing Arrusted palette verbatim via semantic tokens and supported variants;
+  advisory scores do not authorize palette changes or color overrides.
+
 - Optimize the edit loop for feedback speed. Do not automatically run tests,
   broad checks, fresh installs, full walkthroughs, artifact builds, release
   proofs, or publication after each edit or restart.

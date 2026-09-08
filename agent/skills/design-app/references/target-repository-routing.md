@@ -26,14 +26,15 @@ target repository supports production behavior.
 For the component-backed UI, read current semantic tokens from
 `packages/design-systems/core/tokens/theme.css` when present and use the
 target-owned token entrypoint directly. Do not reproduce a literal token table
-or infer a palette from screenshots when the prepared source provides it.
+or infer a palette from screenshots when the prepared source provides it. Preserve
+that palette verbatim; scores are not authority to change component colors.
 
 The catalog is a discovery shortcut, not a runtime allowlist. Follow links only
 for the task at hand. If a link or listed API is stale, inspect the current public
 exports and use the actual renderer error to adapt. Never require a catalog
 version or an example to exist before continuing.
 
-Read how the selected composition handles narrow screens, selection, empty data,
+Read how the selected composition handles resized desktop panels, selection, empty data,
 primary actions, and required providers. Do not assume all tables have selection
 or all details panels manage navigation. For forms, prefer supported field and
 form components; for overviews, start with the information needed for the next

@@ -75,7 +75,10 @@ This tool reads repository-relative files, including packages and documentation.
 Do not infer component props from another UI library.
 Use the repository's existing UI catalog and linked examples as a discovery
 shortcut, not an eligibility gate. Select compositions by their actual workflow
-capabilities, including narrow-screen behavior, selection and primary actions.
+capabilities, including desktop-window/panel resizing, selection and primary actions.
+Generated apps are desktop-only; do not add phone/tablet acceptance or minimum-width
+requirements. Use the existing Arrusted palette verbatim through semantic tokens
+and supported variants. Advisory scores must not cause palette or color overrides.
 Prefer supported variants over heavily restyled primitives. A missing example
 means inspect current exports, not stop. Carry the reviewed route composition
 and theme/providers into implementation instead of redesigning from prose.

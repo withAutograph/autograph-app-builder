@@ -30,7 +30,7 @@ current public exports and adapt to the renderer's actual errors.
   detail panel. Use its selection and compact presentation props rather than
   turning a collection of Buttons into a custom fixed-width grid.
 - **Forms:** use existing form/field compositions, supported labels, errors,
-  grouping, and action variants. Preserve a clear narrow-screen submit path.
+  grouping, and action variants. Preserve a clear submit path in desktop panels.
 - **Overview/detail:** show the information needed to select the next action,
   then reveal details. Do not add metrics or charts merely to fill the page.
 
@@ -50,10 +50,12 @@ When the catalog lacks a needed visual capability, use a supported alternative
 and record the reusable improvement for Arrusted. Do not introduce a runtime
 catalog gate or require a new shared release merely to produce a useful preview.
 
-Use the target-owned theme, fonts, and required providers. If a shared component
-has a confirmed visual defect, fix it in Arrusted rather than compensating with
-generated overrides. A matching color literal is not evidence of token use;
-token use itself is not evidence of accessible contrast or a good layout.
+Use the target-owned theme, fonts, and required providers. Preserve the existing
+Arrusted palette verbatim through semantic tokens and supported component variants.
+Do not adjust shared or generated colors to chase advisory contrast/design scores.
+A matching color literal is not evidence of token use. Apps are desktop-only:
+support resized desktop windows and panels without phone/tablet acceptance or an
+arbitrary minimum width.
 
 ## Preview to implementation
 
@@ -79,5 +81,5 @@ of generation. Keep reports under `docs/reports/design-quality/` when sharing
 them with teammates.
 
 The initial comparison is a fresh Stock Exceptions preview and a contrasting
-form-oriented preview. Check meaningful selection, narrow-screen actions, and
-confirmed shared contrast fixes. Preserve different layouts for different jobs.
+form-oriented preview. Check meaningful selection and actions across desktop
+windows/panels. Preserve different layouts for different jobs and the existing palette.

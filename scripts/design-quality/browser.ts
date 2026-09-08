@@ -5,8 +5,8 @@ import { z } from "zod";
 
 export const viewports = [
   { name: "desktop", width: 1440, height: 900 },
-  { name: "tablet", width: 768, height: 1024 },
-  { name: "mobile", width: 390, height: 844 },
+  { name: "desktop-wide", width: 1920, height: 1080 },
+  { name: "desktop-window", width: 1024, height: 768 },
 ];
 export const scenariosSchema = z.array(
   z.object({
