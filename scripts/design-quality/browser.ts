@@ -2,6 +2,7 @@ import { chromium, type Page } from "playwright";
 import * as axe from "axe-core";
 import { join } from "node:path";
 import { z } from "zod";
+import type { Observation } from "./evidence";
 
 export const viewports = [
   { name: "desktop", width: 1440, height: 900 },
@@ -72,6 +73,43 @@ export function classifyStyle(
     ? ("matching-literal" as const)
     : ("unmatched-literal" as const);
 }
+
+type BrowserStyleObservation = Observation & {
+  node: string;
+  property: string;
+  category: Category;
+  computed: string;
+  declarations: string[];
+  origin: string;
+};
+
+export const sourcePath = (value: string | undefined) => {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "file:"
+      ? decodeURIComponent(url.pathname)
+      : url.pathname;
+  } catch {
+    return value.split(/[?#]/, 1)[0];
+  }
+};
+
+export const generatedSource = (
+  path: string | undefined,
+  generated: string[],
+) => {
+  if (!path) return false;
+  const clean = path.replace(/\\/g, "/");
+  return generated.some((candidate) => {
+    const expected = sourcePath(candidate)?.replace(/\\/g, "/");
+    return Boolean(
+      expected &&
+      (clean === expected ||
+        clean.endsWith(`/${expected.replace(/^\/+/, "")}`)),
+    );
+  });
+};
 
 export async function measurePage(page: Page) {
   await page.addScriptTag({ content: axe.source });
@@ -148,12 +186,16 @@ export async function measurePage(page: Page) {
     for (const table of document.querySelectorAll(
       "table,[role=table],[role=grid]",
     )) {
-      const headers = [...table.querySelectorAll("th,[role=columnheader]")];
+      const headers = [
+        ...table.querySelectorAll("th,[role=columnheader]"),
+      ].filter(visible);
       const row = [...table.querySelectorAll("tr,[role=row]")].find((r) =>
         r.querySelector("td,[role=cell],[role=gridcell]"),
       );
       const cells = row
-        ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")]
+        ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(
+            visible,
+          )
         : [];
       if (headers.length === cells.length)
         headers.forEach((h, i) => {
@@ -245,9 +287,16 @@ export async function measurePage(page: Page) {
 export async function measureStyles(
   page: Page,
   tokens: Record<string, string>,
+  generatedSourcePaths: string[] = [],
 ) {
   const session = await page.context().newCDPSession(page);
   try {
+    const headers = new Map<string, { sourceURL?: string }>();
+    session.on(
+      "CSS.styleSheetAdded",
+      ({ header }: { header: { styleSheetId: string; sourceURL?: string } }) =>
+        headers.set(header.styleSheetId, header),
+    );
     await session.send("DOM.enable");
     await session.send("CSS.enable");
     const { root } = await session.send("DOM.getDocument");
@@ -255,9 +304,13 @@ export async function measureStyles(
       nodeId: root.nodeId,
       selector: "body,body *",
     });
+    // Resolve tokens in the active browser theme. A detached element only sees a
+    // flattened default cascade and is misleading for dark or inherited themes.
     const normalized = await page.evaluate(
       ({ tokens, properties }) => {
         const el = document.createElement("span");
+        el.style.cssText =
+          "position:absolute;visibility:hidden;pointer-events:none";
         document.body.appendChild(el);
         const result: Record<string, string[]> = {};
         for (const prop of Object.keys(properties)) {
@@ -286,18 +339,41 @@ export async function measureStyles(
       },
       { tokens, properties },
     );
-    const observations: Array<{
-      node: string;
-      property: string;
-      category: Category;
-      computed: string;
-      classification: string;
-      declarations: string[];
-      origin: string;
+    // CSS.enable normally emits existing headers, but source location is optional
+    // in CDP. Missing headers deliberately remain unknown.
+    const candidates: Array<{
+      nodeId: number;
+      model: { width: number; height: number; content: number[] };
+      region: "top" | "middle" | "bottom";
     }> = [];
-    let sampled = 0;
     for (const nodeId of nodeIds) {
-      if (sampled >= 120) break;
+      const { model } = await session
+        .send("DOM.getBoxModel", { nodeId })
+        .catch(() => ({ model: null }));
+      if (!model || model.width <= 0 || model.height <= 0) continue;
+      const y = model.content[1] ?? 0;
+      candidates.push({
+        nodeId,
+        model,
+        region: y < 300 ? "top" : y < 1000 ? "middle" : "bottom",
+      });
+    }
+    const selected: typeof candidates = [];
+    for (const region of ["top", "middle", "bottom"] as const) {
+      for (const candidate of candidates.filter(
+        (item) => item.region === region,
+      )) {
+        if (selected.length >= 120) break;
+        selected.push(candidate);
+      }
+    }
+    // Fill unused capacity deterministically from every region rather than only
+    // the first DOM subtree.
+    for (const candidate of candidates)
+      if (selected.length < 120 && !selected.includes(candidate))
+        selected.push(candidate);
+    const observations: BrowserStyleObservation[] = [];
+    for (const { nodeId, model } of selected) {
       const computed = await session.send("CSS.getComputedStyleForNode", {
         nodeId,
       });
@@ -305,11 +381,6 @@ export async function measureStyles(
         computed.computedStyle.map((p) => [p.name, p.value]),
       );
       if (cv.display === "none" || cv.visibility === "hidden") continue;
-      const { model } = await session
-        .send("DOM.getBoxModel", { nodeId })
-        .catch(() => ({ model: null }));
-      if (!model || model.width === 0 || model.height === 0) continue;
-      sampled++;
       const matched = await session.send("CSS.getMatchedStylesForNode", {
         nodeId,
       });
@@ -334,24 +405,35 @@ export async function measureStyles(
             )
           : [];
         const own = rules.flatMap((m) =>
-          m.rule.style.cssProperties.filter(
-            (p) => p.name === property && !p.disabled && p.parsedOk !== false,
-          ),
+          m.rule.style.cssProperties
+            .filter(
+              (p) => p.name === property && !p.disabled && p.parsedOk !== false,
+            )
+            .map((p) => ({ p, rule: m.rule })),
         );
-        const declarations = (
-          inline.length
-            ? inline
-            : own.length
-              ? own
-              : inherited.flatMap((m) =>
-                  m.rule.style.cssProperties.filter(
+        const declarationEntries = inline.length
+          ? inline.map((p) => ({ p, rule: undefined }))
+          : own.length
+            ? own
+            : inherited.flatMap((m) =>
+                m.rule.style.cssProperties
+                  .filter(
                     (p) =>
                       p.name === property &&
                       !p.disabled &&
                       p.parsedOk !== false,
-                  ),
-                )
-        ).map((p) => p.value);
+                  )
+                  .map((p) => ({ p, rule: m.rule })),
+              );
+        const declarations = declarationEntries.map(({ p }) => p.value);
+        const rule = declarationEntries[0]?.rule;
+        const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
+        const path = sourcePath(
+          styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined,
+        );
+        const generated = generatedSource(path, generatedSourcePaths);
+        const inheritedDeclaration =
+          !inline.length && !own.length && declarationEntries.length > 0;
         let classification = classifyStyle(
           declarations,
           cv[property] ?? "",
@@ -364,6 +446,52 @@ export async function measureStyles(
           )
         )
           classification = "unassessed";
+        if (classification === "token-reference")
+          classification = "semantic-token-reference";
+        if (
+          generated &&
+          classification !== "semantic-token-reference" &&
+          classification !== "matching-literal" &&
+          classification !== "structural"
+        )
+          classification = "generated-override";
+        if (
+          !generated &&
+          (inheritedDeclaration || declarations.length > 0) &&
+          classification !== "semantic-token-reference" &&
+          classification !== "matching-literal" &&
+          classification !== "structural"
+        )
+          classification = "inherited-shared";
+        if (
+          classification === "unassessed" ||
+          classification === "unmatched-literal"
+        )
+          classification = "unknown";
+        const provenance: Observation["provenance"] = generated
+          ? "generated"
+          : path || inheritedDeclaration
+            ? "shared"
+            : "unknown";
+        const quad = model.content;
+        const region = {
+          x: quad[0] ?? 0,
+          y: quad[1] ?? 0,
+          width: model.width,
+          height: model.height,
+        };
+        const source = path
+          ? {
+              path,
+              line:
+                (rule?.style?.range?.startLine ?? rule?.range?.startLine ?? 0) +
+                1,
+              column:
+                (rule?.style?.range?.startColumn ??
+                  rule?.range?.startColumn ??
+                  0) + 1,
+            }
+          : undefined;
         observations.push({
           node: `node-${nodeId}`,
           property,
@@ -371,11 +499,28 @@ export async function measureStyles(
           computed: cv[property] ?? "",
           classification,
           declarations: [...new Set(declarations)],
-          origin: inline.length
-            ? "inline"
-            : own.length
-              ? "matched-rule"
-              : "inherited-or-unknown",
+          origin: generated
+            ? "generated-rule"
+            : inheritedDeclaration
+              ? "inherited-shared"
+              : path
+                ? "shared-rule"
+                : inline.length
+                  ? "inline"
+                  : "unknown",
+          id: `style-${nodeId}-${property}`,
+          dimension: "styling",
+          verdict:
+            provenance === "generated" &&
+            (classification === "semantic-token-reference" ||
+              classification === "matching-literal")
+              ? "conforming"
+              : "unassessed",
+          provenance,
+          evidence: "browser",
+          summary: `${property}: ${classification}`,
+          source,
+          region,
         });
       }
     }
@@ -386,16 +531,22 @@ export async function measureStyles(
         );
         const counts = Object.fromEntries(
           [
-            "token-reference",
+            "semantic-token-reference",
             "matching-literal",
-            "unmatched-literal",
-            "unassessed",
+            "generated-override",
+            "inherited-shared",
+            "unknown",
           ].map((key) => [
             key,
             items.filter((o) => o.classification === key).length,
           ]),
         );
-        const assessed = items.length - (counts.unassessed ?? 0);
+        const assessed = items.filter(
+          (item) =>
+            item.provenance === "generated" &&
+            (item.classification === "semantic-token-reference" ||
+              item.classification === "matching-literal"),
+        ).length;
         return [
           category,
           {
@@ -406,21 +557,40 @@ export async function measureStyles(
               ? Math.round((assessed / items.length) * 100)
               : null,
             tokenReferencePercent: assessed
-              ? Math.round(((counts["token-reference"] ?? 0) / assessed) * 100)
+              ? Math.round(
+                  ((counts["semantic-token-reference"] ?? 0) / assessed) * 100,
+                )
               : null,
           },
         ];
       }),
     );
     return {
-      sampledElements: sampled,
+      sampledElements: selected.length,
       totalDomElements: nodeIds.length,
+      sampling: {
+        eligible: candidates.length,
+        sampled: selected.length,
+        coveragePercent: candidates.length
+          ? Math.round((selected.length / candidates.length) * 100)
+          : null,
+        regions: Object.fromEntries(
+          (["top", "middle", "bottom"] as const).map((region) => [
+            region,
+            {
+              eligible: candidates.filter((item) => item.region === region)
+                .length,
+              sampled: selected.filter((item) => item.region === region).length,
+            },
+          ]),
+        ),
+      },
       categories,
       observations,
       limitations: [
         "Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.",
-        "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling covers the first 120 visible elements.",
-        "Inherited library styles and generated rules may share a bundle; source analysis reports generated overrides separately.",
+        "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.",
+        "A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.",
       ],
     };
   } finally {
@@ -433,6 +603,7 @@ export async function capturePreview(input: {
   output: string;
   tokens: Record<string, string>;
   scenarios: Scenario[];
+  generatedSourcePaths?: string[];
 }) {
   const browser = await chromium.launch();
   const captures = [];
@@ -488,7 +659,17 @@ export async function capturePreview(input: {
         const name = `${viewport.name}-${index}`;
         const measurements = await measurePage(page);
         const styles =
-          index === 0 ? await measureStyles(page, input.tokens) : undefined;
+          index === 0
+            ? await measureStyles(
+                page,
+                input.tokens,
+                input.generatedSourcePaths,
+              )
+            : undefined;
+        if (styles)
+          styles.observations.forEach((observation) => {
+            observation.capture = name;
+          });
         const path = join(input.output, `${name}.png`);
         await page.screenshot({ path, fullPage: true });
         captures.push({
