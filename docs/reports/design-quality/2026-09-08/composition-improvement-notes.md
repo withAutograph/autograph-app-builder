@@ -199,3 +199,33 @@ These are useful next changes, not a reason to reroll the judge. This report is
 preserved alongside the stronger 90-point variant. No palette values, scoring
 weights, or historical reports changed. The UI is still a manually refined
 generated example, not evidence that every new generation reaches this quality.
+
+## Incremental update: grouped urgency and supported typography
+
+[The grouped-outcome report](stock-exceptions-grouped-outcome-200226952Z/README.md)
+returns to **90/100** with the unchanged rubric: hierarchy 4, layout 3,
+typography 4, desktop responsiveness 3, and product clarity 4. All nine fixture
+interactions passed; the twelve captured states reported no axe violations or
+layout findings. This is not a claim of complete accessibility compliance.
+
+![Grouped urgency and a distinct action result](stock-exceptions-grouped-outcome-200226952Z/desktop-window-2.png)
+
+The filters now follow the same grid tracks as the list. Priority headings add
+structure without recoloring the shared pills. Existing `Typography` variants
+make supporting information readable and distinguish the action outcome; no
+palette values or component CSS were modified. The source and screenshots are
+included in the report, and the 85-point experiment remains unchanged.
+
+Current source evidence assesses **14/17 component observations** and **32/44
+API observations**. Styling assesses **11/4421** observations; combined coverage
+is **1.27%**. The advisory adherence score is still **100, partial**, not proof
+of complete browser provenance. The new composition changes denominators, so
+use the unchanged-source comparison above to isolate evaluator improvement.
+
+Remaining subjective findings: the short-window list needs a clearer cue that
+more records can be scrolled into view, supplier details could offer more
+decision support from available data, and item-level urgency could be easier to
+scan. The reviewer has not seen narrower desktop windows. Do not invent supplier
+data, a nonexistent compact-card prop, or a minimum-width requirement in response.
+Further changes should improve the actual workflow, not merely fill whitespace
+or chase a score. No automatic evaluator or repair loop has been introduced.
