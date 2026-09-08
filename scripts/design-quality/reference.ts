@@ -363,6 +363,98 @@ function reliableExpectedAssignment(
   return undefined;
 }
 
+/**
+ * Establish that a finite JSX literal can be handed back to TypeScript for the
+ * final assignability decision. This is deliberately not a second type system:
+ * tuple cardinality, excess keys, required keys, and intersections remain the
+ * checker's responsibility.
+ */
+function finiteLiteralEvidence(
+  expression: ts.Expression,
+  expected: ts.Type,
+  checker: ts.TypeChecker,
+  depth = 0,
+): true | undefined {
+  if (depth > 8) return undefined;
+  if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
+    return undefined;
+  if (expected.isUnion()) {
+    const actual = checker.getTypeAtLocation(expression);
+    return expected.types.some(
+      (member) =>
+        finiteLiteralEvidence(expression, member, checker, depth + 1) &&
+        checker.isTypeAssignableTo(actual, member),
+    )
+      ? true
+      : undefined;
+  }
+  if (ts.isArrayLiteralExpression(expression)) {
+    if (!checker.isArrayType(expected) && !checker.isTupleType(expected))
+      return undefined;
+    if (!expression.elements.length) return true;
+    // Non-empty tuples need cardinality/rest handling; retain the conservative
+    // existing path instead of approximating it here.
+    if (checker.isTupleType(expected)) return undefined;
+    const items = checker.getTypeArguments(expected as ts.TypeReference);
+    if (items.length !== 1) return undefined;
+    return expression.elements.every((element) =>
+      ts.isExpression(element)
+        ? finiteLiteralEvidence(element, items[0], checker, depth + 1)
+        : false,
+    )
+      ? true
+      : undefined;
+  }
+  if (ts.isObjectLiteralExpression(expression)) {
+    if (
+      !(expected.flags & ts.TypeFlags.Object) ||
+      expected.isIntersection() ||
+      expected.getCallSignatures().length ||
+      expected.getConstructSignatures().length
+    )
+      return undefined;
+    for (const property of expression.properties) {
+      if (!ts.isPropertyAssignment(property) || !property.name)
+        return undefined;
+      const name = ts.isIdentifier(property.name)
+        ? property.name.text
+        : ts.isStringLiteral(property.name) ||
+            ts.isNumericLiteral(property.name)
+          ? property.name.text
+          : undefined;
+      if (!name) return undefined;
+      const symbol = checker.getPropertyOfType(expected, name);
+      const propertyType = symbol
+        ? checker.getTypeOfSymbolAtLocation(
+            symbol,
+            symbol.valueDeclaration ?? symbol.declarations?.[0] ?? property,
+          )
+        : checker.getIndexTypeOfType(expected, ts.IndexKind.String);
+      if (!propertyType) return undefined;
+      if (
+        finiteLiteralEvidence(
+          property.initializer,
+          propertyType,
+          checker,
+          depth + 1,
+        ) !== true
+      )
+        return undefined;
+    }
+    return true;
+  }
+  if (
+    ts.isStringLiteral(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression) ||
+    ts.isNumericLiteral(expression) ||
+    expression.kind === ts.SyntaxKind.TrueKeyword ||
+    expression.kind === ts.SyntaxKind.FalseKeyword
+  ) {
+    return reliableExpressionType(expected, checker) ? true : undefined;
+  }
+  return undefined;
+}
+
 function jsxAttributeExpectedType(
   attribute: ts.JsxAttribute,
   checker: ts.TypeChecker,
@@ -503,7 +595,7 @@ export function checkJsxAttributes({
                 )
                 .join("; ")}`,
             });
-          else if (!expected || !reliableExpressionType(actual, checker))
+          else if (!expected)
             attributes.push({
               ...key,
               verdict: "unassessed",
@@ -511,26 +603,37 @@ export function checkJsxAttributes({
                 "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
             });
           else {
-            const assignable = reliableExpectedAssignment(
-              actual,
-              expected,
-              checker,
-            );
-            if (assignable === undefined)
+            const finite = finiteLiteralEvidence(expression, expected, checker);
+            if (
+              finite === undefined &&
+              !reliableExpressionType(actual, checker)
+            )
               attributes.push({
                 ...key,
                 verdict: "unassessed",
                 reason:
-                  "The expected prop type has no independently reliable branch for this static JSX expression.",
+                  "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
               });
-            else
-              attributes.push({
-                ...key,
-                verdict: assignable ? "conforming" : "nonconforming",
-                reason: assignable
-                  ? "The static JSX expression is assignable to the selected Arrusted prop type."
-                  : "The static JSX expression is not assignable to the selected Arrusted prop type.",
-              });
+            else {
+              const assignable = finite
+                ? checker.isTypeAssignableTo(actual, expected)
+                : reliableExpectedAssignment(actual, expected, checker);
+              if (assignable === undefined)
+                attributes.push({
+                  ...key,
+                  verdict: "unassessed",
+                  reason:
+                    "The expected prop type has no independently reliable branch for this static JSX expression.",
+                });
+              else
+                attributes.push({
+                  ...key,
+                  verdict: assignable ? "conforming" : "nonconforming",
+                  reason: assignable
+                    ? "The static JSX expression is assignable to the selected Arrusted prop type."
+                    : "The static JSX expression is not assignable to the selected Arrusted prop type.",
+                });
+            }
           }
         }
         ts.forEachChild(node, visit);

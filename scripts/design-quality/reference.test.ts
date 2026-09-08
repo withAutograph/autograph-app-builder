@@ -70,6 +70,113 @@ describe("readReference", () => {
     ]);
   });
 
+  it("checks finite object literals and empty arrays against recursive props", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "compositions.tsx"),
+      `type Section = { title: string; sections: Section[] };
+       export function RecordDetailPanel(_props: { sections: Section[]; detail: { mode: "compact" | "full"; sections: Section[] } }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { RecordDetailPanel } from "@autograph/compositions"; export function Page() { return <><RecordDetailPanel sections={[]} detail={{ mode: "compact", sections: [] }} /><RecordDetailPanel sections={[]} detail={{ mode: "wide", sections: [] }} /><RecordDetailPanel sections={[]} detail={{ sections: [] }} /></>; }`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "conforming",
+      "conforming",
+      "nonconforming",
+      "conforming",
+      "nonconforming",
+    ]);
+    expect(result.attributes[3].reason).toContain("wide");
+    expect(result.attributes[5].reason).toContain("not assignable");
+  });
+
+  it("leaves tuple cardinality to TypeScript and admits finite index entries", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "compositions.tsx"),
+      `type Section = { title: string; sections: Section[] };
+       export function Tuples(_props: { required: [Section]; optional: [Section?]; rest: [Section, ...Section[]] }) { return null; }
+       export function Directory(_props: { entries: Record<string, Section> }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { Tuples, Directory } from "@autograph/compositions"; declare const uncertain: any; export function Page() { return <><Tuples required={[]} optional={[]} rest={[]} /><Tuples required={[{ title: "one", sections: [] }, { title: "two", sections: [] }]} optional={[]} rest={[{ title: "one", sections: [] }]} /><Directory entries={{ west: { title: "West", sections: [] } }} /><Directory entries={{ west: { title: 1, sections: [] } }} /><Directory entries={{ ...uncertain }} /><Directory entries={uncertain} /></>; }`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "nonconforming",
+      "conforming",
+      "nonconforming",
+      "unassessed",
+      "conforming",
+      "unassessed",
+      "conforming",
+      "nonconforming",
+      "unassessed",
+      "unassessed",
+    ]);
+  });
+
+  it("does not let an any-bearing union branch rescue finite evidence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/components": ["./core/components.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "components.tsx"),
+      `export function Choice(_props: { value: { value: string } | { value: any } }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { Choice } from "@autograph/components"; export function Page() { return <><Choice value={{ value: "ready" }} /><Choice value={{ value: 123 }} /></>; }`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "unassessed",
+    ]);
+  });
+
   it("keeps wholly reliable object unions and unresolved expected types distinct", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     await mkdir(join(root, "core"), { recursive: true });
