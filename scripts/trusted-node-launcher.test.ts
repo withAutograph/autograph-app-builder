@@ -414,12 +414,19 @@ describe("trusted Node launcher", () => {
     expect(result.stderr).toContain("launcher argv was invalid");
   });
 
-  it("routes every Node or pnpm mise task through the launcher", () => {
+  it("routes Node tasks through the launcher except the project-OIDC design judge", () => {
     for (const path of taskFiles(
       resolve(repositoryRoot, ".config/mise/tasks"),
     )) {
       const source = readFileSync(path, "utf8");
       expect(source, path).toMatch(/^#!\/bin\/sh\n/u);
+      if (path === resolve(repositoryRoot, ".config/mise/tasks/eval/design")) {
+        // The live judge needs the project environment for Vercel OIDC.
+        expect(source).toContain(
+          'exec "$(mise which node)" --import tsx scripts/eval-design.mts "$@"',
+        );
+        continue;
+      }
       if (!/(mise which (?:node|pnpm)|node_modules\/)/u.test(source)) continue;
       expect(source, path).toContain("trusted-node-launcher");
     }
