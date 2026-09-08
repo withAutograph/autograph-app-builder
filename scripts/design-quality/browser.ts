@@ -3,6 +3,12 @@ import * as axe from "axe-core";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Observation } from "./evidence";
+import {
+  generatedSignatureSelector,
+  signatureAttribution,
+  uniqueIntrinsicSignature,
+  type IntrinsicClassSignature,
+} from "./class-evidence";
 
 export const viewports = [
   { name: "desktop", width: 1440, height: 900 },
@@ -81,7 +87,31 @@ type BrowserStyleObservation = Observation & {
   computed: string;
   declarations: string[];
   origin: string;
+  selector?: string;
+  cssSource?: { path: string; line: number; column?: number };
 };
+
+function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
+  const index = node.attributes?.findIndex((value) => value === "class") ?? -1;
+  const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
+  return value && node.nodeName
+    ? {
+        tag: node.nodeName.toLowerCase(),
+        classes: [...new Set(value.split(/\s+/).filter(Boolean))].sort(),
+      }
+    : undefined;
+}
+
+function matchedSelector(match: {
+  matchingSelectors?: number[];
+  rule: { selectorList?: { selectors?: Array<{ text?: string }> } };
+}) {
+  const selectors = match.rule.selectorList?.selectors;
+  if (!selectors?.length) return undefined;
+  const indexes = match.matchingSelectors;
+  if (indexes?.length === 1) return selectors[indexes[0]]?.text;
+  return selectors.length === 1 ? selectors[0]?.text : undefined;
+}
 
 export const sourcePath = (value: string | undefined) => {
   if (!value) return undefined;
@@ -295,6 +325,8 @@ export async function measureStyles(
   page: Page,
   tokens: Record<string, string>,
   generatedSourcePaths: string[] = [],
+  generatedClassSignatures: IntrinsicClassSignature[] = [],
+  sharedClassSignatures?: IntrinsicClassSignature[],
 ) {
   const session = await page.context().newCDPSession(page);
   try {
@@ -405,6 +437,23 @@ export async function measureStyles(
     }
     const observations: BrowserStyleObservation[] = [];
     for (const { nodeId, model } of selected) {
+      const described = await session.send("DOM.describeNode", { nodeId });
+      const signature = domClassSignature(described.node);
+      const generatedSignature = signature
+        ? uniqueIntrinsicSignature(
+            generatedClassSignatures,
+            signature.tag,
+            signature.classes,
+          )
+        : undefined;
+      const signatureOrigin = signature
+        ? signatureAttribution(
+            generatedClassSignatures,
+            sharedClassSignatures,
+            signature.tag,
+            signature.classes,
+          )
+        : { provenance: "unknown" as const };
       const computed = await session.send("CSS.getComputedStyleForNode", {
         nodeId,
       });
@@ -440,10 +489,10 @@ export async function measureStyles(
             .filter(
               (p) => p.name === property && !p.disabled && p.parsedOk !== false,
             )
-            .map((p) => ({ p, rule: m.rule })),
+            .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) })),
         );
         const declarationEntries = inline.length
-          ? inline.map((p) => ({ p, rule: undefined }))
+          ? inline.map((p) => ({ p, rule: undefined, selector: undefined }))
           : own.length
             ? own
             : inherited.flatMap((m) =>
@@ -454,15 +503,24 @@ export async function measureStyles(
                       !p.disabled &&
                       p.parsedOk !== false,
                   )
-                  .map((p) => ({ p, rule: m.rule })),
+                  .map((p) => ({
+                    p,
+                    rule: m.rule,
+                    selector: matchedSelector(m),
+                  })),
               );
         const declarations = declarationEntries.map(({ p }) => p.value);
         const rule = declarationEntries[0]?.rule;
+        const selector = declarationEntries[0]?.selector;
         const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
         const path = sourcePath(
           styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined,
         );
-        const generated = generatedSource(path, generatedSourcePaths);
+        const signatureGenerated =
+          signatureOrigin.provenance === "generated" &&
+          generatedSignatureSelector(generatedSignature, selector);
+        const generated =
+          generatedSource(path, generatedSourcePaths) || signatureGenerated;
         const inheritedDeclaration =
           !inline.length && !own.length && declarationEntries.length > 0;
         let classification: string = classifyStyle(
@@ -499,7 +557,8 @@ export async function measureStyles(
         if (classification === "structural") continue;
         const provenance: Observation["provenance"] = generated
           ? "generated"
-          : arrustedSharedSource(path)
+          : signatureOrigin.provenance === "shared" ||
+              arrustedSharedSource(path)
             ? "shared"
             : "unknown";
         const quad = model.content;
@@ -509,13 +568,14 @@ export async function measureStyles(
           width: model.width,
           height: model.height,
         };
-        const source = path
+        const cssSource = path
           ? {
               path,
               line: (rule?.style?.range?.startLine ?? 0) + 1,
               column: (rule?.style?.range?.startColumn ?? 0) + 1,
             }
           : undefined;
+        const source = signatureGenerated ? signatureOrigin.source : cssSource;
         observations.push({
           node: `node-${nodeId}`,
           property,
@@ -524,7 +584,9 @@ export async function measureStyles(
           classification,
           declarations: [...new Set(declarations)],
           origin: generated
-            ? "generated-rule"
+            ? signatureGenerated
+              ? "generated-intrinsic-signature"
+              : "generated-rule"
             : provenance === "shared" && inheritedDeclaration
               ? "inherited-shared"
               : provenance === "shared"
@@ -547,6 +609,8 @@ export async function measureStyles(
           evidence: "browser",
           summary: `${property}: ${classification}`,
           source,
+          selector,
+          cssSource,
           region,
         });
       }
@@ -621,6 +685,7 @@ export async function measureStyles(
         "Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.",
         "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.",
         "A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.",
+        "Intrinsic tag/class evidence is eligible only with a selected Arrusted shared-signature inventory and no signature collision; without that inventory it remains unknown.",
       ],
     };
   } finally {
@@ -634,6 +699,8 @@ export async function capturePreview(input: {
   tokens: Record<string, string>;
   scenarios: Scenario[];
   generatedSourcePaths?: string[];
+  generatedClassSignatures?: IntrinsicClassSignature[];
+  sharedClassSignatures?: IntrinsicClassSignature[];
 }) {
   const browser = await chromium.launch();
   const captures = [];
@@ -694,6 +761,8 @@ export async function capturePreview(input: {
                 page,
                 input.tokens,
                 input.generatedSourcePaths,
+                input.generatedClassSignatures,
+                input.sharedClassSignatures,
               )
             : undefined;
         if (styles)

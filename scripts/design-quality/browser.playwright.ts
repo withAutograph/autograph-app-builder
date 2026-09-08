@@ -1,5 +1,6 @@
 import { expect, test } from "playwright/test";
 import { measurePage, measureStyles } from "./browser";
+import { collectIntrinsicClassSignatures } from "./class-evidence";
 
 // Authored calibration candidates, not human-validated aesthetic gold labels.
 test("measurements distinguish concrete defects from intentional layout", async ({
@@ -74,5 +75,55 @@ test("style evidence uses the active theme and reports diversified DOM coverage"
   // manufacture generated provenance from a visual token match.
   expect(
     styles.observations.some((item) => item.provenance === "generated"),
+  ).toBe(false);
+});
+
+test("browser attribution requires a unique generated intrinsic signature", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setContent(`<!doctype html><style>
+    :root { --color-text-primary: rgb(20, 20, 20) }
+    .generated-card { color: var(--color-text-primary) }
+  </style><section class="generated-card tokenized">Stock</section>`);
+  const generated = collectIntrinsicClassSignatures([
+    {
+      path: "src/Stock.tsx",
+      content:
+        'export function Stock(){ return <section className="generated-card tokenized">Stock</section> }',
+    },
+  ]);
+  const proved = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    generated,
+    [],
+  );
+  expect(
+    proved.observations.some(
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "generated" &&
+        item.origin === "generated-intrinsic-signature",
+    ),
+  ).toBe(true);
+  const collision = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    generated,
+    collectIntrinsicClassSignatures([
+      {
+        path: "packages/design-systems/Card.tsx",
+        content:
+          'export function Card(){ return <section className="generated-card tokenized">Shared</section> }',
+      },
+    ]),
+  );
+  expect(
+    collision.observations.some(
+      (item) => item.property === "color" && item.provenance === "generated",
+    ),
   ).toBe(false);
 });
