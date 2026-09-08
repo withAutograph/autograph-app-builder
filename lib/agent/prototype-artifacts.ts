@@ -21,7 +21,8 @@ export type PrototypeArtifactReceipt = Omit<PrototypeArtifact, "content"> & {
   size: number;
 };
 
-const maximumArtifactBytes = 262_144;
+// Browser documents include the compiled React/component runtime and theme.
+const maximumArtifactBytes = 8 * 1024 * 1024;
 
 export function parsePrototypeArtifactPath(path: string): {
   appId: string;

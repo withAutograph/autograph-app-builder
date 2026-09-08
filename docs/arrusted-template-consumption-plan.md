@@ -114,9 +114,12 @@ structurally guarantee visual consistency. A visually unrelated prototype is
 therefore possible even when source selection and repository generation are
 correct.
 
-A future visual-inheritance improvement should preserve the fast, disposable
-HTML prototype for early product exploration while adding a later preview of
-the actual generated application. The bounded improvement should:
+The component-backed preview correction supersedes the earlier proposal to
+retain a disposable standalone HTML prototype. Local and hosted creation use
+`record_ui_preview` with actual current Arrusted public components/compositions
+and the target-owned semantic token entrypoint. A green functional walkthrough
+or an approximately matching palette does not prove visual inheritance. The
+remaining Arrusted starter improvement should:
 
 1. define an Arrusted-owned route-app starter surface containing the supported
    shell, semantic tokens, and public component dependencies;
@@ -124,9 +127,8 @@ the actual generated application. The bounded improvement should:
    copying private app-specific workflow or stale token values;
 3. require planning to name the current target-owned tokens, exports, stories,
    or reference application patterns used by the generated UI;
-4. render the applied generated app in the integrated Browser before the final
-   review boundary, while retaining the standalone HTML artifact as an earlier
-   and cheaper design tool; and
+4. render the applied generated app in the integrated Browser using the same
+   public components and semantic token entrypoint as the initial preview; and
 5. add focused checks proving the generated app uses the declared public shell
    and design-system entrypoints rather than merely approximating their look.
 
@@ -135,13 +137,12 @@ was selected, the repository-owned generator and validation commands ran, and
 the resulting application uses the supported Arrusted visual foundation. None
 of those facts should be inferred from either of the others.
 
-This section records a possible improvement only. It does not authorize an
-Arrusted generator change, a design-system API change, or an App Builder runtime
-change.
+The preview-path correction is approved App Builder work. Changes to the
+Arrusted generator or its design-system API remain separate follow-up work.
 
-## Possible improvement: composition-only application UI
+## Component-only application UI
 
-A stricter follow-up should require App Builder to construct application
+App Builder MUST construct application
 interfaces exclusively by composing components that already exist in the exact
 Arrusted source selected for the build. The builder must not design, generate,
 copy, fork, or restyle a custom UI component to fill a catalog gap. It must not
@@ -157,7 +158,7 @@ the public component contracts, but it must not create new visual primitives,
 component-local styling systems, replacement design tokens, or copied variants
 inside the generated application.
 
-The future composition-only workflow should:
+The composition-only workflow must:
 
 1. inventory current public component exports, supported compositions,
    Storybook stories, required providers, and semantic tokens from the exact
@@ -167,11 +168,10 @@ The future composition-only workflow should:
    supported variant or properties;
 3. generate route and data-wiring code that imports the existing components
    directly instead of emitting new component implementations;
-4. constrain the early Browser prototype to the same verified catalog, using an
-   Arrusted-owned preview harness or a faithful catalog-backed representation
-   rather than free-form invented HTML controls;
-5. fail closed when a requested interaction cannot be expressed with the
-   existing catalog, recommend the closest supported product composition, and
+4. render the early Browser prototype with the actual public components and
+   target-owned token entrypoint, not a lookalike HTML representation;
+5. adapt a requested interaction to the closest available composition when it
+   cannot be expressed directly, offer a product-level alternative if needed, and
    record any genuinely missing reusable component as separate Arrusted work;
    and
 6. keep the missing-component work outside the generated app so a one-off local
@@ -192,9 +192,10 @@ supported alternative; it must not invent a component. Adding a reusable
 component to Arrusted is a separately reviewed prerequisite, after which a new
 build may consume it from the updated exact source.
 
-This section also records a possible improvement only. It does not authorize a
-component-catalog expansion, a generator change, or generated application
-mutation.
+This is the current App Builder design policy, not permission to expand the
+component catalog or change the Arrusted generator. Preparation, rendering,
+internal design recording, and planning proceed automatically. The first normal
+prompt remains **Build this app?**; outward effects require separate approval.
 
 ## Validation
 

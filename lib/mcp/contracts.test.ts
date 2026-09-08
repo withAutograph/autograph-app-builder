@@ -207,9 +207,18 @@ describe("publicPrototypeSchema", () => {
     expect(
       publicPrototypeSchema.safeParse({
         ...prototype,
-        content: "é".repeat(131_073),
+        content: "é".repeat(4 * 1024 * 1024 + 1),
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts compiled component documents larger than the old HTML-only limit", () => {
+    expect(
+      publicPrototypeSchema.safeParse({
+        ...prototype,
+        content: "x".repeat(512_302),
+      }).success,
+    ).toBe(true);
   });
 
   it("accepts only exact hosted HTTPS or loopback preview URLs", () => {

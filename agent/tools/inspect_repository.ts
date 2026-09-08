@@ -30,9 +30,29 @@ const sandboxOverviewPaths = [
 
 export default defineTool({
   description:
-    "Provide a no-content overview of the current session's repository without executing target-owned commands. Hosted inspection uses only the fixed session repository root; the input path remains a local-development checkout hint.",
-  inputSchema: z.object({ path: z.string().min(1) }),
-  async execute({ path }, ctx) {
+    "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Read actual component props before composing a preview; do not guess APIs. Without paths, return the repository overview. Never writes or publishes.",
+  inputSchema: z.object({
+    path: z.string().min(1).default(developmentWorkspacePath),
+    paths: z.array(z.string().min(1)).optional(),
+  }),
+  async execute({ path, paths }, ctx) {
+    if (paths?.length) {
+      const sandbox = await ctx.getSandbox();
+      const files = [];
+      const missingPaths = [];
+      for (const requestedPath of paths) {
+        const relativePath = requestedPath.replace(
+          /^\/workspace\/repository\//u,
+          "",
+        );
+        const content = await sandbox.readTextFile({
+          path: `/workspace/repository/${relativePath}`,
+        });
+        if (content === null) missingPaths.push(requestedPath);
+        else files.push({ path: requestedPath, content });
+      }
+      return { files, missingPaths };
+    }
     // Some models use the runtime-visible workspace path for their first
     // repository inspection. In local development that path does not exist on
     // the host running this tool yet. Treat it as the single configured source

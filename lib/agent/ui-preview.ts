@@ -149,7 +149,10 @@ export function validateUiPreview(input: UiPreviewInput): void {
     throw new Error("UI preview paths must be unique.");
   if (new Set(parsed.routes).size !== parsed.routes.length)
     throw new Error("UI preview routes must be unique.");
-  const gapPaths = new Set(parsed.catalogGaps.map(({ path }) => path));
+  if (parsed.catalogGaps.length > 0)
+    throw new Error(
+      "Adapt the design using existing Arrusted components instead of defining a catalog-gap component.",
+    );
   const screenRoutes = new Set(
     parsed.manifest.screens.map(({ route }) => route),
   );
@@ -192,14 +195,11 @@ export function validateUiPreview(input: UiPreviewInput): void {
       throw new Error("UI previews cannot define replacement design tokens.");
     if (/\b(?:linear|radial|conic)-gradient\s*\(/u.test(file.content))
       throw new Error("UI previews cannot invent decorative gradients.");
-    if (file.path.startsWith("src/components/") && !gapPaths.has(file.path))
+    if (file.path.startsWith("src/components/"))
       throw new Error(
-        "Each local UI component needs a documented catalog gap.",
+        "Compose screens from existing Arrusted components; do not define replacement components.",
       );
-    if (
-      file.path.startsWith("src/components/") &&
-      /<(?:button|input|select|textarea|dialog|table)\b/u.test(file.content)
-    )
+    if (/<(?:button|input|select|textarea|dialog|table)\b/u.test(file.content))
       throw new Error(
         "Local workflow components must compose public Arrusted primitives.",
       );
@@ -246,30 +246,6 @@ export function validateUiPreview(input: UiPreviewInput): void {
           "Each catalog gap must compose inventoried public primitives.",
         );
     }
-}
-
-/**
- * This is only the development fallback document. Production preview rendering
- * is performed by the fixed Arrusted renderer, which replaces this document
- * with the compiled component assets. It remains interactive so local fixture
- * reviews are useful even when that renderer is not available yet.
- */
-export function fallbackUiPreviewHtml(input: UiPreviewInput): string {
-  validateUiPreview(input);
-  const initial = input.routes[0]!;
-  const links = input.routes
-    .map(
-      (value) =>
-        `<a href="#${value}" data-route="${value}">${value === "/" ? "Overview" : value.slice(1)}</a>`,
-    )
-    .join("");
-  const pages = input.routes
-    .map(
-      (value) =>
-        `<section data-page="${value}"${value === initial ? "" : " hidden"}><h1>${value === "/" ? input.appId : value.slice(1)}</h1><p>Fixture-backed UI preview.</p><button data-action="toggle">Try action</button><output aria-live="polite"></output></section>`,
-    )
-    .join("");
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${input.appId}</title></head><body><nav aria-label="Preview pages">${links}</nav><main>${pages}</main><script>const pages=[...document.querySelectorAll('[data-page]')];function route(){const value=location.hash.slice(1)||${JSON.stringify(initial)};pages.forEach(page=>page.hidden=page.dataset.page!==value);document.querySelectorAll('[data-route]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.route===value)));}addEventListener('hashchange',route);route();document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>{button.parentElement.querySelector('output').textContent='Preview state changed';}));</script></body></html>`;
 }
 
 export function uiPreviewSourceDigest(input: UiPreviewInput) {

@@ -4,11 +4,8 @@ set -eu
 
 case "${1:-}" in
   "") ;;
-  --update-visuals)
-    export APP_BUILDER_PRODUCT_EVAL_UPDATE_VISUAL=1
-    ;;
   *)
-    echo "Usage: mise run test:product-evals [-- --update-visuals]" >&2
+    echo "Usage: mise run test:product-evals" >&2
     exit 2
     ;;
 esac

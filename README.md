@@ -30,6 +30,11 @@ receipts, digests, quotas, or other speculative conditions. See the
 [local-development lifecycle](docs/local-development-lifecycle.md) and
 [execution boundaries](docs/implementation-gates.md).
 
+Use `mise run eval:design -- --help` to score an existing preview on demand.
+[Design-quality evals](docs/design-quality-evals.md) report Arrusted token
+evidence, responsive/browser findings, and an advisory AI design score without
+regenerating the app or adding a runtime gate.
+
 The only pre-operation controls are credential/cross-user isolation and
 approval before outward effects. Actual provider or repository command errors
 are handled when they occur.

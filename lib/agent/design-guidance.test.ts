@@ -26,9 +26,11 @@ describe("high-fidelity design guidance", () => {
     expect(skill).toContain(
       "Prefer the cheapest public composition that makes the user's decision visible.",
     );
-    expect(skill).toContain("capability-gap reason");
-    expect(skill).toContain("inventoried public primitives");
-    expect(skill).toContain("semantic Arrusted tokens");
+    expect(skill).toMatch(
+      /catalog\s+gap is a reason to adapt the design using available components/u,
+    );
+    expect(skill).toContain("Do not add local component implementations");
+    expect(skill).toContain("target-owned token entrypoint directly");
   });
 
   it("keeps assumptions distinct and rejects common generic-design failure modes", () => {
@@ -52,7 +54,7 @@ describe("high-fidelity design guidance", () => {
 
   it("contains no HTML-first generation phase for new previews", () => {
     expect(skill).not.toMatch(/Generate the first HTML|Minimum HTML gate/u);
-    expect(skill).toContain("bounded React UI source");
+    expect(skill).toContain("call `record_ui_preview` with React route wiring");
     expect(skill).toMatch(/never substitute a generic\s+file writer/u);
   });
 });

@@ -19,7 +19,7 @@ import acceptAppSpec from "./accept_app_spec";
 
 export default defineTool({
   description:
-    "Record a bounded, session-scoped non-published prototype artifact receipt without pausing for approval. It never writes the target workspace.",
+    "Record internal product decisions and implementation design without pausing for approval. Use record_ui_preview for visual content composed from Arrusted components; never author replacement HTML controls here. A complete design continues into planning automatically.",
   inputSchema: z.object({
     path: z.string().regex(prototypeArtifactPathPattern),
     mediaType: z.enum(prototypeArtifactMediaTypes),
@@ -61,6 +61,11 @@ export default defineTool({
         expected: current,
         operation: "prototype artifact recording",
         transition: () => {
+          if (
+            current.phase === "ui_previewed" ||
+            current.phase === "ui_accepted"
+          )
+            return { ...current, artifacts: recorded.artifacts };
           return {
             version: APP_BUILDER_WORKFLOW_VERSION,
             phase: "prepared",
