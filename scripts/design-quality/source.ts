@@ -207,8 +207,10 @@ function observation(
   };
 }
 
-function isRouteGlue(name: string): boolean {
-  return /(?:Layout|Route|Page|Provider|Boundary|Shell|View)$/.test(name);
+function isStructuralProperty(name: string): boolean {
+  return /^(?:width|maxWidth|minWidth|height|maxHeight|minHeight|gridTemplateColumns|gridTemplateRows)$/i.test(
+    name,
+  );
 }
 
 /**
@@ -231,6 +233,7 @@ export function analyzeSource({
   const observations: Observation[] = [];
   const limitations: string[] = [...(reference?.limitations ?? [])];
   const reachableCss = new Set<string>();
+  const referencedClasses = new Set<string>();
   for (const file of files.filter(
     (candidate) => !/\.css$/i.test(candidate.path),
   )) {
@@ -242,6 +245,11 @@ export function analyzeSource({
       ts.ScriptKind.TSX,
     );
     if (!exportedEntries(source).length) continue;
+    for (const match of file.content.matchAll(
+      /className\s*=\s*["']([^"']+)["']/g,
+    ))
+      for (const name of match[1].split(/\s+/))
+        if (name && !name.includes("[")) referencedClasses.add(name);
     for (const statement of source.statements)
       if (
         ts.isImportDeclaration(statement) &&
@@ -271,6 +279,13 @@ export function analyzeSource({
       collectCssFile(file.content, tokenRefs, literals);
       const css = postcss.parse(file.content, { from: file.path });
       css.walkDecls((declaration) => {
+        const selector =
+          declaration.parent?.type === "rule"
+            ? declaration.parent.selector
+            : undefined;
+        const selectorUsed =
+          !selector ||
+          [...referencedClasses].some((name) => selector.includes(`.${name}`));
         const source = declaration.source?.start
           ? {
               path: file.path,
@@ -297,10 +312,10 @@ export function analyzeSource({
             observation(
               `styling:var:${file.path}:${declaration.source?.start?.line ?? 0}:${ref}`,
               "styling",
-              Object.hasOwn(tokens, ref) && isSemanticToken(ref)
+              selectorUsed && Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                 ? "conforming"
                 : "unassessed",
-              Object.hasOwn(tokens, ref) && isSemanticToken(ref)
+              selectorUsed && Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                 ? `CSS declaration uses declared semantic token ${ref}.`
                 : `CSS declaration references ${ref}, whose semantic token status cannot be established.`,
               source,
@@ -309,17 +324,21 @@ export function analyzeSource({
           );
         const declarationLiterals: string[] = [];
         collectCssLiterals(declaration.value, declarationLiterals);
-        for (const literal of declarationLiterals)
+        for (const literal of declarationLiterals) {
+          if (isStructuralProperty(declaration.prop)) continue;
           observations.push(
             observation(
               `styling:literal:${file.path}:${declaration.source?.start?.line ?? 0}:${literal}`,
               "styling",
-              "nonconforming",
-              `CSS declaration uses raw literal ${literal}; matching a token value is not token provenance.`,
+              selectorUsed ? "nonconforming" : "unassessed",
+              selectorUsed
+                ? `CSS declaration uses raw literal ${literal}; matching a token value is not token provenance.`
+                : `CSS selector is not referenced by static rendered class evidence.`,
               source,
               "raw-literal",
             ),
           );
+        }
       });
       continue;
     }
@@ -332,31 +351,46 @@ export function analyzeSource({
       ts.ScriptKind.TSX,
     );
     const imported = new Map<string, { source: string; name: string }>();
+    const unresolvedImports = new Set<string>();
+    const localDeclarations = new Set<string>();
     const usedInJsx = new Set<string>();
 
     for (const statement of source.statements) {
       if (!ts.isImportDeclaration(statement) || !statement.importClause)
         continue;
-      if (
-        !ts.isStringLiteral(statement.moduleSpecifier) ||
-        !autographUiImport.test(statement.moduleSpecifier.text)
-      )
-        continue;
+      if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
       const moduleSource = statement.moduleSpecifier.text;
       const bindings = statement.importClause.namedBindings;
+      const isAutograph = autographUiImport.test(moduleSource);
       if (statement.importClause.name)
-        imported.set(statement.importClause.name.text, {
-          source: moduleSource,
-          name: "default",
-        });
+        if (isAutograph)
+          imported.set(statement.importClause.name.text, {
+            source: moduleSource,
+            name: "default",
+          });
+        else unresolvedImports.add(statement.importClause.name.text);
       if (bindings && ts.isNamespaceImport(bindings))
-        imported.set(bindings.name.text, { source: moduleSource, name: "*" });
+        if (isAutograph)
+          imported.set(bindings.name.text, { source: moduleSource, name: "*" });
+        else unresolvedImports.add(bindings.name.text);
       if (bindings && ts.isNamedImports(bindings))
         for (const item of bindings.elements)
-          imported.set(item.name.text, {
-            source: moduleSource,
-            name: item.propertyName?.text ?? item.name.text,
-          });
+          if (isAutograph)
+            imported.set(item.name.text, {
+              source: moduleSource,
+              name: item.propertyName?.text ?? item.name.text,
+            });
+          else unresolvedImports.add(item.name.text);
+    }
+    for (const statement of source.statements) {
+      if (ts.isFunctionDeclaration(statement) && statement.name)
+        localDeclarations.add(statement.name.text);
+      if (ts.isClassDeclaration(statement) && statement.name)
+        localDeclarations.add(statement.name.text);
+      if (ts.isVariableStatement(statement))
+        for (const declaration of statement.declarationList.declarations)
+          if (ts.isIdentifier(declaration.name))
+            localDeclarations.add(declaration.name.text);
     }
 
     const seenEntries = exportedEntries(source);
@@ -366,7 +400,15 @@ export function analyzeSource({
       );
       continue;
     }
-    const visit = (node: ts.Node) => {
+    const visit = (node: ts.Node, entry?: ts.Node): void => {
+      if (entry && node !== entry && ts.isFunctionLike(node)) return;
+      if (ts.isBlock(node)) {
+        for (const statement of node.statements) {
+          visit(statement, entry);
+          if (ts.isReturnStatement(statement)) return;
+        }
+        return;
+      }
       if (ts.isIfStatement(node) && isStaticallyFalse(node.expression)) {
         if (node.elseStatement) visit(node.elseStatement);
         return;
@@ -378,6 +420,12 @@ export function analyzeSource({
         visit(node.whenFalse);
         return;
       }
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
+        isStaticallyFalse(node.left)
+      )
+        return;
       if (
         ts.isConditionalExpression(node) &&
         !isStaticallyFalse(node.condition)
@@ -492,19 +540,31 @@ export function analyzeSource({
                   observation(
                     `styling:style-var:${file.path}:${property.getStart(source)}:${ref}`,
                     "styling",
-                    Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                      ? "conforming"
-                      : "unassessed",
-                    Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                      ? `style uses declared semantic token ${ref}.`
-                      : `style references ${ref}, whose semantic status cannot be established.`,
+                    item &&
+                      /^(?:color|background|border)/i.test(
+                        property.name.getText(source),
+                      )
+                      ? "nonconforming"
+                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
+                        ? "conforming"
+                        : "unassessed",
+                    item &&
+                      /^(?:color|background|border)/i.test(
+                        property.name.getText(source),
+                      )
+                      ? `Public ${item.name} receives a generated color treatment override.`
+                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
+                        ? `style uses declared semantic token ${ref}.`
+                        : `style references ${ref}, whose semantic status cannot be established.`,
                     position(source, property),
                     "token-reference",
                   ),
                 );
               const styleLiterals: string[] = [];
               collectCssLiterals(value.text, styleLiterals);
-              for (const literal of styleLiterals)
+              for (const literal of styleLiterals) {
+                if (isStructuralProperty(property.name.getText(source)))
+                  continue;
                 observations.push(
                   observation(
                     `styling:style-literal:${file.path}:${property.getStart(source)}:${literal}`,
@@ -515,6 +575,7 @@ export function analyzeSource({
                     "raw-literal",
                   ),
                 );
+              }
             }
           if (item && reference) {
             const declaration =
@@ -598,7 +659,7 @@ export function analyzeSource({
         else if (
           ts.isIdentifier(tag) &&
           /^[A-Z]/.test(tag.text) &&
-          !isRouteGlue(tag.text)
+          localDeclarations.has(tag.text)
         )
           observations.push(
             observation(
@@ -608,6 +669,32 @@ export function analyzeSource({
               `Local custom visual control ${tag.text} is rendered instead of a selected public component.`,
               position(source, node),
               "local-control",
+            ),
+          );
+        else if (
+          ts.isIdentifier(tag) &&
+          /^[A-Z]/.test(tag.text) &&
+          unresolvedImports.has(tag.text)
+        )
+          observations.push(
+            observation(
+              `component:unresolved:${file.path}:${node.getStart(source)}`,
+              "component",
+              "unassessed",
+              `${tag.text} comes from a non-Arrusted import; static source cannot classify it as a local replacement.`,
+              position(source, node),
+              "unresolved-component",
+            ),
+          );
+        else if (ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text))
+          observations.push(
+            observation(
+              `component:unknown:${file.path}:${node.getStart(source)}`,
+              "component",
+              "unassessed",
+              `${tag.text}'s implementation cannot be resolved statically.`,
+              position(source, node),
+              "unresolved-component",
             ),
           );
         else if (
@@ -633,7 +720,7 @@ export function analyzeSource({
         usedInJsx.add(node.expression.text);
       ts.forEachChild(node, visit);
     };
-    for (const entry of seenEntries) visit(entry);
+    for (const entry of seenEntries) visit(entry, entry);
     for (const localName of unique(
       [...usedInJsx].filter((name) => imported.has(name)),
     )) {

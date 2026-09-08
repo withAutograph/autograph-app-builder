@@ -90,6 +90,70 @@ describe("analyzeSource", () => {
     );
   });
 
+  it("does not score dead branches or unresolved imports as local replacements", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        import { FancyControl } from "some-library";
+        function LocalControl() { return <button />; }
+        export function Page() { return <>{false && <Button variant="other" />}{true && <FancyControl />}</>; }
+      `,
+        },
+      ],
+    });
+    expect(
+      report.observations.some((o) =>
+        o.summary.includes("outside the public variants"),
+      ),
+    ).toBe(false);
+    expect(report.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          classification: "unresolved-component",
+          verdict: "unassessed",
+        }),
+      ]),
+    );
+    expect(
+      report.observations.some((o) =>
+        o.summary.includes("Local custom visual control"),
+      ),
+    ).toBe(false);
+  });
+
+  it("reports public component color overrides and excludes responsive dimensions", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        export function Page() { return <Button style={{ color: "var(--color-bg-page)", maxWidth: "320px", gridTemplateColumns: "1fr 2fr" }} />; }
+      `,
+        },
+      ],
+    });
+    expect(report.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          classification: "token-reference",
+          verdict: "nonconforming",
+          summary: expect.stringContaining("color treatment override"),
+        }),
+      ]),
+    );
+    expect(report.observations.some((o) => o.summary.includes("320px"))).toBe(
+      false,
+    );
+  });
+
   it("reports JSX imports, token evidence, and literal classifications", () => {
     const report = analyzeSource({
       tokenCss,
