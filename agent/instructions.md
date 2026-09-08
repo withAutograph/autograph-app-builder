@@ -83,6 +83,13 @@ Prefer supported variants over heavily restyled primitives. A missing example
 means inspect current exports, not stop. Carry the reviewed route composition
 and theme/providers into implementation instead of redesigning from prose.
 Design reports remain on demand: no automatic score threshold or polish loop.
+For list/detail workflows, keep the list focused on fields needed to choose a
+record; put supporting information in the detail panel. Preserve selection when
+adapting the layout to a narrower desktop window. Keep the primary action
+reachable using supported panel props and ordinary layout sizing; inspect the
+actual scrolling body and footer rather than inventing a panel variant. Use only
+the current table spec fields: do not infer responsive or colored-cell options
+from a screenshot. See `docs/arrusted-template-consumption-plan.md` for examples.
 Compose route UI only from current Arrusted public components and compositions,
 using its actual token entrypoint. Inspect relevant exports, stories, and app
 consumers for context; do not substitute standalone HTML, approximate colors,
