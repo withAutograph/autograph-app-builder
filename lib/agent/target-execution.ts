@@ -6,19 +6,29 @@ import type { SandboxSession } from "eve/sandbox";
 import { hasTestCapability } from "../testing/test-capability";
 
 import {
-  assertExactDependencyTargetBinding,
   dependencyCacheReceiptDigest,
+  dependencyTargetForWorkspace,
   inspectDependencyCache,
+  shouldPreferLiveTemplateDependencies,
+  type ObservedDependencyCache,
 } from "../repository/dependency-cache";
-import { inspectPreparedSandboxWorkspace } from "../repository/supported-template";
-import { targetProposalSchema } from "../repository/target-planning";
+import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
+import {
+  targetExecutionBinding,
+  targetProposalSchema,
+} from "../repository/target-planning";
 import {
   configuredToolchainImage,
   requiredToolVersions,
-  toolVersionMatches,
 } from "../sandbox/toolchain";
-import { sandboxBackendPlan } from "../sandbox/backend";
-import { sha256 } from "./workflow-state";
+import {
+  isHostedVercelSandboxBackend,
+  sandboxBackendPlan,
+} from "../sandbox/backend";
+import {
+  assertExactDependencyPreparationReceipt,
+  sha256,
+} from "./workflow-state";
 
 export type ProposalWorkflowState = Extract<
   AppBuilderWorkflowState,
@@ -60,6 +70,7 @@ export function plannedProposalForExecution(
 export function assertProposalExecutionBindings(
   state: ProposalWorkflowState,
 ): void {
+  assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
   if (!target.success)
     throw new Error(
@@ -72,6 +83,7 @@ export function assertProposalExecutionBindings(
   const expected = {
     sourceSha: state.workspace.sourceSha,
     sourceTree: state.workspace.sourceTree,
+    sourceReceiptDigest: state.sourceReceipt.digest,
     eligibilityDigest: state.workspace.eligibilityDigest,
     workspaceDigest: state.workspace.workspaceDigest,
     imageDigest: state.dependencyReceipt.imageDigest,
@@ -83,6 +95,7 @@ export function assertProposalExecutionBindings(
   const actual = {
     sourceSha: state.proposal.sourceSha,
     sourceTree: state.proposal.sourceTree,
+    sourceReceiptDigest: state.proposal.sourceReceiptDigest,
     eligibilityDigest: state.proposal.eligibilityDigest,
     workspaceDigest: state.proposal.workspaceDigest,
     imageDigest: state.proposal.imageDigest,
@@ -113,12 +126,39 @@ export function targetExecutionBlockers(input: {
     blockers.push("No immutable sandbox image is configured.");
   if (!input.toolchainReady)
     blockers.push(
-      "The sandbox does not prove the exact required Git, mise, and Bun toolchain.",
+      "The sandbox execution environment or a required command is unavailable.",
     );
   return blockers;
 }
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
+
+export function resolveTargetExecutionEnvironment(input: {
+  environment: Readonly<Record<string, string | undefined>>;
+  fixture: boolean;
+  cache?: ObservedDependencyCache;
+}) {
+  const localImage = configuredToolchainImage(input.environment);
+  const backend = sandboxBackendPlan({
+    environment: input.environment,
+    fixture: input.fixture,
+    localImageConfigured: localImage !== undefined,
+  });
+  const cacheInspectable =
+    backend.blockers.length === 0 &&
+    (input.fixture ||
+      localImage !== undefined ||
+      isHostedVercelSandboxBackend(backend.kind));
+  const execution =
+    cacheInspectable && input.cache !== undefined
+      ? targetExecutionBinding(input.cache, input.environment)
+      : undefined;
+  return {
+    backend,
+    cacheInspectable,
+    imageDigest: execution?.imageDigest,
+  };
+}
 
 export async function inspectTargetExecutionReadiness(input: {
   state: ProposalWorkflowState;
@@ -132,14 +172,14 @@ export async function inspectTargetExecutionReadiness(input: {
     input.expectedProposalDigest,
   );
   assertProposalExecutionBindings(input.state);
-  const observed = await inspectPreparedSandboxWorkspace(input.sandbox);
-  if (
-    observed.state !== "prepared" ||
-    JSON.stringify(observed.workspace) !== JSON.stringify(input.state.workspace)
-  )
-    throw new Error(
-      "The prepared workspace receipt changed before execution readiness.",
-    );
+  await inspectSourceBoundSandboxWorkspace({
+    sandbox: input.sandbox,
+    receipt: input.state.sourceReceipt,
+    expectedWorkspace: input.state.workspace,
+    ...(input.state.githubSource === undefined
+      ? {}
+      : { githubSource: input.state.githubSource }),
+  });
   const fixture = hasTestCapability("simulated-target", environment);
   const tools = fixture
     ? commands.map((command) => ({
@@ -169,29 +209,28 @@ export async function inspectTargetExecutionReadiness(input: {
           };
         }),
       );
-  const image = fixture
-    ? input.state.dependencyReceipt.imageDigest
-    : configuredToolchainImage(environment);
-  const backend = sandboxBackendPlan({
+  const executionEnvironment = resolveTargetExecutionEnvironment({
     environment,
     fixture,
-    localImageConfigured: image !== undefined,
   });
-  const cache =
-    image === undefined
-      ? undefined
-      : await inspectDependencyCache(
-          input.sandbox,
+  const cache = executionEnvironment.cacheInspectable
+    ? await inspectDependencyCache(
+        input.sandbox,
+        environment,
+        input.state.workspace,
+        shouldPreferLiveTemplateDependencies(
+          input.state.sourceReceipt.version,
           environment,
-          input.state.workspace,
-        ).catch(() => undefined);
-  if (cache !== undefined)
-    assertExactDependencyTargetBinding({
-      workspace: input.state.workspace,
-      sourceReceipt: input.state.sourceReceipt,
-      cache,
-      dependencyReceipt: input.state.dependencyReceipt,
-    });
+        ),
+      ).catch(() => undefined)
+    : undefined;
+  const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
+    environment,
+    fixture,
+    cache,
+  });
+  const image = resolvedExecutionEnvironment.imageDigest;
+  const backend = resolvedExecutionEnvironment.backend;
   const required = (
     Object.keys(requiredToolVersions) as Array<
       keyof typeof requiredToolVersions
@@ -202,30 +241,26 @@ export async function inspectTargetExecutionReadiness(input: {
       command,
       expected: requiredToolVersions[command].source,
       version: observedTool?.version ?? "",
-      matches:
-        observedTool?.available === true &&
-        (fixture || toolVersionMatches(command, observedTool.version)),
+      available: observedTool?.available === true,
     };
   });
   const toolchainReady =
     backend.blockers.length === 0 &&
     image !== undefined &&
-    cache !== undefined &&
-    input.state.dependencyReceipt.imageDigest === image &&
-    input.state.dependencyReceipt.dependencyCacheDigest ===
-      dependencyCacheReceiptDigest(cache) &&
-    input.state.dependencyReceipt.cacheManifestDigest ===
-      cache.manifestDigest &&
-    input.state.dependencyReceipt.cacheContentDigest === cache.contentDigest &&
-    required.every((tool) => tool.matches);
+    required.every((tool) => tool.available);
   const blockers = targetExecutionBlockers({
     imageConfigured: image !== undefined,
     toolchainReady,
     capabilityBlockers: backend.blockers,
   });
+  const dependencyTarget =
+    cache === undefined
+      ? undefined
+      : dependencyTargetForWorkspace(cache, input.state.workspace);
   const readiness = {
     sourceSha: input.state.workspace.sourceSha,
     sourceTree: input.state.workspace.sourceTree,
+    sourceReceiptDigest: input.state.sourceReceipt.digest,
     eligibilityDigest: input.state.workspace.eligibilityDigest,
     workspaceDigest: input.state.workspace.workspaceDigest,
     appSpecDigest: input.state.appSpec.digest,
@@ -237,8 +272,8 @@ export async function inspectTargetExecutionReadiness(input: {
     imageDigest: image ?? "unconfigured",
     dependencyCacheDigest:
       cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
-    targetSha: cache?.manifest.target.sha ?? "unverified",
-    targetTree: cache?.manifest.target.tree ?? "unverified",
+    targetSha: dependencyTarget?.sha ?? "unverified",
+    targetTree: dependencyTarget?.tree ?? "unverified",
     required,
   };
   return {

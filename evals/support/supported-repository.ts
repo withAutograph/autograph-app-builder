@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,6 +28,31 @@ export const SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE = [
   "    if: needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository",
 ].join("\n");
 
+/**
+ * A target-owned composition policy fixture. The builder binds these bytes to
+ * the source receipt selected for each evaluation rather than trusting a
+ * component name from a prompt or a screenshot.
+ */
+export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
+  {
+    version: 1,
+    kind: "arrusted-component-composition-v1",
+    publicImports: [
+      "@autograph/components",
+      "@autograph/compositions",
+      "@autograph/icons",
+    ],
+    tokenEntrypoints: ["@autograph/design-system/tokens.css"],
+    providers: ["@autograph/components/providers"],
+    routeGlue: {
+      allowedFiles: ["app/layout.tsx", "app/page.tsx"],
+      allowedStyleFiles: [],
+    },
+  },
+  null,
+  2,
+)}\n`;
+
 function fixtureGit(root: string, args: string[]): void {
   execFileSync(
     "git",
@@ -50,7 +75,9 @@ export function createSupportedRepositoryFixture(): string {
       recursive: true,
       mode: 0o700,
     });
-  const root = mkdtempSync(join(tmpdir(), "app-builder-eval-repository-"));
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "app-builder-eval-repository-")),
+  );
   const files: Record<string, string> = {
     ".config/mise/config.toml": [
       '[tasks."create:app"]',
@@ -61,25 +88,47 @@ export function createSupportedRepositoryFixture(): string {
       "",
       '[tasks."generate:app"]',
       "run = 'turbo gen --config .config/turbo/generators/config.ts app --args \"$usage_app_id\"'",
+      "",
+      '[tasks."app:check-build"]',
+      "run = 'bun .config/mise/scripts/repository/app-validation.ts check-build \"$usage_app\"'",
+      "",
+      '[tasks."app:test"]',
+      'run = \'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"\'',
+    ].join("\n"),
+    ".config/mise/tasks/repository/exec": [
+      "#!/usr/bin/env bash",
+      'exec mise exec -- bun ".config/mise/scripts/repository/$1" "${@:2}"',
+      "",
     ].join("\n"),
     ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
     "microfrontends.json": "{}\n",
+    "package.json": `${JSON.stringify(
+      {
+        name: "@autograph/supported-repository-fixture",
+        private: true,
+        dependencies: { next: "16.1.6" },
+      },
+      null,
+      2,
+    )}\n`,
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":
       'const scope = "@autograph/${appId}";\n',
+    ".config/mise/scripts/repository/app-validation.ts": "export {};\n",
     ".config/mise/scripts/repository/repository-preflight.ts": [
       'const observed = { runtime: "nextjs" };',
       'const appIdentity = "mise run repository:exec -- app-identity.ts --app <app-id>";',
       'const appPlan = "mise run repository:exec -- app-contract.ts --contract <contract-file>";',
       'const appApply = "mise run create:app -- --proposal <proposal-file>";',
       'const preflight = "mise run repository:preflight";',
-      'const validation = ["mise run check", "mise run test"];',
+      'const validation = ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"];',
     ].join("\n"),
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":
       "export default {};\n",
+    "docs/component-composition.json": ARRUSTED_COMPONENT_COMPOSITION_MANIFEST,
   };
   for (const [path, content] of Object.entries(files)) {
     const absolute = join(root, path);

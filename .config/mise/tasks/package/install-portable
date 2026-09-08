@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Install one offline portable-plugin client harness"
 set -eu
 

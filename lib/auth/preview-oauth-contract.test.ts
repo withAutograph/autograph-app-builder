@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildPreviewCimdOptions,
   buildPreviewMcpOAuthOptions,
-  previewEmailPasswordPolicy,
   previewOAuthScopes,
   readPreviewOAuthContractConfig,
 } from "./preview-oauth-contract";
@@ -78,9 +77,6 @@ describe("Preview OAuth activation contract", () => {
         signingAlgorithm: "ES256",
       },
     ]);
-    expect(previewEmailPasswordPolicy).toEqual({
-      enabled: false,
-    });
     for (const action of [
       "create",
       "read",

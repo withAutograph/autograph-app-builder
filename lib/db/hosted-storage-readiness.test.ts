@@ -38,6 +38,23 @@ async function exactReadBack() {
 }
 
 describe("hosted storage read-only readiness", () => {
+  it("keeps managed schema expectations in database read-back order", () => {
+    for (const rows of [
+      hostedStorageExpectedColumns,
+      hostedStorageExpectedIndexes,
+      hostedStorageExpectedConstraints,
+    ]) {
+      expect(rows).toEqual(
+        [...rows].sort(([leftTable, leftName], [rightTable, rightName]) => {
+          if (leftTable !== rightTable) {
+            return leftTable < rightTable ? -1 : 1;
+          }
+          return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
+        }),
+      );
+    }
+  });
+
   it("emits one sanitized receipt for the exact applied schema", async () => {
     const receipt = await verifyHostedStorageReadBack({
       repositoryRoot: process.cwd(),
@@ -54,7 +71,7 @@ describe("hosted storage read-only readiness", () => {
         maxConnections: 1,
       },
       migrations: {
-        count: 8,
+        count: 19,
         exactOrder: true,
         noPendingMigration: true,
         additiveOnly: true,
@@ -64,6 +81,8 @@ describe("hosted storage read-only readiness", () => {
         liveMembershipPredicateBound: true,
         githubJournalCompareAndSetBound: true,
         githubJournalExcludedFromTenantRetention: true,
+        builderProvisionJournalCompareAndSetBound: true,
+        githubUserCredentialEnvelopeBound: true,
         oauthAuthorizationSchemaBound: true,
         sandboxExecutionLeaseBound: true,
       },
@@ -153,15 +172,33 @@ describe("hosted storage read-only readiness", () => {
     expect(task).toContain("--database-url-fd 0");
     expect(cli).toContain("SET TRANSACTION READ ONLY");
     expect(cli).toContain("constraint_record.contype <> 'n'");
-    expect(cli).toContain("'github_publication_proposal'");
-    expect(cli).toContain("'github_installation_authorization_state'");
-    expect(cli).toContain("'hosted_github_installation'");
-    expect(cli).toContain("'hosted_github_publication_journal'");
-    expect(cli).toContain("'hosted_github_publication_proposal'");
+    expect(cli).toContain("hostedStorageExpectedColumns");
+    expect(cli).toContain(
+      "new Set(hostedStorageExpectedColumns.map(([table]) => table))",
+    );
+    expect(cli.match(/= ANY\(\$\{managedTables\}\)/gu)).toHaveLength(3);
     expect(cli).not.toContain("process.env.DATABASE_URL");
     expect(contract).toContain(
       'providerRestorePointStatus: "not-proven" as const',
     );
     expect(contract).toContain("githubJournalExcludedFromTenantRetention");
+  });
+
+  it("fails closed on normalized-email collisions before adding personal workspaces", async () => {
+    const migration = await readFile(
+      "drizzle/0011_self_service_onboarding.sql",
+      "utf8",
+    );
+    expect(migration).toContain('GROUP BY lower("email")');
+    expect(migration).toContain(
+      "case-insensitive Better Auth user email collision",
+    );
+    expect(migration).toContain('SET "email" = lower("email")');
+    expect(migration).toContain('CREATE UNIQUE INDEX "user_email_lower_uidx"');
+    expect(migration).toContain('CREATE TABLE "personal_workspace"');
+    expect(migration).toContain('REFERENCES "user"("id") ON DELETE CASCADE');
+    expect(migration).toContain(
+      'REFERENCES "organization"("id") ON DELETE CASCADE',
+    );
   });
 });

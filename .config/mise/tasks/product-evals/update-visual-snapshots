@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Explicitly refresh reviewed App Builder product-eval visual baselines"
+set -eu
+
+exec mise run test:product-evals -- --update-visuals

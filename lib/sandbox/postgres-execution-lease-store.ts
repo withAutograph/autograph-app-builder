@@ -1,4 +1,4 @@
-import { and, count, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as databaseSchema from "../db/schema";
@@ -49,14 +49,6 @@ function tenantPredicate(
   );
 }
 
-function workspacePredicate(principal: HostedPrincipal) {
-  return and(
-    eq(sandboxExecutionLeases.issuer, principal.issuer),
-    eq(sandboxExecutionLeases.audience, principal.audience),
-    eq(sandboxExecutionLeases.workspaceId, principal.workspaceId),
-  );
-}
-
 function leaseValues(lease: SandboxExecutionLease) {
   return {
     issuer: lease.principal.issuer,
@@ -102,16 +94,15 @@ export function parseSandboxExecutionLeaseRow(input: unknown) {
   return lease;
 }
 
-async function lockAdmissionScopes(
+async function lockExactLease(
   database: Transaction,
   principal: HostedPrincipal,
+  adapterSessionId: string,
 ) {
-  for (const scope of ["workspace", "subject"] as const) {
-    const key = sandboxLeaseAdvisoryKey(scope, principal);
-    await database.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
-    );
-  }
+  const key = sandboxLeaseAdvisoryKey(principal, adapterSessionId);
+  await database.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
+  );
 }
 
 async function exactLease(
@@ -137,7 +128,7 @@ export function createPostgresSandboxExecutionLeaseStore(
       const principal = hostedPrincipalSchema.parse(input.principal);
       const policyDigest = sandboxExecutionPolicyDigest(input.policy);
       return database.transaction(async (transaction) => {
-        await lockAdmissionScopes(transaction, principal);
+        await lockExactLease(transaction, principal, input.adapterSessionId);
         const nowEpochMs = await postgresNowEpochMs(transaction);
         const existing = await exactLease(
           transaction,
@@ -167,34 +158,6 @@ export function createPostgresSandboxExecutionLeaseStore(
           };
         }
 
-        const now = new Date(nowEpochMs);
-        const activePredicate = and(
-          workspacePredicate(principal),
-          eq(sandboxExecutionLeases.state, "active"),
-          gt(sandboxExecutionLeases.expiresAt, now),
-        );
-        const [subjectCount, workspaceCount] = await Promise.all([
-          transaction
-            .select({ value: count() })
-            .from(sandboxExecutionLeases)
-            .where(and(activePredicate, tenantPredicate(principal))),
-          transaction
-            .select({ value: count() })
-            .from(sandboxExecutionLeases)
-            .where(activePredicate),
-        ]);
-        if (
-          (subjectCount[0]?.value ?? 0) >=
-          input.policy.lease.maxActivePerSubject
-        ) {
-          return { disposition: "rejected", reason: "subject-limit" };
-        }
-        if (
-          (workspaceCount[0]?.value ?? 0) >=
-          input.policy.lease.maxActivePerWorkspace
-        ) {
-          return { disposition: "rejected", reason: "workspace-limit" };
-        }
         const lease = sandboxExecutionLeaseSchema.parse({
           version: 1,
           principal,
@@ -448,15 +411,16 @@ export function createPostgresSandboxExecutionLeaseStore(
 }
 
 export function sandboxLeaseAdvisoryKey(
-  scope: "workspace" | "subject",
   principal: HostedPrincipal,
+  adapterSessionId: string,
 ) {
   return JSON.stringify([
     "sandbox_execution_lease_v1",
-    scope,
+    "session",
     principal.issuer,
     principal.audience,
     principal.workspaceId,
-    ...(scope === "subject" ? [principal.ownerUserId] : []),
+    principal.ownerUserId,
+    adapterSessionId,
   ]);
 }

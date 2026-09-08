@@ -68,7 +68,7 @@ export const extBld05EvidenceInputSchema = z
           HOSTED_SESSION_MAX_LIFETIME_MS / 1_000,
         ),
         expiredSessionDeniedBeforeTransport: z.literal(true),
-        expiredSessionsExcludedFromAdmission: z.literal(true),
+        expiredSessionsExcludedFromActiveCompute: z.literal(true),
         evePackageVersion: z.literal("0.43.0"),
         continuationCredential: z.literal(
           "not-applicable-canonical-session-id-only",

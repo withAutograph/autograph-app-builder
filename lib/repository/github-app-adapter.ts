@@ -14,6 +14,7 @@ import {
   type GitHubMutationAcknowledgement,
   type GitHubOperation,
   type GitHubPublicationAdapter,
+  type GitHubSourceResolutionAdapter,
   type GitHubDraftPullRequestContent,
   type GitHubFreshRepositoryContent,
   type GitHubRepositoryObservation,
@@ -41,7 +42,7 @@ const installationSnapshotSchema = z
     accountId: decimal,
     accountLogin: z.string().min(1).max(100),
     accountType: z.enum(["Organization", "User"]),
-    repositorySelection: z.literal("selected"),
+    repositorySelection: z.enum(["all", "selected"]),
     selectedRepositoryIds: z.array(decimal),
     grantedPermissions: permissionSnapshotSchema,
   })
@@ -184,9 +185,6 @@ function repositoryObservation(
     repositorySnapshotSchema,
     snapshotInput,
   );
-  if (snapshot.repositoryVariableNames.includes(REPOSITORY_RELEASE_GATE)) {
-    throw new Error("The repository release gate is configured.");
-  }
   return createRepositoryObservation({
     repositoryId: snapshot.repositoryId,
     owner: snapshot.owner,
@@ -196,7 +194,12 @@ function repositoryObservation(
     headSha: snapshot.headSha,
     headTree: snapshot.headTree,
     installationIdentityDigest,
-    releaseGate: { name: REPOSITORY_RELEASE_GATE, configured: false },
+    releaseGate: {
+      name: REPOSITORY_RELEASE_GATE,
+      configured: snapshot.repositoryVariableNames.includes(
+        REPOSITORY_RELEASE_GATE,
+      ),
+    },
   });
 }
 
@@ -321,6 +324,57 @@ export function createGitHubAppPublicationAdapter(
           provider.publishDraftPullRequest(proposal, content),
         ),
       ) as GitHubMutationAcknowledgement;
+    },
+  };
+}
+
+export type GitHubAppSourceResolutionProvider = Pick<
+  GitHubAppInstallationProvider,
+  "inspectInstallation" | "inspectRepository"
+>;
+
+/** The read-only subset used to bind one exact existing-repository source. */
+export function createGitHubAppSourceResolutionAdapter(
+  provider: GitHubAppSourceResolutionProvider,
+): GitHubSourceResolutionAdapter {
+  async function inspectInstallation(operation: GitHubOperation) {
+    const expected = githubPermissionsFor(operation);
+    const snapshot = parseProviderResponse(
+      installationSnapshotSchema,
+      await sanitizedProviderCall(() =>
+        provider.inspectInstallation({
+          operation,
+          requestedPermissions: expected,
+        }),
+      ),
+    );
+    if (
+      JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected)
+    )
+      throw new Error(
+        "GitHub installation permissions do not match the operation.",
+      );
+    return createGitHubInstallationIdentity({
+      operation,
+      installationId: snapshot.installationId,
+      accountId: snapshot.accountId,
+      accountLogin: snapshot.accountLogin,
+      accountType: snapshot.accountType,
+      repositorySelection: snapshot.repositorySelection,
+      selectedRepositoryIds: snapshot.selectedRepositoryIds,
+    });
+  }
+
+  return {
+    inspectInstallation,
+    async inspectRepository({ operation, repositoryId, ref }) {
+      const identity = await inspectInstallation(operation);
+      return repositoryObservation(
+        await sanitizedProviderCall(() =>
+          provider.inspectRepository({ repositoryId, ref }),
+        ),
+        identity.digest,
+      );
     },
   };
 }

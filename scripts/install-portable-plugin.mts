@@ -35,7 +35,7 @@ const requestedDestination = resolve(destinationValue);
 await mkdir(requestedDestination, { recursive: true, mode: 0o700 });
 const destination = await realpath(requestedDestination);
 await validateAgentPluginPackage({
-  pluginRoot: join(source, "autograph-app-builder"),
+  pluginRoot: join(source, "app-builder"),
   repositoryRoot: resolve("."),
   release: true,
   packageKind: "generated-artifact",
@@ -48,19 +48,17 @@ try {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 }
 await mkdir(clientRoot, { mode: 0o700 });
-await cp(
-  join(source, "autograph-app-builder"),
-  join(clientRoot, "autograph-app-builder"),
-  { recursive: true },
-);
+await cp(join(source, "app-builder"), join(clientRoot, "app-builder"), {
+  recursive: true,
+});
 const harness = JSON.parse(
   await readFile(
     join(source, "clients", `${client}.client-harness.json`),
     "utf8",
   ),
 );
-harness.pluginRoot = "./autograph-app-builder";
-harness.mcp = "./autograph-app-builder/mcp.json";
+harness.pluginRoot = "./app-builder";
+harness.mcp = "./app-builder/mcp.json";
 await writeFile(
   join(clientRoot, "client-harness.json"),
   `${JSON.stringify(harness, null, 2)}\n`,
@@ -75,7 +73,7 @@ await writeFile(
       format: "agent-plugins-offline-installation-v1",
       client,
       releaseArchive: release.archive,
-      pluginRoot: "./autograph-app-builder",
+      pluginRoot: "./app-builder",
     },
     null,
     2,

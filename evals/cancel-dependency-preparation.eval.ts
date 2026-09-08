@@ -18,14 +18,14 @@ export default defineEval({
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
     t.notEvent("input.requested");
-    t.calledTool("prepare_target_dependencies", { count: 1 });
-    t.check(t.reply, includes("target-bound offline dependency closure"));
+    t.notCalledTool("prepare_target_dependencies");
+    t.check(t.reply, includes("already available"));
     t.notCalledTool("plan_app_creation");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"dependencies_prepared"'));
+    t.check(t.reply, includes('"phase":"planned"'));
   },
 });

@@ -81,11 +81,15 @@ const targetFiles = Object.fromEntries(
     ".config/mise/config.toml",
     ".config/mise/mise.lock",
     "bun.lock",
+    "Cargo.lock",
     ".config/mise/scripts/repository/app-identity.ts",
     ".config/mise/scripts/repository/app-contract.ts",
+    ".config/mise/scripts/repository/app-validation.ts",
+    ".config/turbo/generators/create-app.ts",
+    ".config/turbo/generators/templates/app/package.json.hbs",
     ".config/mise/scripts/repository/repository-preflight.ts",
     ".config/mise/tasks/repository/exec",
-  ].map((path, index) => [path, "456789a"[index]!.repeat(64)]),
+  ].map((path, index) => [path, "3456789abcd"[index]!.repeat(64)]),
 );
 
 const provenance = () =>
@@ -220,7 +224,7 @@ const { createHash } = require("node:crypto");
 const { appendFileSync } = require("node:fs");
 const { join } = require("node:path");
 if (process.argv.length === 3 && process.argv[2] === "--version") {
-  process.stdout.write("msb 0.6.14\\n");
+  process.stdout.write("msb 0.5.10\\n");
   process.exit(0);
 }
 const helper = spawnSync(
@@ -1266,7 +1270,7 @@ wait
     for (const expected of [
       '"aqua:docker/buildx" = "0.33.0"',
       'docker-cli = "29.4.0"',
-      '"npm:microsandbox" = "0.6.14"',
+      '"npm:microsandbox" = "0.5.10"',
     ])
       expect(miseConfig).toContain(expected);
     for (const expected of [
@@ -1279,7 +1283,7 @@ wait
       readFileSync("containers/eve-sandbox/Dockerfile"),
     );
     expect(dockerfileDigest).toBe(
-      "71cfb9d0d5bb5780e5496d3b62ce66f47f34f73d95d336e9c6ad10128b521813",
+      "05e47db175d19c836d95be2e628e36cf7c7a2859dc8fbd92ac5c07573db0ad5b",
     );
     expect(
       readFileSync("containers/eve-sandbox/README.md", "utf8"),
@@ -1310,7 +1314,7 @@ wait
         },
       });
       expect(invoked.status).toBe(0);
-      expect(invoked.stdout).toBe("msb 0.6.14\n");
+      expect(invoked.stdout).toBe("msb 0.5.10\n");
       expect(imageToolInvocation("docker", ["version"])).toEqual({
         program: realpathSync(join(fixture.bin, "docker")),
         args: ["version"],
@@ -1331,7 +1335,7 @@ wait
       assertExactImageToolVersion("docker", "Docker version 29.3.0, build old"),
     ).toThrow("does not match");
     expect(() =>
-      assertExactImageToolVersion("msb", "Microsandbox CLI v0.6.14"),
+      assertExactImageToolVersion("msb", "Microsandbox CLI v0.5.10"),
     ).not.toThrow();
     expect(() => assertExactImageToolVersion("pnpm", "11.7.0")).not.toThrow();
   });

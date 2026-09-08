@@ -1,0 +1,33 @@
+#!/bin/sh
+#MISE description="Build and locally prove one immutable release candidate without publication"
+set -eu
+
+case "${1:-}" in
+  -h|--help)
+    cat <<'EOF'
+Usage:
+  mise run release:prove -- \
+    --endpoint https://approved-release-origin.example \
+    --deployment-url https://exact-deployment.vercel.app \
+    --output /absolute/path/to/new-candidate
+
+Build and prove one immutable plugin candidate from a clean exact Builder
+checkout. Vercel Git owns deployment; this command does not deploy or publish.
+
+Required:
+  --endpoint URL        Literal HTTPS release endpoint. Local and loopback
+                        endpoints are rejected.
+  --deployment-url URL  Exact provider-owned deployment for this source SHA.
+  --output PATH         Absolute path for a new owner-controlled candidate
+                        directory. The path must not already exist.
+  -h, --help            Show this help.
+
+Review promotion-receipt.json before separately authorizing release:publish.
+EOF
+    exit 0
+    ;;
+esac
+
+export APP_BUILDER_RELEASE_NODE_BIN="$(mise which node)"
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$APP_BUILDER_RELEASE_NODE_BIN" --import tsx scripts/build-release-promotion.mts "$@"

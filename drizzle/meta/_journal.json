@@ -57,6 +57,83 @@
       "when": 1787983200000,
       "tag": "0008_sandbox_execution_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788066000000,
+      "tag": "0009_builder_provider_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788069600000,
+      "tag": "0010_better_auth_organizations",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788080400000,
+      "tag": "0011_self_service_onboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788084000000,
+      "tag": "0012_provider_connection_return_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788091200000,
+      "tag": "0013_passkey_onboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788094800000,
+      "tag": "0014_tenant_github_installation_uniqueness",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788102000000,
+      "tag": "0015_builder_resource_provisioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788102600000,
+      "tag": "0016_emulate_preview_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788261600000,
+      "tag": "0017_chat_repository_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788264000000,
+      "tag": "0018_durable_session_resume",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788267600000,
+      "tag": "0019_opaque_builder_handoff",
+      "breakpoints": true
     }
   ]
 }

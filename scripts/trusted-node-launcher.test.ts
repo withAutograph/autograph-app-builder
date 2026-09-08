@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   statSync,
   writeFileSync,
@@ -241,6 +242,57 @@ describe("trusted Node launcher", () => {
     expect(JSON.parse(result.stdout)).toEqual({ gh, token: null });
   });
 
+  it("passes the scoped development Codex profile without exposing ambient CODEX_HOME", () => {
+    const cleanEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      CODEX_HOME: "/hostile/ambient/codex",
+      APP_BUILDER_DEV_CODEX_HOME: "/private/dev/codex-home",
+      APP_BUILDER_DEV_CODEX_BIN: "/mise/bin/codex",
+    };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({home:process.env.CODEX_HOME ?? null, scopedHome:process.env.APP_BUILDER_DEV_CODEX_HOME, bin:process.env.APP_BUILDER_DEV_CODEX_BIN}))",
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      home: null,
+      scopedHome: "/private/dev/codex-home",
+      bin: "/mise/bin/codex",
+    });
+  });
+
+  it("uses only an owner-only development runtime home when explicitly scoped", () => {
+    const runtimeHome = realpathSync(
+      mkdtempSync(join(tmpdir(), "app-builder-runtime-")),
+    );
+    chmodSync(runtimeHome, 0o700);
+    const cleanEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      APP_BUILDER_DEV_RUNTIME_HOME: runtimeHome,
+    };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({home:process.env.HOME, scoped:process.env.APP_BUILDER_DEV_RUNTIME_HOME}))",
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      home: runtimeHome,
+      scoped: runtimeHome,
+    });
+  });
+
   it("keeps OIDC out of generic tasks and exposes only a closed Eve launcher", () => {
     const cleanEnvironment: NodeJS.ProcessEnv = {
       ...process.env,
@@ -362,12 +414,19 @@ describe("trusted Node launcher", () => {
     expect(result.stderr).toContain("launcher argv was invalid");
   });
 
-  it("routes every Node or pnpm mise task through the launcher", () => {
+  it("routes Node tasks through the launcher except the project-OIDC design judge", () => {
     for (const path of taskFiles(
       resolve(repositoryRoot, ".config/mise/tasks"),
     )) {
       const source = readFileSync(path, "utf8");
       expect(source, path).toMatch(/^#!\/bin\/sh\n/u);
+      if (path === resolve(repositoryRoot, ".config/mise/tasks/eval/design")) {
+        // The live judge needs the project environment for Vercel OIDC.
+        expect(source).toContain(
+          'exec "$(mise which node)" --import tsx scripts/eval-design.mts "$@"',
+        );
+        continue;
+      }
       if (!/(mise which (?:node|pnpm)|node_modules\/)/u.test(source)) continue;
       expect(source, path).toContain("trusted-node-launcher");
     }

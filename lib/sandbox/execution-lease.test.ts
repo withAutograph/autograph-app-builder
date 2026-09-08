@@ -33,15 +33,15 @@ const acquire = (
   });
 
 describe("sandbox execution lease", () => {
-  it("is idempotent at exact inputs and rejects a raced subject lease", async () => {
+  it("is idempotent at exact inputs without a per-subject quota", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     const [first, raced] = await Promise.all([
       acquire(store, "user_1", "session_1"),
       acquire(store, "user_1", "session_2"),
     ]);
-    expect([first.disposition, raced.disposition].sort()).toEqual([
+    expect([first.disposition, raced.disposition]).toEqual([
       "acquired",
-      "rejected",
+      "acquired",
     ]);
     const replay = await acquire(store, "user_1", "session_1");
     expect(replay.disposition).toBe("existing");
@@ -76,7 +76,7 @@ describe("sandbox execution lease", () => {
     expect(next.lease.epoch).toBe(2);
   });
 
-  it("keeps stop failures orphaned and admission-blocking until a successful retry", async () => {
+  it("keeps stop failures orphaned and reuse-blocking until a successful retry", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     await acquire(store, "user_1", "session_1", 1);
     const stopSandbox = vi.fn(async () => {

@@ -12,13 +12,14 @@ configured and approved.
 
 ## Build the endpoint-bound release
 
-Run from a clean checkout at the exact supported release SHA:
+This proof is an internal release gate. Build its endpoint-bound bytes only
+through the public release mode from clean exact Builder and Arrusted commits:
 
 ```sh
-mise run package:build-portable-release -- \
+mise run release:prove -- \
+  --arrusted-root /PRIVATE_INPUT/clean-arrusted \
   --endpoint https://PREVIEW_ORIGIN \
-  --output /PRIVATE_OUTPUT/autograph-app-builder
-mise run package:test-portable
+  --output /PRIVATE_OUTPUT/release-candidate
 ```
 
 The build rejects loopback, template, example, credential-bearing, non-HTTPS,
@@ -44,16 +45,9 @@ approval descriptions emitted by Eve must each be one closed JSON
 `autograph-eve-approval-receipt-v2` value identical to the corresponding
 scenario receipt. Prose matching cannot grant approval.
 
-```sh
-mise run package:prove-hosted -- \
-  --release /PRIVATE_OUTPUT/autograph-app-builder \
-  --install-root /PRIVATE_OUTPUT/installed-clients \
-  --scenario /PRIVATE_INPUT/create-iterate-draft-pr.json \
-  --token-file /PRIVATE_INPUT/primary.jwt \
-  --cross-tenant-token-file /PRIVATE_INPUT/other-workspace.jwt \
-  --receipt /PRIVATE_OUTPUT/hosted-proof.json \
-  --permit-approvals
-```
+The hosted runner is invoked only as a release-path check after the exact
+candidate has been published and deployed. Its package task is private and is
+not a third supported proof mode.
 
 `--permit-approvals` is intentionally separate. Without it, the harness refuses
 every scripted approval. Supplying it is appropriate only when the exact

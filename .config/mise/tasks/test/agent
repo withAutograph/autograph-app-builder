@@ -4,3 +4,4 @@ set -eu
 
 mise run test:general-evals
 mise run test:fresh-bootstrap-evals
+mise run test:product-evals

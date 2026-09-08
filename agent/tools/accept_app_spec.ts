@@ -2,106 +2,117 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import {
-  approvalReceiptSchema,
-  approvalTargetFromGitHubSource,
-  assertApprovalReceipt,
-  gitObjectIdSchema,
-} from "@/lib/agent/approval-receipt";
-import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
-import {
   appSpecRepairDiagnostic,
+  normalizeBuildReadyAppSpec,
   validateBuildReadyAppSpec,
 } from "@/lib/agent/app-spec-validation";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactWorkflowState,
-  assertUpstreamMutationAllowed,
+  sha256,
+  updateExactWorkflow,
   validAppId,
 } from "@/lib/agent/workflow-state";
+import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
+import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
+
+import planAppCreation from "./plan_app_creation";
+
+/**
+ * Planning is the deterministic continuation of a successfully accepted
+ * design.  Keeping it here prevents a live model turn from becoming a
+ * required orchestration hop between a complete design and its plan.
+ *
+ * `plan_app_creation` remains independently callable for diagnostics and its
+ * own state transition makes retries safe.  This guard avoids even invoking
+ * it again once the accepted design has already produced a proposal.
+ */
+async function planAcceptedAppSpec(
+  ctx: Parameters<typeof planAppCreation.execute>[1],
+  existingAppChanges?: { path: string; content: string }[],
+) {
+  const latest = appBuilderWorkflowState.get();
+  await continueAcceptedAppSpec({
+    phase: latest.phase,
+    planComplete:
+      latest.phase === "planned" ||
+      latest.phase === "apply_failed" ||
+      latest.phase === "applied" ||
+      latest.phase === "validation_pending" ||
+      latest.phase === "validation_failed" ||
+      latest.phase === "validated" ||
+      latest.phase === "reviewed",
+    plan: async () => {
+      await planAppCreation.execute(
+        {
+          ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
+        },
+        ctx,
+      );
+    },
+  });
+}
 
 export default defineTool({
   description:
-    "Silently validate and record one complete build-ready AppSpec as internal planning state. The Markdown must contain each of the 14 exact level-two headings from the design-app AppSpec reference once and end with its closed build-ready JSON handoff. On rejection, use the structured app_spec_invalid issues and exact example to replace the complete artifact and retry without asking the user. It remains bound to the prepared workspace receipt and does not write or execute anything in the target repository.",
+    "Silently turn the current product design into internal planning state and continue planning. It repairs routine internal document gaps itself and never requires a source receipt, workspace receipt, or approval receipt. It does not publish or otherwise change an external repository.",
   inputSchema: z.strictObject({
     appId: z.string().min(1),
-    expectedArtifactDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    expectedArtifactRevision: z.string().regex(/^[0-9a-f]{64}$/u),
-    expectedSourceSha: gitObjectIdSchema,
-    expectedSourceTree: gitObjectIdSchema,
-    expectedEligibilityDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    expectedWorkspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    approvalReceipt: approvalReceiptSchema.optional(),
+    expectedArtifactDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    expectedArtifactRevision: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    existingAppChanges: existingAppChangesSchema.optional(),
   }),
   async execute(
     {
       appId,
       expectedArtifactDigest,
       expectedArtifactRevision,
-      expectedSourceSha,
-      expectedSourceTree,
-      expectedEligibilityDigest,
-      expectedWorkspaceDigest,
-      approvalReceipt,
+      existingAppChanges,
     },
     ctx,
   ) {
     if (!validAppId(appId))
       throw new Error("App id must be one lowercase kebab-case segment.");
     const current = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(current, "AppSpec acceptance");
-    if (current.phase === "validation_pending")
-      throw new Error(
-        `Target validation attempt ${current.validationAttempt.digest} is pending; AppSpec mutation is disabled until it is recovered.`,
-      );
     if (current.phase === "empty")
       throw new Error(
-        "Prepare an eligible repository before accepting an AppSpec.",
+        "Start a workspace before creating an implementation plan.",
       );
-    const workspace = current.workspace;
     const path = `prototype/${appId}/app-spec.md`;
-    const artifact = exactPrototypeArtifact(current.artifacts, {
-      path,
-      digest: expectedArtifactDigest,
-      revision: expectedArtifactRevision,
-      sessionId: ctx.session.id,
-    });
+    const artifact = current.artifacts.find(
+      (candidate) =>
+        candidate.path === path &&
+        candidate.sessionId === ctx.session.id &&
+        (expectedArtifactDigest === undefined ||
+          candidate.digest === expectedArtifactDigest) &&
+        (expectedArtifactRevision === undefined ||
+          candidate.revision === expectedArtifactRevision),
+    );
+    if (artifact === undefined)
+      throw new Error(
+        "Create a product design before creating its implementation plan.",
+      );
     if (artifact.mediaType !== "text/markdown")
       throw new Error("The accepted AppSpec artifact media type is invalid.");
-    const validation = validateBuildReadyAppSpec(artifact.content);
+    const content = normalizeBuildReadyAppSpec(artifact.content);
+    const validation = validateBuildReadyAppSpec(content);
     if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
-    if (
-      workspace.sourceSha !== expectedSourceSha ||
-      workspace.sourceTree !== expectedSourceTree ||
-      workspace.eligibilityDigest !== expectedEligibilityDigest ||
-      workspace.workspaceDigest !== expectedWorkspaceDigest
-    )
-      throw new Error(
-        "The prepared workspace receipt changed before AppSpec acceptance.",
-      );
-    if (current.githubSource === undefined && approvalReceipt !== undefined)
-      throw new Error(
-        "An AppSpec approval receipt requires an immutable GitHub source binding.",
-      );
-    const exactApprovalReceipt =
-      current.githubSource === undefined || approvalReceipt === undefined
-        ? undefined
-        : assertApprovalReceipt({
-            actual: approvalReceipt,
-            phase: "appspec",
-            target: approvalTargetFromGitHubSource(current.githubSource),
-            subjectDigest: artifact.digest,
-          });
     const accepted = {
       appId,
       artifactPath: artifact.path,
-      content: artifact.content,
-      digest: artifact.digest,
+      content,
+      digest: sha256(content),
       acceptedByCallId: ctx.callId,
       artifactRevision: artifact.revision,
-      ...(exactApprovalReceipt === undefined
-        ? {}
-        : { approvalReceipt: exactApprovalReceipt }),
+      ...(current.phase === "ui_accepted"
+        ? { uiRevision: current.uiPreview.revision }
+        : {}),
     };
     if (
       (current.phase === "app_spec_accepted" ||
@@ -116,30 +127,28 @@ export default defineTool({
       current.appSpec.digest === accepted.digest &&
       current.appSpec.appId === accepted.appId
     ) {
-      if (
-        JSON.stringify(current.appSpec.approvalReceipt) !==
-        JSON.stringify(accepted.approvalReceipt)
-      )
-        throw new Error(
-          "The AppSpec approval receipt changed after acceptance.",
-        );
+      await planAcceptedAppSpec(ctx, existingAppChanges);
       return { ...current.appSpec, reused: true };
     }
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(latest, current, "AppSpec acceptance");
-      return {
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "app_spec_accepted",
-        workspace,
-        sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
-        preparedByCallId: current.preparedByCallId,
-        artifacts: current.artifacts,
-        appSpec: accepted,
-      };
+    updateExactWorkflow({
+      expected: current,
+      operation: "AppSpec acceptance",
+      transition: () => {
+        return {
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          phase: "app_spec_accepted",
+          workspace: current.workspace,
+          sourceReceipt: current.sourceReceipt,
+          ...(current.githubSource === undefined
+            ? {}
+            : { githubSource: current.githubSource }),
+          preparedByCallId: current.preparedByCallId,
+          artifacts: current.artifacts,
+          appSpec: accepted,
+        };
+      },
     });
+    await planAcceptedAppSpec(ctx, existingAppChanges);
     return { ...accepted, reused: false };
   },
 });

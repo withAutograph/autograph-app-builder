@@ -98,7 +98,7 @@ try {
   ]);
   assert.deepEqual(sameSubject.map(({ disposition }) => disposition).sort(), [
     "acquired",
-    "rejected",
+    "acquired",
   ]);
   const acquired = sameSubject.find(
     (result) => result.disposition === "acquired",
@@ -122,15 +122,7 @@ try {
   );
   assert.equal(
     workspace.filter(({ disposition }) => disposition === "acquired").length,
-    policy.lease.maxActivePerWorkspace,
-  );
-  assert.equal(
-    workspace.filter(
-      (result) =>
-        result.disposition === "rejected" &&
-        result.reason === "workspace-limit",
-    ).length,
-    1,
+    5,
   );
 
   await clear();

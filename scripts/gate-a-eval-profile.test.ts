@@ -10,6 +10,7 @@ import {
   installGateAEvalProfile,
   validateGateAEvalProfile,
 } from "./gate-a-eval-profile.mjs";
+import { gateAEvalWorkflowBodyTimeout } from "./run-with-test-capability.mts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -82,8 +83,34 @@ describe("closed Gate A eval profile", () => {
     );
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
-    expect(environment).toEqual({ APP_BUILDER_REAL_SANDBOX: "1" });
+    expect(environment).toEqual({
+      APP_BUILDER_REAL_SANDBOX: "1",
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
+    });
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
+    expect(gateAEvalWorkflowBodyTimeout(profile)).toBe("360000");
+  });
+
+  it("projects the body timeout only from a closed sandbox launch profile", () => {
+    const sandbox = createGateAEvalProfile(
+      { profile: "sandbox", image: null, sourceRoot: null },
+      repositoryRoot,
+    );
+    const general = createGateAEvalProfile(
+      { profile: "general", localPublication: "0" },
+      repositoryRoot,
+    );
+    expect(gateAEvalWorkflowBodyTimeout(sandbox)).toBe("360000");
+    expect(gateAEvalWorkflowBodyTimeout(general)).toBeUndefined();
+    expect(
+      gateAEvalWorkflowBodyTimeout({
+        version: 1,
+        profile: "sandbox",
+        image: null,
+        sourceRoot: null,
+      }),
+    ).toBeUndefined();
   });
 
   it("accepts only an explicit immutable sandbox image", () => {
@@ -130,6 +157,8 @@ describe("closed Gate A eval profile", () => {
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
       APP_BUILDER_SANDBOX_IMAGE: image,
       REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
     expect(validateGateAEvalProfile(profile, repositoryRoot)).toEqual(profile);
 
@@ -160,6 +189,8 @@ describe("closed Gate A eval profile", () => {
       APP_BUILDER_REAL_SANDBOX: "1",
       APP_BUILDER_SANDBOX_IMAGE: image,
       REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
     if (profile?.profile !== "sandbox")
       throw new Error("Expected sandbox profile.");

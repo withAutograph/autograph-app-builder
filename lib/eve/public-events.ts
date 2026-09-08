@@ -3,16 +3,22 @@ import { createHash } from "node:crypto";
 import {
   publicImplementationPlanSchema,
   publicPrototypeSchema,
+  publicUiPreviewSchema,
   type EveSessionStatus,
   type PublicEveEvent,
   type PublicImplementationPlan,
   type PublicInputRequest,
   type PublicPrototype,
+  type PublicUiPreview,
 } from "../mcp/contracts";
 import { targetProposalSchema } from "../repository/target-planning";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
+import {
+  githubRepositoryAccessSchema,
+  githubRepositoryAccessViewModel,
+} from "../integrations/store-in-view-model";
 
 export type InternalEveEvent = {
   type: string;
@@ -29,9 +35,16 @@ export type InternalEveEvent = {
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
-const invalidApprovalReceiptMessage =
-  "A required approval receipt was missing or invalid; the request was not exposed.";
-const maximumPrototypeBytes = 262_144;
+const silentInternalApprovalTools = new Set([
+  "accept_app_spec",
+  "validate_app_creation",
+  "accept_change_set",
+]);
+const unavailableConfirmationMessage =
+  "I couldn't verify this action, so it was not run.";
+const unavailableContinuationMessage =
+  "I couldn't finish preparing your app. Your progress is saved, so you can try again.";
+const maximumPrototypeBytes = 8 * 1024 * 1024;
 const prototypePathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -61,14 +74,44 @@ const prototypeResultSchema = z
     invalidated: z.boolean().optional(),
   })
   .strict();
+const uiPreviewResultSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    revision: lowercaseSha256Schema,
+    routes: z.array(z.string().startsWith("/")).min(1).max(16),
+    fidelity: z.literal("arrusted-component-catalog"),
+    functionality: z.literal("fixtures-only"),
+    content: z.string().min(1).max(maximumPrototypeBytes),
+    digest: lowercaseSha256Schema,
+  })
+  .passthrough();
 const planRequestSchema = z
-  .object({ expectedAppSpecDigest: lowercaseSha256Schema })
+  .object({
+    expectedAppSpecDigest: lowercaseSha256Schema,
+    existingAppChanges: z
+      .array(
+        z
+          .object({
+            path: z
+              .string()
+              .min(1)
+              .max(512)
+              .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u),
+            content: z.string().max(262_144),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(32)
+      .optional(),
+  })
   .strict();
 const planResultSchema = z
   .object({
     version: z.literal(1),
     sourceSha: gitObjectIdSchema,
     sourceTree: gitObjectIdSchema,
+    sourceReceiptDigest: lowercaseSha256Schema,
     eligibilityDigest: lowercaseSha256Schema,
     workspaceDigest: lowercaseSha256Schema,
     imageDigest: immutableExecutionArtifactSchema,
@@ -90,17 +133,30 @@ function sha256(value: string): string {
 
 function verifiedImplementationPlan(
   callId: string,
-  expectedAppSpecDigest: string,
+  request: z.infer<typeof planRequestSchema>,
   candidate: unknown,
 ): PublicImplementationPlan | undefined {
   const parsed = planResultSchema.safeParse(candidate);
   if (!parsed.success) return undefined;
   const result = parsed.data;
   const target = result.target;
+  const requestedChanges = request.existingAppChanges;
+  const iterationMatchesRequest =
+    requestedChanges === undefined
+      ? !("operation" in target)
+      : "operation" in target &&
+        target.operation === "iterate-existing-app" &&
+        target.iteration.changes.length === requestedChanges.length &&
+        target.iteration.changes.every(
+          (change, index) =>
+            change.path === requestedChanges[index]?.path &&
+            change.after.content === requestedChanges[index]?.content,
+        );
   const unsigned = {
     version: result.version,
     sourceSha: result.sourceSha,
     sourceTree: result.sourceTree,
+    sourceReceiptDigest: result.sourceReceiptDigest,
     eligibilityDigest: result.eligibilityDigest,
     workspaceDigest: result.workspaceDigest,
     imageDigest: result.imageDigest,
@@ -114,9 +170,10 @@ function verifiedImplementationPlan(
   };
   if (
     (!result.reused && result.plannedByCallId !== callId) ||
-    result.appSpecDigest !== expectedAppSpecDigest ||
-    target.contract.appSpec.sha256 !== expectedAppSpecDigest ||
-    target.plan.product.appSpec.sha256 !== expectedAppSpecDigest ||
+    result.appSpecDigest !== request.expectedAppSpecDigest ||
+    target.contract.appSpec.sha256 !== request.expectedAppSpecDigest ||
+    target.plan.product.appSpec.sha256 !== request.expectedAppSpecDigest ||
+    !iterationMatchesRequest ||
     result.contractDigest !== sha256(JSON.stringify(target.contract)) ||
     result.digest !== sha256(JSON.stringify(unsigned)) ||
     target.blockers.length !== 0 ||
@@ -126,13 +183,9 @@ function verifiedImplementationPlan(
   return publicImplementationPlanSchema.parse({
     appId: target.contract.appId,
     runtime: target.plan.source.runtime,
-    workspacePath: target.plan.source.workspacePath,
     packageName: target.plan.source.packageName,
     projectName: target.plan.topology.projectName,
     routes: target.plan.topology.routes,
-    sourceSha: result.sourceSha,
-    sourceTree: result.sourceTree,
-    proposalDigest: result.digest,
     readOnly: true,
   });
 }
@@ -188,7 +241,7 @@ export function latestInstalledImplementationPlan(
     if (input === undefined) continue;
     const plan = verifiedImplementationPlan(
       callId,
-      input.expectedAppSpecDigest,
+      input,
       event.data.result.output,
     );
     if (plan !== undefined) latest = plan;
@@ -227,10 +280,27 @@ export function latestInstalledPrototype(
       event.type !== "action.result" ||
       event.data.status !== "completed" ||
       event.data.result.kind !== "tool-result" ||
-      event.data.result.toolName !== "record_prototype_artifact" ||
       event.data.result.isError === true
     )
       continue;
+
+    if (event.data.result.toolName === "record_ui_preview") {
+      const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
+      if (
+        !preview.success ||
+        sha256(preview.data.content) !== preview.data.digest
+      )
+        continue;
+      latest = publicPrototypeSchema.parse({
+        path: `prototype/${preview.data.appId}/index.html`,
+        mediaType: "text/html",
+        content: preview.data.content,
+        digest: preview.data.digest,
+        revision: preview.data.digest,
+      });
+      continue;
+    }
+    if (event.data.result.toolName !== "record_prototype_artifact") continue;
 
     const callId = event.data.result.callId;
     const input = requested.get(callId);
@@ -271,6 +341,37 @@ export function latestInstalledPrototype(
   return latest;
 }
 
+/** Projects component-backed preview metadata only from a completed tool receipt. */
+export function latestInstalledUiPreview(
+  events: readonly MessageStreamEvent[],
+): PublicUiPreview | undefined {
+  let latest: PublicUiPreview | undefined;
+  for (const event of events) {
+    if (
+      event.type !== "action.result" ||
+      event.data.status !== "completed" ||
+      event.data.result.kind !== "tool-result" ||
+      event.data.result.isError === true ||
+      event.data.result.toolName !== "record_ui_preview"
+    )
+      continue;
+    const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
+    if (
+      !preview.success ||
+      sha256(preview.data.content) !== preview.data.digest
+    )
+      continue;
+    latest = publicUiPreviewSchema.parse({
+      appId: preview.data.appId,
+      revision: preview.data.revision,
+      routes: preview.data.routes,
+      fidelity: preview.data.fidelity,
+      functionality: preview.data.functionality,
+    });
+  }
+  return latest;
+}
+
 function inputRequest(request: {
   requestId: string;
   kind: "question" | "session-limit" | "tool-approval";
@@ -284,11 +385,16 @@ function inputRequest(request: {
   };
 }): PublicInputRequest | undefined {
   const approvalTitles = {
-    accept_app_spec: "Approve AppSpec",
-    accept_change_set: "Approve change set",
+    apply_app_creation: "Build this app?",
     publish_github_draft_pr: "Approve draft PR publication",
   } as const;
   const toolName = request.action?.toolName;
+  if (
+    request.kind === "tool-approval" &&
+    toolName !== undefined &&
+    silentInternalApprovalTools.has(toolName)
+  )
+    return undefined;
   const title =
     request.kind === "tool-approval" &&
     toolName !== undefined &&
@@ -296,15 +402,21 @@ function inputRequest(request: {
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   const description =
-    request.kind === "tool-approval" &&
-    toolName !== undefined &&
-    toolName in approvalTitles
-      ? publicApprovalDescription(request.action?.input, toolName)
-      : undefined;
+    request.kind === "tool-approval" && toolName === "apply_app_creation"
+      ? (z
+          .object({ productSummary: z.string().trim().min(1).max(600) })
+          .safeParse(request.action?.input).data?.productSummary ??
+        "Build and validate the preview shown above. This changes only the private App Builder workspace.")
+      : request.kind === "tool-approval" &&
+          toolName !== undefined &&
+          toolName in approvalTitles
+        ? publicApprovalDescription(request.action?.input, toolName)
+        : undefined;
   if (
     request.kind === "tool-approval" &&
     toolName !== undefined &&
     toolName in approvalTitles &&
+    toolName !== "apply_app_creation" &&
     description === undefined
   )
     return undefined;
@@ -361,8 +473,8 @@ export function projectInstalledEveEvent(
             {
               type: "error.public",
               index,
-              code: "approval_receipt_invalid",
-              message: invalidApprovalReceiptMessage,
+              code: "confirmation_unavailable",
+              message: unavailableConfirmationMessage,
             },
             { type: "status", index, status: "failed" },
           ]
@@ -388,6 +500,15 @@ export function projectInstalledEveEvent(
         },
       ];
     case "authorization.required":
+      const authorization = event.data.authorization;
+      const repositoryAccess = githubRepositoryAccessSchema.safeParse(
+        authorization === undefined
+          ? undefined
+          : Reflect.get(authorization, "repositoryAccess"),
+      );
+      const storeIn = repositoryAccess.success
+        ? githubRepositoryAccessViewModel(repositoryAccess.data)
+        : undefined;
       return [
         {
           type: "input.requested",
@@ -398,8 +519,40 @@ export function projectInstalledEveEvent(
               event.data.candidateId ??
               `${event.data.turnId}:${event.data.name}`,
             kind: "authorization",
-            title: event.data.name,
-            description: event.data.description,
+            title: storeIn?.title ?? event.data.name,
+            description: storeIn?.description ?? event.data.description,
+            ...(storeIn === undefined
+              ? {}
+              : {
+                  presentation: {
+                    section: "store-in" as const,
+                    control: "provider" as const,
+                  },
+                }),
+            ...(authorization === undefined
+              ? {}
+              : {
+                  authorization: {
+                    ...(authorization.url === undefined
+                      ? {}
+                      : { url: authorization.url }),
+                    ...(authorization.userCode === undefined
+                      ? {}
+                      : { userCode: authorization.userCode }),
+                    ...(authorization.expiresAt === undefined
+                      ? {}
+                      : { expiresAt: authorization.expiresAt }),
+                    ...(authorization.instructions === undefined
+                      ? {}
+                      : { instructions: authorization.instructions }),
+                    ...(authorization.displayName === undefined
+                      ? {}
+                      : { displayName: authorization.displayName }),
+                    ...(repositoryAccess.success
+                      ? { repositoryAccess: repositoryAccess.data }
+                      : {}),
+                  },
+                }),
             allowFreeform: false,
           },
         },
@@ -415,8 +568,8 @@ export function projectInstalledEveEvent(
         {
           type: "error.public",
           index,
-          code: event.data.code,
-          message: event.data.message,
+          code: "unable_to_continue",
+          message: unavailableContinuationMessage,
         },
         { type: "status", index, status: "failed" },
       ];

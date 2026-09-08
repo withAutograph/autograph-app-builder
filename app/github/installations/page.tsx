@@ -1,31 +1,50 @@
+import {
+  parseProviderConnectionFailureReason,
+  providerConnectionFailureMessage,
+} from "@/lib/integrations/provider-connection-status";
+import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
+import {
+  ProviderConnection,
+  ProviderConnectionNotice,
+} from "@/app/ui/provider-connection";
+import { FaGithub } from "react-icons/fa";
+
 type Props = {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{
+    status?: string | string[];
+    reason?: string | string[];
+    returnTo?: string | string[];
+    resume?: string | string[];
+  }>;
 };
 
 export default async function GitHubInstallationsPage({ searchParams }: Props) {
-  const { status } = await searchParams;
+  const { status, reason, returnTo, resume } = await searchParams;
+  const failureReason = parseProviderConnectionFailureReason(reason);
+  const returnState = safeProviderConnectionReturn({
+    returnTo,
+    resumeKey: resume,
+  });
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <p className="eyebrow">Autograph App Builder</p>
-        <h1>Connect a GitHub App installation</h1>
-        <p>
-          Choose only the repositories this workspace may inspect or update.
-          GitHub will ask you to confirm the installation and return here.
-        </p>
-        {status === "connected" ? (
-          <p role="status">The GitHub App installation is connected.</p>
-        ) : null}
-        {status === "failed" ? (
-          <p role="alert">
-            The GitHub App installation could not be connected. Start a new
-            authorization attempt.
-          </p>
-        ) : null}
-        <form method="post" action="/github/installations/start">
-          <button type="submit">Install or update GitHub access</button>
-        </form>
-      </section>
-    </main>
+    <ProviderConnection
+      action="/github/installations/start"
+      buttonLabel="Install or update GitHub access"
+      description="Choose the repositories this workspace may inspect or update, or allow all repositories. For an existing installation, GitHub must have Redirect on update enabled to return here."
+      icon={<FaGithub size={23} />}
+      returnTo={returnState.returnTo}
+      resumeKey={returnState.resumeKey}
+      title="Connect a GitHub App installation"
+    >
+      {status === "connected" ? (
+        <ProviderConnectionNotice status="success">
+          The GitHub App installation is connected.
+        </ProviderConnectionNotice>
+      ) : null}
+      {status === "failed" ? (
+        <ProviderConnectionNotice status="error">
+          {providerConnectionFailureMessage("GitHub", failureReason)}
+        </ProviderConnectionNotice>
+      ) : null}
+    </ProviderConnection>
   );
 }

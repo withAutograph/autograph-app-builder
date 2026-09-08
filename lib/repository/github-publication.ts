@@ -6,12 +6,14 @@ import {
   type SourceReceiptEvidence,
 } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
+import { compareOverlayPaths } from "./target-apply";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
 
 type Digest = string;
 type ObjectId = string;
+export type GitHubRepositorySelection = "all" | "selected";
 export type GitHubOperation =
   | "resolve-existing-source"
   | "create-fresh-repository"
@@ -33,7 +35,7 @@ export type GitHubInstallationIdentity = {
   accountId: string;
   accountLogin: string;
   accountType: "Organization" | "User";
-  repositorySelection: "selected";
+  repositorySelection: GitHubRepositorySelection;
   selectedRepositoryIds: readonly string[];
   permissions: GitHubPermissions;
   digest: Digest;
@@ -51,7 +53,7 @@ export type GitHubRepositoryObservation = {
   installationIdentityDigest: Digest;
   releaseGate: {
     name: typeof REPOSITORY_RELEASE_GATE;
-    configured: false;
+    configured: boolean;
   };
   digest: Digest;
 };
@@ -104,7 +106,7 @@ export type DraftPullRequestProposal = {
   repositoryObservationDigest: Digest;
   releaseGate: {
     name: typeof REPOSITORY_RELEASE_GATE;
-    configured: false;
+    configured: boolean;
   };
   reviewDigest: Digest;
   changeSetDigest: Digest;
@@ -182,7 +184,7 @@ export type DraftPullRequestSuccessReceipt = {
   changeSetDigest: Digest;
   changedContentDigest: Digest;
   normalizedChangedPaths: readonly string[];
-  releaseGateAbsent: true;
+  releaseGateUnchanged: true;
   recoveredFromPending: boolean;
   providerReadBackDigest: Digest;
   digest: Digest;
@@ -315,7 +317,7 @@ export interface GitHubDraftPullRequestContentSource {
 export type GitHubPublicationContentSource =
   GitHubFreshRepositoryContentSource & GitHubDraftPullRequestContentSource;
 
-export interface GitHubPublicationAdapter {
+export interface GitHubSourceResolutionAdapter {
   inspectInstallation(
     operation: GitHubOperation,
   ): Promise<GitHubInstallationIdentity>;
@@ -324,6 +326,9 @@ export interface GitHubPublicationAdapter {
     repositoryId: string;
     ref: string;
   }): Promise<GitHubRepositoryObservation>;
+}
+
+export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
   inspectDestination(input: {
     owner: string;
     name: string;
@@ -489,7 +494,7 @@ function canonicalPaths(paths: readonly string[]): readonly string[] {
     paths.some((path) => !safeSourcePath(path))
   )
     throw new Error("GitHub publication paths are unsafe or duplicated.");
-  return [...paths].toSorted();
+  return [...paths].toSorted(compareOverlayPaths);
 }
 
 function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
@@ -510,7 +515,7 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
   delete changeSet.reviewedByCallId;
   changeSet.digest = review.changeSetDigest;
   const sortedChanges = [...review.changes].toSorted((left, right) =>
-    left.path.localeCompare(right.path),
+    compareOverlayPaths(left.path, right.path),
   );
   if (
     !isDigest(review.changeSetDigest) ||
@@ -880,6 +885,7 @@ function assertReviewedBinding(
   assertCanonicalReview(review);
   if (
     source.releaseEnabled !== false ||
+    source.digest !== review.sourceReceiptDigest ||
     source.sourceSha !== review.sourceSha ||
     source.sourceTree !== review.sourceTree ||
     source.contractDigest !== review.repositoryContractDigest ||
@@ -922,7 +928,8 @@ export function createGitHubInstallationIdentity(
     !isDecimal(input.accountId) ||
     !safeName(input.accountLogin) ||
     (input.accountType !== "Organization" && input.accountType !== "User") ||
-    input.repositorySelection !== "selected" ||
+    (input.repositorySelection !== "all" &&
+      input.repositorySelection !== "selected") ||
     !Array.isArray(input.selectedRepositoryIds) ||
     new Set(input.selectedRepositoryIds).size !==
       input.selectedRepositoryIds.length ||
@@ -936,7 +943,7 @@ export function createGitHubInstallationIdentity(
     accountId: input.accountId,
     accountLogin: input.accountLogin,
     accountType: input.accountType,
-    repositorySelection: "selected" as const,
+    repositorySelection: input.repositorySelection,
     selectedRepositoryIds: [...input.selectedRepositoryIds].toSorted(),
     permissions: githubPermissionsFor(input.operation),
   };
@@ -994,11 +1001,9 @@ export function createRepositoryObservation(
     !isDigest(input.installationIdentityDigest) ||
     !exactKeys(input.releaseGate, ["name", "configured"]) ||
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    input.releaseGate.configured !== false
+    typeof input.releaseGate.configured !== "boolean"
   )
-    throw new Error(
-      "The repository observation is invalid or release-enabled.",
-    );
+    throw new Error("The repository observation is invalid.");
   const unsigned = { version: GITHUB_PUBLICATION_VERSION, ...input };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -1024,7 +1029,8 @@ export function assertExactRepositoryObservation(
 }
 
 export async function resolveImmutableExistingSource(input: {
-  adapter: GitHubPublicationAdapter;
+  adapter: GitHubSourceResolutionAdapter;
+  expectedInstallationId: string;
   repositoryId: string;
   ref: string;
   expectedSha: ObjectId;
@@ -1032,6 +1038,7 @@ export async function resolveImmutableExistingSource(input: {
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
   if (
+    !isDecimal(input.expectedInstallationId) ||
     !isDecimal(input.repositoryId) ||
     !safeHeadRef(input.ref) ||
     !isObjectId(input.expectedSha) ||
@@ -1044,6 +1051,7 @@ export async function resolveImmutableExistingSource(input: {
   assertExactInstallationIdentity(installation);
   if (
     installation.operation !== "resolve-existing-source" ||
+    installation.installationId !== input.expectedInstallationId ||
     !installation.selectedRepositoryIds.includes(input.repositoryId)
   )
     throw new Error("The installation is not selected for source resolution.");
@@ -1057,8 +1065,7 @@ export async function resolveImmutableExistingSource(input: {
     repository.installationIdentityDigest !== installation.digest ||
     repository.repositoryId !== input.repositoryId ||
     repository.headSha !== input.expectedSha ||
-    repository.headTree !== input.expectedTree ||
-    !releaseGateAbsent(repository)
+    repository.headTree !== input.expectedTree
   )
     throw new Error(
       "The GitHub source changed or is outside the approved installation.",
@@ -1105,8 +1112,7 @@ export function assertExactImmutableGitHubSourceReceipt(
     receipt.repository.headSha !== receipt.resolvedSha ||
     receipt.repository.headTree !== receipt.resolvedTree ||
     receipt.repository.installationIdentityDigest !==
-      receipt.installationIdentityDigest ||
-    !releaseGateAbsent(receipt.repository)
+      receipt.installationIdentityDigest
   )
     throw new Error("The immutable GitHub source receipt is malformed.");
 }
@@ -1263,18 +1269,12 @@ export function createDraftPullRequestProposal(input: {
   assertExactRepositoryObservation(input.repository);
   assertCanonicalReview(input.review);
   const approvedPaths = canonicalPaths(input.review.approvedPaths);
-  const concurrentPaths = canonicalPathsOrEmpty(input.changedPathsSinceBase);
   if (
     input.installation.operation !== "publish-draft-pull-request" ||
     !input.installation.selectedRepositoryIds.includes(
       input.repository.repositoryId,
     ) ||
     input.repository.installationIdentityDigest !== input.installation.digest ||
-    input.repository.headSha !== input.review.sourceSha ||
-    input.repository.headTree !== input.review.sourceTree ||
-    concurrentPaths.some((path) =>
-      approvedPaths.some((approved) => pathsOverlap(path, approved)),
-    ) ||
     !safeTitle(input.title)
   )
     throw new Error(
@@ -1296,7 +1296,7 @@ export function createDraftPullRequestProposal(input: {
     baseSha: input.repository.headSha,
     baseTree: input.repository.headTree,
     repositoryObservationDigest: input.repository.digest,
-    releaseGate: { name: REPOSITORY_RELEASE_GATE, configured: false as const },
+    releaseGate: input.repository.releaseGate,
     reviewDigest: input.review.digest,
     changeSetDigest: input.review.changeSetDigest,
     changedContentDigest: input.review.changedContentDigest,
@@ -1336,7 +1336,7 @@ export function assertExactDraftPullRequestProposal(
     !isObjectId(proposal.baseTree) ||
     !isDigest(proposal.repositoryObservationDigest) ||
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    proposal.releaseGate.configured !== false ||
+    typeof proposal.releaseGate.configured !== "boolean" ||
     !isDigest(proposal.reviewDigest) ||
     !isDigest(proposal.changeSetDigest) ||
     !isDigest(proposal.changedContentDigest) ||
@@ -1422,7 +1422,9 @@ function assertDraftReadBack(
     readBack.repository.repositoryId !== proposal.repositoryId ||
     readBack.repository.headSha !== proposal.baseSha ||
     readBack.repository.headTree !== proposal.baseTree ||
-    !releaseGateAbsent(readBack.repository) ||
+    readBack.repository.releaseGate.name !== proposal.releaseGate.name ||
+    readBack.repository.releaseGate.configured !==
+      proposal.releaseGate.configured ||
     JSON.stringify(canonicalPathsOrEmpty(readBack.changedPathsSinceBase)) !==
       JSON.stringify(readBack.changedPathsSinceBase) ||
     canonicalPathsOrEmpty(readBack.changedPathsSinceBase).some((path) =>
@@ -1541,7 +1543,7 @@ export function assertCanonicalGitHubMutationReceipt(
               "changeSetDigest",
               "changedContentDigest",
               "normalizedChangedPaths",
-              "releaseGateAbsent",
+              "releaseGateUnchanged",
               "recoveredFromPending",
               "providerReadBackDigest",
             ];
@@ -1569,7 +1571,9 @@ export function assertCanonicalGitHubMutationReceipt(
     if (
       !isDigest(value.providerReadBackDigest) ||
       !isDigest(value.installationIdentityDigest) ||
-      value.releaseGateAbsent !== true
+      (value.kind === "fresh-repository"
+        ? value.releaseGateAbsent !== true
+        : value.releaseGateUnchanged !== true)
     )
       throw new Error("GitHub success receipt read-back binding is invalid.");
     if (value.kind === "fresh-repository") {
@@ -1720,7 +1724,7 @@ function draftSuccess(input: {
     changeSetDigest: input.readBack.pullRequest.changeSetDigest,
     changedContentDigest: input.readBack.branch.changedContentDigest,
     normalizedChangedPaths: input.readBack.branch.normalizedChangedPaths,
-    releaseGateAbsent: true as const,
+    releaseGateUnchanged: true as const,
     recoveredFromPending: input.recovered,
     providerReadBackDigest: input.readBack.digest,
   });

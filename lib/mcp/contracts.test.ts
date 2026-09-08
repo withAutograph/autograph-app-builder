@@ -1,10 +1,140 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  eveGetInputSchema,
   eveRespondInputSchema,
+  eveStartInputSchema,
+  publicInputRequestSchema,
   publicImplementationPlanSchema,
   publicPrototypeSchema,
 } from "./contracts";
+
+describe("durable session discovery contracts", () => {
+  it("lists without a session and requires exactly one new, handoff, or resume start", () => {
+    expect(eveGetInputSchema.parse({})).toEqual({ cursor: 0, limit: 100 });
+    expect(
+      eveStartInputSchema.parse({
+        resumeSessionId: "session-one",
+        clientRequestId: "resume-one",
+      }),
+    ).toMatchObject({ resumeSessionId: "session-one" });
+    expect(
+      eveStartInputSchema.parse({
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "handoff-one",
+      }),
+    ).toMatchObject({
+      handoffId: "123e4567-e89b-42d3-a456-426614174000",
+    });
+    for (const candidate of [
+      { clientRequestId: "missing" },
+      {
+        prompt: "Build",
+        resumeSessionId: "session-one",
+        clientRequestId: "both",
+      },
+      {
+        prompt: "Build",
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "prompt-and-handoff",
+      },
+    ])
+      expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);
+  });
+});
+
+describe("publicInputRequestSchema", () => {
+  const authorization = {
+    requestId: "authorize-one",
+    kind: "authorization" as const,
+    title: "GitHub",
+    allowFreeform: false,
+  };
+
+  it("accepts only safe authorization challenges", () => {
+    for (const url of [
+      "https://github.com/login/oauth/authorize?state=opaque",
+      "http://127.0.0.1:4000/callback",
+    ])
+      expect(
+        publicInputRequestSchema.safeParse({
+          ...authorization,
+          authorization: { url, displayName: "GitHub" },
+        }).success,
+      ).toBe(true);
+
+    for (const url of [
+      "http://github.example/authorize",
+      "https://user:secret@github.example/authorize",
+      "javascript:alert(1)",
+    ])
+      expect(
+        publicInputRequestSchema.safeParse({
+          ...authorization,
+          authorization: { url },
+        }).success,
+      ).toBe(false);
+  });
+
+  it("accepts closed GitHub repository-access presentation metadata", () => {
+    const repositoryAccess = {
+      provider: "github" as const,
+      action: "update" as const,
+      repository: {
+        owner: "withAutograph",
+        name: "app-builder-dogfood",
+        fullName: "withAutograph/app-builder-dogfood",
+      },
+      scopes: [
+        {
+          installationId: "123",
+          accountLogin: "withAutograph",
+          accountType: "Organization" as const,
+        },
+      ],
+    };
+    expect(
+      publicInputRequestSchema.safeParse({
+        ...authorization,
+        title: "Update GitHub access",
+        authorization: {
+          url: "https://builder.example.test/github/installations?continuation=opaque",
+          displayName: "GitHub",
+          repositoryAccess,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      publicInputRequestSchema.safeParse({
+        ...authorization,
+        authorization: {
+          repositoryAccess: { ...repositoryAccess, accessToken: "secret" },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps presentation metadata closed and authorization-specific", () => {
+    expect(
+      publicInputRequestSchema.safeParse({
+        requestId: "choice-one",
+        kind: "question",
+        title: "Store in",
+        allowFreeform: false,
+        presentation: { section: "store-in", control: "provider" },
+      }).success,
+    ).toBe(true);
+    expect(
+      publicInputRequestSchema.safeParse({
+        requestId: "choice-one",
+        kind: "question",
+        title: "Store in",
+        allowFreeform: false,
+        authorization: { url: "https://github.com" },
+      }).success,
+    ).toBe(false);
+  });
+});
 
 const response = (requestId: string) => ({
   requestId,
@@ -77,9 +207,18 @@ describe("publicPrototypeSchema", () => {
     expect(
       publicPrototypeSchema.safeParse({
         ...prototype,
-        content: "é".repeat(131_073),
+        content: "é".repeat(4 * 1024 * 1024 + 1),
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts compiled component documents larger than the old HTML-only limit", () => {
+    expect(
+      publicPrototypeSchema.safeParse({
+        ...prototype,
+        content: "x".repeat(512_302),
+      }).success,
+    ).toBe(true);
   });
 
   it("accepts only exact hosted HTTPS or loopback preview URLs", () => {
@@ -114,13 +253,9 @@ describe("publicImplementationPlanSchema", () => {
   const plan = {
     appId: "vendor-onboarding",
     runtime: "nextjs" as const,
-    workspacePath: "apps/vendor-onboarding",
     packageName: "@autograph/vendor-onboarding",
     projectName: "apps-vendor-onboarding",
     routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
-    proposalDigest: "c".repeat(64),
     readOnly: true as const,
   };
 
@@ -135,13 +270,13 @@ describe("publicImplementationPlanSchema", () => {
     expect(
       publicImplementationPlanSchema.safeParse({
         ...plan,
-        sourceSha: "d".repeat(64),
+        sourceSha: "d".repeat(40),
       }).success,
     ).toBe(false);
     expect(
       publicImplementationPlanSchema.safeParse({
         ...plan,
-        workspacePath: "../outside",
+        proposalDigest: "private",
       }).success,
     ).toBe(false);
   });

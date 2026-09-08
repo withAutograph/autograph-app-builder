@@ -233,20 +233,30 @@ function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
   )}`;
 }
 
-export function unauthorizedResponse(config: HostedMcpAuthConfig): Response {
+export function unauthorizedResponse(
+  config: HostedMcpAuthConfig,
+  scopes = ["autograph:session"],
+): Response {
   return Response.json(
     { error: "unauthorized" },
     {
       status: 401,
       headers: {
         "Cache-Control": "no-store",
-        "WWW-Authenticate": challenge(config, ['error="invalid_token"']),
+        "WWW-Authenticate": challenge(config, [
+          'error="invalid_token"',
+          'error_description="Sign in to Autograph App Builder to continue"',
+          `scope="${scopes.join(" ")}"`,
+        ]),
       },
     },
   );
 }
 
-export function forbiddenResponse(config: HostedMcpAuthConfig): Response {
+export function forbiddenResponse(
+  config: HostedMcpAuthConfig,
+  scopes = ["autograph:session"],
+): Response {
   return Response.json(
     { error: "forbidden" },
     {
@@ -255,7 +265,8 @@ export function forbiddenResponse(config: HostedMcpAuthConfig): Response {
         "Cache-Control": "no-store",
         "WWW-Authenticate": challenge(config, [
           'error="insufficient_scope"',
-          'scope="autograph:session"',
+          'error_description="Reconnect Autograph App Builder to grant the required permissions"',
+          `scope="${scopes.join(" ")}"`,
         ]),
       },
     },

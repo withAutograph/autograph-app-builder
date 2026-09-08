@@ -1,14 +1,116 @@
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import * as databaseSchema from "../db/schema";
-import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
   createPreviewOAuthServer,
   readPreviewOAuthRuntimeConfig,
+  type PreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
+import { selfServiceSignupFlag } from "../feature-flags";
+import { readProviderEmulation } from "../integrations/local-provider-emulation";
+import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
+import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
 
-let deploymentAuth: ReturnType<typeof createPreviewOAuthServer> | undefined;
+type PreviewOAuthServer = ReturnType<typeof createPreviewOAuthServer>;
+
+interface PreviewOAuthDeploymentRuntime {
+  auth: PreviewOAuthServer;
+  origin: string;
+  organizationAuthority: ReturnType<
+    typeof createPostgresPreviewOrganizationAuthority
+  >;
+}
+
+let deploymentRuntime: PreviewOAuthDeploymentRuntime | undefined;
+
+export function selfServiceSignupAuthority(
+  environment: PreviewOAuthRuntimeConfig["environment"],
+  managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
+  emulated = false,
+) {
+  return environment === "local" || emulated
+    ? async () => true
+    : managedAuthority;
+}
+
+function getPreviewOAuthDeploymentRuntime(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): PreviewOAuthDeploymentRuntime {
+  if (deploymentRuntime !== undefined) return deploymentRuntime;
+  let providerEmulation: ReturnType<typeof readProviderEmulation>;
+  try {
+    providerEmulation = readProviderEmulation(environment);
+  } catch (cause) {
+    const invalidFields =
+      cause &&
+      typeof cause === "object" &&
+      "issues" in cause &&
+      Array.isArray(cause.issues)
+        ? cause.issues
+            .map((issue) =>
+              issue && typeof issue === "object" && "path" in issue
+                ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
+                : "unknown",
+            )
+            .join(",")
+        : "unknown";
+    throw new Error(`preview-oauth-emulation-config:${invalidFields}`, {
+      cause,
+    });
+  }
+  let config: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
+  try {
+    config = readPreviewOAuthRuntimeConfig(environment);
+  } catch (cause) {
+    throw new Error("preview-oauth-config", { cause });
+  }
+  const database = openHostedPostgresDatabase(config.databaseUrl);
+  const organizationAuthority = createPostgresPreviewOrganizationAuthority(
+    database,
+    {
+      issuer: config.issuer,
+      audience: config.resource,
+    },
+    {
+      isSelfServiceSignupEnabled: selfServiceSignupAuthority(
+        config.environment,
+        selfServiceSignupFlag,
+        Boolean(providerEmulation),
+      ),
+    },
+  );
+  let auth: PreviewOAuthServer;
+  try {
+    auth = createPreviewOAuthServer({
+      config,
+      database: drizzleAdapter(database, {
+        provider: "pg",
+        schema: databaseSchema,
+        transaction: true,
+      }),
+      membership: organizationAuthority,
+      userManagement: organizationAuthority,
+      infrastructure: {
+        environment: {
+          BETTER_AUTH_INFRASTRUCTURE: environment.BETTER_AUTH_INFRASTRUCTURE,
+          BETTER_AUTH_API_KEY: environment.BETTER_AUTH_API_KEY,
+        },
+        organizationAuthorityReady:
+          environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY ===
+          "verified-v1",
+      },
+    });
+  } catch (cause) {
+    throw new Error("preview-oauth-server", { cause });
+  }
+  deploymentRuntime = {
+    organizationAuthority,
+    auth,
+    origin: new URL(config.resource).origin,
+  };
+  return deploymentRuntime;
+}
 
 /**
  * Lazily mounts one exact Preview issuer. Importing the Next.js route performs
@@ -19,19 +121,80 @@ let deploymentAuth: ReturnType<typeof createPreviewOAuthServer> | undefined;
 export function getPreviewOAuthDeploymentAuth(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  if (deploymentAuth !== undefined) return deploymentAuth;
-  const config = readPreviewOAuthRuntimeConfig(environment);
-  const database = openHostedPostgresDatabase(config.databaseUrl);
-  deploymentAuth = createPreviewOAuthServer({
-    config,
-    database: drizzleAdapter(database, {
-      provider: "pg",
-      schema: databaseSchema,
-      transaction: true,
-    }),
-    membership: createPostgresOAuthMembershipAuthority(database),
+  return getPreviewOAuthDeploymentRuntime(environment).auth;
+}
+
+export function getPreviewOAuthDeploymentOrigin(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+) {
+  return getPreviewOAuthDeploymentRuntime(environment).origin;
+}
+
+export function getPreviewOAuthDeploymentSession(input: {
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  headers: Headers;
+}) {
+  return getPreviewOAuthDeploymentRuntime(
+    input.environment,
+  ).auth.api.getSession({ headers: input.headers });
+}
+
+interface PreviewSessionOrganizationAuth {
+  api: {
+    getSession(input: { headers: Headers }): Promise<{
+      session: { activeOrganizationId?: string | null };
+      user: { id: string; name: string; email: string };
+    } | null>;
+    setActiveOrganization(input: {
+      headers: Headers;
+      body: { organizationId: string };
+    }): Promise<{ id: string } | null>;
+  };
+}
+
+/**
+ * Reconcile a signed-in verified user with the one server-owned organization
+ * before rendering the product. Session-create hooks remain the primary path;
+ * this idempotent recovery covers sessions that predate self-serve onboarding
+ * or provider-link callbacks that reuse an existing session.
+ */
+export async function ensurePreviewSessionOrganization(input: {
+  auth: PreviewSessionOrganizationAuth;
+  authority: PreviewOrganizationUserAuthority;
+  headers: Headers;
+}) {
+  const current = await input.auth.api.getSession({ headers: input.headers });
+  if (!current?.user) return undefined;
+
+  const ensured = await input.authority.ensureOrganizationForVerifiedUser({
+    userId: current.user.id,
   });
-  return deploymentAuth;
+  if (current.session.activeOrganizationId !== ensured.organizationId) {
+    const active = await input.auth.api.setActiveOrganization({
+      headers: input.headers,
+      body: { organizationId: ensured.organizationId },
+    });
+    if (active?.id !== ensured.organizationId) {
+      throw new Error("Unable to activate the provisioned organization.");
+    }
+  }
+
+  return {
+    user: current.user,
+    organization: ensured,
+  };
+}
+
+export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  headers: Headers;
+}) {
+  const runtime = getPreviewOAuthDeploymentRuntime(input.environment);
+  return ensurePreviewSessionOrganization({
+    auth: runtime.auth,
+    authority: runtime.organizationAuthority,
+    headers: input.headers,
+  });
 }
 
 export function createPreviewOAuthRequestHandler(input: {
@@ -43,8 +206,36 @@ export function createPreviewOAuthRequestHandler(input: {
       const auth = (input.getAuth ?? getPreviewOAuthDeploymentAuth)(
         input.environment,
       );
-      return await auth.handler(request);
-    } catch {
+      const response = await auth.handler(request);
+      if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
+        let hasRedirect = false;
+        try {
+          const payload = (await response.clone().json()) as { url?: unknown };
+          hasRedirect = typeof payload.url === "string";
+        } catch {
+          // The response shape is diagnostic only; auth owns the response.
+        }
+        console.info(
+          JSON.stringify({
+            level: "info",
+            message: "preview_oauth_sign_in_response",
+            status: response.status,
+            hasRedirect,
+          }),
+        );
+      }
+      return response;
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "preview_oauth_unavailable",
+          reason:
+            error instanceof Error && error.message.startsWith("preview-oauth-")
+              ? error.message
+              : "preview-oauth-request",
+        }),
+      );
       return Response.json(
         { error: "preview_oauth_unavailable" },
         {

@@ -6,10 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  HOSTED_ARTIFACT_BYTES,
-  HOSTED_ARTIFACT_SHA256,
-} from "./hosted-artifact";
+import { HOSTED_ARTIFACT_URL } from "./hosted-artifact";
 
 const temporaryRoots: string[] = [];
 
@@ -19,7 +16,7 @@ afterEach(() => {
 });
 
 describe("hosted runtime asset bundle", () => {
-  it("loads every managed seed and the exact artifact without an authored tree", () => {
+  it("loads every managed seed and immutable artifact identity without authored bytes", () => {
     const runtimeRoot = mkdtempSync(join(tmpdir(), "hosted-runtime-assets-"));
     temporaryRoots.push(runtimeRoot);
     const seedsModule = pathToFileURL(
@@ -38,9 +35,8 @@ describe("hosted runtime asset bundle", () => {
         tsxLoader,
         "--input-type=module",
         "--eval",
-        `const [crypto, seeds, artifact] = await Promise.all([import("node:crypto"), import(${JSON.stringify(seedsModule)}), import(${JSON.stringify(artifactModule)})]);
-const bytes = artifact.readHostedArtifactBytes();
-process.stdout.write(JSON.stringify({ artifactBytes: bytes.byteLength, artifactSha256: crypto.createHash("sha256").update(bytes).digest("hex"), seedCount: seeds.readHostedManagedSeedFiles().length }));`,
+        `const [seeds, artifact] = await Promise.all([import(${JSON.stringify(seedsModule)}), import(${JSON.stringify(artifactModule)})]);
+process.stdout.write(JSON.stringify({ artifactUrl: artifact.HOSTED_ARTIFACT_URL, seedCount: seeds.readHostedManagedSeedFiles().length }));`,
       ],
       {
         cwd: runtimeRoot,
@@ -50,8 +46,7 @@ process.stdout.write(JSON.stringify({ artifactBytes: bytes.byteLength, artifactS
     );
 
     expect(JSON.parse(output)).toEqual({
-      artifactBytes: HOSTED_ARTIFACT_BYTES,
-      artifactSha256: HOSTED_ARTIFACT_SHA256,
+      artifactUrl: HOSTED_ARTIFACT_URL,
       seedCount: 12,
     });
   });

@@ -10,7 +10,7 @@ import {
 } from "@/lib/agent/fresh-bootstrap-capability";
 import {
   appBuilderWorkflowState,
-  assertExactWorkflowState,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   assertExactFreshBootstrapProposal,
@@ -20,6 +20,7 @@ import {
   deriveFreshBootstrapProposal,
   publishFreshBootstrap,
 } from "@/lib/repository/node-fresh-bootstrap";
+import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 export default defineTool({
   description:
@@ -41,12 +42,14 @@ export default defineTool({
       /^\/workspace\//u,
       "",
     );
-    const readOverlayFile = (path: string) =>
-      ctx
-        .getSandbox()
-        .then((sandbox) =>
-          sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
-        );
+    const sandbox = await ctx.getSandbox();
+    const readOverlayFile = async (path: string) =>
+      await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
+    const sourceWorkspace = await freshBootstrapSourceWorkspace({
+      sandbox,
+      receipt: workflow.sourceReceipt,
+      workspace: workflow.workspace,
+    });
     const proposal = await deriveFreshBootstrapProposal({
       capability,
       destinationPath: expected.destinationPath,
@@ -56,6 +59,7 @@ export default defineTool({
       review: workflow.reviewReceipt,
       protectedPaths: [process.cwd()],
       readOverlayFile,
+      sourceWorkspace,
     });
     if (!exactFreshBootstrapProposalMatch(proposal, expected))
       throw new Error("Fresh-bootstrap preconditions changed after approval.");
@@ -68,26 +72,26 @@ export default defineTool({
       review: workflow.reviewReceipt,
       publishedByCallId: ctx.callId,
       readOverlayFile,
+      sourceWorkspace,
       hooks: {
         ...configuredFreshBootstrapEvalHooks(),
         ...currentFreshBootstrapTestHooks(),
         afterPendingJournal: () => {
-          appBuilderWorkflowState.update((current) => {
-            assertExactWorkflowState(
-              current,
-              workflow,
-              "fresh-bootstrap pending recording",
-            );
-            if (current.phase !== "reviewed")
-              throw new Error(
-                "The reviewed workflow changed before fresh bootstrap.",
-              );
-            return {
-              ...current,
-              phase: "fresh_bootstrap_pending",
-              freshBootstrapProposal: proposal,
-              freshBootstrapCallId: ctx.callId,
-            };
+          updateExactWorkflow({
+            expected: workflow,
+            operation: "fresh-bootstrap pending recording",
+            transition: (current) => {
+              if (current.phase !== "reviewed")
+                throw new Error(
+                  "The reviewed workflow changed before fresh bootstrap.",
+                );
+              return {
+                ...current,
+                phase: "fresh_bootstrap_pending",
+                freshBootstrapProposal: proposal,
+                freshBootstrapCallId: ctx.callId,
+              };
+            },
           });
           pendingWorkflow = appBuilderWorkflowState.get();
         },
@@ -98,34 +102,33 @@ export default defineTool({
         "Durable fresh-bootstrap intent was not bound to workflow state.",
       );
     const exactPending = pendingWorkflow;
-    appBuilderWorkflowState.update((current) => {
-      assertExactWorkflowState(
-        current,
-        exactPending,
-        "fresh-bootstrap terminal recording",
-      );
-      if (
-        current.phase !== "fresh_bootstrap_pending" ||
-        current.freshBootstrapCallId !== ctx.callId ||
-        !exactFreshBootstrapProposalMatch(
-          current.freshBootstrapProposal,
-          proposal,
+    updateExactWorkflow({
+      expected: exactPending,
+      operation: "fresh-bootstrap terminal recording",
+      transition: (current) => {
+        if (
+          current.phase !== "fresh_bootstrap_pending" ||
+          current.freshBootstrapCallId !== ctx.callId ||
+          !exactFreshBootstrapProposalMatch(
+            current.freshBootstrapProposal,
+            proposal,
+          )
         )
-      )
-        throw new Error(
-          "The pending fresh-bootstrap workflow changed before terminal recording.",
-        );
-      return result.ok
-        ? {
-            ...current,
-            phase: "published_fresh_bootstrap",
-            freshBootstrapReceipt: result.receipt,
-          }
-        : {
-            ...current,
-            phase: "fresh_bootstrap_failed",
-            freshBootstrapReceipt: result.receipt,
-          };
+          throw new Error(
+            "The pending fresh-bootstrap workflow changed before terminal recording.",
+          );
+        return result.ok
+          ? {
+              ...current,
+              phase: "published_fresh_bootstrap",
+              freshBootstrapReceipt: result.receipt,
+            }
+          : {
+              ...current,
+              phase: "fresh_bootstrap_failed",
+              freshBootstrapReceipt: result.receipt,
+            };
+      },
     });
     return result.receipt;
   },

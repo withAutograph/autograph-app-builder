@@ -52,7 +52,11 @@ import {
   type SourceReceipt,
 } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
-import { resolveAllowedRepository } from "./supported-template";
+import { compareOverlayPaths } from "./target-apply";
+import {
+  resolveAllowedRepository,
+  SUPPORTED_REPOSITORY_CONTRACT,
+} from "./supported-template";
 
 export type BranchWorktreePublicationFaultHooks = {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -221,7 +225,7 @@ function parseCanonicalPathList(output: Buffer, message: string): string[] {
     paths.some((path) => !safeSourcePath(path))
   )
     throw new Error(message);
-  return paths.toSorted();
+  return paths.toSorted(compareOverlayPaths);
 }
 
 function publicationRoot(): string {
@@ -1121,7 +1125,11 @@ async function inspectBranchPublicationSource(input: {
     headReference,
     indexFileDigest: contentDigest(await readFile(indexPath)),
     remoteDigest: stableDigest(git(canonicalPath, ["remote", "-v"])),
-    contractDigest: inspectSourceContractDigest(canonicalPath, headSha),
+    contractDigest: inspectSourceContractDigest(
+      canonicalPath,
+      headSha,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
     dirty: [] as const,
     index: [] as const,
     dirtyDigest,
@@ -1352,7 +1360,9 @@ async function worktreeFileStates(
     }
   };
   await visit(proposal.worktreePath, "");
-  const paths = [...new Set([...cached, ...present])].toSorted();
+  const paths = [...new Set([...cached, ...present])].toSorted(
+    compareOverlayPaths,
+  );
   return Promise.all(
     paths.map(async (path) => ({
       path,
@@ -1397,7 +1407,11 @@ async function worktreeSnapshot(proposal: BranchWorktreePublicationProposal) {
     ]).trim(),
     indexFileDigest: contentDigest(await readFile(indexPath)),
     remoteDigest: stableDigest(git(root, ["remote", "-v"])),
-    contractDigest: inspectSourceContractDigest(root, proposal.baseSha),
+    contractDigest: inspectSourceContractDigest(
+      root,
+      proposal.baseSha,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
     statusDigest: stableDigest(statusEntries),
   };
 }
@@ -1488,7 +1502,7 @@ async function assertPostimages(
   const observed = await worktreeFileStates(proposal);
   if (
     JSON.stringify(observed.map(({ path }) => path)) !==
-    JSON.stringify([...expectedPaths].toSorted())
+    JSON.stringify([...expectedPaths].toSorted(compareOverlayPaths))
   )
     throw new Error("The publication worktree contains an unapproved path.");
   for (const { path, state } of observed) {

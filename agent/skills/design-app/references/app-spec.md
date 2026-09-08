@@ -1,6 +1,10 @@
 # AppSpec and Build-Ready Contract
 
-Keep `app-spec.md` human-readable and stable across prototype revisions.
+Keep `app-spec.md` human-readable and synchronized with prototype revisions.
+This is internal planning guidance. Derive it from the brief and safe revisable
+defaults without asking for formal specification or UI-finalization acceptance.
+The first normal prompt remains **Build this app?** after the Browser prototype
+and implementation plan are ready.
 
 ## Inference labels
 
@@ -83,7 +87,7 @@ Every object is closed. Arrays must be sorted and contain no duplicates.
 Do not include app id, runtime, workspace, package, project, local port, schema
 path, authorization copies, workspace dependencies, credentials, secrets,
 provider ids, plan/region choices, environment values, or deployment ids. The
-accepted AppSpec already carries authorization and product meaning; repository
+AppSpec records product meaning, not approval for outward effects; repository
 conventions derive mechanical values, and provider configuration remains a
 separate authority.
 
@@ -97,7 +101,7 @@ prototype interface that demonstrates it or note that it is nonvisual.
 
 Mark build-ready only when:
 
-- accepted UI revision and interface inventory follow stated preferences or clearly
+- current UI revision and interface inventory follow stated preferences or clearly
   labeled safe revisable defaults;
 - integrations and data objects are confirmed or deferred;
 - sources, identities, relationships, and temporal meaning are adequate for the
@@ -109,8 +113,10 @@ Mark build-ready only when:
 - the walkthrough is complete enough for product review.
 
 After those conditions pass, add the strict Build handoff block with status
-`build-ready`. Any subsequent AppSpec byte change invalidates its prepared
-digest and requires a new review and preparation result.
+`build-ready`. When the design changes, update the internal specification and
+plan silently. Do not turn internal recording or preparation into another user
+approval.
 
 Formal AppSpec recording is internal planning state, not authority to mutate the
-target. Target mutation still requires its own explicit approval.
+target. **Build this app?** authorizes editing and validating the private checkout;
+repository publication and other outward effects require separate approval.

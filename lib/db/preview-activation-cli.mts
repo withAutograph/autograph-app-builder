@@ -313,6 +313,9 @@ function createStore(sql: Sql): PreviewActivationStore {
           databaseUrl: "postgresql://task-scoped.invalid/database",
           githubClientId: "task-scoped-oauth-initialization",
           githubClientSecret: "task-scoped-oauth-initialization",
+          vercelClientId: "task-scoped-oauth-initialization",
+          vercelClientSecret: "task-scoped-oauth-initialization",
+          passkeyOnboarding: null,
         },
         database: drizzleAdapter(database, {
           provider: "pg",

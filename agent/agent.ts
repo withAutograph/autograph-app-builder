@@ -1,54 +1,78 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
+import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
+
 import { sha256 } from "@/lib/agent/workflow-state";
+import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
-const vendorOnboardingPrototype = `<!doctype html>
+export const vendorOnboardingPrototype = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vendor Onboarding</title>
+  <title>Vendor Review · Autograph</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #17211b; background: #f4f7f4; }
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #292929; background: #fafaf9; }
     * { box-sizing: border-box; }
-    body { margin: 0; }
-    header { padding: 24px 32px 18px; background: #173f31; color: white; }
-    header p { margin: 6px 0 0; color: #c8ddd4; }
-    main { display: grid; grid-template-columns: minmax(320px, 0.9fr) minmax(380px, 1.1fr); gap: 20px; padding: 24px 32px; }
-    section { background: white; border: 1px solid #dce5df; border-radius: 16px; box-shadow: 0 8px 24px #163b2d12; }
-    .section-heading { padding: 18px 20px; border-bottom: 1px solid #e6ece8; }
+    body { margin: 0; background: #fafaf9; }
+    .topnav { min-height: 52px; display: flex; align-items: stretch; gap: 4px; padding: 0 16px; border-bottom: 1px solid rgba(41,41,41,.08); background: #fefefe; }
+    .brand { align-self: center; display: flex; align-items: center; gap: 8px; height: 32px; margin-right: 12px; padding: 0 12px; border-radius: 8px; background: #f8f8f8; font-size: 13px; font-weight: 600; }
+    .mark { width: 24px; height: 24px; display: grid; place-items: center; border: 2px solid #8192ff; border-radius: 50%; color: #8192ff; font-size: 12px; }
+    .tab { border: 0; border-radius: 0; padding: 0 16px; background: transparent; color: #4e5253; box-shadow: none; }
+    .tab[aria-current="page"] { color: #292929; box-shadow: inset 0 -2px #8192ff; }
+    main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 32px 0 48px; }
+    .page-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+    section { background: #fefefe; border-radius: 20px; box-shadow: 0 1px 12px 1px rgba(68,102,136,.04); }
+    .section-heading { padding: 20px 24px 12px; }
     h1, h2, h3, p { margin-top: 0; }
-    h1 { margin-bottom: 0; font-size: 24px; }
-    h2 { margin-bottom: 4px; font-size: 17px; }
-    .muted { color: #617067; font-size: 14px; }
-    .filters { display: flex; gap: 8px; padding: 14px 20px; }
-    button { border: 1px solid #c8d4cd; border-radius: 999px; background: white; color: #244438; padding: 8px 12px; font: inherit; cursor: pointer; }
-    button[aria-pressed="true"] { background: #d9eee4; border-color: #74a88f; }
+    h1 { margin-bottom: 4px; font-size: 32px; line-height: 48px; letter-spacing: -.02em; }
+    h2 { margin-bottom: 4px; font-size: 16px; }
+    h3 { font-size: 14px; }
+    .muted { color: #5f6263; font-size: 13px; line-height: 20px; }
+    .heading-actions, .actions { display: flex; gap: 12px; }
+    button { min-height: 40px; border: 1px solid rgba(41,41,41,.16); border-radius: 8px; background: #fefefe; color: #292929; padding: 0 16px; font: 600 13px/1 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: rgba(41,41,41,.04); }
+    button:focus-visible { outline: 3px solid #f5f4ff; box-shadow: 0 0 0 2px #8192ff; }
+    .primary { border-color: #8192ff; background: #8192ff; color: #292929; box-shadow: 0 2px 8px rgba(99,102,241,.2); }
+    .primary:hover { background: #6b7de2; }
+    .summary { display: grid; grid-template-columns: 120px 1fr 1fr 1fr; align-items: center; gap: 24px; min-height: 138px; padding: 24px 32px; margin-bottom: 32px; }
+    .progress { width: 82px; height: 82px; display: grid; place-content: center; text-align: center; border: 9px solid #f5f4ff; border-radius: 50%; }
+    .progress strong { font-size: 18px; }.progress span { font-size: 11px; color: #5f6263; }
+    .summary-step { position: relative; min-height: 52px; padding-left: 44px; }
+    .summary-step::before { content: "✓"; position: absolute; left: 0; top: 2px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #f5f4ff; color: #6b7de2; }
+    .summary-step.active::before { content: "≡"; background: #8192ff; color: white; }
+    .summary-step.clear::before { background: #e6fbf7; color: #17b196; }
+    .summary-step strong { display: block; font-size: 13px; margin: 4px 0; }
+    .workspace { display: grid; grid-template-columns: .95fr 1.05fr; gap: 16px; }
+    .filters { display: flex; gap: 8px; padding: 0 24px 16px; }
+    .filters button { min-height: 32px; border: 0; border-radius: 999px; padding: 0 12px; color: #4e5253; background: rgba(41,41,41,.05); }
+    .filters button[aria-pressed="true"] { color: #4d5fc2; background: #f5f4ff; }
     .queue { list-style: none; margin: 0; padding: 0 12px 14px; }
-    .queue button { width: 100%; border: 0; border-radius: 12px; padding: 14px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; text-align: left; }
-    .queue button:hover, .queue button[aria-current="true"] { background: #edf6f1; }
-    .queue strong { font-size: 15px; }
-    .status { align-self: center; color: #8a4c10; background: #fff1db; border-radius: 999px; padding: 4px 8px; font-size: 12px; }
-    .detail { padding: 20px; }
+    .queue button { width: 100%; min-height: 68px; border: 0; border-radius: 12px; padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; text-align: left; }
+    .queue button:hover, .queue button[aria-current="true"] { background: #f5f4ff; }
+    .queue strong { font-size: 14px; }
+    .status { align-self: center; color: #9a4a09; background: #ffeede; border-radius: 999px; padding: 5px 9px; font-size: 11px; }
+    .detail { padding: 0 24px 24px; }
     .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
-    .fact { padding: 12px; background: #f5f8f6; border-radius: 10px; }
-    .fact span { display: block; color: #617067; font-size: 12px; margin-bottom: 3px; }
+    .fact { padding: 14px; background: #f8f8f8; border-radius: 10px; font-size: 14px; }
+    .fact span { display: block; color: #5f6263; font-size: 11px; margin-bottom: 4px; }
     .steps { list-style: none; margin: 0; padding: 0; }
-    .steps li { position: relative; padding: 12px 12px 12px 42px; border-top: 1px solid #edf1ee; }
-    .steps li::before { content: ""; position: absolute; left: 14px; top: 15px; width: 16px; height: 16px; border: 2px solid #77a28e; border-radius: 50%; }
-    .steps li.done::before { background: #2d7557; border-color: #2d7557; box-shadow: inset 0 0 0 3px white; }
-    .steps li.conditional { background: #fff9ee; }
+    .steps li { position: relative; padding: 13px 12px 13px 42px; border-top: 1px solid rgba(41,41,41,.08); }
+    .steps li::before { content: ""; position: absolute; left: 14px; top: 16px; width: 16px; height: 16px; border: 2px solid #a9adaf; border-radius: 50%; }
+    .steps li.done::before { content: "✓"; display: grid; place-items: center; background: #e6fbf7; border-color: #e6fbf7; color: #087463; font-size: 11px; }
+    .steps li.conditional { background: #ffeede; border-radius: 8px; }
     .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-    .primary { background: #1f684d; border-color: #1f684d; color: white; }
-    @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } header { padding: 20px 16px; } .facts { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .topnav { overflow-x: auto; padding: 0 8px; }.brand { flex: 0 0 auto; }.tab { flex: 0 0 auto; padding: 0 10px; } main { width: calc(100% - 24px); padding-top: 20px; }.page-heading { align-items: stretch; flex-direction: column; }.heading-actions button { flex: 1; }.summary { grid-template-columns: 1fr; padding: 20px; }.progress { margin: auto; }.workspace { grid-template-columns: 1fr; }.facts { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-  <header><h1>Vendor Onboarding</h1><p>Review new vendors, resolve exceptions, and send complete records forward.</p></header>
+  <nav class="topnav" aria-label="Vendor pages"><div class="brand"><span class="mark">A</span><span>Autograph.</span><span aria-hidden="true">·</span><span>Vendors</span></div><button class="tab">Import data</button><button class="tab" aria-current="page">Data Review</button><button class="tab">Integrations</button></nav>
   <main>
-    <section aria-labelledby="queue-title">
+    <div class="page-heading"><div><h1>Vendor Review</h1><p class="muted">Review new vendors, resolve exceptions, and send complete records forward.</p></div><div class="heading-actions"><button>↻ Run scan</button><button class="primary">Start Guided Review</button></div></div>
+    <section class="summary" aria-label="Review readiness"><div class="progress"><strong>67%</strong><span>ready</span></div><div class="summary-step clear"><strong>Intake complete</strong><span class="muted">3 vendor records received</span></div><div class="summary-step active"><strong>3 decisions remaining</strong><span class="muted">Across vendor submissions</span></div><div class="summary-step"><strong>Finance involved when needed</strong><span class="muted">Tax checks stay conditional</span></div></section>
+    <div class="workspace"><section aria-labelledby="queue-title">
       <div class="section-heading"><h2 id="queue-title">Operations review queue</h2><p class="muted">3 vendors need attention</p></div>
       <div class="filters" aria-label="Queue filters"><button aria-pressed="true">Needs review</button><button aria-pressed="false">Waiting</button><button aria-pressed="false">Ready</button></div>
       <ul class="queue">
@@ -56,8 +80,7 @@ const vendorOnboardingPrototype = `<!doctype html>
         <li><button data-name="Cedar Creative Studio" data-type="US individual" data-tax="required"><strong>Cedar Creative Studio</strong><span class="status">Missing W-9</span><span class="muted">Submitted yesterday</span></button></li>
         <li><button data-name="Kiteworks GmbH" data-type="International company" data-tax="not-required"><strong>Kiteworks GmbH</strong><span class="status">Bank review</span><span class="muted">Submitted yesterday</span></button></li>
       </ul>
-    </section>
-    <section aria-labelledby="detail-title">
+    </section><section aria-labelledby="detail-title">
       <div class="section-heading"><h2 id="detail-title">Northstar Logistics</h2><p class="muted" id="vendor-type">US corporation</p></div>
       <div class="detail">
         <div class="facts"><div class="fact"><span>Requested by</span>Field Operations</div><div class="fact"><span>Risk tier</span>Standard</div></div>
@@ -65,7 +88,7 @@ const vendorOnboardingPrototype = `<!doctype html>
         <ol class="steps"><li class="done">Business details complete</li><li class="done">Payment contact verified</li><li class="conditional" id="tax-step"><strong>Finance: verify tax information</strong><br><span class="muted">Required for tax-reportable US vendors</span></li><li>Final operations approval</li></ol>
         <div class="actions"><button>Request changes</button><button class="primary">Send to finance</button></div>
       </div>
-    </section>
+    </section></div>
   </main>
   <script>
     const rows = document.querySelectorAll('.queue button');
@@ -80,7 +103,7 @@ const vendorOnboardingPrototype = `<!doctype html>
 </body>
 </html>`;
 
-const vendorOnboardingDecisions = `# Vendor Onboarding decisions
+export const vendorOnboardingDecisions = `# Vendor Onboarding decisions
 
 - \`agent_inferred\`: The product name is **Vendor Onboarding** and the app id is \`vendor-onboarding\`.
 - \`agent_inferred\`: Operations starts from a review queue because the job is to move multiple submissions through exceptions efficiently.
@@ -89,7 +112,7 @@ const vendorOnboardingDecisions = `# Vendor Onboarding decisions
 - \`deferred\`: Final tax rules, approval roles, and system-of-record integrations remain product-review decisions.
 `;
 
-const vendorOnboardingAppSpec = `## Status and prototype
+export const vendorOnboardingAppSpec = `## Status and prototype
 
 Exploring. The usable prototype is at prototype/vendor-onboarding/index.html.
 
@@ -142,7 +165,7 @@ The queue, detail panel, and conditional Finance step are revisable inferred def
 Review the queue, open each vendor, and confirm that tax verification appears only when required.
 `;
 
-const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
+export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 ## Build handoff
 
 \`\`\`json
@@ -160,10 +183,61 @@ const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
+  if (message.includes("component-backed renewal review ui")) {
+    const path = lastUserMessage?.match(
+      /supported repository at (\/\S+)/iu,
+    )?.[1];
+    if (path === undefined)
+      return "I need the supported project location before I can shape the renewal review.";
+    const inspection = toolResults.find(
+      ({ name }) => name === "inspect_source",
+    );
+    if (inspection === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "inspect_source",
+            input: {
+              path: developmentInspectionPath({ requestedPath: path }),
+              sourceKind: "existing-repository",
+            },
+          },
+        ],
+      };
+    const preparation = toolResults.find(
+      ({ name }) => name === "prepare_workspace",
+    );
+    if (preparation === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "prepare_workspace",
+            input: {},
+          },
+        ],
+      };
+    const preview = toolResults.find(
+      ({ name }) => name === "record_ui_preview",
+    );
+    if (preview === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "record_ui_preview",
+            input: renewalReviewUiPreview,
+          },
+        ],
+      };
+    if (preview.isError)
+      return "I couldn't produce a reliable renewal review preview.";
+    return "I shaped **Renewal Review** around a prioritized 90-day queue using the existing table and review components. The preview is ready to explore; the intervention-owner choice remains open, and no functionality or live data has been planned yet.";
+  }
   if (message.includes("uncertain vendor workflow brief"))
     return "These lead to meaningfully different products. Which outcome should lead the first version: getting each new vendor approved once (recommended, because it delivers the fastest operational value), or continuously monitoring vendors after approval (broader scope with recurring compliance work)?";
   if (message.includes("anonymous public vendor portal"))
     return "An anonymous public vendor portal is unavailable in this product path. The recommended alternative is an internal **Vendor Intake** experience with an operations review queue and vendor detail panel, paired with secure upload requests sent through your existing intake channel.";
+  if (message.includes("full-page step-by-step form"))
+    return "I’ll call this **Vendor Onboarding** and use the requested full-page step-by-step form for a single requester. The conditional Finance review appears only when tax information makes it relevant.";
   if (message.includes("internal vendor-onboarding workflow")) {
     const path = lastUserMessage?.match(
       /supported repository at (\/\S+)/iu,
@@ -178,7 +252,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "inspect_source",
-            input: { path, sourceKind: "existing-repository" },
+            input: {
+              path: developmentInspectionPath({ requestedPath: path }),
+              sourceKind: "existing-repository",
+            },
           },
         ],
       };
@@ -195,7 +272,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "prepare_workspace",
-            input: { expectedSourceReceiptDigest: source.digest },
+            input: {},
           },
         ],
       };
@@ -314,10 +391,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
               appId: "vendor-onboarding",
               expectedArtifactDigest: currentAppSpec.digest,
               expectedArtifactRevision: currentAppSpec.revision,
-              expectedSourceSha: workspace.sourceSha,
-              expectedSourceTree: workspace.sourceTree,
-              expectedEligibilityDigest: workspace.eligibilityDigest,
-              expectedWorkspaceDigest: workspace.workspaceDigest,
             },
           },
         ],
@@ -328,33 +401,83 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       { digest?: string } | undefined;
     if (accepted?.digest === undefined)
       return "The product direction is not complete enough to plan reliably yet.";
-    const dependencies = toolResults.find(
-      ({ name }) => name === "prepare_target_dependencies",
-    );
-    if (dependencies === undefined)
-      return {
-        toolCalls: [
-          {
-            name: "prepare_target_dependencies",
-            input: { expectedAppSpecDigest: accepted.digest },
-          },
-        ],
-      };
-    if (dependencies.isError)
-      return "This product direction cannot yet be planned with the available project capabilities.";
     const plan = toolResults.find(({ name }) => name === "plan_app_creation");
     if (plan === undefined)
       return {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: { expectedAppSpecDigest: accepted.digest },
+            input: {},
           },
         ],
       };
     if (plan.isError)
       return "A real project conflict prevents this product direction from becoming a reliable plan.";
-    return "I inferred **Vendor Onboarding** with app ID `vendor-onboarding`. I started with an operations review queue and an in-context vendor detail panel so reviewers can work exceptions quickly; tax-reportable vendors get a conditional Finance verification step. A usable visual prototype and validated implementation plan are ready for review.";
+    const planned = plan.output as { digest?: string } | undefined;
+    const application = toolResults.find(
+      ({ name }) => name === "apply_app_creation",
+    );
+    if (application === undefined) {
+      if (planned?.digest === undefined)
+        return "I couldn't safely prepare this product direction for review.";
+      return {
+        toolCalls: [
+          {
+            name: "apply_app_creation",
+            input: {
+              productSummary:
+                "Build the operations review queue, vendor detail panel, and conditional Finance tax-verification workflow shown in the preview.",
+            },
+          },
+        ],
+      };
+    }
+    if (application.isError)
+      return "I couldn't finish assembling this product direction for review.";
+    const validation = toolResults.find(
+      ({ name }) => name === "validate_app_creation",
+    );
+    if (validation === undefined) {
+      return {
+        toolCalls: [
+          {
+            name: "validate_app_creation",
+            input: {},
+          },
+        ],
+      };
+    }
+    if (validation.isError)
+      return "The assembled app needs another revision before it is ready to review.";
+    const changeSet = toolResults.find(
+      ({ name }) => name === "change_set_status",
+    );
+    if (changeSet === undefined) {
+      return {
+        toolCalls: [
+          {
+            name: "change_set_status",
+            input: {},
+          },
+        ],
+      };
+    }
+    if (changeSet.isError)
+      return "I couldn't prepare the completed app changes for review.";
+    const review = toolResults.find(({ name }) => name === "accept_change_set");
+    if (review === undefined) {
+      return {
+        toolCalls: [
+          {
+            name: "accept_change_set",
+            input: {},
+          },
+        ],
+      };
+    }
+    if (review.isError)
+      return "I couldn't finish preparing the completed app for review.";
+    return "I inferred **Vendor Onboarding** with app ID `vendor-onboarding`. The interactive prototype now covers an operations review queue, an in-context vendor detail panel, and a conditional Finance verification step for tax-reportable vendors. The implementation plan and complete app changes passed their checks and are ready to review. If you want to continue, I can prepare a draft pull request for the repository.";
   }
   if (message.includes("record three prototype artifacts in parallel")) {
     const recorded = toolResults.filter(
@@ -423,12 +546,56 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The artifact workflow status could not be verified."
       : `Artifact workflow status: ${JSON.stringify(result.output)}`;
   }
+  if (message.includes("inspect existing vendor application")) {
+    const inspections = toolResults.filter(
+      ({ name }) => name === "inspect_existing_app",
+    );
+    const latest = inspections.at(-1);
+    if (latest === undefined)
+      return {
+        toolCalls: [
+          {
+            name: "inspect_existing_app",
+            input: { appId: "vendor", paths: [] },
+          },
+        ],
+      };
+    if (latest.isError)
+      return "The existing Vendor application could not be inspected safely.";
+    const result = latest.output as
+      | {
+          availablePaths?: readonly string[];
+          files?: readonly { path: string; content: string }[];
+        }
+      | undefined;
+    if ((result?.files?.length ?? 0) === 0) {
+      const candidates = result?.availablePaths?.filter((candidate) =>
+        /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate),
+      );
+      const path =
+        candidates?.find((candidate) =>
+          /(?:^|\/)page[.]tsx$/u.test(candidate),
+        ) ??
+        candidates?.find((candidate) => /[.]tsx$/u.test(candidate)) ??
+        candidates?.at(0);
+      if (path === undefined)
+        return "The existing Vendor application has no bounded source file suitable for iteration.";
+      return {
+        toolCalls: [
+          {
+            name: "inspect_existing_app",
+            input: { appId: "vendor", paths: [path] },
+          },
+        ],
+      };
+    }
+    return "The existing Vendor application is ready for a bounded product iteration.";
+  }
   if (message.includes("retry target planning")) {
-    const stale = message.includes("stale");
     const planResults = toolResults.filter(
       ({ name }) => name === "plan_app_creation",
     );
-    const requiredResults = stale ? 3 : 2;
+    const requiredResults = 2;
     const statusResult = [...toolResults]
       .reverse()
       .find(({ name }) => name === "workspace_status");
@@ -448,25 +615,20 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: {
-              expectedAppSpecDigest: stale
-                ? "0".repeat(64)
-                : status.appSpec.digest,
-            },
+            input: {},
           },
         ],
       };
     if (planResult === undefined)
       return "The target-planning retry result is unavailable.";
     if (planResult.isError)
-      return "The stale target-planning retry was rejected without changing its durable receipt.";
+      return "The target-planning retry failed; inspect its actual error.";
     const output = planResult.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
       : "The target-planning retry did not reuse its durable receipt.";
   }
   if (message.includes("prepare offline target dependencies")) {
-    const stale = message.includes("stale appspec digest");
     const lostResponse = message.includes("lost response");
     const statusResult = [...toolResults]
       .reverse()
@@ -483,6 +645,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase === "planned") {
+      return lostResponse
+        ? "The lost-response retry reused the exact durable dependency-preparation receipt."
+        : "Checkout-backed dependency metadata is already recorded for planning.";
+    }
     if (
       status?.phase !== "app_spec_accepted" &&
       status?.phase !== "dependencies_prepared"
@@ -493,17 +660,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const preparations = toolResults.filter(
       ({ name }) => name === "prepare_target_dependencies",
     );
-    const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
+    const requiredResults = lostResponse ? 2 : 1;
     if (preparations.length < requiredResults)
       return {
         toolCalls: [
           {
             name: "prepare_target_dependencies",
-            input: {
-              expectedAppSpecDigest: stale
-                ? "0".repeat(64)
-                : status.appSpec.digest,
-            },
+            input: {},
           },
         ],
       };
@@ -511,13 +674,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (preparation === undefined)
       return "The dependency-preparation result is unavailable.";
     if (preparation.isError)
-      return stale
-        ? "Stale offline dependency preparation was rejected; the exact durable receipt was preserved."
-        : "Offline dependency preparation was canceled or rejected; accepted AppSpec state was preserved.";
+      return "Dependency setup failed; inspect its actual error.";
     const output = preparation.output as { reused?: boolean } | undefined;
     return output?.reused === true
-      ? "The lost-response retry reused the exact durable dependency-preparation receipt after re-verifying the cache."
-      : "The approved target-bound offline dependency closure was verified and materialized only in builder-owned planning metadata; request target planning separately.";
+      ? "The lost-response retry reused the exact durable dependency-preparation receipt."
+      : "Checkout-backed dependency metadata was recorded for planning.";
   }
   if (message.includes("run target identity and planning")) {
     const statusResult = [...toolResults]
@@ -532,6 +693,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase === "planned")
+      return "The app is ready in the private preview.";
     if (
       status?.phase !== "dependencies_prepared" ||
       status.appSpec?.digest === undefined
@@ -540,18 +703,38 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const latestResult = toolResults.at(-1);
     const planResult =
       latestResult?.name === "plan_app_creation" ? latestResult : undefined;
-    if (planResult === undefined)
+    if (planResult === undefined) {
+      const existing = [...toolResults]
+        .reverse()
+        .find(({ name }) => name === "inspect_existing_app")?.output as
+        { files?: readonly { path: string; content: string }[] } | undefined;
+      const existingAppChanges = existing?.files?.flatMap(
+        ({ path, content }) => {
+          const changed = content.replace(
+            /(return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
+            (opening) =>
+              `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
+          );
+          return changed === content ? [] : [{ path, content: changed }];
+        },
+      );
       return {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: { expectedAppSpecDigest: status.appSpec.digest },
+            input: {
+              ...(existingAppChanges === undefined ||
+              existingAppChanges.length === 0
+                ? {}
+                : { existingAppChanges }),
+            },
           },
         ],
       };
+    }
     return planResult.isError
       ? "Target identity and planning were canceled or rejected; no target mutation occurred."
-      : "The approved fixed target identity and planning commands produced a digest-bound canonical proposal; no apply, validation, or target mutation ran.";
+      : "The Vendor review now shows when tax verification is required, and the update is ready for the private preview.";
   }
   if (
     message.includes("apply the current creation proposal") ||
@@ -596,11 +779,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       status?.phase !== "apply_failed" &&
       status?.phase !== "applied"
     )
-      return "A completed target plan is required before apply.";
+      return "I need a complete implementation plan before I can prepare the app.";
     if (applications.length < requiredResults) {
       const proposalDigest = status.proposal?.digest;
       if (proposalDigest === undefined)
-        return "The canonical proposal digest is unavailable.";
+        return "I couldn't safely prepare the app from the current plan.";
       return {
         toolCalls: [
           {
@@ -615,15 +798,15 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const result = applications.at(-1);
     if (result?.isError) {
       if (stale)
-        return "Stale target apply was rejected without creating or changing an apply overlay.";
+        return "The product plan changed, so I stopped before preparing the app.";
       if (status.phase === "apply_failed")
-        return "Target apply recorded a recovery-required partial-failure receipt and will not retry automatically.";
-      return "Target apply was canceled or rejected; the exact planned phase was preserved.";
+        return "I couldn't finish preparing the app safely. The current plan remains available to review.";
+      return "I couldn't safely prepare the app. The current plan remains available to review.";
     }
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
-      ? "The lost-response retry reused the exact durable target-apply receipt after verifying the post-apply overlay tree; the command was not rerun."
-      : "The approved canonical proposal was applied only in a fresh builder-owned overlay and recorded with exact pre/post tree and changed-content digests. Validation, reviewed change-set generation, and publication did not run.";
+      ? "The prepared app is unchanged and ready for quality checks."
+      : "The app is assembled in a private preview and ready for quality checks.";
   }
   if (
     message.includes("record a replacement prototype artifact") ||
@@ -708,11 +891,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       status?.phase !== "validation_failed" &&
       status?.phase !== "validated"
     )
-      return "An exact applied receipt is required before validation.";
+      return "The app must be prepared before I can run its quality checks.";
     if (validations.length < requiredResults) {
       const applyDigest = status.apply?.digest;
       if (applyDigest === undefined)
-        return "The exact apply receipt digest is unavailable.";
+        return "I couldn't safely run checks against the current app.";
       return {
         toolCalls: [
           {
@@ -727,17 +910,17 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const result = validations.at(-1);
     if (result?.isError) {
       if (stale)
-        return "Stale target validation was rejected without creating a validation overlay.";
+        return "The app changed before checks could start, so I stopped safely.";
       if (status.phase === "validation_pending")
-        return "The incomplete validation attempt is recovery-required and was not redispatched automatically.";
+        return "The app checks did not finish, so the current preview still needs review.";
       if (status.phase === "validation_failed")
-        return "Target validation recorded a recovery-required failure receipt and will not retry automatically.";
-      return "Target validation was canceled or rejected; the exact applied phase was preserved.";
+        return "The app did not pass its quality checks and needs another revision.";
+      return "I couldn't safely finish the app checks. The current preview still needs review.";
     }
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
-      ? "The lost-response retry reused the exact durable target-validation receipt after verifying the canonical applied tree; neither fixed command was rerun."
-      : "The separately approved fixed check and test commands passed in independent builder-owned copies of the exact applied tree. The applied overlay remained unchanged; change review and publication did not run.";
+      ? "The app remains unchanged and its quality checks are still passing."
+      : "The app passed its local quality checks and is ready for review.";
   }
   if (
     message.includes("inspect the validated change set") ||
@@ -778,7 +961,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     if (message.includes("inspect the validated change set")) {
       if (proposal.isError)
-        return "The exact validated change set could not be read.";
+        return "I couldn't prepare the completed app changes for review.";
       const output = proposal.output as
         | {
             digest?: string;
@@ -786,27 +969,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
             approvedPaths?: readonly string[];
           }
         | undefined;
-      return `Validated change-set proposal: ${JSON.stringify({ digest: output?.digest, changes: output?.changes, approvedPaths: output?.approvedPaths })}. Review this exact ordered declarative change summary before requesting separate acceptance.`;
+      return `The completed app changes are ready for review across ${String(output?.changes?.length ?? 0)} files.`;
     }
     if (accepted.length < requiredAccepts) {
-      const output = proposal.output as
-        | {
-            digest?: string;
-            approvedPaths?: readonly string[];
-            changes?: readonly unknown[];
-          }
-        | undefined;
       return {
         toolCalls: [
           {
             name: "accept_change_set",
-            input: {
-              changeSet: {
-                digest: stale ? "0".repeat(64) : output?.digest,
-                approvedPaths: output?.approvedPaths,
-                changes: output?.changes,
-              },
-            },
+            input: {},
           },
         ],
       };
@@ -814,12 +984,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const result = accepted.at(-1);
     if (result?.isError)
       return stale
-        ? "The stale change-set proposal was rejected without changing the validated receipt."
-        : "Change-set acceptance was canceled or rejected; the validated receipt was preserved.";
+        ? "The app changed before review could finish, so I stopped safely."
+        : "I couldn't safely prepare the completed app changes for review.";
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
-      ? "The lost-response retry reused the exact durable reviewed change-set receipt without any target command, validation, or publication."
-      : "The separately approved normalized change set was recorded from the exact canonical applied overlay. Publication did not run.";
+      ? "The same completed app changes remain ready for review. If you want to continue, I can prepare a draft pull request for the repository."
+      : "The completed app changes are ready for review. If you want to continue, I can prepare a draft pull request for the repository.";
   }
   if (
     message.includes("inspect fresh repository bootstrap at ") ||
@@ -1194,17 +1364,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (proposal.isError || proposal.output === undefined) {
       if (message.includes("dirty overlap"))
         return "Local publication preconditions were rejected before approval or destination mutation.";
-      return {
-        toolCalls: [
-          {
-            name: "local_publication_status",
-            input: {
-              destinationPath,
-              expectedReviewDigest: reviewDigest,
-            },
-          },
-        ],
-      };
+      return "Local publication could not be prepared; inspect the tool's actual error before retrying.";
     }
     const publicationState = proposal.output as {
       status?: string;
@@ -1536,10 +1696,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
               appId,
               expectedArtifactDigest: artifact.digest,
               expectedArtifactRevision: artifact.revision,
-              expectedSourceSha: workspace.sourceSha,
-              expectedSourceTree: workspace.sourceTree,
-              expectedEligibilityDigest: workspace.eligibilityDigest,
-              expectedWorkspaceDigest: workspace.workspaceDigest,
             },
           },
         ],
@@ -1556,16 +1712,34 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const path = lastUserMessage?.match(
       /prepare (?:supported repository|fresh template) at (\/\S+)/iu,
     )?.[1];
-    if (path === undefined) return "The configured test repository is missing.";
     const sourceKind = message.includes("prepare fresh template at ")
       ? "fresh-template"
       : "existing-repository";
+    if (sourceKind === "existing-repository" && path === undefined)
+      return "The configured test repository is missing.";
     const inspectionResult = toolResults.find(
       ({ name }) => name === "inspect_source",
     );
     if (inspectionResult === undefined) {
       return {
-        toolCalls: [{ name: "inspect_source", input: { path, sourceKind } }],
+        toolCalls: [
+          {
+            name: "inspect_source",
+            input:
+              sourceKind === "fresh-template"
+                ? {
+                    sourceKind,
+                    ...(hasTestCapability("simulated-target") &&
+                    path !== undefined
+                      ? { path }
+                      : {}),
+                  }
+                : {
+                    path: developmentInspectionPath({ requestedPath: path! }),
+                    sourceKind,
+                  },
+          },
+        ],
       };
     }
     const inspected = inspectionResult.output as
@@ -1610,9 +1784,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "prepare_workspace",
-            input: {
-              expectedSourceReceiptDigest: inspected.digest,
-            },
+            input: {},
           },
         ],
       };
@@ -1642,13 +1814,23 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   return "Tell me what you want the app to help someone accomplish. I will infer a sensible starting experience and show you something reviewable.";
 });
 
+const localDevelopmentAgent =
+  process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
+
 export default defineAgent({
   model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-sol",
+  ...(!hasTestCapability("mock-model")
+    ? {
+        modelOptions: {
+          providerOptions: {
+            gateway: {
+              only: ["openai"],
+              order: ["openai"],
+            },
+          },
+        },
+      }
+    : {}),
   modelContextWindowTokens: 128_000,
-  reasoning: "high",
-  limits: {
-    maxInputTokensPerSession: 2_000_000,
-    maxOutputTokensPerSession: 200_000,
-    sessionTimeoutMs: 7 * 24 * 60 * 60 * 1_000,
-  },
+  reasoning: localDevelopmentAgent ? "low" : "high",
 });

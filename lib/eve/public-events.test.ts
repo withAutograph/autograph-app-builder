@@ -6,6 +6,7 @@ import {
   deriveInstalledEveStatus,
   latestInstalledImplementationPlan,
   latestInstalledPrototype,
+  latestInstalledUiPreview,
   projectInstalledEveEvents,
   projectInstalledEveEvent,
   toPublicEvent,
@@ -88,13 +89,14 @@ function recordedPlanEvents(input?: {
   blockers?: string[];
   plannedByCallId?: string;
   reused?: boolean;
+  existingAppChanges?: { path: string; content: string }[];
 }): MessageStreamEvent[] {
   const callId = input?.callId ?? "call_plan";
   const plannedByCallId = input?.plannedByCallId ?? callId;
   const expectedAppSpecDigest = input?.expectedAppSpecDigest ?? "a".repeat(64);
   const outputAppSpecDigest =
     input?.outputAppSpecDigest ?? expectedAppSpecDigest;
-  const target = {
+  const targetBase = {
     contract: {
       version: 1 as const,
       appId: "vendor-onboarding",
@@ -129,10 +131,28 @@ function recordedPlanEvents(input?: {
     blockers: input?.blockers ?? [],
     mutations: [] as [],
   };
+  const iterationChanges = input?.existingAppChanges?.map(
+    ({ path, content }) => ({
+      path,
+      before: { mode: "644", digest: digest(`before:${path}`) },
+      after: { mode: "644", digest: digest(content), content },
+    }),
+  );
+  const target = iterationChanges
+    ? {
+        ...targetBase,
+        operation: "iterate-existing-app" as const,
+        iteration: {
+          changes: iterationChanges,
+          digest: digest(JSON.stringify(iterationChanges)),
+        },
+      }
+    : targetBase;
   const unsigned = {
     version: 1 as const,
     sourceSha: "1".repeat(40),
     sourceTree: "2".repeat(40),
+    sourceReceiptDigest: "0".repeat(64),
     eligibilityDigest: "3".repeat(64),
     workspaceDigest: "4".repeat(64),
     imageDigest:
@@ -154,7 +174,12 @@ function recordedPlanEvents(input?: {
             kind: "tool-call",
             callId,
             toolName: "plan_app_creation",
-            input: { expectedAppSpecDigest },
+            input: {
+              expectedAppSpecDigest,
+              ...(input?.existingAppChanges === undefined
+                ? {}
+                : { existingAppChanges: input.existingAppChanges }),
+            },
           },
         ],
       },
@@ -206,17 +231,23 @@ describe("toPublicEvent", () => {
 });
 
 describe("installed Eve 0.43 projection", () => {
+  it("keeps source and workspace bindings out of the public plan", () => {
+    const plan = latestInstalledImplementationPlan(recordedPlanEvents());
+    expect(plan).toBeDefined();
+    const serialized = JSON.stringify(plan);
+    expect(serialized).not.toContain("sourceSha");
+    expect(serialized).not.toContain("sourceTree");
+    expect(serialized).not.toContain("proposalDigest");
+    expect(serialized).not.toContain("workspacePath");
+  });
+
   it("projects only a receipt-bound read-only target implementation plan", () => {
     expect(latestInstalledImplementationPlan(recordedPlanEvents())).toEqual({
       appId: "vendor-onboarding",
       runtime: "nextjs",
-      workspacePath: "apps/vendor-onboarding",
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
       routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      sourceSha: "1".repeat(40),
-      sourceTree: "2".repeat(40),
-      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
   });
@@ -232,9 +263,51 @@ describe("installed Eve 0.43 projection", () => {
       ),
     ).toMatchObject({
       appId: "vendor-onboarding",
-      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
+  });
+
+  it("projects an existing-app plan without dropping its typed replacements", () => {
+    expect(
+      latestInstalledImplementationPlan(
+        recordedPlanEvents({
+          existingAppChanges: [
+            {
+              path: "apps/vendor-onboarding/app/page.tsx",
+              content: "export default function Page() { return 'Ready'; }\n",
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      appId: "vendor-onboarding",
+      readOnly: true,
+    });
+  });
+
+  it("rejects an existing-app plan that is not bound to the requested replacements", () => {
+    const events = recordedPlanEvents({
+      existingAppChanges: [
+        {
+          path: "apps/vendor-onboarding/app/page.tsx",
+          content: "export default function Page() { return 'Ready'; }\n",
+        },
+      ],
+    });
+    const request = events.find((event) => event.type === "actions.requested");
+    if (
+      request?.type !== "actions.requested" ||
+      request.data.actions[0]?.kind !== "tool-call" ||
+      typeof request.data.actions[0].input !== "object" ||
+      request.data.actions[0].input === null
+    )
+      throw new Error("expected a plan request fixture");
+    const input = request.data.actions[0].input as {
+      existingAppChanges: { content: string }[];
+    };
+    input.existingAppChanges[0]!.content = "different\n";
+
+    expect(latestInstalledImplementationPlan(events)).toBeUndefined();
   });
 
   it("rejects a fresh plan bound to another call", () => {
@@ -347,7 +420,43 @@ describe("installed Eve 0.43 projection", () => {
     expect(latestInstalledPrototype(malformedRequest)).toBeUndefined();
   });
 
-  it("projects a stable title and only a closed approval receipt", () => {
+  it("projects a receipt-bound component-backed UI preview and its Browser transport", () => {
+    const content =
+      "<!doctype html><html><body>Component preview</body></html>";
+    const revision = "a".repeat(64);
+    const events = [
+      installedEvent({
+        type: "action.result",
+        data: {
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            callId: "ui-preview",
+            toolName: "record_ui_preview",
+            output: {
+              appId: "vendor-onboarding",
+              revision,
+              routes: ["/", "/vendors"],
+              fidelity: "arrusted-component-catalog",
+              functionality: "fixtures-only",
+              content,
+              digest: digest(content),
+            },
+          },
+        },
+      }),
+    ];
+    expect(latestInstalledUiPreview(events)).toMatchObject({
+      revision,
+      routes: ["/", "/vendors"],
+    });
+    expect(latestInstalledPrototype(events)).toMatchObject({
+      content,
+      digest: digest(content),
+    });
+  });
+
+  it("fails closed if internal specification recording requests approval", () => {
     const receipt = {
       format: "autograph-eve-approval-receipt-v2",
       phase: "appspec",
@@ -385,20 +494,16 @@ describe("installed Eve 0.43 projection", () => {
       ),
     ).toEqual([
       {
-        type: "input.requested",
+        type: "error.public",
         index: 3,
-        request: {
-          requestId: "req_appspec",
-          kind: "approval",
-          title: "Approve AppSpec",
-          description: JSON.stringify(receipt),
-          allowFreeform: false,
-        },
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
+      { type: "status", index: 3, status: "failed" },
     ]);
   });
 
-  it("keeps a normal local AppSpec approval actionable with a closed subject", () => {
+  it("does not expose an internal local specification approval", () => {
     const projected = projectInstalledEveEvent(
       installedEvent({
         type: "input.requested",
@@ -428,16 +533,15 @@ describe("installed Eve 0.43 projection", () => {
       }),
       3,
     );
-    expect(projected).toHaveLength(1);
-    expect(projected[0]?.request).toMatchObject({
-      requestId: "req_local_appspec",
-      kind: "approval",
-      title: "Approve AppSpec",
-      allowFreeform: false,
-    });
-    expect(projected[0]?.request?.description).toContain(
-      "autograph-local-approval-subject-v1",
-    );
+    expect(projected).toEqual([
+      {
+        type: "error.public",
+        index: 3,
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
+      },
+      { type: "status", index: 3, status: "failed" },
+    ]);
     expect(JSON.stringify(projected)).not.toContain("not projected");
     expect(
       deriveInstalledEveStatus([
@@ -467,7 +571,86 @@ describe("installed Eve 0.43 projection", () => {
           },
         }),
       ]),
-    ).toBe("input_required");
+    ).toBe("failed");
+  });
+
+  it.each(["validate_app_creation", "accept_change_set"])(
+    "does not expose an unexpected internal %s approval",
+    (toolName) => {
+      const projected = projectInstalledEveEvent(
+        installedEvent({
+          type: "input.requested",
+          data: {
+            requests: [
+              {
+                requestId: `req_${toolName}`,
+                kind: "tool-approval",
+                prompt: "Raw internal prompt with private mechanics",
+                action: {
+                  kind: "tool-call",
+                  toolName,
+                  input: { privateValue: "not projected" },
+                },
+              },
+            ],
+          },
+        }),
+        4,
+      );
+      expect(projected).toEqual([
+        {
+          type: "error.public",
+          index: 4,
+          code: "confirmation_unavailable",
+          message: "I couldn't verify this action, so it was not run.",
+        },
+        { type: "status", index: 4, status: "failed" },
+      ]);
+      expect(JSON.stringify(projected)).not.toContain("private mechanics");
+      expect(JSON.stringify(projected)).not.toContain("not projected");
+    },
+  );
+
+  it("presents sandbox build approval in product language", () => {
+    const projected = projectInstalledEveEvent(
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: [
+            {
+              requestId: "req_build",
+              kind: "tool-approval",
+              prompt: "Approve internal apply_app_creation call",
+              action: {
+                kind: "tool-call",
+                toolName: "apply_app_creation",
+                input: {
+                  productSummary:
+                    "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
+                },
+              },
+            },
+          ],
+        },
+      }),
+      4,
+    );
+
+    expect(projected).toEqual([
+      {
+        type: "input.requested",
+        index: 4,
+        request: {
+          requestId: "req_build",
+          kind: "approval",
+          title: "Build this app?",
+          description:
+            "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
+          allowFreeform: false,
+        },
+      },
+    ]);
+    expect(JSON.stringify(projected)).not.toContain("apply_app_creation");
   });
 
   it("fails closed without exposing a malformed receipt or raw arguments", () => {
@@ -497,9 +680,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         type: "error.public",
         index: 4,
-        code: "approval_receipt_invalid",
-        message:
-          "A required approval receipt was missing or invalid; the request was not exposed.",
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
       { type: "status", index: 4, status: "failed" },
     ]);
@@ -507,9 +689,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         type: "error",
         index: 0,
-        code: "approval_receipt_invalid",
-        message:
-          "A required approval receipt was missing or invalid; the request was not exposed.",
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
       { type: "status", index: 1, status: "failed" },
     ]);
@@ -567,9 +748,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         type: "error.public",
         index: 4,
-        code: "approval_receipt_invalid",
-        message:
-          "A required approval receipt was missing or invalid; the request was not exposed.",
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
       { type: "status", index: 4, status: "failed" },
     ]);
@@ -606,7 +786,7 @@ describe("installed Eve 0.43 projection", () => {
       },
     });
     expect(projectInstalledEveEvent(event, 8)).toMatchObject([
-      { type: "error.public", code: "approval_receipt_invalid" },
+      { type: "error.public", code: "confirmation_unavailable" },
       { type: "status", status: "failed" },
     ]);
     expect(deriveInstalledEveStatus([event])).toBe("failed");
@@ -666,6 +846,77 @@ describe("installed Eve 0.43 projection", () => {
         4,
       ),
     ).toEqual([]);
+  });
+
+  it("projects a GitHub repository authorization as a Store In request", () => {
+    expect(
+      projectInstalledEveEvent(
+        installedEvent({
+          type: "authorization.required",
+          data: {
+            turnId: "turn_1",
+            attemptId: "attempt_1",
+            name: "github-repository-access",
+            description: "Internal connection description.",
+            authorization: {
+              url: "https://builder.example.test/github/installations?continuation=opaque",
+              displayName: "GitHub",
+              repositoryAccess: {
+                provider: "github",
+                action: "update",
+                repository: {
+                  owner: "withAutograph",
+                  name: "app-builder-dogfood",
+                  fullName: "withAutograph/app-builder-dogfood",
+                },
+                scopes: [
+                  {
+                    installationId: "123",
+                    accountLogin: "withAutograph",
+                    accountType: "Organization",
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        5,
+      ),
+    ).toEqual([
+      {
+        type: "input.requested",
+        index: 5,
+        request: {
+          requestId: "attempt_1",
+          kind: "authorization",
+          title: "Update GitHub access",
+          description:
+            "Update GitHub access to include withAutograph/app-builder-dogfood.",
+          presentation: { section: "store-in", control: "provider" },
+          authorization: {
+            url: "https://builder.example.test/github/installations?continuation=opaque",
+            displayName: "GitHub",
+            repositoryAccess: {
+              provider: "github",
+              action: "update",
+              repository: {
+                owner: "withAutograph",
+                name: "app-builder-dogfood",
+                fullName: "withAutograph/app-builder-dogfood",
+              },
+              scopes: [
+                {
+                  installationId: "123",
+                  accountLogin: "withAutograph",
+                  accountType: "Organization",
+                },
+              ],
+            },
+          },
+          allowFreeform: false,
+        },
+      },
+    ]);
   });
 
   it("keeps a multi-request batch input-required until every id resolves", () => {
@@ -737,5 +988,32 @@ describe("installed Eve 0.43 projection", () => {
       "error",
       "status",
     ]);
+    expect(JSON.stringify(projected)).not.toContain("Stopped");
+  });
+
+  it("keeps source and planning diagnostics out of public failures", () => {
+    const projected = projectInstalledEveEvents([
+      installedEvent({
+        type: "session.failed",
+        data: {
+          code: "source_workspace_invalid",
+          message:
+            "The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest.",
+        },
+      }),
+    ]);
+    expect(projected).toEqual([
+      {
+        type: "error",
+        index: 0,
+        code: "unable_to_continue",
+        message:
+          "I couldn't finish preparing your app. Your progress is saved, so you can try again.",
+      },
+      { type: "status", index: 1, status: "failed" },
+    ]);
+    expect(JSON.stringify(projected)).not.toMatch(
+      /AppSpec|cache|dependency|digest|receipt|source workspace|validation/iu,
+    );
   });
 });

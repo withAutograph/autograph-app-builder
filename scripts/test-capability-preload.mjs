@@ -68,11 +68,12 @@ const allowedWorkerEnvironment = new Set([
 ]);
 delete process.env.NODE_OPTIONS;
 
-function workerEnvironment(source, eveProfile, hasEveEnvelope) {
+function workerEnvironment(source, eveProfile, eveEnvelope) {
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment)
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined)
       environment[name] = source[name];
+  const hasEveEnvelope = eveEnvelope !== undefined;
   environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope
     ? undefined
     : repositoryRoot;
@@ -81,6 +82,10 @@ function workerEnvironment(source, eveProfile, hasEveEnvelope) {
     : eveProfile
       ? "1"
       : undefined;
+  if (eveEnvelope?.bodyTimeout === "360000")
+    environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = eveEnvelope.bodyTimeout;
+  if (eveEnvelope?.headersTimeout === "360000")
+    environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = eveEnvelope.headersTimeout;
   return environment;
 }
 
@@ -296,7 +301,7 @@ function installWorkerBroker(
           ...workerEnvironment(
             options.env ?? process.env,
             eveProfile,
-            eveEnvelope !== undefined,
+            eveEnvelope,
           ),
           NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
           APP_BUILDER_TEST_MODEL: undefined,

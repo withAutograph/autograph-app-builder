@@ -23,10 +23,17 @@ export const user = pgTable(
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
+    role: text("role"),
+    banned: boolean("banned").default(false),
+    banReason: text("ban_reason"),
+    banExpires: timestamp("ban_expires", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
-  (table) => [uniqueIndex("user_email_uidx").on(table.email)],
+  (table) => [
+    uniqueIndex("user_email_uidx").on(table.email),
+    uniqueIndex("user_email_lower_uidx").on(sql`lower(${table.email})`),
+  ],
 );
 
 export const session = pgTable(
@@ -42,10 +49,98 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    activeOrganizationId: text("active_organization_id"),
+    impersonatedBy: text("impersonated_by"),
   },
   (table) => [
     uniqueIndex("session_token_uidx").on(table.token),
     index("session_user_id_idx").on(table.userId),
+  ],
+);
+
+export const organization = pgTable(
+  "organization",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    logo: text("logo"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    metadata: text("metadata"),
+    issuer: text("issuer").notNull(),
+    audience: text("audience").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    uniqueIndex("organization_slug_uidx").on(table.slug),
+    uniqueIndex("organization_authority_uidx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+    ),
+  ],
+);
+
+export const member = pgTable(
+  "member",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("member_organization_user_uidx").on(
+      table.organizationId,
+      table.userId,
+    ),
+    index("member_organization_id_idx").on(table.organizationId),
+    index("member_user_id_idx").on(table.userId),
+  ],
+);
+
+export const personalWorkspace = pgTable(
+  "personal_workspace",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("personal_workspace_organization_id_uidx").on(
+      table.organizationId,
+    ),
+  ],
+);
+
+export const invitation = pgTable(
+  "invitation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role"),
+    status: text("status").notNull().default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    inviterId: text("inviter_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("invitation_organization_id_idx").on(table.organizationId),
+    index("invitation_email_idx").on(table.email),
   ],
 );
 
@@ -93,6 +188,48 @@ export const verification = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
+);
+
+export const passkey = pgTable(
+  "passkey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    credentialID: text("credential_id").notNull(),
+    counter: integer("counter").notNull(),
+    deviceType: text("device_type").notNull(),
+    backedUp: boolean("backed_up").notNull(),
+    transports: text("transports"),
+    createdAt: timestamp("created_at", { withTimezone: true }),
+    aaguid: text("aaguid"),
+  },
+  (table) => [
+    uniqueIndex("passkey_credential_id_uidx").on(table.credentialID),
+    index("passkey_user_id_idx").on(table.userId),
+  ],
+);
+
+export const passkeyOnboarding = pgTable(
+  "passkey_onboarding",
+  {
+    id: text("id").primaryKey(),
+    tokenDigest: text("token_digest").notNull(),
+    deploymentId: text("deployment_id").notNull(),
+    origin: text("origin").notNull(),
+    rpId: text("rp_id").notNull(),
+    userHandle: text("user_handle").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("passkey_onboarding_token_digest_uidx").on(table.tokenDigest),
+    uniqueIndex("passkey_onboarding_user_handle_uidx").on(table.userHandle),
+    index("passkey_onboarding_expires_at_idx").on(table.expiresAt),
+  ],
 );
 
 export const jwks = pgTable("jwks", {
@@ -338,6 +475,14 @@ export const agentSessions = pgTable(
     ownerUserId: text("owner_user_id").notNull(),
     sessionId: text("session_id").notNull(),
     adapterSessionId: text("adapter_session_id").notNull(),
+    adapterGeneration: integer("adapter_generation"),
+    title: text("title"),
+    stage: text("stage"),
+    resumabilityState: text("resumability_state"),
+    checkpointDigest: text("checkpoint_digest"),
+    checkpointProgressDigest: text("checkpoint_progress_digest"),
+    parentSessionId: text("parent_session_id"),
+    lastProgressAt: timestamp("last_progress_at", { withTimezone: true }),
     record: jsonb("record").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
@@ -366,12 +511,40 @@ export const agentSessions = pgTable(
       table.ownerUserId,
       table.updatedAt,
     ),
+    index("agent_session_recent_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.updatedAt.desc(),
+      table.sessionId.desc(),
+    ),
     uniqueIndex("agent_session_adapter_id_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.ownerUserId,
       table.adapterSessionId,
+    ),
+    check(
+      "agent_session_adapter_generation_check",
+      sql`${table.adapterGeneration} IS NULL OR ${table.adapterGeneration} > 0`,
+    ),
+    check(
+      "agent_session_stage_check",
+      sql`${table.stage} IS NULL OR ${table.stage} IN ('starting', 'designing', 'prototype', 'planning', 'ready', 'complete', 'needs_attention')`,
+    ),
+    check(
+      "agent_session_resumability_check",
+      sql`${table.resumabilityState} IS NULL OR ${table.resumabilityState} IN ('live', 'checkpoint', 'restart_required', 'terminal')`,
+    ),
+    check(
+      "agent_session_checkpoint_digest_check",
+      sql`${table.checkpointDigest} IS NULL OR ${table.checkpointDigest} ~ '^sha256:[a-f0-9]{64}$'`,
+    ),
+    check(
+      "agent_session_checkpoint_progress_digest_check",
+      sql`${table.checkpointProgressDigest} IS NULL OR ${table.checkpointProgressDigest} ~ '^sha256:[a-f0-9]{64}$'`,
     ),
   ],
 );
@@ -601,7 +774,6 @@ export const hostedGitHubInstallations = pgTable(
       table.workspaceId,
       table.ownerUserId,
     ),
-    uniqueIndex("hosted_github_installation_id_uidx").on(table.installationId),
     check(
       "hosted_github_installation_id_check",
       sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
@@ -617,12 +789,270 @@ export const hostedGitHubInstallations = pgTable(
   ],
 );
 
+/** Multi-installation GitHub bindings used by App Builder selection. The
+ * original single binding remains the publication-runtime compatibility row;
+ * connecting another scope never broadens publication authority implicitly. */
+export const hostedGitHubInstallationBindings = pgTable(
+  "hosted_github_installation_binding",
+  {
+    ...hostedGitHubTenantColumns,
+    installationId: text("installation_id").notNull(),
+    accountId: text("account_id").notNull(),
+    accountLogin: text("account_login").notNull(),
+    accountType: text("account_type").notNull(),
+    active: boolean("active").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_github_installation_binding_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.installationId,
+      ],
+    }),
+    uniqueIndex("hosted_github_installation_binding_id_tenant_uidx").on(
+      table.installationId,
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+    ),
+    check(
+      "hosted_github_installation_binding_id_check",
+      sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_installation_binding_account_id_check",
+      sql`${table.accountId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_installation_binding_account_type_check",
+      sql`${table.accountType} IN ('Organization', 'User')`,
+    ),
+  ],
+);
+
+export const hostedVercelInstallations = pgTable(
+  "hosted_vercel_installation",
+  {
+    ...hostedGitHubTenantColumns,
+    installationId: text("installation_id").notNull(),
+    scopeId: text("scope_id").notNull(),
+    scopeType: text("scope_type").notNull(),
+    displayName: text("display_name").notNull(),
+    slug: text("slug").notNull(),
+    plan: text("plan").notNull(),
+    encryptedToken: text("encrypted_token").notNull(),
+    tokenIv: text("token_iv").notNull(),
+    tokenTag: text("token_tag").notNull(),
+    tokenKeyVersion: text("token_key_version").notNull(),
+    active: boolean("active").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_vercel_installation_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.installationId,
+      ],
+    }),
+    uniqueIndex("hosted_vercel_installation_id_uidx").on(table.installationId),
+    check(
+      "hosted_vercel_installation_scope_type_check",
+      sql`${table.scopeType} IN ('team', 'user')`,
+    ),
+  ],
+);
+
+export const hostedGitHubUserCredentials = pgTable(
+  "hosted_github_user_credential",
+  {
+    ...hostedGitHubTenantColumns,
+    providerUserId: text("provider_user_id").notNull(),
+    providerLogin: text("provider_login").notNull(),
+    encryptedCredential: text("encrypted_credential").notNull(),
+    credentialIv: text("credential_iv").notNull(),
+    credentialTag: text("credential_tag").notNull(),
+    keyVersion: text("key_version").notNull(),
+    revision: integer("revision").notNull().default(1),
+    active: boolean("active").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "hosted_github_user_credential_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.providerUserId,
+      ],
+    }),
+    check(
+      "hosted_github_user_credential_provider_user_id_check",
+      sql`${table.providerUserId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "hosted_github_user_credential_revision_check",
+      sql`${table.revision} > 0`,
+    ),
+  ],
+);
+
+export const builderProvisioningJournals = pgTable(
+  "builder_provisioning_journal",
+  {
+    ...hostedGitHubTenantColumns,
+    requestId: text("request_id").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    state: text("state").notNull(),
+    revision: integer("revision").notNull().default(1),
+    record: jsonb("record").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "builder_provisioning_journal_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.requestId,
+      ],
+    }),
+    index("builder_provisioning_journal_retention_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.updatedAt,
+    ),
+    check(
+      "builder_provisioning_journal_request_id_check",
+      sql`${table.requestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_provisioning_journal_request_digest_check",
+      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "builder_provisioning_journal_state_check",
+      sql`${table.state} IN ('pending', 'settled')`,
+    ),
+    check(
+      "builder_provisioning_journal_revision_check",
+      sql`${table.revision} > 0`,
+    ),
+    check(
+      "builder_provisioning_journal_record_check",
+      sql`jsonb_typeof(${table.record}) = 'object'`,
+    ),
+  ],
+);
+
+export const builderHandoffs = pgTable(
+  "builder_handoff",
+  {
+    handoffId: text("handoff_id").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    creationRequestId: text("creation_request_id").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    intent: jsonb("intent").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    sessionId: text("session_id"),
+  },
+  (table) => [
+    uniqueIndex("builder_handoff_creation_uidx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.creationRequestId,
+    ),
+    index("builder_handoff_expiry_idx").on(table.expiresAt),
+    check(
+      "builder_handoff_id_check",
+      sql`${table.handoffId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_handoff_creation_request_id_check",
+      sql`${table.creationRequestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+    ),
+    check(
+      "builder_handoff_request_digest_check",
+      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "builder_handoff_intent_check",
+      sql`jsonb_typeof(${table.intent}) = 'object'`,
+    ),
+    check(
+      "builder_handoff_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "builder_handoff_redemption_check",
+      sql`(${table.redeemedAt} IS NULL AND ${table.sessionId} IS NULL) OR (${table.redeemedAt} BETWEEN ${table.createdAt} AND ${table.expiresAt} AND ${table.sessionId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const vercelInstallationAuthorizationStates = pgTable(
+  "vercel_installation_authorization_state",
+  {
+    stateDigest: text("state_digest").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    authorityDigest: text("authority_digest").notNull(),
+    returnTo: text("return_to").notNull().default("/"),
+    resumeKey: text("resume_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("vercel_installation_authorization_state_expiry_idx").on(
+      table.expiresAt,
+    ),
+    check(
+      "vercel_installation_authorization_state_digest_check",
+      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "vercel_installation_authorization_authority_digest_check",
+      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "vercel_installation_authorization_state_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "vercel_installation_authorization_state_consumed_check",
+      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
+    ),
+  ],
+);
+
 export const githubInstallationAuthorizationStates = pgTable(
   "github_installation_authorization_state",
   {
     stateDigest: text("state_digest").primaryKey(),
     ...hostedGitHubTenantColumns,
     authorityDigest: text("authority_digest").notNull(),
+    returnTo: text("return_to").notNull().default("/"),
+    resumeKey: text("resume_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
@@ -646,6 +1076,66 @@ export const githubInstallationAuthorizationStates = pgTable(
     check(
       "github_installation_authorization_state_consumed_check",
       sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
+    ),
+  ],
+);
+
+/**
+ * One-time bridge from the existing GitHub installation callback back to the
+ * exact Eve authorization callback that parked a repository-access tool call.
+ * The public continuation id is stored only as a SHA-256 digest.
+ */
+export const githubRepositoryAccessContinuations = pgTable(
+  "github_repository_access_continuation",
+  {
+    continuationDigest: text("continuation_digest").primaryKey(),
+    ...hostedGitHubTenantColumns,
+    sessionId: text("session_id").notNull(),
+    requestId: text("request_id").notNull(),
+    repositoryOwner: text("repository_owner").notNull(),
+    repositoryName: text("repository_name").notNull(),
+    selectedInstallationId: text("selected_installation_id"),
+    callbackUrl: text("callback_url").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("github_repository_access_continuation_expiry_idx").on(
+      table.expiresAt,
+    ),
+    check(
+      "github_repository_access_continuation_digest_check",
+      sql`${table.continuationDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "github_repository_access_continuation_session_check",
+      sql`length(${table.sessionId}) BETWEEN 1 AND 255`,
+    ),
+    check(
+      "github_repository_access_continuation_request_check",
+      sql`length(${table.requestId}) BETWEEN 1 AND 255`,
+    ),
+    check(
+      "github_repository_access_continuation_repository_check",
+      sql`length(${table.repositoryOwner}) BETWEEN 1 AND 100 AND length(${table.repositoryName}) BETWEEN 1 AND 100`,
+    ),
+    check(
+      "github_repository_access_continuation_installation_check",
+      sql`${table.selectedInstallationId} IS NULL OR ${table.selectedInstallationId} ~ '^[1-9][0-9]*$'`,
+    ),
+    check(
+      "github_repository_access_continuation_time_check",
+      sql`${table.createdAt} < ${table.expiresAt}`,
+    ),
+    check(
+      "github_repository_access_continuation_authorized_check",
+      sql`${table.authorizedAt} IS NULL OR (${table.authorizedAt} >= ${table.createdAt} AND ${table.authorizedAt} <= ${table.expiresAt})`,
+    ),
+    check(
+      "github_repository_access_continuation_consumed_check",
+      sql`${table.consumedAt} IS NULL OR (${table.authorizedAt} IS NOT NULL AND ${table.consumedAt} >= ${table.authorizedAt})`,
     ),
   ],
 );
@@ -763,6 +1253,30 @@ export const hostedGitHubPublicationJournals = pgTable(
     ),
     check(
       "hosted_github_publication_journal_timestamp_check",
+      sql`${table.createdAt} <= ${table.updatedAt}`,
+    ),
+  ],
+);
+
+export const emulatePreviewState = pgTable(
+  "emulate_preview_state",
+  {
+    namespace: text("namespace").primaryKey(),
+    state: text("state").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "emulate_preview_state_namespace_check",
+      sql`length(${table.namespace}) BETWEEN 3 AND 1024`,
+    ),
+    check(
+      "emulate_preview_state_state_check",
+      sql`octet_length(${table.state}) BETWEEN 2 AND 8388608`,
+    ),
+    check(
+      "emulate_preview_state_timestamp_check",
       sql`${table.createdAt} <= ${table.updatedAt}`,
     ),
   ],

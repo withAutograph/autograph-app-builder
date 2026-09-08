@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Install Chromium for Storybook browser-mode tests"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/playwright/cli.js install --with-deps chromium

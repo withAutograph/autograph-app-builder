@@ -8,17 +8,46 @@ import {
   parseHostedDatabaseUrl,
 } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
+import type { HostedPrincipal } from "../eve/hosted-auth";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
-import { readHostedAdmissionControlBinding } from "../hosted/admission-control";
+import { createPostgresBuilderHandoffStore } from "../handoff/postgres-store";
+import { createBuilderHandoffService } from "../handoff/service";
 import { composeHostedMcpRuntime } from "./hosted-runtime";
 import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
-import { createMcpRequestHandler } from "./request-handler";
+import {
+  createMcpRequestHandler,
+  type HostedBuilderHandoffRuntime,
+} from "./request-handler";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
+type ResumeRepositoryAccess = (input: {
+  sessionAuth: unknown;
+  sessionId: string;
+  fetchImplementation?: typeof fetch;
+}) => Promise<unknown>;
+type RecheckRepositoryAccess = (input: {
+  sessionAuth: unknown;
+  repository: string;
+}) => ReturnType<HostedBuilderHandoffRuntime["recheckRepositoryAccess"]>;
+
+function forwardedSessionAuth(principal: HostedPrincipal) {
+  const context = {
+    attributes: {
+      "mcp:audience": principal.audience,
+      "mcp:scopes": principal.scopes,
+      "mcp:workspace-id": principal.workspaceId,
+    },
+    authenticator: "mcp-oauth-jwks" as const,
+    issuer: principal.issuer,
+    principalId: principal.ownerUserId,
+    principalType: "user" as const,
+    subject: principal.ownerUserId,
+  };
+  return { current: context, initiator: context };
+}
 
 export function readHostedDeploymentConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
-  nowEpochMs = Date.now(),
 ) {
   const auth = readHostedMcpAuthConfig(environment);
   const resourceUrl = new URL(auth.resourceUrl);
@@ -32,10 +61,6 @@ export function readHostedDeploymentConfig(
   return {
     auth,
     databaseUrl: parseHostedDatabaseUrl(environment.DATABASE_URL),
-    admissionControl: readHostedAdmissionControlBinding(
-      environment,
-      nowEpochMs,
-    ),
     eve: {
       baseUrl: resourceUrl.origin,
     },
@@ -62,6 +87,8 @@ export function createDeploymentMcpRequestHandler(input: {
   workloadIdentity: HostedWorkloadIdentity;
   openDatabase?: (databaseUrl: string) => Database;
   fetchImplementation?: typeof fetch;
+  resumeRepositoryAccess?: ResumeRepositoryAccess;
+  recheckRepositoryAccess?: RecheckRepositoryAccess;
   now?: () => number;
 }) {
   const fallbackHandler = createMcpRequestHandler({
@@ -77,10 +104,7 @@ export function createDeploymentMcpRequestHandler(input: {
 
     try {
       if (hostedHandler === undefined) {
-        const config = readHostedDeploymentConfig(
-          input.environment,
-          input.now?.() ?? Date.now(),
-        );
+        const config = readHostedDeploymentConfig(input.environment);
         if (request.url !== config.auth.resourceUrl) {
           throw new Error(
             "The hosted request does not match the configured MCP resource.",
@@ -94,13 +118,54 @@ export function createDeploymentMcpRequestHandler(input: {
           database,
           eve: config.eve,
           workloadIdentity: input.workloadIdentity,
-          admissionControl: config.admissionControl,
           fetchImplementation: input.fetchImplementation,
           now: input.now,
         });
+        const handoffService = createBuilderHandoffService({
+          store: createPostgresBuilderHandoffStore(database),
+        });
         hostedHandler = createMcpRequestHandler({
           environment: input.environment,
-          hostedRuntime: runtime,
+          hostedRuntime: {
+            ...runtime,
+            handoffs: {
+              ...handoffService,
+              async recheckRepositoryAccess({ principal, repository }) {
+                if (input.recheckRepositoryAccess !== undefined)
+                  return input.recheckRepositoryAccess({
+                    sessionAuth: forwardedSessionAuth(principal),
+                    repository,
+                  });
+                const repositoryAccessRuntime =
+                  await import("../agent/deployment-repository-access-runtime");
+                return (
+                  await repositoryAccessRuntime.repositoryAccessRuntimeForSession(
+                    forwardedSessionAuth(principal),
+                  )
+                ).classify({ repository });
+              },
+            },
+            async beforeRead({ principal, adapterSessionId }) {
+              try {
+                const resumeRepositoryAccess =
+                  input.resumeRepositoryAccess ??
+                  (
+                    await import("../agent/deployment-repository-access-runtime")
+                  ).resumeAuthorizedRepositoryAccessForSession;
+                await resumeRepositoryAccess({
+                  sessionAuth: forwardedSessionAuth(principal),
+                  sessionId: adapterSessionId,
+                  ...(input.fetchImplementation === undefined
+                    ? {}
+                    : { fetchImplementation: input.fetchImplementation }),
+                });
+              } catch {
+                // A lost callback notification is recoverable. Repository
+                // access remains parked and the ordinary session read still
+                // returns its exact outstanding authorization request.
+              }
+            },
+          },
         });
         hostedResourceUrl = config.auth.resourceUrl;
       }

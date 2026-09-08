@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
 import {
-  admissionAdvisoryLockKey,
   parseHostedOperationRow,
   parseHostedSessionRow,
 } from "./postgres-hosted-store";
@@ -62,57 +61,20 @@ const sessionRow = {
   ownerUserId: principal.ownerUserId,
   sessionId: sessionRecord.sessionId,
   adapterSessionId: sessionRecord.adapterSessionId,
+  adapterGeneration: null,
+  title: null,
+  stage: null,
+  resumabilityState: null,
+  checkpointDigest: null,
+  checkpointProgressDigest: null,
+  parentSessionId: null,
+  lastProgressAt: null,
   record: sessionRecord,
   createdAt: new Date(2_000),
   updatedAt: new Date(2_000),
 };
 
 describe("PostgreSQL hosted Eve row authority", () => {
-  it("encodes admission advisory lock keys as unambiguous PostgreSQL text", () => {
-    const workspaceKey = admissionAdvisoryLockKey("workspace", principal);
-    const subjectKey = admissionAdvisoryLockKey("subject", principal);
-
-    expect(workspaceKey).toBe(
-      '["hosted_eve_admission_v1","workspace","https://identity.example.test","eve-hosted","workspace_1"]',
-    );
-    expect(subjectKey).toBe(
-      '["hosted_eve_admission_v1","subject","https://identity.example.test","eve-hosted","workspace_1","user_1"]',
-    );
-    expect(workspaceKey).not.toContain("\0");
-    expect(subjectKey).not.toContain("\0");
-
-    const embeddedNullKey = admissionAdvisoryLockKey("subject", {
-      ...principal,
-      workspaceId: "workspace\0one",
-      ownerUserId: "user\0one",
-    });
-    expect(embeddedNullKey).not.toContain("\0");
-    expect(JSON.parse(embeddedNullKey)).toEqual([
-      "hosted_eve_admission_v1",
-      "subject",
-      principal.issuer,
-      principal.audience,
-      "workspace\0one",
-      "user\0one",
-    ]);
-
-    expect(
-      admissionAdvisoryLockKey("workspace", {
-        ...principal,
-        issuer: "issuer-a",
-        audience: "audience-b|workspace-c",
-        workspaceId: "workspace-d",
-      }),
-    ).not.toBe(
-      admissionAdvisoryLockKey("workspace", {
-        ...principal,
-        issuer: "issuer-a|audience-b",
-        audience: "workspace-c",
-        workspaceId: "workspace-d",
-      }),
-    );
-  });
-
   it("accepts only an operation whose indexed authority matches its closed record", () => {
     expect(parseHostedOperationRow(operationRow)).toEqual(operationRecord);
     expect(() =>
@@ -215,18 +177,116 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0008_sandbox_execution_lease",
           breakpoints: true,
         },
+        {
+          idx: 8,
+          version: "7",
+          when: 1_788_066_000_000,
+          tag: "0009_builder_provider_integrations",
+          breakpoints: true,
+        },
+        {
+          idx: 9,
+          version: "7",
+          when: 1_788_069_600_000,
+          tag: "0010_better_auth_organizations",
+          breakpoints: true,
+        },
+        {
+          idx: 10,
+          version: "7",
+          when: 1_788_080_400_000,
+          tag: "0011_self_service_onboarding",
+          breakpoints: true,
+        },
+        {
+          idx: 11,
+          version: "7",
+          when: 1_788_084_000_000,
+          tag: "0012_provider_connection_return_state",
+          breakpoints: true,
+        },
+        {
+          idx: 12,
+          version: "7",
+          when: 1_788_091_200_000,
+          tag: "0013_passkey_onboarding",
+          breakpoints: true,
+        },
+        {
+          idx: 13,
+          version: "7",
+          when: 1_788_094_800_000,
+          tag: "0014_tenant_github_installation_uniqueness",
+          breakpoints: true,
+        },
+        {
+          idx: 14,
+          version: "7",
+          when: 1_788_102_000_000,
+          tag: "0015_builder_resource_provisioning",
+          breakpoints: true,
+        },
+        {
+          idx: 15,
+          version: "7",
+          when: 1_788_102_600_000,
+          tag: "0016_emulate_preview_state",
+          breakpoints: true,
+        },
+        {
+          idx: 16,
+          version: "7",
+          when: 1_788_261_600_000,
+          tag: "0017_chat_repository_access",
+          breakpoints: true,
+        },
+        {
+          idx: 17,
+          version: "7",
+          when: 1_788_264_000_000,
+          tag: "0018_durable_session_resume",
+          breakpoints: true,
+        },
+        {
+          idx: 18,
+          version: "7",
+          when: 1_788_267_600_000,
+          tag: "0019_opaque_builder_handoff",
+          breakpoints: true,
+        },
       ],
     });
   });
 
-  it("excludes idle and maximum-lifetime-expired sessions from admission", async () => {
-    const source = await readFile(
-      new URL("./postgres-hosted-store.ts", import.meta.url),
+  it("adds bounded durable-session metadata without rewriting legacy rows", async () => {
+    const migration = await readFile(
+      new URL("../../drizzle/0018_durable_session_resume.sql", import.meta.url),
       "utf8",
     );
-    expect(source).toContain("sessionTimeoutPolicy.idleTimeoutMs");
-    expect(source).toContain("sessionTimeoutPolicy.maxLifetimeMs");
-    expect(source).toContain("gt(agentSessions.updatedAt, idleCutoff)");
-    expect(source).toContain("gt(agentSessions.createdAt, lifetimeCutoff)");
+    for (const required of [
+      '"adapter_generation" integer',
+      '"checkpoint_digest" text',
+      '"checkpoint_progress_digest" text',
+      '"parent_session_id" text',
+      '"last_progress_at" timestamptz',
+      '"agent_session_recent_idx"',
+    ])
+      expect(migration).toContain(required);
+    expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
+  });
+
+  it("adds opaque handoffs without rewriting existing rows", async () => {
+    const migration = await readFile(
+      new URL("../../drizzle/0019_opaque_builder_handoff.sql", import.meta.url),
+      "utf8",
+    );
+    for (const required of [
+      'CREATE TABLE "builder_handoff"',
+      '"builder_handoff_creation_uidx"',
+      '"builder_handoff_expiry_idx"',
+      '"builder_handoff_redemption_check"',
+    ])
+      expect(migration).toContain(required);
+    expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 });

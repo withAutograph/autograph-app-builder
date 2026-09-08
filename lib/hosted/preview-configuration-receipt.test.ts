@@ -33,21 +33,6 @@ const configuration = {
       "0005_github_publication_journal",
     ],
   },
-  admissionControl: {
-    version: 1,
-    environment: "preview",
-    enforcement: "provider-readback",
-    scope: "issuer-audience-workspace-subject",
-    startsPerSubjectPerMinute: 10,
-    startsPerWorkspacePerMinute: 50,
-    maxConcurrentSessionsPerSubject: 2,
-    maxActiveSessionsPerWorkspace: 20,
-    monthlySpendUsedUsdCents: 0,
-    monthlySpendLimitUsdCents: 10_000,
-    observedAt: "2026-08-27T00:55:00.000Z",
-    expiresAt: "2026-08-27T01:55:00.000Z",
-    readbackDigest: `sha256:${"c".repeat(64)}`,
-  },
 } as const;
 
 describe("hosted Preview receipt boundaries", () => {
@@ -128,7 +113,6 @@ describe("hosted Preview receipt boundaries", () => {
       oauthMetadataReadbackDigest: digest,
       mintedTokenContractDigest: digest,
       databaseMigrationReadbackDigest: digest,
-      admissionControlReadbackDigest: digest,
       workloadIdentityProofDigest: digest,
       tenantIsolationProofDigest: digest,
       fiveToolLifecycleProofDigest: digest,
@@ -136,7 +120,6 @@ describe("hosted Preview receipt boundaries", () => {
         oauthMounted: true,
         databaseMigrated: true,
         mintedTokenVerified: true,
-        admissionControlVerified: true,
         workloadIdentityVerified: true,
         tenantIsolationVerified: true,
         fiveToolLifecycleVerified: true,

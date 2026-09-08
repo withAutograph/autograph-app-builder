@@ -2,25 +2,26 @@
 
 ## Install before shared marketplace publication
 
-Once the pre-release `v0.2.1` GitHub release is published, use its public
+Once the pre-release `v0.2.12` GitHub release is published, use its public
 [release assets](https://github.com/withAutograph/autograph-app-builder/releases)
 until the shared marketplace is available. The release contains:
 
-- `autograph-app-builder-0.2.1.tar.gz`
-- `autograph-app-builder-codex-marketplace-0.2.1.tar.gz`
+- `app-builder-0.2.12.tar.gz`
+- `app-builder-codex-marketplace-0.2.12.tar.gz`
 - `release-receipt.json`
+- `promotion-receipt.json`
 - `SHA256SUMS`
 
 Download the complete asset set, verify both archive checksums and GitHub's
-immutable release attestations, install, and open a new Codex task. These
-commands fail closed until `v0.2.1` exists:
+immutable release state, install, and open a new Codex task. These
+commands fail closed until `v0.2.12` exists:
 
 ```sh
 (
   set -eu
-  release_version=0.2.1
-  release_dir="$PWD/autograph-app-builder-release-$release_version"
-  marketplace_dir="$PWD/autograph-app-builder-marketplace-$release_version"
+  release_version=0.2.12
+  release_dir="$PWD/app-builder-release-$release_version"
+  marketplace_dir="$PWD/app-builder-marketplace-$release_version"
   mkdir "$release_dir" "$marketplace_dir"
   gh release download "v$release_version" \
     --repo withAutograph/autograph-app-builder \
@@ -30,19 +31,21 @@ commands fail closed until `v0.2.1` exists:
   gh release verify "v$release_version" \
     --repo withAutograph/autograph-app-builder
   gh release verify-asset "v$release_version" \
-    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    "app-builder-codex-marketplace-$release_version.tar.gz" \
     --repo withAutograph/autograph-app-builder
   tar -xzf \
-    "autograph-app-builder-codex-marketplace-$release_version.tar.gz" \
+    "app-builder-codex-marketplace-$release_version.tar.gz" \
     -C "$marketplace_dir"
   codex plugin marketplace add "$marketplace_dir"
-  codex plugin add autograph-app-builder@autograph
+  codex plugin add app-builder@autograph
 )
 ```
 
 The release package defines the Model Context Protocol (MCP) origin and contains
-no credential. Codex completes OAuth against that origin's protected-resource
-and authorization-server metadata. Its creation and publication capabilities
+no credential. On first use, Codex automatically starts OAuth against that
+origin's protected-resource and authorization-server metadata, then resumes the
+protected connection after consent. Users do not run a separate MCP login
+command. Its creation and publication capabilities
 apply only to repositories that satisfy the App Builder's explicit supported
 repository contract; it does not claim support for arbitrary repositories.
 
@@ -57,22 +60,37 @@ published.
 
 ## Install from the shared marketplace after publication
 
-After the immutable marketplace tag is published, register that exact Git ref
-and install its `autograph` listing:
+After the release is imported into the organization marketplace, register the
+shared catalog and install its `autograph` listing:
 
 ```sh
 (
   set -eu
-  codex plugin marketplace add withAutograph/autograph-app-builder \
-    --ref codex-marketplace-v0.2.1
-  codex plugin add autograph-app-builder@autograph
+  codex plugin marketplace add withAutograph/marketplace
+  codex plugin add app-builder@autograph
 )
 ```
 
-Open a new Codex task after installation. The marketplace tag contains only the
-generated catalog and endpoint-bound plugin; it never installs the loopback
-development adapter from `main`. Publishing a release does not create the
-shared listing; marketplace publication is a separate distribution action.
+Open a new Codex task after installation. The marketplace contains only
+verified endpoint-bound packages; it never installs the loopback development
+adapter from App Builder `main`. Publishing a product release does not create
+the shared listing: the separate marketplace import opens a reviewed catalog
+change.
+
+You can also ask Codex to do the installation:
+
+```text
+Install Autograph App Builder from withAutograph/marketplace. Add or upgrade the
+marketplace from main, install app-builder@autograph, and verify it is enabled.
+When it is ready, give me a short user-facing confirmation and tell me to open a
+fresh task to create my app. Put commands, versions, endpoints, and diagnostics
+under an optional Details section.
+```
+
+The expected handoff is:
+
+> Autograph App Builder is ready. Open a fresh Codex task and describe the app
+> you want to create.
 
 ## Other Agent Plugins clients
 
@@ -97,23 +115,25 @@ doesn't offer a catalog listing.
 
 Every release contains:
 
-- `autograph-app-builder-0.2.1.tar.gz`, the portable Agent Plugins package
-- `autograph-app-builder-codex-marketplace-0.2.1.tar.gz`, a self-contained
+- `app-builder-0.2.12.tar.gz`, the portable Agent Plugins package
+- `app-builder-codex-marketplace-0.2.12.tar.gz`, a self-contained
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
   origin, archive digests, and exact five Autograph tools
+- `promotion-receipt.json`, which binds those package bytes to the exact
+  Vercel Git deployment, canonical endpoint, project, source SHA, and health
 
 ### Portable archive
 
-Download the complete release, verify its checksums and immutable attestations,
+Download the complete release, verify its checksums and immutable release state,
 then extract the portable archive:
 
 ```sh
 (
   set -eu
-  release_version=0.2.1
-  release_dir="$PWD/autograph-app-builder-release-$release_version"
+  release_version=0.2.12
+  release_dir="$PWD/app-builder-release-$release_version"
   mkdir "$release_dir"
   gh release download "v$release_version" \
     --repo withAutograph/autograph-app-builder \
@@ -123,13 +143,13 @@ then extract the portable archive:
   gh release verify "v$release_version" \
     --repo withAutograph/autograph-app-builder
   gh release verify-asset "v$release_version" \
-    "autograph-app-builder-$release_version.tar.gz" \
+    "app-builder-$release_version.tar.gz" \
     --repo withAutograph/autograph-app-builder
-  tar -xzf "autograph-app-builder-$release_version.tar.gz"
+  tar -xzf "app-builder-$release_version.tar.gz"
 )
 ```
 
-Add the extracted `$release_dir/autograph-app-builder/` directory using the
+Add the extracted `$release_dir/app-builder/` directory using the
 client’s local Agent Plugin installation procedure.
 
 ### Local Codex marketplace archive
@@ -149,13 +169,13 @@ marketplace directory:
 ```sh
 (
   set -eu
-  codex plugin remove autograph-app-builder@autograph
+  codex plugin remove app-builder@autograph
   codex plugin marketplace remove autograph
-  mkdir autograph-app-builder-marketplace-0.2.1
-  tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz \
-    -C autograph-app-builder-marketplace-0.2.1
-  codex plugin marketplace add "$PWD/autograph-app-builder-marketplace-0.2.1"
-  codex plugin add autograph-app-builder@autograph
+  mkdir app-builder-marketplace-0.2.12
+  tar -xzf app-builder-codex-marketplace-0.2.12.tar.gz \
+    -C app-builder-marketplace-0.2.12
+  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.12"
+  codex plugin add app-builder@autograph
 )
 ```
 
@@ -169,34 +189,31 @@ project:
 
 ```sh
 mise run dependencies:install
-mise run package:validate
-mise run local:dev
+mise run dev -- --arrusted-root /absolute/path/to/arrusted
 ```
 
-The source `mcp.json` intentionally uses a loopback development endpoint. Do not
-publish or redistribute source-checkout bytes as an endpoint-bound release.
+The task snapshots that checkout, starts the loopback endpoint, proves that it
+exposes exactly the five public `autograph_*` tools, and then replaces and
+installs the ignored `app-builder@autograph-dev` package in the active Codex
+profile. Wait for the ready message, keep the task running, and open a fresh
+Codex task. No separate plugin command is required. Do not publish or
+redistribute development package bytes as an endpoint-bound release.
 
 ## Maintainer release flow
 
-Publish `v0.2.1` only through the existing tag-triggered
-`.github/workflows/release.yml` workflow. Do not create or upload the release
-manually. The tag may be created only after the exact release SHA has passed
-the hosted proof and `AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to
-that same accepted SHA.
+Exact-main CI waits for Vercel Git to deploy the same SHA, then runs
+`release:prove` once with that provider-owned URL and the canonical endpoint.
+It records `promotion-receipt.json` and attests every asset. The protected
+`release:publish` step creates the prerelease from those exact package and
+marketplace bytes. It never rebuilds, invokes Vercel CLI, pushes an image, or
+accepts replacement bytes or bindings.
 
-Maintainers set `AUTOGRAPH_APP_BUILDER_RELEASE_ORIGIN` to the exact deployed
-HTTPS origin. A `vMAJOR.MINOR.PATCH` tag whose version matches `plugin.json`
-runs the release workflow through the protected `release` environment. Before
-creating the tag, an administrator must enable and read back GitHub immutable
-releases, accept the exact-SHA hosted proof, and set
-`AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` to that SHA. The workflow requires the
-exact current `main`, successful exact-SHA CI, and the accepted proof SHA. It
-uses pinned Actions, validates the actual deterministic portable and Codex
-marketplace archives, creates a draft, verifies every uploaded digest, and only
-then publishes the version as a prerelease without marking it latest. It
-requires GitHub's immutable-release attestation and separate build-provenance
-attestations to verify before completing.
+Protected-environment policy, exact-current-main CI, immutable GitHub release
+verification, and marketplace import readback remain required release
+gates. They verify the CI promotion receipt and uploaded digests rather than
+rebuilding the candidate.
 
 The archives are the immutable distribution payload behind marketplace and
-client installation. Publishing a shared marketplace or client catalog entry
-is a separate distribution action.
+client installation. The public `withAutograph/marketplace` repository imports
+those verified bytes through its **Import plugin release** workflow; it does not
+rebuild the package or maintain a hand-edited duplicate.

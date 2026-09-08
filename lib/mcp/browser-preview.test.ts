@@ -7,6 +7,8 @@ import {
   attachPrototypePreviewUrl,
   createPrototypePreviewRequestHandler,
   createServicePrototypePreviewResolver,
+  loopbackDevelopmentOrigin,
+  prototypePreviewRequestUrl,
   prototypePreviewContentSecurityPolicy,
 } from "./browser-preview";
 
@@ -29,6 +31,39 @@ const result = {
 };
 
 describe("Browser prototype preview", () => {
+  it("uses the supervisor-owned non-default loopback origin only in exact development mode", () => {
+    const developmentRequestUrl = prototypePreviewRequestUrl({
+      environment: {
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+        APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+        APP_BUILDER_LOCAL_ADAPTER: "1",
+        APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(3_100),
+        EVE_HOSTED_ADAPTER: "0",
+      },
+      requestUrl: "http://localhost:3000/mcp",
+    });
+    expect(
+      attachPrototypePreviewUrl(result, developmentRequestUrl).prototype,
+    ).toMatchObject({
+      previewUrl: `http://127.0.0.1:3100/preview/session-one/${prototype.digest}`,
+    });
+
+    expect(
+      prototypePreviewRequestUrl({
+        environment: {
+          APP_BUILDER_EXECUTION_MODE: "development",
+          APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+          APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+          APP_BUILDER_LOCAL_ADAPTER: "0",
+          APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(3_100),
+          EVE_HOSTED_ADAPTER: "1",
+        },
+        requestUrl: "https://builder.example.test/mcp",
+      }),
+    ).toBe("https://builder.example.test/mcp");
+  });
+
   it("attaches only hosted HTTPS or loopback URLs", () => {
     expect(
       attachPrototypePreviewUrl(result, "https://builder.example.test/mcp")
@@ -65,8 +100,10 @@ describe("Browser prototype preview", () => {
     expect(response.headers.get("content-security-policy")).toBe(
       prototypePreviewContentSecurityPolicy,
     );
+    // Forms must dispatch their local submit event so generated prototypes can
+    // handle it with preventDefault(); CSP still rejects every navigation.
     expect(prototypePreviewContentSecurityPolicy).toContain(
-      "sandbox allow-scripts",
+      "sandbox allow-forms allow-scripts",
     );
     expect(prototypePreviewContentSecurityPolicy).not.toContain(
       "allow-same-origin",
@@ -167,5 +204,22 @@ describe("Browser prototype preview", () => {
       cursor: 0,
       limit: 1,
     });
+  });
+
+  it("waits briefly for a prototype event that is still being delivered", async () => {
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce({ ...result, prototype: undefined })
+      .mockResolvedValueOnce(result);
+    const resolver = createServicePrototypePreviewResolver({
+      serviceForRequest: async () => ({ get }) as unknown as EveSessionService,
+    });
+    await expect(
+      resolver({
+        request: new Request("https://builder.example.test/preview"),
+        sessionId: "session-one",
+      }),
+    ).resolves.toEqual(prototype);
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Run the Storybook product catalog"
+set -eu
+
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/storybook/dist/bin/dispatcher.js dev --port 6006 "$@"

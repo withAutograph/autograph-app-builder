@@ -8,6 +8,7 @@ import type { EveSessionService } from "../eve/service";
 import {
   createAutographMcpHandler,
   createMcpRequestHandler,
+  withHostedBuilderHandoffs,
   type HostedMcpRuntime,
 } from "./request-handler";
 
@@ -18,22 +19,6 @@ const auth = {
   algorithm: "ES256" as const,
   resourceUrl: "https://builder.example.test/mcp",
 };
-const admissionControl = {
-  version: 1 as const,
-  environment: "preview" as const,
-  enforcement: "provider-readback" as const,
-  scope: "issuer-audience-workspace-subject" as const,
-  startsPerSubjectPerMinute: 10,
-  startsPerWorkspacePerMinute: 50,
-  maxConcurrentSessionsPerSubject: 2,
-  maxActiveSessionsPerWorkspace: 20,
-  monthlySpendUsedUsdCents: 0,
-  monthlySpendLimitUsdCents: 10_000,
-  observedAt: "2033-05-18T03:32:00.000Z",
-  expiresAt: "2033-05-18T04:32:00.000Z",
-  readbackDigest: `sha256:${"a".repeat(64)}`,
-};
-
 const exactTools = [
   "autograph_cancel",
   "autograph_get",
@@ -102,7 +87,6 @@ function runtime(
     },
     store: new InMemoryHostedEveStore(),
     transport,
-    admissionControl,
     now: () => 2_000_000_000_000,
   };
 }
@@ -151,7 +135,8 @@ async function mcpResult<T>(response: Response): Promise<T> {
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
   const payload = JSON.parse(data ?? body) as { result?: T };
-  if (payload.result === undefined) throw new Error("MCP result was missing.");
+  if (payload.result === undefined)
+    throw new Error(`MCP result was missing: ${body}`);
   return payload.result;
 }
 
@@ -163,13 +148,278 @@ async function toolNames(response: Response): Promise<string[]> {
 }
 
 describe("branded public tool mapping", () => {
-  it("links each exact public tool to the shared MCP App resource", async () => {
+  it("redeems an opaque handoff once and returns the same session after a lost response", async () => {
+    const calls: Array<{ operation: string; input: unknown }> = [];
+    const result = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 1,
+      events: [],
+    };
+    const service = {
+      async start(input: Parameters<EveSessionService["start"]>[0]) {
+        calls.push({ operation: "start", input });
+        return result;
+      },
+      async get(input: Parameters<EveSessionService["get"]>[0]) {
+        calls.push({ operation: "get", input });
+        return result;
+      },
+      async recoverStart(
+        input: Parameters<NonNullable<EveSessionService["recoverStart"]>>[0],
+      ) {
+        calls.push({ operation: "recoverStart", input });
+        return result;
+      },
+      async list() {
+        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      },
+      async send() {
+        return result;
+      },
+      async respond() {
+        return result;
+      },
+      async cancel() {
+        return result;
+      },
+    } satisfies EveSessionService;
+    let redeemed = false;
+    const bindSession = vi.fn(async () => {
+      redeemed = true;
+    });
+    const wrapped = withHostedBuilderHandoffs({
+      service,
+      principal: {
+        issuer: auth.issuer,
+        audience: auth.audience,
+        workspaceId: "workspace-one",
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+      },
+      handoffs: {
+        async resolve({ authority, handoffId }) {
+          expect(authority).toEqual({
+            issuer: auth.issuer,
+            audience: auth.audience,
+            workspaceId: "workspace-one",
+            ownerUserId: "user-one",
+          });
+          expect(handoffId).toBe("123e4567-e89b-42d3-a456-426614174000");
+          return redeemed
+            ? { status: "redeemed" as const, sessionId: "session-one" }
+            : {
+                status: "unredeemed" as const,
+                prompt:
+                  "Build the server-owned handoff. Call resolve_repository_access before repository work.",
+                deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+                record: {
+                  requestDigest: "a".repeat(64),
+                  intent: {
+                    repository: {
+                      requestedName: "app-builder-dogfood",
+                      resolvedFullName: "withAutograph/app-builder-dogfood",
+                    },
+                  },
+                },
+              };
+        },
+        bindSession,
+        async recheckRepositoryAccess({ principal, repository }) {
+          calls.push({
+            operation: "recheckRepositoryAccess",
+            input: { principal, repository },
+          });
+          return { status: "authorization-required", action: "update" };
+        },
+      },
+    });
+    const request = {
+      handoffId: "123e4567-e89b-42d3-a456-426614174000",
+      clientRequestId: "caller-one",
+    };
+
+    await expect(wrapped.start(request)).resolves.toEqual(result);
+    await expect(wrapped.start(request)).resolves.toEqual(result);
+    expect(bindSession).toHaveBeenCalledOnce();
+    expect(calls).toEqual([
+      {
+        operation: "recheckRepositoryAccess",
+        input: {
+          principal: {
+            issuer: auth.issuer,
+            audience: auth.audience,
+            workspaceId: "workspace-one",
+            ownerUserId: "user-one",
+            scopes: claims().scopes,
+          },
+          repository: "withAutograph/app-builder-dogfood",
+        },
+      },
+      {
+        operation: "start",
+        input: {
+          prompt:
+            "Build the server-owned handoff. Call resolve_repository_access before repository work.",
+          clientRequestId: `handoff:${"a".repeat(64)}`,
+        },
+      },
+      {
+        operation: "recoverStart",
+        input: { sessionId: "session-one", cursor: 0, limit: 100 },
+      },
+    ]);
+  });
+
+  it("leaves an opaque handoff unbound when the provider re-read is unavailable", async () => {
+    const start = vi.fn();
+    const bindSession = vi.fn();
+    const result = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 1,
+      events: [],
+    };
+    const service = {
+      start,
+      async list() {
+        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      },
+      async get() {
+        return result;
+      },
+      async send() {
+        return result;
+      },
+      async respond() {
+        return result;
+      },
+      async cancel() {
+        return result;
+      },
+    } satisfies EveSessionService;
+    const wrapped = withHostedBuilderHandoffs({
+      service,
+      principal: {
+        issuer: auth.issuer,
+        audience: auth.audience,
+        workspaceId: "workspace-one",
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+      },
+      handoffs: {
+        async resolve() {
+          return {
+            status: "unredeemed" as const,
+            prompt: "Build the server-owned handoff.",
+            deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+            record: {
+              requestDigest: "a".repeat(64),
+              intent: {
+                repository: {
+                  requestedName: "app-builder-dogfood",
+                  resolvedFullName: "withAutograph/app-builder-dogfood",
+                },
+              },
+            },
+          };
+        },
+        bindSession,
+        async recheckRepositoryAccess() {
+          return { status: "provider-unavailable" };
+        },
+      },
+    });
+
+    await expect(
+      wrapped.start({
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "caller-one",
+      }),
+    ).rejects.toThrow("handoff-repository-access-unavailable");
+    expect(start).not.toHaveBeenCalled();
+    expect(bindSession).not.toHaveBeenCalled();
+  });
+
+  it("silently starts an opaque handoff after a current ready provider read", async () => {
+    const result = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 1,
+      events: [],
+    };
+    const start = vi.fn(async () => result);
+    const bindSession = vi.fn();
+    const recheckRepositoryAccess = vi.fn(async () => ({
+      status: "ready" as const,
+    }));
+    const service = {
+      start,
+      async list() {
+        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      },
+      async get() {
+        return result;
+      },
+      async send() {
+        return result;
+      },
+      async respond() {
+        return result;
+      },
+      async cancel() {
+        return result;
+      },
+    } satisfies EveSessionService;
+    const wrapped = withHostedBuilderHandoffs({
+      service,
+      principal: {
+        issuer: auth.issuer,
+        audience: auth.audience,
+        workspaceId: "workspace-one",
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+      },
+      handoffs: {
+        async resolve() {
+          return {
+            status: "unredeemed" as const,
+            prompt: "Build the server-owned handoff.",
+            deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+            record: {
+              requestDigest: "a".repeat(64),
+              intent: {
+                repository: {
+                  requestedName: "app-builder-dogfood",
+                  resolvedFullName: "withAutograph/app-builder-dogfood",
+                },
+              },
+            },
+          };
+        },
+        bindSession,
+        recheckRepositoryAccess,
+      },
+    });
+
+    await expect(
+      wrapped.start({
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "caller-one",
+      }),
+    ).resolves.toEqual(result);
+    expect(recheckRepositoryAccess).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledOnce();
+    expect(bindSession).toHaveBeenCalledOnce();
+  });
+
+  it("keeps ordinary tools free of unconditional MCP App resources", async () => {
     const handler = createAutographMcpHandler({} as EveSessionService);
     const response = await handler(mcpRequest());
     const result = await mcpResult<{
       tools?: Array<{
         name?: string;
-        _meta?: { ui?: { resourceUri?: string } };
+        _meta?: { ui?: { resourceUri?: string; visibility?: string[] } };
       }>;
     }>(response);
 
@@ -177,17 +427,14 @@ describe("branded public tool mapping", () => {
       exactTools,
     );
     expect(
-      (result.tools ?? [])
-        .toSorted((left, right) =>
-          (left.name ?? "").localeCompare(right.name ?? ""),
-        )
-        .map(({ _meta }) => _meta?.ui?.resourceUri),
-    ).toEqual(
-      Array.from(
-        { length: exactTools.length },
-        () => "ui://autograph-app-builder/session.html",
+      (result.tools ?? []).every(
+        ({ _meta }) => _meta?.ui?.resourceUri === undefined,
       ),
-    );
+    ).toBe(true);
+    expect(
+      result.tools?.find(({ name }) => name === "autograph_respond")?._meta?.ui
+        ?.visibility,
+    ).toEqual(["model", "app"]);
   });
 
   it("maps each public operation to the unchanged Eve session service", async () => {
@@ -202,6 +449,10 @@ describe("branded public tool mapping", () => {
       async start(input) {
         calls.push({ operation: "start", input });
         return result;
+      },
+      async list(input) {
+        calls.push({ operation: "list", input });
+        return { kind: "session_list", cursor: 0, sessions: [] };
       },
       async get(input) {
         calls.push({ operation: "get", input });
@@ -270,6 +521,46 @@ describe("branded public tool mapping", () => {
     ]);
   });
 
+  it("lists recent sessions when autograph_get omits sessionId", async () => {
+    const sessionResult = {
+      sessionId: "session-one",
+      status: "waiting" as const,
+      cursor: 0,
+      events: [],
+    };
+    const listed = {
+      kind: "session_list" as const,
+      cursor: 1,
+      sessions: [
+        {
+          sessionId: "session-one",
+          title: "Vendor workspace",
+          stage: "prototype" as const,
+          status: "waiting" as const,
+          resumability: "live" as const,
+          updatedAt: "2026-09-01T12:00:00.000Z",
+        },
+      ],
+    };
+    const service = {
+      start: vi.fn(async () => sessionResult),
+      list: vi.fn(async () => listed),
+      get: vi.fn(async () => sessionResult),
+      send: vi.fn(async () => sessionResult),
+      respond: vi.fn(async () => sessionResult),
+      cancel: vi.fn(async () => sessionResult),
+    } satisfies EveSessionService;
+    const handler = createAutographMcpHandler(service);
+    const response = await handler(
+      mcpToolRequest("autograph_get", { cursor: 0, limit: 25 }),
+    );
+    const result = await mcpResult<{ structuredContent: unknown }>(response);
+
+    expect(result.structuredContent).toEqual(listed);
+    expect(service.list).toHaveBeenCalledWith({ cursor: 0, limit: 25 });
+    expect(service.get).not.toHaveBeenCalled();
+  });
+
   it("returns a Browser-openable URL without attaching prototype UI", async () => {
     const content = "<!doctype html><html><body>Vendor queue</body></html>";
     const result = {
@@ -288,6 +579,11 @@ describe("branded public tool mapping", () => {
     };
     const service = {
       start: vi.fn(async () => result),
+      list: vi.fn(async () => ({
+        kind: "session_list" as const,
+        cursor: 0,
+        sessions: [],
+      })),
       get: vi.fn(async () => result),
       send: vi.fn(async () => result),
       respond: vi.fn(async () => result),
@@ -318,6 +614,71 @@ describe("branded public tool mapping", () => {
 });
 
 describe("request-scoped MCP service selection", () => {
+  it("allows public tool discovery before OAuth but protects tool calls", async () => {
+    const verifier = vi.fn(async () => claims());
+    const membership = vi.fn(async () => true);
+    const hostedRuntime = runtime();
+    hostedRuntime.verifier = { verify: verifier };
+    hostedRuntime.membership = { isMember: membership };
+    const handler = createMcpRequestHandler({
+      environment: { EVE_HOSTED_ADAPTER: "1" },
+      hostedRuntime,
+    });
+
+    const discovery = await mcpResult<{
+      tools: Array<{
+        name: string;
+        _meta?: {
+          securitySchemes?: Array<{ type: string; scopes?: string[] }>;
+        };
+      }>;
+    }>(await handler(mcpRequest({}, "tools/list")));
+    expect(discovery.tools.map(({ name }) => name).sort()).toEqual(exactTools);
+    for (const tool of discovery.tools) {
+      expect(tool._meta?.securitySchemes).toEqual([
+        {
+          type: "oauth2",
+          scopes: [
+            "autograph:session",
+            "autograph:start",
+            "autograph:get",
+            "autograph:send",
+            "autograph:respond",
+            "autograph:cancel",
+          ],
+        },
+      ]);
+    }
+    expect(verifier).not.toHaveBeenCalled();
+    expect(membership).not.toHaveBeenCalled();
+
+    const protectedCall = await handler(
+      mcpRequest({}, "tools/call", {
+        name: "autograph_get",
+        arguments: { cursor: 0, limit: 20 },
+      }),
+    );
+    expect(protectedCall.status).toBe(200);
+    const authResult = await mcpResult<{
+      isError: boolean;
+      _meta: { "mcp/www_authenticate": string[] };
+      structuredContent: { error: { code: string } };
+    }>(protectedCall);
+    expect(authResult.isError).toBe(true);
+    expect(authResult.structuredContent.error.code).toBe(
+      "authentication_required",
+    );
+    expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
+      'error="invalid_token"',
+    );
+    expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
+      'error_description="Sign in to Autograph App Builder to continue"',
+    );
+    expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
+      'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
+    );
+  });
+
   it("does not fall back to local or unconfigured service in hosted mode", async () => {
     const handler = createMcpRequestHandler({
       environment: {
@@ -341,14 +702,12 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime,
     });
     const response = await handler(
-      mcpRequest({
-        authorization: "Bearer token",
-      }),
+      mcpRequest({ authorization: "Bearer token" }, "tools/call"),
     );
     expect(response.status).toBe(503);
   });
 
-  it("rejects missing and malformed credentials with the same 401 challenge", async () => {
+  it("returns the same tool-level auth challenge for missing and malformed credentials", async () => {
     const verifier = vi.fn(async () => claims());
     const hostedRuntime = runtime();
     hostedRuntime.verifier = { verify: verifier };
@@ -357,17 +716,37 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime,
     });
     const responses = await Promise.all([
-      handler(mcpRequest()),
-      handler(mcpRequest({ authorization: "Bearer two tokens" })),
-      handler(mcpRequest({ authorization: "Basic token" })),
+      handler(
+        mcpRequest({}, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
+        }),
+      ),
+      handler(
+        mcpRequest({ authorization: "Bearer two tokens" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
+        }),
+      ),
+      handler(
+        mcpRequest({ authorization: "Basic token" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
+        }),
+      ),
     ]);
     expect(verifier).not.toHaveBeenCalled();
     for (const response of responses) {
-      expect(response.status).toBe(401);
-      expect(response.headers.get("www-authenticate")).toContain(
+      expect(response.status).toBe(200);
+      const result = await mcpResult<{
+        _meta: { "mcp/www_authenticate": string[] };
+      }>(response);
+      expect(result._meta["mcp/www_authenticate"][0]).toContain(
         'error="invalid_token"',
       );
-      await expect(response.json()).resolves.toEqual({ error: "unauthorized" });
+      expect(result._meta["mcp/www_authenticate"][0]).toContain(
+        'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
+      );
     }
   });
 
@@ -377,26 +756,41 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime: runtime({ verifierError: new Error("bad token") }),
     });
     const invalidResponse = await invalid(
-      mcpRequest({
-        authorization: "Bearer token",
+      mcpRequest({ authorization: "Bearer token" }, "tools/call", {
+        name: "autograph_get",
+        arguments: { cursor: 0, limit: 20 },
       }),
     );
-    expect(invalidResponse.status).toBe(401);
+    expect(invalidResponse.status).toBe(200);
+    expect(
+      (
+        await mcpResult<{
+          _meta: { "mcp/www_authenticate": string[] };
+        }>(invalidResponse)
+      )._meta["mcp/www_authenticate"][0],
+    ).toContain('error="invalid_token"');
 
     const insufficient = createMcpRequestHandler({
       environment: { EVE_HOSTED_ADAPTER: "1" },
       hostedRuntime: runtime({
-        verifiedClaims: claims({ scopes: ["autograph:get"] }),
+        verifiedClaims: claims({ scopes: ["autograph:session"] }),
       }),
     });
     const insufficientResponse = await insufficient(
-      mcpRequest({
-        authorization: "Bearer token",
+      mcpRequest({ authorization: "Bearer token" }, "tools/call", {
+        name: "autograph_get",
+        arguments: { cursor: 0, limit: 20 },
       }),
     );
-    expect(insufficientResponse.status).toBe(403);
-    expect(insufficientResponse.headers.get("www-authenticate")).toContain(
+    expect(insufficientResponse.status).toBe(200);
+    const insufficientResult = await mcpResult<{
+      _meta: { "mcp/www_authenticate": string[] };
+    }>(insufficientResponse);
+    expect(insufficientResult._meta["mcp/www_authenticate"][0]).toContain(
       'error="insufficient_scope"',
+    );
+    expect(insufficientResult._meta["mcp/www_authenticate"][0]).toContain(
+      'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
     );
   });
 
@@ -421,8 +815,8 @@ describe("request-scoped MCP service selection", () => {
       }),
     ];
     const responses = [
-      await handlers[0]!(mcpRequest(requestHeaders)),
-      await handlers[1]!(mcpRequest(requestHeaders)),
+      await handlers[0]!(mcpRequest(requestHeaders, "tools/call")),
+      await handlers[1]!(mcpRequest(requestHeaders, "tools/call")),
     ];
     const projections = await Promise.all(
       responses.map(async (response) => ({
@@ -441,7 +835,7 @@ describe("request-scoped MCP service selection", () => {
     });
   });
 
-  it("binds each hosted request to its own principal and membership check", async () => {
+  it("binds each protected hosted request to its own principal and membership check", async () => {
     const seen: string[] = [];
     const hostedRuntime = runtime({
       membership: async (workspaceId) => {
@@ -463,20 +857,20 @@ describe("request-scoped MCP service selection", () => {
     });
     const [one, two] = await Promise.all([
       handler(
-        mcpRequest({
-          authorization: "Bearer one",
+        mcpRequest({ authorization: "Bearer one" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
         }),
       ),
       handler(
-        mcpRequest({
-          authorization: "Bearer two",
+        mcpRequest({ authorization: "Bearer two" }, "tools/call", {
+          name: "autograph_get",
+          arguments: { cursor: 0, limit: 20 },
         }),
       ),
     ]);
     expect(one.status).toBe(200);
     expect(two.status).toBe(200);
-    expect(await toolNames(one)).toEqual(exactTools);
-    expect(await toolNames(two)).toEqual(exactTools);
     expect(seen.sort()).toEqual(["workspace-one", "workspace-two"]);
   });
 
@@ -512,7 +906,17 @@ describe("request-scoped MCP service selection", () => {
     expect(resourceReadResponse.status).toBe(200);
 
     const toolResult = await mcpResult<{
-      tools: Array<{ name: string; title?: string; description?: string }>;
+      tools: Array<{
+        name: string;
+        title?: string;
+        description?: string;
+        annotations?: {
+          readOnlyHint?: boolean;
+          destructiveHint?: boolean;
+          idempotentHint?: boolean;
+          openWorldHint?: boolean;
+        };
+      }>;
     }>(toolResponse);
     expect(toolResult.tools.map(({ name }) => name).sort()).toEqual(exactTools);
     expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(
@@ -535,14 +939,51 @@ describe("request-scoped MCP service selection", () => {
       ),
     ).toEqual({
       autograph_start:
-        "Start a durable app build and return immediately; check progress separately.",
+        "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
       autograph_get:
-        "Read the next page of progress and requests for the current app build.",
+        "List recent app builds, or read the next page of one app build's progress and requests.",
       autograph_send:
-        "Send additional direction while the current app build is waiting.",
+        "Send additional direction to an App Builder session. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
       autograph_respond:
-        "Answer the complete outstanding set of App Builder questions in one response.",
-      autograph_cancel: "Request cancellation of the active app build.",
+        "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
+      autograph_cancel:
+        "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
+    });
+    expect(
+      Object.fromEntries(
+        toolResult.tools.map(({ name, annotations }) => [name, annotations]),
+      ),
+    ).toEqual({
+      autograph_start: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_get: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_send: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_respond: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      autograph_cancel: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     });
 
     const resourceResult = await mcpResult<{

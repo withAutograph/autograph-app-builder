@@ -49,24 +49,66 @@ atomically consumes the installation state, creates a second tenant-bound
 authorization state, and redirects through GitHub's web authorization flow
 with S256 PKCE. The authorization callback atomically consumes that second
 state before exchanging the one-time code and derived verifier. The returned
-GitHub user token is request-local: the callback uses it only against the fixed
+GitHub user token is initially request-local: the callback uses it only against
+the fixed
 `api.github.com` `/user` and paginated `/user/installations` endpoints, accepts
-only one unambiguous active selected-repository installation for the configured
-App ID, checks personal installations against the caller, rechecks live App
-Builder membership, and then writes the existing tenant installation binding.
-It never persists or returns the code, client secret, user token, refresh
-token, raw provider response, or authorization header. A replay, tenant change,
-provider drift, membership change, suspended installation, or all-repository
-selection fails closed without a binding.
+only one unambiguous active installation for the configured App ID, checks
+personal installations against the caller, rechecks live App Builder
+membership, and then writes the existing tenant installation binding.
+For pre-handoff personal-repository creation, it also encrypts the GitHub App
+user access and refresh token set with the dedicated versioned credential key;
+plaintext tokens remain request-local and are never returned or logged.
+Expiring credentials use atomic compare-and-set rotation. Confirmed `401`,
+installation deletion/suspension, or `github_app_authorization.revoked`
+webhook events deactivate the affected credential or binding. It never
+persists or returns the code, client secret, plaintext token, raw provider
+response, or authorization header. A replay, tenant change,
+provider drift, membership change, or suspended installation fails closed
+without a binding. Both GitHub repository selections (`selected` and `all`) are
+supported; the live installation identity and per-operation repository
+authorization checks remain required.
 
 This route adds the exact hosted environment fields
-`GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
-`GITHUB_APP_INSTALL_STATE_SECRET`. The existing `GITHUB_CLIENT_ID` and
+`GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
+`GITHUB_APP_INSTALL_STATE_SECRET`, `GITHUB_APP_USER_TOKEN_KEY`,
+`GITHUB_APP_USER_TOKEN_KEY_VERSION`, and `GITHUB_APP_WEBHOOK_SECRET`. The existing `GITHUB_CLIENT_ID` and
 `GITHUB_CLIENT_SECRET` remain the separate invited-user sign-in provider.
 `GITHUB_TOKEN` and `GITHUB_API_URL` are forbidden ambient overrides. Migration
 `0007_github_installation_authorization` owns the digest-only, one-time state
 table. The owner-only mise binding remains an operator recovery path; it is not
 the public installation flow.
+
+Register the GitHub App under the Autograph organization with the exact slug
+`autograph-app-builder`. Use `https://www.autograph.so/` as its public homepage
+and configure both its callback URL and setup URL as
+`<APP_ORIGIN>/github/installations/callback`. Enable **Redirect on update** so an
+existing installation returns to the same state-bound flow after its repository
+access changes. Choose either repository selection offered by GitHub and only the
+maximum repository permissions exercised by the
+operation-scoped installation tokens: metadata read, contents read/write,
+workflows read/write, pull requests read/write, administration read/write, and
+variables read. The App Builder narrows these permissions again for each
+operation and performs no repository mutation during the connection flow.
+
+The separate web handoff provisioning path is gated by
+`builder-resource-provisioning`. It journals intent before provider calls,
+creates a public or private repository from the exact content-addressed
+Arrusted starter as one parentless `main` commit, and verifies the repository
+ID, privacy, SHA, tree, and complete blob inventory before reporting success.
+Organization creation uses the selected installation token with Administration
+write. Personal creation uses the encrypted GitHub App user credential because
+`POST /user/repos` does not accept an installation token. This does not change
+the five-tool public MCP surface or bypass the later reviewed-change-set
+publication gate.
+
+Leave GitHub App **Request user authorization (OAuth) during installation**
+disabled for this flow. When enabled, GitHub bypasses the setup URL and starts
+its OAuth flow directly, returning a code to the first registered callback URL
+without this flow's tenant-bound state. The callback rejects that response before
+code exchange or binding rather than accepting an unbound authorization. Multiple
+registered callback URLs do not select a tenant callback for that automatic flow;
+the configured App Builder callback and setup URL must be the same exact
+`<APP_ORIGIN>/github/installations/callback` URL.
 
 `composeGitHubPublicationRuntime` enables the typed tools only when an adapter,
 proposal store, and receipt store are all injected with `enabled: true`. The
@@ -97,7 +139,10 @@ The boundary supports four operations:
 Repository creation and draft-PR publication are separate approvals. Each
 proposal binds the exact installation identity, selected repository or private
 destination, reviewed change-set digest, source/base SHA and tree, and the
-absence of `REPOSITORY_RELEASE_ENABLED`. Immediately before mutation, the
+observed `REPOSITORY_RELEASE_ENABLED` state. A fresh repository must keep the
+gate absent. An existing repository may already have the gate configured; draft
+pull-request publication carries that exact observation through the sealed
+proposal and receipt and must not change it. Immediately before mutation, the
 adapter must re-observe those bindings and refuse stale base state, changed-path
 overlap, branch or destination collision, release-gate drift, or digest drift.
 
@@ -110,7 +155,7 @@ exact idempotency read-back. Only an explicit provider rejection becomes a
 bounded sanitized failure receipt and requires explicit recovery.
 
 The repository now supplies the PostgreSQL CAS store, its additive schema, and
-a fixed-`api.github.com` HTTP provider. Hosted deployment composition is
+an Octokit-backed fixed-`api.github.com` provider. Hosted deployment composition is
 enabled only by exact `APP_BUILDER_GITHUB_PUBLICATION_ENABLED=1` together with
 an exact matching `VERCEL_ENV` and `EVE_HOSTED_VERCEL_ENVIRONMENT` of either
 `preview` or `production`, bounded `DATABASE_URL`, `GITHUB_APP_ID`, and
@@ -119,12 +164,13 @@ an exact matching `VERCEL_ENV` and `EVE_HOSTED_VERCEL_ENVIRONMENT` of either
 issuer/audience/workspace/owner database binding after current and initiating
 forwarded authority plus membership are revalidated for the session. Local,
 unconfigured, unsupported, service, mismatched, inactive, or ambient authority
-remains fail-closed. The provider creates short-lived App JWTs and mints a
-fresh installation token with the exact permissions for each operation. The runtime
+remains fail-closed. The provider delegates short-lived App JWT creation and
+installation-token minting with the exact permissions for each operation to
+`@octokit/app` and `@octokit/auth-app`. The runtime
 passes a closed, discriminated, ephemeral content value directly into the
 provider mutation: fresh creation receives the complete immutable prepared
 source manifest and bytes at `sourceTree`, while draft publication receives
-only the reviewed validated-overlay changes. The HTTP provider has no second
+only the reviewed validated-overlay changes. The Octokit provider has no second
 material source and verifies modes, blob identities, byte digests, and the
 exact Git tree before mutation. Tokens, endpoints, raw responses, raw content,
 and raw errors never enter a proposal or receipt. Composition makes the typed

@@ -1,21 +1,13 @@
-import { createHash } from "node:crypto";
-
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxSession } from "eve/sandbox";
 
-import type { OverlaySnapshot, TargetApplyReceipt } from "./target-apply";
+import type { TargetApplyReceipt } from "./target-apply";
 import {
-  appliedOverlayDriftFailure,
-  assertReusableTargetApplyReceipt,
-  assertReusableTargetValidationReceipt,
-  assertTargetValidationSourceBindings,
   createTargetValidationAttempt,
+  compilerDiagnostics,
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
-  type TargetValidationReceipt,
-  type ValidationCommandExecutor,
-  validationOverlayRoot,
 } from "./target-validation";
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
@@ -24,6 +16,7 @@ const apply: TargetApplyReceipt = {
   version: 2,
   sourceSha: "1".repeat(40),
   sourceTree: "0".repeat(40),
+  sourceReceiptDigest: digest("1"),
   eligibilityDigest: digest("2"),
   workspaceDigest: digest("3"),
   appSpecDigest: digest("4"),
@@ -33,28 +26,22 @@ const apply: TargetApplyReceipt = {
   identityDigest: digest("7"),
   imageDigest: `fixture@sha256:${digest("8")}`,
   dependencyCacheDigest: `sha256:${digest("9")}`,
-  proposalDigest: digest("a"),
-  applyRoot: `/workspace/.app-builder/apply/${digest("a")}/repository`,
-  planningTreeDigest: digest("b"),
+  dependencyCacheContentDigest: digest("a"),
+  proposalDigest: digest("b"),
+  applyRoot: "/workspace/repository",
+  planningTreeDigest: digest("c"),
+  preparedTreeDigest: digest("d"),
   preTree: [],
-  postTree: [
-    { path: "apps/example/package.json", mode: "644", digest: digest("b") },
-  ],
-  preTreeDigest: digest("c"),
-  postTreeDigest: digest("d"),
-  changes: [
-    {
-      path: "apps/example/package.json",
-      kind: "added",
-      after: { mode: "644", digest: digest("b") },
-    },
-  ],
-  changedContentDigest: digest("e"),
+  postTree: [],
+  preTreeDigest: digest("e"),
+  postTreeDigest: digest("f"),
+  changes: [],
+  changedContentDigest: digest("0"),
   command: {
     name: "create-app",
     exitCode: 0,
-    stdoutDigest: digest("f"),
-    stderrDigest: digest("0"),
+    stdoutDigest: digest("1"),
+    stderrDigest: digest("2"),
   },
   appliedByCallId: "apply-call",
   status: "applied",
@@ -65,8 +52,8 @@ const apply: TargetApplyReceipt = {
     workspacePath: "apps/example",
     topology: {
       path: "microfrontends.json",
-      oldDigest: digest("1"),
-      newDigest: digest("2"),
+      oldDigest: digest("3"),
+      newDigest: digest("4"),
     },
     mutations: ["apps/example", "microfrontends.json"],
     recovered: false,
@@ -76,438 +63,167 @@ const apply: TargetApplyReceipt = {
       "production-readiness",
     ],
   },
-  digest: digest("f"),
+  digest: digest("5"),
 };
 
-function snapshot(treeDigest: string): OverlaySnapshot {
-  return { treeDigest, files: apply.postTree };
-}
-
-const canonicalDigest = (value: unknown) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
-
-function reusableValidationReceipt(): TargetValidationReceipt {
-  const attempt = createTargetValidationAttempt(apply, "validation-call");
-  const unsigned = {
-    version: 2 as const,
-    sourceSha: attempt.sourceSha,
-    sourceTree: attempt.sourceTree,
-    eligibilityDigest: attempt.eligibilityDigest,
-    workspaceDigest: attempt.workspaceDigest,
-    appSpecDigest: attempt.appSpecDigest,
-    appSpecPath: attempt.appSpecPath,
-    artifactRevision: attempt.artifactRevision,
-    dependencyReceiptDigest: attempt.dependencyReceiptDigest,
-    identityDigest: attempt.identityDigest,
-    imageDigest: attempt.imageDigest,
-    dependencyCacheDigest: attempt.dependencyCacheDigest,
-    proposalDigest: attempt.proposalDigest,
-    applyDigest: attempt.applyDigest,
-    appliedTreeDigest: attempt.appliedTreeDigest,
-    changedContentDigest: attempt.changedContentDigest,
-    status: "passed" as const,
-    attemptDigest: attempt.digest,
-    commands: attempt.commands.map((command) => ({
-      ...command,
-      inputTreeDigest: apply.postTreeDigest,
-      exitCode: 0,
-      stdoutDigest: digest("1"),
-      stderrDigest: digest("2"),
-    })),
-    validatedByCallId: attempt.startedByCallId,
-  };
-  return { ...unsigned, digest: canonicalDigest(unsigned) };
-}
-
 function sandboxFixture() {
-  const run = vi.fn(async (request: unknown) => {
-    void request;
-    return { exitCode: 0, stdout: "", stderr: "" };
-  });
+  const run = vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" }));
   return {
     run,
-    sandbox: { id: "sandbox", run } as unknown as SandboxSession,
+    sandbox: {
+      id: "sandbox",
+      run,
+      writeTextFile: vi.fn(async () => undefined),
+    } as unknown as SandboxSession,
   };
 }
 
-describe("proposal-bound target validation", () => {
-  it("binds planning and prepared-source trees independently", () => {
-    expect(() =>
-      assertTargetValidationSourceBindings({
-        apply,
-        planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      assertTargetValidationSourceBindings({
-        apply,
-        planningTreeDigest: digest("0"),
-        preparedTreeDigest: apply.preTreeDigest,
-      }),
-    ).toThrow(/planning overlay changed/u);
-    expect(() =>
-      assertTargetValidationSourceBindings({
-        apply,
-        planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: digest("0"),
-      }),
-    ).toThrow(/prepared source changed/u);
-  });
-
-  it.each([
-    ["apply", assertReusableTargetApplyReceipt],
-    ["validation", assertReusableTargetValidationReceipt],
-  ] as const)(
-    "rejects stale planning and prepared trees before reusing a %s receipt",
-    (_name, assertReusable) => {
-      const exact = {
-        apply,
-        validation: reusableValidationReceipt(),
-        expectedAppSpecPath: apply.appSpecPath,
-        appliedTreeDigest: apply.postTreeDigest,
-        planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
-      };
-      expect(() => assertReusable(exact)).not.toThrow();
-      expect(() =>
-        assertReusable({ ...exact, planningTreeDigest: digest("0") }),
-      ).toThrow(/planning overlay changed/u);
-      expect(() =>
-        assertReusable({ ...exact, preparedTreeDigest: digest("0") }),
-      ).toThrow(/prepared source changed/u);
-      expect(() =>
-        assertReusable({
-          ...exact,
-          apply: { ...apply, appSpecPath: undefined } as never,
-        }),
-      ).toThrow(/canonical V2 target apply receipt/u);
-      expect(() =>
-        assertReusable({
-          ...exact,
-          apply: { ...apply, appSpecPath: "prototype/other/app-spec.md" },
-        }),
-      ).toThrow(/accepted AppSpec path changed/u);
-    },
-  );
-
-  it.each([
-    [
-      "path-less historical V1",
-      (receipt: Record<string, unknown>) => {
-        receipt.version = 1;
-        delete receipt.appSpecPath;
-      },
-    ],
-    [
-      "path-present wrong version",
-      (receipt: Record<string, unknown>) => {
-        receipt.version = 1;
-      },
-    ],
-    [
-      "tampered binding",
-      (receipt: Record<string, unknown>) => {
-        receipt.workspaceDigest = digest("0");
-      },
-    ],
-    [
-      "tampered attempt digest",
-      (receipt: Record<string, unknown>) => {
-        receipt.attemptDigest = digest("0");
-      },
-    ],
-    [
-      "extra command key",
-      (receipt: Record<string, unknown>) => {
-        const commands = receipt.commands as Array<Record<string, unknown>>;
-        if (commands[0] !== undefined) commands[0].unexpected = "authority";
-      },
-    ],
-    [
-      "tampered digest",
-      (receipt: Record<string, unknown>) => {
-        receipt.digest = digest("0");
-      },
-    ],
-  ] as const)("rejects %s during validated-state reuse", (_name, mutate) => {
-    const validation = structuredClone(reusableValidationReceipt()) as Record<
-      string,
-      unknown
-    >;
-    mutate(validation);
-    if (_name !== "tampered digest") {
-      delete validation.digest;
-      validation.digest = canonicalDigest(validation);
-    }
-    expect(() =>
-      assertReusableTargetValidationReceipt({
-        apply,
-        validation: validation as never,
-        expectedAppSpecPath: apply.appSpecPath,
-        appliedTreeDigest: apply.postTreeDigest,
-        planningTreeDigest: apply.planningTreeDigest,
-        preparedTreeDigest: apply.preTreeDigest,
-      }),
-    ).toThrow(/canonical V2 target validation receipt/u);
-  });
-
-  it("binds a pending attempt to the exact apply receipt and fixed commands", () => {
-    const attempt = createTargetValidationAttempt(apply, "validation-call");
-    expect(attempt).toMatchObject({
-      status: "pending",
-      applyDigest: apply.digest,
-      appliedTreeDigest: apply.postTreeDigest,
-      changedContentDigest: apply.changedContentDigest,
-      startedByCallId: "validation-call",
-    });
-    expect(attempt.commands).toEqual([
-      {
-        name: "check",
-        command: "mise run check",
-        validationRoot: validationOverlayRoot(apply.digest, "check"),
-      },
-      {
-        name: "test",
-        command: "mise run test",
-        validationRoot: validationOverlayRoot(apply.digest, "test"),
-      },
-    ]);
-  });
-
-  it("rejects historical or wrong-version runtime receipts at validation boundaries", async () => {
-    const historical = { ...apply, version: 1 } as Record<string, unknown>;
-    delete historical.appSpecPath;
-    expect(() =>
-      createTargetValidationAttempt(historical as never, "validation-call"),
-    ).toThrow(/canonical V2 target apply receipt/u);
-    const attempt = createTargetValidationAttempt(apply, "validation-call");
-    await expect(
-      executeProposalBoundValidation({
-        sandbox: sandboxFixture().sandbox,
-        executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-        apply,
-        attempt: { ...attempt, version: 1 } as never,
-        appId: "example",
-      }),
-    ).rejects.toThrow(/canonical V2 target validation attempt/u);
-  });
-
-  it("rejects an apply overlay root that is not bound to the proposal", () => {
-    expect(() =>
-      createTargetValidationAttempt(
-        { ...apply, applyRoot: "/workspace/repository" },
-        "validation-call",
-      ),
-    ).toThrow("apply overlay root is not proposal-bound");
-  });
-
-  it("runs each fixed command in an independent exact-tree overlay", async () => {
-    const { run, sandbox } = sandboxFixture();
-    const snapshots = [
-      snapshot(apply.postTreeDigest),
-      snapshot(apply.postTreeDigest),
-    ];
-    const executor = vi.fn(
-      async ({ command }: Parameters<ValidationCommandExecutor>[0]) => ({
-        exitCode: 0,
-        stdout: `${command} passed`,
-        stderr: "",
-      }),
-    );
+describe("target validation", () => {
+  it("reports a missing package script without echoing command output", async () => {
+    const { sandbox } = sandboxFixture();
     const result = await executeProposalBoundValidation({
       sandbox,
-      executor,
-      snapshotter: async () => snapshots.shift()!,
       apply,
-      attempt: createTargetValidationAttempt(apply, "validation-call"),
       appId: "example",
+      attempt: createTargetValidationAttempt(apply, "missing-script"),
+      executor: async () => ({
+        exitCode: 1,
+        stdout: "",
+        stderr: 'error: Script not found "check"\nsecret-test-value',
+      }),
     });
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("expected passing validation");
-    expect(result.receipt.commands.map(({ command }) => command)).toEqual([
-      "mise run check",
-      "mise run test",
-    ]);
-    expect(
-      result.receipt.commands.map(({ inputTreeDigest }) => inputTreeDigest),
-    ).toEqual([apply.postTreeDigest, apply.postTreeDigest]);
-    expect(executor).toHaveBeenCalledTimes(2);
-    expect(executor.mock.calls[0]?.[0].validationRoot).not.toBe(
-      executor.mock.calls[1]?.[0].validationRoot,
-    );
-    expect(
-      run.mock.calls
-        .map(([request]) => (request as { command: string }).command)
-        .filter((command) => command.startsWith("cp -R")),
-    ).toEqual([
-      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "check")}`,
-      `cp -R ${apply.applyRoot} ${validationOverlayRoot(apply.digest, "test")}`,
-    ]);
-  });
-
-  it("records a command failure and does not dispatch later validation", async () => {
-    const { sandbox } = sandboxFixture();
-    const executor = vi.fn(async () => ({
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected a command failure");
+    expect(result.receipt.commandFailure).toMatchObject({
       exitCode: 1,
-      stdout: "",
-      stderr: "failed",
-    }));
-    const snapshots = [snapshot(apply.postTreeDigest)];
-    const result = await executeProposalBoundValidation({
-      sandbox,
-      executor,
-      snapshotter: async () => snapshots.shift()!,
-      apply,
-      attempt: createTargetValidationAttempt(apply, "validation-call"),
-      appId: "example",
+      hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
     });
-    expect(result).toMatchObject({
-      ok: false,
-      receipt: {
-        status: "failed",
-        reason: "command-failed",
-        recoveryRequired: true,
-        commands: [{ command: "mise run check", exitCode: 1 }],
-      },
-    });
-    expect(executor).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(result)).not.toContain("secret-test-value");
   });
-
-  it("fails closed when a fixed command drifts protected workspace state", async () => {
+  it("runs repository commands without receipt or source preflight", async () => {
     const { sandbox } = sandboxFixture();
-    const executor = vi.fn(async () => ({
+    const currentApply = { ...apply, digest: "current-worktree" };
+    const attempt = createTargetValidationAttempt(
+      currentApply,
+      "validation-call",
+    );
+    const execute = vi.fn(async () => ({
       exitCode: 0,
       stdout: "passed",
       stderr: "",
     }));
-    const verifyProtectedState = vi
-      .fn<() => Promise<void>>()
-      .mockResolvedValueOnce()
-      .mockRejectedValue(new Error("prepared source drifted"));
-    const result = await executeProposalBoundValidation({
-      sandbox,
-      executor,
-      snapshotter: async () => snapshot(apply.postTreeDigest),
-      verifyProtectedState,
-      apply,
-      attempt: createTargetValidationAttempt(apply, "validation-call"),
-      appId: "example",
-    });
-    expect(result).toMatchObject({
-      ok: false,
-      receipt: {
-        reason: "protected-workspace-drift",
-        recoveryRequired: true,
-        commands: [],
-      },
-    });
-    expect(executor).not.toHaveBeenCalled();
-    expect(verifyProtectedState).toHaveBeenCalledTimes(2);
-  });
 
-  it("records materialization failure without dispatching a command", async () => {
-    let calls = 0;
-    const run = vi.fn(async (request: unknown) => {
-      void request;
-      calls += 1;
-      return calls === 3
-        ? { exitCode: 1, stdout: "", stderr: "copy failed" }
-        : { exitCode: 0, stdout: "", stderr: "" };
-    });
-    const sandbox = { id: "sandbox", run } as unknown as SandboxSession;
-    const executor = vi.fn();
     const result = await executeProposalBoundValidation({
       sandbox,
-      executor,
-      apply,
-      attempt: createTargetValidationAttempt(apply, "validation-call"),
-      appId: "example",
-    });
-    expect(result).toMatchObject({
-      ok: false,
-      receipt: {
-        reason: "materialization-failed",
-        commands: [],
-        recoveryRequired: true,
-      },
-    });
-    expect(executor).not.toHaveBeenCalled();
-  });
-
-  it("fails before command execution when a copied input tree drifts", async () => {
-    const { sandbox } = sandboxFixture();
-    const executor = vi.fn();
-    const result = await executeProposalBoundValidation({
-      sandbox,
-      executor,
-      snapshotter: async () => snapshot(digest("0")),
-      apply,
-      attempt: createTargetValidationAttempt(apply, "validation-call"),
-      appId: "example",
-    });
-    expect(result).toMatchObject({
-      ok: false,
-      receipt: { reason: "input-tree-mismatch", commands: [] },
-    });
-    expect(executor).not.toHaveBeenCalled();
-  });
-
-  it("can convert a terminal result into applied-overlay drift failure", async () => {
-    const { sandbox } = sandboxFixture();
-    const snapshots = [
-      snapshot(apply.postTreeDigest),
-      snapshot(apply.postTreeDigest),
-    ];
-    const attempt = createTargetValidationAttempt(apply, "validation-call");
-    const result = await executeProposalBoundValidation({
-      sandbox,
-      executor: async () => ({ exitCode: 0, stdout: "ok", stderr: "" }),
-      snapshotter: async () => snapshots.shift()!,
-      apply,
+      executor: execute,
+      apply: currentApply,
       attempt,
       appId: "example",
+      dependencyLayout: {
+        version: 1,
+        kind: "fixture",
+        roots: [],
+        workspaceLinks: [],
+      },
     });
+
     expect(result.ok).toBe(true);
-    const failure = appliedOverlayDriftFailure({
-      attempt,
-      receipt: result.receipt,
-    });
-    expect(failure).toMatchObject({
-      status: "failed",
-      reason: "applied-overlay-drift",
-      recoveryRequired: true,
-    });
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects a pending attempt whose immutable apply binding changed", async () => {
+  it("reports the actual repository command failure", async () => {
     const { sandbox } = sandboxFixture();
     const attempt = createTargetValidationAttempt(apply, "validation-call");
-    await expect(
-      executeProposalBoundValidation({
-        sandbox,
-        executor: vi.fn(),
-        apply: { ...apply, changedContentDigest: digest("0") },
-        attempt,
-        appId: "example",
+
+    const result = await executeProposalBoundValidation({
+      sandbox,
+      executor: async () => ({
+        exitCode: 1,
+        stdout: "",
+        stderr: "repository command failed",
       }),
-    ).rejects.toThrow("no longer matches the exact apply receipt");
+      apply,
+      attempt,
+      appId: "example",
+      dependencyLayout: {
+        version: 1,
+        kind: "fixture",
+        roots: [],
+        workspaceLinks: [],
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      receipt: {
+        reason: "command-failed",
+        commandFailure: { name: "check-build", exitCode: 1 },
+      },
+    });
   });
 
-  it("uses only the fixed command, cwd, timeout, and no environment", async () => {
-    const { run, sandbox } = sandboxFixture();
-    const root = validationOverlayRoot(apply.digest, "check");
-    await sandboxValidationCommandExecutor()({
+  it("returns only safe structured TypeScript diagnostics from a failed command", () => {
+    expect(
+      compilerDiagnostics(
+        "\u001B[31mx typescript(TS2593): Cannot find name 'describe'.\n   ,-[apps/stock-exceptions/app/page.test.tsx:1:1]\n   `----\n\napps/stock-exceptions/app/page.test.tsx(2,1): error TS2304: Cannot find name 'process.env.TOKEN=secret-value'.\n FAIL  apps/stock-exceptions/app/__tests__/page.test.tsx > renders the exception queue\n ❯ apps/stock-exceptions/app/__tests__/page.test.tsx:8:5",
+      ),
+    ).toEqual([
+      {
+        code: "TS2593",
+        path: "apps/stock-exceptions/app/page.test.tsx",
+        line: 1,
+        column: 1,
+        message:
+          "A referenced name is missing; inspect its declaration or import.",
+      },
+      {
+        code: "TS2304",
+        path: "apps/stock-exceptions/app/page.test.tsx",
+        line: 2,
+        column: 1,
+        message:
+          "A referenced name is missing; inspect its declaration or import.",
+      },
+      {
+        code: "VITEST",
+        path: "apps/stock-exceptions/app/__tests__/page.test.tsx",
+        line: 8,
+        column: 5,
+        message: "Test assertion failed at this location.",
+      },
+    ]);
+  });
+
+  it("repairs only the reported formatter failure before rerunning check and build", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "package.json Formatting issues found",
+        stderr: "Formatting issues found",
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "fixed", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "checked", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "built", stderr: "" });
+    const sandbox = { run } as unknown as SandboxSession;
+    const executor = sandboxValidationCommandExecutor();
+
+    const result = await executor({
       sandbox,
       appId: "example",
-      command: "mise run check",
-      validationRoot: root,
+      command: "mise run app:check-build example",
+      validationRoot: "/workspace/repository",
     });
-    expect(run).toHaveBeenCalledWith({
-      command: "mise run check",
-      workingDirectory: root,
-      abortSignal: expect.any(AbortSignal),
-    });
-    expect(run.mock.calls[0]?.[0]).not.toHaveProperty("env");
+
+    expect(result.exitCode).toBe(0);
+    expect(
+      run.mock.calls.every(([input]) => input.abortSignal === undefined),
+    ).toBe(true);
+    expect(run.mock.calls.map(([input]) => input.command)).toEqual([
+      "bun run --cwd apps/example check",
+      "bun run --cwd apps/example check -- --fix",
+      "bun run --cwd apps/example check",
+      "bun run --cwd apps/example build",
+    ]);
   });
 });

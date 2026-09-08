@@ -5,6 +5,7 @@ import { sessionStatusSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema, type HostedPrincipal } from "./hosted-auth";
 import {
   HostedCancellationUnsettledError,
+  HostedAdapterSessionUnavailableError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
   type HostedEngineSnapshot,
@@ -14,11 +15,11 @@ import {
   deriveInstalledEveStatus,
   latestInstalledImplementationPlan,
   latestInstalledPrototype,
+  latestInstalledUiPreview,
   projectInstalledEveEvent,
 } from "./public-events";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
-const MAX_STREAM_EVENTS = 100_000;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
 const EVE_STREAM_FORMAT = "ndjson";
@@ -234,6 +235,7 @@ async function readInstalledSnapshot(input: {
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
+  if (response.status === 404) throw new HostedAdapterSessionUnavailableError();
   if (response.status !== 200 || response.body === null) {
     throw new Error("Canonical Eve stream was unavailable.");
   }
@@ -255,7 +257,7 @@ async function readInstalledSnapshot(input: {
     throw new Error("Canonical Eve omitted its durable stream tail.");
   }
   const tail = Number(tailValue);
-  if (!Number.isSafeInteger(tail) || tail < -1 || tail >= MAX_STREAM_EVENTS) {
+  if (!Number.isSafeInteger(tail) || tail < -1) {
     throw new Error("Canonical Eve returned an invalid durable stream tail.");
   }
   if (tail === -1) {
@@ -270,7 +272,6 @@ async function readInstalledSnapshot(input: {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const events: MessageStreamEvent[] = [];
   let buffered = "";
-  let receivedBytes = 0;
   try {
     while (events.length <= tail) {
       const chunk = await reader.read();
@@ -286,10 +287,8 @@ async function readInstalledSnapshot(input: {
         }
         break;
       }
-      receivedBytes += chunk.value.byteLength;
-      if (receivedBytes > MAX_RESPONSE_BYTES) {
-        throw new Error("Canonical Eve stream is too large.");
-      }
+      // Generated files make a legitimate session history large. Read through
+      // the provider's observed tail rather than imposing a lifetime byte quota.
       buffered += decoder.decode(chunk.value, { stream: true });
       let newline = buffered.indexOf("\n");
       while (newline !== -1 && events.length <= tail) {
@@ -317,12 +316,14 @@ async function readInstalledSnapshot(input: {
     .flatMap((event) => projectInstalledEveEvent(event, 0))
     .map((event, index) => ({ ...event, index }));
   const prototype = latestInstalledPrototype(events);
+  const uiPreview = latestInstalledUiPreview(events);
   const implementationPlan = latestInstalledImplementationPlan(events);
   return {
     snapshot: {
       status: deriveInstalledEveStatus(events),
       events: projected,
       ...(prototype === undefined ? {} : { prototype }),
+      ...(uiPreview === undefined ? {} : { uiPreview }),
       ...(implementationPlan === undefined ? {} : { implementationPlan }),
     },
     installed: events,
@@ -381,6 +382,42 @@ function cancellationSettled(
       .slice(cancelledAt + 1)
       .some((event) => event.type === "session.waiting")
   );
+}
+
+function outstandingRequestIds(
+  events: readonly MessageStreamEvent[],
+): ReadonlySet<string> {
+  const outstanding = new Set<string>();
+  for (const event of events) {
+    if (event.type === "input.requested")
+      for (const request of event.data.requests)
+        outstanding.add(request.requestId);
+    if (event.type === "input.resolved")
+      for (const resolution of event.data.resolutions)
+        outstanding.delete(resolution.requestId);
+    if (event.type === "approval.settled")
+      outstanding.delete(event.data.requestId);
+  }
+  return outstanding;
+}
+
+async function readRespondSettlement(input: {
+  config: z.infer<typeof sameOriginConfigSchema>;
+  workloadIdentity: HostedWorkloadIdentity;
+  fetchImplementation: typeof fetch;
+  sessionId: string;
+  requestIds: readonly string[];
+}): Promise<HostedEngineSnapshot> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const observed = await readInstalledSnapshot(input);
+    const outstanding = outstandingRequestIds(observed.installed);
+    if (
+      observed.snapshot.status !== "input_required" ||
+      input.requestIds.every((requestId) => !outstanding.has(requestId))
+    )
+      return observed.snapshot;
+  }
+  throw new SubmissionOutcomeUnknownError();
 }
 
 export function createSameOriginEveTransport(input: {
@@ -448,7 +485,11 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== request.adapterSessionId) {
         throw new SubmissionOutcomeUnknownError();
       }
-      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+      return readRespondSettlement({
+        ...common,
+        sessionId: request.adapterSessionId,
+        requestIds: request.responses.map(({ requestId }) => requestId),
+      });
     },
     async cancel(request) {
       const before = await readInstalledSnapshot({

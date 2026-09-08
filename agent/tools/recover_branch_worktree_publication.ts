@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import {
   appBuilderWorkflowState,
-  assertExactWorkflowState,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   exactBranchWorktreeProposalMatch,
@@ -62,30 +62,29 @@ export default defineTool({
             sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
           ),
     });
-    appBuilderWorkflowState.update((current) => {
-      assertExactWorkflowState(
-        current,
-        workflow,
-        "branch publication recovery recording",
-      );
-      if (
-        current.phase !== "branch_publication_pending" &&
-        current.phase !== "branch_publication_failed"
-      )
-        throw new Error(
-          "The branch publication workflow changed before recovery recording.",
-        );
-      return result.status === "succeeded"
-        ? {
-            ...current,
-            phase: "published_branch_worktree",
-            branchPublicationReceipt: result,
-          }
-        : {
-            ...current,
-            phase: "branch_publication_failed",
-            branchPublicationReceipt: result,
-          };
+    updateExactWorkflow({
+      expected: workflow,
+      operation: "branch publication recovery recording",
+      transition: (current) => {
+        if (
+          current.phase !== "branch_publication_pending" &&
+          current.phase !== "branch_publication_failed"
+        )
+          throw new Error(
+            "The branch publication workflow changed before recovery recording.",
+          );
+        return result.status === "succeeded"
+          ? {
+              ...current,
+              phase: "published_branch_worktree",
+              branchPublicationReceipt: result,
+            }
+          : {
+              ...current,
+              phase: "branch_publication_failed",
+              branchPublicationReceipt: result,
+            };
+      },
     });
     return result;
   },

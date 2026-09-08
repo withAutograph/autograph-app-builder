@@ -91,8 +91,8 @@ try {
       output,
     ]);
   const portableManifest = JSON.parse(await readFile("plugin.json", "utf8"));
-  const archiveName = `autograph-app-builder-${portableManifest.version}.tar.gz`;
-  const marketplaceArchiveName = `autograph-app-builder-codex-marketplace-${portableManifest.version}.tar.gz`;
+  const archiveName = `app-builder-${portableManifest.version}.tar.gz`;
+  const marketplaceArchiveName = `app-builder-codex-marketplace-${portableManifest.version}.tar.gz`;
   const firstArchive = await readFile(join(first, archiveName));
   const secondArchive = await readFile(join(second, archiveName));
   if (!firstArchive.equals(secondArchive))
@@ -132,7 +132,7 @@ try {
   );
   await run("validate-plugin.mts", [
     "--root",
-    join(extracted, "autograph-app-builder"),
+    join(extracted, "app-builder"),
     "--artifact",
     "--release",
   ]);
@@ -155,9 +155,12 @@ try {
   if (
     marketplaceManifest.name !== "autograph" ||
     marketplaceManifest.plugins?.[0]?.source?.path !==
-      "./plugins/autograph-app-builder"
+      "./plugins/app-builder" ||
+    marketplaceManifest.plugins?.[0]?.policy?.authentication !== "ON_USE"
   )
-    throw new Error("Codex marketplace manifest was invalid.");
+    throw new Error(
+      "Codex marketplace manifest must authenticate App Builder on first use.",
+    );
   const codexPluginRoot = join(
     marketplace,
     marketplaceManifest.plugins[0].source.path,
@@ -169,11 +172,13 @@ try {
   const codexAdapter = JSON.parse(
     await readFile(join(codexPluginRoot, ".mcp.json"), "utf8"),
   );
+  if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`)
+    throw new Error("Codex marketplace did not bind the release endpoint.");
   if (
-    codexAdapter.mcpServers?.["autograph-app-builder"]?.url !==
+    codexAdapter.mcpServers?.["app-builder"]?.oauth_resource !==
     `${endpoint}/mcp`
   )
-    throw new Error("Codex marketplace did not bind the release endpoint.");
+    throw new Error("Codex marketplace did not bind the OAuth resource.");
   const codexManifest = JSON.parse(
     await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf8"),
   );
@@ -276,8 +281,7 @@ try {
   const missingAssetFiles = archiveFiles(
     await readFile(missingAssetArchivePath),
   );
-  const missingAssetPath =
-    "plugins/autograph-app-builder/assets/autograph-icon.png";
+  const missingAssetPath = "plugins/app-builder/assets/autograph-icon.png";
   if (!missingAssetFiles.delete(missingAssetPath))
     throw new Error("Expected generated marketplace asset was absent.");
   const missingAssetArchive = deterministicGzip(

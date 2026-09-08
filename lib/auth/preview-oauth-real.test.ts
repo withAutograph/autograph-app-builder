@@ -100,7 +100,6 @@ async function setup(
       baseURL: origin,
       basePath: "/api/auth",
       secret: "test-secret-that-is-long-enough-for-better-auth",
-      emailAndPassword: { enabled: true },
       logger: { disabled: true },
       rateLimit,
       plugins: [

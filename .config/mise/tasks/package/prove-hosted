@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Prove a live OAuth-backed hosted Agent Plugins lifecycle"
 set -eu
 

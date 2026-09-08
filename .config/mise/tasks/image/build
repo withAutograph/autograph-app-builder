@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Build the exact linux/arm64 sandbox image locally"
 set -eu
 

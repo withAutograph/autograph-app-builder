@@ -4,11 +4,17 @@ import { HostedAuthorizationError } from "../eve/hosted-auth";
 import {
   HostedIdempotencyConflictError,
   HostedRejectedOperationError,
+  HostedSessionBusyError,
   HostedSessionNotFoundError,
+  HostedSessionRecoveryUnavailableError,
   HostedSubmissionUnknownError,
 } from "../eve/hosted-service";
 import { AdapterNotConfiguredError } from "../eve/service";
-import { safeToolError, toolResult } from "./result";
+import {
+  McpToolAuthenticationRequiredError,
+  safeToolError,
+  toolResult,
+} from "./result";
 
 describe("safe MCP tool errors", () => {
   it.each([
@@ -18,6 +24,8 @@ describe("safe MCP tool errors", () => {
     [new HostedIdempotencyConflictError(), "request_conflict"],
     [new HostedSubmissionUnknownError(), "submission_unknown"],
     [new HostedRejectedOperationError(), "operation_rejected"],
+    [new HostedSessionBusyError(), "already_continuing"],
+    [new HostedSessionRecoveryUnavailableError(), "restart_required"],
     [new Error("secret provider detail"), "internal_error"],
   ])("projects %s without exposing internal details", (error, code) => {
     const result = safeToolError(error, "session-one");
@@ -37,6 +45,20 @@ describe("safe MCP tool errors", () => {
     expect(result.structuredContent.error?.message).toBe(
       "Autograph App Builder is not connected to its production service yet.",
     );
+  });
+
+  it("returns the MCP OAuth challenge as protected tool metadata", () => {
+    const challenge =
+      'Bearer resource_metadata="https://new.autograph.so/.well-known/oauth-protected-resource", error="invalid_token", error_description="Sign in to continue"';
+    const result = safeToolError(
+      new McpToolAuthenticationRequiredError(challenge),
+    );
+
+    expect(result.structuredContent.error?.code).toBe(
+      "authentication_required",
+    );
+    expect(result._meta).toEqual({ "mcp/www_authenticate": [challenge] });
+    expect(result.isError).toBe(true);
   });
 });
 

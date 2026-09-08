@@ -7,6 +7,9 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
+import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
+import { hasTestCapability } from "@/lib/testing/test-capability";
 
 function isReviewedPhase(
   state: ReturnType<typeof appBuilderWorkflowState.get>,
@@ -150,9 +153,6 @@ function statusReceipt(
           review: {
             digest: state.reviewReceipt.digest,
             changeSetDigest: state.reviewReceipt.changeSetDigest,
-            ...(state.changeSetApprovalReceipt === undefined
-              ? {}
-              : { approvalReceipt: state.changeSetApprovalReceipt }),
           },
         }
       : {}),
@@ -165,26 +165,40 @@ export default defineTool({
   inputSchema: z.object({}),
   async execute(_input, ctx) {
     const durable = appBuilderWorkflowState.get();
-    const observed = await inspectPreparedSandboxWorkspace(
-      await ctx.getSandbox(),
-    );
+    if (hasTestCapability("simulated-target")) {
+      return durable.phase === "empty"
+        ? durable
+        : {
+            ...statusReceipt(durable, false),
+            workspace: workflowWorkspace(durable),
+          };
+    }
+    const sandbox = await ctx.getSandbox();
     if (durable.phase === "empty") {
+      const observed = await inspectPreparedSandboxWorkspace(sandbox);
       if (observed.state === "absent") return durable;
       throw new Error(
         "The sandbox workspace cannot be recovered without its original durable source receipt.",
       );
     }
-    if (observed.state === "absent")
-      throw new Error(
-        "The durable workflow receipt exists but its sandbox workspace is missing.",
-      );
+    const observed = await inspectSourceBoundSandboxWorkspace({
+      sandbox,
+      receipt: durable.sourceReceipt,
+      expectedWorkspace: durable.workspace,
+      ...(durable.githubSource === undefined
+        ? {}
+        : { githubSource: durable.githubSource }),
+    });
     if (
-      JSON.stringify(workflowWorkspace(durable)) !==
-      JSON.stringify(observed.workspace)
+      !canAutoSelectDevelopmentSource() &&
+      JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed)
     )
       throw new Error(
         "The durable workflow receipt does not match the sandbox workspace.",
       );
-    return statusReceipt(durable, false);
+    return {
+      ...statusReceipt(durable, false),
+      workspace: observed,
+    };
   },
 });

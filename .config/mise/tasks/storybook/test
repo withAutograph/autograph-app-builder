@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Run Storybook story and play-function tests"
+set -eu
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx scripts/run-vitest.mts run --project storybook

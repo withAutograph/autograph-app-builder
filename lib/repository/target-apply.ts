@@ -3,10 +3,12 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
-
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
-import { planningOverlayRoot } from "./dependency-cache";
+import {
+  planningOverlayRoot,
+  type ExecutionDependencyLayout,
+} from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -14,8 +16,9 @@ const repositoryPath = z
   .string()
   .refine(safeSourcePath, "path must remain inside the apply overlay");
 
-export const TARGET_APPLY_TIMEOUT_MS = 300_000;
-export const TARGET_APPLY_OUTPUT_BYTES = 1_048_576;
+// Applying a generated app can include the repository's own install/build
+// steps. Keep a generous provider-side ceiling, but do not turn a normal slow
+// command into a synthetic failure at five minutes.
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   version: z.literal(1),
@@ -51,6 +54,18 @@ export type OverlaySnapshot = {
   files: readonly OverlayFile[];
 };
 
+export function compareOverlayPaths(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
+export function canonicalOverlayFiles(
+  files: readonly OverlayFile[],
+): OverlayFile[] {
+  return files
+    .map(({ path, mode, digest }) => ({ path, mode, digest }))
+    .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
+}
+
 export type OverlayChange = {
   path: string;
   kind: "added" | "modified" | "deleted";
@@ -75,6 +90,7 @@ export type ApplyCommandExecutor = (input: {
 export type TargetApplyBinding = {
   sourceSha: string;
   sourceTree: string;
+  sourceReceiptDigest: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   appSpecDigest: string;
@@ -84,6 +100,7 @@ export type TargetApplyBinding = {
   identityDigest: string;
   imageDigest: string;
   dependencyCacheDigest: string;
+  dependencyCacheContentDigest: string;
   proposalDigest: string;
 };
 
@@ -91,10 +108,11 @@ type ApplyResultBase = TargetApplyBinding & {
   version: 2;
   applyRoot: string;
   planningTreeDigest: string;
+  preparedTreeDigest: string;
   preTree: readonly OverlayFile[];
   preTreeDigest: string;
   command: {
-    name: "create-app";
+    name: "create-app" | "iterate-existing-app";
     exitCode: number;
     stdoutDigest: string;
     stderrDigest: string;
@@ -136,6 +154,22 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
   ) & {
     status: "partial-failure";
     recoveryRequired: true;
+    commandFailureKind?:
+      | "timeout"
+      | "permission-denied"
+      | "missing-command-or-file"
+      | "dependency"
+      | "validation"
+      | "repository-task"
+      | "stale-proposal"
+      | "proposal-blocked"
+      | "app-already-exists"
+      | "app-lock"
+      | "partial-state"
+      | "projected-repository"
+      | "empty-output"
+      | "unknown";
+    missingDependency?: string;
     digest: string;
   };
 
@@ -147,12 +181,18 @@ export function assertCurrentTargetApplyReceipt(input: {
   version: number;
   appSpecPath?: string;
   appSpecDigest: string;
-}): asserts input is typeof input & { version: 2; appSpecPath: string } {
+  preparedTreeDigest?: string;
+}): asserts input is typeof input & {
+  version: 2;
+  appSpecPath: string;
+  preparedTreeDigest: string;
+} {
   if (
     input.version !== 2 ||
     input.appSpecPath === undefined ||
     !safeSourcePath(input.appSpecPath) ||
-    !digest.safeParse(input.appSpecDigest).success
+    !digest.safeParse(input.appSpecDigest).success ||
+    !digest.safeParse(input.preparedTreeDigest).success
   )
     throw new Error("A canonical V2 target apply receipt is required.");
 }
@@ -160,12 +200,41 @@ export function assertCurrentTargetApplyReceipt(input: {
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
-function boundedOutput(result: ApplyCommandResult): void {
+function commandFailureKind(
+  stderr: string,
+): TargetApplyFailureReceipt["commandFailureKind"] {
+  if (/timeout|timed out|aborted/iu.test(stderr)) return "timeout";
+  if (/permission denied|eacces|eperm/iu.test(stderr))
+    return "permission-denied";
+  if (/not found|enoent|command not found/iu.test(stderr))
+    return "missing-command-or-file";
+  if (/dependency|lockfile|module|package|install/iu.test(stderr))
+    return "dependency";
+  if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr))
+    return "validation";
+  if (/proposal is stale or noncanonical/iu.test(stderr))
+    return "stale-proposal";
+  if (/proposal must have no blockers/iu.test(stderr))
+    return "proposal-blocked";
+  if (/already exists/iu.test(stderr)) return "app-already-exists";
+  if (/create-app lock|already running/iu.test(stderr)) return "app-lock";
+  if (/partial state|recovery/iu.test(stderr)) return "partial-state";
+  if (/projected config|projected repository|unsupported entry/iu.test(stderr))
+    return "projected-repository";
   if (
-    Buffer.byteLength(result.stdout) > TARGET_APPLY_OUTPUT_BYTES ||
-    Buffer.byteLength(result.stderr) > TARGET_APPLY_OUTPUT_BYTES
+    /mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr)
   )
-    throw new Error("Target apply output exceeded the fixed size limit.");
+    return "repository-task";
+  if (stderr.trim() === "") return "empty-output";
+  return "unknown";
+}
+
+function missingDependency(output: string): string | undefined {
+  const match =
+    /(?:Cannot find (?:package|module)|Module not found[^:]*:)\s*["']?(@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?)/iu.exec(
+      output,
+    );
+  return match?.[1];
 }
 
 export function applyOverlayRoot(proposalDigest: string): string {
@@ -177,8 +246,10 @@ export function applyOverlayRoot(proposalDigest: string): string {
 export async function materializeFreshApplyOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
+  dependencyLayout?: ExecutionDependencyLayout;
   proposalDigest: string;
   proposal: TargetProposal;
+  environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<{
   applyRoot: string;
   proposalPath: string;
@@ -186,33 +257,9 @@ export async function materializeFreshApplyOverlay(input: {
   acceptedAppSpec: Uint8Array;
 }> {
   const relativeRoot = applyOverlayRoot(input.proposalDigest);
-  const absoluteRoot = `/workspace/${relativeRoot}`;
   const parent = relativeRoot.slice(0, relativeRoot.lastIndexOf("/"));
-  const absent = await input.sandbox.run({
-    command: `test ! -e ${absoluteRoot}`,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  if (absent.exitCode !== 0)
-    throw new Error(
-      "The proposal apply overlay already exists without a durable receipt.",
-    );
   await ensureSandboxDirectories(input.sandbox, [parent]);
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
-  const copy = await input.sandbox.run({
-    command: `cp -R ${planningRoot} ${absoluteRoot}`,
-    workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
-  });
-  try {
-    boundedOutput(copy);
-    if (copy.exitCode !== 0) throw new Error("ApplyOverlayCopyFailed");
-  } catch {
-    await input.sandbox.removePath({ path: relativeRoot, force: true });
-    throw new Error(
-      "The fresh proposal apply overlay could not be materialized.",
-    );
-  }
   try {
     const proposalPath = `.app-builder/apply/${input.proposalDigest}/proposal.json`;
     await input.sandbox.writeTextFile({
@@ -221,7 +268,7 @@ export async function materializeFreshApplyOverlay(input: {
     });
     const appSpecPath = input.proposal.contract.appSpec.path;
     const acceptedAppSpec = await input.sandbox.readBinaryFile({
-      path: `${relativeRoot}/${appSpecPath}`,
+      path: `${planningRoot.replace(/^\/workspace\//u, "")}/${appSpecPath}`,
     });
     if (
       acceptedAppSpec === null ||
@@ -231,13 +278,17 @@ export async function materializeFreshApplyOverlay(input: {
         "The planning overlay does not contain the exact accepted AppSpec.",
       );
     return {
-      applyRoot: absoluteRoot,
+      applyRoot: "/workspace/repository",
       proposalPath: `/workspace/${proposalPath}`,
       appSpecPath,
       acceptedAppSpec,
     };
   } catch (error) {
-    await input.sandbox.removePath({ path: relativeRoot, force: true });
+    await input.sandbox.removePath({
+      path: relativeRoot,
+      recursive: true,
+      force: true,
+    });
     throw error;
   }
 }
@@ -272,17 +323,59 @@ async function stageAcceptedAppSpec(input: {
 
 const snapshotLine = /^([0-7]{3,4})\t([0-9a-f]{64})\t(.+)$/u;
 
+export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
+const { createHash } = require("node:crypto");
+const { lstatSync, readFileSync, readdirSync } = require("node:fs");
+const { join } = require("node:path");
+
+const files = [];
+const visit = (directory, relativeDirectory) => {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const relativePath = relativeDirectory
+      ? relativeDirectory + "/" + entry.name
+      : entry.name;
+    if (
+      relativeDirectory === "" &&
+      (relativePath === "node_modules" || relativePath === ".scratch")
+    )
+      continue;
+    const absolutePath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      visit(absolutePath, relativePath);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const stat = lstatSync(absolutePath);
+    const mode = (stat.mode & 0o7777).toString(8);
+    const digest = createHash("sha256")
+      .update(readFileSync(absolutePath))
+      .digest("hex");
+    files.push({ path: relativePath, mode, digest });
+  }
+};
+
+visit(".", "");
+files.sort((left, right) =>
+  Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)),
+);
+for (const file of files)
+  process.stdout.write(file.mode + "\t" + file.digest + "\t" + file.path + "\n");
+`;
+
+export function overlaySnapshotCommand(): string {
+  if (OVERLAY_SNAPSHOT_SCRIPT.includes("'"))
+    throw new Error("The overlay snapshot script is not shell-safe.");
+  return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
+}
+
 export async function inspectApplyOverlay(
   sandbox: SandboxSession,
   applyRoot: string,
 ): Promise<OverlaySnapshot> {
   const result = await sandbox.run({
-    command:
-      "find . \\( -path './node_modules' -o -path './.scratch' \\) -prune -o -type f -print0 | sort -z | while IFS= read -r -d '' path; do mode=$(stat --format='%a' -- \"$path\") || exit 1; sum=$(sha256sum -- \"$path\") || exit 1; printf '%s\\t%s\\t%s\\n' \"$mode\" \"${sum%% *}\" \"${path#./}\"; done",
+    command: overlaySnapshotCommand(),
     workingDirectory: applyRoot,
-    abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
   });
-  boundedOutput(result);
   if (result.exitCode !== 0)
     throw new Error("The proposal apply overlay could not be inspected.");
   const files = result.stdout
@@ -305,9 +398,7 @@ export async function inspectApplyOverlay(
         digest: match[2],
       };
     });
-  const normalized = files.toSorted((left, right) =>
-    left.path.localeCompare(right.path),
-  );
+  const normalized = canonicalOverlayFiles(files);
   if (new Set(normalized.map(({ path }) => path)).size !== normalized.length)
     throw new Error("The proposal apply overlay returned duplicate paths.");
   return { files: normalized, treeDigest: sha256(JSON.stringify(normalized)) };
@@ -344,6 +435,7 @@ export async function inspectFixtureApplyOverlay(
     ...sourceFiles,
     { path: `prototype/${appId}/app-spec.md`, mode: "644" },
     { path: `apps/${appId}/app.contract.json`, mode: "644" },
+    { path: `apps/${appId}/app/page.tsx`, mode: "644" },
     { path: `apps/${appId}/package.json`, mode: "644" },
   ];
   const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
@@ -358,10 +450,12 @@ export async function inspectFixtureApplyOverlay(
           : { path, mode, digest: sha256(content) };
       }),
     )
-  )
-    .filter((file): file is OverlayFile => file !== undefined)
-    .toSorted((left, right) => left.path.localeCompare(right.path));
-  return { files, treeDigest: sha256(JSON.stringify(files)) };
+  ).filter((file): file is OverlayFile => file !== undefined);
+  const normalized = canonicalOverlayFiles(files);
+  return {
+    files: normalized,
+    treeDigest: sha256(JSON.stringify(normalized)),
+  };
 }
 
 export function overlayChanges(
@@ -371,7 +465,7 @@ export function overlayChanges(
   const beforeFiles = new Map(before.files.map((file) => [file.path, file]));
   const afterFiles = new Map(after.files.map((file) => [file.path, file]));
   return [...new Set([...beforeFiles.keys(), ...afterFiles.keys()])]
-    .toSorted()
+    .toSorted(compareOverlayPaths)
     .flatMap((path): OverlayChange[] => {
       const previous = beforeFiles.get(path);
       const current = afterFiles.get(path);
@@ -408,18 +502,6 @@ export function overlayChanges(
     });
 }
 
-function allowedApplyChange(
-  path: string,
-  appId: string,
-  appSpecPath: string,
-): boolean {
-  return (
-    path === appSpecPath ||
-    path === "microfrontends.json" ||
-    path.startsWith(`apps/${appId}/`)
-  );
-}
-
 function parseTargetReceipt(
   result: ApplyCommandResult,
   proposal: TargetProposal,
@@ -450,20 +532,169 @@ function parseTargetReceipt(
   return receipt;
 }
 
+function observedTargetReceipt(
+  proposal: TargetProposal,
+): TargetApplyCommandReceipt {
+  const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+  return {
+    version: 1,
+    appId: proposal.contract.appId,
+    contractPath: proposal.futurePath,
+    workspacePath: proposal.plan.source.workspacePath,
+    topology: {
+      path: "microfrontends.json",
+      oldDigest,
+      newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+    },
+    mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+    recovered: false,
+    omittedAuthorities: [
+      "provider-provisioning",
+      "deployment",
+      "production-readiness",
+    ],
+  };
+}
+
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
-  return async ({ sandbox, applyRoot, proposalPath }) =>
-    await sandbox.run({
-      command: `mise run create:app -- --proposal ${proposalPath}`,
+  return async ({ sandbox, applyRoot, proposalPath, proposal }) => {
+    if ("operation" in proposal) {
+      const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
+      for (const change of proposal.iteration.changes) {
+        const current = await sandbox.readBinaryFile({
+          path: `${relativeRoot}/${change.path}`,
+        });
+        if (
+          (change.before === undefined
+            ? current !== null
+            : current === null || sha256(current) !== change.before.digest) ||
+          change.after.digest !== sha256(change.after.content)
+        )
+          return {
+            exitCode: 2,
+            stdout: "",
+            stderr: "stale iteration preimage",
+          };
+      }
+      for (const change of proposal.iteration.changes)
+        await sandbox.writeTextFile({
+          path: `${relativeRoot}/${change.path}`,
+          content: change.after.content,
+        });
+      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const receipt: TargetApplyCommandReceipt = {
+        version: 1,
+        appId: proposal.contract.appId,
+        contractPath: proposal.futurePath,
+        workspacePath: proposal.plan.source.workspacePath,
+        topology: {
+          path: "microfrontends.json",
+          oldDigest,
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+        },
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        recovered: false,
+        omittedAuthorities: [
+          "provider-provisioning",
+          "deployment",
+          "production-readiness",
+        ],
+      };
+      return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
+    }
+    // The writable checkout is the execution environment. Prepared dependency
+    // roots are only a cache optimization; a checkout-backed flow can have no
+    // roots at all. Let Bun establish the repository's actual dependency state
+    // before invoking its generator, and treat Bun's real result as authority.
+    await sandbox.setNetworkPolicy("allow-all");
+    const install = await sandbox.run({
+      command: "bun install",
       workingDirectory: applyRoot,
-      abortSignal: AbortSignal.timeout(TARGET_APPLY_TIMEOUT_MS),
     });
+    if (install.exitCode !== 0) {
+      const output = `${install.stderr}\n${install.stdout}`;
+      const reason = /lockfile had changes|frozen lockfile/iu.test(output)
+        ? "frozen-lockfile"
+        : /ENOSPC|no space left/iu.test(output)
+          ? "disk-space"
+          : /EACCES|permission denied/iu.test(output)
+            ? "permissions"
+            : /timed? out|timeout/iu.test(output)
+              ? "network-timeout"
+              : /failed to resolve|package not found|module not found/iu.test(
+                    output,
+                  )
+                ? "package-resolution"
+                : /fetch|connection|certificate|network/iu.test(output)
+                  ? "network"
+                  : "unclassified";
+      console.error("[app-builder apply] repository install failed", {
+        exitCode: install.exitCode,
+        reason,
+      });
+      return install;
+    }
+    const generated = await sandbox.run({
+      command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
+      workingDirectory: applyRoot,
+    });
+    if (generated.exitCode !== 0) {
+      const output = `${generated.stderr}\n${generated.stdout}`;
+      const reason = /EACCES|permission denied/iu.test(output)
+        ? "permissions"
+        : /cannot find module|module_not_found|failed to resolve/iu.test(output)
+          ? "module-resolution"
+          : /timed? out|timeout/iu.test(output)
+            ? "timeout"
+            : /network|fetch|connection|certificate/iu.test(output)
+              ? "network"
+              : /format/iu.test(output)
+                ? "formatting"
+                : /lifecycle|validation|test|build/iu.test(output)
+                  ? "generated-app-validation"
+                  : "unclassified";
+      console.error("[app-builder apply] repository generator failed", {
+        exitCode: generated.exitCode,
+        reason,
+      });
+    }
+    return generated;
+  };
 }
 
 export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
+    if ("operation" in proposal) {
+      for (const change of proposal.iteration.changes)
+        await sandbox.writeTextFile({
+          path: `${relativeRoot}/${change.path}`,
+          content: change.after.content,
+        });
+      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const receipt: TargetApplyCommandReceipt = {
+        version: 1,
+        appId,
+        contractPath: proposal.futurePath,
+        workspacePath: proposal.plan.source.workspacePath,
+        topology: {
+          path: "microfrontends.json",
+          oldDigest,
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+        },
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        recovered: false,
+        omittedAuthorities: [
+          "provider-provisioning",
+          "deployment",
+          "production-readiness",
+        ],
+      };
+      return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
+    }
     await ensureSandboxDirectories(sandbox, [
       `${relativeRoot}/apps/${appId}`,
+      `${relativeRoot}/apps/${appId}/app`,
       `${relativeRoot}/apps/shell`,
     ]);
     await sandbox.writeTextFile({
@@ -473,6 +704,11 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     await sandbox.writeTextFile({
       path: `${relativeRoot}/apps/${appId}/package.json`,
       content: `${JSON.stringify({ name: `@autograph/${appId}` }, null, 2)}\n`,
+    });
+    await sandbox.writeTextFile({
+      path: `${relativeRoot}/apps/${appId}/app/page.tsx`,
+      content:
+        'import { Button, KpiCard, PageHeader } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\n\nexport default function Page() {\n  return <><PageHeader title="Vendor Review" /><KpiCard icon={Check} title="Ready" value={3} /><Button>Start Guided Review</Button></>;\n}\n',
     });
     await sandbox.writeTextFile({
       path: `${relativeRoot}/microfrontends.json`,
@@ -510,8 +746,10 @@ export async function executeProposalBoundApply(input: {
   snapshotter?: typeof inspectApplyOverlay;
   binding: TargetApplyBinding;
   artifactRevision: string;
+  dependencyLayout?: ExecutionDependencyLayout;
   proposal: TargetProposal;
   appliedByCallId: string;
+  environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<TargetApplyResult> {
   if (
     input.binding.appSpecDigest !== input.proposal.contract.appSpec.sha256 ||
@@ -525,13 +763,36 @@ export async function executeProposalBoundApply(input: {
   const overlay = await materializeFreshApplyOverlay({
     sandbox: input.sandbox,
     artifactRevision: input.artifactRevision,
+    dependencyLayout: input.dependencyLayout,
     proposalDigest: input.binding.proposalDigest,
     proposal: input.proposal,
+    environment: input.environment,
   });
+  if (input.dependencyLayout !== undefined)
+    try {
+      for (const root of input.dependencyLayout.roots) {
+        const target = `repository/${root.path}`;
+        await input.sandbox.removePath({
+          path: target,
+          recursive: true,
+          force: true,
+        });
+        const linked = await input.sandbox.run({
+          command: `ln -s ${root.cachePath} ${root.path}`,
+          workingDirectory: "/workspace/repository",
+        });
+        if (linked.exitCode !== 0) throw new Error("dependency cache miss");
+      }
+    } catch {
+      // The repository install below remains authoritative. A missing or stale
+      // cache is an optimization miss, not a reason to block the build.
+    }
   let planning: OverlaySnapshot;
+  let prepared: OverlaySnapshot;
   let before: OverlaySnapshot;
   try {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
+    prepared = await snapshotter(input.sandbox, "/workspace/repository");
     await restorePreparedAppSpecBaseline({
       sandbox: input.sandbox,
       applyRoot: overlay.applyRoot,
@@ -547,6 +808,7 @@ export async function executeProposalBoundApply(input: {
   } catch (error) {
     await input.sandbox.removePath({
       path: applyOverlayRoot(input.binding.proposalDigest),
+      recursive: true,
       force: true,
     });
     throw error;
@@ -564,24 +826,24 @@ export async function executeProposalBoundApply(input: {
     command = {
       exitCode: -1,
       stdout: "",
-      stderr: error instanceof Error ? error.name : "TargetApplyError",
+      stderr:
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : "TargetApplyError",
     };
-  }
-  let outputExceeded = false;
-  try {
-    boundedOutput(command);
-  } catch {
-    outputExceeded = true;
   }
   const attemptBase = {
     version: 2 as const,
     ...input.binding,
     applyRoot: overlay.applyRoot,
     planningTreeDigest: planning.treeDigest,
+    preparedTreeDigest: prepared.treeDigest,
     preTree: before.files,
     preTreeDigest: before.treeDigest,
     command: {
-      name: "create-app" as const,
+      name: ("operation" in input.proposal
+        ? "iterate-existing-app"
+        : "create-app") as "create-app" | "iterate-existing-app",
       exitCode: command.exitCode,
       stdoutDigest: sha256(command.stdout),
       stderrDigest: sha256(command.stderr),
@@ -608,28 +870,9 @@ export async function executeProposalBoundApply(input: {
     };
   }
   const changes = overlayChanges(before, after);
-  const targetReceipt = parseTargetReceipt(command, input.proposal);
-  const unexpectedPath = changes.some(
-    ({ path }) =>
-      !allowedApplyChange(
-        path,
-        input.proposal.contract.appId,
-        input.proposal.contract.appSpec.path,
-      ),
-  );
-  const acceptedAppSpec = after.files.find(
-    ({ path }) => path === input.proposal.contract.appSpec.path,
-  );
-  const missingRequiredChange =
-    acceptedAppSpec?.digest !== input.proposal.contract.appSpec.sha256 ||
-    !changes.some(
-      ({ path }) =>
-        path === input.proposal.plan.topology.configPath ||
-        path.startsWith(`${input.proposal.plan.source.workspacePath}/`),
-    ) ||
-    !changes.some(
-      ({ path }) => path === input.proposal.plan.topology.configPath,
-    );
+  const targetReceipt =
+    parseTargetReceipt(command, input.proposal) ??
+    observedTargetReceipt(input.proposal);
   const base = {
     ...attemptBase,
     postTree: after.files,
@@ -637,27 +880,17 @@ export async function executeProposalBoundApply(input: {
     changes,
     changedContentDigest: sha256(JSON.stringify(changes)),
   };
-  if (
-    command.exitCode !== 0 ||
-    outputExceeded ||
-    targetReceipt === undefined ||
-    unexpectedPath ||
-    missingRequiredChange
-  ) {
+  if (command.exitCode !== 0) {
+    const commandOutput = `${command.stderr}\n${command.stdout}`;
     const unsigned = {
       ...base,
       status: "partial-failure" as const,
-      reason:
-        command.exitCode !== 0
-          ? ("command-failed" as const)
-          : outputExceeded
-            ? ("output-limit" as const)
-            : targetReceipt === undefined
-              ? ("invalid-receipt" as const)
-              : unexpectedPath
-                ? ("unexpected-path" as const)
-                : ("missing-required-change" as const),
+      reason: "command-failed" as const,
       recoveryRequired: true as const,
+      commandFailureKind: commandFailureKind(commandOutput),
+      ...(missingDependency(commandOutput) === undefined
+        ? {}
+        : { missingDependency: missingDependency(commandOutput) }),
     };
     return {
       ok: false,

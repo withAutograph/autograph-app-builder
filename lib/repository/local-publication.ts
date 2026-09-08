@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 
-import type { OverlayChange } from "./target-apply";
+import { compareOverlayPaths, type OverlayChange } from "./target-apply";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
+import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template";
 
 export const LOCAL_PUBLICATION_VERSION = 2 as const;
 export const LOCAL_PUBLICATION_MAX_FILE_BYTES = 4 * 1024 * 1024;
@@ -188,7 +189,7 @@ function canonicalChanges(
   if (review.changes.length === 0)
     throw new Error("The reviewed change set is empty.");
   const sorted = [...review.changes].toSorted((left, right) =>
-    left.path.localeCompare(right.path),
+    compareOverlayPaths(left.path, right.path),
   );
   if (
     JSON.stringify(sorted.map(({ path }) => path)) !==
@@ -218,6 +219,7 @@ export function assertExactReviewedChangeSet(
     repositoryContractDigest: review.repositoryContractDigest,
     sourceSha: review.sourceSha,
     sourceTree: review.sourceTree,
+    sourceReceiptDigest: review.sourceReceiptDigest,
     eligibilityDigest: review.eligibilityDigest,
     workspaceDigest: review.workspaceDigest,
     appSpecDigest: review.appSpecDigest,
@@ -227,6 +229,7 @@ export function assertExactReviewedChangeSet(
     identityDigest: review.identityDigest,
     imageDigest: review.imageDigest,
     dependencyCacheDigest: review.dependencyCacheDigest,
+    dependencyCacheContentDigest: review.dependencyCacheContentDigest,
     targetReceipt: review.targetReceipt,
     preTreeDigest: review.preTreeDigest,
     postTreeDigest: review.postTreeDigest,
@@ -260,6 +263,11 @@ export function createLocalPublicationProposal(input: {
     throw new Error(
       "Local publication accepts only the original existing-repository source.",
     );
+  assertRepositoryReleasePolicyAtGitSnapshot({
+    sourcePath: source.sourcePath,
+    sourceSha: source.sourceSha,
+    sourceTree: source.sourceTree,
+  });
   if (
     destination.canonicalPath !== source.sourcePath ||
     destination.headSha !== source.sourceSha ||
@@ -508,8 +516,8 @@ export function assertCanonicalLocalPublicationJournal(
   const canonicalPartition =
     new Set(accounted).size === accounted.length &&
     samePaths(
-      accounted.filter((path) => applied.has(path)).sort(),
-      [...journal.appliedPaths].sort(),
+      accounted.filter((path) => applied.has(path)).sort(compareOverlayPaths),
+      [...journal.appliedPaths].sort(compareOverlayPaths),
     );
   if (journal.reason === "precondition-failed") {
     if (

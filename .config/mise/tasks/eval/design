@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Score an existing generated UI on demand (advisory only)"
+set -eu
+exec "$(mise which node)" --import tsx scripts/eval-design.mts "$@"

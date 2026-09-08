@@ -1,133 +1,29 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
-import {
-  APP_BUILDER_WORKFLOW_VERSION,
-  appBuilderWorkflowState,
-  assertExactWorkflowState,
-  assertUpstreamMutationAllowed,
-  sha256,
-} from "@/lib/agent/workflow-state";
-import {
-  assertExactDependencyTargetBinding,
-  inspectDependencyCache,
-  materializeOfflineDependencies,
-} from "@/lib/repository/dependency-cache";
-import {
-  materializePlanningOverlay,
-  targetExecutionBinding,
-} from "@/lib/repository/target-planning";
+import { prepareOrReuseDependencies } from "@/lib/agent/target-dependency-preparation";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 export default defineTool({
   description:
-    "Automatically materialize the fixed verified offline dependency closure into the builder-owned planning overlay after a complete AppSpec is recorded. No target mutation, network, apply, validation, or prepared-source mutation is available.",
-  inputSchema: z.object({
-    expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-  }),
-  async execute({ expectedAppSpecDigest }, ctx) {
+    "Diagnostic-only planning setup. Records checkout-backed dependency metadata; it does not install or verify dependencies. Normal planning performs this automatically. No provider or target-repository mutation is available.",
+  inputSchema: z.object({}),
+  async execute(_, ctx) {
     const current = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(current, "target dependency preparation");
-    if (current.phase === "empty" || current.phase === "prepared")
+    if (
+      current.phase === "empty" ||
+      current.phase === "prepared" ||
+      current.phase === "ui_previewed" ||
+      current.phase === "ui_accepted"
+    )
       throw new Error(
-        "Accept a build-ready AppSpec before preparing target dependencies.",
+        "Finalize the UI and accept a build-ready AppSpec before preparing target dependencies.",
       );
-    if (current.appSpec.digest !== expectedAppSpecDigest)
-      throw new Error(
-        "The accepted AppSpec changed before dependency preparation.",
-      );
-    exactPrototypeArtifact(current.artifacts, {
-      path: current.appSpec.artifactPath,
-      digest: current.appSpec.digest,
-      revision: current.appSpec.artifactRevision,
-      sessionId: ctx.session.id,
+    const prepared = await prepareOrReuseDependencies({
+      current,
+      callId: ctx.callId,
+      getSandbox: () => ctx.getSandbox(),
     });
-    const sandbox = await ctx.getSandbox();
-    const observedCache = await inspectDependencyCache(
-      sandbox,
-      process.env,
-      current.workspace,
-    );
-    assertExactDependencyTargetBinding({
-      workspace: current.workspace,
-      sourceReceipt: current.sourceReceipt,
-      cache: observedCache,
-      ...(current.phase === "app_spec_accepted"
-        ? {}
-        : { dependencyReceipt: current.dependencyReceipt }),
-    });
-    await materializePlanningOverlay({
-      sandbox,
-      artifactRevision: current.appSpec.artifactRevision,
-      appId: current.appSpec.appId,
-      appSpecContent: current.appSpec.content,
-      appSpecDigest: current.appSpec.digest,
-    });
-    const cache = await materializeOfflineDependencies({
-      sandbox,
-      artifactRevision: current.appSpec.artifactRevision,
-      target: current.workspace,
-    });
-    assertExactDependencyTargetBinding({
-      workspace: current.workspace,
-      sourceReceipt: current.sourceReceipt,
-      cache,
-      ...(current.phase === "app_spec_accepted"
-        ? {}
-        : { dependencyReceipt: current.dependencyReceipt }),
-    });
-    const execution = targetExecutionBinding(cache);
-
-    if (current.phase !== "app_spec_accepted") {
-      const receipt = current.dependencyReceipt;
-      if (
-        receipt.imageDigest !== execution.imageDigest ||
-        receipt.dependencyCacheDigest !== execution.dependencyCacheDigest ||
-        receipt.cacheManifestDigest !== cache.manifestDigest ||
-        receipt.cacheContentDigest !== cache.contentDigest
-      )
-        throw new Error(
-          "The offline dependency cache changed after its durable receipt.",
-        );
-      return { ...receipt, reused: true };
-    }
-
-    const unsigned = {
-      version: 2 as const,
-      sourceSha: current.workspace.sourceSha,
-      sourceTree: current.workspace.sourceTree,
-      eligibilityDigest: current.workspace.eligibilityDigest,
-      workspaceDigest: current.workspace.workspaceDigest,
-      imageDigest: execution.imageDigest,
-      dependencyCacheDigest: execution.dependencyCacheDigest,
-      appSpecDigest: current.appSpec.digest,
-      artifactRevision: current.appSpec.artifactRevision,
-      targetSha: cache.manifest.target.sha,
-      targetTree: cache.manifest.target.tree,
-      cacheManifestDigest: cache.manifestDigest,
-      cacheContentDigest: cache.contentDigest,
-      preparedByCallId: ctx.callId,
-    };
-    const dependencyReceipt = {
-      ...unsigned,
-      digest: sha256(JSON.stringify(unsigned)),
-    };
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(latest, current, "dependency receipt recording");
-      return {
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "dependencies_prepared",
-        preparedByCallId: current.preparedByCallId,
-        workspace: current.workspace,
-        sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
-        artifacts: current.artifacts,
-        appSpec: current.appSpec,
-        dependencyReceipt,
-      };
-    });
-    return { ...dependencyReceipt, reused: false };
+    return { ...prepared.receipt, reused: prepared.reused };
   },
 });

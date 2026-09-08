@@ -21,12 +21,16 @@ const principal: HostedPrincipal = {
 function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   const limit = vi.fn(async () => rows);
   const where = vi.fn(() => ({ limit }));
-  const from = vi.fn(() => ({ where }));
+  const joined = { innerJoin: undefined as unknown, where };
+  const innerJoin = vi.fn(() => joined);
+  joined.innerJoin = innerJoin;
+  const from = vi.fn(() => joined);
   const select = vi.fn(() => ({ from }));
   return {
     database: { select } as unknown as Database,
     select,
     from,
+    innerJoin,
     where,
     limit,
   };
@@ -35,18 +39,31 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
 describe("PostgreSQL workspace membership", () => {
   it.each([
     [[], false],
-    [[{ active: false }], false],
-    [[{ active: true }], true],
-  ] as const)("admits only one active exact row", async (rows, expected) => {
-    const fixture = databaseReturning([...rows]);
-    await expect(
-      createPostgresWorkspaceMembership(fixture.database).isMember({
-        principal,
-        workspaceId: principal.workspaceId,
-      }),
-    ).resolves.toBe(expected);
-    expect(fixture.limit).toHaveBeenCalledWith(1);
-  });
+    [[{ role: "revoked", banned: false }], false],
+    [[{ role: "member", banned: true }], false],
+    [[{ role: "member", banned: false }], true],
+    [[{ role: "admin", banned: false }], true],
+    [[{ role: "owner", banned: false }], true],
+    [
+      [
+        { role: "member", banned: false },
+        { role: "member", banned: false },
+      ],
+      false,
+    ],
+  ] as const)(
+    "admits only one canonical Better Auth membership",
+    async (rows, expected) => {
+      const fixture = databaseReturning([...rows]);
+      await expect(
+        createPostgresWorkspaceMembership(fixture.database).isMember({
+          principal,
+          workspaceId: principal.workspaceId,
+        }),
+      ).resolves.toBe(expected);
+      expect(fixture.limit).toHaveBeenCalledWith(2);
+    },
+  );
 
   it("rejects a non-claim workspace before querying storage", async () => {
     const fixture = databaseReturning([{ active: true }]);
@@ -61,9 +78,20 @@ describe("PostgreSQL workspace membership", () => {
 
   it.each([
     [[], undefined],
-    [[{ workspaceId: "workspace_1" }], "workspace_1"],
     [
-      [{ workspaceId: "workspace_1" }, { workspaceId: "workspace_2" }],
+      [{ workspaceId: "workspace_1", role: "owner", banned: false }],
+      "workspace_1",
+    ],
+    [[{ workspaceId: "workspace_1", role: "member", banned: true }], undefined],
+    [
+      [{ workspaceId: "workspace_1", role: "revoked", banned: false }],
+      undefined,
+    ],
+    [
+      [
+        { workspaceId: "workspace_1", role: "member", banned: false },
+        { workspaceId: "workspace_2", role: "member", banned: false },
+      ],
       undefined,
     ],
   ] as const)(

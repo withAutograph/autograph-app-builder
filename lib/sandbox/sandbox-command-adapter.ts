@@ -4,9 +4,7 @@ import type {
   SandboxSession,
 } from "eve/sandbox";
 
-import { runBoundedSandboxCommand } from "./bounded-command";
-
-export function createBoundedSandboxSession(input: {
+export function createAuthorizedSandboxSession(input: {
   session: SandboxSession;
   authorize?: () => Promise<unknown>;
 }): SandboxSession {
@@ -24,13 +22,18 @@ export function createBoundedSandboxSession(input: {
     writeTextFile: (options) => input.session.writeTextFile(options),
     async run(options) {
       await authorize();
-      return runBoundedSandboxCommand(input.session, options);
+      // Vercel Sandbox owns command streaming and the explicit caller abort
+      // signal. Do not insert an unrelated wall, silence, or output limit
+      // between an Arrusted operation and its provider runtime.
+      return input.session.run(options);
     },
-    async spawn() {
+    async spawn(options) {
       await authorize();
-      throw new Error(
-        "Direct authored sandbox spawn is disabled; use the bounded command adapter.",
-      );
+      // Keep the signed-user boundary while delegating process semantics to
+      // Vercel Sandbox. The previous rejection forced callers through a
+      // custom command wrapper and turned ordinary repository work into an
+      // artificial gate.
+      return input.session.spawn(options);
     },
   };
 }
@@ -41,12 +44,12 @@ function wrapHandle<SO>(input: {
 }): SandboxBackendHandle<SO> {
   return {
     ...input.handle,
-    session: createBoundedSandboxSession({
+    session: createAuthorizedSandboxSession({
       session: input.handle.session,
       authorize: input.authorize,
     }),
     async useSessionFn(options) {
-      return createBoundedSandboxSession({
+      return createAuthorizedSandboxSession({
         session: await input.handle.useSessionFn(options),
         authorize: input.authorize,
       });
@@ -54,16 +57,13 @@ function wrapHandle<SO>(input: {
   };
 }
 
-/**
- * Wraps both template bootstrap and every live session, so authored callers
- * cannot bypass shared stream, timeout, process, file, or workspace limits.
- */
-export function createBoundedSandboxBackend<BO, SO>(input: {
+/** Preserves tenant-bound command authority without replacing Vercel's transport. */
+export function createAuthorizedSandboxBackend<BO, SO>(input: {
   backend: SandboxBackend<BO, SO>;
   authorizeSessionCommand(sessionId: string): Promise<unknown>;
 }): SandboxBackend<BO, SO> {
   return {
-    name: `${input.backend.name}-bounded-v1`,
+    name: `${input.backend.name}-authorized`,
     async create(createInput) {
       const handle = await input.backend.create(createInput);
       return wrapHandle({
@@ -82,7 +82,7 @@ export function createBoundedSandboxBackend<BO, SO>(input: {
                 bootstrap({
                   ...context,
                   use: async (options) =>
-                    createBoundedSandboxSession({
+                    createAuthorizedSandboxSession({
                       session: await context.use(options),
                     }),
                 }),

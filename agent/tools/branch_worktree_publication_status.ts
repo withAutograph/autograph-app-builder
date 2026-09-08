@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import {
   appBuilderWorkflowState,
-  assertExactWorkflowState,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import {
   exactBranchWorktreeProposalMatch,
@@ -65,24 +65,23 @@ export default defineTool({
     const journal = await readBranchWorktreePublicationJournal(proposal);
     if (journal === undefined) {
       if (workflow.phase === "branch_publication_pending")
-        appBuilderWorkflowState.update((current) => {
-          assertExactWorkflowState(
-            current,
-            workflow,
-            "pre-journal branch publication reconciliation",
-          );
-          if (current.phase !== "branch_publication_pending")
-            throw new Error(
-              "The publication workflow changed before pre-journal reconciliation.",
-            );
-          const {
-            branchPublicationProposal: _proposal,
-            branchPublicationCallId: _callId,
-            ...reviewed
-          } = current;
-          void _proposal;
-          void _callId;
-          return { ...reviewed, phase: "reviewed" };
+        updateExactWorkflow({
+          expected: workflow,
+          operation: "pre-journal branch publication reconciliation",
+          transition: (current) => {
+            if (current.phase !== "branch_publication_pending")
+              throw new Error(
+                "The publication workflow changed before pre-journal reconciliation.",
+              );
+            const {
+              branchPublicationProposal: _proposal,
+              branchPublicationCallId: _callId,
+              ...reviewed
+            } = current;
+            void _proposal;
+            void _callId;
+            return { ...reviewed, phase: "reviewed" };
+          },
         });
       return workflow.phase === "reviewed"
         ? { ...proposal, workflowPhase: workflow.phase }
@@ -120,25 +119,24 @@ export default defineTool({
         workflow.phase === "branch_publication_pending" ||
         workflow.phase === "branch_publication_failed"
       )
-        appBuilderWorkflowState.update((current) => {
-          assertExactWorkflowState(
-            current,
-            workflow,
-            "branch publication success reconciliation",
-          );
-          if (
-            current.phase !== "reviewed" &&
-            current.phase !== "branch_publication_pending" &&
-            current.phase !== "branch_publication_failed"
-          )
-            throw new Error(
-              "The publication workflow changed before reconciliation.",
-            );
-          return {
-            ...current,
-            phase: "published_branch_worktree",
-            branchPublicationReceipt: journal,
-          };
+        updateExactWorkflow({
+          expected: workflow,
+          operation: "branch publication success reconciliation",
+          transition: (current) => {
+            if (
+              current.phase !== "reviewed" &&
+              current.phase !== "branch_publication_pending" &&
+              current.phase !== "branch_publication_failed"
+            )
+              throw new Error(
+                "The publication workflow changed before reconciliation.",
+              );
+            return {
+              ...current,
+              phase: "published_branch_worktree",
+              branchPublicationReceipt: journal,
+            };
+          },
         });
       return {
         ...journal,
@@ -147,46 +145,44 @@ export default defineTool({
       };
     }
     if (journal.status === "pending" && workflow.phase === "reviewed")
-      appBuilderWorkflowState.update((current) => {
-        assertExactWorkflowState(
-          current,
-          workflow,
-          "branch publication pending reconciliation",
-        );
-        if (current.phase !== "reviewed")
-          throw new Error(
-            "The publication workflow changed before pending reconciliation.",
-          );
-        return {
-          ...current,
-          phase: "branch_publication_pending",
-          branchPublicationProposal: proposal,
-          branchPublicationCallId: journal.publishedByCallId,
-        };
+      updateExactWorkflow({
+        expected: workflow,
+        operation: "branch publication pending reconciliation",
+        transition: (current) => {
+          if (current.phase !== "reviewed")
+            throw new Error(
+              "The publication workflow changed before pending reconciliation.",
+            );
+          return {
+            ...current,
+            phase: "branch_publication_pending",
+            branchPublicationProposal: proposal,
+            branchPublicationCallId: journal.publishedByCallId,
+          };
+        },
       });
     if (
       journal.status === "failed" &&
       (workflow.phase === "reviewed" ||
         workflow.phase === "branch_publication_pending")
     )
-      appBuilderWorkflowState.update((current) => {
-        assertExactWorkflowState(
-          current,
-          workflow,
-          "branch publication failure reconciliation",
-        );
-        if (
-          current.phase !== "reviewed" &&
-          current.phase !== "branch_publication_pending"
-        )
-          throw new Error(
-            "The publication workflow changed before reconciliation.",
-          );
-        return {
-          ...current,
-          phase: "branch_publication_failed",
-          branchPublicationReceipt: journal,
-        };
+      updateExactWorkflow({
+        expected: workflow,
+        operation: "branch publication failure reconciliation",
+        transition: (current) => {
+          if (
+            current.phase !== "reviewed" &&
+            current.phase !== "branch_publication_pending"
+          )
+            throw new Error(
+              "The publication workflow changed before reconciliation.",
+            );
+          return {
+            ...current,
+            phase: "branch_publication_failed",
+            branchPublicationReceipt: journal,
+          };
+        },
       });
     return {
       ...journal,

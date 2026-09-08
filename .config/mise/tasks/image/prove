@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Run the read-only sandbox proof against the preloaded exact digest"
 set -eu
 

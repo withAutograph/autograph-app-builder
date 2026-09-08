@@ -8,9 +8,9 @@ export const IMAGE_REPOSITORY =
   "ghcr.io/withautograph/autograph-app-builder-sandbox";
 export const IMAGE_VERSION = "sandbox-v2";
 export const ARRUSTED_IMAGE_TARGET_SHA =
-  "77dce48833e7d6e05e086f18ca11b77d9214da9e";
+  "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 export const ARRUSTED_IMAGE_TARGET_TREE =
-  "2ed91119a0101ce053a4eb2122624efa1fff6ecd";
+  "6735f4b45cc2b29a139531a41dac990c925e0d39";
 
 const sha40 = /^[0-9a-f]{40}$/u;
 const sha256 = /^[0-9a-f]{64}$/u;
@@ -29,7 +29,7 @@ export type CommandSpec = Readonly<{
 export const IMAGE_TOOL_VERSIONS = {
   docker: "29.4.0",
   "docker-buildx": "0.33.0",
-  msb: "0.6.14",
+  msb: "0.5.10",
   node: "24.18.0",
   pnpm: "11.7.0",
 } as const;
@@ -183,7 +183,7 @@ export function createExactImageProvenance(
     a.localeCompare(b),
   );
   if (
-    targetFileEntries.length !== 7 ||
+    targetFileEntries.length !== 11 ||
     targetFileEntries.some(([, digest]) => !sha256.test(digest))
   )
     throw new Error("The exact target-file digest set is incomplete.");

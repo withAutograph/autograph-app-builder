@@ -7,54 +7,10 @@ import type {
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 
 export class SandboxCommandLimitError extends Error {
-  constructor(
-    readonly code:
-      "timeout" | "no-output-timeout" | "output-limit" | "process-limit",
-  ) {
+  constructor(readonly code: "timeout" | "no-output-timeout" | "output-limit") {
     super("The sandbox command exceeded its execution envelope.");
     this.name = "SandboxCommandLimitError";
   }
-}
-
-// Bash defines the `ulimit -f` block size as 1024 bytes.
-const BASH_ULIMIT_FILE_BLOCK_BYTES = 1_024;
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
-}
-
-export function quotaWrappedSandboxCommand(command: string): string {
-  const quota = SANDBOX_EXECUTION_POLICY.command;
-  const maximumFileBlocks = Math.floor(
-    quota.maximumFileBytes / BASH_ULIMIT_FILE_BLOCK_BYTES,
-  );
-  const script = `
-set -euo pipefail
-ulimit -t ${Math.ceil(quota.maximumWallTimeMs / 1_000)}
-ulimit -f ${maximumFileBlocks}
-ulimit -n ${quota.maximumOpenFiles}
-ulimit -u ${quota.maximumProcesses}
-setsid bash -lc ${shellQuote(command)} &
-child=$!
-cleanup() { kill -TERM -- -"$child" 2>/dev/null || true; }
-trap cleanup EXIT INT TERM
-while kill -0 "$child" 2>/dev/null; do
-  workspace_bytes=$(du -sx --block-size=1 /workspace 2>/dev/null | awk '{print $1}')
-  workspace_files=$(find /workspace -xdev -type f -printf '.' 2>/dev/null | wc -c)
-  if [ "\${workspace_bytes:-0}" -gt ${quota.maximumWorkspaceBytes} ] || [ "\${workspace_files:-0}" -gt ${quota.maximumWorkspaceFiles} ]; then
-    kill -TERM -- -"$child" 2>/dev/null || true
-    sleep 1
-    kill -KILL -- -"$child" 2>/dev/null || true
-    wait "$child" 2>/dev/null || true
-    printf '%s\\n' sandbox_workspace_quota_exceeded >&2
-    exit 125
-  fi
-  sleep 1
-done
-trap - EXIT INT TERM
-wait "$child"
-`;
-  return `bash -lc ${shellQuote(script)}`;
 }
 
 type OutputReader = ReadableStreamDefaultReader<Uint8Array>;
@@ -168,7 +124,7 @@ export async function runBoundedSandboxCommand(
     const spawnPromise = Promise.resolve(
       sandbox.spawn({
         ...options,
-        command: quotaWrappedSandboxCommand(options.command),
+        command: options.command,
         abortSignal: signal,
       }),
     );

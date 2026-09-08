@@ -1,30 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { HostedPreviewAdmissionControlBinding } from "../hosted/admission-control";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   createHostedEveSessionService,
-  HostedAdmissionDeniedError,
   type HostedEveTransport,
 } from "./hosted-service";
 import { InMemoryHostedEveStore } from "./hosted-store";
-
-const now = Date.parse("2026-08-27T12:00:00.000Z");
-const baseBinding: HostedPreviewAdmissionControlBinding = {
-  version: 1,
-  environment: "preview",
-  enforcement: "provider-readback",
-  scope: "issuer-audience-workspace-subject",
-  startsPerSubjectPerMinute: 10,
-  startsPerWorkspacePerMinute: 50,
-  maxConcurrentSessionsPerSubject: 2,
-  maxActiveSessionsPerWorkspace: 20,
-  monthlySpendUsedUsdCents: 0,
-  monthlySpendLimitUsdCents: 10_000,
-  observedAt: "2026-08-27T11:55:00.000Z",
-  expiresAt: "2026-08-27T12:55:00.000Z",
-  readbackDigest: `sha256:${"a".repeat(64)}`,
-};
 
 function principal(ownerUserId: string): HostedPrincipal {
   return {
@@ -46,9 +27,7 @@ function principal(ownerUserId: string): HostedPrincipal {
 function service(input: {
   store: InMemoryHostedEveStore;
   ownerUserId: string;
-  binding: HostedPreviewAdmissionControlBinding;
   status?: "working" | "waiting";
-  now?: () => number;
 }) {
   let sequence = 0;
   const transport: HostedEveTransport = {
@@ -76,8 +55,6 @@ function service(input: {
     principal: principal(input.ownerUserId),
     store: input.store,
     transport,
-    admissionControl: input.binding,
-    now: input.now ?? (() => now),
   });
 }
 
@@ -90,77 +67,22 @@ async function startTwice(
   return hosted.start({ prompt: "Build again", clientRequestId: second });
 }
 
-describe("hosted start admission enforcement", () => {
-  it("enforces the per-subject start window", async () => {
-    const hosted = service({
-      store: new InMemoryHostedEveStore(),
-      ownerUserId: "user_one",
-      binding: { ...baseBinding, startsPerSubjectPerMinute: 1 },
-    });
-    await expect(startTwice(hosted)).rejects.toBeInstanceOf(
-      HostedAdmissionDeniedError,
-    );
-  });
-
-  it("enforces the shared workspace start window across subjects", async () => {
+describe("hosted start capacity", () => {
+  it("does not impose App Builder start, subject, or workspace quotas", async () => {
     const store = new InMemoryHostedEveStore();
-    const binding = { ...baseBinding, startsPerWorkspacePerMinute: 1 };
-    await service({ store, ownerUserId: "user_one", binding }).start({
-      prompt: "Build",
-      clientRequestId: "one",
-    });
-    await expect(
-      service({ store, ownerUserId: "user_two", binding }).start({
-        prompt: "Build",
-        clientRequestId: "two",
-      }),
-    ).rejects.toBeInstanceOf(HostedAdmissionDeniedError);
-  });
-
-  it("enforces concurrent subject and active workspace session ceilings", async () => {
-    const concurrent = service({
-      store: new InMemoryHostedEveStore(),
-      ownerUserId: "user_one",
-      binding: { ...baseBinding, maxConcurrentSessionsPerSubject: 1 },
-      status: "working",
-    });
-    await expect(startTwice(concurrent)).rejects.toBeInstanceOf(
-      HostedAdmissionDeniedError,
-    );
-
-    const store = new InMemoryHostedEveStore();
-    const binding = { ...baseBinding, maxActiveSessionsPerWorkspace: 1 };
-    await service({ store, ownerUserId: "user_one", binding }).start({
-      prompt: "Build",
-      clientRequestId: "one",
-    });
-    await expect(
-      service({ store, ownerUserId: "user_two", binding }).start({
-        prompt: "Build",
-        clientRequestId: "two",
-      }),
-    ).rejects.toBeInstanceOf(HostedAdmissionDeniedError);
-  });
-
-  it("does not count expired active sessions against admission ceilings", async () => {
-    let current = now;
-    const store = new InMemoryHostedEveStore();
-    const binding = {
-      ...baseBinding,
-      maxConcurrentSessionsPerSubject: 1,
-      maxActiveSessionsPerWorkspace: 1,
-    };
-    const hosted = service({
+    const firstUser = service({
       store,
       ownerUserId: "user_one",
-      binding,
       status: "working",
-      now: () => current,
     });
-    await hosted.start({ prompt: "Build", clientRequestId: "one" });
-    current += 30 * 60 * 1_000;
+    await expect(startTwice(firstUser)).resolves.toMatchObject({
+      sessionId: expect.any(String),
+    });
     await expect(
-      hosted.start({ prompt: "Build again", clientRequestId: "two" }),
+      service({ store, ownerUserId: "user_two", status: "working" }).start({
+        prompt: "Build in the same workspace",
+        clientRequestId: "three",
+      }),
     ).resolves.toMatchObject({ sessionId: expect.any(String) });
   });
 });

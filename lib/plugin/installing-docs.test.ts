@@ -7,13 +7,10 @@ import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
 const readDocumentation = (path: string) => readFile(resolve(path), "utf8");
-const documents = [
-  { path: "README.md", heading: "## Install" },
-  {
-    path: "docs/installing.md",
-    heading: "## Install before shared marketplace publication",
-  },
-] as const;
+const verifiedReleaseInstall = {
+  path: "docs/installing.md",
+  heading: "## Install before shared marketplace publication",
+} as const;
 
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
@@ -74,55 +71,62 @@ async function runInstall(
 }
 
 describe("public plugin installation documentation", () => {
-  it.each(documents)(
-    "$path stops before extraction or installation when verification fails",
-    async ({ path, heading }) => {
-      const documentation = await readDocumentation(path);
-      const script = firstShellBlock(documentation, heading);
-      expect(script).toContain("set -eu");
+  it("stops before extraction or installation when release verification fails", async () => {
+    const { path, heading } = verifiedReleaseInstall;
+    const documentation = await readDocumentation(path);
+    const script = firstShellBlock(documentation, heading);
+    expect(script).toContain("set -eu");
 
-      for (const failure of ["checksum", "release-verifier"] as const) {
-        const auditLog = await runInstall(script, failure);
-        expect(auditLog).toBe("");
-        expect(auditLog).not.toContain("tar ");
-        expect(auditLog).not.toContain("codex plugin marketplace add");
-        expect(auditLog).not.toContain("codex plugin add");
-      }
+    for (const failure of ["checksum", "release-verifier"] as const) {
+      const auditLog = await runInstall(script, failure);
+      expect(auditLog).toBe("");
+      expect(auditLog).not.toContain("tar ");
+      expect(auditLog).not.toContain("codex plugin marketplace add");
+      expect(auditLog).not.toContain("codex plugin add");
+    }
 
-      const auditLog = await runInstall(script, "none");
-      expect(auditLog).toContain(
-        "tar -xzf autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
-      );
-      expect(auditLog).toMatch(
-        /codex plugin marketplace add .*autograph-app-builder-marketplace-0\.2\.1/u,
-      );
-      expect(auditLog).toContain(
-        "codex plugin add autograph-app-builder@autograph",
-      );
-    },
-  );
+    const auditLog = await runInstall(script, "none");
+    expect(auditLog).toContain(
+      "tar -xzf app-builder-codex-marketplace-0.2.12.tar.gz",
+    );
+    expect(auditLog).toMatch(
+      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.12/u,
+    );
+    expect(auditLog).toContain("codex plugin add app-builder@autograph");
+  });
+
+  it("uses the shared marketplace as the primary README installation path", async () => {
+    const documentation = await readDocumentation("README.md");
+    const script = firstShellBlock(documentation, "## Install");
+
+    expect(script).toContain(
+      "codex plugin marketplace add withAutograph/marketplace",
+    );
+    expect(script).toContain("codex plugin add app-builder@autograph");
+    expect(script).not.toContain("gh release download");
+    expect(script).not.toContain("tar -xzf");
+  });
 
   it("keeps exact pre-release assets and availability explicit", async () => {
     const documentation = await readDocumentation("docs/installing.md");
 
     expect(documentation).toContain(
-      "Once the pre-release `v0.2.1` GitHub release is published",
+      "Once the pre-release `v0.2.12` GitHub release is published",
     );
     expect(documentation).toMatch(
-      /These\s+commands fail closed until `v0\.2\.1` exists/u,
+      /These\s+commands fail closed until `v0\.2\.12` exists/u,
     );
-    expect(documentation).toContain("autograph-app-builder-0.2.1.tar.gz");
+    expect(documentation).toContain("app-builder-0.2.12.tar.gz");
     expect(documentation).toContain(
-      "autograph-app-builder-codex-marketplace-0.2.1.tar.gz",
+      "app-builder-codex-marketplace-0.2.12.tar.gz",
     );
-    expect(documentation).toContain(
-      "Publish `v0.2.1` only through the existing tag-triggered",
-    );
-    expect(documentation).toContain(
-      "`AUTOGRAPH_APP_BUILDER_RELEASE_PROOF_SHA` has been set to",
+    expect(documentation).toContain("Exact-main CI waits for Vercel Git");
+    expect(documentation).toMatch(
+      /The protected\s+`release:publish` step creates the prerelease/u,
     );
     expect(documentation).toMatch(
-      /Do not create or upload the release\s+manually\./u,
+      /It never rebuilds, invokes Vercel CLI, pushes an image, or\s+accepts replacement bytes or bindings\./u,
     );
+    expect(documentation).not.toContain("owner-only-hosted-oauth-token");
   });
 });

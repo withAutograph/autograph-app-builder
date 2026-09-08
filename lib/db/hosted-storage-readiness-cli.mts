@@ -2,7 +2,10 @@ import postgres from "postgres";
 
 import { readPrivateDatabaseUrl } from "./private-database-url";
 import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
-import { verifyHostedStorageReadBack } from "./hosted-storage-readiness";
+import {
+  hostedStorageExpectedColumns,
+  verifyHostedStorageReadBack,
+} from "./hosted-storage-readiness";
 
 if (
   process.argv.length !== 4 ||
@@ -16,6 +19,9 @@ if (
 
 const databaseUrl = readPrivateDatabaseUrl(0);
 const client = postgres(databaseUrl, hostedTaskPostgresOptions);
+const managedTables = [
+  ...new Set(hostedStorageExpectedColumns.map(([table]) => table)),
+];
 try {
   const readBack = await client.begin(async (transaction) => {
     await transaction`SET TRANSACTION READ ONLY`;
@@ -48,29 +54,7 @@ try {
       JOIN pg_catalog.pg_namespace AS namespace
         ON namespace.oid = relation.relnamespace
       WHERE namespace.nspname = 'public'
-        AND relation.relname IN (
-          'account',
-          'agent_operation',
-          'agent_session',
-          'github_installation_authorization_state',
-          'github_publication_journal',
-          'github_publication_proposal',
-          'hosted_github_installation',
-          'hosted_github_publication_journal',
-          'hosted_github_publication_proposal',
-          'hosted_workspace_membership',
-          'jwks',
-          'oauth_access_token',
-          'oauth_client',
-          'oauth_client_assertion',
-          'oauth_client_resource',
-          'oauth_consent',
-          'oauth_refresh_token',
-          'oauth_resource',
-          'session',
-          'user',
-          'verification'
-        )
+        AND relation.relname = ANY(${managedTables})
         AND attribute.attnum > 0
         AND NOT attribute.attisdropped
       ORDER BY relation.relname, attribute.attname
@@ -79,29 +63,7 @@ try {
       SELECT tablename AS "table", indexname AS "name"
       FROM pg_catalog.pg_indexes
       WHERE schemaname = 'public'
-        AND tablename IN (
-          'account',
-          'agent_operation',
-          'agent_session',
-          'github_installation_authorization_state',
-          'github_publication_journal',
-          'github_publication_proposal',
-          'hosted_github_installation',
-          'hosted_github_publication_journal',
-          'hosted_github_publication_proposal',
-          'hosted_workspace_membership',
-          'jwks',
-          'oauth_access_token',
-          'oauth_client',
-          'oauth_client_assertion',
-          'oauth_client_resource',
-          'oauth_consent',
-          'oauth_refresh_token',
-          'oauth_resource',
-          'session',
-          'user',
-          'verification'
-        )
+        AND tablename = ANY(${managedTables})
       ORDER BY tablename, indexname
     `;
     const constraints = await transaction<
@@ -115,29 +77,7 @@ try {
         ON namespace.oid = relation.relnamespace
       WHERE namespace.nspname = 'public'
         AND constraint_record.contype <> 'n'
-        AND relation.relname IN (
-          'account',
-          'agent_operation',
-          'agent_session',
-          'github_installation_authorization_state',
-          'github_publication_journal',
-          'github_publication_proposal',
-          'hosted_github_installation',
-          'hosted_github_publication_journal',
-          'hosted_github_publication_proposal',
-          'hosted_workspace_membership',
-          'jwks',
-          'oauth_access_token',
-          'oauth_client',
-          'oauth_client_assertion',
-          'oauth_client_resource',
-          'oauth_consent',
-          'oauth_refresh_token',
-          'oauth_resource',
-          'session',
-          'user',
-          'verification'
-        )
+        AND relation.relname = ANY(${managedTables})
       ORDER BY relation.relname, constraint_record.conname
     `;
     return {

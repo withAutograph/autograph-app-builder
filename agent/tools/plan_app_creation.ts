@@ -1,19 +1,18 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { exactPrototypeArtifact } from "@/lib/agent/prototype-artifacts";
+import {
+  prepareOrReuseDependencies,
+  type DependencyReadyState,
+} from "@/lib/agent/target-dependency-preparation";
+import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
-  assertExactWorkflowState,
-  assertUpstreamMutationAllowed,
   sha256,
   type TargetIdentityReceipt,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-import {
-  assertExactDependencyTargetBinding,
-  inspectDependencyCache,
-} from "@/lib/repository/dependency-cache";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -23,52 +22,29 @@ import {
 
 export default defineTool({
   description:
-    "Required completion gate for every app-creation turn. Automatically run the two fixed read-only target commands for app identity and canonical planning after a complete AppSpec is recorded. Never substitute a prose implementation outline or finish the turn before this tool succeeds. No apply, validation, target write, network, arbitrary shell, arguments, cwd, or environment are available.",
+    "Create the implementation plan for the current product design. It prepares dependencies when needed, then runs the repository's normal planning commands. Repository inspection is best-effort context: ordinary source changes, new files, and differing project layouts do not block planning. This does not publish or otherwise change an external repository.",
   inputSchema: z.object({
-    expectedAppSpecDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    existingAppChanges: existingAppChangesSchema.optional(),
   }),
-  async execute({ expectedAppSpecDigest }, ctx) {
-    const current = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(current, "target identity and planning");
+  async execute({ existingAppChanges }, ctx) {
+    const state = appBuilderWorkflowState.get();
     if (
-      current.phase === "empty" ||
-      current.phase === "prepared" ||
-      current.phase === "app_spec_accepted"
+      state.phase === "empty" ||
+      state.phase === "prepared" ||
+      state.phase === "ui_previewed" ||
+      state.phase === "ui_accepted"
     )
       throw new Error(
-        "Prepare the approved offline dependency closure before running target planning.",
+        "Finalize the UI and accept a build-ready AppSpec before running target planning.",
       );
-    if (current.appSpec.digest !== expectedAppSpecDigest)
-      throw new Error("The accepted AppSpec changed before target planning.");
-    exactPrototypeArtifact(current.artifacts, {
-      path: current.appSpec.artifactPath,
-      digest: current.appSpec.digest,
-      revision: current.appSpec.artifactRevision,
-      sessionId: ctx.session.id,
+    const prepared = await prepareOrReuseDependencies({
+      current: state,
+      callId: ctx.callId,
+      getSandbox: () => ctx.getSandbox(),
     });
-    const sandbox = await ctx.getSandbox();
-    const cache = await inspectDependencyCache(
-      sandbox,
-      process.env,
-      current.workspace,
-    );
-    assertExactDependencyTargetBinding({
-      workspace: current.workspace,
-      sourceReceipt: current.sourceReceipt,
-      cache,
-      dependencyReceipt: current.dependencyReceipt,
-    });
-    const execution = targetExecutionBinding(cache);
-    if (
-      current.dependencyReceipt.imageDigest !== execution.imageDigest ||
-      current.dependencyReceipt.dependencyCacheDigest !==
-        execution.dependencyCacheDigest ||
-      current.dependencyReceipt.cacheManifestDigest !== cache.manifestDigest ||
-      current.dependencyReceipt.cacheContentDigest !== cache.contentDigest
-    )
-      throw new Error(
-        "The offline dependency cache changed after its durable receipt.",
-      );
+    const current: DependencyReadyState = prepared.state;
+    const sandbox = prepared.sandbox;
+    const execution = targetExecutionBinding(undefined, process.env);
     if (
       current.phase === "planned" ||
       current.phase === "apply_failed" ||
@@ -83,6 +59,7 @@ export default defineTool({
     const binding = {
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
+      sourceReceiptDigest: current.sourceReceipt.digest,
       eligibilityDigest: current.workspace.eligibilityDigest,
       workspaceDigest: current.workspace.workspaceDigest,
       imageDigest: execution.imageDigest,
@@ -104,17 +81,11 @@ export default defineTool({
       appSpecContent: current.appSpec.content,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
+      existingAppChanges,
+      sourceReceipt: current.sourceReceipt,
+      environment: process.env,
       onIdentity(identity) {
-        if (identityReceipt !== undefined) {
-          if (
-            JSON.stringify(identityReceipt.identity) !==
-            JSON.stringify(identity)
-          )
-            throw new Error(
-              "Target identity changed after its durable receipt.",
-            );
-          return;
-        }
+        if (identityReceipt !== undefined) return;
         const unsigned = {
           version: 1 as const,
           ...binding,
@@ -139,13 +110,10 @@ export default defineTool({
           dependencyReceipt: current.dependencyReceipt,
           identityReceipt: identityReceipt!,
         } as const;
-        appBuilderWorkflowState.update((latest) => {
-          assertExactWorkflowState(
-            latest,
-            current,
-            "target identity receipt recording",
-          );
-          return identityState;
+        updateExactWorkflow({
+          expected: current,
+          operation: "target identity receipt recording",
+          transition: () => identityState,
         });
         workflowBeforeProposal = identityState;
       },
@@ -162,13 +130,10 @@ export default defineTool({
       plannedByCallId: ctx.callId,
     };
     const proposal = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
-    appBuilderWorkflowState.update((latest) => {
-      assertExactWorkflowState(
-        latest,
-        workflowBeforeProposal,
-        "target proposal recording",
-      );
-      return {
+    updateExactWorkflow({
+      expected: workflowBeforeProposal,
+      operation: "target proposal recording",
+      transition: () => ({
         version: APP_BUILDER_WORKFLOW_VERSION,
         phase: "planned",
         preparedByCallId: current.preparedByCallId,
@@ -182,7 +147,7 @@ export default defineTool({
         dependencyReceipt: current.dependencyReceipt,
         identityReceipt: recordedIdentity,
         proposal,
-      };
+      }),
     });
     return { ...proposal, reused: false };
   },

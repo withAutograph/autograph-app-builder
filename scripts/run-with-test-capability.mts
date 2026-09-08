@@ -5,7 +5,8 @@ import {
   sign,
 } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
@@ -29,7 +30,7 @@ const launcher = resolve(
   ".config/mise/scripts/trusted-node-launcher",
 );
 const launcherDigest =
-  "ed02ec81fa72dcd102a7fcd16722494dbd92a7243dc293cb231a3446f4cc32ed";
+  "4b0dc2998432cb006eabfaf3f9660e19ca97cd44e34f133330c12087155d1379";
 const allowedEnvironment = [
   "HOME",
   "TMPDIR",
@@ -53,6 +54,24 @@ function childEnvironment(): NodeJS.ProcessEnv {
     if (value !== undefined) environment[name] = value;
   }
   return environment as NodeJS.ProcessEnv;
+}
+
+export function gateAEvalWorkflowBodyTimeout(
+  profile: unknown,
+): string | undefined {
+  if (
+    typeof profile !== "object" ||
+    profile === null ||
+    !Object.isFrozen(profile) ||
+    Object.keys(profile).sort().join(",") !==
+      "image,profile,sourceRoot,version" ||
+    (profile as { version?: unknown }).version !== 1
+  )
+    return undefined;
+  const name = (profile as { profile?: unknown }).profile;
+  return name === "sandbox" || name === "hosted-artifact"
+    ? "360000"
+    : undefined;
 }
 
 function canonical(proof: Record<string, unknown>) {
@@ -200,6 +219,18 @@ export async function runWithTestCapability(options: {
       ...childEnvironment(),
       EVE_DEV_WORKER_APP_ROOT:
         options.profile === "eve" ? repositoryRoot : undefined,
+      // Never recover another eval's unfinished queues. Keep the directory
+      // after exit for failure diagnostics; it is not a dependency cache.
+      WORKFLOW_LOCAL_DATA_DIR:
+        options.profile === "eve"
+          ? mkdtempSync(resolve(tmpdir(), "app-builder-eval-workflow-"))
+          : undefined,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
+        options.gateAEvalProfile,
+      ),
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
+        options.gateAEvalProfile,
+      ),
       NODE_OPTIONS: `--import=${preload}`,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,

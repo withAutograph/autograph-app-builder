@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Run Eve locally without repository publication capabilities"
 set -eu
 

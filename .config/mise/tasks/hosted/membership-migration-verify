@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Verify Better Auth organization membership migration parity"
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  echo "usage: mise run hosted:membership-migration-verify" >&2
+  exit 64
+fi
+if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
+  echo "hosted:membership-migration-verify requires DATABASE_URL" >&2
+  exit 64
+fi
+database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$database_url" | (
+  unset database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx \
+    lib/db/better-auth-membership-readiness-cli.mts --database-url-fd 0
+)

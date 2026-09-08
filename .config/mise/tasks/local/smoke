@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Smoke the supervised local Next and Eve services"
 set -eu
 

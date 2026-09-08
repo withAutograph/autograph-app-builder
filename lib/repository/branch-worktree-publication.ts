@@ -8,6 +8,7 @@ import {
   stableDigest,
 } from "./local-publication";
 import type { SourceReceipt } from "./source-receipt";
+import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template";
 
 export const BRANCH_WORKTREE_PUBLICATION_VERSION = 2 as const;
 
@@ -123,6 +124,11 @@ export function createBranchWorktreePublicationProposal(input: {
     throw new Error(
       "Branch-worktree publication accepts only an existing-repository source.",
     );
+  assertRepositoryReleasePolicyAtGitSnapshot({
+    sourcePath: sourceReceipt.sourcePath,
+    sourceSha: sourceReceipt.sourceSha,
+    sourceTree: sourceReceipt.sourceTree,
+  });
   if (
     source.canonicalPath !== sourceReceipt.sourcePath ||
     source.headSha !== sourceReceipt.sourceSha ||

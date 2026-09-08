@@ -19,6 +19,8 @@ function trustedSource(overrides: Record<string, string | undefined> = {}) {
     EVE_DEVELOPMENT_SANDBOX_RUN_ID: randomUUID(),
     EVE_EVALUATION: "1",
     EVE_EVALUATION_RUN_ID: randomUUID(),
+    WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+    WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     ...overrides,
   };
 }
@@ -36,12 +38,16 @@ describe("closed Eve worker environment", () => {
       WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
       PORT: "43123",
       EVE_EVALUATION: "1",
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
     expect(nested.baseUrl).toBe(first.baseUrl);
     expect(nested.port).toBe(first.port);
     expect(nested.evaluationRunId).toBe(first.evaluationRunId);
     expect(nested.developmentSandboxRunId).toBe(first.developmentSandboxRunId);
     expect(nested.transportSecret).toHaveLength(43);
+    expect(nested.bodyTimeout).toBe("360000");
+    expect(nested.headersTimeout).toBe("360000");
   });
 
   it.each([
@@ -55,6 +61,8 @@ describe("closed Eve worker environment", () => {
     ["evaluation marker", { EVE_EVALUATION: "0" }],
     ["evaluation id", { EVE_EVALUATION_RUN_ID: "not-a-uuid" }],
     ["sandbox id", { EVE_DEVELOPMENT_SANDBOX_RUN_ID: "not-a-uuid" }],
+    ["body timeout", { WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "30000" }],
+    ["headers timeout", { WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "30000" }],
   ])("rejects %s drift", (_name, overrides) => {
     expect(() =>
       captureEveWorkerEnvelope(trustedSource(overrides), appRoot),
@@ -88,5 +96,22 @@ describe("closed Eve worker environment", () => {
     };
     installEveWorkerEnvelope(environment, envelope, appRoot);
     expect(environment.EVE_DEVELOPMENT_SANDBOX_RUN_ID).toBeUndefined();
+  });
+
+  it("deletes an ambient body timeout when the envelope omits it", () => {
+    const envelope = captureEveWorkerEnvelope(
+      trustedSource({
+        WORKFLOW_LOCAL_BODY_TIMEOUT_MS: undefined,
+        WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: undefined,
+      }),
+      appRoot,
+    );
+    const environment: Record<string, string | undefined> = {
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile",
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "hostile",
+    };
+    installEveWorkerEnvelope(environment, envelope, appRoot);
+    expect(environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS).toBeUndefined();
+    expect(environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS).toBeUndefined();
   });
 });

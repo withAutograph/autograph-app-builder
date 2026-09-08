@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Create the exact frozen-install receipt used only by the sandbox proof"
 set -eu
 

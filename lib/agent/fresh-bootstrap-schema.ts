@@ -64,7 +64,11 @@ export const freshBootstrapProposalSchema = z.strictObject({
   repositoryIdentity: z.strictObject({
     initialBranch: z.string().min(1),
     authorName: z.string().min(1),
-    authorEmail: z.string().email(),
+    // Keep the transport schema within the JSON Schema subset accepted by
+    // AI Gateway providers. The stricter Git identity check runs when the
+    // proposal is executed (commitActor), rather than relying on a provider
+    // to interpret an email regex with lookaround.
+    authorEmail: z.string().min(3).max(320),
     commitMessage: z.string().min(1),
     commitTimestamp: z.string().datetime({ offset: true }),
   }),
@@ -88,7 +92,8 @@ export const freshBootstrapProposalSchema = z.strictObject({
 export const freshBootstrapIdentitySchema = z.strictObject({
   initialBranch: z.string().min(1),
   authorName: z.string().min(1),
-  authorEmail: z.string().email(),
+  // Provider-compatible shape; commitActor performs the authoritative check.
+  authorEmail: z.string().min(3).max(320),
   commitMessage: z.string().min(1),
   commitTimestamp: z.string().datetime({ offset: true }),
 });

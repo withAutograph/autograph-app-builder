@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appSpecRepairDiagnostic,
   BUILD_READY_HANDOFF_EXAMPLE,
+  normalizeBuildReadyAppSpec,
   REQUIRED_APP_SPEC_HEADINGS,
   validateBuildReadyAppSpec,
 } from "./app-spec-validation";
@@ -25,6 +26,63 @@ describe("build-ready AppSpec validation", () => {
   it("accepts the complete closed handoff contract", () => {
     expect(validateBuildReadyAppSpec(completeAppSpec())).toEqual({
       valid: true,
+    });
+  });
+
+  it.each([
+    ["without a blank line", "## Build handoff\n```json"],
+    ["with extra blank lines", "## Build handoff\n\n\n```json"],
+    ["with an uppercase fence language", "## Build handoff\n\n```JSON"],
+  ])("accepts harmless handoff Markdown %s", (_label, headingAndFence) => {
+    expect(
+      validateBuildReadyAppSpec(
+        completeAppSpec().replace(
+          "## Build handoff\n\n```json",
+          headingAndFence,
+        ),
+      ),
+    ).toEqual({ valid: true });
+  });
+
+  it("accepts CRLF and trailing whitespace", () => {
+    expect(
+      validateBuildReadyAppSpec(
+        `${completeAppSpec().replaceAll("\n", "\r\n")}\r\n  `,
+      ),
+    ).toEqual({ valid: true });
+  });
+
+  it("normalizes mechanical handoff drift before validation", () => {
+    const normalized = normalizeBuildReadyAppSpec(
+      completeAppSpec({
+        status: "ready",
+        owner: " operations ",
+        schema: { kind: "operational", entities: ["exception"] },
+        additionalPublicRoutes: ["/z", "/bad/[id]", "/a", "/a"],
+        optionalCapabilities: {
+          integrations: ["inventory-sync", "inventory-sync", "Bad"],
+          hostedResources: ["relational-database"],
+        },
+        ignored: true,
+      }),
+    );
+
+    expect(validateBuildReadyAppSpec(normalized)).toEqual({ valid: true });
+    expect(normalized).toContain('"kind": "kernel"');
+    expect(normalized).not.toContain("entities");
+    expect(normalized).not.toContain("/bad/[id]");
+    expect(normalized.indexOf('"/a"')).toBeLessThan(normalized.indexOf('"/z"'));
+  });
+
+  it.each([
+    ["trailing prose", `${completeAppSpec()}\nnot part of the handoff`],
+    ["wrong fence language", completeAppSpec().replace("```json", "```yaml")],
+  ])("rejects %s after the terminal handoff", (_label, content) => {
+    expect(validateBuildReadyAppSpec(content)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "build_handoff_format" }),
+      ]),
     });
   });
 

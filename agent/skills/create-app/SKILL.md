@@ -15,13 +15,14 @@ missing operation with a raw shell command or generic file write.
 
 ## Workflow
 
-When `record_prototype_bundle` is available, it is the normal fast path. For a
-new app, call it in the first response with the inferred `appId`, the user's
-brief, and an inferred interface pattern when useful. It automatically prepares
-the writable checkout and returns the Browser prototype and implementation
-plan. Do not split this into model-selected source, workspace, dependency, or
-planning steps. For an existing app, inspect only the app-owned files first and
-then call the same operation with the intended app-owned changes.
+Use the same component-backed `record_ui_preview` path locally and hosted.
+Prepare automatically, infer a useful design, and compose it with current
+Arrusted public components/compositions and their token entrypoint. Do not use
+a standalone HTML prototype, invent components, or substitute custom controls.
+Adapt catalog gaps with existing components or explain a product alternative.
+Continue from the Browser preview to the implementation plan without asking for
+setup or design-recording approval. For existing apps, inspect their current
+app-owned files and reuse the same component-backed preview flow.
 
 1. If the user explicitly requests only a bare Next.js workspace, follow
    [$scaffold-app-workspace](../scaffold-app-workspace/SKILL.md) and stop this
@@ -78,7 +79,8 @@ then call the same operation with the intended app-owned changes.
    again. Never expose this repair or substitute prose. Return only product
    blockers without workarounds or internal validator mechanics.
 6. For a new app, compose the actual product implementation from the prototype,
-   brief, and inspected Arrusted conventions: include the app-owned TSX,
+   brief, and inspected Arrusted conventions, using only existing public
+   components and compositions without local replacement components. Include the app-owned TSX,
    styles, and focused tests needed for the described experience. Pass those
    model-authored files as `implementationFiles` to `apply_app_creation` with
    the concise product summary. For an existing-app iteration, the planned

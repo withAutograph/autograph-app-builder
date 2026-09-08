@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { defineState } from "eve/context";
 
+import type { UiPreviewInput } from "@/lib/agent/ui-preview";
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import type {
   TargetIdentity,
@@ -38,10 +39,11 @@ import type {
   ImmutableGitHubSourceReceipt,
 } from "@/lib/repository/github-publication";
 import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
+import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
 
-export const APP_BUILDER_WORKFLOW_VERSION = 14 as const;
+export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v14" as const;
+  "autograph-app-builder.workflow.v17" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -51,6 +53,8 @@ export type AcceptedAppSpec = {
   acceptedByCallId: string;
   artifactRevision: string;
   approvalReceipt?: ApprovalReceipt;
+  /** Exact UI revision accepted before this functional handoff, if any. */
+  uiRevision?: string;
 };
 
 export type PrototypeArtifact = {
@@ -64,9 +68,30 @@ export type PrototypeArtifact = {
   recordedByCallId: string;
 };
 
+/**
+ * A UI preview is source-first. The Browser HTML is a renderer output, never
+ * the authored design input.  Keeping the small source set in durable state
+ * lets a later functionality pass promote the exact reviewed UI.
+ */
+export type UiPreviewRevision = {
+  appId: string;
+  revision: string;
+  sourceDigest: string;
+  catalogDigest: string;
+  sourceSha: string;
+  sourceTree: string;
+  routes: readonly string[];
+  files: readonly { path: string; content: string }[];
+  manifest?: UiPreviewInput["manifest"];
+  catalogGaps: readonly UiPreviewInput["catalogGaps"][number][];
+  previewHtml: string;
+  createdByCallId: string;
+};
+
 type TargetExecutionBinding = {
   sourceSha: string;
   sourceTree: string;
+  sourceReceiptDigest: string;
   eligibilityDigest: string;
   workspaceDigest: string;
   imageDigest: string;
@@ -81,9 +106,24 @@ export type DependencyPreparationReceipt = TargetExecutionBinding & {
   targetTree: string;
   cacheManifestDigest: string;
   cacheContentDigest: string;
+  dependencyLayout: ExecutionDependencyLayout;
   preparedByCallId: string;
   digest: string;
 };
+
+/** Reject persisted V2 receipts whose durable fields no longer bind together. */
+export function assertExactDependencyPreparationReceipt(
+  receipt: DependencyPreparationReceipt,
+): void {
+  const { digest, ...unsigned } = receipt;
+  if (
+    receipt.version !== 2 ||
+    receipt.dependencyLayout === undefined ||
+    !/^[0-9a-f]{64}$/u.test(digest) ||
+    digest !== sha256(JSON.stringify(unsigned))
+  )
+    throw new Error("The dependency preparation receipt is malformed.");
+}
 
 export type TargetIdentityReceipt = TargetExecutionBinding & {
   version: 1;
@@ -109,6 +149,8 @@ type WorkspacePhase = {
   artifacts: readonly PrototypeArtifact[];
 };
 
+type UiPreviewPhase = WorkspacePhase & { uiPreview: UiPreviewRevision };
+
 export type GitHubDraftProposalBinding = {
   proposal: DraftPullRequestProposal;
   sourceReceiptDigest: string;
@@ -123,7 +165,6 @@ type ReviewedPhase = WorkspacePhase & {
   applyReceipt: TargetApplyReceipt;
   validationReceipt: TargetValidationReceipt;
   reviewReceipt: ReviewedChangeSetReceipt;
-  changeSetApprovalReceipt?: ApprovalReceipt;
   githubDraftProposal?: GitHubDraftProposalBinding;
 };
 
@@ -133,6 +174,15 @@ export type AppBuilderWorkflowState =
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "prepared";
     } & WorkspacePhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "ui_previewed";
+    } & UiPreviewPhase)
+  | ({
+      version: typeof APP_BUILDER_WORKFLOW_VERSION;
+      phase: "ui_accepted";
+      uiAcceptedByCallId: string;
+    } & UiPreviewPhase)
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "app_spec_accepted";
@@ -337,9 +387,7 @@ export function assertCurrentGitHubDraftProposal(input: {
     proposal.repositoryId !== input.githubSource.repository.repositoryId ||
     proposal.owner !== input.githubSource.repository.owner ||
     proposal.name !== input.githubSource.repository.name ||
-    proposal.baseBranch !== input.githubSource.repository.defaultBranch ||
-    proposal.baseSha !== input.githubSource.resolvedSha ||
-    proposal.baseTree !== input.githubSource.resolvedTree
+    proposal.baseBranch !== input.githubSource.repository.defaultBranch
   )
     throw new Error(
       "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
@@ -405,3 +453,18 @@ export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
   APP_BUILDER_WORKFLOW_STATE_KEY,
   () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );
+
+/**
+ * The only write gateway for agent tools. It preserves the optimistic-concurrency
+ * guard while making transition ownership explicit at the workflow boundary.
+ */
+export function updateExactWorkflow(input: {
+  expected: AppBuilderWorkflowState;
+  operation: string;
+  transition: (current: AppBuilderWorkflowState) => AppBuilderWorkflowState;
+}): void {
+  appBuilderWorkflowState.update((current) => {
+    assertExactWorkflowState(current, input.expected, input.operation);
+    return input.transition(current);
+  });
+}

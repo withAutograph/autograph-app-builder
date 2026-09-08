@@ -5,25 +5,39 @@ import {
   APP_BUILDER_SOURCE_VERSION,
   sourceWorkflowState,
 } from "@/lib/agent/source-state";
-import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
+import { existingRepositoryAcquisitionReceipt } from "@/lib/agent/existing-app-sequencing";
+import {
+  SOURCE_RECEIPT_VERSION,
+  inspectSourceReceipt,
+} from "@/lib/repository/source-receipt";
+import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
   description:
-    "Automatically bind an exact eligible fresh-template local checkout as the internal acquisition source. This does not clone, copy, or materialize anything.",
+    "Automatically bind the exact eligible canonical Arrusted workspace clone as the internal fresh-template source. This does not clone, fetch, or materialize another workspace.",
   inputSchema: z.object({
     expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
   async execute({ expectedSourceReceiptDigest }, ctx) {
     const current = sourceWorkflowState.get();
-    if (current.phase === "empty") throw new Error("No source was reviewed.");
-    if (current.receipt.sourceKind !== "fresh-template")
-      throw new Error("Acquisition approval only applies to fresh templates.");
-    if (current.receipt.digest !== expectedSourceReceiptDigest)
-      throw new Error("The source receipt does not match the reviewed source.");
-    const currentReceipt = await inspectSourceReceipt(
-      current.receipt.sourceKind,
-      current.receipt.sourcePath,
+    const existing = existingRepositoryAcquisitionReceipt(
+      current,
+      expectedSourceReceiptDigest,
     );
+    if (existing !== undefined) return existing;
+    if (current.phase === "empty") throw new Error("No source was reviewed.");
+    let currentReceipt = current.receipt;
+    if (current.receipt.version === SOURCE_RECEIPT_VERSION) {
+      await inspectCanonicalArrustedSandboxWorkspace({
+        sandbox: await ctx.getSandbox(),
+        receipt: current.receipt,
+      });
+    } else {
+      currentReceipt = await inspectSourceReceipt(
+        current.receipt.sourceKind,
+        current.receipt.sourcePath,
+      );
+    }
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review.");
     sourceWorkflowState.update(() => ({

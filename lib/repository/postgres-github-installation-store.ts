@@ -1,10 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import * as databaseSchema from "../db/schema";
-import { hostedGitHubInstallations } from "../db/schema";
+import {
+  hostedGitHubInstallationBindings,
+  hostedGitHubInstallations,
+} from "../db/schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type HostedGitHubTenantAuthority = z.infer<
@@ -28,6 +31,16 @@ export type HostedGitHubInstallationBinding = z.infer<
   typeof hostedGitHubInstallationBindingSchema
 >;
 
+export function mergeHostedGitHubInstallationBindings(
+  bindings: HostedGitHubInstallationBinding[],
+  legacy: HostedGitHubInstallationBinding | undefined,
+) {
+  return legacy === undefined ||
+    bindings.some((binding) => binding.installationId === legacy.installationId)
+    ? bindings
+    : [...bindings, legacy];
+}
+
 function tenantPredicate(authority: HostedGitHubTenantAuthority) {
   const parsed = hostedTenantAuthoritySchema.parse(authority);
   return and(
@@ -38,10 +51,32 @@ function tenantPredicate(authority: HostedGitHubTenantAuthority) {
   );
 }
 
+function bindingTenantPredicate(authority: HostedGitHubTenantAuthority) {
+  const parsed = hostedTenantAuthoritySchema.parse(authority);
+  return and(
+    eq(hostedGitHubInstallationBindings.issuer, parsed.issuer),
+    eq(hostedGitHubInstallationBindings.audience, parsed.audience),
+    eq(hostedGitHubInstallationBindings.workspaceId, parsed.workspaceId),
+    eq(hostedGitHubInstallationBindings.ownerUserId, parsed.ownerUserId),
+  );
+}
+
+const bindingSelection = {
+  installationId: hostedGitHubInstallationBindings.installationId,
+  accountId: hostedGitHubInstallationBindings.accountId,
+  accountLogin: hostedGitHubInstallationBindings.accountLogin,
+  accountType: hostedGitHubInstallationBindings.accountType,
+  active: hostedGitHubInstallationBindings.active,
+  updatedAt: hostedGitHubInstallationBindings.updatedAt,
+};
+
 export interface HostedGitHubInstallationStore {
   read(
     authority: HostedGitHubTenantAuthority,
   ): Promise<HostedGitHubInstallationBinding | undefined>;
+  list?(
+    authority: HostedGitHubTenantAuthority,
+  ): Promise<HostedGitHubInstallationBinding[]>;
   bind(input: {
     authority: HostedGitHubTenantAuthority;
     binding: Omit<HostedGitHubInstallationBinding, "active" | "updatedAt">;
@@ -70,6 +105,16 @@ export function createPostgresHostedGitHubInstallationStore(
         ? undefined
         : hostedGitHubInstallationBindingSchema.parse(rows[0]);
     },
+    async list(authority) {
+      const rows = await database
+        .select(bindingSelection)
+        .from(hostedGitHubInstallationBindings)
+        .where(bindingTenantPredicate(authority))
+        .orderBy(asc(hostedGitHubInstallationBindings.accountLogin));
+      return rows.map((row) =>
+        hostedGitHubInstallationBindingSchema.parse(row),
+      );
+    },
     async bind(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const binding = hostedGitHubInstallationBindingSchema.parse({
@@ -77,29 +122,66 @@ export function createPostgresHostedGitHubInstallationStore(
         active: true,
         updatedAt: input.now,
       });
-      const rows = await database
-        .insert(hostedGitHubInstallations)
-        .values({ ...authority, ...binding })
-        .onConflictDoUpdate({
-          target: [
-            hostedGitHubInstallations.issuer,
-            hostedGitHubInstallations.audience,
-            hostedGitHubInstallations.workspaceId,
-            hostedGitHubInstallations.ownerUserId,
-          ],
-          set: binding,
-        })
-        .returning({
-          installationId: hostedGitHubInstallations.installationId,
-          accountId: hostedGitHubInstallations.accountId,
-          accountLogin: hostedGitHubInstallations.accountLogin,
-          accountType: hostedGitHubInstallations.accountType,
-          active: hostedGitHubInstallations.active,
-          updatedAt: hostedGitHubInstallations.updatedAt,
-        });
-      if (rows.length !== 1)
-        throw new Error("Hosted GitHub installation binding was not durable.");
-      return hostedGitHubInstallationBindingSchema.parse(rows[0]);
+      return database.transaction(async (transaction) => {
+        const legacyRows = await transaction
+          .select({
+            installationId: hostedGitHubInstallations.installationId,
+            accountId: hostedGitHubInstallations.accountId,
+            accountLogin: hostedGitHubInstallations.accountLogin,
+            accountType: hostedGitHubInstallations.accountType,
+            active: hostedGitHubInstallations.active,
+            updatedAt: hostedGitHubInstallations.updatedAt,
+          })
+          .from(hostedGitHubInstallations)
+          .where(tenantPredicate(authority))
+          .limit(1);
+        const legacy = legacyRows[0];
+        if (legacy !== undefined) {
+          await transaction
+            .insert(hostedGitHubInstallationBindings)
+            .values({ ...authority, ...legacy })
+            .onConflictDoNothing();
+        }
+
+        const bindingRows = await transaction
+          .insert(hostedGitHubInstallationBindings)
+          .values({ ...authority, ...binding })
+          .onConflictDoUpdate({
+            target: [
+              hostedGitHubInstallationBindings.issuer,
+              hostedGitHubInstallationBindings.audience,
+              hostedGitHubInstallationBindings.workspaceId,
+              hostedGitHubInstallationBindings.ownerUserId,
+              hostedGitHubInstallationBindings.installationId,
+            ],
+            set: binding,
+          })
+          .returning(bindingSelection);
+        if (bindingRows.length !== 1)
+          throw new Error(
+            "Hosted GitHub installation binding was not durable.",
+          );
+
+        // Maintain the original single publication binding as an explicit
+        // compatibility row. Publication continues to require its own later
+        // authority check and never guesses among the selectable UI scopes.
+        await transaction
+          .insert(hostedGitHubInstallations)
+          .values({ ...authority, ...binding })
+          .onConflictDoUpdate({
+            target: [
+              hostedGitHubInstallations.issuer,
+              hostedGitHubInstallations.audience,
+              hostedGitHubInstallations.workspaceId,
+              hostedGitHubInstallations.ownerUserId,
+            ],
+            set: binding,
+          })
+          .returning({
+            installationId: hostedGitHubInstallations.installationId,
+          });
+        return hostedGitHubInstallationBindingSchema.parse(bindingRows[0]);
+      });
     },
   };
 }

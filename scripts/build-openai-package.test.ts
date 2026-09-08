@@ -36,14 +36,14 @@ const runGenerator = (cwd: string, endpoint: string) =>
 const writeFixture = async (
   root: string,
   {
-    version = "0.2.1",
+    version = "0.2.12",
     extraServer = false,
   }: { version?: string; extraServer?: boolean } = {},
 ) => {
   await writeFile(
     join(root, "plugin.json"),
     JSON.stringify({
-      name: "autograph-app-builder",
+      name: "app-builder",
       version,
       description: "test",
       author: { name: "Autograph" },
@@ -58,7 +58,7 @@ const writeFixture = async (
     JSON.stringify({
       $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
       mcpServers: {
-        "autograph-app-builder": {
+        "app-builder": {
           type: "streamable-http",
           url: "http://127.0.0.1:3000/mcp",
         },
@@ -91,13 +91,12 @@ describe("OpenAI package generator", () => {
       const manifest = JSON.parse(
         await readFile(join(root, ".codex-plugin/plugin.json"), "utf8"),
       );
-      expect(portable.mcpServers["autograph-app-builder"].url).toBe(endpoint);
-      expect(Object.keys(portable.mcpServers)).toEqual([
-        "autograph-app-builder",
-      ]);
-      expect(codex.mcpServers["autograph-app-builder"].url).toBe(endpoint);
-      expect(Object.keys(codex.mcpServers)).toEqual(["autograph-app-builder"]);
-      expect(manifest.version).toBe("0.2.1");
+      expect(portable.mcpServers["app-builder"].url).toBe(endpoint);
+      expect(Object.keys(portable.mcpServers)).toEqual(["app-builder"]);
+      expect(codex.mcpServers["app-builder"].url).toBe(endpoint);
+      expect(codex.mcpServers["app-builder"].oauth_resource).toBe(endpoint);
+      expect(Object.keys(codex.mcpServers)).toEqual(["app-builder"]);
+      expect(manifest.version).toBe("0.2.12");
       expect(manifest.interface).toMatchObject({
         displayName: "Autograph App Builder",
         shortDescription: "Design and create apps with Autograph",
@@ -111,7 +110,7 @@ describe("OpenAI package generator", () => {
         expect(prompt.length).toBeLessThanOrEqual(128);
       }
       expect(manifest.interface.defaultPrompt).toEqual([
-        "Create a polished personal finance dashboard",
+        "Create an app for [who it is for, what they need to do, and the outcome you want]",
         "Build an event planning app for coordinating guests, schedules, and tasks",
         "Design a customer feedback app with a clear review workflow",
       ]);

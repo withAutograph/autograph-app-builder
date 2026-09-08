@@ -1,79 +1,128 @@
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
+import { never } from "eve/tools/approval";
 import { z } from "zod";
 
-import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
-import { sourceWorkflowState } from "@/lib/agent/source-state";
+import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
+import { resolveRepositoryAccessForTool } from "@/lib/agent/repository-access-tool";
+import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
+import {
+  APP_BUILDER_SOURCE_VERSION,
+  sourceWorkflowState,
+} from "@/lib/agent/source-state";
+import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  appBuilderWorkflowState,
+  assertExactWorkflowState,
+  assertUpstreamMutationAllowed,
+  workflowWorkspace,
+} from "@/lib/agent/workflow-state";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 
-const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
+const inputSchema = z.strictObject({
+  repository: z
+    .string()
+    .min(3)
+    .max(201)
+    .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
+  selectedInstallationId: z
+    .string()
+    .regex(/^[1-9][0-9]*$/u)
+    .optional(),
+});
 
 export default defineTool({
   description:
-    "After approval, resolve one installation-selected private GitHub repository ref to an exact immutable SHA/tree receipt. It does not clone, create, push, branch, open a PR, or alter a release gate.",
-  inputSchema: z.strictObject({
-    expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    repositoryId: z.string().regex(/^\d+$/u),
-    ref: z.string().min(1).max(255),
-    expectedSha: objectId,
-    expectedTree: objectId,
-  }),
-  approval: always(),
+    "Automatically resolve and prepare one supported existing GitHub repository. It independently confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, re-reads the selected installation and exact default-branch SHA/tree, and materializes the eligible source in the isolated workspace. It never creates, pushes, branches, opens a PR, or alters a release gate.",
+  inputSchema,
+  approval: never(),
   async execute(input, ctx) {
-    const source = sourceWorkflowState.get();
-    if (
-      source.phase === "empty" ||
-      source.receipt.sourceKind !== "existing-repository"
-    )
-      throw new Error("No reviewed existing-repository source is available.");
-    if (
-      source.receipt.digest !== input.expectedSourceReceiptDigest ||
-      source.receipt.sourceSha !== input.expectedSha ||
-      source.receipt.sourceTree !== input.expectedTree
-    )
-      throw new Error(
-        "The GitHub source request is not bound to the exact reviewed source receipt.",
-      );
-    if (
-      source.githubSource !== undefined &&
-      (source.githubSource.repository.repositoryId !== input.repositoryId ||
-        source.githubSource.resolvedRef !== input.ref)
-    )
-      throw new Error(
-        "This source is already bound to a different GitHub ref.",
-      );
-    if (source.githubSource !== undefined) {
-      assertExactImmutableGitHubSourceReceipt(source.githubSource);
-      if (
-        source.githubSource.resolvedSha !== input.expectedSha ||
-        source.githubSource.resolvedTree !== input.expectedTree
-      )
-        throw new Error("The persisted GitHub source receipt is stale.");
-      return source.githubSource;
-    }
+    const initialWorkflow = appBuilderWorkflowState.get();
+    const initialSource = sourceWorkflowState.get();
+    assertUpstreamMutationAllowed(initialWorkflow, "GitHub source preparation");
+    const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
+    const access = await resolveRepositoryAccessForTool(input, ctx, runtime);
+    if (access.kind === "selection") return access.access;
 
-    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
-    const receipt = await runtime.resolveImmutableSource({
-      repositoryId: input.repositoryId,
-      ref: input.ref,
-      expectedSha: input.expectedSha,
-      expectedTree: input.expectedTree,
-      approvedByCallId: ctx.callId,
+    const prepared = await runtime.prepareExistingSource({
+      ...input,
+      access: access.access,
+      currentAccessReceipt: access.receipt,
+      sessionId: ctx.session.id,
+      callId: ctx.callId,
+      // Source credentials are resolved first. The backend consumes the
+      // server-owned context while `getSandbox()` creates the provider
+      // session, so Vercel performs the Git clone itself.
+      sandbox: () => ctx.getSandbox(),
+      ...(initialSource.phase === "empty" ||
+      initialSource.githubSource === undefined
+        ? {}
+        : { currentGitHubSource: initialSource.githubSource }),
     });
-    assertExactImmutableGitHubSourceReceipt(receipt);
-    if (
-      receipt.resolvedSha !== source.receipt.sourceSha ||
-      receipt.resolvedTree !== source.receipt.sourceTree
-    )
-      throw new Error("The immutable GitHub receipt changed after resolution.");
-
-    sourceWorkflowState.update((latest) => {
-      if (JSON.stringify(latest) !== JSON.stringify(source))
+    assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
+    repositoryAccessReceiptState.update((current) => {
+      if (current?.digest !== access.receipt.digest)
         throw new Error(
-          "The reviewed source changed concurrently before GitHub resolution was recorded.",
+          "Repository access changed concurrently during source preparation.",
         );
-      return { ...source, githubSource: receipt };
+      return prepared.accessReceipt;
     });
-    return receipt;
+    sourceWorkflowState.update((current) => {
+      if (JSON.stringify(current) !== JSON.stringify(initialSource))
+        throw new Error(
+          "The reviewed source changed concurrently during GitHub source preparation.",
+        );
+      if (current.phase !== "empty") {
+        if (
+          current.receipt.digest !== prepared.sourceReceipt.digest ||
+          current.githubSource?.digest !== prepared.githubSource.digest
+        )
+          throw new Error(
+            "This app build already owns a different GitHub source binding.",
+          );
+        return current;
+      }
+      return {
+        version: APP_BUILDER_SOURCE_VERSION,
+        phase: "reviewed",
+        receipt: prepared.sourceReceipt,
+        githubSource: prepared.githubSource,
+      };
+    });
+    appBuilderWorkflowState.update((current) => {
+      assertExactWorkflowState(
+        current,
+        initialWorkflow,
+        "GitHub source preparation",
+      );
+      if (current.phase !== "empty") {
+        if (
+          workflowWorkspace(current)?.workspaceDigest !==
+            prepared.workspace.workspaceDigest ||
+          current.sourceReceipt.digest !== prepared.sourceReceipt.digest ||
+          current.githubSource?.digest !== prepared.githubSource.digest
+        )
+          throw new Error(
+            "This app build already owns a different GitHub source binding.",
+          );
+        return current;
+      }
+      return {
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        phase: "prepared",
+        preparedByCallId: ctx.callId,
+        workspace: prepared.workspace,
+        sourceReceipt: prepared.sourceReceipt,
+        githubSource: prepared.githubSource,
+        artifacts: [],
+      };
+    });
+    return {
+      repository: access.access.repository,
+      scope: access.access.scope,
+      repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
+      githubSource: prepared.githubSource,
+      sourceReceipt: prepared.sourceReceipt,
+      workspace: prepared.workspace,
+    };
   },
 });

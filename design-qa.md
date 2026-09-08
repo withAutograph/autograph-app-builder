@@ -1,5 +1,33 @@
 # Design QA
 
+## Vendor UI-first preview pass — 2026-09-02
+
+- Source: `/Volumes/Home/.TemporaryItems/folders.501/TemporaryItems/NSIRD_screencaptureui_JwKu1F/Screenshot 2026-09-02 at 14.35.57.png`
+- Source dimensions: 1592 x 902 at DPR 1.
+- Implementation: `.artifacts/product-quality/vendor-onboarding/vendor-onboarding-desktop.png`
+- Implementation viewport: 1592 x 902 at DPR 1, after selecting Kiteworks GmbH.
+- Narrow implementation: `.artifacts/product-quality/vendor-onboarding/vendor-onboarding-mobile.png` at 390 x 844.
+- Combined comparison: `.artifacts/design-qa/vendor-source-vs-app-builder.png` (source left, implementation right).
+- Arrusted sources inspected: `packages/design-systems/core/tokens/theme.css`, `apps/vendor/frontend/src/review/ReviewQueueServerPage.tsx`, and `apps/vendor/frontend/src/shell/VendorAppChrome.tsx` in the exact Arrusted checkout used by PR 1267.
+
+### Pass 1
+
+- P1: The previous eval used a dark green page header and bespoke green controls, which did not match the Vendor application or Arrusted tokens.
+- P2: The preview lacked the Vendor shell, page tabs, scan summary, soft dashboard cards, periwinkle actions, lavender selected states, and mint success treatment.
+- P2: The first corrected pass exposed WCAG contrast failures in muted text and primary-button labels.
+
+Fixes applied: replaced the visual fixture with the Vendor shell and dashboard composition, used Arrusted's live canvas, surface, ink, periwinkle, lavender, warning, and success values, retained the requested onboarding queue/detail behavior, and corrected all Axe contrast findings without introducing a replacement palette.
+
+### Pass 2
+
+The side-by-side comparison confirms the same page framing, maximum content width, 52px shell, tab treatment, title hierarchy, right-aligned actions, summary-card proportions, dashboard card radius/shadow, typography density, and Arrusted color relationships. The different card contents are intentional because the evaluated product is the onboarding review workflow rather than the source screen's scan-result workflow.
+
+Playwright verified the queue selection, conditional Finance step, desktop and narrow layouts, semantic landmarks, headings, controls, and Axe accessibility scan. The component-composition gate binds `@autograph/components`, `@autograph/compositions`, `@autograph/icons`, and the Arrusted token entrypoint; private imports and replacement tokens fail the eval.
+
+No actionable P0, P1, or P2 visual differences remain for this product translation.
+
+Final result: passed.
+
 ## Visual truth
 
 - Authenticated builder source: `/Volumes/Home/.TemporaryItems/folders.501/TemporaryItems/NSIRD_screencaptureui_YkrnsV/Screenshot 2026-08-28 at 14.54.33.png`
@@ -29,6 +57,16 @@
 The authenticated builder comparison used the source viewport of 1699 x 1600 at DPR 1, with both experiences in the authenticated light-theme state. The completion comparison used the same light theme and the completed handoff state.
 
 ## Comparison history
+
+### Future consideration: anonymous desktop orientation
+
+The anonymous start is healthy and requires no current design or behavior
+change. At wider desktop viewports, the deliberately compact entry card leaves
+substantial open space below it. A future design pass could explore a small
+amount of supporting context about what Autograph creates or what follows after
+Continue, provided it preserves the current focused, low-friction hierarchy.
+This is an optional improvement, not a committed requirement or an actionable
+finding from this review.
 
 ### Pass 1
 

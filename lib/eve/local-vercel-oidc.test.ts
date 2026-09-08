@@ -23,7 +23,7 @@ import {
 
 const now = 2_000_000_000;
 const realPnpmStoreEntry =
-  "eve@0.43.0_ai@7.0.73_zod@4.4.3__drizzle-orm@0.45.2_kysely@0.29.5_postgres@3.4.9_sql.js@_82627d0d0ba0ad7ab6d1a82e27fe42b5";
+  "eve@0.44.4_@vercel+functions@3.9.5_ws@8.21.3__ai@7.0.79_zod@4.4.3__dotenv@17.4.2_drizzl_1358a224edaa8ba31fee79f308c3b7e1";
 const project = {
   projectId: "prj_builder",
   orgId: "team_autographing",
@@ -178,13 +178,13 @@ function installedEveFixture(
   mkdirSync(join(packageRoot, "bin"), { recursive: true });
   writeFileSync(
     join(root, "package.json"),
-    JSON.stringify({ dependencies: { eve: "0.43.0" } }),
+    JSON.stringify({ dependencies: { eve: "0.44.4" } }),
   );
   writeFileSync(
     join(packageRoot, "package.json"),
     JSON.stringify({
       name: input.name ?? "eve",
-      version: input.version ?? "0.43.0",
+      version: input.version ?? "0.44.4",
       bin: { eve: input.bin ?? "./bin/eve.js" },
     }),
   );
@@ -199,7 +199,7 @@ function installedEveFixture(
 }
 
 describe("installed Eve command identity", () => {
-  it("accepts the real relative pnpm layout and exact 0.43.0 bin contract", () => {
+  it("accepts the real relative pnpm layout and exact 0.44.4 bin contract", () => {
     const root = installedEveFixture();
     expect(resolveInstalledEveCli(root)).toBe(
       join(
@@ -229,7 +229,7 @@ describe("installed Eve command identity", () => {
     mkdirSync(join(root, "node_modules/.pnpm"), { recursive: true });
     writeFileSync(
       join(root, "package.json"),
-      JSON.stringify({ dependencies: { eve: "0.43.0" } }),
+      JSON.stringify({ dependencies: { eve: "0.44.4" } }),
     );
     symlinkSync(target, join(root, "node_modules/eve"));
     expect(() => resolveInstalledEveCli(root)).toThrow("link");
@@ -242,12 +242,12 @@ describe("installed Eve command identity", () => {
     const outsideStore = realpathSync(
       mkdtempSync(join(tmpdir(), "installed-eve-outside-store-")),
     );
-    const storeEntry = "eve@0.43.0_peer";
+    const storeEntry = "eve@0.44.4_peer";
     mkdirSync(join(root, "node_modules/.pnpm"), { recursive: true });
     mkdirSync(join(outsideStore, "node_modules/eve"), { recursive: true });
     writeFileSync(
       join(root, "package.json"),
-      JSON.stringify({ dependencies: { eve: "0.43.0" } }),
+      JSON.stringify({ dependencies: { eve: "0.44.4" } }),
     );
     symlinkSync(outsideStore, join(root, "node_modules/.pnpm", storeEntry));
     symlinkSync(
@@ -267,16 +267,16 @@ describe("installed Eve command identity", () => {
     mkdirSync(join(root, "node_modules"));
     symlinkSync(external, join(root, "node_modules/.pnpm"));
     symlinkSync(
-      ".pnpm/eve@0.43.0_peer/node_modules/eve",
+      ".pnpm/eve@0.44.4_peer/node_modules/eve",
       join(root, "node_modules/eve"),
     );
     expect(() => resolveInstalledEveCli(root)).toThrow("owner-bound");
   });
 
-  it("rejects a wrong 0.43.x pnpm version", () => {
+  it("rejects a wrong 0.44.x pnpm version", () => {
     const wrongVersion = installedEveFixture();
     const link = join(wrongVersion, "node_modules/eve");
-    const wrongTarget = ".pnpm/eve@0.43.1_peer/node_modules/eve";
+    const wrongTarget = ".pnpm/eve@0.44.3_peer/node_modules/eve";
     const wrongRoot = join(wrongVersion, "node_modules", wrongTarget);
     mkdirSync(join(wrongRoot, "bin"), { recursive: true });
     writeFileSync(join(wrongRoot, "package.json"), "{}");

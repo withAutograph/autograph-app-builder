@@ -81,7 +81,7 @@ const manifest = {
     logo: "./assets/autograph-icon.png",
     websiteURL: portable.homepage,
     defaultPrompt: [
-      "Create a polished personal finance dashboard",
+      "Create an app for [who it is for, what they need to do, and the outcome you want]",
       "Build an event planning app for coordinating guests, schedules, and tasks",
       "Design a customer feedback app with a clear review workflow",
     ],
@@ -90,7 +90,7 @@ const manifest = {
   },
 };
 const apps = connectionId
-  ? { apps: { "autograph-app-builder": { id: connectionId } } }
+  ? { apps: { "app-builder": { id: connectionId } } }
   : { apps: {} };
 await mkdir(resolve(".codex-plugin"), { recursive: true });
 await writeFile(
@@ -108,7 +108,11 @@ if (endpoint) {
     await format(
       JSON.stringify({
         mcpServers: {
-          [AUTOGRAPH_MCP_SERVER_NAME]: { type: "http", url: endpoint },
+          [AUTOGRAPH_MCP_SERVER_NAME]: {
+            type: "http",
+            url: endpoint,
+            oauth_resource: endpoint,
+          },
         },
       }),
       { parser: "json" },

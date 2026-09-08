@@ -42,8 +42,11 @@ const git = (...args: string[]) =>
       NODE_ENV: "production",
     },
   }).trim();
-if (git("status", "--porcelain=v1") !== "")
-  throw new Error("Portable releases require a clean source checkout.");
+const sourceStatus = git("status", "--porcelain=v1");
+if (sourceStatus !== "")
+  throw new Error(
+    `Portable releases require a clean source checkout. Dirty entries:\n${sourceStatus}`,
+  );
 const sourceRepository =
   "https://github.com/withAutograph/autograph-app-builder";
 if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository))
@@ -55,7 +58,7 @@ const source = {
 };
 const endpoint = releaseEndpoint(argument("--endpoint"));
 const requestedOutput = resolve(
-  argument("--output") ?? ".artifacts/portable-release/autograph-app-builder",
+  argument("--output") ?? ".artifacts/portable-release/app-builder",
 );
 try {
   await lstat(requestedOutput);
@@ -67,7 +70,7 @@ const requestedParent = resolve(requestedOutput, "..");
 await mkdir(requestedParent, { recursive: true, mode: 0o700 });
 const output = join(await realpath(requestedParent), basename(requestedOutput));
 await mkdir(output, { mode: 0o700 });
-const core = join(output, "autograph-app-builder");
+const core = join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
 for (const path of ["plugin.json", "mcp.json", "LICENSE", "skills"]) {
   const source = resolve(repositoryRoot, path);
@@ -76,7 +79,7 @@ for (const path of ["plugin.json", "mcp.json", "LICENSE", "skills"]) {
   await cp(source, join(core, path), { recursive: true });
 }
 const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf8"));
-mcp.mcpServers["autograph-app-builder"].url = `${endpoint}/mcp`;
+mcp.mcpServers["app-builder"].url = `${endpoint}/mcp`;
 await writeFile(join(core, "mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`);
 await validateAgentPluginPackage({
   pluginRoot: core,
@@ -114,8 +117,8 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
       {
         format: "agent-plugins-client-harness-v2",
         client,
-        pluginRoot: "../autograph-app-builder",
-        mcp: "../autograph-app-builder/mcp.json",
+        pluginRoot: "../app-builder",
+        mcp: "../app-builder/mcp.json",
         transport: { type: "streamable-http", url: `${endpoint}/mcp` },
         oauth: {
           protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
@@ -199,7 +202,11 @@ await writeFile(
   `${JSON.stringify(
     {
       mcpServers: {
-        [portable.name]: { type: "http", url: `${endpoint}/mcp` },
+        [portable.name]: {
+          type: "http",
+          url: `${endpoint}/mcp`,
+          oauth_resource: `${endpoint}/mcp`,
+        },
       },
     },
     null,
@@ -228,7 +235,7 @@ await writeFile(
           },
           policy: {
             installation: "AVAILABLE",
-            authentication: "ON_INSTALL",
+            authentication: "ON_USE",
           },
           category: "Developer Tools",
         },

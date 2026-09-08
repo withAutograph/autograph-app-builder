@@ -1,4 +1,5 @@
 import { getPreviewOAuthDeploymentAuth } from "../auth/preview-oauth-deployment";
+import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import {
   createHostedEveSessionService,
@@ -6,7 +7,6 @@ import {
 } from "../eve/hosted-service";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
-import { createPostgresOAuthMembershipAuthority } from "../eve/postgres-workspace-membership";
 import {
   createSameOriginEveTransport,
   type HostedWorkloadIdentity,
@@ -44,14 +44,15 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     request: Request,
   ) => Promise<EveSessionService | undefined>;
 }) {
-  let localService: EveSessionService | undefined;
   let hosted:
     | {
         origin: string;
         issuer: string;
         audience: string;
         auth: ReturnType<typeof getPreviewOAuthDeploymentAuth>;
-        membership: ReturnType<typeof createPostgresOAuthMembershipAuthority>;
+        membership: ReturnType<
+          typeof createPostgresPreviewOrganizationAuthority
+        >;
         store: ReturnType<typeof createPostgresHostedEveStore>;
         transport: HostedEveTransport;
       }
@@ -62,10 +63,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
   ): Promise<EveSessionService | undefined> => {
     const mode = adapterMode(input.environment);
     if (mode === "unavailable") return undefined;
-    if (mode === "local") {
-      localService ??= createEveSessionService(input.environment);
-      return localService;
-    }
+    if (mode === "local") return createEveSessionService(input.environment);
 
     if (hosted === undefined) {
       const config = readPreviewOAuthRuntimeConfig(input.environment);
@@ -75,7 +73,10 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
         issuer: config.issuer,
         audience: config.resource,
         auth: getPreviewOAuthDeploymentAuth(input.environment),
-        membership: createPostgresOAuthMembershipAuthority(database),
+        membership: createPostgresPreviewOrganizationAuthority(database, {
+          issuer: config.issuer,
+          audience: config.resource,
+        }),
         store: createPostgresHostedEveStore(database),
         transport: createSameOriginEveTransport({
           config: { baseUrl: new URL(config.resource).origin },

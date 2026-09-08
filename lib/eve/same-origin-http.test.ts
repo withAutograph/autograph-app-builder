@@ -57,9 +57,45 @@ function stream(
   );
 }
 
+function pendingApprovalEvents(requestId: string) {
+  return [
+    {
+      type: "input.requested",
+      data: {
+        requests: [
+          {
+            requestId,
+            kind: "tool-approval",
+            prompt: "Approve tool call: resolve_github_source",
+            action: {
+              kind: "tool-call",
+              toolName: "resolve_github_source",
+              input: { repository: "withAutograph/arrusted-development" },
+            },
+          },
+        ],
+      },
+      meta: { at: 1, id: "evt_input" },
+    },
+    {
+      type: "session.waiting",
+      data: {},
+      meta: { at: 2, id: "evt_waiting" },
+    },
+  ];
+}
+
 function plannedEvents() {
   const callId = "call_plan";
   const appSpecDigest = "a".repeat(64);
+  const existingAppChanges = [
+    {
+      path: "apps/vendor-onboarding/app/page.tsx",
+      content: "export default function Page() { return 'Ready'; }\n",
+    },
+  ];
+  const hash = (value: string) =>
+    createHash("sha256").update(value).digest("hex");
   const target = {
     contract: {
       version: 1,
@@ -94,13 +130,29 @@ function plannedEvents() {
     },
     blockers: [],
     mutations: [],
+    operation: "iterate-existing-app",
+    iteration: {
+      changes: existingAppChanges.map(({ path, content }) => ({
+        path,
+        before: { mode: "644", digest: hash(`before:${path}`) },
+        after: { mode: "644", digest: hash(content), content },
+      })),
+      digest: hash(
+        JSON.stringify(
+          existingAppChanges.map(({ path, content }) => ({
+            path,
+            before: { mode: "644", digest: hash(`before:${path}`) },
+            after: { mode: "644", digest: hash(content), content },
+          })),
+        ),
+      ),
+    },
   };
-  const hash = (value: string) =>
-    createHash("sha256").update(value).digest("hex");
   const unsigned = {
     version: 1,
     sourceSha: "1".repeat(40),
     sourceTree: "2".repeat(40),
+    sourceReceiptDigest: "0".repeat(64),
     eligibilityDigest: "3".repeat(64),
     workspaceDigest: "4".repeat(64),
     imageDigest: `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
@@ -121,7 +173,10 @@ function plannedEvents() {
             kind: "tool-call",
             callId,
             toolName: "plan_app_creation",
-            input: { expectedAppSpecDigest: appSpecDigest },
+            input: {
+              expectedAppSpecDigest: appSpecDigest,
+              existingAppChanges,
+            },
           },
         ],
       },
@@ -164,13 +219,9 @@ describe("same-origin canonical Eve transport", () => {
     expect(snapshot.implementationPlan).toEqual({
       appId: "vendor-onboarding",
       runtime: "nextjs",
-      workspacePath: "apps/vendor-onboarding",
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
       routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      sourceSha: "1".repeat(40),
-      sourceTree: "2".repeat(40),
-      proposalDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       readOnly: true,
     });
     expect(JSON.stringify(snapshot.events)).not.toContain("proposalDigest");
@@ -350,6 +401,70 @@ describe("same-origin canonical Eve transport", () => {
     );
   });
 
+  it("waits for the exact accepted input response to settle", async () => {
+    const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
+    const pending = pendingApprovalEvents(requestId);
+    const settled = [
+      ...pending,
+      {
+        type: "input.resolved",
+        data: { resolutions: [{ requestId }] },
+        meta: { at: 3, id: "evt_resolved" },
+      },
+    ];
+    let streamReads = 0;
+    const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).includes("/stream?")) {
+        streamReads += 1;
+        return stream(streamReads < 3 ? pending : settled);
+      }
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        inputResponses: [{ requestId, optionId: "cancel" }],
+      });
+      return accepted();
+    });
+
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation,
+      }).respond({
+        principal,
+        operationId: "op_respond_settlement",
+        adapterSessionId: "wrun_1",
+        responses: [{ requestId, response: { kind: "deny" } }],
+      }),
+    ).resolves.toMatchObject({ status: "waiting" });
+    expect(streamReads).toBe(3);
+  });
+
+  it("keeps an accepted but unsettled input response non-replayable", async () => {
+    const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
+    let streamReads = 0;
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).includes("/stream?")) {
+        streamReads += 1;
+        return stream(pendingApprovalEvents(requestId));
+      }
+      return accepted();
+    });
+
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation,
+      }).respond({
+        principal,
+        operationId: "op_respond_unsettled",
+        adapterSessionId: "wrun_1",
+        responses: [{ requestId, response: { kind: "deny" } }],
+      }),
+    ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
+    expect(streamReads).toBe(8);
+  });
+
   it("waits for a new guarded cancel and waiting boundary", async () => {
     const active = [{ type: "step.started", data: { turnId: "turn_1" } }];
     const settled = [
@@ -418,6 +533,20 @@ describe("same-origin canonical Eve transport", () => {
     expect(staleGuardFetch).toHaveBeenCalledTimes(1);
 
     const waiting = [{ type: "session.waiting", data: {} }];
+    const noActiveGuardFetch = vi.fn<typeof fetch>(async () => stream(waiting));
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        workloadIdentity: identity(),
+        fetchImplementation: noActiveGuardFetch,
+      }).cancel({
+        principal,
+        adapterSessionId: "wrun_1",
+        turnId: "turn_0",
+      }),
+    ).rejects.toMatchObject({ code: "turn_changed" });
+    expect(noActiveGuardFetch).toHaveBeenCalledTimes(1);
+
     const noActiveFetch = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" })
@@ -510,7 +639,45 @@ describe("same-origin canonical Eve transport", () => {
     ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
   });
 
-  it("rejects non-origin configuration and oversized durable tails", async () => {
+  it("reads generated-code histories larger than 2 MiB without exposing tool input", async () => {
+    const generatedSource = "private-generated-source".repeat(140_000);
+    const events = [
+      {
+        type: "actions.requested",
+        data: {
+          actions: [
+            {
+              kind: "tool-call",
+              callId: "apply_1",
+              toolName: "apply_target_proposal",
+              input: {
+                implementationFiles: [
+                  {
+                    path: "apps/stock-exceptions/app/page.tsx",
+                    content: generatedSource,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      { type: "session.waiting", data: {} },
+    ];
+    const transport = createSameOriginEveTransport({
+      config,
+      workloadIdentity: identity(),
+      fetchImplementation: vi.fn(async () => stream(events)),
+    });
+    const result = await transport.get({
+      principal,
+      adapterSessionId: "wrun_1",
+    });
+    expect(result.status).toBe("waiting");
+    expect(JSON.stringify(result)).not.toContain("private-generated-source");
+  });
+
+  it("rejects non-origin configuration and invalid durable tail numbers", async () => {
     expect(() =>
       createSameOriginEveTransport({
         config: { baseUrl: "https://user@example.test/path" },
@@ -529,7 +696,7 @@ describe("same-origin canonical Eve transport", () => {
               "content-type": "application/x-ndjson; charset=utf-8",
               "x-eve-session-id": "wrun_1",
               "x-eve-stream-format": "ndjson",
-              "x-eve-stream-tail-index": "100000",
+              "x-eve-stream-tail-index": "9007199254740992",
               "x-eve-stream-version": "23",
             },
           }),

@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Push the locally inspected exact sandbox image to GHCR"
 set -eu
 

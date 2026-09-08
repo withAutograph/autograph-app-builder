@@ -1,4 +1,5 @@
 #!/bin/sh
+#MISE hide=true
 #MISE description="Smoke offline portable-plugin client harnesses"
 set -eu
 

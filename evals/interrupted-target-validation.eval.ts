@@ -16,16 +16,14 @@ export default defineEval({
     await t.send("Prepare offline target dependencies.");
     await t.send("Run target identity and planning.");
     await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
+    t.notEvent("input.requested");
 
     await t.send("Validate the applied creation.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("incomplete validation attempt"));
-    t.check(t.reply, includes("not redispatched automatically"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("checks did not finish"));
+    t.check(t.reply, includes("preview still needs review"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -35,10 +33,9 @@ export default defineEval({
     t.check(t.reply, includes('"recoveryRequired":true'));
 
     await t.send("Retry target validation after a lost response.");
-    t.requireInputRequest({ toolName: "validate_app_creation" });
-    await t.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("not redispatched automatically"));
+    t.notEvent("input.requested");
+    t.check(t.reply, includes("checks did not finish"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

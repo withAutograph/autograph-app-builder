@@ -7,6 +7,7 @@ import {
   GitHubOutcomeUnknownError,
   assertCanonicalGitHubMutationReceipt,
   assertExactDraftPullRequestProposal,
+  assertExactFreshRepositoryProposal,
   assertExactGitHubPublicationContent,
   assertExactInstallationIdentity,
   assertExactRepositoryObservation,
@@ -39,6 +40,7 @@ import {
 } from "./reviewed-change-set";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
+import { compareOverlayPaths } from "./target-apply";
 
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -113,14 +115,19 @@ function source(
   return { ...unsigned, digest: hash(unsigned) };
 }
 
-function review() {
-  const changes = [
+function review(
+  inputChanges: NormalizedChangeSet["changes"] = [
     {
       path: "apps/demo/page.tsx",
       kind: "added" as const,
       after: { mode: "644", digest: reviewedBytesDigest },
     },
-  ];
+  ],
+  overrides: Partial<Pick<NormalizedChangeSet, "sourceReceiptDigest">> = {},
+) {
+  const changes = [...inputChanges].toSorted((left, right) =>
+    compareOverlayPaths(left.path, right.path),
+  );
   const unsigned = {
     version: 2 as const,
     validationDigest: "6".repeat(64),
@@ -130,6 +137,7 @@ function review() {
     repositoryContractDigest: "5".repeat(64),
     sourceSha: sha,
     sourceTree: tree,
+    sourceReceiptDigest: source().digest,
     eligibilityDigest: "4".repeat(64),
     workspaceDigest: "a".repeat(64),
     appSpecDigest: "b".repeat(64),
@@ -139,6 +147,7 @@ function review() {
     identityDigest: "e".repeat(64),
     imageDigest: `sha256:${"f".repeat(64)}`,
     dependencyCacheDigest: "0".repeat(64),
+    dependencyCacheContentDigest: "1".repeat(64),
     targetReceipt: {
       version: 1 as const,
       contractPath: ".config/repository-template.json",
@@ -152,7 +161,8 @@ function review() {
     postTreeDigest: "4".repeat(64),
     changedContentDigest: hash(changes),
     changes,
-    approvedPaths: ["apps/demo/page.tsx"],
+    approvedPaths: changes.map(({ path }) => path),
+    ...overrides,
   };
   const changeSet: NormalizedChangeSet = {
     ...unsigned,
@@ -388,6 +398,50 @@ function draftProposal(adapter: Adapter) {
 }
 
 describe("closed GitHub publication contract", () => {
+  it("round-trips UTF-8 ordered review paths into GitHub publication", () => {
+    const adapter = new Adapter();
+    const canonicalReview = review([
+      {
+        path: "apps/demo/\u{10000}.tsx",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+      {
+        path: ".codex/skills/example/agents/openai.yaml",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+      {
+        path: "apps/demo/\u{e000}.tsx",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+      {
+        path: ".codex/skills/example/SKILL.md",
+        kind: "added",
+        after: { mode: "644", digest: reviewedBytesDigest },
+      },
+    ]);
+    const roundTripped = JSON.parse(
+      JSON.stringify(canonicalReview),
+    ) as typeof canonicalReview;
+    const proposal = createDraftPullRequestProposal({
+      installation: adapter.identities.publish,
+      repository: adapter.publishRepo,
+      review: roundTripped,
+      changedPathsSinceBase: [],
+      title: "Add demo",
+    });
+
+    expect(proposal.approvedPaths).toEqual([
+      ".codex/skills/example/SKILL.md",
+      ".codex/skills/example/agents/openai.yaml",
+      "apps/demo/\u{e000}.tsx",
+      "apps/demo/\u{10000}.tsx",
+    ]);
+    expect(() => assertExactDraftPullRequestProposal(proposal)).not.toThrow();
+  });
+
   it("derives operation-specific least-privilege identities", () => {
     const resolve = installation("resolve-existing-source");
     const create = installation("create-fresh-repository");
@@ -406,6 +460,21 @@ describe("closed GitHub publication contract", () => {
     expect(publish.permissions.administration).toBe("none");
     expect(publish.permissions.pullRequests).toBe("write");
     expect(publish.permissions.workflows).toBe("write");
+  });
+
+  it("preserves all-repository selection in the closed installation identity", () => {
+    const identity = createGitHubInstallationIdentity({
+      operation: "resolve-existing-source",
+      installationId: "10",
+      accountId: "20",
+      accountLogin: "withAutograph",
+      accountType: "Organization",
+      repositorySelection: "all",
+      selectedRepositoryIds: ["100"],
+    });
+
+    expect(identity.repositorySelection).toBe("all");
+    expect(() => assertExactInstallationIdentity(identity)).not.toThrow();
   });
 
   it("rejects unknown keys and permission escalation", () => {
@@ -428,6 +497,7 @@ describe("closed GitHub publication contract", () => {
     const adapter = new Adapter();
     const result = await resolveImmutableExistingSource({
       adapter,
+      expectedInstallationId: "10",
       repositoryId: "100",
       ref: "refs/heads/main",
       expectedSha: sha,
@@ -435,6 +505,17 @@ describe("closed GitHub publication contract", () => {
       resolvedByCallId: "resolve-call",
     });
     expect(result.repository.repositoryId).toBe("100");
+    await expect(
+      resolveImmutableExistingSource({
+        adapter,
+        expectedInstallationId: "11",
+        repositoryId: "100",
+        ref: "refs/heads/main",
+        expectedSha: sha,
+        expectedTree: tree,
+        resolvedByCallId: "resolve-call",
+      }),
+    ).rejects.toThrow(/installation is not selected/u);
     for (const ref of [
       "main",
       "refs/tags/v1",
@@ -444,6 +525,7 @@ describe("closed GitHub publication contract", () => {
       await expect(
         resolveImmutableExistingSource({
           adapter,
+          expectedInstallationId: "10",
           repositoryId: "100",
           ref,
           expectedSha: sha,
@@ -453,7 +535,7 @@ describe("closed GitHub publication contract", () => {
       ).rejects.toThrow(/invalid/u);
   });
 
-  it("rejects repository observation unknown keys, digest drift, and release gate drift", () => {
+  it("accepts exact active release-gate observations and rejects schema or digest drift", () => {
     const repo = repository(installation("resolve-existing-source"));
     expect(() =>
       assertExactRepositoryObservation({ ...repo, url: "private" } as never),
@@ -461,12 +543,46 @@ describe("closed GitHub publication contract", () => {
     expect(() =>
       assertExactRepositoryObservation({ ...repo, headTree: "9".repeat(40) }),
     ).toThrow(/non-canonical/u);
+    const active = repository(installation("resolve-existing-source"), {
+      releaseGate: { name: "REPOSITORY_RELEASE_ENABLED", configured: true },
+    });
+    expect(active.releaseGate.configured).toBe(true);
+    expect(() => assertExactRepositoryObservation(active)).not.toThrow();
+  });
+
+  it("keeps fresh repositories release-disabled", () => {
+    const adapter = new Adapter();
+    const proposal = freshProposal(adapter);
+    const unsigned = {
+      ...proposal,
+      releaseGate: {
+        name: "REPOSITORY_RELEASE_ENABLED" as const,
+        configured: true,
+      },
+    };
+    delete (unsigned as Partial<typeof proposal>).digest;
+    const releaseEnabled = {
+      ...unsigned,
+      digest: hash(unsigned),
+    };
     expect(() =>
-      createRepositoryObservation({
-        ...repo,
-        releaseGate: { name: "REPOSITORY_RELEASE_ENABLED", configured: true },
-      } as never),
-    ).toThrow(/release-enabled/u);
+      assertExactFreshRepositoryProposal(releaseEnabled as never),
+    ).toThrow(/malformed/u);
+  });
+
+  it("binds a fresh proposal to the exact reviewed source receipt", () => {
+    const adapter = new Adapter();
+    expect(() =>
+      createFreshRepositoryProposal({
+        installation: adapter.identities.create,
+        source: source(),
+        review: review(undefined, {
+          sourceReceiptDigest: "0".repeat(64),
+        }),
+        destinationOwner: "withAutograph",
+        destinationName: "new-app",
+      }),
+    ).toThrow(/exact source receipt/u);
   });
 
   it("rejects proposal unknown keys, unsafe names, titles, and paths", () => {
@@ -745,6 +861,56 @@ describe("closed GitHub publication contract", () => {
       expect(draftChange.after.bytes).toEqual(reviewedBytes);
     }
     assertCanonicalGitHubMutationReceipt(result);
+  });
+
+  it("publishes to an active repository only while the release gate remains unchanged", async () => {
+    const adapter = new Adapter();
+    adapter.publishRepo = repository(adapter.identities.publish, {
+      releaseGate: {
+        name: "REPOSITORY_RELEASE_ENABLED",
+        configured: true,
+      },
+    });
+    const store = new Store();
+    const proposal = draftProposal(adapter);
+    expect(proposal.releaseGate.configured).toBe(true);
+
+    const result = await publishApprovedDraftPullRequest({
+      adapter,
+      store,
+      proposal,
+      review: review(),
+      contentSource: publicationContentSource(),
+      approvedByCallId: "approve-active-repository",
+    });
+
+    expect(result.releaseGateUnchanged).toBe(true);
+    expect(result).not.toHaveProperty("releaseGateAbsent");
+    assertCanonicalGitHubMutationReceipt(result);
+  });
+
+  it("rejects release-gate drift after the draft proposal is sealed", async () => {
+    const adapter = new Adapter();
+    const proposal = draftProposal(adapter);
+    const changedGate = repository(adapter.identities.publish, {
+      releaseGate: {
+        name: "REPOSITORY_RELEASE_ENABLED",
+        configured: true,
+      },
+    });
+    adapter.draftOutcome = draftReadBack(proposal, changedGate);
+
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        store: new Store(),
+        proposal,
+        review: review(),
+        contentSource: publicationContentSource(),
+        approvedByCallId: "approve-stale-gate",
+      }),
+    ).rejects.toThrow(/stale or overlapping/u);
+    expect(adapter.draftCalls).toBe(0);
   });
 
   it("keeps content-source failures pending without provider dispatch and permits explicit recovery", async () => {

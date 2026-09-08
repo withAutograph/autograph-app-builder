@@ -24,8 +24,8 @@ export const portableReleaseReceiptSchema = z
   .object({
     format: z.literal("autograph-portable-plugin-release-v3"),
     specification: z.literal("1.0.0"),
-    name: z.literal("autograph-app-builder"),
-    version: z.literal("0.2.1"),
+    name: z.literal("app-builder"),
+    version: z.literal("0.2.12"),
     source: z
       .object({
         repository: z.literal(
@@ -218,9 +218,10 @@ export async function verifyPortableProofArtifact(input: {
     JSON.stringify(marketplaceAdapter) !==
     JSON.stringify({
       mcpServers: {
-        "autograph-app-builder": {
+        "app-builder": {
           type: "http",
           url: receipt.endpoint,
+          oauth_resource: receipt.endpoint,
         },
       },
     })
@@ -234,11 +235,11 @@ export async function verifyPortableProofArtifact(input: {
   );
   if (
     codexManifest.name !== receipt.name ||
-    codexManifest.version !== "0.2.1" ||
+    codexManifest.version !== "0.2.12" ||
     codexManifest.mcpServers !== "./.mcp.json"
   )
     throw new Error(
-      "Codex marketplace manifest was not bound to package 0.2.1 and its sole MCP adapter.",
+      "Codex marketplace manifest was not bound to package 0.2.12 and its sole MCP adapter.",
     );
   const codexMarketplaceAssetPaths: string[] = [];
   for (const reference of new Set([
@@ -318,8 +319,8 @@ export async function verifyPortableProofArtifact(input: {
       .object({
         format: z.literal("agent-plugins-client-harness-v2"),
         client: z.literal(client),
-        pluginRoot: z.literal("./autograph-app-builder"),
-        mcp: z.literal("./autograph-app-builder/mcp.json"),
+        pluginRoot: z.literal("./app-builder"),
+        mcp: z.literal("./app-builder/mcp.json"),
         transport: z
           .object({
             type: z.literal("streamable-http"),
@@ -353,7 +354,7 @@ export async function verifyPortableProofArtifact(input: {
             sha256: z.literal(receipt.archive.sha256),
           })
           .strict(),
-        pluginRoot: z.literal("./autograph-app-builder"),
+        pluginRoot: z.literal("./app-builder"),
       })
       .strict()
       .parse(
