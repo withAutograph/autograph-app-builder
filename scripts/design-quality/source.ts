@@ -208,9 +208,19 @@ function observation(
 }
 
 function isStructuralProperty(name: string): boolean {
-  return /^(?:width|maxWidth|minWidth|height|maxHeight|minHeight|gridTemplateColumns|gridTemplateRows)$/i.test(
+  return /^(?:width|max-?width|min-?width|height|max-?height|min-?height|grid-?template-?columns|grid-?template-?rows)$/i.test(
     name,
   );
+}
+
+function containsNativeControl(node: ts.Node): boolean {
+  if (
+    (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+    ts.isIdentifier(node.tagName) &&
+    /^(button|input|select|textarea)$/.test(node.tagName.text)
+  )
+    return true;
+  return ts.forEachChild(node, containsNativeControl) ?? false;
 }
 
 /**
@@ -383,13 +393,24 @@ export function analyzeSource({
           else unresolvedImports.add(item.name.text);
     }
     for (const statement of source.statements) {
-      if (ts.isFunctionDeclaration(statement) && statement.name)
+      if (
+        ts.isFunctionDeclaration(statement) &&
+        statement.name &&
+        containsNativeControl(statement)
+      )
         localDeclarations.add(statement.name.text);
-      if (ts.isClassDeclaration(statement) && statement.name)
+      if (
+        ts.isClassDeclaration(statement) &&
+        statement.name &&
+        containsNativeControl(statement)
+      )
         localDeclarations.add(statement.name.text);
       if (ts.isVariableStatement(statement))
         for (const declaration of statement.declarationList.declarations)
-          if (ts.isIdentifier(declaration.name))
+          if (
+            ts.isIdentifier(declaration.name) &&
+            containsNativeControl(declaration)
+          )
             localDeclarations.add(declaration.name.text);
     }
 
@@ -465,6 +486,14 @@ export function analyzeSource({
           const text = jsxAttributeText(attribute);
           if (name === "className" && text) {
             for (const bracketed of text.matchAll(/\[([^\]]+)\]/g)) {
+              const prefix =
+                text.slice(0, bracketed.index).split(/\s/).at(-1) ?? "";
+              if (
+                /(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/.test(
+                  prefix,
+                )
+              )
+                continue;
               collectCssLiterals(bracketed[1], literals);
               const refs: string[] = [];
               collectVarReferences(bracketed[1], refs);
@@ -473,12 +502,20 @@ export function analyzeSource({
                   observation(
                     `styling:class-var:${file.path}:${attribute.getStart(source)}:${ref}`,
                     "styling",
-                    Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                      ? "conforming"
-                      : "unassessed",
-                    Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                      ? `className uses declared semantic token ${ref}.`
-                      : `className references ${ref}, whose semantic status cannot be established.`,
+                    item &&
+                      /(?:^|:)(?:bg|text|border)-$/.test(prefix) &&
+                      ref.startsWith("--color-")
+                      ? "nonconforming"
+                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
+                        ? "conforming"
+                        : "unassessed",
+                    item &&
+                      /(?:^|:)(?:bg|text|border)-$/.test(prefix) &&
+                      ref.startsWith("--color-")
+                      ? `Generated class overrides ${item.name}'s color treatment; prefer supported variants.`
+                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
+                        ? `className uses declared semantic token ${ref}.`
+                        : `className references ${ref}, whose semantic status cannot be established.`,
                     position(source, attribute),
                     "token-reference",
                   ),
@@ -648,7 +685,7 @@ export function analyzeSource({
             observation(
               `component:public:${file.path}:${node.getStart(source)}`,
               "component",
-              reference && !reference.modules[item.source]?.exports[item.name]
+              !reference || !reference.modules[item.source]?.exports[item.name]
                 ? "unassessed"
                 : "conforming",
               `${item.name} is used from ${item.source}.`,

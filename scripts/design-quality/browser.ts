@@ -525,9 +525,9 @@ export async function measureStyles(
           declarations: [...new Set(declarations)],
           origin: generated
             ? "generated-rule"
-            : inheritedDeclaration
+            : shared && inheritedDeclaration
               ? "inherited-shared"
-              : path
+              : shared
                 ? "shared-rule"
                 : inline.length
                   ? "inline"
@@ -582,7 +582,13 @@ export async function measureStyles(
               : null,
             tokenReferencePercent: assessed
               ? Math.round(
-                  ((counts["semantic-token-reference"] ?? 0) / assessed) * 100,
+                  (items.filter(
+                    (item) =>
+                      item.provenance === "generated" &&
+                      item.classification === "semantic-token-reference",
+                  ).length /
+                    assessed) *
+                    100,
                 )
               : null,
           },

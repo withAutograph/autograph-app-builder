@@ -5,6 +5,9 @@ import { capturePreview, scenariosSchema } from "./design-quality/browser";
 import { analyzeSource, parseTokens } from "./design-quality/source";
 import { judgeDesign } from "./design-quality/judge";
 import { renderReport } from "./design-quality/report";
+import { readReference } from "./design-quality/reference";
+import { scoreAdherence } from "./design-quality/evidence";
+import { execFileSync } from "node:child_process";
 
 const { values } = parseArgs({
   options: {
@@ -68,19 +71,35 @@ async function main() {
   );
   await mkdir(output, { recursive: true, mode: 0o700 });
   const brief = await readFile(values["brief-file"], "utf8");
+  const limitations: string[] = [];
+  const referenceRoot = resolve(values["arrusted-root"]);
   const tokenCss = await readFile(
     join(
       resolve(values["arrusted-root"]),
       "packages/design-systems/core/tokens/theme.css",
     ),
     "utf8",
-  );
+  ).catch(() => {
+    limitations.push(
+      "Reference theme could not be read; token evidence is incomplete.",
+    );
+    return "";
+  });
+  const reference = await readReference(referenceRoot);
+  limitations.push(...reference.limitations);
+  const sourceFiles = values["source-dir"]
+    ? await sources(resolve(values["source-dir"])).catch(() => {
+        limitations.push("Generated source could not be read.");
+        return [];
+      })
+    : [];
   const source = values["source-dir"]
     ? {
         status: "available",
         ...analyzeSource({
-          files: await sources(resolve(values["source-dir"])),
+          files: sourceFiles,
           tokenCss,
+          reference,
         }),
       }
     : {
@@ -97,11 +116,45 @@ async function main() {
     output,
     tokens: parseTokens(tokenCss),
     scenarios,
+    generatedSourcePaths: sourceFiles.map((f) => f.path),
   });
+  limitations.push(...("limitations" in source ? source.limitations : []));
+  for (const capture of captures)
+    limitations.push(...(capture.styles?.limitations ?? []));
+  const adherence = scoreAdherence(
+    [
+      ...("observations" in source ? source.observations : []),
+      ...captures.flatMap((c) => c.styles?.observations ?? []),
+    ],
+    [...new Set(limitations)],
+    sourceFiles.length > 0,
+  );
+  let referenceCommit: string | null = null;
+  try {
+    referenceCommit = execFileSync(
+      "git",
+      ["-C", referenceRoot, "rev-parse", "HEAD"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+  } catch {
+    /* Diagnostic only. */
+  }
+  const catalog = await readFile(
+    join(referenceRoot, "docs/app-builder-ui-catalog.json"),
+    "utf8",
+  ).catch(() => "");
   const measured = {
     createdAt: new Date().toISOString(),
     referenceTheme: "packages/design-systems/core/tokens/theme.css",
     source,
+    sourceFiles,
+    adherence,
+    reference: {
+      name: referenceRoot.split("/").pop(),
+      commit: referenceCommit,
+      publicModules: Object.keys(reference.modules),
+      catalogAvailable: !!catalog,
+    },
     captures,
   };
   // Save useful results before any model call; a failed judge never discards them.
@@ -115,12 +168,22 @@ async function main() {
     ? { status: "not-run", reason: "Measurements-only requested" }
     : await judgeDesign({
         brief,
-        evidence: captures.map((c) => ({
-          name: c.name,
-          state: c.state,
-          measurements: c.measurements,
-          interaction: c.interaction,
-        })),
+        evidence: {
+          arrustedCapabilities: catalog,
+          adherence: {
+            dimensions: adherence.dimensions,
+            limitations: adherence.limitations,
+          },
+          sourceFindings: adherence.observations.filter(
+            (o) => o.evidence === "static" && o.verdict !== "conforming",
+          ),
+          captures: captures.map((c) => ({
+            name: c.name,
+            state: c.state,
+            measurements: c.measurements,
+            interaction: c.interaction,
+          })),
+        },
         images: captures.map(({ name, path, width, height }) => ({
           name,
           path,
