@@ -32,6 +32,18 @@ describe("intrinsic class evidence", () => {
     ).toBeUndefined();
   });
 
+  it("ignores valueless and namespaced JSX attributes", () => {
+    expect(
+      collectIntrinsicClassSignatures([
+        {
+          path: "src/InvalidCandidates.tsx",
+          content:
+            'export function Invalid(){ return <><div className /><div svg:className="not-a-class" /></> }',
+        },
+      ]),
+    ).toEqual([]);
+  });
+
   it("keeps source-only and shared-collision signatures unknown", () => {
     expect(
       signatureAttribution(generated, undefined, "section", [

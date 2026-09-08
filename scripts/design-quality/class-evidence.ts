@@ -9,14 +9,15 @@ export type IntrinsicClassSignature = {
 };
 
 function staticClassName(attribute: ts.JsxAttribute): string | undefined {
-  if (ts.isStringLiteral(attribute.initializer))
-    return attribute.initializer.text;
+  const initializer = attribute.initializer;
+  if (!initializer) return undefined;
+  if (ts.isStringLiteral(initializer)) return initializer.text;
   if (
-    ts.isJsxExpression(attribute.initializer) &&
-    attribute.initializer.expression &&
-    ts.isStringLiteral(attribute.initializer.expression)
+    ts.isJsxExpression(initializer) &&
+    initializer.expression &&
+    ts.isStringLiteral(initializer.expression)
   )
-    return attribute.initializer.expression.text;
+    return initializer.expression.text;
   return undefined;
 }
 
@@ -47,7 +48,9 @@ export function collectIntrinsicClassSignatures(
         }
         const attribute = node.attributes.properties.find(
           (attribute): attribute is ts.JsxAttribute =>
-            ts.isJsxAttribute(attribute) && attribute.name.text === "className",
+            ts.isJsxAttribute(attribute) &&
+            ts.isIdentifier(attribute.name) &&
+            attribute.name.text === "className",
         );
         const value = attribute && staticClassName(attribute);
         const classes = value
