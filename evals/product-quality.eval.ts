@@ -30,6 +30,8 @@ export default defineEval({
     await t.send(
       `Supported repository at ${repository}\nProduct brief: ${vendor.brief}`,
     );
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
     t.calledTool("record_prototype_artifact", {
       input: {
