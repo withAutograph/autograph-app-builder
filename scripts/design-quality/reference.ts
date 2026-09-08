@@ -292,7 +292,7 @@ function reliableExpressionType(
   depth = 0,
   seen = new Set<ts.Type>(),
 ): boolean {
-  if (depth > 5 || seen.has(type)) return depth <= 5;
+  if (depth > 5 || seen.has(type)) return false;
   if (
     type.flags &
     (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter)
@@ -393,6 +393,7 @@ export function checkJsxAttributes({
     for (const [path] of virtual) {
       const source = program.getSourceFile(path);
       if (!source) continue;
+      const diagnostics = program.getSemanticDiagnostics(source);
       const visit = (node: ts.Node) => {
         if (
           ts.isJsxAttribute(node) &&
@@ -416,12 +417,30 @@ export function checkJsxAttributes({
               )?.path ?? path,
             start: node.getStart(source),
           };
-          if (!expected || !reliableExpressionType(actual, checker))
+          const initializerStart = node.initializer.getStart(source);
+          const initializerEnd = node.initializer.getEnd();
+          const diagnostic = diagnostics.find((item) => {
+            const start = item.start ?? -1;
+            const end = start + (item.length ?? 0);
+            return start >= initializerStart && end <= initializerEnd;
+          });
+          if (diagnostic)
+            attributes.push({
+              ...key,
+              verdict: "nonconforming",
+              reason:
+                "TypeScript reports a prop expression diagnostic within this JSX attribute.",
+            });
+          else if (
+            !expected ||
+            !reliableExpressionType(actual, checker) ||
+            !reliableExpressionType(expected, checker)
+          )
             attributes.push({
               ...key,
               verdict: "unassessed",
               reason:
-                "The JSX expression type is dynamic, unresolved, any, unknown, or callback-shaped.",
+                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
             });
           else
             attributes.push({

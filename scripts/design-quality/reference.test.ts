@@ -19,14 +19,14 @@ describe("readReference", () => {
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
-      `export type TableSpec = { narrowLayout: "compact" | "full"; columns: Array<{ id: string }> }; export function DataTable(_props: { spec: TableSpec }) { return null; }`,
+      `export type TableSpec = { narrowLayout: "compact" | "full"; columns: Array<{ id: string }> }; export function DataTable(_props: { spec: TableSpec }) { return null; } export function Loose(_props: any) { return null; }`,
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
           path: "app/page.tsx",
-          content: `import { DataTable } from "@autograph/compositions"; export function Page() { return <><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }] }} /><DataTable spec={{ narrowLayout: "wide", columns: [{ id: 2 }] }} /></>; }`,
+          content: `import { DataTable, Loose } from "@autograph/compositions"; export function Page() { return <><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }] }} /><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }], unexpected: true }} /><Loose label={"untyped"} /></>; }`,
         },
       ],
     });
@@ -34,6 +34,7 @@ describe("readReference", () => {
     expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
       "conforming",
       "nonconforming",
+      "unassessed",
     ]);
   });
 
