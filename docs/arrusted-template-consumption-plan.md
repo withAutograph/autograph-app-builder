@@ -57,9 +57,12 @@ selection to make a layout fit loses the review workflow.
 
 `RecordDetailPanel` accepts ordinary layout sizing through `className`. Its
 existing body scrolls and its actions footer sits outside that body. A bounded
-panel height can keep the action reachable while the details scroll; choose the
-height for the surrounding layout and inspect the result in a shorter desktop
-window. This is layout composition, not a new `panel-scroll` variant. Sections
+panel height can keep the action reachable while the details scroll, but is not
+a default: prefer ordinary page flow when a short record fits comfortably.
+Nested viewport-height caps can cut off decision context and introduce two
+scrolling regions. If a long-record workflow needs one, inspect the actual body
+and keyboard access in a shorter desktop window. This is layout composition,
+not a new `panel-scroll` variant. Sections
 support `collapsible` and `defaultOpen` when secondary information benefits from
 disclosure. Do not hide essential decision context simply to shorten the panel.
 The existing `tabs`, `activeTabId`, and `onTabChange` props are another option
@@ -72,8 +75,12 @@ when the actual workflow benefits; tabs are not a requirement for every record.
 When a long record title competes with the header status, the supported
 ReactNode `subtitle` can compose the shared `StatusPill` with metadata below
 the title. Use the public component and its tone props, not a bespoke badge.
-Decision-critical quantities should use normal detail fields rather than tiny
-metadata text. Table `density` changes row spacing, not header typography;
+Decision-critical quantities should not be relegated to tiny metadata text.
+For a uniform metric/value summary, the panel's existing `type: "table"` item
+can provide readable aligned rows using `columns`, `rows`, `ariaLabel`, and
+`density: "compact"`. It is not an editable form. Choose it for the information
+structure, not as a universal replacement for fields. Table `density` changes
+row spacing, not header typography;
 inspect the implementation before acting on a judge's proposed API change.
 
 ### Stock Exceptions example

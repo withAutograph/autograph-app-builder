@@ -344,3 +344,46 @@ report's unchanged `captures[].styles.observations` to `scoreAdherence`.
 Historical report JSON and screenshots are unchanged. This improves static API
 confidence only; it does not claim that shared component bytes rendered or that
 compiled browser styles have known provenance.
+
+## Incremental update: readable tables and natural page flow
+
+[The natural-table report](stock-exceptions-natural-tables-205937286Z/README.md)
+preserves another **85/100** result under the same model and rubric. Layout
+improves to **4/4**; hierarchy, typography, and desktop responsiveness each score
+3, and product clarity scores 4. This is a targeted improvement, not completion
+of the 100-point objective or a claim that the generator produces this result
+automatically.
+
+![Aligned stock metrics without faint field labels](stock-exceptions-natural-tables-205937286Z/desktop-0.png)
+
+The existing `RecordDetailPanel` table item presents metric/value and supplier
+detail/value records through the shared `DataTableComposition`. No new visual
+component, color override, token replacement, or shared palette change was added.
+The panel and list no longer have generated viewport-height caps; the resize
+observer, scroll hint, and sticky group-heading wrappers were removed with them.
+Ordinary page scrolling avoids competing scroll regions and clipped detail rows.
+At 1024×768 the full page is 844px high, so some actions require a short scroll.
+This is disclosed as a tradeoff, not hidden by full-page screenshots.
+
+![Supplier details at a shorter desktop window](stock-exceptions-natural-tables-205937286Z/desktop-window-1.png)
+
+All **16 fixture interactions** pass across four desktop sizes, with **20
+screenshots** archived. No layout findings or nested-landmark/scroll-focus
+violations were reported. The render consumes the shared accessibility candidate
+`a93ecef05e14da68f239eb74a48cd7f6942c2a63` from Arrusted PR #1309; that PR is
+not claimed merged. Its Vercel deployment status remains blocked independently
+of this local render.
+
+The previous shared field-label observation was **2.24:1**. The table instead
+has a shared header contrast observation of **4.25:1**; it remains informational,
+not permission to change the Arrusted palette. The judge suggests stronger
+row-level urgency cues, more immediate short-window actions, and a clearer
+simulation outcome. Its proposed table-header variant is not an existing API;
+do not invent that prop or apply an override to satisfy the suggestion.
+
+Adherence is **100, partial**, with **14/17** component, **34/43** API, and
+**12/5892** styling observations assessed. Combined coverage is **1.01%**.
+The denominator differs because the generated composition is simpler; it is
+not a loss of evaluator capability. All 5880 unattributed browser styling
+observations remain unknown. The source is retained in the report JSON, and
+all previous reports and screenshots remain unchanged.
