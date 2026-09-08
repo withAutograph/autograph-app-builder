@@ -34,6 +34,8 @@ Use `mise run eval:design -- --help` to score an existing preview on demand.
 [Design-quality evals](docs/design-quality-evals.md) report Arrusted token
 evidence, responsive/browser findings, and an advisory AI design score without
 regenerating the app or adding a runtime gate.
+Use `--additional-desktop-size WIDTHxHEIGHT` to add one explicit desktop window
+observation; the default three desktop captures remain unchanged.
 
 The only pre-operation controls are credential/cross-user isolation and
 approval before outward effects. Actual provider or repository command errors

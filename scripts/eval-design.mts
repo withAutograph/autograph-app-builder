@@ -1,7 +1,11 @@
 import { parseArgs } from "node:util";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { capturePreview, scenariosSchema } from "./design-quality/browser";
+import {
+  capturePreview,
+  parseAdditionalDesktopSize,
+  scenariosSchema,
+} from "./design-quality/browser";
 import { analyzeSource, parseTokens } from "./design-quality/source";
 import { judgeDesign } from "./design-quality/judge";
 import { renderReport } from "./design-quality/report";
@@ -20,12 +24,13 @@ const { values } = parseArgs({
     scenario: { type: "string" },
     "fixture-interactions": { type: "boolean" },
     "measurements-only": { type: "boolean" },
+    "additional-desktop-size": { type: "string" },
     help: { type: "boolean" },
   },
 });
 if (values.help) {
   console.log(
-    "mise run eval:design -- --preview-url URL --arrusted-root PATH --brief-file FILE [--source-dir PATH] [--scenario FILE --fixture-interactions] [--measurements-only] [--output-dir PATH]",
+    "mise run eval:design -- --preview-url URL --arrusted-root PATH --brief-file FILE [--source-dir PATH] [--scenario FILE --fixture-interactions] [--additional-desktop-size WIDTHxHEIGHT] [--measurements-only] [--output-dir PATH]",
   );
   process.exit(0);
 }
@@ -115,6 +120,9 @@ async function main() {
   const scenarios = values.scenario
     ? scenariosSchema.parse(JSON.parse(await readFile(values.scenario, "utf8")))
     : [];
+  const additionalDesktopSize = values["additional-desktop-size"]
+    ? parseAdditionalDesktopSize(values["additional-desktop-size"])
+    : undefined;
   console.log("Capturing existing preview across desktop window sizes…");
   const captures = await capturePreview({
     url: url.href,
@@ -126,6 +134,7 @@ async function main() {
     sharedClassSignatures: sharedFiles
       ? collectIntrinsicClassSignatures(sharedFiles)
       : undefined,
+    additionalDesktopSize,
   });
   limitations.push(...("limitations" in source ? source.limitations : []));
   for (const capture of captures)

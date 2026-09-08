@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   arrustedSharedSource,
+  captureViewports,
   classifyStyle,
   generatedSource,
+  parseAdditionalDesktopSize,
   scenariosSchema,
   sourcePath,
 } from "./browser";
@@ -33,6 +35,24 @@ describe("conservative design measurements", () => {
         { name: "test", steps: [{ action: "publish", selector: "button" }] },
       ]).success,
     ).toBe(false);
+  });
+  it("accepts an opt-in desktop size without adding a width requirement", () => {
+    expect(parseAdditionalDesktopSize("960x700")).toEqual({
+      width: 960,
+      height: 700,
+    });
+    for (const value of ["960", "960X700", "0x700", "960x0", "960x700px"])
+      expect(() => parseAdditionalDesktopSize(value)).toThrow();
+    expect(captureViewports().map((viewport) => viewport.name)).toEqual([
+      "desktop",
+      "desktop-wide",
+      "desktop-window",
+    ]);
+    expect(captureViewports({ width: 960, height: 700 }).at(-1)).toMatchObject({
+      name: "desktop-custom-960x700",
+      width: 960,
+      height: 700,
+    });
   });
   it("attributes a stylesheet only when its source URL matches an explicit generated path", () => {
     expect(
