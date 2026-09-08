@@ -62,6 +62,19 @@ height for the surrounding layout and inspect the result in a shorter desktop
 window. This is layout composition, not a new `panel-scroll` variant. Sections
 support `collapsible` and `defaultOpen` when secondary information benefits from
 disclosure. Do not hide essential decision context simply to shorten the panel.
+The existing `tabs`, `activeTabId`, and `onTabChange` props are another option
+when users switch between distinct groups of details. Supply the selected
+group's sections from route state; tabs do not filter sections automatically.
+Keep the action in the shared footer and retain enough context to understand
+it from either view. Prefer this over a tall stack of mostly secondary sections
+when the actual workflow benefits; tabs are not a requirement for every record.
+
+When a long record title competes with the header status, the supported
+ReactNode `subtitle` can compose the shared `StatusPill` with metadata below
+the title. Use the public component and its tone props, not a bespoke badge.
+Decision-critical quantities should use normal detail fields rather than tiny
+metadata text. Table `density` changes row spacing, not header typography;
+inspect the implementation before acting on a judge's proposed API change.
 
 ### Stock Exceptions example
 
@@ -72,10 +85,11 @@ position. Right-align Cover using the column's `align` field. This is an example
 of choosing task-relevant columns, not a required three-column template.
 
 Keep replenishment in the shared detail `actions`/`onAction` API, with its visible
-fixture outcome. Consider a bounded detail height and a Supplier section using
-`collapsible: true, defaultOpen: false`; retain the stock facts and preview-only
-disclosure needed to understand the action. Show severity through the supported
-detail `status` tone. Plain severity text in the table is preferable to an
+fixture outcome. The tabbed example keeps Stock position and Supplier details
+in separate shared panel views; a shorter record can instead use the existing
+Supplier disclosure. Retain the stock facts and preview-only disclosure needed
+to understand the action. Show severity through the supported detail `status`
+tone or shared subtitle `StatusPill`. Plain severity text in the table is preferable to an
 invented tone-cell prop or a palette override. A reusable semantic table-cell
 capability belongs in Arrusted if the workflow needs it.
 

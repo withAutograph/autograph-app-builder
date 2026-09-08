@@ -12,6 +12,7 @@ deployment or proof that generation always produces this result.
 | [Saved baseline](stock-exceptions-adherence-v2-181423365Z/README.md)                   | 75/100            | Evaluator 2; initial states only                                                                                 |
 | [First composition pass](stock-exceptions-composition-first-pass-185811538Z/README.md) | 65/100            | Supplier fixture used the wrong locator; vertical scrolling was not reported; retained rather than discarded     |
 | [Corrected composition](stock-exceptions-composition-corrected-190303519Z/README.md)   | 80/100            | Evaluator 3; all nine selection/supplier, simulated-order, and filter checks passed across three desktop windows |
+| [Tabbed detail](stock-exceptions-tabbed-detail-191819290Z/README.md)                   | 80/100            | Existing shared tabs keep each detail group and action visible; all nine interaction checks passed               |
 
 The judge model and rubric remain unchanged. Captured states and evaluator
 capabilities differ, so these are directional observations, not a controlled
@@ -81,3 +82,44 @@ mistakenly omitted from the judge's evidence.
 
 No deployment, package release, provider reconfiguration, or Arrusted shared
 component publication is part of this comparison.
+
+## Incremental update: tabbed detail
+
+The newest pass reuses the existing `RecordDetailPanel` tabs, ordinary field
+rows, footer, and subtitle plus a public `StatusPill`. No shared component or
+palette was changed. Stock position and supplier information occupy separate
+views; the long product title no longer competes with the badge on the same row.
+Estimated cover is a normal readable field, and simulation remains explicit.
+The source and all twelve screenshots are in the new report; earlier runs remain
+unchanged.
+
+![Tabbed detail in a 1024px desktop window](stock-exceptions-tabbed-detail-191819290Z/desktop-window-0.png)
+
+![Supplier detail after selecting another record](stock-exceptions-tabbed-detail-191819290Z/desktop-window-1.png)
+
+The unchanged model/rubric scored this pass **80/100**, not 100. It no longer
+identified the long scrolling detail body as a defect. It still identified the
+repetitive selection column, plain severity text, and small table headers.
+Its suggestions of a richer cell or typography variant are hypotheses: the
+inspected DataTable supports serializable cells and row density, not arbitrary
+cell rendering or a header typography variant. Do not invent those props or
+override colors to follow a model recommendation.
+
+Component evidence now covers **9/10**, API evidence **13/33**, and generated
+styling **8/4277** observations. The TypeScript checker no longer mistakes
+independent sibling fields with the same type for recursion. True cycles,
+unresolved values, and callbacks remain unassessed. Composition changes also
+change the denominator, so this is not a controlled evaluator-only comparison.
+
+The compiled preview contains one inline Tailwind stylesheet with no source map
+or preserved stylesheet URLs. Its matched rules cannot identify which source
+consumer supplied a utility. The **4269 unknown browser styling observations
+remain unknown**. A Tailwind class match or ordinary source map alone cannot
+prove that a utility came from Arrusted. Direct source stylesheet attribution
+would require separately preserved generated/shared CSS assets at build time;
+that renderer change has not been implemented or claimed by this PR.
+
+PR #339's first CI attempt found missing TypeScript narrowing in the new
+class-evidence helper. The follow-up guards absent initializers and namespaced
+attributes and adds a focused regression. No check or scoring criterion was
+removed.
