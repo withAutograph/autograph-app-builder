@@ -19,6 +19,14 @@ export type PublicExport = {
 export type Reference = {
   modules: Record<string, { exports: Record<string, PublicExport> }>;
   limitations: string[];
+  arrustedRoot?: string;
+};
+
+export type TypedJsxAttribute = {
+  path: string;
+  start: number;
+  verdict: "conforming" | "nonconforming" | "unassessed";
+  reason: string;
 };
 
 type PackageJson = {
@@ -275,5 +283,166 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
     limitations.push(
       "No public @autograph component, composition, or icon packages were found in the selected Arrusted checkout.",
     );
-  return { modules, limitations };
+  return { modules, limitations, arrustedRoot };
+}
+
+function reliableExpressionType(
+  type: ts.Type,
+  checker: ts.TypeChecker,
+  depth = 0,
+  seen = new Set<ts.Type>(),
+): boolean {
+  if (depth > 5 || seen.has(type)) return depth <= 5;
+  if (
+    type.flags &
+    (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter)
+  )
+    return false;
+  seen.add(type);
+  if (type.isUnion() || type.isIntersection())
+    return type.types.every((member) =>
+      reliableExpressionType(member, checker, depth + 1, seen),
+    );
+  if (checker.isArrayType(type) || checker.isTupleType(type))
+    return checker
+      .getTypeArguments(type as ts.TypeReference)
+      .every((item) => reliableExpressionType(item, checker, depth + 1, seen));
+  if (type.getCallSignatures().length || type.getConstructSignatures().length)
+    return false;
+  if (!(type.flags & ts.TypeFlags.Object)) return true;
+  return checker.getPropertiesOfType(type).every((property) => {
+    const declaration = property.valueDeclaration ?? property.declarations?.[0];
+    return (
+      Boolean(declaration) &&
+      reliableExpressionType(
+        checker.getTypeOfSymbolAtLocation(property, declaration!),
+        checker,
+        depth + 1,
+        seen,
+      )
+    );
+  });
+}
+
+/**
+ * Type-check generated JSX through a virtual, read-only host configured from
+ * the selected Arrusted checkout. This proves assignability only, never render
+ * reachability or runtime behaviour.
+ */
+export function checkJsxAttributes({
+  arrustedRoot,
+  files,
+}: {
+  arrustedRoot: string;
+  files: Array<{ path: string; content: string }>;
+}): { attributes: TypedJsxAttribute[]; limitations: string[] } {
+  const limitations: string[] = [];
+  const config = ts.readConfigFile(
+    join(arrustedRoot, "tsconfig.json"),
+    ts.sys.readFile,
+  );
+  if (config.error)
+    return {
+      attributes: [],
+      limitations: [
+        "Could not read selected Arrusted TypeScript configuration; JSX prop types are unassessed.",
+      ],
+    };
+  const parsed = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    arrustedRoot,
+  );
+  const virtual = new Map(
+    files
+      .filter((file) => /\.tsx?$/i.test(file.path))
+      .map((file) => [
+        resolve(arrustedRoot, ".design-quality-virtual", file.path),
+        file.content,
+      ]),
+  );
+  const host = ts.createCompilerHost(
+    { ...parsed.options, jsx: ts.JsxEmit.Preserve },
+    true,
+  );
+  const originalFileExists = host.fileExists.bind(host);
+  const originalReadFile = host.readFile.bind(host);
+  const originalGetSourceFile = host.getSourceFile.bind(host);
+  host.fileExists = (path) => virtual.has(path) || originalFileExists(path);
+  host.readFile = (path) => virtual.get(path) ?? originalReadFile(path);
+  host.getSourceFile = (path, languageVersion) => {
+    const content = virtual.get(path);
+    return content === undefined
+      ? originalGetSourceFile(path, languageVersion)
+      : ts.createSourceFile(
+          path,
+          content,
+          languageVersion,
+          true,
+          ts.ScriptKind.TSX,
+        );
+  };
+  try {
+    const program = ts.createProgram(
+      [...virtual.keys()],
+      { ...parsed.options, jsx: ts.JsxEmit.Preserve, noEmit: true },
+      host,
+    );
+    const checker = program.getTypeChecker();
+    const attributes: TypedJsxAttribute[] = [];
+    for (const [path] of virtual) {
+      const source = program.getSourceFile(path);
+      if (!source) continue;
+      const visit = (node: ts.Node) => {
+        if (
+          ts.isJsxAttribute(node) &&
+          node.initializer &&
+          ts.isJsxExpression(node.initializer) &&
+          node.initializer.expression
+        ) {
+          const actual = checker.getTypeAtLocation(node.initializer.expression);
+          const expected = checker.getContextualType(
+            node.initializer.expression,
+          );
+          const key = {
+            path:
+              files.find(
+                (file) =>
+                  resolve(
+                    arrustedRoot,
+                    ".design-quality-virtual",
+                    file.path,
+                  ) === path,
+              )?.path ?? path,
+            start: node.getStart(source),
+          };
+          if (!expected || !reliableExpressionType(actual, checker))
+            attributes.push({
+              ...key,
+              verdict: "unassessed",
+              reason:
+                "The JSX expression type is dynamic, unresolved, any, unknown, or callback-shaped.",
+            });
+          else
+            attributes.push({
+              ...key,
+              verdict: checker.isTypeAssignableTo(actual, expected)
+                ? "conforming"
+                : "nonconforming",
+              reason: checker.isTypeAssignableTo(actual, expected)
+                ? "The static JSX expression is assignable to the selected Arrusted prop type."
+                : "The static JSX expression is not assignable to the selected Arrusted prop type.",
+            });
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+    }
+    return { attributes, limitations };
+  } catch {
+    limitations.push(
+      "Selected Arrusted TypeScript types could not be loaded for generated JSX; prop conformance is unassessed.",
+    );
+    return { attributes: [], limitations };
+  }
 }
