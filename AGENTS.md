@@ -62,3 +62,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Integrate first, resolve only real conflicts, and defer the broad suite to the
   final local acceptance or exact-head CI. Do not create micro-PRs solely for
   process ceremony.
+
+## Project skill ownership
+
+Use the official Vercel package selected in `.codex/config.toml` for React,
+Next.js, shadcn and Vercel-specific work. Keep platform packages project-scoped.
+This repository selects the development App Builder plugin and disables the
+release plugin to avoid duplicate tool and skill entry points. Use the focused
+validation loop above; provider verification belongs to acceptance work.

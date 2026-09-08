@@ -1,0 +1,3 @@
+[submodule ".config/codex-marketplace/vercel"]
+	path = .config/codex-marketplace/vercel
+	url = https://github.com/vercel/vercel-plugin.git
