@@ -65,6 +65,37 @@ describe("readReference", () => {
     });
     expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
       "conforming",
+      "unassessed",
+    ]);
+  });
+
+  it("keeps wholly reliable object unions and unresolved expected types distinct", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/components": ["./core/components.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "components.tsx"),
+      `export function Choice(_props: { spec: { id: string } | null }) { return null; } export function Loose(_props: { value: unknown }) { return null; } export function Variant(_props: { mode: "ready" | "paused" }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { Choice, Loose, Variant } from "@autograph/components"; export function Page() { return <><Choice spec={{ id: "stock" }} /><Loose value={"untrusted target"} /><Variant mode={"invalid"} /></>; }`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "unassessed",
       "nonconforming",
     ]);
   });

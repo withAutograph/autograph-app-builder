@@ -342,6 +342,8 @@ function reliableExpectedAssignment(
     )
   )
     return undefined;
+  if (expected.types.every((member) => reliableExpressionType(member, checker)))
+    return checker.isTypeAssignableTo(actual, expected);
   const primitiveActual = Boolean(
     actual.flags &
     (ts.TypeFlags.String |
@@ -358,12 +360,7 @@ function reliableExpectedAssignment(
   if (!candidates.length) return undefined;
   if (candidates.some((member) => checker.isTypeAssignableTo(actual, member)))
     return true;
-  return actual.flags &
-    (ts.TypeFlags.StringLiteral |
-      ts.TypeFlags.NumberLiteral |
-      ts.TypeFlags.BooleanLiteral)
-    ? false
-    : undefined;
+  return undefined;
 }
 
 /**
