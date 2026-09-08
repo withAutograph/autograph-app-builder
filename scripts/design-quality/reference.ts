@@ -327,6 +327,45 @@ function reliableExpressionType(
   });
 }
 
+function reliableExpectedAssignment(
+  actual: ts.Type,
+  expected: ts.Type,
+  checker: ts.TypeChecker,
+): boolean | undefined {
+  if (!expected.isUnion())
+    return reliableExpressionType(expected, checker)
+      ? checker.isTypeAssignableTo(actual, expected)
+      : undefined;
+  if (
+    expected.types.some(
+      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
+    )
+  )
+    return undefined;
+  const primitiveActual = Boolean(
+    actual.flags &
+    (ts.TypeFlags.String |
+      ts.TypeFlags.StringLiteral |
+      ts.TypeFlags.Number |
+      ts.TypeFlags.NumberLiteral |
+      ts.TypeFlags.Boolean |
+      ts.TypeFlags.BooleanLiteral),
+  );
+  if (!primitiveActual) return undefined;
+  const candidates = expected.types.filter((member) =>
+    reliableExpressionType(member, checker),
+  );
+  if (!candidates.length) return undefined;
+  if (candidates.some((member) => checker.isTypeAssignableTo(actual, member)))
+    return true;
+  return actual.flags &
+    (ts.TypeFlags.StringLiteral |
+      ts.TypeFlags.NumberLiteral |
+      ts.TypeFlags.BooleanLiteral)
+    ? false
+    : undefined;
+}
+
 /**
  * Type-check generated JSX through a virtual, read-only host configured from
  * the selected Arrusted checkout. This proves assignability only, never render
@@ -438,27 +477,35 @@ export function checkJsxAttributes({
                 )
                 .join("; ")}`,
             });
-          else if (
-            !expected ||
-            !reliableExpressionType(actual, checker) ||
-            !reliableExpressionType(expected, checker)
-          )
+          else if (!expected || !reliableExpressionType(actual, checker))
             attributes.push({
               ...key,
               verdict: "unassessed",
               reason:
                 "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
             });
-          else
-            attributes.push({
-              ...key,
-              verdict: checker.isTypeAssignableTo(actual, expected)
-                ? "conforming"
-                : "nonconforming",
-              reason: checker.isTypeAssignableTo(actual, expected)
-                ? "The static JSX expression is assignable to the selected Arrusted prop type."
-                : "The static JSX expression is not assignable to the selected Arrusted prop type.",
-            });
+          else {
+            const assignable = reliableExpectedAssignment(
+              actual,
+              expected,
+              checker,
+            );
+            if (assignable === undefined)
+              attributes.push({
+                ...key,
+                verdict: "unassessed",
+                reason:
+                  "The expected prop type has no independently reliable branch for this static JSX expression.",
+              });
+            else
+              attributes.push({
+                ...key,
+                verdict: assignable ? "conforming" : "nonconforming",
+                reason: assignable
+                  ? "The static JSX expression is assignable to the selected Arrusted prop type."
+                  : "The static JSX expression is not assignable to the selected Arrusted prop type.",
+              });
+          }
         }
         ts.forEachChild(node, visit);
       };

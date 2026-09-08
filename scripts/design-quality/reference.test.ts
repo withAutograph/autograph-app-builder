@@ -39,6 +39,36 @@ describe("readReference", () => {
     expect(result.attributes[1].reason).toContain("unexpected");
   });
 
+  it("accepts a static primitive through a reliable branch of a recursive union", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/components": ["./core/components.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "components.tsx"),
+      `type Node = "ready" | "paused" | { children: Node }; export function PageHeader(_props: { title: Node }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { PageHeader } from "@autograph/components"; export function Page() { return <><PageHeader title={"ready"} /><PageHeader title={"invalid"} /></>; }`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "nonconforming",
+    ]);
+  });
+
   it("keeps public export subpaths separate and resolves selected tsconfig aliases", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     const core = join(root, "core");
