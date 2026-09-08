@@ -15,6 +15,32 @@ export const viewports = [
   { name: "desktop-wide", width: 1920, height: 1080 },
   { name: "desktop-window", width: 1024, height: 768 },
 ];
+
+export type DesktopSize = { width: number; height: number };
+
+/** Parses an opt-in desktop window size without imposing a width policy. */
+export function parseAdditionalDesktopSize(value: string): DesktopSize {
+  const match = /^([1-9]\d*)x([1-9]\d*)$/.exec(value);
+  if (!match)
+    throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height))
+    throw new Error("Desktop dimensions must be safe integers");
+  return { width, height };
+}
+
+export function captureViewports(additionalDesktopSize?: DesktopSize) {
+  return additionalDesktopSize
+    ? [
+        ...viewports,
+        {
+          name: `desktop-custom-${additionalDesktopSize.width}x${additionalDesktopSize.height}`,
+          ...additionalDesktopSize,
+        },
+      ]
+    : viewports;
+}
 export const scenariosSchema = z.array(
   z.object({
     name: z.string().min(1),
@@ -741,11 +767,12 @@ export async function capturePreview(input: {
   generatedSourcePaths?: string[];
   generatedClassSignatures?: IntrinsicClassSignature[];
   sharedClassSignatures?: IntrinsicClassSignature[];
+  additionalDesktopSize?: DesktopSize;
 }) {
   const browser = await chromium.launch();
   const captures = [];
   try {
-    for (const viewport of viewports) {
+    for (const viewport of captureViewports(input.additionalDesktopSize)) {
       const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },
         deviceScaleFactor: 1,
