@@ -363,6 +363,26 @@ function reliableExpectedAssignment(
   return undefined;
 }
 
+function jsxAttributeExpectedType(
+  attribute: ts.JsxAttribute,
+  checker: ts.TypeChecker,
+): ts.Type | undefined {
+  const opening = attribute.parent.parent;
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening))
+    return undefined;
+  const symbol = checker.getSymbolAtLocation(opening.tagName);
+  const component = symbol
+    ? checker.getTypeOfSymbolAtLocation(symbol, opening.tagName)
+    : checker.getTypeAtLocation(opening.tagName);
+  const parameter = checker
+    .getSignaturesOfType(component, ts.SignatureKind.Call)[0]
+    ?.getParameters()[0];
+  if (!parameter) return undefined;
+  const props = checker.getTypeOfSymbolAtLocation(parameter, opening);
+  const prop = checker.getPropertyOfType(props, attribute.name.getText());
+  return prop ? checker.getTypeOfSymbolAtLocation(prop, attribute) : undefined;
+}
+
 /**
  * Type-check generated JSX through a virtual, read-only host configured from
  * the selected Arrusted checkout. This proves assignability only, never render
@@ -437,13 +457,22 @@ export function checkJsxAttributes({
         if (
           ts.isJsxAttribute(node) &&
           node.initializer &&
-          ts.isJsxExpression(node.initializer) &&
-          node.initializer.expression
+          ((ts.isJsxExpression(node.initializer) &&
+            node.initializer.expression) ||
+            ts.isStringLiteral(node.initializer))
         ) {
-          const actual = checker.getTypeAtLocation(node.initializer.expression);
-          const expected = checker.getContextualType(
-            node.initializer.expression,
-          );
+          const expression = ts.isJsxExpression(node.initializer)
+            ? node.initializer.expression!
+            : node.initializer;
+          const actual = ts.isStringLiteral(node.initializer)
+            ? checker.getStringLiteralType(node.initializer.text)
+            : checker.getTypeAtLocation(expression);
+          let expected = checker.getContextualType(expression);
+          if (
+            !expected ||
+            expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+          )
+            expected = jsxAttributeExpectedType(node, checker);
           const key = {
             path:
               files.find(

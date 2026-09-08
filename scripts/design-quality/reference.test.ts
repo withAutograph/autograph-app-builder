@@ -59,11 +59,12 @@ describe("readReference", () => {
       files: [
         {
           path: "app/page.tsx",
-          content: `import { PageHeader } from "@autograph/components"; export function Page() { return <><PageHeader title={"ready"} /><PageHeader title={"invalid"} /></>; }`,
+          content: `import { PageHeader } from "@autograph/components"; export function Page() { return <><PageHeader title="ready" /><PageHeader title={"ready"} /><PageHeader title={"invalid"} /></>; }`,
         },
       ],
     });
     expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
       "conforming",
       "unassessed",
     ]);
