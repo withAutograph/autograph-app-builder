@@ -1,9 +1,15 @@
+import postcss from "postcss";
 import ts from "typescript";
 
 export type SourceFile = { path: string; content: string };
 
 export type SourceAnalysis = {
-  imports: Array<{ path: string; names: string[] }>;
+  imports: Array<{
+    path: string;
+    source: string;
+    name: string;
+    localName: string;
+  }>;
   tokenRefs: string[];
   semanticVarRefs: string[];
   undefinedTokens: string[];
@@ -14,7 +20,8 @@ export type SourceAnalysis = {
 
 const varReference = /var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/g;
 const cssLiteral = /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/g;
-const structuralLiteral = /^(?:0(?:\.0+)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/i;
+const structuralLiteral = /^(?:0(?:\.0+)?(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/i;
+const autographUiImport = /^@autograph\/(?:components|compositions|icons)(?:\/|$)/;
 
 function unique(values: Iterable<string>): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
@@ -27,10 +34,9 @@ function normalise(value: string): string {
 /** Parse custom properties from a CSS token sheet and resolve simple var() aliases. */
 export function parseTokens(css: string): Record<string, string> {
   const declared: Record<string, string> = {};
-  // A declaration is deliberately bounded to a semicolon. This keeps comments,
-  // selectors, and arbitrary CSS values out of the token map.
-  const declaration = /(^|[;{])\s*(--[A-Za-z0-9_-]+)\s*:\s*([^;{}]+);/gm;
-  for (const match of css.matchAll(declaration)) declared[match[2]] = match[3].trim();
+  postcss.parse(css).walkDecls(/^--/, (declaration) => {
+    declared[declaration.prop] = declaration.value.trim();
+  });
 
   const resolving = new Set<string>();
   const resolve = (name: string): string => {
@@ -88,6 +94,23 @@ function collectStyleExpression(expression: ts.Expression, destination: string[]
   }
 }
 
+function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
+  if (ts.isIdentifier(tag)) return tag.text;
+  // TypeScript represents `<Icons.Check />` as a PropertyAccessExpression.
+  if (!ts.isPropertyAccessExpression(tag)) return undefined;
+  let expression = tag.expression;
+  while (ts.isPropertyAccessExpression(expression))
+    expression = expression.expression;
+  return ts.isIdentifier(expression) ? expression.text : undefined;
+}
+
+function collectCssFile(content: string, tokenRefs: string[], literals: string[]) {
+  postcss.parse(content).walkDecls((declaration) => {
+    collectVarReferences(declaration.value, tokenRefs);
+    collectCssLiterals(declaration.value, literals);
+  });
+}
+
 /**
  * Inspect generated TSX without applying a policy gate. The report is evidence:
  * callers decide how, or whether, to score it.
@@ -96,27 +119,37 @@ export function analyzeSource({ files, tokenCss }: { files: SourceFile[]; tokenC
   const tokens = parseTokens(tokenCss);
   const tokenRefs: string[] = [];
   const literals: string[] = [];
-  const imports: Array<{ path: string; names: string[] }> = [];
+  const imports: SourceAnalysis["imports"] = [];
 
   for (const file of files) {
+    if (/\.css$/i.test(file.path)) {
+      collectCssFile(file.content, tokenRefs, literals);
+      continue;
+    }
     collectVarReferences(file.content, tokenRefs);
     const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const imported = new Set<string>();
+    const imported = new Map<string, { source: string; name: string }>();
     const usedInJsx = new Set<string>();
 
     for (const statement of source.statements) {
       if (!ts.isImportDeclaration(statement) || !statement.importClause) continue;
+      if (!ts.isStringLiteral(statement.moduleSpecifier) || !autographUiImport.test(statement.moduleSpecifier.text)) continue;
+      const moduleSource = statement.moduleSpecifier.text;
       const bindings = statement.importClause.namedBindings;
-      if (statement.importClause.name) imported.add(statement.importClause.name.text);
-      if (bindings && ts.isNamespaceImport(bindings)) imported.add(bindings.name.text);
+      if (statement.importClause.name)
+        imported.set(statement.importClause.name.text, { source: moduleSource, name: "default" });
+      if (bindings && ts.isNamespaceImport(bindings))
+        imported.set(bindings.name.text, { source: moduleSource, name: "*" });
       if (bindings && ts.isNamedImports(bindings))
-        for (const item of bindings.elements) imported.add(item.name.text);
+        for (const item of bindings.elements)
+          imported.set(item.name.text, { source: moduleSource, name: item.propertyName?.text ?? item.name.text });
     }
 
     const visit = (node: ts.Node) => {
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const tag = node.tagName;
-        if (ts.isIdentifier(tag)) usedInJsx.add(tag.text);
+        const root = jsxRootIdentifier(tag);
+        if (root) usedInJsx.add(root);
         for (const attribute of node.attributes.properties) {
           if (!ts.isJsxAttribute(attribute)) continue;
           const name = attribute.name.text;
@@ -133,8 +166,10 @@ export function analyzeSource({ files, tokenCss }: { files: SourceFile[]; tokenC
       ts.forEachChild(node, visit);
     };
     visit(source);
-    const names = unique([...usedInJsx].filter((name) => imported.has(name)));
-    if (names.length) imports.push({ path: file.path, names });
+    for (const localName of unique([...usedInJsx].filter((name) => imported.has(name)))) {
+      const item = imported.get(localName);
+      if (item) imports.push({ path: file.path, localName, ...item });
+    }
   }
 
   const resolvedValues = new Set(Object.values(tokens).map(normalise));
@@ -144,7 +179,9 @@ export function analyzeSource({ files, tokenCss }: { files: SourceFile[]; tokenC
   const uniqueRefs = unique(tokenRefs);
 
   return {
-    imports: imports.sort((left, right) => left.path.localeCompare(right.path)),
+    imports: imports.sort((left, right) =>
+      left.path.localeCompare(right.path) || left.source.localeCompare(right.source) || left.localName.localeCompare(right.localName),
+    ),
     tokenRefs: uniqueRefs,
     semanticVarRefs: uniqueRefs.filter(isSemanticToken),
     undefinedTokens: uniqueRefs.filter((name) => !Object.hasOwn(tokens, name)),
