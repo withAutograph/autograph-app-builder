@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { analyzeSource, parseTokens } from "./source";
+import type { Reference } from "./reference";
 
 const tokenCss = `
   @theme {
@@ -36,6 +37,59 @@ describe("parseTokens", () => {
 });
 
 describe("analyzeSource", () => {
+  const reference: Reference = {
+    limitations: [],
+    modules: {
+      "@autograph/components": {
+        exports: {
+          Button: {
+            props: {
+              variant: { required: false, values: ["primary", "secondary"] },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  it("uses selected public types, skips false branches, and labels unknown paths", () => {
+    const report = analyzeSource({
+      tokenCss,
+      reference,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `
+        import { Button } from "@autograph/components";
+        export function Page() { return <>{false ? <button /> : null}{ready ? <Button variant="other" {...props} /> : null}</>; }
+      `,
+        },
+      ],
+    });
+    expect(
+      report.observations.some((o) => o.classification === "local-control"),
+    ).toBe(false);
+    expect(report.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dimension: "api",
+          verdict: "nonconforming",
+          classification: "prop",
+        }),
+        expect.objectContaining({
+          dimension: "api",
+          verdict: "unassessed",
+          classification: "spread-props",
+        }),
+        expect.objectContaining({
+          dimension: "component",
+          verdict: "unassessed",
+          classification: "dynamic-reachability",
+        }),
+      ]),
+    );
+  });
+
   it("reports JSX imports, token evidence, and literal classifications", () => {
     const report = analyzeSource({
       tokenCss,
