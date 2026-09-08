@@ -91,9 +91,7 @@ async function main() {
   const scenarios = values.scenario
     ? scenariosSchema.parse(JSON.parse(await readFile(values.scenario, "utf8")))
     : [];
-  console.log(
-    "Capturing existing preview across desktop window sizes…",
-  );
+  console.log("Capturing existing preview across desktop window sizes…");
   const captures = await capturePreview({
     url: url.href,
     output,
