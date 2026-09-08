@@ -268,3 +268,79 @@ The optional `--additional-desktop-size WIDTHxHEIGHT` evaluator flag and archive
 filename support are covered by eight focused tests. It does not change scoring,
 the palette, runtime generation, or any default capture size. Broad verification
 belongs to this increment's exact-head CI.
+
+## Incremental update: compact advice and shared accessibility correction
+
+[The compact-context report](stock-exceptions-compact-context-203050797Z/README.md)
+records **85/100**, not an improvement to 100. All **16 fixture interactions**
+passed across the same four windows, with **20 screenshots** preserved. The
+group headings now remain visible during list scrolling, and delivery advice
+states the estimated gap plus the next action instead of a dense paragraph.
+
+![Compact supplier advice with visible group context](stock-exceptions-compact-context-203050797Z/desktop-window-1.png)
+
+The shared component correction is [Arrusted PR #1309](https://github.com/withAutograph/arrusted-development/pull/1309),
+candidate `cfd940cad7f13549dec80a1f9d8c33c99e8251fd`. It changes contextual
+notes from complementary landmarks to ordinary content, and makes the actual
+scroll body focusable with the existing shared focus treatment. Its focused
+suite passed **28/28**. The existing Vercel Sandbox rendered that component
+alongside the saved example; no full regeneration or new backend was involved.
+The Browser also confirmed that Tab from Supplier details visibly focuses the
+detail body. That manual observation is separate from the scripted interactions.
+
+The new measurements no longer report either nested complementary landmarks or
+keyboard-inaccessible scrolling. They do report **2.24:1** contrast for shared
+field labels. The current component uses `--color-text-disabled` for those
+labels. Its candidate diff changes no colors, and the selected reference's
+palette file matches the prior reference byte-for-byte. Previous rendered labels
+were stronger; earlier screenshots are not proof that every shared component
+byte matched the selected reference. Do not infer a color repair or complete
+shared-style provenance from those earlier adherence scores. The observations
+remain informational; this increment does not recolor the shared component.
+
+The judge's remaining composition suggestions concern the filtered one-record
+state and visibility of list scrolling. These are subjective opportunities,
+not runtime requirements. Keep context stable when filtering; do not add a
+changing layout merely to fill unused space or sample the judge repeatedly.
+
+Adherence remains **100, partial**, with component **15/19**, API **34/46**, and
+styling **13/5893** assessed observations; combined coverage is **1.04%**. This
+is still sparse evidence, not a whole-app fidelity claim. The prior 90-point
+report, source, and screenshots remain unchanged. The shared fix is submitted
+for review and is not claimed as merged by this report.
+
+The shared PR's React analysis then identified the unnamed focusable container.
+Follow-up `a93ecef05e14da68f239eb74a48cd7f6942c2a63` names it as a region via the
+existing panel heading, preserving keyboard access without a rule suppression.
+The exact CI-pinned React Doctor 0.9.3 changed-scope scan reports zero issues, and
+the focused component suite remains 28/28. That semantic-only follow-up is not
+retroactively represented as the version captured above, and did not trigger
+another visual score run.
+
+## Incremental update: finite prop evidence without another capture
+
+The evaluator can now assess finite object and array literals inside otherwise
+recursive component prop types. It inspects only the supplied literal structure
+and then asks TypeScript for assignability. It does not approximate tuple length,
+required properties, index signatures, or discriminants with a parallel type
+system. A union must have an independently inspectable, assignable branch;
+an `any`-bearing alternative cannot rescue a mismatch into positive evidence.
+Unsupported dynamic expressions, callbacks, spreads, and unresolved types remain
+unknown. Eighteen focused source/reference tests cover these boundaries.
+
+Reanalysis of the **unchanged saved source and browser observations** from both
+latest reports changes API evidence from **34/46 (73.91%)** to **37/46 (80.43%)**.
+Nine API observations remain unknown. Component and styling counts do not change.
+Combined coverage rises from 1.02% to **1.07%** for delivery-context and from 1.04%
+to **1.09%** for compact-context. Both adherence scores remain **100, partial**.
+Their subjective scores remain **90** and **85**; no screenshots were recaptured
+and no AI judge was rerun for this confidence improvement.
+
+[The count comparison](finite-prop-evidence-reanalysis.json) records the inputs
+and before/after observations. It can be recomputed by passing each archived
+report's `sourceFiles`, its selected reference's token CSS and `readReference`
+result to `analyzeSource`, then passing those new static observations and the
+report's unchanged `captures[].styles.observations` to `scoreAdherence`.
+Historical report JSON and screenshots are unchanged. This improves static API
+confidence only; it does not claim that shared component bytes rendered or that
+compiled browser styles have known provenance.
