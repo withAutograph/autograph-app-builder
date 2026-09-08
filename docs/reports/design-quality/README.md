@@ -18,6 +18,6 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 ## History
 
-| Evaluated (UTC) | App | Subjective score / 100 |
-| --- | --- | --- |
-| 2026-09-08T11:39:04.457Z | [stock-exceptions](2026-09-08/stock-exceptions-113904457Z/README.md) | 60 |
+| Evaluated (UTC)          | App                                                                  | Subjective score / 100 |
+| ------------------------ | -------------------------------------------------------------------- | ---------------------- |
+| 2026-09-08T11:39:04.457Z | [stock-exceptions](2026-09-08/stock-exceptions-113904457Z/README.md) | 60                     |

@@ -10,13 +10,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page establishes a clear sequence from title and filters to the exception queue, selected-item details, recommendation, and replenishment action. Critical/requested badges and exception counts aid scanning, though the mobile action sits far below the queue and the selected queue row is not visually prominent. |
-| layout | 2/4 | Desktop uses a clean two-column composition with aligned item, location, quantity, reorder, and status columns. At tablet and mobile widths the queue retains an approximately 760px row width inside narrower containers, clipping columns and location values and requiring horizontal navigation. |
-| typography | 2/4 | Headings, item names, values, and section titles are consistently styled and generally readable. However, detail labels use very light gray text with reported contrast around 2.24:1, several captions are only 10–12px, and the primary button reports only 2.78:1 contrast between white text and its background. |
-| responsive | 2/4 | Filters and detail content stack into a usable single-column flow, and primary controls remain within the viewport. The queue itself does not recompose: measured 760px-wide row controls overflow 720px tablet and 342px mobile containers, leaving status and portions of locations off-screen; the mobile document also extends to 1752px before the action. |
-| productClarity | 3/4 | The interface clearly communicates a low-stock review task, exposes location and Critical-only filters, shows inventory and supplier context, recommends an exact quantity, and provides explicit requested-state feedback. Selection is inferable from the matching detail title but lacks a strong visible marker in the queue. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                          |
+| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page establishes a clear sequence from title and filters to the exception queue, selected-item details, recommendation, and replenishment action. Critical/requested badges and exception counts aid scanning, though the mobile action sits far below the queue and the selected queue row is not visually prominent.                                      |
+| layout         | 2/4   | Desktop uses a clean two-column composition with aligned item, location, quantity, reorder, and status columns. At tablet and mobile widths the queue retains an approximately 760px row width inside narrower containers, clipping columns and location values and requiring horizontal navigation.                                                            |
+| typography     | 2/4   | Headings, item names, values, and section titles are consistently styled and generally readable. However, detail labels use very light gray text with reported contrast around 2.24:1, several captions are only 10–12px, and the primary button reports only 2.78:1 contrast between white text and its background.                                            |
+| responsive     | 2/4   | Filters and detail content stack into a usable single-column flow, and primary controls remain within the viewport. The queue itself does not recompose: measured 760px-wide row controls overflow 720px tablet and 342px mobile containers, leaving status and portions of locations off-screen; the mobile document also extends to 1752px before the action. |
+| productClarity | 3/4   | The interface clearly communicates a low-stock review task, exposes location and Critical-only filters, shows inventory and supplier context, recommends an exact quantity, and provides explicit requested-state feedback. Selection is inferable from the matching detail title but lacks a strong visible marker in the queue.                               |
 
 ## Strengths
 
@@ -39,26 +39,26 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 86/86 | 37% (86/233) |
-| desktop-0 | typography | 72/113 | 19% (113/592) |
-| desktop-0 | spacing | 2/54 | 20% (54/268) |
-| desktop-0 | radius | 0/11 | 9% (11/120) |
-| desktop-0 | border | 0/106 | 81% (106/131) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| tablet-0 | color | 86/86 | 37% (86/233) |
-| tablet-0 | typography | 72/113 | 19% (113/592) |
-| tablet-0 | spacing | 2/54 | 20% (54/268) |
-| tablet-0 | radius | 0/11 | 9% (11/120) |
-| tablet-0 | border | 0/106 | 81% (106/131) |
-| tablet-0 | shadow | 0/0 | 0% (0/120) |
-| mobile-0 | color | 86/86 | 37% (86/233) |
-| mobile-0 | typography | 72/113 | 19% (113/592) |
-| mobile-0 | spacing | 2/54 | 20% (54/268) |
-| mobile-0 | radius | 0/11 | 9% (11/120) |
-| mobile-0 | border | 0/106 | 81% (106/131) |
-| mobile-0 | shadow | 0/0 | 0% (0/120) |
+| Viewport  | Category   | Token references / assessed | Coverage      |
+| --------- | ---------- | --------------------------- | ------------- |
+| desktop-0 | color      | 86/86                       | 37% (86/233)  |
+| desktop-0 | typography | 72/113                      | 19% (113/592) |
+| desktop-0 | spacing    | 2/54                        | 20% (54/268)  |
+| desktop-0 | radius     | 0/11                        | 9% (11/120)   |
+| desktop-0 | border     | 0/106                       | 81% (106/131) |
+| desktop-0 | shadow     | 0/0                         | 0% (0/120)    |
+| tablet-0  | color      | 86/86                       | 37% (86/233)  |
+| tablet-0  | typography | 72/113                      | 19% (113/592) |
+| tablet-0  | spacing    | 2/54                        | 20% (54/268)  |
+| tablet-0  | radius     | 0/11                        | 9% (11/120)   |
+| tablet-0  | border     | 0/106                       | 81% (106/131) |
+| tablet-0  | shadow     | 0/0                         | 0% (0/120)    |
+| mobile-0  | color      | 86/86                       | 37% (86/233)  |
+| mobile-0  | typography | 72/113                      | 19% (113/592) |
+| mobile-0  | spacing    | 2/54                        | 20% (54/268)  |
+| mobile-0  | radius     | 0/11                        | 9% (11/120)   |
+| mobile-0  | border     | 0/106                       | 81% (106/131) |
+| mobile-0  | shadow     | 0/0                         | 0% (0/120)    |
 
 ## Latest-run screenshots
 

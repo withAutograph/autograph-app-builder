@@ -23,12 +23,10 @@ test("measurements distinguish concrete defects from intentional layout", async 
   expect(
     good.accessibility.violations.some((v) => v.id === "button-name"),
   ).toBe(false);
-  await test
-    .info()
-    .attach("authored-good-reference", {
-      body: await page.screenshot(),
-      contentType: "image/png",
-    });
+  await test.info().attach("authored-good-reference", {
+    body: await page.screenshot(),
+    contentType: "image/png",
+  });
   await page.setContent(
     `<!doctype html><html lang="en"><title>Poor reference</title><main style="width:900px"><h1>Inventory</h1><button style="width:50px;height:30px"></button><div role="table"><div role="row"><span role="columnheader">Item</span></div><div role="row"><span role="cell" style="display:inline-block;margin-left:80px">Bottle</span></div></div><div style="width:20px;overflow:hidden"><button style="width:200px">Clipped action</button></div></main></html>`,
   );
@@ -42,10 +40,8 @@ test("measurements distinguish concrete defects from intentional layout", async 
   expect(
     poor.accessibility.violations.some((v) => v.id === "button-name"),
   ).toBe(true);
-  await test
-    .info()
-    .attach("authored-poor-reference", {
-      body: await page.screenshot(),
-      contentType: "image/png",
-    });
+  await test.info().attach("authored-poor-reference", {
+    body: await page.screenshot(),
+    contentType: "image/png",
+  });
 });

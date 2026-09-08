@@ -1,4 +1,250 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Generated UI design report</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1100px;color:#222}h1,h2{line-height:1.2}img{max-width:100%;height:auto;border:1px solid #ddd}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f4f4;padding:16px;border-radius:8px}section,article{margin:32px 0}summary{cursor:pointer}a{color:#334ba0}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd;vertical-align:top}</style><main><h1>Generated UI design report</h1><p>Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.</p><p>2026-09-08T11:39:04.457Z</p><h2>AI design review</h2><p><strong>Subjective design score: 60/100</strong></p><p>One model assessment; not an objective rating. Token adherence is reported separately below.</p><table><thead><tr><th>Dimension</th><th>Rating</th><th>Reason</th></tr></thead><tbody><tr><th>hierarchy</th><td>3/4</td><td>The page establishes a clear sequence from title and filters to the exception queue, selected-item details, recommendation, and replenishment action. Critical/requested badges and exception counts aid scanning, though the mobile action sits far below the queue and the selected queue row is not visually prominent.</td></tr><tr><th>layout</th><td>2/4</td><td>Desktop uses a clean two-column composition with aligned item, location, quantity, reorder, and status columns. At tablet and mobile widths the queue retains an approximately 760px row width inside narrower containers, clipping columns and location values and requiring horizontal navigation.</td></tr><tr><th>typography</th><td>2/4</td><td>Headings, item names, values, and section titles are consistently styled and generally readable. However, detail labels use very light gray text with reported contrast around 2.24:1, several captions are only 10–12px, and the primary button reports only 2.78:1 contrast between white text and its background.</td></tr><tr><th>responsive</th><td>2/4</td><td>Filters and detail content stack into a usable single-column flow, and primary controls remain within the viewport. The queue itself does not recompose: measured 760px-wide row controls overflow 720px tablet and 342px mobile containers, leaving status and portions of locations off-screen; the mobile document also extends to 1752px before the action.</td></tr><tr><th>productClarity</th><td>3/4</td><td>The interface clearly communicates a low-stock review task, exposes location and Critical-only filters, shows inventory and supplier context, recommends an exact quantity, and provides explicit requested-state feedback. Selection is inferable from the matching detail title but lacks a strong visible marker in the queue.</td></tr></tbody></table><h3>Strengths</h3><ul><li>Desktop columns are consistently aligned, with numeric inventory fields right-aligned for quick comparison.</li><li>Locations are shown both in queue rows and selected-item details, supporting operational context.</li><li>The Critical-only state updates the visible count from five to three exceptions in the supplied states.</li><li>The replenishment action names the exact quantity, and the requested state provides both a status badge and confirmation message.</li><li>Tablet and mobile layouts stack the detail panel beneath the queue rather than compressing the full desktop split view.</li></ul><h3>Recommended improvements</h3><article><h4>high · <a href="#mobile-0">mobile-0</a></h4><p>The mobile queue viewport is 342px wide while each row is measured at 760px. Only the item and part of the location column are visible, with location names visibly truncated and inventory, reorder, and status information off-screen. Horizontal scrolling may be intentional, but it conflicts with the brief&#39;s responsive and clear-location goals.</p><p><strong>Improve:</strong> Replace the desktop row grid with mobile cards or stacked rows that show item, full location, on-hand/reorder values, and status without horizontal scrolling. If horizontal scrolling must remain, add a clear scroll affordance and keep the item column sticky.</p><small>Screenshot region: x 24, y 375, width 342, height 410</small></article><article><h4>medium · <a href="#tablet-0">tablet-0</a></h4><p>The tablet queue still uses rows wider than the viewport; the status header and badges are visibly cut at the right edge. This weakens scanability despite the otherwise well-aligned desktop columns.</p><p><strong>Improve:</strong> Introduce a tablet-specific grid with narrower item/location columns, or move status beneath the item name so all operational fields fit within the 720px container.</p><small>Screenshot region: x 24, y 226, width 720, height 410</small></article><article><h4>medium · <a href="#desktop-0">desktop-0</a></h4><p>Inventory and replenishment field labels are rendered in very pale gray. Reported contrast is approximately 2.24:1, making important labels such as Location, On hand, and Recommended quantity difficult to read.</p><p><strong>Improve:</strong> Use a darker muted-text color that reaches at least 4.5:1 against the panel background, and avoid disabled styling for active informational labels.</p><small>Screenshot region: x 954, y 420, width 300, height 340</small></article><article><h4>medium · <a href="#desktop-0">desktop-0</a></h4><p>The main replenishment button is the primary task affordance, but its white text on the light blue background reports only 2.78:1 contrast, reducing legibility and visual confidence.</p><p><strong>Improve:</strong> Darken the primary button background or use darker text while preserving clear prominence and meeting at least 4.5:1 text contrast.</p><small>Screenshot region: x 1252, y 875, width 144, height 40</small></article><article><h4>medium · <a href="#desktop-2">desktop-2</a></h4><p>Canvas Weekender Bag is the item shown in the details panel, but its queue row has little or no visible distinction from neighboring rows. Users must compare text to confirm which item is selected.</p><p><strong>Improve:</strong> Add a persistent selected-row treatment such as a tinted background, stronger inset border, or left selection indicator with sufficient contrast.</p><small>Screenshot region: x 25, y 343, width 884, height 73</small></article><article><h4>low · <a href="#mobile-0">mobile-0</a></h4><p>The narrow detail layout places labels and values on separate lines with generous vertical spacing, producing a long path from the selected-item heading to the replenishment action.</p><p><strong>Improve:</strong> Reduce vertical gaps and use compact two-column label/value pairs where values fit, while allowing long locations or supplier names to wrap.</p><small>Screenshot region: x 48, y 934, width 294, height 700</small></article><details><summary>Full scoring metadata and limitations</summary><pre>{
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #ddd;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>2026-09-08T11:39:04.457Z</p>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 60/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>3/4</td>
+          <td>
+            The page establishes a clear sequence from title and filters to the
+            exception queue, selected-item details, recommendation, and
+            replenishment action. Critical/requested badges and exception counts
+            aid scanning, though the mobile action sits far below the queue and
+            the selected queue row is not visually prominent.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>2/4</td>
+          <td>
+            Desktop uses a clean two-column composition with aligned item,
+            location, quantity, reorder, and status columns. At tablet and
+            mobile widths the queue retains an approximately 760px row width
+            inside narrower containers, clipping columns and location values and
+            requiring horizontal navigation.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>2/4</td>
+          <td>
+            Headings, item names, values, and section titles are consistently
+            styled and generally readable. However, detail labels use very light
+            gray text with reported contrast around 2.24:1, several captions are
+            only 10–12px, and the primary button reports only 2.78:1 contrast
+            between white text and its background.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>2/4</td>
+          <td>
+            Filters and detail content stack into a usable single-column flow,
+            and primary controls remain within the viewport. The queue itself
+            does not recompose: measured 760px-wide row controls overflow 720px
+            tablet and 342px mobile containers, leaving status and portions of
+            locations off-screen; the mobile document also extends to 1752px
+            before the action.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>3/4</td>
+          <td>
+            The interface clearly communicates a low-stock review task, exposes
+            location and Critical-only filters, shows inventory and supplier
+            context, recommends an exact quantity, and provides explicit
+            requested-state feedback. Selection is inferable from the matching
+            detail title but lacks a strong visible marker in the queue.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        Desktop columns are consistently aligned, with numeric inventory fields
+        right-aligned for quick comparison.
+      </li>
+      <li>
+        Locations are shown both in queue rows and selected-item details,
+        supporting operational context.
+      </li>
+      <li>
+        The Critical-only state updates the visible count from five to three
+        exceptions in the supplied states.
+      </li>
+      <li>
+        The replenishment action names the exact quantity, and the requested
+        state provides both a status badge and confirmation message.
+      </li>
+      <li>
+        Tablet and mobile layouts stack the detail panel beneath the queue
+        rather than compressing the full desktop split view.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article>
+      <h4>high · <a href="#mobile-0">mobile-0</a></h4>
+      <p>
+        The mobile queue viewport is 342px wide while each row is measured at
+        760px. Only the item and part of the location column are visible, with
+        location names visibly truncated and inventory, reorder, and status
+        information off-screen. Horizontal scrolling may be intentional, but it
+        conflicts with the brief&#39;s responsive and clear-location goals.
+      </p>
+      <p>
+        <strong>Improve:</strong> Replace the desktop row grid with mobile cards
+        or stacked rows that show item, full location, on-hand/reorder values,
+        and status without horizontal scrolling. If horizontal scrolling must
+        remain, add a clear scroll affordance and keep the item column sticky.
+      </p>
+      <small>Screenshot region: x 24, y 375, width 342, height 410</small>
+    </article>
+    <article>
+      <h4>medium · <a href="#tablet-0">tablet-0</a></h4>
+      <p>
+        The tablet queue still uses rows wider than the viewport; the status
+        header and badges are visibly cut at the right edge. This weakens
+        scanability despite the otherwise well-aligned desktop columns.
+      </p>
+      <p>
+        <strong>Improve:</strong> Introduce a tablet-specific grid with narrower
+        item/location columns, or move status beneath the item name so all
+        operational fields fit within the 720px container.
+      </p>
+      <small>Screenshot region: x 24, y 226, width 720, height 410</small>
+    </article>
+    <article>
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        Inventory and replenishment field labels are rendered in very pale gray.
+        Reported contrast is approximately 2.24:1, making important labels such
+        as Location, On hand, and Recommended quantity difficult to read.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use a darker muted-text color that reaches at
+        least 4.5:1 against the panel background, and avoid disabled styling for
+        active informational labels.
+      </p>
+      <small>Screenshot region: x 954, y 420, width 300, height 340</small>
+    </article>
+    <article>
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The main replenishment button is the primary task affordance, but its
+        white text on the light blue background reports only 2.78:1 contrast,
+        reducing legibility and visual confidence.
+      </p>
+      <p>
+        <strong>Improve:</strong> Darken the primary button background or use
+        darker text while preserving clear prominence and meeting at least 4.5:1
+        text contrast.
+      </p>
+      <small>Screenshot region: x 1252, y 875, width 144, height 40</small>
+    </article>
+    <article>
+      <h4>medium · <a href="#desktop-2">desktop-2</a></h4>
+      <p>
+        Canvas Weekender Bag is the item shown in the details panel, but its
+        queue row has little or no visible distinction from neighboring rows.
+        Users must compare text to confirm which item is selected.
+      </p>
+      <p>
+        <strong>Improve:</strong> Add a persistent selected-row treatment such
+        as a tinted background, stronger inset border, or left selection
+        indicator with sufficient contrast.
+      </p>
+      <small>Screenshot region: x 25, y 343, width 884, height 73</small>
+    </article>
+    <article>
+      <h4>low · <a href="#mobile-0">mobile-0</a></h4>
+      <p>
+        The narrow detail layout places labels and values on separate lines with
+        generous vertical spacing, producing a long path from the selected-item
+        heading to the replenishment action.
+      </p>
+      <p>
+        <strong>Improve:</strong> Reduce vertical gaps and use compact
+        two-column label/value pairs where values fit, while allowing long
+        locations or supplier names to wrap.
+      </p>
+      <small>Screenshot region: x 48, y 934, width 294, height 700</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
   &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
   &quot;rubricVersion&quot;: 1,
   &quot;assessedImages&quot;: [
@@ -137,7 +383,11 @@
     },
     &quot;totalTokens&quot;: 45763
   }
-}</pre></details><h2>Generated-source evidence</h2><pre>{
+}</pre>
+    </details>
+    <h2>Generated-source evidence</h2>
+    <pre>
+{
   &quot;status&quot;: &quot;available&quot;,
   &quot;imports&quot;: [
     {
@@ -266,7 +516,16 @@
     &quot;720px&quot;,
     &quot;760px&quot;
   ]
-}</pre><section id="desktop-0"><h2>desktop-0 — initial</h2><a href="desktop-0.png"><img src="desktop-0.png" alt="desktop-0 initial screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <a href="desktop-0.png"
+        ><img src="desktop-0.png" alt="desktop-0 initial screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 1440,
@@ -534,7 +793,12 @@
   &quot;interaction&quot;: {
     &quot;status&quot;: &quot;not-run&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
   &quot;sampledElements&quot;: 120,
   &quot;totalDomElements&quot;: 151,
   &quot;categories&quot;: {
@@ -25089,7 +25353,18 @@
     &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling covers the first 120 visible elements.&quot;,
     &quot;Inherited library styles and generated rules may share a bundle; source analysis reports generated overrides separately.&quot;
   ]
-}</pre></details></section><section id="desktop-1"><h2>desktop-1 — critical filter</h2><a href="desktop-1.png"><img src="desktop-1.png" alt="desktop-1 critical filter screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — critical filter</h2>
+      <a href="desktop-1.png"
+        ><img src="desktop-1.png" alt="desktop-1 critical filter screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 1440,
@@ -25326,7 +25601,22 @@
     &quot;status&quot;: &quot;passed&quot;,
     &quot;expectedText&quot;: &quot;3 exceptions&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>&quot;See initial state for style evidence&quot;</pre></details></section><section id="desktop-2"><h2>desktop-2 — replenishment</h2><a href="desktop-2.png"><img src="desktop-2.png" alt="desktop-2 replenishment screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-2">
+      <h2>desktop-2 — replenishment</h2>
+      <a href="desktop-2.png"
+        ><img src="desktop-2.png" alt="desktop-2 replenishment screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 1440,
@@ -25589,7 +25879,22 @@
     &quot;status&quot;: &quot;passed&quot;,
     &quot;expectedText&quot;: &quot;Replenishment request created&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>&quot;See initial state for style evidence&quot;</pre></details></section><section id="tablet-0"><h2>tablet-0 — initial</h2><a href="tablet-0.png"><img src="tablet-0.png" alt="tablet-0 initial screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="tablet-0">
+      <h2>tablet-0 — initial</h2>
+      <a href="tablet-0.png"
+        ><img src="tablet-0.png" alt="tablet-0 initial screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 768,
@@ -25867,7 +26172,12 @@
   &quot;interaction&quot;: {
     &quot;status&quot;: &quot;not-run&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
   &quot;sampledElements&quot;: 120,
   &quot;totalDomElements&quot;: 151,
   &quot;categories&quot;: {
@@ -50422,7 +50732,18 @@
     &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling covers the first 120 visible elements.&quot;,
     &quot;Inherited library styles and generated rules may share a bundle; source analysis reports generated overrides separately.&quot;
   ]
-}</pre></details></section><section id="tablet-1"><h2>tablet-1 — critical filter</h2><a href="tablet-1.png"><img src="tablet-1.png" alt="tablet-1 critical filter screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+    </section>
+    <section id="tablet-1">
+      <h2>tablet-1 — critical filter</h2>
+      <a href="tablet-1.png"
+        ><img src="tablet-1.png" alt="tablet-1 critical filter screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 768,
@@ -50669,7 +50990,22 @@
     &quot;status&quot;: &quot;passed&quot;,
     &quot;expectedText&quot;: &quot;3 exceptions&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>&quot;See initial state for style evidence&quot;</pre></details></section><section id="tablet-2"><h2>tablet-2 — replenishment</h2><a href="tablet-2.png"><img src="tablet-2.png" alt="tablet-2 replenishment screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="tablet-2">
+      <h2>tablet-2 — replenishment</h2>
+      <a href="tablet-2.png"
+        ><img src="tablet-2.png" alt="tablet-2 replenishment screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 768,
@@ -50942,7 +51278,22 @@
     &quot;status&quot;: &quot;passed&quot;,
     &quot;expectedText&quot;: &quot;Replenishment request created&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>&quot;See initial state for style evidence&quot;</pre></details></section><section id="mobile-0"><h2>mobile-0 — initial</h2><a href="mobile-0.png"><img src="mobile-0.png" alt="mobile-0 initial screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="mobile-0">
+      <h2>mobile-0 — initial</h2>
+      <a href="mobile-0.png"
+        ><img src="mobile-0.png" alt="mobile-0 initial screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 390,
@@ -51220,7 +51571,12 @@
   &quot;interaction&quot;: {
     &quot;status&quot;: &quot;not-run&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
   &quot;sampledElements&quot;: 120,
   &quot;totalDomElements&quot;: 151,
   &quot;categories&quot;: {
@@ -75775,7 +76131,18 @@
     &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling covers the first 120 visible elements.&quot;,
     &quot;Inherited library styles and generated rules may share a bundle; source analysis reports generated overrides separately.&quot;
   ]
-}</pre></details></section><section id="mobile-1"><h2>mobile-1 — critical filter</h2><a href="mobile-1.png"><img src="mobile-1.png" alt="mobile-1 critical filter screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+    </section>
+    <section id="mobile-1">
+      <h2>mobile-1 — critical filter</h2>
+      <a href="mobile-1.png"
+        ><img src="mobile-1.png" alt="mobile-1 critical filter screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 390,
@@ -76022,7 +76389,22 @@
     &quot;status&quot;: &quot;passed&quot;,
     &quot;expectedText&quot;: &quot;3 exceptions&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>&quot;See initial state for style evidence&quot;</pre></details></section><section id="mobile-2"><h2>mobile-2 — replenishment</h2><a href="mobile-2.png"><img src="mobile-2.png" alt="mobile-2 replenishment screenshot"></a><details><summary>Browser findings and interactions</summary><pre>{
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="mobile-2">
+      <h2>mobile-2 — replenishment</h2>
+      <a href="mobile-2.png"
+        ><img src="mobile-2.png" alt="mobile-2 replenishment screenshot"
+      /></a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
   &quot;measurements&quot;: {
     &quot;title&quot;: &quot;stock-exceptions&quot;,
     &quot;width&quot;: 390,
@@ -76295,4 +76677,12 @@
     &quot;status&quot;: &quot;passed&quot;,
     &quot;expectedText&quot;: &quot;Replenishment request created&quot;
   }
-}</pre></details><details><summary>Token evidence and coverage</summary><pre>&quot;See initial state for style evidence&quot;</pre></details></section></main></html>
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>
