@@ -185,18 +185,42 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
       sourceRoot,
       "ls-files",
       "--cached",
+      "--stage",
       "--others",
       "--exclude-standard",
       "-z",
     ],
     { encoding: "buffer", env: gitEnvironment(), maxBuffer: 64 * 1024 * 1024 },
   );
-  return stdout
-    .toString("utf8")
-    .split("\0")
-    .filter(Boolean)
-    .filter((path) => safeRelativePath(path))
-    .toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right)));
+  const paths: string[] = [];
+  for (const entry of stdout.toString("utf8").split("\0").filter(Boolean)) {
+    const staged = /^(\d{6}) [0-9a-f]+ [0-3]\t([\s\S]*)$/u.exec(entry);
+    const path = staged?.[2] ?? entry;
+    if (!safeRelativePath(path)) continue;
+    if (staged?.[1] === "160000") {
+      const absolute = join(sourceRoot, path);
+      try {
+        await assertSafeSourceAncestors(sourceRoot, absolute);
+        const info = await lstat(absolute);
+        if (info.isDirectory() && !info.isSymbolicLink()) {
+          // An uninitialized gitlink has no checkout bytes to snapshot. An
+          // initialized submodule contributes its live, nonignored files.
+          await lstat(join(absolute, ".git"));
+          paths.push(
+            ...(await sourcePaths(absolute)).map((child) => `${path}/${child}`),
+          );
+          continue;
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+    }
+    paths.push(path);
+  }
+  return [...new Set(paths)].toSorted((left, right) =>
+    Buffer.from(left).compare(Buffer.from(right)),
+  );
 }
 
 async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {

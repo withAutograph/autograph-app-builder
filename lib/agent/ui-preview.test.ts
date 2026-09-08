@@ -64,6 +64,20 @@ const preview = {
 };
 
 describe("component-backed UI preview policy", () => {
+  it("does not count TypeScript-only imports as visual components", () => {
+    expect(() =>
+      validateUiPreview({
+        ...preview,
+        files: [
+          {
+            path: "src/routes/index.tsx",
+            content:
+              'import type { SchemaFormValue } from "@autograph/compositions"; import { Button as Action, type ButtonProps } from "@autograph/components"; export default function Page() { return <Action>Review</Action>; }',
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
   it("accepts public Arrusted imports and gives equivalent source one revision", () => {
     expect(() => validateUiPreview(preview)).not.toThrow();
     expect(uiPreviewSourceDigest(preview)).toMatch(/^[a-f0-9]{64}$/u);

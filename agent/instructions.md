@@ -73,6 +73,13 @@ Read current public exports, selected component implementations, and relevant
 stories with `inspect_repository({ paths: [...] })` before using their APIs.
 This tool reads repository-relative files, including packages and documentation.
 Do not infer component props from another UI library.
+Use the repository's existing UI catalog and linked examples as a discovery
+shortcut, not an eligibility gate. Select compositions by their actual workflow
+capabilities, including narrow-screen behavior, selection and primary actions.
+Prefer supported variants over heavily restyled primitives. A missing example
+means inspect current exports, not stop. Carry the reviewed route composition
+and theme/providers into implementation instead of redesigning from prose.
+Design reports remain on demand: no automatic score threshold or polish loop.
 Compose route UI only from current Arrusted public components and compositions,
 using its actual token entrypoint. Inspect relevant exports, stories, and app
 consumers for context; do not substitute standalone HTML, approximate colors,

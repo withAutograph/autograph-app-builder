@@ -86,6 +86,52 @@ async function fixture() {
 }
 
 describe("development source snapshots", () => {
+  it("skips uninitialized gitlinks and snapshots live initialized submodule files", async () => {
+    const source = await fixture();
+    const { execFileSync } = await import("node:child_process");
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync("/usr/bin/git", args, { cwd, encoding: "utf8" });
+    const head = git(source, "rev-parse", "HEAD").trim();
+    const submodule = join(source, "plugin");
+    git(
+      source,
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `160000,${head},plugin`,
+    );
+    await mkdir(submodule);
+    const empty = await fingerprintDevelopmentSource(source);
+    await writeFile(join(submodule, "not-initialized.txt"), "not a checkout");
+    expect(await fingerprintDevelopmentSource(source)).toBe(empty);
+
+    git(submodule, "init", "-q");
+    await writeFile(join(submodule, ".gitignore"), "ignored.txt\n");
+    await writeFile(join(submodule, "tracked.txt"), "original");
+    git(submodule, "add", ".gitignore", "tracked.txt");
+    await writeFile(join(submodule, "tracked.txt"), "dirty");
+    await writeFile(join(submodule, "ignored.txt"), "ignored");
+    const runRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "app-builder-dev-submodule-")),
+    );
+    roots.push(runRoot);
+    await chmod(runRoot, 0o700);
+    const snapshot = await createDevelopmentSnapshot({
+      sourceRoot: source,
+      runRoot,
+    });
+    expect(
+      await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf8"),
+    ).toBe("dirty");
+    expect(
+      await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf8"),
+    ).toBe("not a checkout");
+    await expect(
+      stat(join(snapshot.root, "plugin/ignored.txt")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(snapshot.fingerprint).not.toBe(empty);
+  });
+
   it("captures dirty and untracked source in an owner-writable Git snapshot", async () => {
     const source = await fixture();
     await writeFile(join(source, "README.md"), "dirty\n");

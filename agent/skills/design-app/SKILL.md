@@ -19,8 +19,9 @@ Ask one question only when the missing answer would create a meaningfully
 different visible product. Record all other unconfirmed choices as narrow
 assumptions or visible-product questions, never accepted decisions.
 
-Prepare the canonical Arrusted source before creating a preview. Inspect design
-evidence in this order:
+Use the prepared Arrusted source when creating a preview. Start with its
+`docs/app-builder-ui-catalog.json` and linked examples to find relevant patterns,
+then inspect the useful subset of:
 
 1. public `@autograph/components` exports;
 2. public `@autograph/compositions` exports, including tables and charts;
@@ -38,11 +39,24 @@ to invent one. Offer a product-level alternative if the gap changes what the
 user can accomplish. Import the current target-owned token entrypoint directly;
 do not approximate the theme with hand-authored colors.
 
+Choose by capability, not component name. A display-only table is not an
+interactive review queue. Prefer a supported record-review composition for
+selection and details, a form composition for data entry, and an overview/detail
+pattern when summarizing before drilling in. These are examples, not required
+layouts. Read the selected API and example rather than browsing the whole catalog.
+Missing or stale documentation is not a blocker: inspect current public exports
+and try the renderer. See `references/target-repository-routing.md` for sources.
+
+Plan narrow-screen behavior with the first composition. Keep the selected record
+and its primary action understandable; use supported compact/list presentations
+where comparison columns would hide essential information. Intentional scrolling
+is appropriate for wide comparisons, not a universal failure. Use component
+variants instead of turning Buttons into rows through extensive style overrides.
+
 ## Source and manifest contract
 
 In local and hosted execution, call `record_ui_preview` with React route wiring,
-routes, catalog gaps, and
-one synchronized manifest. The manifest must inventory:
+routes, catalog gaps, and one synchronized manifest. The manifest inventories:
 
 - every screen and its source entry;
 - every imported public component, composition, and icon;
@@ -73,7 +87,8 @@ invented iconography, and unsupported design-system APIs. Prefer a restrained
 composition that keeps the primary task, selection, evidence, and next action
 obvious.
 
-Before presenting a material revision, verify:
+Use these design considerations while composing; they are not additional
+preflight steps or approval gates:
 
 - every public import and catalog gap is inventoried and justified;
 - a suitable public composition was not replaced by local UI;
@@ -101,6 +116,15 @@ revisions update the plan silently. Publication and other outward effects need
 their own later effect-based approval. Reuse the prepared checkout while
 refining the design, and keep the applied interface on the same public Arrusted
 components and token entrypoint as the preview.
+Carry the reviewed route composition, responsive choices, and supported props
+into implementation; change fixture data to real data bindings rather than
+redesigning the UI from the prose brief. Load the same required providers and
+font/theme foundation in both surfaces.
+
+Design scoring is on demand only. Do not run a judge, impose a score threshold,
+or start an automatic polish loop before showing the prototype. Report shared
+component defects for repair in Arrusted instead of covering them with a new
+generated styling system.
 
 ## References
 
