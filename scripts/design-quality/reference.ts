@@ -563,6 +563,30 @@ function jsxAttributeExpectedType(
   return prop ? checker.getTypeOfSymbolAtLocation(prop, attribute) : undefined;
 }
 
+function requiresFiniteIdentifierEvidence(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+): boolean {
+  if (!ts.isIdentifier(expression)) return false;
+  const declaration = checker.getSymbolAtLocation(expression)?.valueDeclaration;
+  if (!declaration) return false;
+  if (ts.isImportSpecifier(declaration)) return true;
+  if (ts.isVariableDeclaration(declaration)) return true;
+  // Object destructuring can conceal a JSX/object literal alias. Array
+  // destructuring from hooks remains ordinary state evidence and is left to
+  // the existing reliable-type path.
+  if (!ts.isBindingElement(declaration)) return false;
+  const pattern = declaration.parent;
+  const variable = pattern?.parent;
+  return Boolean(
+    ts.isObjectBindingPattern(pattern) &&
+      variable &&
+      ts.isVariableDeclaration(variable) &&
+      variable.initializer &&
+      ts.isObjectLiteralExpression(variable.initializer),
+  );
+}
+
 /**
  * Type-check generated JSX through a virtual, read-only host configured from
  * the selected Arrusted checkout. This proves assignability only, never render
@@ -728,11 +752,10 @@ export function checkJsxAttributes({
             const finite = finiteLiteralEvidence(expression, expected, checker);
             if (
               finite === undefined &&
-              // An identifier can hide a mutable, imported, or otherwise
-              // externally-owned value even when its widened type is reliable.
-              // It needs the finite same-file const proof above before type
-              // assignability can receive evidence credit.
-              (ts.isIdentifier(expression) ||
+              // JSX/object aliases and imports can hide mutable or
+              // externally-owned values even when their widened types are
+              // reliable. State bindings retain the existing type-only path.
+              (requiresFiniteIdentifierEvidence(expression, checker) ||
                 !reliableExpressionType(actual, checker))
             )
               attributes.push({
