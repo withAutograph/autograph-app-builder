@@ -5,7 +5,7 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { StoreInSection } from "./app-builder";
 
 const meta = {
-  title: "Create App/Sections/Store In",
+  title: "Components/Create App/Sections/Store In",
   component: StoreInSection,
   args: {
     available: true,

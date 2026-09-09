@@ -1,143 +1,133 @@
-# Agent Client Deep-Link Handoff
+# Web-to-client handoff
 
-## Production behavior
+The form prepares the selected resources, saves an owner-bound handoff, and
+launches the selected client from the original **Create App** gesture. The
+browser reserves that native launch before asynchronous preparation, then sends
+only the saved opaque handoff ID when it is ready. It also navigates to
+`/handoff/[id]` as a durable recovery and reopen surface; it does not require a
+second click for the normal path.
+The durable page loads from the authenticated server record, so reloading or
+opening its URL in another tab preserves the app brief, repository, Vercel
+project/team, connection choices, and provisioning outcomes.
 
-The app creation form has one required **Build with** destination. **ChatGPT /
-Codex** is selected by default, **Cursor** is selectable, and **Web Chat** is
-visible as a disabled **Coming soon** option.
+## Continue in Codex or Cursor
 
-When the user clicks **Create App**, Autograph first provisions only the
-selected providers. GitHub receives the exact verified Arrusted starter as one
-parentless `main` commit. Vercel receives a project with no deployment; when
-GitHub also succeeded, the Vercel project is linked to that repository. After
-all attempted provider setup settles, Autograph builds one canonical prompt
-from the app brief and the provider read-back receipts. It then:
+1. Review the saved app and select a destination (the form's choice is the default).
+2. If needed, expand **Set up Autograph** for that destination. Use the same
+   Autograph account and browser profile that signed into the form.
+3. Click **Open in Codex** or **Open in Cursor**. Review and send the prepared
+   prompt in the native client.
+4. The client invokes `autograph_start` with the opaque `handoffId`. Its
+   Autograph connection authenticates the request and the server resolves the
+   saved intent and existing provider connections.
 
-1. copies that prompt to the clipboard as a fallback;
-2. requests a launch of the selected client with the same prompt encoded in its
-   deep link; and
-3. continues to the Ready screen whether or not the browser permits the custom
-   URL.
+A new client may ask the user to allow Autograph once. GitHub and Vercel
+credentials stay server-side; provider CLI logins and separate provider plugins
+are not part of this flow. Expired browser sessions, a different browser
+profile/account, revoked credentials, and missing permissions can require
+authentication again. Handoff does not grant build, publication, or deployment
+approval.
 
-The Ready screen retains the copied brief, linked resource cards, sanitized
-partial failures, installation guidance, and a destination-specific retry
-button. A failed provider can be retried with the original request ID without
-recreating a successful resource. A successful retry refreshes the prompt, but
-the user explicitly reopens the client. Deep links only prefill a composer;
-they do not submit or execute the task.
+The page shows **Launch requested** after invoking the custom protocol. A
+browser cannot confirm that the app opened or the user submitted the prompt.
+**Continued in your app** appears only when the owner-authorized status endpoint
+reports a bound session. Status refresh runs while the page is visible, pauses
+and cancels in-flight reads when hidden, and stops after confirmed continuation.
+A status outage remains retryable and does not trigger a provider login.
 
-## ChatGPT / Codex deep link
+The user can switch clients and reopen the same handoff. This retains the same
+server reference; server-side start idempotency owns session reuse.
 
-Codex supports the `codex://` URL scheme on macOS.
+## Destination adapters
 
-The production format is:
+`lib/handoff/client.ts` generates distinct prompts and deep links. Prompts carry
+the opaque handoff ID and destination-specific setup guidance; they do not
+carry app content, provider credentials, resource receipts, or browser cookies.
 
-```text
-codex://new?prompt=<URL-encoded-prompt>
-```
+Codex uses `codex://new?prompt=<URL-encoded-prompt>`. Its setup guidance retains
+the official App Builder plugin:
 
-This opens Codex, selects the current project/worktree, and pre-fills the
-composer. The user must still review the task and click Send.
-
-## Starting the chat automatically
-
-There is no confirmed supported parameter for automatically submitting the
-prompt. The handoff should stop at:
-
-> Open Codex -> pre-fill the prompt -> user reviews -> user sends.
-
-This lets the user verify the repository, worktree, model, permissions, and
-requested action before execution.
-
-## Plugin installation
-
-Codex can be instructed to install a plugin, but installation cannot reliably
-happen invisibly through the deep link.
-
-A pre-filled task checks whether the official `app-builder@autograph` plugin is
-installed, enabled, and exposes a callable `autograph_start`. A working plugin is
-used immediately with the opaque handoff ID and a unique `clientRequestId`.
-
-The prompt authorizes the agent to run necessary installation, enablement, or
-update commands itself. It does not ask the user to run those commands. An
-installed, enabled plugin whose tools are unavailable is treated as a connection
-or tool-loading problem, not evidence that an update is needed. The agent uses
-supported reconnect or reload capabilities and retries discovery. If a user-only
-action remains necessary, it explains the specific blocker and asks only for that
-action. It must not claim the handoff started before `autograph_start` succeeds,
-substitute a development plugin or another builder, or edit a repository directly.
-
-Installation may still require:
-
-- approval to run the install command;
-- authentication or workspace authorization; and
-- a reload or fresh task before the plugin becomes available.
-
-There is no confirmed deep link that silently installs a plugin.
-
-For Autograph, the fallback installation commands are:
-
-```bash
+```sh
 codex plugin marketplace add withAutograph/marketplace --ref main
 codex plugin marketplace upgrade autograph
 codex plugin add app-builder@autograph
 ```
 
-Command output, versions, endpoint details, and repository diagnostics belong
-under an optional **Details** section. They must not replace a concise explanation of the actual handoff status.
+The Codex prompt first checks for a callable official plugin and uses it without
+reinstalling or upgrading it. If missing, disabled, or outdated, it authorizes
+the agent to perform the required setup itself, subject to native approvals.
+Unavailable tools in an installed plugin trigger supported connection/reload
+recovery, not an assumed upgrade. Only genuinely user-only actions are handed
+back to the user. Successful continuation still requires `autograph_start`;
+the deterministic handoff request ID and normal build approvals are preserved.
 
-OpenAI's plugin guidance also states that installation and any required
-authorization must be completed before the plugin can be used.
+Codex setup details display the canonical MCP URL from the authenticated handoff.
+Before sending the prompt, the user must have an App Builder plugin connection
+configured for that endpoint. The official release plugin may target Production;
+local and Preview handoffs require a matching configured connection. Web handoff
+and client OAuth must use the same Autograph origin/resource. This guidance does
+not provide tokens or invent a CLI endpoint override.
 
-## ChatGPT / Codex flow
+Cursor uses
+`cursor://anysphere.cursor-deeplink/prompt?text=<URL-encoded-prompt>`.
+Its prompt does not contain Codex installation commands. Cursor requires the
+user to review and submit the prefilled prompt; automatic execution is not
+requested. See [Cursor deeplinks](https://cursor.com/docs/reference/deeplinks).
 
-1. The user clicks **Create App**.
-2. Autograph prepares the app brief and copies it as a fallback.
-3. Autograph opens `codex://new?prompt=<URL-encoded-app-builder-prompt>`.
-4. Codex opens a new task with the prompt pre-filled.
-5. The user reviews and sends it.
-6. Codex performs any necessary official plugin setup itself, verifies enablement,
-   rediscovers the tools, and starts the prepared handoff.
-7. If tools remain unavailable, Codex attempts supported connection recovery and
-   requests a user action only when it cannot perform that action itself.
+**Add Autograph to Cursor** is rendered only when the server reports
+`cursorInstallReady: true`. Its `mcp/install` deep link carries a Base64 JSON
+configuration with exactly:
 
-## Cursor handoff
-
-Cursor has documented deep-link support for pre-filled prompts.
-
-The prompt format is:
-
-```text
-cursor://anysphere.cursor-deeplink/prompt?text=<URL-encoded-prompt>
+```json
+{
+  "url": "<canonical Autograph MCP URL>",
+  "auth": { "CLIENT_ID": "autograph-cursor-desktop" }
+}
 ```
 
-The link opens the prompt in Cursor chat. The user must still review and submit
-it; Cursor deeplinks do not automatically execute prompts.
+This is a public OAuth client; there is no secret in the configuration.
+Registration must be deployed before the server marks installation ready.
+When it is not ready, an existing Cursor connection can still use the prompt;
+the page offers Codex or returning later for fresh setup.
+See [Cursor static OAuth configuration](https://cursor.com/docs/mcp).
 
-### Cursor flow
+## Recovery and API contract
 
-1. The user selects **Cursor** under **Build with**.
-2. **Create App** copies the canonical prompt and opens the prompt deeplink
-   using
-   `cursor://anysphere.cursor-deeplink/prompt?text=...`.
-3. Cursor opens a chat with the Autograph request pre-filled.
-4. The user reviews and submits the request.
-5. If Autograph is unavailable, the user can separately approve MCP or plugin
-   installation, authentication, and scope.
+- `GET /api/builder/handoffs/[id]` returns sanitized public page data with
+  `version`, `handoffId`, `expiresAt`, `status` (`prepared`, `continued`,
+  or `expired`), `intent`, `destination`, `cursorInstallReady`, and `mcpUrl`.
+- The server page calls `getBuilderHandoffPageData({ environment, headers,
+handoffId })`. No browser session redirects to sign-in with the handoff path
+  preserved. Missing ownership or an unavailable record produces generic
+  same-account guidance without owner details.
+- Expired handoffs disable launch and offer **Renew handoff**. The control posts
+  `{ creationRequestId: uuid }` to `/api/builder/handoffs/[id]/renew`, then
+  immediately refreshes status when the returned `handoffId` is unchanged, or
+  navigates when it differs. An expiry extension re-enables launch without a
+  remount; a concurrent session binding shows server-confirmed continuation.
+  Retries reuse the request ID, including
+  after a reload when session storage is available. Renewal never calls resource
+  provisioning or launches a client.
+- Credential-unavailable and inactive-installation setup outcomes offer
+  `/github/installations?returnTo=/handoff/<id>` or the equivalent Vercel route
+  (URL encoded). Reconnection returns to the same saved handoff. Provider setup
+  outcomes are historical; current credential/resource readbacks belong to the
+  authenticated Autograph recovery flow.
+- **Copy prompt** is separate from launch. Clipboard denial retains a selectable
+  prompt for manual copy. A blocked or suppressed custom protocol remains
+  retryable and never changes the server continuation status.
+- A lost web login retains a sign-in link back to this handoff. Unauthorized
+  status responses hide the prompt and disable client actions.
 
-Installation and any required app authorization remain user- or
-workspace-controlled.
+## Verification boundary
 
-## Failure handling
+Focused UI tests cover destination payloads, explicit launch, visible-only
+polling, confirmation from the server, blocked launch/copy, client-registration
+readiness, lost renewal responses, access failures, and recovery links.
+`e2e/builder/builder-handoff.spec.ts` exercises the durable page through the
+emulated web flow, including reload, explicit launch/copy, and reset.
 
-Browsers do not provide reliable confirmation that a custom-protocol handler
-opened successfully. The Ready screen therefore treats the launch as a request,
-keeps the retry action available, and tells the user that the prompt was copied.
-If clipboard access is denied, the status explains how to retry after granting
-access. Prompts whose encoded URL exceeds the conservative client-link limit are
-not launched; the Ready screen instead directs the user to paste the copied
-prompt manually.
-
-### Cursor references
-
-- [Cursor deeplinks](https://cursor.com/docs/reference/deeplinks)
+UI tests simulate the OS launch boundary. They do not prove native client
+installation or provider credential reuse. Those claims require the real OAuth
+and provider integration harness, followed by fresh-profile Codex and Cursor
+acceptance on Preview with the observed client versions recorded.

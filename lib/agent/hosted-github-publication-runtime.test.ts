@@ -7,6 +7,7 @@ import type {
   GitHubPublicationReceiptStore,
 } from "../repository/github-publication";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
+import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
 import {
   createHostedGitHubPublicationRuntimeResolver,
@@ -86,7 +87,12 @@ function dependencies(input?: {
   const installations = vi.fn(() => installationStore);
   const publicationStores = vi.fn(() => ({ proposals, receipts }));
   return {
-    dependencies: { membership, installations, publicationStores },
+    dependencies: {
+      membership,
+      installations,
+      publicationStores,
+      readPreparedHandoff: vi.fn(async () => undefined),
+    },
     installationStore,
     membership,
     installations,
@@ -95,6 +101,124 @@ function dependencies(input?: {
 }
 
 describe("hosted tenant GitHub publication runtime resolver", () => {
+  it("uses the prepared selection instead of the last connected installation on every resolution", async () => {
+    const selected = {
+      ...installation,
+      installationId: "789",
+      accountLogin: "prepared-account",
+    };
+    const injected = dependencies();
+    const list = vi.fn(async () => [installation, selected]);
+    injected.installationStore.list = list;
+    const readPreparedHandoff = vi.fn(
+      async () =>
+        ({
+          providers: { githubInstallationId: "789" },
+        }) as BuilderHandoffIntent & {
+          providers: { githubInstallationId: string };
+        },
+    );
+    const providerFactory = vi.fn(async () => adapter);
+    const resolver = createHostedGitHubPublicationRuntimeResolver({
+      enabled: true,
+      openDatabase: async () => ({}) as never,
+      providerFactory,
+      dependencies: { ...injected.dependencies, readPreparedHandoff },
+    });
+    const auth = sessionAuth();
+    await resolver.resolve(auth);
+    await resolver.resolve(auth);
+    expect(readPreparedHandoff).toHaveBeenCalledWith(auth);
+    expect(readPreparedHandoff).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenCalledWith(authority);
+    expect(providerFactory).toHaveBeenCalledWith({
+      authority,
+      installation: selected,
+    });
+    expect(readPreparedHandoff.mock.invocationCallOrder[0]).toBeLessThan(
+      providerFactory.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it.each(["missing", "inactive"] as const)(
+    "does not fall back to last-connected when the prepared installation is %s",
+    async (state) => {
+      const injected = dependencies();
+      injected.installationStore.list = vi.fn(async () =>
+        state === "missing"
+          ? [installation]
+          : [
+              installation,
+              { ...installation, installationId: "789", active: false },
+            ],
+      );
+      const providerFactory = vi.fn(async () => adapter);
+      const resolver = createHostedGitHubPublicationRuntimeResolver({
+        enabled: true,
+        openDatabase: async () => ({}) as never,
+        providerFactory,
+        dependencies: {
+          ...injected.dependencies,
+          readPreparedHandoff: async () =>
+            ({
+              providers: { githubInstallationId: "789" },
+            }) as BuilderHandoffIntent & {
+              providers: { githubInstallationId: string };
+            },
+        },
+      });
+      await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
+        "installation is inactive or unavailable",
+      );
+      expect(providerFactory).not.toHaveBeenCalled();
+      expect(injected.publicationStores).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reads the selected installation from an older provisioning result and supports legacy-only storage", async () => {
+    const injected = dependencies();
+    const providerFactory = vi.fn(async () => adapter);
+    const resolver = createHostedGitHubPublicationRuntimeResolver({
+      enabled: true,
+      openDatabase: async () => ({}) as never,
+      providerFactory,
+      dependencies: {
+        ...injected.dependencies,
+        readPreparedHandoff: async () =>
+          ({
+            provisioning: {
+              github: { status: "succeeded", installationId: "123" },
+            },
+          }) as BuilderHandoffIntent,
+      },
+    });
+    await resolver.resolve(sessionAuth());
+    expect(providerFactory).toHaveBeenCalledWith({ authority, installation });
+  });
+
+  it("fails before pool, stores, or provider construction if the prepared handoff is unavailable", async () => {
+    const injected = dependencies();
+    const openDatabase = vi.fn(async () => ({}) as never);
+    const providerFactory = vi.fn(async () => adapter);
+    const resolver = createHostedGitHubPublicationRuntimeResolver({
+      enabled: true,
+      openDatabase,
+      providerFactory,
+      dependencies: {
+        ...injected.dependencies,
+        readPreparedHandoff: async () => {
+          throw new Error("Handoff unavailable");
+        },
+      },
+    });
+    await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
+      "Handoff unavailable",
+    );
+    expect(openDatabase).not.toHaveBeenCalled();
+    expect(injected.publicationStores).not.toHaveBeenCalled();
+    expect(providerFactory).not.toHaveBeenCalled();
+  });
+
   it("stays disabled without configuration and touches no authority or pool", async () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: false,

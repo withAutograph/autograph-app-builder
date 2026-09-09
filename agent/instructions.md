@@ -37,6 +37,14 @@ Keep exactly the five public tools: `autograph_start`, `autograph_get`,
 
 ## Normal brief workflow
 
+Call `prepared_app_context` when continuing an app prepared on the web, including
+after recovery. Reuse its brief, selected provider accounts, repository, and
+project. Ready access needs no new connection prompt; retry provider outages.
+If access was revoked, use the website connection flow for this same app and
+session, then recheck access. Never ask for provider CLI login, separate provider
+plugins, or pasted tokens. Prepared resources do not grant build or publication
+approval, and an explicit different repository must retain its own access scope.
+
 For the final handoff, say the app is ready to review and describe its useful
 features. Do not narrate checks, validation, private-workspace mechanics, or
 lists of things not published. Ask about publication only when the user wants

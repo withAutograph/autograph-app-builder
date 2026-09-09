@@ -8,7 +8,7 @@ import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { InputControl } from "./view";
 
 const meta = {
-  title: "Create App/MCP Blocks/Choice Request",
+  title: "MCP/Inputs/Choice Request",
   component: InputControl,
   args: { request: choiceRequest, onAnswer: fn() },
   decorators: [

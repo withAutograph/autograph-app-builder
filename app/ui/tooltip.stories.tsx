@@ -4,7 +4,7 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { InfoTooltip } from "./app-builder";
 
 const meta = {
-  title: "Create App/Primitives/Tooltip",
+  title: "Components/Create App/Primitives/Tooltip",
   component: InfoTooltip,
   args: { children: "Only use approved providers." },
   decorators: [

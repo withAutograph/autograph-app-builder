@@ -201,6 +201,52 @@ function plannedEvents() {
 }
 
 describe("same-origin canonical Eve transport", () => {
+  it("forwards the prepared reference on start and every mutating continuation without putting it in messages", async () => {
+    const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).includes("/stream?")) return stream();
+      bodies.push(JSON.parse(String(init?.body)));
+      return accepted();
+    });
+    const adapter = createSameOriginEveTransport({
+      config,
+      workloadIdentity: identity(),
+      fetchImplementation,
+    });
+    await adapter.start({
+      principal,
+      sourceHandoffId,
+      operationId: "start",
+      prompt: "Build",
+    });
+    await adapter.send({
+      principal,
+      sourceHandoffId,
+      operationId: "send",
+      adapterSessionId: "wrun_1",
+      message: "Continue",
+    });
+    await adapter.respond({
+      principal,
+      sourceHandoffId,
+      operationId: "respond",
+      adapterSessionId: "wrun_1",
+      responses: [],
+    });
+    expect(bodies).toHaveLength(3);
+    for (const body of bodies) {
+      expect(body).toMatchObject({
+        forwardedPrincipal: {
+          current: {
+            attributes: { "autograph:source-handoff-id": sourceHandoffId },
+          },
+        },
+      });
+      expect(body).not.toHaveProperty("sourceHandoffId");
+      expect(String(body.message)).not.toContain(sourceHandoffId);
+    }
+  });
   it("carries a verified target plan without projecting raw planning output", async () => {
     const events = [
       ...plannedEvents(),

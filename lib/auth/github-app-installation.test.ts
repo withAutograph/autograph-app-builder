@@ -105,7 +105,9 @@ function authorizationCallbackUrl(state: string) {
 
 async function prepareAuthorization(
   authorization: ReturnType<typeof createGitHubAppInstallationAuthorization>,
-  returnState: { returnTo: "/"; resumeKey?: string } = { returnTo: "/" },
+  returnState: { returnTo: "/" | `/handoff/${string}`; resumeKey?: string } = {
+    returnTo: "/",
+  },
 ) {
   const begun = await authorization.begin(authority, returnState);
   const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
@@ -360,35 +362,38 @@ describe("public GitHub App installation authorization", () => {
     });
   });
 
-  it("fails replay before another provider request or binding", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
-    const { authorization, bind } = harness({
-      fetch: successfulFetch(requests),
-    });
-    const returnState = {
-      returnTo: "/" as const,
-      resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
-    };
-    const { authorizeState } = await prepareAuthorization(
-      authorization,
-      returnState,
-    );
-    await authorization.complete(
-      authorizationCallbackUrl(authorizeState),
-      authority,
-    );
-    await expect(
-      authorization.complete(
+  it.each(["/", "/handoff/ed5bc83d-a08f-42be-9635-4677fa7bdb32"] as const)(
+    "preserves %s through signed state and fails replay before another provider request",
+    async (returnTo) => {
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const { authorization, bind } = harness({
+        fetch: successfulFetch(requests),
+      });
+      const returnState = {
+        returnTo,
+        resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+      };
+      const { authorizeState } = await prepareAuthorization(
+        authorization,
+        returnState,
+      );
+      await authorization.complete(
         authorizationCallbackUrl(authorizeState),
         authority,
-      ),
-    ).rejects.toMatchObject({
-      message: "GitHub App installation authorization failed.",
-      returnState,
-    });
-    expect(requests).toHaveLength(3);
-    expect(bind).toHaveBeenCalledOnce();
-  });
+      );
+      await expect(
+        authorization.complete(
+          authorizationCallbackUrl(authorizeState),
+          authority,
+        ),
+      ).rejects.toMatchObject({
+        message: "GitHub App installation authorization failed.",
+        returnState,
+      });
+      expect(requests).toHaveLength(3);
+      expect(bind).toHaveBeenCalledOnce();
+    },
+  );
 
   it("derives the selected installation after GitHub returns only code and state", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];

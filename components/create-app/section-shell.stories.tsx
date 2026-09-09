@@ -6,7 +6,7 @@ import styles from "../../app/ui/app-builder.module.css";
 import { SectionShell } from "./choice-card";
 
 const meta = {
-  title: "Create App/Primitives/Section Shell",
+  title: "Components/Create App/Primitives/Section Shell",
   component: SectionShell,
   args: {
     className: styles.sectionField,

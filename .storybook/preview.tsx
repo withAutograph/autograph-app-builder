@@ -10,9 +10,15 @@ import "../app/globals.css";
 import "./preview.css";
 
 const CREATE_APP_STORY_PREFIX = "Create App/";
+const CREATE_APP_COMPONENT_STORY_PREFIX = "Components/Create App/";
+const CONNECTION_DRAWER_STORY = "Components/Connections/Connection Drawer";
 
-function isCreateAppStory(title: string) {
-  return title.startsWith(CREATE_APP_STORY_PREFIX);
+function usesCreateAppShell(title: string) {
+  return (
+    title.startsWith(CREATE_APP_STORY_PREFIX) ||
+    title.startsWith(CREATE_APP_COMPONENT_STORY_PREFIX) ||
+    title === CONNECTION_DRAWER_STORY
+  );
 }
 
 const storybookQueryClient = getQueryClient();
@@ -22,6 +28,52 @@ storybookQueryClient.setQueryDefaults(authQueryKeys.session, {
 
 const preview: Preview = {
   parameters: {
+    options: {
+      storySort: {
+        order: [
+          "Create App",
+          ["Flow", ["Anonymous Entry", "Page", "Handoff"], "Recovery"],
+          "Components",
+          [
+            "Create App",
+            [
+              "Sections",
+              [
+                "App Details",
+                "Build With",
+                "Connections",
+                "Deploy To",
+                "Store In",
+              ],
+              "Primitives",
+              [
+                "Brand",
+                "Choice Card",
+                "Search Combobox",
+                "Section Shell",
+                "Tooltip",
+              ],
+            ],
+            "Connections",
+            ["Connection Drawer", "Provider Connection"],
+            "Workspace",
+            ["Onboarding"],
+            "Auth",
+            ["Theme Controls"],
+          ],
+          "Pages",
+          ["Auth", ["Workspace Setup"]],
+          "MCP",
+          [
+            "Authorization",
+            ["Approval Request", "Authorization Request"],
+            "Inputs",
+            ["Choice Request", "Freeform Request", "Input Batch"],
+          ],
+          "*",
+        ],
+      },
+    },
     authSession: null,
     nextjs: { appDirectory: true },
     controls: {
@@ -44,7 +96,7 @@ const preview: Preview = {
   decorators: [
     (Story, context) => (
       <AppShell>
-        {isCreateAppStory(context.title) ? (
+        {usesCreateAppShell(context.title) ? (
           <div className={appStyles.appShell} data-create-app-story-environment>
             <Story />
           </div>
@@ -55,7 +107,7 @@ const preview: Preview = {
     ),
   ],
   afterEach: ({ canvasElement, title }) => {
-    if (!isCreateAppStory(title)) return;
+    if (!usesCreateAppShell(title)) return;
 
     expect(
       canvasElement.querySelector("[data-create-app-story-environment]"),

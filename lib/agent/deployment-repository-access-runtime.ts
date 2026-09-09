@@ -54,6 +54,17 @@ import {
   type RepositoryAccessReceipt,
 } from "./repository-access-state";
 import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
+import type { BuilderHandoffIntent } from "../handoff/contracts";
+import {
+  preparedHandoffReturnPath,
+  withPreparedGitHubSelection,
+} from "./prepared-provider-context";
+import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+} from "../integrations/local-provider-emulation";
+import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 
 const failed = (reason: string, message: string, retryable = false) =>
   new ConnectionAuthorizationFailedError("github-repository-access", {
@@ -143,17 +154,77 @@ export function createRepositoryAccessRuntime(input: {
     typeof classifyGitHubRepositoryAccess
   >[0]["providerFactory"];
   continuations: ReturnType<typeof createRepositoryAccessContinuationService>;
+  preparedIntent?: BuilderHandoffIntent;
+  returnTo?: ProviderConnectionReturn["returnTo"];
 }): RepositoryAccessRuntime {
-  const classify = (value: {
+  const classify = async (value: {
     repository: string;
     selectedInstallationId?: string;
-  }) =>
-    classifyGitHubRepositoryAccess({
+  }): Promise<RepositoryAccessResult> => {
+    const selected = withPreparedGitHubSelection(value, input.preparedIntent);
+    const deniedInstallations = new Set<string>();
+    let unavailable = false;
+    const result = await classifyGitHubRepositoryAccess({
       authority: input.authority,
-      ...value,
+      ...selected,
       installations: input.installations,
-      providerFactory: input.providerFactory,
+      async providerFactory(request) {
+        let provider: GitHubRepositoryAccessProvider;
+        try {
+          provider = await input.providerFactory(request);
+        } catch (error) {
+          unavailable = true;
+          throw error;
+        }
+        return {
+          async inspectInstallation(value) {
+            try {
+              return await provider.inspectInstallation(value);
+            } catch (error) {
+              // Octokit's installation lookup preserves HTTP status. A revoked
+              // installation is not an outage; rate limits and invalid app
+              // credentials must not ask the user to reconnect their account.
+              const failure = error as {
+                status?: number;
+                response?: { headers?: Record<string, string> };
+              } | null;
+              const headers = failure?.response?.headers;
+              const rateLimited =
+                headers?.["retry-after"] !== undefined ||
+                headers?.["x-ratelimit-remaining"] === "0";
+              if (
+                !rateLimited &&
+                (failure?.status === 403 || failure?.status === 404)
+              )
+                deniedInstallations.add(request.installation.installationId);
+              else unavailable = true;
+              throw error;
+            }
+          },
+          async inspectRepositoryByName(value) {
+            try {
+              return await provider.inspectRepositoryByName(value);
+            } catch (error) {
+              unavailable = true;
+              throw error;
+            }
+          },
+        };
+      },
     });
+    if (
+      result.status === "provider-unavailable" &&
+      deniedInstallations.size > 0 &&
+      !unavailable
+    )
+      return {
+        status: "authorization-required",
+        action: "update",
+        repository: result.repository,
+        scopes: [],
+      };
+    return result;
+  };
 
   return {
     classify,
@@ -283,7 +354,11 @@ export function createRepositoryAccessRuntime(input: {
       }
       return resumed;
     },
-    authorization(value) {
+    authorization(request) {
+      const value = {
+        ...request,
+        ...withPreparedGitHubSelection(request, input.preparedIntent),
+      };
       return defineInteractiveAuthorization<{ continuationId: string }>({
         displayName: "GitHub repository access",
         async getToken({ principal }) {
@@ -334,7 +409,7 @@ export function createRepositoryAccessRuntime(input: {
             callbackUrl,
           });
           const authorizeUrl = new URL("/github/installations", input.origin);
-          authorizeUrl.searchParams.set("returnTo", "/");
+          authorizeUrl.searchParams.set("returnTo", input.returnTo ?? "/");
           authorizeUrl.searchParams.set("resume", continuation.continuationId);
           const challenge = {
             url: authorizeUrl.toString(),
@@ -410,20 +485,43 @@ let runtimeInput:
       database: ReturnType<typeof openHostedPostgresDatabase>;
       origin: string;
       credentials: ReturnType<typeof parseGitHubAppHttpProviderCredentials>;
+      providerFetch?: typeof fetch;
     }
   | undefined;
 
 export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
+  const { readPreparedHandoffContext } = await import("./handoff-context");
+  const preparedIntent = await readPreparedHandoffContext(sessionAuth);
   if (!runtimeInput) {
-    const installation = readGitHubAppInstallationEnvironment(process.env);
+    const environment = providerEmulationEnvironment(process.env);
+    const installation = readGitHubAppInstallationEnvironment(environment);
+    const emulation = readProviderEmulation(environment);
     runtimeInput = {
-      database: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+      database: openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
       origin: new URL(installation.issuer).origin,
       credentials: parseGitHubAppHttpProviderCredentials({
         appId: installation.appId,
-        privateKey: process.env.GITHUB_APP_PRIVATE_KEY,
+        privateKey: environment.GITHUB_APP_PRIVATE_KEY,
       }),
+      ...(emulation
+        ? {
+            providerFetch: ((resource, init) => {
+              const url = new URL(
+                typeof resource === "string"
+                  ? resource
+                  : resource instanceof URL
+                    ? resource.href
+                    : resource.url,
+              );
+              return providerEmulationFetch(
+                `${emulation.githubOrigin}${url.pathname}${url.search}`,
+                init,
+                emulation,
+              );
+            }) as typeof fetch,
+          }
+        : {}),
     };
   }
   const membership = createPostgresWorkspaceMembership(runtimeInput.database);
@@ -440,10 +538,15 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   );
   return createRepositoryAccessRuntime({
     authority,
+    preparedIntent,
+    returnTo: preparedIntent
+      ? preparedHandoffReturnPath(sessionAuth)
+      : undefined,
     origin: runtimeInput.origin,
     installations,
     providerFactory: ({ installation }) =>
       createGitHubAppHttpProvider({
+        fetch: runtimeInput!.providerFetch,
         config: {
           ...runtimeInput!.credentials,
           installationId: installation.installationId,

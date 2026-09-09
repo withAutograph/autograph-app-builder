@@ -1,4 +1,5 @@
 import { AdapterNotConfiguredError } from "../eve/service";
+import { BuilderHandoffUnavailableError } from "../handoff/service";
 import { HostedAuthorizationError } from "../eve/hosted-auth";
 import {
   HostedCancellationUnsettledError,
@@ -20,6 +21,13 @@ export class McpToolAuthenticationRequiredError extends Error {
   }
 }
 
+export class McpProviderUnavailableError extends Error {
+  constructor() {
+    super("Provider access is temporarily unavailable.");
+    this.name = "McpProviderUnavailableError";
+  }
+}
+
 export function toolResult<
   const Result extends EveSessionListResult | EveSessionResult,
 >(result: Result, text: string) {
@@ -38,10 +46,29 @@ export function toolResult<
 }
 
 export function safeToolError(error: unknown, sessionId = "") {
+  if (error instanceof McpProviderUnavailableError) {
+    const message =
+      "Provider access is temporarily unavailable. Retry this same handoff shortly; your prepared app and connections are saved. No provider login is needed for this outage.";
+    return {
+      ...toolResult(
+        {
+          sessionId,
+          status: "failed",
+          cursor: 0,
+          events: [],
+          error: { code: "provider_unavailable", message },
+        },
+        message,
+      ),
+      isError: true,
+    };
+  }
   const authenticationRequired =
     error instanceof McpToolAuthenticationRequiredError;
   const notConfigured = error instanceof AdapterNotConfiguredError;
-  const notFound = error instanceof HostedSessionNotFoundError;
+  const handoffUnavailable = error instanceof BuilderHandoffUnavailableError;
+  const notFound =
+    error instanceof HostedSessionNotFoundError || handoffUnavailable;
   const forbidden = error instanceof HostedAuthorizationError;
   const conflict = error instanceof HostedIdempotencyConflictError;
   const unknown = error instanceof HostedSubmissionUnknownError;
@@ -77,7 +104,9 @@ export function safeToolError(error: unknown, sessionId = "") {
     : notConfigured
       ? "Autograph App Builder is not connected to its production service yet."
       : notFound
-        ? "The requested resource was not found."
+        ? handoffUnavailable
+          ? "This handoff is unavailable. Connect Autograph with the same account used on the web, or reopen your prepared app to renew an expired handoff."
+          : "The requested resource was not found."
         : forbidden
           ? "The operation is not permitted."
           : conflict

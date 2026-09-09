@@ -23,6 +23,19 @@ export interface BuilderHandoffStore {
     authority: Authority;
     handoffId: string;
   }): Promise<BuilderHandoffRecord | undefined>;
+  renewExpired?(input: {
+    authority: Authority;
+    handoffId: string;
+    requestDigest: string;
+    now: Date;
+    expiresAt: Date;
+  }): Promise<
+    | {
+        disposition: "renewed" | "existing";
+        record: BuilderHandoffRecord;
+      }
+    | undefined
+  >;
   bindSession(input: {
     authority: Authority;
     handoffId: string;
@@ -46,12 +59,32 @@ export class BuilderHandoffConflictError extends Error {
   }
 }
 
+function requireOwnedRecord(
+  value: unknown,
+  expected: { authority: Authority; handoffId?: string },
+) {
+  const parsed = builderHandoffRecordSchema.safeParse(value);
+  if (!parsed.success) throw new BuilderHandoffUnavailableError();
+  const record = parsed.data;
+  if (
+    (expected.handoffId !== undefined &&
+      record.handoffId !== expected.handoffId) ||
+    record.authority.issuer !== expected.authority.issuer ||
+    record.authority.audience !== expected.authority.audience ||
+    record.authority.workspaceId !== expected.authority.workspaceId ||
+    record.authority.ownerUserId !== expected.authority.ownerUserId
+  )
+    throw new BuilderHandoffUnavailableError();
+  return record;
+}
+
 export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
   const intent = builderHandoffIntentSchema.parse(intentInput);
   const repository =
     intent.repository.resolvedFullName ?? intent.repository.requestedName;
   return [
     `Create ${intent.appName} with Autograph App Builder.`,
+    "Call prepared_app_context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
     `App id: ${intent.appId}`,
     `Requested repository: ${repository}`,
     `Model preference: ${intent.modelId}`,
@@ -82,7 +115,33 @@ export function createBuilderHandoffService(input: {
   )
     throw new Error("builder-handoff-lifetime-invalid");
 
-  return {
+  const read = async (value: { authority: Authority; handoffId: string }) => {
+    const authority = hostedTenantAuthoritySchema.parse(value.authority);
+    const parsedId = builderHandoffIdSchema.safeParse(value.handoffId);
+    if (!parsedId.success) throw new BuilderHandoffUnavailableError();
+    const stored = await input.store.read({
+      authority,
+      handoffId: parsedId.data,
+    });
+    if (!stored) throw new BuilderHandoffUnavailableError();
+    return requireOwnedRecord(stored, { authority, handoffId: parsedId.data });
+  };
+
+  const service = {
+    // Owner reads intentionally survive expiry; starting still uses resolve.
+    read,
+
+    async status(value: { authority: Authority; handoffId: string }) {
+      const record = await read(value);
+      const status =
+        record.sessionId !== undefined
+          ? ("continued" as const)
+          : now() >= record.expiresAt
+            ? ("expired" as const)
+            : ("prepared" as const);
+      return { status, record };
+    },
+
     async create(value: {
       authority: Authority;
       creationRequestId: string;
@@ -111,7 +170,12 @@ export function createBuilderHandoffService(input: {
         expiresAt: new Date(createdAt.getTime() + lifetimeMs),
       });
       const reserved = await input.store.reserve(candidate);
-      const record = builderHandoffRecordSchema.parse(reserved.record);
+      const record = requireOwnedRecord(reserved.record, {
+        authority,
+        ...(reserved.disposition === "created"
+          ? { handoffId: candidate.handoffId }
+          : {}),
+      });
       if (
         record.requestDigest !== requestDigest ||
         record.creationRequestId !== creationRequestId
@@ -125,11 +189,7 @@ export function createBuilderHandoffService(input: {
     },
 
     async resolve(value: { authority: Authority; handoffId: string }) {
-      const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const handoffId = builderHandoffIdSchema.parse(value.handoffId);
-      const stored = await input.store.read({ authority, handoffId });
-      if (!stored) throw new BuilderHandoffUnavailableError();
-      const record = builderHandoffRecordSchema.parse(stored);
+      const record = await read(value);
       if (record.sessionId !== undefined)
         return {
           status: "redeemed" as const,
@@ -142,6 +202,47 @@ export function createBuilderHandoffService(input: {
         prompt: builderHandoffPrompt(record.intent),
         deterministicClientRequestId: `handoff:${record.requestDigest}`,
         record,
+      };
+    },
+
+    async renew(value: {
+      authority: Authority;
+      handoffId: string;
+      creationRequestId: string;
+    }) {
+      z.string().uuid().parse(value.creationRequestId);
+      const record = await read(value);
+      const timestamp = now();
+      if (record.sessionId !== undefined || timestamp < record.expiresAt)
+        return {
+          handoffId: record.handoffId,
+          expiresAt: record.expiresAt,
+          disposition: "existing" as const,
+        };
+
+      // Renew the same start identity: a durable start may have succeeded before
+      // its bind reply was lost at expiry. A successor would launch a second app.
+      if (!input.store.renewExpired) throw new BuilderHandoffUnavailableError();
+      const renewed = await input.store.renewExpired({
+        authority: record.authority,
+        handoffId: record.handoffId,
+        requestDigest: record.requestDigest,
+        now: timestamp,
+        expiresAt: new Date(timestamp.getTime() + lifetimeMs),
+      });
+      if (!renewed) throw new BuilderHandoffUnavailableError();
+      const parsed = requireOwnedRecord(renewed.record, value);
+      if (
+        parsed.requestDigest !== record.requestDigest ||
+        parsed.creationRequestId !== record.creationRequestId
+      )
+        throw new BuilderHandoffConflictError();
+      if (parsed.sessionId === undefined && now() >= parsed.expiresAt)
+        throw new BuilderHandoffUnavailableError();
+      return {
+        handoffId: parsed.handoffId,
+        expiresAt: parsed.expiresAt,
+        disposition: renewed.disposition,
       };
     },
 
@@ -162,10 +263,14 @@ export function createBuilderHandoffService(input: {
         now: now(),
       });
       if (!record) throw new BuilderHandoffUnavailableError();
-      const parsed = builderHandoffRecordSchema.parse(record);
-      if (parsed.sessionId !== value.sessionId)
+      const parsed = requireOwnedRecord(record, value);
+      if (
+        parsed.requestDigest !== value.requestDigest ||
+        parsed.sessionId !== value.sessionId
+      )
         throw new BuilderHandoffConflictError();
       return parsed;
     },
   };
+  return service;
 }

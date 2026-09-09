@@ -10,7 +10,12 @@ import type { BuilderProvisionJournalStore } from "../provisioning/journal";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
 import { activeBuilderModelIdSchema } from "../integrations/active-model";
 import {
+  builderHandoffDestinationSchema,
+  type BuilderHandoffIntent,
+} from "./contracts";
+import {
   BuilderHandoffConflictError,
+  BuilderHandoffUnavailableError,
   createBuilderHandoffService,
 } from "./service";
 
@@ -61,6 +66,7 @@ export const builderHandoffCreateRequestSchema = z
   .object({
     version: z.literal(1),
     creationRequestId: z.string().uuid(),
+    destination: builderHandoffDestinationSchema.optional(),
     provisioningRequestId: z.string().uuid().optional(),
     appName: z.string().trim().min(1).max(120),
     repository: z
@@ -82,6 +88,17 @@ export const builderHandoffCreateRequestSchema = z
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 type HandoffService = ReturnType<typeof createBuilderHandoffService>;
+
+export type BuilderHandoffPageData = {
+  version: 1;
+  handoffId: string;
+  expiresAt: string;
+  status: "prepared" | "continued" | "expired";
+  intent: BuilderHandoffIntent;
+  destination: "codex" | "cursor";
+  cursorInstallReady: boolean;
+  mcpUrl: string;
+};
 
 export function createBuilderHandoffRouteHandler(input: {
   origin: string;
@@ -141,6 +158,9 @@ export function createBuilderHandoffRouteHandler(input: {
         authority,
         creationRequestId: body.creationRequestId,
         intent: {
+          ...(body.destination === undefined
+            ? {}
+            : { destination: body.destination }),
           appName,
           appId:
             provision?.record.response.appId ?? deriveBuilderAppId(appName),
@@ -157,6 +177,7 @@ export function createBuilderHandoffRouteHandler(input: {
           ...(provision === undefined
             ? {}
             : {
+                providers: provision.record.request.providers,
                 provisioningRequestId: provision.requestId,
                 provisioningRequestDigest: provision.requestDigest,
                 provisioning: provision.record.response,
@@ -193,24 +214,127 @@ export function createBuilderHandoffRouteHandler(input: {
   };
 }
 
-let deploymentHandler: ((request: Request) => Promise<Response>) | undefined;
+function handoffErrorResponse(error: unknown) {
+  if (error instanceof BuilderHandoffUnavailableError)
+    return Response.json(
+      { error: "handoff_unavailable" },
+      { status: 404, headers: noStore },
+    );
+  if (error instanceof BuilderHandoffConflictError)
+    return Response.json(
+      { error: "request_id_conflict" },
+      { status: 409, headers: noStore },
+    );
+  if (
+    error instanceof BuilderHandoffRequestError ||
+    error instanceof z.ZodError
+  )
+    return Response.json(
+      { error: "request_invalid" },
+      { status: 400, headers: noStore },
+    );
+  return Response.json(
+    { error: "handoff_unavailable" },
+    { status: 503, headers: noStore },
+  );
+}
 
-export function getBuilderHandoffDeploymentHandler(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
-) {
-  if (deploymentHandler) return deploymentHandler;
+export function createBuilderHandoffStatusRouteHandler(input: {
+  pageData(
+    request: Request,
+    handoffId: string,
+  ): Promise<BuilderHandoffPageData | undefined>;
+}) {
+  return async (request: Request, handoffId: string) => {
+    try {
+      const data = await input.pageData(request, handoffId);
+      return data
+        ? Response.json(data, { headers: noStore })
+        : Response.json(
+            { error: "authentication_required" },
+            { status: 401, headers: noStore },
+          );
+    } catch (error) {
+      return handoffErrorResponse(error);
+    }
+  };
+}
+
+export function createBuilderHandoffRenewRouteHandler(input: {
+  origin: string;
+  authorityForRequest(request: Request): Promise<Authority | undefined>;
+  handoffs: HandoffService;
+}) {
+  const origin = new URL(input.origin).origin;
+  return async (request: Request, handoffId: string) => {
+    try {
+      if (
+        request.method !== "POST" ||
+        !hasCanonicalRequestOrigin(request, origin) ||
+        request.headers.get("origin") !== origin ||
+        request.headers.get("content-type")?.split(";", 1)[0] !==
+          "application/json"
+      )
+        throw new BuilderHandoffRequestError();
+      const contentLength = request.headers.get("content-length");
+      if (
+        contentLength &&
+        (!/^\d+$/u.test(contentLength) ||
+          Number(contentLength) > maximumRequestBytes)
+      )
+        throw new BuilderHandoffRequestError();
+      const authority = await input.authorityForRequest(request);
+      if (!authority)
+        return Response.json(
+          { error: "authentication_required" },
+          { status: 401, headers: noStore },
+        );
+      const body = z
+        .object({ creationRequestId: z.string().uuid() })
+        .strict()
+        .parse(await readBoundedJson(request));
+      const renewed = await input.handoffs.renew({
+        authority,
+        handoffId,
+        ...body,
+      });
+      return Response.json(
+        {
+          version: 1,
+          handoffId: renewed.handoffId,
+          expiresAt: renewed.expiresAt.toISOString(),
+        },
+        { headers: noStore },
+      );
+    } catch (error) {
+      return handoffErrorResponse(error);
+    }
+  };
+}
+
+type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
+const deploymentDatabases = new Map<
+  string,
+  ReturnType<typeof openHostedPostgresDatabase>
+>();
+
+function deploymentContext(environment: Environment) {
   const preview = readPreviewOAuthRuntimeConfig(environment);
-  const database = openHostedPostgresDatabase(preview.databaseUrl);
-  deploymentHandler = createBuilderHandoffRouteHandler({
-    origin: new URL(preview.issuer).origin,
-    journal: createPostgresBuilderProvisionJournalStore(database),
+  let database = deploymentDatabases.get(preview.databaseUrl);
+  if (!database) {
+    database = openHostedPostgresDatabase(preview.databaseUrl);
+    deploymentDatabases.set(preview.databaseUrl, database);
+  }
+  return {
+    preview,
+    database,
     handoffs: createBuilderHandoffService({
       store: createPostgresBuilderHandoffStore(database),
     }),
-    async authorityForRequest(request) {
+    async authorityForHeaders(headers: Headers) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
         environment,
-        headers: request.headers,
+        headers,
       });
       return session
         ? hostedTenantAuthoritySchema.parse({
@@ -221,6 +345,76 @@ export function getBuilderHandoffDeploymentHandler(
           })
         : undefined;
     },
+  };
+}
+
+export async function getBuilderHandoffPageData(input: {
+  environment: Environment;
+  headers: Headers;
+  handoffId: string;
+}): Promise<BuilderHandoffPageData | undefined> {
+  const context = deploymentContext(input.environment);
+  const authority = await context.authorityForHeaders(input.headers);
+  if (!authority) return undefined;
+  const { status, record } = await context.handoffs.status({
+    authority,
+    handoffId: input.handoffId,
   });
-  return deploymentHandler;
+  const { isCursorClientReady } = await import("../auth/cursor-client");
+  return {
+    version: 1,
+    handoffId: record.handoffId,
+    expiresAt: record.expiresAt.toISOString(),
+    status,
+    intent: record.intent,
+    destination: record.intent.destination ?? "codex",
+    cursorInstallReady: await isCursorClientReady(
+      context.database,
+      context.preview.resource,
+    ),
+    mcpUrl: context.preview.resource,
+  };
+}
+
+export function getBuilderHandoffStatusDeploymentHandler(
+  environment: Environment,
+) {
+  return createBuilderHandoffStatusRouteHandler({
+    pageData: (request, handoffId) =>
+      getBuilderHandoffPageData({
+        environment,
+        headers: request.headers,
+        handoffId,
+      }),
+  });
+}
+
+export function getBuilderHandoffRenewDeploymentHandler(
+  environment: Environment,
+) {
+  // Compose inside the error boundary so setup failures also remain no-store.
+  return async (request: Request, handoffId: string) => {
+    try {
+      const context = deploymentContext(environment);
+      return await createBuilderHandoffRenewRouteHandler({
+        origin: new URL(context.preview.issuer).origin,
+        handoffs: context.handoffs,
+        authorityForRequest: (request) =>
+          context.authorityForHeaders(request.headers),
+      })(request, handoffId);
+    } catch (error) {
+      return handoffErrorResponse(error);
+    }
+  };
+}
+
+export function getBuilderHandoffDeploymentHandler(environment: Environment) {
+  const context = deploymentContext(environment);
+  return createBuilderHandoffRouteHandler({
+    origin: new URL(context.preview.issuer).origin,
+    journal: createPostgresBuilderProvisionJournalStore(context.database),
+    handoffs: context.handoffs,
+    authorityForRequest: (request) =>
+      context.authorityForHeaders(request.headers),
+  });
 }

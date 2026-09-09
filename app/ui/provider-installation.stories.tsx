@@ -9,7 +9,7 @@ import {
 } from "./provider-connection";
 
 const meta = {
-  title: "Components/Provider Connection",
+  title: "Components/Connections/Provider Connection",
   component: ProviderConnection,
   args: {
     action: "/github/installations/start",

@@ -33,6 +33,11 @@ import {
 } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import {
+  buildAppHandoffPrompt,
+  buildAppHandoffUrl,
+} from "../../lib/handoff/client";
+export { buildAppHandoffPrompt } from "../../lib/handoff/client";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
@@ -89,6 +94,10 @@ export type {
 } from "./builder-types";
 
 type Screen = "builder" | "handoff" | "ready";
+type ReservedHandoffLaunch = {
+  launch: (destination: BuildDestination, handoffId: string) => HandoffAttempt;
+  abandon: () => void;
+};
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -128,40 +137,11 @@ function providerSetupMessage(
   return `${provider}: ${reason}.`;
 }
 
-export function buildAppHandoffPrompt(handoffId: string) {
-  if (!uuidPattern.test(handoffId)) throw new Error("handoff-id-invalid");
-  return `Use the official Autograph App Builder plugin to create this app.
-
-Handoff ID: ${handoffId}
-
-First check whether app-builder@autograph is installed and enabled and whether its autograph_start tool is callable.
-
-If the official tool is callable, immediately call autograph_start with the handoffId and a unique clientRequestId. Do not reinstall or upgrade a working plugin.
-
-If the official plugin is missing, disabled, or outdated, you are authorized to install, enable, or update it automatically. Run the necessary commands yourself:
-
-codex plugin marketplace add withAutograph/marketplace --ref main
-codex plugin marketplace upgrade autograph
-codex plugin add app-builder@autograph
-
-Verify that app-builder@autograph is enabled, then rediscover its tools and continue with autograph_start.
-
-If the official plugin is installed and enabled but its tools remain unavailable, treat this as a connection or tool-loading problem, not proof that an update is needed. Use available supported reconnect or reload capabilities and retry discovery. Do not substitute the development plugin or another app builder, and do not edit a repository directly.
-
-Do not ask the user to run installation or upgrade commands. If recovery requires a user-only action, explain the specific blocker and request only that minimal action. Never claim the handoff has started until autograph_start succeeds.`;
-}
-
-function buildAppHandoffUrl(destination: BuildDestination, handoffId: string) {
-  const prompt = encodeURIComponent(buildAppHandoffPrompt(handoffId));
-  return destination === "codex"
-    ? `codex://new?prompt=${prompt}`
-    : `cursor://anysphere.cursor-deeplink/prompt?text=${prompt}`;
-}
-
 function attemptAppHandoff(
   destination: BuildDestination,
   handoffId: string,
 ): HandoffAttempt {
+  if (destination === "web") return "blocked";
   const url = buildAppHandoffUrl(destination, handoffId);
   if (url.length > maximumHandoffUrlLength) return "too-long";
   try {
@@ -169,6 +149,40 @@ function attemptAppHandoff(
     return "attempted";
   } catch {
     return "blocked";
+  }
+}
+
+// Desktop custom protocols need to be opened from the Create App gesture.
+// Provisioning is necessarily asynchronous, so reserve the native window now
+// and navigate it only after the server has saved the opaque handoff.
+function reserveAppHandoff(
+  destination: BuildDestination,
+): ReservedHandoffLaunch | undefined {
+  if (destination === "web") return undefined;
+  try {
+    const target = window.open("about:blank", "_blank");
+    if (!target) return undefined;
+    target.opener = null;
+    let used = false;
+    return {
+      launch(nextDestination, handoffId) {
+        if (used || nextDestination === "web") return "blocked";
+        const url = buildAppHandoffUrl(nextDestination, handoffId);
+        if (url.length > maximumHandoffUrlLength) return "too-long";
+        try {
+          target.location.href = url;
+          used = true;
+          return "attempted";
+        } catch {
+          return attemptAppHandoff(nextDestination, handoffId);
+        }
+      },
+      abandon() {
+        if (!used) target.close();
+      },
+    };
+  } catch {
+    return undefined;
   }
 }
 
@@ -183,6 +197,8 @@ async function createBuilderHandoff(input: {
     body: JSON.stringify({
       version: 1,
       creationRequestId: input.creationRequestId,
+      destination:
+        input.form.buildDestination === "cursor" ? "cursor" : "codex",
       ...(input.provisioning.requestDigest === "0".repeat(64)
         ? {}
         : { provisioningRequestId: input.provisioning.requestId }),
@@ -1130,7 +1146,11 @@ export function Builder({
 }: {
   initialBrief: string;
   generatedNameSeed: string;
-  onCreate: (form: BuilderForm, resumeKey?: string) => void;
+  onCreate: (
+    form: BuilderForm,
+    resumeKey?: string,
+    launch?: ReservedHandoffLaunch,
+  ) => void;
   connectionsEnabled: boolean;
   comingSoonEnabled: boolean;
   integrations: BuilderIntegrationState;
@@ -1347,21 +1367,23 @@ export function Builder({
     if (canSubmit) {
       const appName =
         form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
+      const nextForm = {
+        ...form,
+        appName,
+        repository:
+          form.repository.trim() || repositoryNameFromAppName(appName),
+        ...(deploymentProvider === "vercel" && team
+          ? { vercelInstallationId: team }
+          : {}),
+        ...(storageProvider === "github" && gitScope
+          ? { githubInstallationId: gitScope }
+          : {}),
+        modelId: preferredModelId,
+      };
       onCreate(
-        {
-          ...form,
-          appName,
-          repository:
-            form.repository.trim() || repositoryNameFromAppName(appName),
-          ...(deploymentProvider === "vercel" && team
-            ? { vercelInstallationId: team }
-            : {}),
-          ...(storageProvider === "github" && gitScope
-            ? { githubInstallationId: gitScope }
-            : {}),
-          modelId: preferredModelId,
-        },
+        nextForm,
         resumeKey,
+        reserveAppHandoff(nextForm.buildDestination),
       );
     }
   }
@@ -1623,6 +1645,7 @@ export function Handoff({
   requestId,
   handoffCreationRequestId,
   provisioningEnabled,
+  launch,
   createHandoffTask = createBuilderHandoff,
   onReady,
 }: {
@@ -1630,6 +1653,7 @@ export function Handoff({
   requestId: string;
   handoffCreationRequestId: string;
   provisioningEnabled: boolean;
+  launch?: ReservedHandoffLaunch;
   createHandoffTask?: typeof createBuilderHandoff;
   onReady: (result: {
     provisioning: BuilderProvisionResponse;
@@ -1646,8 +1670,7 @@ export function Handoff({
     ...(form.githubInstallationId ? ["Creating GitHub repository"] : []),
     ...(form.vercelInstallationId ? ["Creating Vercel project"] : []),
     "Preparing secure handoff",
-    "Copying handoff prompt",
-    "Opening selected client",
+    "Ready to continue",
   ];
   const [step, setStep] = useState(0);
   useEffect(() => {
@@ -1714,30 +1737,23 @@ export function Handoff({
           creationRequestId: handoffCreationRequestId,
         });
       } catch {
+        launch?.abandon();
         if (mounted.current) setHandoffError(true);
         return;
       }
       if (!mounted.current) return;
       setStep((value) => value + 1);
-      let clipboardState: ClipboardState = "idle";
-      try {
-        await navigator.clipboard.writeText(
-          buildAppHandoffPrompt(handoff.handoffId),
-        );
-        clipboardState = "copied";
-      } catch {
-        clipboardState = "failed";
-      }
-      if (!mounted.current) return;
-      setStep((value) => value + 1);
-      const handoffAttempt = attemptAppHandoff(
-        form.buildDestination,
-        handoff.handoffId,
-      );
       setStep(stages.length);
       await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
       if (!mounted.current) return;
-      onReady({ provisioning, handoff, handoffAttempt, clipboardState });
+      onReady({
+        provisioning,
+        handoff,
+        handoffAttempt:
+          launch?.launch(form.buildDestination, handoff.handoffId) ??
+          attemptAppHandoff(form.buildDestination, handoff.handoffId),
+        clipboardState: "idle",
+      });
     })();
     return () => {
       mounted.current = false;
@@ -1747,6 +1763,7 @@ export function Handoff({
     createHandoffTask,
     form,
     handoffCreationRequestId,
+    launch,
     onReady,
     provisioningEnabled,
     requestId,
@@ -1809,7 +1826,12 @@ codex plugin add app-builder@autograph`;
   const openSelectedClient = () => {
     try {
       void navigator.clipboard
-        .writeText(buildAppHandoffPrompt(handoff.handoffId))
+        .writeText(
+          buildAppHandoffPrompt(
+            handoff.handoffId,
+            form.buildDestination === "cursor" ? "cursor" : "codex",
+          ),
+        )
         .then(() => setRetryClipboardState("copied"))
         .catch(() => setRetryClipboardState("failed"));
     } catch {
@@ -1844,7 +1866,7 @@ codex plugin add app-builder@autograph`;
         provisioning: refreshed,
         handoff: refreshedHandoff,
       });
-      setHandoffAttempt("attempted");
+      setHandoffAttempt("idle");
       setRetryClipboardState("idle");
     } catch {
       setRetryClipboardState("failed");
@@ -1911,7 +1933,7 @@ codex plugin add app-builder@autograph`;
             ? " Clipboard access was blocked. Retry after allowing clipboard access."
             : null}
         </p>
-        {showInstall ? (
+        {showInstall && form.buildDestination === "codex" ? (
           <BuilderInstallInstructions
             command={command}
             onDismiss={() => setShowInstall(false)}
@@ -1950,10 +1972,10 @@ export function AppBuilder({
     useState<string>();
   const [provisioning, setProvisioning] = useState<BuilderProvisionResponse>();
   const [handoff, setHandoff] = useState<BuilderHandoffReference>();
-  const [handoffAttempt, setHandoffAttempt] =
-    useState<HandoffAttempt>("attempted");
+  const [handoffAttempt, setHandoffAttempt] = useState<HandoffAttempt>("idle");
   const [handoffClipboardState, setHandoffClipboardState] =
     useState<ClipboardState>("idle");
+  const [pendingLaunch, setPendingLaunch] = useState<ReservedHandoffLaunch>();
   const [savedBrief, setSavedBrief] = useState("");
   const resumedDraft = useSyncExternalStore(
     () => () => undefined,
@@ -1970,36 +1992,22 @@ export function AppBuilder({
         setSubmitted(active.form);
         setProvisionRequestId(active.requestId);
         setHandoffCreationRequestId(active.handoffCreationRequestId);
-        if (active.phase === "ready" && active.provisioning) {
+        const activeHandoff = active.handoff;
+        if (active.phase === "ready" && active.provisioning && activeHandoff) {
           setProvisioning(active.provisioning);
-          setHandoff(active.handoff);
+          setHandoff(activeHandoff);
           setScreen("ready");
-          if (active.provisioning.requestDigest !== "0".repeat(64))
-            void fetch(
-              `/api/builder/provision?requestId=${encodeURIComponent(active.requestId)}`,
-              { cache: "no-store" },
-            )
-              .then(async (response) =>
-                response.ok
-                  ? ((await response.json()) as BuilderProvisionResponse)
-                  : undefined,
-              )
-              .then((response) => {
-                if (!response) return;
-                setProvisioning(response);
-                persistActiveProvisioning({
-                  ...active,
-                  provisioning: response,
-                });
-              })
-              .catch(() => undefined);
+          router.replace(
+            `/handoff/${encodeURIComponent(activeHandoff.handoffId)}`,
+          );
+          clearActiveProvisioning();
         } else {
           setScreen("handoff");
         }
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [router]);
   const builderKey = providerResumeKey
     ? `${providerResumeKey}:${resumedDraft ? "restored" : "pending"}`
     : savedBrief || "new";
@@ -2027,7 +2035,7 @@ export function AppBuilder({
           comingSoonEnabled={comingSoonEnabled}
           integrations={integrations}
           providerNotices={providerNotices}
-          onCreate={(form) => {
+          onCreate={(form, _resumeKey, launch) => {
             if (providerResumeKey) clearBuilderDraft(providerResumeKey);
             const requestId = crypto.randomUUID();
             const creationRequestId = crypto.randomUUID();
@@ -2044,6 +2052,7 @@ export function AppBuilder({
             setProvisioning(undefined);
             setHandoff(undefined);
             setHandoffClipboardState("idle");
+            setPendingLaunch(launch);
             setScreen("handoff");
           }}
         />
@@ -2057,6 +2066,7 @@ export function AppBuilder({
           requestId={provisionRequestId}
           handoffCreationRequestId={handoffCreationRequestId}
           provisioningEnabled={provisioningEnabled}
+          launch={pendingLaunch}
           onReady={(result) => {
             persistActiveProvisioning({
               version: 1,
@@ -2071,7 +2081,12 @@ export function AppBuilder({
             setHandoff(result.handoff);
             setHandoffAttempt(result.handoffAttempt);
             setHandoffClipboardState(result.clipboardState);
+            setPendingLaunch(undefined);
             setScreen("ready");
+            router.push(
+              `/handoff/${encodeURIComponent(result.handoff.handoffId)}`,
+            );
+            clearActiveProvisioning();
           }}
         />
       ) : null}
@@ -2089,6 +2104,8 @@ export function AppBuilder({
           initialAttempt={handoffAttempt}
           initialClipboardState={handoffClipboardState}
           onReset={() => {
+            pendingLaunch?.abandon();
+            setPendingLaunch(undefined);
             clearActiveProvisioning();
             setSubmitted(undefined);
             setProvisionRequestId(undefined);

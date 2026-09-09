@@ -22,9 +22,13 @@ const fullRepositoryName = z
   .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 
 export const builderHandoffIdSchema = z.string().uuid();
+export const builderHandoffDestinationSchema = z.enum(["codex", "cursor"]);
 
 export const builderHandoffIntentSchema = z
   .object({
+    // Keep legacy stored intents byte-compatible with their request digests.
+    // Consumers interpret an omitted destination as Codex.
+    destination: builderHandoffDestinationSchema.optional(),
     appName: z.string().trim().min(1).max(120),
     appId: builderAppIdSchema,
     brief: z.string().trim().min(1).max(32_000),
@@ -37,6 +41,16 @@ export const builderHandoffIntentSchema = z
       .strict(),
     modelId: activeBuilderModelIdSchema,
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
+    providers: z
+      .object({
+        githubInstallationId: z
+          .string()
+          .regex(/^[1-9][0-9]*$/u)
+          .optional(),
+        vercelInstallationId: z.string().min(1).max(256).optional(),
+      })
+      .strict()
+      .optional(),
     provisioningRequestId: z.string().uuid().optional(),
     provisioningRequestDigest: sha256.optional(),
     provisioning: builderProvisionResponseSchema.optional(),

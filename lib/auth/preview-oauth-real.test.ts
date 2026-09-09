@@ -1,151 +1,147 @@
 import { createHash } from "node:crypto";
-
-import { cimd } from "@better-auth/cimd";
-import { mcp } from "@better-auth/mcp";
-import type { BetterAuthOptions } from "better-auth";
-import { jwt } from "better-auth/plugins";
-import { getTestInstance } from "better-auth/test";
 import { createLocalJWKSet, jwtVerify } from "jose";
-import { describe, expect, it, vi } from "vitest";
-
-import {
-  buildPreviewCimdOptions,
-  buildPreviewMcpOAuthOptions,
-} from "./preview-oauth-contract";
+import { describe, expect, it } from "vitest";
 import { previewOAuthRateLimit } from "./preview-oauth-runtime";
-
-const origin = "https://builder.example.test";
-const issuer = `${origin}/api/auth`;
-const resource = `${origin}/mcp`;
-const clientId = "https://client.withautograph.com/portable.json";
-const redirectUri = "http://127.0.0.1:43123/auth/callback";
-const requestedScope = "autograph:session autograph:start offline_access";
-
-const codexClientId =
-  "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json";
-const codexRedirectUris = [
-  "http://127.0.0.1/callback/4-bzS8rt42zJ",
-  "http://localhost/callback/4-bzS8rt42zJ",
-] as const;
-const codexClientMetadata = {
-  client_id: codexClientId,
-  client_uri: "https://chatgpt.com/codex",
-  application_type: "native",
-  redirect_uris: [...codexRedirectUris],
-  token_endpoint_auth_method: "none",
-  token_endpoint_auth_methods_supported: ["none"],
-  grant_types: ["authorization_code", "refresh_token"],
-  response_types: ["code"],
-  client_name: "Codex",
-  logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
-};
-
-function authorizationUrl(
-  challenge: string,
-  state: string,
-  client: { id: string; redirectUri: string } = {
-    id: clientId,
-    redirectUri,
-  },
-) {
-  const url = new URL(`${issuer}/oauth2/authorize`);
-  for (const [key, value] of Object.entries({
-    response_type: "code",
-    client_id: client.id,
-    redirect_uri: client.redirectUri,
-    scope: requestedScope,
-    state,
-    resource,
-    code_challenge: challenge,
-    code_challenge_method: "S256",
-  })) {
-    url.searchParams.set(key, value);
-  }
-  return url;
-}
-
-async function setup(
-  activeWorkspaces: string[] = ["workspace_1"],
-  clientMetadata: Record<string, unknown> = {
-    client_name: "Portable client",
-    redirect_uris: [redirectUri],
-    token_endpoint_auth_method: "none",
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-  },
-  rateLimit: BetterAuthOptions["rateLimit"] = { enabled: false },
-) {
-  const membershipState = { activeWorkspaces };
-  const fetchClientMetadata = vi.fn(async (input: RequestInfo | URL) =>
-    Response.json({
-      ...clientMetadata,
-      client_id: input instanceof Request ? input.url : String(input),
-    }),
-  );
-  const options = buildPreviewMcpOAuthOptions({
-    config: { issuer, resource },
-    membership: {
-      activeWorkspaceForUser: vi.fn(async () =>
-        membershipState.activeWorkspaces.length === 1
-          ? membershipState.activeWorkspaces[0]
-          : undefined,
-      ),
-      isActiveMember: vi.fn(async ({ workspaceId }) =>
-        membershipState.activeWorkspaces.includes(workspaceId),
-      ),
-    },
-  });
-  return getTestInstance(
-    {
-      baseURL: origin,
-      basePath: "/api/auth",
-      secret: "test-secret-that-is-long-enough-for-better-auth",
-      logger: { disabled: true },
-      rateLimit,
-      plugins: [
-        jwt({
-          jwks: { keyPairConfig: { alg: "ES256" }, jwksPath: "/jwks" },
-          jwt: { issuer, audience: resource, expirationTime: "5m" },
-          disableSettingJwtHeader: true,
-        }),
-        mcp(options),
-        cimd(
-          buildPreviewCimdOptions({
-            fetchClientMetadataResource: fetchClientMetadata,
-          }),
-        ),
-      ],
-    },
-    { port: 3000 },
-  ).then((instance) => ({
-    ...instance,
-    fetchClientMetadata,
-    membershipState,
-    signIn: async () => {
-      const response = await instance.customFetchImpl(
-        `${issuer}/sign-in/email`,
-        {
-          method: "POST",
-          headers: {
-            origin,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            email: instance.testUser.email,
-            password: instance.testUser.password,
-          }),
-        },
-      );
-      if (!response.ok) throw new Error("Test sign-in failed.");
-      const cookie = response.headers.get("set-cookie")?.split(";", 1)[0];
-      if (cookie === undefined)
-        throw new Error("Test session was unavailable.");
-      return new Headers({ cookie });
-    },
-  }));
-}
+import { cursorClientId, cursorRedirectUri } from "./cursor-client";
+import { previewOAuthScopes } from "./preview-oauth-contract";
+import {
+  grantRealOAuth,
+  refreshRealOAuth,
+  registerTestCursorClient,
+} from "./real-oauth-test-harness";
+import {
+  createRealOAuthHarness as setup,
+  authorizationUrl,
+  origin,
+  issuer,
+  resource,
+  clientId,
+  redirectUri,
+  requestedScope,
+  codexClientId,
+  codexRedirectUris,
+  codexClientMetadata,
+} from "./real-oauth-test-harness";
 
 describe("real Better Auth Preview OAuth handler", () => {
+  it("reuses one web login for Cursor and Codex, persists consent, and refreshes actual tokens", async () => {
+    const harness = await setup(["workspace_1"], codexClientMetadata);
+    await registerTestCursorClient(harness);
+    const browser = await harness.signIn();
+    const session = await harness.customFetchImpl(`${issuer}/get-session`, {
+      headers: browser,
+    });
+    const { user } = (await session.json()) as { user: { id: string } };
+    for (const client of [
+      { id: cursorClientId, redirectUri: cursorRedirectUri },
+      { id: codexClientId, redirectUri: codexRedirectUris[0] },
+    ]) {
+      const first = await grantRealOAuth(
+        harness,
+        browser,
+        client,
+        previewOAuthScopes.join(" "),
+      );
+      expect(first.consentRequired).toBe(true);
+      expect(first.claims).toMatchObject({
+        sub: user.id,
+        workspace_id: "workspace_1",
+        aud: resource,
+        iss: issuer,
+      });
+      expect(first.tokens).toMatchObject({
+        token_type: "Bearer",
+        expires_in: 300,
+        refresh_token: expect.any(String),
+      });
+      const repeated = await grantRealOAuth(
+        harness,
+        browser,
+        client,
+        previewOAuthScopes.join(" "),
+      );
+      expect(repeated.consentRequired).toBe(false);
+      expect(repeated.claims.sub).toBe(user.id);
+      const refreshed = await refreshRealOAuth(
+        harness,
+        client.id,
+        first.tokens.refresh_token,
+      );
+      expect(refreshed.claims).toMatchObject({
+        sub: user.id,
+        workspace_id: "workspace_1",
+        aud: resource,
+      });
+      expect(refreshed.tokens.refresh_token).not.toBe(
+        first.tokens.refresh_token,
+      );
+      expect(refreshed.tokens.scope).toBe(previewOAuthScopes.join(" "));
+    }
+    expect(harness.fetchClientMetadata).not.toHaveBeenCalledWith(
+      cursorClientId,
+      expect.anything(),
+    );
+    expect(harness.fetchClientMetadata).toHaveBeenCalledWith(
+      codexClientId,
+      expect.anything(),
+    );
+    expect(
+      await harness.auth.api.getOAuthConsents({ headers: browser }),
+    ).toHaveLength(2);
+  });
+
+  it("requires Cursor PKCE, rejects every alternate callback, and keeps DCR disabled", async () => {
+    const harness = await setup();
+    await registerTestCursorClient(harness);
+    const browser = await harness.signIn();
+    for (const redirect of [
+      "http://localhost:8788/callback",
+      "http://127.0.0.1:8787/callback",
+      "http://localhost:8787/other",
+      "https://attacker.example/callback",
+    ]) {
+      const response = await harness.customFetchImpl(
+        authorizationUrl("a".repeat(43), "invalid_redirect", {
+          id: cursorClientId,
+          redirectUri: redirect,
+        }),
+        { headers: browser, redirect: "manual" },
+      );
+      const destination = new URL(response.headers.get("location")!);
+      expect(destination.origin + destination.pathname).toBe(`${issuer}/error`);
+      expect(destination.searchParams.get("error")).toBe("invalid_redirect");
+    }
+    const missingPkce = authorizationUrl("a".repeat(43), "no_pkce", {
+      id: cursorClientId,
+      redirectUri: cursorRedirectUri,
+    });
+    missingPkce.searchParams.delete("code_challenge");
+    missingPkce.searchParams.delete("code_challenge_method");
+    const response = await harness.customFetchImpl(missingPkce, {
+      headers: browser,
+      redirect: "manual",
+    });
+    expect(
+      new URL(response.headers.get("location")!).searchParams.has("error"),
+    ).toBe(true);
+    expect(
+      await harness.auth.api.getOAuthConsents({ headers: browser }),
+    ).toEqual([]);
+    const registration = await harness.customFetchImpl(
+      `${issuer}/oauth2/register`,
+      {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "unapproved",
+          redirect_uris: [cursorRedirectUri],
+        }),
+      },
+    );
+    expect(registration.ok).toBe(false);
+    const clients = await harness.db.findMany({ model: "oauthClient" });
+    expect(clients).toHaveLength(1);
+  });
   it("serves exact OAuth AS discovery and an ES256 public JWKS", async () => {
     const { customFetchImpl } = await setup();
     const discovery = await customFetchImpl(

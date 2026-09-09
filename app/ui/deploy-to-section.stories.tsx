@@ -5,7 +5,7 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { DeployToSection } from "./app-builder";
 
 const meta = {
-  title: "Create App/Sections/Deploy To",
+  title: "Components/Create App/Sections/Deploy To",
   component: DeployToSection,
   args: {
     available: true,

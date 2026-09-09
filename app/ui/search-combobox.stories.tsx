@@ -8,7 +8,7 @@ const options = [
   { value: "sandbox", label: "Sandbox", detail: "Hobby" },
 ];
 const meta = {
-  title: "Create App/Primitives/Search Combobox",
+  title: "Components/Create App/Primitives/Search Combobox",
   component: SearchCombobox,
   args: {
     label: "Select a Vercel Team",

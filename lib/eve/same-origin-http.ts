@@ -103,7 +103,10 @@ function endpoint(
   return new URL(path, `${config.baseUrl}/`).href;
 }
 
-function forwardedPrincipal(principalInput: HostedPrincipal) {
+function forwardedPrincipal(
+  principalInput: HostedPrincipal,
+  sourceHandoffId?: string,
+) {
   const principal = hostedPrincipalSchema.parse(principalInput);
   return {
     current: {
@@ -111,6 +114,14 @@ function forwardedPrincipal(principalInput: HostedPrincipal) {
         "mcp:audience": principal.audience,
         "mcp:scopes": principal.scopes,
         "mcp:workspace-id": principal.workspaceId,
+        ...(sourceHandoffId === undefined
+          ? {}
+          : {
+              "autograph:source-handoff-id": z
+                .string()
+                .uuid()
+                .parse(sourceHandoffId),
+            }),
       },
       authenticator: "mcp-oauth-jwks",
       issuer: principal.issuer,
@@ -156,6 +167,7 @@ async function postMutation(input: {
   path: string;
   principal: HostedPrincipal;
   body: Record<string, unknown>;
+  sourceHandoffId?: string;
 }) {
   let headers: Record<string, string>;
   try {
@@ -181,7 +193,10 @@ async function postMutation(input: {
         },
         body: JSON.stringify({
           ...input.body,
-          forwardedPrincipal: forwardedPrincipal(input.principal),
+          forwardedPrincipal: forwardedPrincipal(
+            input.principal,
+            input.sourceHandoffId,
+          ),
         }),
       },
     );
@@ -439,6 +454,7 @@ export function createSameOriginEveTransport(input: {
         path: "/eve/v1/session",
         principal: request.principal,
         body: { message: request.prompt, operationId: request.operationId },
+        sourceHandoffId: request.sourceHandoffId,
       });
       return {
         adapterSessionId: accepted.sessionId,
@@ -456,6 +472,7 @@ export function createSameOriginEveTransport(input: {
         path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
         principal: request.principal,
         body: { message: request.message, turnPolicy: "queue" },
+        sourceHandoffId: request.sourceHandoffId,
       });
       if (accepted.sessionId !== request.adapterSessionId) {
         throw new SubmissionOutcomeUnknownError();
@@ -465,6 +482,7 @@ export function createSameOriginEveTransport(input: {
     async respond(request) {
       const accepted = await postMutation({
         ...common,
+        sourceHandoffId: request.sourceHandoffId,
         path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
         principal: request.principal,
         body: {

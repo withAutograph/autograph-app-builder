@@ -1,6 +1,10 @@
 import type { ToolContext } from "eve/tools";
+import { ConnectionAuthorizationFailedError } from "eve/connections";
 
-import type { ReadyRepositoryAccess } from "../integrations/repository-access";
+import type {
+  ReadyRepositoryAccess,
+  RepositoryAccessResult,
+} from "../integrations/repository-access";
 import type { RepositoryAccessRuntime } from "./deployment-repository-access-runtime";
 import {
   recordRepositoryAccessReceipt,
@@ -28,23 +32,38 @@ export async function resolveRepositoryAccessForTool(
   const access = await runtime.classify(input);
   if (access.status === "scope-selection-required")
     return { kind: "selection", access };
-  const provider = runtime.authorization({
-    ...input,
-    sessionId: ctx.session.id,
-    requestId: ctx.callId,
-  });
-  const authOptions = {
-    authKey: `github-repository:${ctx.session.id}:${input.repository.toLowerCase().replace("/", ":")}`,
-    displayName:
-      access.status === "authorization-required" && access.action === "update"
-        ? "Update GitHub access"
-        : "Connect GitHub",
-  } as const;
-  await ctx.getToken(provider, authOptions);
-  const confirmed = await runtime.classify(input);
-  if (confirmed.status === "authorization-required") {
-    ctx.requireAuth(provider, authOptions);
+  if (access.status === "provider-unavailable")
+    throw new ConnectionAuthorizationFailedError("github-repository-access", {
+      reason: "provider_unavailable",
+      retryable: true,
+      message: "GitHub could not confirm repository access. Try again shortly.",
+    });
+  let confirmed: RepositoryAccessResult = access;
+  if (access.status !== "ready") {
+    const provider = runtime.authorization({
+      ...input,
+      sessionId: ctx.session.id,
+      requestId: ctx.callId,
+    });
+    const authOptions = {
+      authKey: `github-repository:${ctx.session.id}:${input.repository.toLowerCase().replace("/", ":")}`,
+      displayName:
+        access.status === "authorization-required" && access.action === "update"
+          ? "Update GitHub access"
+          : "Connect GitHub",
+    } as const;
+    await ctx.getToken(provider, authOptions);
+    confirmed = await runtime.classify(input);
+    if (confirmed.status === "authorization-required") {
+      ctx.requireAuth(provider, authOptions);
+    }
   }
+  if (confirmed.status === "provider-unavailable")
+    throw new ConnectionAuthorizationFailedError("github-repository-access", {
+      reason: "provider_unavailable",
+      retryable: true,
+      message: "GitHub could not confirm repository access. Try again shortly.",
+    });
   if (confirmed.status !== "ready") {
     throw new Error(
       confirmed.status === "scope-selection-required"
@@ -52,13 +71,14 @@ export async function resolveRepositoryAccessForTool(
         : "GitHub could not confirm repository access.",
     );
   }
+  const ready = confirmed;
   let recorded: RepositoryAccessReceipt | undefined;
   repositoryAccessReceiptState.update((current) => {
     recorded = recordRepositoryAccessReceipt({
       current,
       sessionId: ctx.session.id,
       confirmedByCallId: ctx.callId,
-      access: confirmed,
+      access: ready,
     });
     return recorded;
   });

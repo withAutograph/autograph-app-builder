@@ -8,7 +8,10 @@ import {
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
+import {
+  providerConnectionReturnToSchema,
+  type ProviderConnectionReturn,
+} from "../integrations/provider-connection-return";
 import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import type { GitHubUserCredentialStore } from "../provisioning/github-user-credential";
@@ -335,7 +338,7 @@ const statePayloadSchema = z
     phase: z.enum(["install", "authorize"]),
     installationId: decimalSchema.optional(),
     setupAction: z.enum(["install", "update"]).optional(),
-    returnTo: z.literal("/"),
+    returnTo: providerConnectionReturnToSchema,
     resumeKey: z.string().uuid().optional(),
     issuedAt: z.number().int().nonnegative(),
     expiresAt: z.number().int().positive(),

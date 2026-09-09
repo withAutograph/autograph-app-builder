@@ -41,6 +41,7 @@ import {
 } from "./request-auth";
 import {
   McpToolAuthenticationRequiredError,
+  McpProviderUnavailableError,
   safeToolError,
   SESSION_RESOURCE_URI,
   toolResult,
@@ -110,6 +111,7 @@ export interface HostedBuilderHandoffRuntime {
   recheckRepositoryAccess(input: {
     principal: HostedPrincipal;
     repository: string;
+    sourceHandoffId?: string;
   }): Promise<
     | { status: "ready" }
     | {
@@ -165,14 +167,16 @@ export function withHostedBuilderHandoffs(input: {
         resolved.record.intent.repository.resolvedFullName;
       if (resolvedRepository !== undefined) {
         const access = await input.handoffs.recheckRepositoryAccess({
+          sourceHandoffId: request.handoffId,
           principal: input.principal,
           repository: resolvedRepository,
         });
         if (access.status === "provider-unavailable")
-          throw new Error("handoff-repository-access-unavailable");
+          throw new McpProviderUnavailableError();
       }
       const result = await input.service.start({
         prompt: resolved.prompt,
+        sourceHandoffId: request.handoffId,
         clientRequestId: resolved.deterministicClientRequestId,
       });
       await input.handoffs.bindSession({

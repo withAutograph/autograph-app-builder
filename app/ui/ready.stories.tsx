@@ -8,7 +8,7 @@ import {
 import { Ready } from "./app-builder";
 
 const meta = {
-  title: "Create App/Flow/Ready",
+  title: "Create App/Recovery/Ready",
   component: Ready,
   args: {
     form: storyForm,

@@ -262,6 +262,7 @@ describe("branded public tool mapping", () => {
           prompt:
             "Build the server-owned handoff. Call resolve_repository_access before repository work.",
           clientRequestId: `handoff:${"a".repeat(64)}`,
+          sourceHandoffId: "123e4567-e89b-42d3-a456-426614174000",
         },
       },
       {
@@ -336,7 +337,7 @@ describe("branded public tool mapping", () => {
         handoffId: "123e4567-e89b-42d3-a456-426614174000",
         clientRequestId: "caller-one",
       }),
-    ).rejects.toThrow("handoff-repository-access-unavailable");
+    ).rejects.toThrow("Provider access is temporarily unavailable.");
     expect(start).not.toHaveBeenCalled();
     expect(bindSession).not.toHaveBeenCalled();
   });

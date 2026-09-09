@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, lte } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as databaseSchema from "../db/schema";
@@ -95,6 +95,33 @@ export function createPostgresBuilderHandoffStore(
       return { disposition: "existing", record: rowRecord(existing[0]) };
     },
     read,
+    async renewExpired(input) {
+      const updated = await database
+        .update(builderHandoffs)
+        .set({ expiresAt: input.expiresAt })
+        .where(
+          and(
+            authorityPredicate(input.authority),
+            eq(builderHandoffs.handoffId, input.handoffId),
+            eq(builderHandoffs.requestDigest, input.requestDigest),
+            // PostgreSQL timestamps may retain microseconds lost by JS Date.
+            // Expired + unbound is the atomic guard; do not compare a readback
+            // timestamp for equality. A winning renewal moves expiry past now.
+            lte(builderHandoffs.expiresAt, input.now),
+            isNull(builderHandoffs.redeemedAt),
+            isNull(builderHandoffs.sessionId),
+          ),
+        )
+        .returning();
+      if (updated[0])
+        return { disposition: "renewed", record: rowRecord(updated[0]) };
+      // A concurrent renewal or bind won the CAS. Return its current reference.
+      const existing = await read(input);
+      return existing?.requestDigest === input.requestDigest &&
+        (existing.sessionId !== undefined || existing.expiresAt > input.now)
+        ? { disposition: "existing", record: existing }
+        : undefined;
+    },
     async bindSession(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const updated = await database

@@ -14,6 +14,7 @@ import {
   type RepositoryAccessContinuationStore,
 } from "../integrations/repository-access-continuation";
 import { createRepositoryAccessRuntime } from "./deployment-repository-access-runtime";
+import type { BuilderHandoffIntent } from "../handoff/contracts";
 
 const authority = {
   issuer: "https://builder.example/api/auth",
@@ -169,6 +170,87 @@ function runtimeFixture(input?: {
 }
 
 describe("deployment repository access authorization", () => {
+  it("uses the web selection among multiple installations and preserves its handoff return", async () => {
+    const providerFactory = mutableProvider({
+      repositoryAvailable: () => true,
+    });
+    const preparedIntent = {
+      repository: {
+        requestedName: "app-builder-dogfood",
+        private: true,
+        resolvedFullName: repository,
+      },
+      providers: { githubInstallationId: "10" },
+    } as unknown as BuilderHandoffIntent;
+    const runtime = createRepositoryAccessRuntime({
+      authority,
+      origin: "https://builder.example",
+      installations: installationStore([
+        installation,
+        { ...installation, installationId: "11" },
+      ]),
+      providerFactory,
+      continuations: runtimeFixture().continuations,
+      preparedIntent,
+      returnTo: `/handoff/${continuationId}`,
+    });
+    expect(await runtime.classify({ repository })).toMatchObject({
+      status: "ready",
+      scope: { installationId: "10" },
+    });
+    expect(providerFactory).toHaveBeenCalledTimes(1);
+    expect(providerFactory.mock.calls[0]?.[0]).toMatchObject({
+      authority,
+      installation: { installationId: "10" },
+    });
+    const authorization = runtime.authorization({
+      repository,
+      sessionId: "ses_one",
+      requestId: "call_one",
+    });
+    expect(
+      await authorization.getToken({ principal, connection }),
+    ).toHaveProperty("token");
+    providerFactory.mockImplementation(
+      mutableProvider({ repositoryAvailable: () => false }),
+    );
+    const started = await authorization.startAuthorization({
+      principal,
+      connection,
+      callbackUrl,
+    });
+    expect(new URL(started.challenge.url!).searchParams.get("returnTo")).toBe(
+      `/handoff/${continuationId}`,
+    );
+  });
+
+  it.each([
+    [404, {}, "authorization-required"],
+    [403, {}, "authorization-required"],
+    [401, {}, "provider-unavailable"],
+    [503, {}, "provider-unavailable"],
+    [403, { "x-ratelimit-remaining": "0" }, "provider-unavailable"],
+  ])(
+    "classifies installation HTTP %s with headers %j as %s",
+    async (status, headers, expected) => {
+      const runtime = createRepositoryAccessRuntime({
+        authority,
+        origin: "https://builder.example",
+        installations: installationStore([installation]),
+        continuations: runtimeFixture().continuations,
+        providerFactory: () => ({
+          inspectInstallation: async () => {
+            throw { status, response: { headers } };
+          },
+          inspectRepositoryByName: async () => undefined,
+        }),
+      });
+      expect(
+        await runtime.classify({ repository, selectedInstallationId: "10" }),
+      ).toMatchObject({ status: expected });
+    },
+  );
+
   it("emits the closed Store In presentation while retaining server authority", async () => {
     const fixture = runtimeFixture({ bindings: [] });
     const authorization = fixture.runtime.authorization({

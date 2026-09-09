@@ -5,7 +5,7 @@ import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { AuthorizationControl } from "./view";
 
 const meta = {
-  title: "Create App/MCP Blocks/Authorization Request",
+  title: "MCP/Authorization/Authorization Request",
   component: AuthorizationControl,
   args: {
     canOpen: true,

@@ -30,6 +30,11 @@ describe("durable session discovery contracts", () => {
       { clientRequestId: "missing" },
       {
         prompt: "Build",
+        sourceHandoffId: "123e4567-e89b-42d3-a456-426614174000",
+        clientRequestId: "cannot-inject-internal-context",
+      },
+      {
+        prompt: "Build",
         resumeSessionId: "session-one",
         clientRequestId: "both",
       },

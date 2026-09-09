@@ -1,5 +1,78 @@
 # Installing Autograph App Builder
 
+## Continue a web-prepared app
+
+See [Authenticated client handoff](authenticated-client-handoff.md) for the
+architecture and native Preview acceptance boundary.
+For acceptance, follow [the Codex + Computer QA runbook](handoff-native-qa.md).
+
+Use the same Autograph origin and browser profile where you prepared the app.
+Codex and Cursor authorize their own Autograph connection through the existing
+Better Auth browser session. First use shows an Allow confirmation; an existing
+grant can reuse consent. Provider connections remain server-owned: continuing
+through Autograph does not require a separate GitHub/Vercel plugin, CLI login,
+or copying a provider token. Expired browser sessions and revoked provider access
+can require authentication again.
+
+### Cursor desktop
+
+After the deployment operator registers the dedicated public client, configure
+Cursor's remote MCP entry using the canonical deployment URL:
+
+```json
+{
+  "mcpServers": {
+    "autograph": {
+      "url": "https://YOUR-AUTOGRAPH-ORIGIN/mcp",
+      "auth": {
+        "CLIENT_ID": "autograph-cursor-desktop",
+        "scopes": [
+          "autograph:session",
+          "autograph:start",
+          "autograph:get",
+          "autograph:send",
+          "autograph:respond",
+          "autograph:cancel",
+          "offline_access"
+        ]
+      }
+    }
+  }
+}
+```
+
+This is a Cursor-specific adapter, not the portable plugin manifest. It has no
+client secret. Cursor documents its `auth.CLIENT_ID` field and desktop callback
+in [Static OAuth for remote servers](https://cursor.com/docs/mcp#static-oauth-for-remote-servers).
+Only `http://localhost:8787/callback` is registered; Cursor web/cloud callbacks
+and alternate ports are not supported by this client.
+
+### Deployment setup for Cursor
+
+Run database migrations and the existing `hosted:oauth-initialize` operation
+first, then explicitly run this task against that deployment's database and
+canonical MCP resource. Supply `DATABASE_URL` through the deployment's existing
+secret environment; it is passed privately on stdin and never printed:
+
+```sh
+mise run hosted:cursor-client-setup -- --resource https://YOUR-AUTOGRAPH-ORIGIN/mcp
+```
+
+The task creates `autograph-cursor-desktop` with authorization-code and refresh
+grants, required PKCE, the existing MCP scopes, and exactly one resource binding.
+It is safe to repeat with the same configuration. A conflicting or disabled
+client causes failure and transaction rollback, requiring operator review;
+setup does not silently replace credentials or re-enable a disabled client.
+Dynamic registration remains disabled. Request handlers must never call setup.
+Gate the installation link with the read-only
+`isCursorClientReady(database, resource)` from `lib/auth/cursor-client.ts`.
+
+The real Better Auth tests reuse a browser cookie for Cursor and Codex CIMD,
+exercise signed consent, repeat grants, and verify exchanged/refreshed JWTs.
+`lib/auth/real-oauth-test-harness.ts` exposes these flows for integration tests.
+This local protocol coverage is not a claim of fresh-profile desktop acceptance;
+record Codex/Cursor versions and observed behavior on Preview before that claim.
+
 ## Install before shared marketplace publication
 
 Once the pre-release `v0.2.12` GitHub release is published, use its public
