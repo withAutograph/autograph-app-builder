@@ -68,15 +68,26 @@ const result = await Bun.build({
 });
 if (!result.success) throw new Error(result.logs.map(String).join("\\n"));
 const theme = path.join(repository, "packages/design-systems/core/tokens/theme.css");
-const css = await postcss([tailwind({ base: root })]).process(
-  await readFile(theme, "utf8") + "\\n@source " + JSON.stringify(root) + ";\\n@source " + JSON.stringify(path.dirname(path.dirname(theme))) + ";",
-  { from: theme },
-);
+const themeCss = await readFile(theme, "utf8");
+const css = await postcss([
+  {
+    postcssPlugin: "preview-sources",
+    Once(stylesheet) {
+      stylesheet.append({ name: "source", params: JSON.stringify(root) });
+      stylesheet.append({ name: "source", params: JSON.stringify(path.dirname(path.dirname(theme))) });
+    },
+  },
+  tailwind({ base: root }),
+]).process(themeCss, {
+  from: theme,
+  map: { inline: true, annotation: true, sourcesContent: true },
+});
 const js = await result.outputs.find(output => output.path.endsWith(".js")).text();
 const bundledCss = await Promise.all(result.outputs.filter(output => output.path.endsWith(".css")).map(output => output.text()));
-const style = (css.css + "\\n" + bundledCss.join("\\n")).replace(/<\\/style/gi, "<\\\\/style");
+const themeStyle = css.css.replace(/<\\/style/gi, "<\\\\/style");
+const bundledStyle = bundledCss.join("\\n").replace(/<\\/style/gi, "<\\\\/style");
 const script = js.replace(/<\\/script/gi, "<\\\\/script");
-await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${input.appId}</title><style>' + style + '</style></head><body><div id="root"></div><script>' + script + '</script></body></html>');`;
+await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${input.appId}</title><style>' + themeStyle + '</style><style>' + bundledStyle + '</style></head><body><div id="root"></div><script>' + script + '</script></body></html>');`;
   return {
     root,
     files: [
