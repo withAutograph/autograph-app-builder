@@ -2,43 +2,30 @@
 
 import {
   AlertCircle,
-  ArrowLeft,
   Check,
   ChevronDown,
-  ChevronRight,
-  Clock,
-  Copy,
-  DollarSign,
   ExternalLink,
-  GitBranch,
   Globe,
-  Info,
-  Monitor,
   Plus,
   PlusCircle,
-  RefreshCw,
   Search,
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import {
   useEffect,
-  useId,
   useRef,
   useState,
   useSyncExternalStore,
   type FormEvent,
-  type ReactNode,
 } from "react";
 import {
   SiBitbucket,
   SiCloudflare,
   SiGitlab,
   SiNetlify,
-  SiOpenai,
   SiQuickbooks,
   SiSage,
   SiVercel,
@@ -49,203 +36,68 @@ import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import {
   createBuilderHandoff as createBuilderHandoffAction,
   provisionBuilderProvider,
-  readBuilderProviderProvisioning,
 } from "@/app/actions/builder";
+import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
 import { SectionShell } from "../../components/create-app/choice-card";
 import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
-import { UserButton } from "../../components/auth/user/user-button";
 import styles from "./app-builder.module.css";
-import { SearchCombobox as SearchComboboxIsland } from "./search-combobox";
 import autographIcon from "../../assets/autograph-icon.png";
-import {
-  providerConnectionFailureMessage,
-  type ProviderConnectionNotice,
-} from "../../lib/integrations/provider-connection-status";
+import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
+import {
+  activeProvisioningStorageKey,
+  clearActiveProvisioning,
+  clearBuilderDraft,
+  parseActiveProvisioning,
+  persistActiveProvisioning,
+  persistBuilderDraft,
+  readBuilderDraft,
+} from "./builder-session";
+import { Header, ProviderNotices } from "./builder-shell";
+import { BuilderNextSteps } from "./builder-next-steps";
+import { BuilderProvisionedResources } from "./builder-provisioned-resources";
+import { BuilderInstallInstructions } from "./builder-install-instructions";
+import { BuilderHandoffProgress } from "./builder-handoff-progress";
+import { AppDetailsSection } from "./builder-app-details";
+import { BuildWithSection } from "./builder-destination";
+import { InfoTooltip } from "./builder-info-tooltip";
+import { SearchCombobox, type ComboOption } from "./builder-combobox";
+
+export { AppDetailsSection } from "./builder-app-details";
+export { BuildWithSection } from "./builder-destination";
+export { InfoTooltip } from "./builder-info-tooltip";
+export { SearchCombobox, type ComboOption } from "./builder-combobox";
+import type {
+  BuilderDraft,
+  BuilderForm,
+  BuilderHandoffReference,
+  BuildDestination,
+  ClipboardState,
+  DeploymentProvider,
+  HandoffAttempt,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
+export type {
+  BuilderDraft,
+  BuilderForm,
+  BuilderHandoffReference,
+  BuildDestination,
+  ClipboardState,
+  DeploymentProvider,
+  HandoffAttempt,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
 
 type Screen = "builder" | "handoff" | "ready";
-export type BuildDestination = "web" | "codex" | "cursor";
-export type ClipboardState = "idle" | "copied" | "failed";
-export type HandoffAttempt = "attempted" | "blocked" | "too-long";
-export type BuilderHandoffReference = {
-  version: 1;
-  handoffId: string;
-  expiresAt: string;
-};
-export type BuilderForm = {
-  appName: string;
-  repository: string;
-  brief: string;
-  privateRepository: boolean;
-  buildDestination: BuildDestination;
-  connections: string[];
-  vercelInstallationId?: string;
-  githubInstallationId?: string;
-  modelId: string;
-};
-export type ProviderField = "vercel" | "github";
-export type StorageProvider = "github" | "gitlab" | "bitbucket";
-export type DeploymentProvider = "vercel" | "netlify" | "cloudflare";
-export type BuilderDraft = {
-  version: 1;
-  form: BuilderForm;
-  team: string;
-  gitScope: string;
-  model: string;
-  zdrOnly: boolean;
-  showMoreConnections: boolean;
-  search: string;
-  connectedConnections: string[];
-  storageProvider?: StorageProvider | null;
-  deploymentProvider?: DeploymentProvider | null;
-  focusOrigin: ProviderField;
-  appNameEditedByUser: boolean;
-  repositoryEditedByUser: boolean;
-};
-
-const builderDraftStorageKey = (resumeKey: string) =>
-  `autograph-builder-draft:${resumeKey}`;
-const activeProvisioningStorageKey = "autograph-builder-active-provisioning";
-const builderDraftCache = new Map<
-  string,
-  { raw: string | null; draft: BuilderDraft | undefined }
->();
-
-function parseBuilderDraft(value: string | null): BuilderDraft | undefined {
-  if (!value) return undefined;
-  try {
-    const parsed = JSON.parse(value) as Partial<BuilderDraft>;
-    if (
-      parsed.version !== 1 ||
-      !parsed.form ||
-      (parsed.focusOrigin !== "vercel" && parsed.focusOrigin !== "github") ||
-      !Array.isArray(parsed.form.connections) ||
-      !Array.isArray(parsed.connectedConnections)
-    )
-      return undefined;
-    return {
-      ...parsed,
-      form: {
-        ...parsed.form,
-        buildDestination:
-          parsed.form.buildDestination === "web" ||
-          parsed.form.buildDestination === "codex" ||
-          parsed.form.buildDestination === "cursor"
-            ? parsed.form.buildDestination
-            : "codex",
-      },
-      storageProvider: parsed.storageProvider === null ? null : "github",
-      deploymentProvider:
-        parsed.deploymentProvider === "vercel" ? "vercel" : null,
-    } as BuilderDraft;
-  } catch {
-    return undefined;
-  }
-}
-
-function readBuilderDraft(resumeKey: string) {
-  const raw = sessionStorage.getItem(builderDraftStorageKey(resumeKey));
-  const cached = builderDraftCache.get(resumeKey);
-  if (cached?.raw === raw) return cached.draft;
-  const draft = parseBuilderDraft(raw);
-  builderDraftCache.set(resumeKey, { raw, draft });
-  return draft;
-}
-
-type ActiveProvisioning = {
-  version: 1;
-  requestId: string;
-  handoffCreationRequestId: string;
-  form: BuilderForm;
-  phase: "handoff" | "ready";
-  provisioning?: BuilderProvisionResponse;
-  handoff?: BuilderHandoffReference;
-};
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
-
-function parseActiveProvisioning(value: string | null) {
-  if (!value) return undefined;
-  try {
-    const parsed = JSON.parse(value) as Partial<ActiveProvisioning>;
-    const phase =
-      parsed.phase === "handoff" || parsed.phase === "ready"
-        ? parsed.phase
-        : undefined;
-    if (
-      parsed.version !== 1 ||
-      !parsed.requestId?.match(uuidPattern) ||
-      !parsed.handoffCreationRequestId?.match(uuidPattern) ||
-      !parsed.form ||
-      phase === undefined ||
-      typeof parsed.form.appName !== "string" ||
-      typeof parsed.form.repository !== "string" ||
-      typeof parsed.form.brief !== "string" ||
-      typeof parsed.form.privateRepository !== "boolean" ||
-      !["web", "codex", "cursor"].includes(parsed.form.buildDestination) ||
-      !Array.isArray(parsed.form.connections) ||
-      typeof parsed.form.modelId !== "string"
-    )
-      return undefined;
-    const provisioning = parsed.provisioning;
-    const handoff = parsed.handoff;
-    if (
-      phase === "ready" &&
-      (!provisioning ||
-        provisioning.version !== 1 ||
-        provisioning.requestId !== parsed.requestId ||
-        typeof provisioning.requestDigest !== "string" ||
-        typeof provisioning.appId !== "string" ||
-        !["pending", "settled"].includes(provisioning.status) ||
-        typeof provisioning.github !== "object" ||
-        typeof provisioning.vercel !== "object" ||
-        typeof provisioning.updatedAt !== "string" ||
-        handoff?.version !== 1 ||
-        !handoff.handoffId.match(uuidPattern) ||
-        Number.isNaN(Date.parse(handoff.expiresAt)))
-    )
-      return undefined;
-    return {
-      version: 1,
-      requestId: parsed.requestId,
-      handoffCreationRequestId: parsed.handoffCreationRequestId,
-      form: parsed.form,
-      phase,
-      ...(provisioning ? { provisioning } : {}),
-      ...(handoff ? { handoff } : {}),
-    } satisfies ActiveProvisioning;
-  } catch {
-    return undefined;
-  }
-}
-
-function persistActiveProvisioning(value: ActiveProvisioning) {
-  sessionStorage.setItem(activeProvisioningStorageKey, JSON.stringify(value));
-}
 export type ConnectionStage = "connect" | "configure" | "customize";
 export type ConnectionFlow = { name: string; stage: ConnectionStage };
-
-function CursorMark() {
-  return (
-    <svg
-      width="16"
-      height="18"
-      viewBox="0 0 466.73 532.09"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        fill="currentColor"
-        d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"
-      />
-    </svg>
-  );
-}
 
 const maximumHandoffUrlLength = 8_000;
 
@@ -282,19 +134,25 @@ function providerSetupMessage(
 
 export function buildAppHandoffPrompt(handoffId: string) {
   if (!uuidPattern.test(handoffId)) throw new Error("handoff-id-invalid");
-  return `Use the Autograph App Builder plugin to create this app.
+  return `Use the official Autograph App Builder plugin to create this app.
 
-If Autograph App Builder is unavailable, install the official plugin first:
+Handoff ID: ${handoffId}
+
+First check whether app-builder@autograph is installed and enabled and whether its autograph_start tool is callable.
+
+If the official tool is callable, immediately call autograph_start with the handoffId and a unique clientRequestId. Do not reinstall or upgrade a working plugin.
+
+If the official plugin is missing, disabled, or outdated, you are authorized to install, enable, or update it automatically. Run the necessary commands yourself:
 
 codex plugin marketplace add withAutograph/marketplace --ref main
 codex plugin marketplace upgrade autograph
 codex plugin add app-builder@autograph
 
-Verify that app-builder@autograph is enabled, then continue the prepared app with this handoff ID:
+Verify that app-builder@autograph is enabled, then rediscover its tools and continue with autograph_start.
 
-${handoffId}
+If the official plugin is installed and enabled but its tools remain unavailable, treat this as a connection or tool-loading problem, not proof that an update is needed. Use available supported reconnect or reload capabilities and retry discovery. Do not substitute the development plugin or another app builder, and do not edit a repository directly.
 
-Use autograph_start with the handoffId. Do not use another app builder or edit a repository directly. If autograph_start is unavailable, stop and explain how to install the official plugin.`;
+Do not ask the user to run installation or upgrade commands. If recovery requires a user-only action, explain the specific blocker and request only that minimal action. Never claim the handoff has started until autograph_start succeeds.`;
 }
 
 function buildAppHandoffUrl(destination: BuildDestination, handoffId: string) {
@@ -324,19 +182,19 @@ async function createBuilderHandoff(input: {
   creationRequestId: string;
 }): Promise<BuilderHandoffReference> {
   const value = await createBuilderHandoffAction({
-    version: 1,
-    creationRequestId: input.creationRequestId,
-    ...(input.provisioning.requestDigest === "0".repeat(64)
-      ? {}
-      : { provisioningRequestId: input.provisioning.requestId }),
-    appName: input.form.appName,
-    repository: {
-      name: input.form.repository,
-      private: input.form.privateRepository,
-    },
-    brief: input.form.brief,
-    modelId: input.form.modelId,
-    connections: input.form.connections,
+      version: 1,
+      creationRequestId: input.creationRequestId,
+      ...(input.provisioning.requestDigest === "0".repeat(64)
+        ? {}
+        : { provisioningRequestId: input.provisioning.requestId }),
+      appName: input.form.appName,
+      repository: {
+        name: input.form.repository,
+        private: input.form.privateRepository,
+      },
+      brief: input.form.brief,
+      modelId: activeBuilderModelId,
+      connections: input.form.connections,
   });
   if (
     value.version !== 1 ||
@@ -481,7 +339,7 @@ const randomNameNouns = [
   "Waypoint",
   "Workshop",
 ] as const;
-const preferredModelId = "openai/gpt-5.6-sol";
+const preferredModelId = activeBuilderModelId;
 
 export function repositoryNameFromAppName(appName: string) {
   return appName
@@ -558,21 +416,6 @@ export function AutographMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function InfoTooltip({ children }: { children: string }) {
-  const tooltipId = useId();
-
-  return (
-    <span className={styles.infoTooltip}>
-      <button type="button" aria-label={children} aria-describedby={tooltipId}>
-        <Info size={12} aria-hidden="true" />
-      </button>
-      <span id={tooltipId} role="tooltip">
-        {children}
-      </span>
-    </span>
-  );
-}
-
 export function ConnectionIcon({
   kind,
   name,
@@ -596,398 +439,6 @@ export function ConnectionIcon({
     >
       {Icon ? <Icon size={18} /> : hasBrandAsset ? null : <Globe size={18} />}
     </span>
-  );
-}
-
-export type ComboOption = {
-  value: string;
-  label: string;
-  detail?: string;
-  icon?: string;
-};
-
-type ComboFooter = ComboOption & { disabled?: boolean };
-
-export function SearchCombobox({
-  label,
-  value,
-  options,
-  onChange,
-  prefix,
-  menuFooter,
-  optionIcon,
-  footerIcon,
-  detailPills = false,
-  showSelectedCheck = true,
-  placeholder = "Select…",
-  disabled = false,
-  onFooterSelect,
-  inputId,
-}: {
-  label: string;
-  value: string;
-  options: ComboOption[];
-  onChange: (value: string) => void;
-  prefix: ReactNode;
-  menuFooter?: ComboFooter;
-  optionIcon?: (option: ComboOption) => ReactNode;
-  footerIcon?: ReactNode;
-  detailPills?: boolean;
-  showSelectedCheck?: boolean;
-  placeholder?: string;
-  disabled?: boolean;
-  onFooterSelect?: () => void;
-  inputId?: string;
-}) {
-  const id = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const selected = options.find((option) => option.value === value);
-  const [query, setQuery] = useState(selected?.label ?? "");
-  const [filtering, setFiltering] = useState(false);
-  const [active, setActive] = useState(0);
-  const shown = filtering
-    ? options.filter((option) =>
-        `${option.label} ${option.detail ?? ""}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-      )
-    : options;
-
-  useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, []);
-
-  function closeAndRestore() {
-    setOpen(false);
-    setQuery(selected?.label ?? "");
-    setFiltering(false);
-    setActive(0);
-  }
-
-  function choose(option: ComboOption) {
-    if (option.value.startsWith("create-") || option.value.startsWith("add-"))
-      return;
-    onChange(option.value);
-    setQuery(option.label);
-    setFiltering(false);
-    setOpen(false);
-  }
-
-  return (
-    <div
-      className={styles.combobox}
-      ref={rootRef}
-      data-open={open || undefined}
-      data-label={label}
-      role="combobox"
-      aria-expanded={open}
-      aria-haspopup="listbox"
-      aria-controls={`${id}-listbox`}
-    >
-      <div className={styles.comboPrefix} aria-hidden="true">
-        {prefix}
-      </div>
-      <input
-        id={inputId}
-        role="searchbox"
-        aria-label={label}
-        aria-autocomplete="list"
-        aria-controls={`${id}-listbox`}
-        value={query}
-        placeholder={placeholder}
-        disabled={disabled}
-        autoComplete="off"
-        spellCheck={false}
-        onFocus={(event) => {
-          setOpen(true);
-          setFiltering(false);
-          event.currentTarget.select();
-        }}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setFiltering(true);
-          setOpen(true);
-          setActive(0);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") closeAndRestore();
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setOpen(true);
-            setActive((index) =>
-              Math.min(index + 1, Math.max(shown.length - 1, 0)),
-            );
-          }
-          if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActive((index) => Math.max(index - 1, 0));
-          }
-          if (event.key === "Enter" && open && shown[active]) {
-            event.preventDefault();
-            choose(shown[active]);
-          }
-        }}
-      />
-      {selected?.detail ? (
-        <span className={styles.comboDetail}>{selected.detail}</span>
-      ) : null}
-      <button
-        type="button"
-        aria-label={open ? "Close menu" : "Open menu"}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <ChevronDown size={16} aria-hidden="true" />
-      </button>
-      <div className={styles.comboMenu} role="dialog" hidden={!open}>
-        <div id={`${id}-listbox`} role="listbox">
-          {shown.map((option, index) => (
-            <button
-              type="button"
-              role="option"
-              aria-selected={option.value === value}
-              data-has-icon={optionIcon ? "" : undefined}
-              data-option-value={option.value}
-              data-active={index === active || undefined}
-              key={option.value}
-              onPointerMove={() => setActive(index)}
-              onClick={() => choose(option)}
-            >
-              {optionIcon ? (
-                <span className={styles.comboOptionIcon} aria-hidden="true">
-                  {optionIcon(option)}
-                </span>
-              ) : null}
-              <span className={styles.comboOptionLabel}>{option.label}</span>
-              {option.detail ? (
-                <small data-pill={detailPills || undefined}>
-                  {option.detail}
-                </small>
-              ) : null}
-              {showSelectedCheck && option.value === value ? (
-                <Check size={16} aria-hidden="true" />
-              ) : null}
-            </button>
-          ))}
-          {!shown.length ? (
-            <p className={styles.noResults}>No results found.</p>
-          ) : null}
-        </div>
-        {menuFooter ? (
-          <button
-            className={styles.comboFooter}
-            type="button"
-            disabled={menuFooter.disabled}
-            onClick={() => {
-              setOpen(false);
-              onFooterSelect?.();
-            }}
-          >
-            <span className={styles.comboOptionIcon} aria-hidden="true">
-              {footerIcon ?? <Plus size={20} />}
-            </span>
-            <span className={styles.comboOptionLabel}>{menuFooter.label}</span>
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-export function Header() {
-  return (
-    <header className={styles.header}>
-      <a className={styles.skipLink} href="#main-content">
-        Skip to content
-      </a>
-      <Link href="/" className={styles.back}>
-        <ArrowLeft size={17} aria-hidden="true" /> Back
-      </Link>
-      <span>New App</span>
-      <div className={styles.headerActions}>
-        <UserButton align="end" sideOffset={8} size="icon" />
-      </div>
-    </header>
-  );
-}
-
-export function ProviderNotices({
-  notices,
-}: {
-  notices: ProviderConnectionNotice[];
-}) {
-  if (!notices.length) return null;
-  return (
-    <div className={styles.providerNotices} aria-live="polite">
-      {notices.map((notice) => {
-        const provider = notice.provider === "vercel" ? "Vercel" : "GitHub";
-        return (
-          <p
-            key={`${notice.provider}-${notice.status}`}
-            role={notice.status === "failed" ? "alert" : "status"}
-            data-status={notice.status}
-          >
-            {notice.status === "connected" ? (
-              <>
-                <Check size={15} aria-hidden="true" />
-                {provider} connected successfully.
-              </>
-            ) : (
-              <>
-                <Info size={15} aria-hidden="true" />
-                {providerConnectionFailureMessage(provider, notice.reason)}
-              </>
-            )}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-export function AppDetailsSection({
-  appName,
-  brief,
-  onAppNameChange,
-  onBriefChange,
-  onCycleBrief,
-}: {
-  appName: string;
-  brief: string;
-  onAppNameChange: (value: string) => void;
-  onBriefChange: (value: string) => void;
-  onCycleBrief: () => void;
-}) {
-  return (
-    <fieldset
-      className={`${styles.sectionField} ${styles.appDetailsSection}`}
-      data-create-app-section="app-details"
-    >
-      <legend className={styles.visuallyHidden}>App details</legend>
-      <label htmlFor="app-name">
-        <span className={styles.fieldLabel}>
-          App Name <small aria-hidden="true">Optional</small>
-        </span>
-        <input
-          id="app-name"
-          name="app-name"
-          aria-label="App Name"
-          autoComplete="off"
-          spellCheck={false}
-          value={appName}
-          onChange={(event) => onAppNameChange(event.target.value)}
-          placeholder="support-app"
-        />
-      </label>
-      <label htmlFor="app-brief">
-        <span className={styles.fieldLabel}>
-          App Brief <small aria-hidden="true">Required</small>
-        </span>
-        <div className={styles.briefField}>
-          <textarea
-            id="app-brief"
-            name="app-brief"
-            aria-label="App Brief"
-            autoComplete="off"
-            value={brief}
-            onChange={(event) => onBriefChange(event.target.value)}
-            placeholder="Describe the app you want to build…"
-          />
-          <button
-            type="button"
-            aria-label="Try another app brief example"
-            onClick={onCycleBrief}
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-        </div>
-      </label>
-      <p className={styles.helpText}>
-        Define this app’s users, workflow, constraints, and desired outcome.{" "}
-        <a
-          href="https://github.com/withAutograph/autograph-app-builder"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Read the App Builder docs ↗
-        </a>
-        .
-      </p>
-    </fieldset>
-  );
-}
-
-export function BuildWithSection({
-  children,
-  comingSoonEnabled = false,
-  selected,
-  onChange,
-}: {
-  children?: ReactNode;
-  comingSoonEnabled?: boolean;
-  selected: BuildDestination;
-  onChange: (destination: BuildDestination) => void;
-}) {
-  return (
-    <>
-      <SectionShell
-        className={`${styles.sectionField} ${styles.buildSection}`}
-        section="build-with"
-        title="Build with"
-        description="Where do you want to build this app?"
-      >
-        <div
-          className={`${styles.optionGrid} ${styles.buildDestinationGrid}`}
-          role="radiogroup"
-          aria-label="Build destination"
-        >
-          {comingSoonEnabled ? (
-            <label className={styles.unavailableOption}>
-              <Monitor size={18} aria-hidden="true" />
-              <span>
-                Web Chat <small>Coming soon</small>
-              </span>
-              <input
-                type="radio"
-                name="build-destination"
-                value="web"
-                disabled
-                checked={selected === "web"}
-              />
-            </label>
-          ) : null}
-          <label>
-            <SiOpenai size={18} aria-hidden="true" />
-            ChatGPT / Codex
-            <input
-              type="radio"
-              name="build-destination"
-              value="codex"
-              required
-              checked={selected === "codex"}
-              onChange={() => onChange("codex")}
-            />
-          </label>
-          <label>
-            <CursorMark />
-            Cursor
-            <input
-              type="radio"
-              name="build-destination"
-              value="cursor"
-              required
-              checked={selected === "cursor"}
-              onChange={() => onChange("cursor")}
-            />
-          </label>
-        </div>
-      </SectionShell>
-      {children}
-    </>
   );
 }
 
@@ -1023,7 +474,7 @@ export function ModelControls({
           Only use providers that support Zero Data Retention.
         </InfoTooltip>
       </label>
-      <SearchComboboxIsland
+      <SearchCombobox
         label={
           options.find((option) => option.value === model)?.label ??
           "Select model"
@@ -1031,10 +482,14 @@ export function ModelControls({
         value={model}
         options={options}
         onChange={onModelChange}
-        prefix={<Search size={15} />}
-        showSelectedCheck={false}
-        placeholder={available ? "Select model" : "Models unavailable"}
-        disabled={!available}
+        input={{
+          placeholder: available ? "Select model" : "Models unavailable",
+          disabled: !available,
+        }}
+        presentation={{
+          prefix: <Search size={15} />,
+          showSelectedCheck: false,
+        }}
       />
       {!available ? (
         <button className={styles.retryModels} type="button" onClick={onRetry}>
@@ -1092,23 +547,27 @@ export function DeployToSection({
               Vercel Team <small aria-hidden="true">Optional</small>
             </span>
             {connected ? (
-              <SearchComboboxIsland
+              <SearchCombobox
                 label="Select a Vercel Team"
-                inputId="vercel-team"
                 value={team}
                 options={teamOptions}
                 onChange={onTeamChange}
-                prefix={<span className={styles.teamDot} data-team={team} />}
-                menuFooter={{
-                  value: "create-team",
-                  label: "Connect another Vercel team",
+                input={{ id: "vercel-team" }}
+                presentation={{
+                  prefix: <span className={styles.teamDot} data-team={team} />,
+                  optionIcon: (option) => (
+                    <span className={styles.teamDot} data-team={option.value} />
+                  ),
+                  footerIcon: <PlusCircle size={18} />,
+                  detailPills: true,
                 }}
-                onFooterSelect={onConnect}
-                optionIcon={(option) => (
-                  <span className={styles.teamDot} data-team={option.value} />
-                )}
-                footerIcon={<PlusCircle size={18} />}
-                detailPills
+                footer={{
+                  option: {
+                    value: "create-team",
+                    label: "Connect another Vercel team",
+                  },
+                  onSelect: onConnect,
+                }}
               />
             ) : (
               <button
@@ -1194,20 +653,24 @@ export function StoreInSection({
                   Git Scope <small aria-hidden="true">Optional</small>
                 </span>
                 {connected ? (
-                  <SearchComboboxIsland
+                  <SearchCombobox
                     label="Git Scope"
-                    inputId="git-scope"
                     value={gitScope}
                     options={gitScopeOptions}
                     onChange={onGitScopeChange}
-                    prefix={<FaGithub size={16} />}
-                    menuFooter={{
-                      value: "add-github",
-                      label: githubView.actionLabel,
+                    input={{ id: "git-scope" }}
+                    presentation={{
+                      prefix: <FaGithub size={16} />,
+                      optionIcon: () => <FaGithub size={16} />,
+                      footerIcon: <Plus size={21} />,
                     }}
-                    onFooterSelect={onConnect}
-                    optionIcon={() => <FaGithub size={16} />}
-                    footerIcon={<Plus size={21} />}
+                    footer={{
+                      option: {
+                        value: "add-github",
+                        label: githubView.actionLabel,
+                      },
+                      onSelect: onConnect,
+                    }}
                   />
                 ) : (
                   <button
@@ -1684,16 +1147,14 @@ export function Builder({
     label: scope.accountLogin,
     detail: scope.accountType,
   }));
-  const allModelOptions = integrations.models.entries.map((model) => ({
-    value: model.id,
-    label: model.name,
-    detail: model.id,
-  }));
-  const defaultModel = integrations.models.entries.some(
-    (entry) => entry.id === preferredModelId,
-  )
-    ? preferredModelId
-    : (integrations.models.defaultModelId ?? allModelOptions[0]?.value ?? "");
+  const allModelOptions = integrations.models.entries
+    .filter((model) => model.id === preferredModelId)
+    .map((model) => ({
+      value: model.id,
+      label: model.name,
+      detail: model.id,
+    }));
+  const defaultModel = allModelOptions[0]?.value ?? "";
   const effectiveInitialBrief = initialBrief.trim()
     ? initialBrief
     : defaultBrief;
@@ -1739,7 +1200,7 @@ export function Builder({
       ? (gitScopeOptions[0]?.value ?? "")
       : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
   );
-  const [model, setModel] = useState(initialDraft?.model ?? defaultModel);
+  const [model, setModel] = useState(defaultModel);
   const [zdrOnly, setZdrOnly] = useState(initialDraft?.zdrOnly ?? false);
   const [showMoreConnections, setShowMoreConnections] = useState(
     initialDraft?.showMoreConnections ?? false,
@@ -1875,7 +1336,7 @@ export function Builder({
       appNameEditedByUser: appNameEditedByUser.current,
       repositoryEditedByUser: repositoryEditedByUser.current,
     };
-    sessionStorage.setItem(builderDraftStorageKey(key), JSON.stringify(draft));
+    persistBuilderDraft(key, draft);
     suppressUnsavedWarning.current = true;
     router.push(`/${provider}/installations?returnTo=%2F&resume=${key}`);
   };
@@ -1896,7 +1357,7 @@ export function Builder({
           ...(storageProvider === "github" && gitScope
             ? { githubInstallationId: gitScope }
             : {}),
-          modelId: model,
+          modelId: preferredModelId,
         },
         resumeKey,
       );
@@ -2146,9 +1607,7 @@ async function provisionSelectedProvider(
   requestId: string,
   operation: "github" | "vercel",
 ) {
-  return provisionBuilderProvider(
-    provisioningRequest(form, requestId, operation),
-  );
+  return provisionBuilderProvider(provisioningRequest(form, requestId, operation));
 }
 
 export function Handoff({
@@ -2286,63 +1745,12 @@ export function Handoff({
     stages.length,
   ]);
   return (
-    <main className={styles.flowPage} id="main-content">
-      <section className={styles.deploymentCard}>
-        <div className={styles.deploymentBody}>
-          <h1>Handoff</h1>
-          <p className={styles.creating}>
-            {handoffError ? (
-              <AlertCircle size={18} aria-hidden="true" />
-            ) : (
-              <span className={styles.spinner} aria-hidden="true" />
-            )}
-            {handoffError
-              ? "We couldn’t finish preparing this handoff."
-              : "Preparing your app and handoff…"}
-          </p>
-          {handoffError ? (
-            <button
-              type="button"
-              onClick={() => setAttempt((value) => value + 1)}
-            >
-              Try again
-            </button>
-          ) : null}
-          <div className={styles.stageList}>
-            {stages.map((stage, index) => (
-              <div
-                key={stage}
-                data-active={index === step}
-                data-complete={index < step}
-              >
-                {index < step || step >= stages.length ? (
-                  <Check size={17} aria-hidden="true" />
-                ) : index === step ? (
-                  <span className={styles.spinner} aria-hidden="true" />
-                ) : (
-                  <Clock size={18} aria-hidden="true" />
-                )}
-                <span>{stage}</span>
-                {index > 0 ? (
-                  <ChevronRight size={17} aria-hidden="true" />
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-        <footer>
-          <ExternalLink size={18} aria-hidden="true" /> Tip: Review and send the
-          brief in your selected client.
-        </footer>
-      </section>
-      <p className={styles.liveStatus} role="status" aria-live="polite">
-        {step >= stages.length
-          ? "Your secure handoff is ready. Opening your selected client."
-          : handoffError
-            ? "Try again. Your app brief and completed setup are safe."
-            : stages[Math.min(step, stages.length - 1)]}
-      </p>
-    </main>
+    <BuilderHandoffProgress
+      stages={stages}
+      step={step}
+      handoffError={handoffError}
+      onRetry={() => setAttempt((value) => value + 1)}
+    />
   );
 }
 
@@ -2371,9 +1779,6 @@ codex plugin add app-builder@autograph`;
   const [showInstall, setShowInstall] = useState(true);
   const [retryClipboardState, setRetryClipboardState] =
     useState<ClipboardState>("idle");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle",
-  );
   const [handoffAttempt, setHandoffAttempt] =
     useState<HandoffAttempt>(initialAttempt);
   const [provisioning, setProvisioning] = useState(initialProvisioning);
@@ -2472,77 +1877,15 @@ codex plugin add app-builder@autograph`;
             Open in {destination}
           </button>
         </div>
-        <div
-          className={styles.resourceCards}
-          aria-label="Provisioned resources"
-        >
-          {(["github", "vercel"] as const).map((provider) => {
-            const result = provisioning[provider];
-            const selected =
-              provider === "github"
-                ? Boolean(form.githubInstallationId)
-                : Boolean(form.vercelInstallationId);
-            if (!selected) return null;
-            const label = provider === "github" ? "GitHub" : "Vercel";
-            return (
-              <article key={provider} data-status={result.status}>
-                <span aria-hidden="true">
-                  {result.status === "failed" ? (
-                    <AlertCircle size={18} />
-                  ) : provider === "github" ? (
-                    <FaGithub />
-                  ) : (
-                    <SiVercel />
-                  )}
-                </span>
-                <div>
-                  <strong>{label}</strong>
-                  {result.status === "succeeded" ? (
-                    <a
-                      href={
-                        provider === "github" && "url" in result
-                          ? result.url
-                          : "dashboardUrl" in result
-                            ? result.dashboardUrl
-                            : "#"
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {provider === "github" && "fullName" in result
-                        ? result.fullName
-                        : result.name}{" "}
-                      <ExternalLink size={13} aria-hidden="true" />
-                    </a>
-                  ) : (
-                    <>
-                      <small>{providerSetupMessage(label, result)}</small>
-                      {result.status === "failed" ? (
-                        <small className={styles.resourceRecovery}>
-                          {result.retryable && provisioningEnabled
-                            ? `Retry to finish setting up ${label}. Your app brief and completed resources are safe.`
-                            : `Reconnect ${label}, then create the app again to finish setup.`}
-                        </small>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-                {result.status !== "succeeded" &&
-                result.retryable &&
-                provisioningEnabled ? (
-                  <button
-                    type="button"
-                    disabled={retrying !== undefined}
-                    onClick={() => void retryProvider(provider)}
-                  >
-                    <RefreshCw size={14} aria-hidden="true" />
-                    {retrying === provider ? "Retrying…" : "Retry"}
-                  </button>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
+        <BuilderProvisionedResources
+          githubSelected={Boolean(form.githubInstallationId)}
+          vercelSelected={Boolean(form.vercelInstallationId)}
+          provisioning={provisioning}
+          provisioningEnabled={provisioningEnabled}
+          retrying={retrying}
+          onRetry={(provider) => void retryProvider(provider)}
+          providerSetupMessage={providerSetupMessage}
+        />
         <p className={styles.continueStatus} role="status" aria-live="polite">
           {handoffAttempt === "attempted"
             ? `Launch requested for ${destination}. If your browser suppressed the custom link, you can retry above.`
@@ -2561,91 +1904,12 @@ codex plugin add app-builder@autograph`;
             : null}
         </p>
         {showInstall ? (
-          <section className={styles.installCard}>
-            <div>
-              <h2>Install App Builder Plugin</h2>
-              <button
-                type="button"
-                aria-label="Dismiss install instructions"
-                onClick={() => setShowInstall(false)}
-              >
-                <X size={17} aria-hidden="true" />
-              </button>
-            </div>
-            <p>
-              Run this once in Codex&apos;s terminal. Then open a fresh task and
-              describe the app you want to create.
-            </p>
-            <div className={styles.command}>
-              <code>{command}</code>
-              <button
-                type="button"
-                aria-label="Copy install command"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(command);
-                    setCopyState("copied");
-                  } catch {
-                    setCopyState("failed");
-                  }
-                }}
-              >
-                <Copy size={17} aria-hidden="true" />
-              </button>
-            </div>
-            <span role="status" aria-live="polite">
-              {copyState === "copied" ? "Install command copied." : null}
-              {copyState === "failed"
-                ? "Copy failed. Select and copy the command manually."
-                : null}
-            </span>
-          </section>
+          <BuilderInstallInstructions
+            command={command}
+            onDismiss={() => setShowInstall(false)}
+          />
         ) : null}
-        <h2 className={styles.nextTitle}>Next Steps</h2>
-        <div className={styles.nextSteps}>
-          <div>
-            <span>
-              <GitBranch size={17} aria-hidden="true" />
-            </span>
-            <p>
-              <strong>Start a New Task</strong>Paste your prepared brief into
-              your connected client.
-            </p>
-          </div>
-          <div>
-            <span>
-              <DollarSign size={17} aria-hidden="true" />
-            </span>
-            <p>
-              <strong>Review the Plan</strong>Approve only the changes you want
-              to make.
-            </p>
-            <ChevronRight size={18} aria-hidden="true" />
-          </div>
-          <div>
-            <span>
-              <Globe size={17} aria-hidden="true" />
-            </span>
-            <p>
-              <strong>Connect a Repository</strong>Choose the exact repository
-              for the app.
-            </p>
-            <ChevronRight size={18} aria-hidden="true" />
-          </div>
-          <div>
-            <span>
-              <Check size={17} aria-hidden="true" />
-            </span>
-            <p>
-              <strong>Validate the Build</strong>Confirm the acceptance criteria
-              in your connected client.
-            </p>
-            <ChevronRight size={18} aria-hidden="true" />
-          </div>
-        </div>
-        <button className={styles.createButton} type="button" onClick={onReset}>
-          Create Another App
-        </button>
+        <BuilderNextSteps onReset={onReset} />
       </section>
     </main>
   );
@@ -2703,8 +1967,17 @@ export function AppBuilder({
           setHandoff(active.handoff);
           setScreen("ready");
           if (active.provisioning.requestDigest !== "0".repeat(64))
-            void readBuilderProviderProvisioning(active.requestId)
+            void fetch(
+              `/api/builder/provision?requestId=${encodeURIComponent(active.requestId)}`,
+              { cache: "no-store" },
+            )
+              .then(async (response) =>
+                response.ok
+                  ? ((await response.json()) as BuilderProvisionResponse)
+                  : undefined,
+              )
               .then((response) => {
+                if (!response) return;
                 setProvisioning(response);
                 persistActiveProvisioning({
                   ...active,
@@ -2747,10 +2020,7 @@ export function AppBuilder({
           integrations={integrations}
           providerNotices={providerNotices}
           onCreate={(form) => {
-            if (providerResumeKey)
-              sessionStorage.removeItem(
-                builderDraftStorageKey(providerResumeKey),
-              );
+            if (providerResumeKey) clearBuilderDraft(providerResumeKey);
             const requestId = crypto.randomUUID();
             const creationRequestId = crypto.randomUUID();
             persistActiveProvisioning({
@@ -2811,7 +2081,7 @@ export function AppBuilder({
           initialAttempt={handoffAttempt}
           initialClipboardState={handoffClipboardState}
           onReset={() => {
-            sessionStorage.removeItem(activeProvisioningStorageKey);
+            clearActiveProvisioning();
             setSubmitted(undefined);
             setProvisionRequestId(undefined);
             setHandoffCreationRequestId(undefined);
