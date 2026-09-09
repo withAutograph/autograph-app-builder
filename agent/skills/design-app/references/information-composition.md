@@ -57,6 +57,9 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
 - When a calculation explains an action, expose its meaningful steps as short
   labeled facts using existing detail components. Preserve assumptions and
   quantities; do not replace them with decorative metrics or invented context.
+  Name the same measure consistently across evidence, confirmation, and result
+  states. Explain any calculation basis that could change interpretation before
+  the user acts; detailed derivations may use existing progressive disclosure.
 
 ## Make the next step legible
 
