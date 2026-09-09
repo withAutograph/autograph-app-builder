@@ -2,6 +2,17 @@
 
 ## Latest reviewer note: semantic severity
 
+### Capture timing correction discovered afterward
+
+The concise-completion narrow filtered capture showed a blue-tinted border while
+the radio was unchecked. A direct browser read confirmed the component already
+used its neutral border class, but its finite CSS color transition was still
+running. Waiting for that transition produced `rgba(41, 41, 41, 0.08)`, exactly
+the selected checkout's `--color-border-subtle` value. This is a capture-timing
+defect, not evidence that the app selected a hidden record. Historical captures
+and scores remain unchanged; later settled captures must disclose this method
+correction rather than claim a UI improvement from the removed transient tint.
+
 The [semantic-severity report](stock-exceptions-semantic-severity-234749774Z/README.md)
 scored 90/100. Its claim that the first narrow-list record omits its location is
 incorrect: `desktop-custom-700x900-0.png` visibly shows “Riverside” beneath
