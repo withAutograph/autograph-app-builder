@@ -1,5 +1,10 @@
 # Design-quality evaluations
 
+Generation follows the [task-first information composition contract](../agent/skills/design-app/references/information-composition.md)
+for all app types. Improve the information structure and shared Arrusted APIs,
+not a particular example's score. The contract is bundled with the design skill
+for local and hosted execution; this evaluator remains independent and advisory.
+
 ## Arrusted adherence (evaluator 2)
 
 The report leads with three separate measured dimensions: component usage,

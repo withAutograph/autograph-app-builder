@@ -39,6 +39,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Iteration and validation
 
+- Apply the [task-first composition contract](agent/skills/design-app/references/information-composition.md)
+  to all generated apps and revisions. Improve shared visual capabilities in
+  Arrusted when needed; do not duplicate them in generated apps. Preserve diverse
+  task-appropriate layouts and keep design reporting advisory and on demand.
+
 - Generated apps are desktop-only. Preserve resizing within desktop windows and
   panels without phone/tablet acceptance or an arbitrary minimum width. Use the
   existing Arrusted palette verbatim via semantic tokens and supported variants;

@@ -83,6 +83,12 @@ Prefer supported variants over heavily restyled primitives. A missing example
 means inspect current exports, not stop. Carry the reviewed route composition
 and theme/providers into implementation instead of redesigning from prose.
 Design reports remain on demand: no automatic score threshold or polish loop.
+For every app, follow `design-app`'s `references/information-composition.md`:
+separate page purpose from collection metadata, group related facts, establish
+consistent Arrusted typography roles, and keep decision-critical evidence with
+its action. Choose the structure by task; do not impose a queue, severity groups,
+cards, or tabs on unrelated workflows. Reusable missing visual capabilities
+belong in authorized Arrusted component work, not generated local replacements.
 For list/detail workflows, keep the list focused on fields needed to choose a
 record; put supporting information in the detail panel. Preserve selection when
 adapting the layout to a narrower desktop window.
