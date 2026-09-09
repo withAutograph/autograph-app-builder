@@ -84,6 +84,16 @@ describe("intrinsic class evidence", () => {
     expect(escapedTailwindClassToken(selector)).toBe(
       "data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]",
     );
+    expect(escapedTailwindClassToken('.token[data-label="a]b"][data-x]')).toBe(
+      "token",
+    );
+    for (const invalid of [
+      ".token[data-x] .other",
+      ".token[data-x]:hover",
+      ".token[data-x],.other",
+      ".token[data-x",
+    ])
+      expect(escapedTailwindClassToken(invalid)).toBeUndefined();
     expect(classTokenAttribution([], shared, selector)).toMatchObject({
       provenance: "shared",
       source: { path: "packages/design-systems/RecordList.tsx" },

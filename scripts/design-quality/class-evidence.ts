@@ -215,9 +215,37 @@ export function escapedTailwindClassToken(selector: string | undefined) {
     else if (/[A-Za-z0-9_-]/.test(character)) token += character;
     else return undefined;
   }
-  return token && (index === selector.length || selector[index] === "[")
-    ? token
-    : undefined;
+  if (!token) return undefined;
+  while (index < selector.length) {
+    if (selector[index] !== "[") return undefined;
+    index++;
+    let quote: string | undefined;
+    let closed = false;
+    for (; index < selector.length; index++) {
+      const character = selector[index]!;
+      if (character === "\\") {
+        if (index + 1 >= selector.length) return undefined;
+        index++;
+        continue;
+      }
+      if (quote) {
+        if (character === quote) quote = undefined;
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        quote = character;
+        continue;
+      }
+      if (character === "]") {
+        closed = true;
+        index++;
+        break;
+      }
+      if (character === "[") return undefined;
+    }
+    if (!closed || quote) return undefined;
+  }
+  return token;
 }
 
 export function classTokenAttribution(
