@@ -16,6 +16,11 @@ import {
   collectIntrinsicClassSignatures,
 } from "./design-quality/class-evidence";
 import { collectCssRuleEvidence } from "./design-quality/css-evidence";
+import {
+  appendReviewQuestions,
+  listDesignCases,
+  readDesignCase,
+} from "./design-quality/cases";
 import { execFileSync } from "node:child_process";
 
 const { values } = parseArgs({
@@ -23,6 +28,8 @@ const { values } = parseArgs({
     "preview-url": { type: "string" },
     "arrusted-root": { type: "string" },
     "brief-file": { type: "string" },
+    case: { type: "string" },
+    "list-cases": { type: "boolean" },
     "source-dir": { type: "string" },
     "output-dir": { type: "string" },
     scenario: { type: "string" },
@@ -34,7 +41,7 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log(
-    "mise run eval:design -- --preview-url URL --arrusted-root PATH --brief-file FILE [--source-dir PATH] [--scenario FILE --fixture-interactions] [--additional-desktop-size WIDTHxHEIGHT] [--measurements-only] [--output-dir PATH]",
+    "mise run eval:design -- --preview-url URL --arrusted-root PATH (--brief-file FILE | --case ID) [--source-dir PATH] [--scenario FILE --fixture-interactions] [--additional-desktop-size WIDTHxHEIGHT] [--measurements-only] [--output-dir PATH]\n\nmise run eval:design -- --list-cases",
   );
   process.exit(0);
 }
@@ -55,12 +62,23 @@ async function sources(
   return files;
 }
 async function main() {
+  if (values["list-cases"]) {
+    for (const designCase of await listDesignCases())
+      console.log(
+        `${designCase.id}\t${designCase.status}\t${designCase.title}`,
+      );
+    return;
+  }
+  if (values.case && values["brief-file"])
+    throw new Error("Use either --case or --brief-file, not both");
   if (
     !values["preview-url"] ||
     !values["arrusted-root"] ||
-    !values["brief-file"]
+    (!values["brief-file"] && !values.case)
   )
-    throw new Error("Required: --preview-url, --arrusted-root, --brief-file");
+    throw new Error(
+      "Required: --preview-url, --arrusted-root, and --brief-file or --case",
+    );
   const url = new URL(values["preview-url"]);
   if (
     !["http:", "https:"].includes(url.protocol) ||
@@ -80,7 +98,12 @@ async function main() {
       ),
   );
   await mkdir(output, { recursive: true, mode: 0o700 });
-  const brief = await readFile(values["brief-file"], "utf8");
+  const selectedCase = values.case
+    ? await readDesignCase(values.case)
+    : undefined;
+  const brief = selectedCase
+    ? appendReviewQuestions(selectedCase.brief, selectedCase.reviewQuestions)
+    : await readFile(values["brief-file"]!, "utf8");
   const limitations: string[] = [];
   const referenceRoot = resolve(values["arrusted-root"]);
   const tokenCss = await readFile(
@@ -123,8 +146,26 @@ async function main() {
         reason:
           "No generated preview source supplied. Computed style matches do not prove component or token provenance.",
       };
-  const scenarios = values.scenario
-    ? scenariosSchema.parse(JSON.parse(await readFile(values.scenario, "utf8")))
+  // An explicit scenario is always user-bound. Case scenarios are an optional
+  // fixture convenience and never run unless interactions were explicitly enabled.
+  const scenarioPath =
+    values.scenario ??
+    (selectedCase && values["fixture-interactions"]
+      ? selectedCase.scenariosPath
+      : undefined);
+  const scenarios = scenarioPath
+    ? scenariosSchema.parse(
+        JSON.parse(
+          await readFile(scenarioPath, "utf8").catch((error) => {
+            if (
+              !values.scenario &&
+              (error as NodeJS.ErrnoException).code === "ENOENT"
+            )
+              return "[]";
+            throw error;
+          }),
+        ),
+      )
     : [];
   const additionalDesktopSize = values["additional-desktop-size"]
     ? parseAdditionalDesktopSize(values["additional-desktop-size"])
@@ -191,6 +232,19 @@ async function main() {
       publicModules: Object.keys(reference.modules),
       catalogAvailable: !!catalog,
     },
+    ...(selectedCase
+      ? {
+          case: {
+            id: selectedCase.id,
+            title: selectedCase.title,
+            status: selectedCase.status,
+            notes: selectedCase.notes,
+            evidence: selectedCase.evidence,
+            reviewQuestions: selectedCase.reviewQuestions,
+            outcomes: selectedCase.outcomes,
+          },
+        }
+      : {}),
     captures,
   };
   // Save useful results before any model call; a failed judge never discards them.
