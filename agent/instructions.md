@@ -85,7 +85,14 @@ and theme/providers into implementation instead of redesigning from prose.
 Design reports remain on demand: no automatic score threshold or polish loop.
 For list/detail workflows, keep the list focused on fields needed to choose a
 record; put supporting information in the detail panel. Preserve selection when
-adapting the layout to a narrower desktop window. Keep the primary action
+adapting the layout to a narrower desktop window.
+In a drill-in layout, show navigation and instructions for the current view,
+return keyboard focus to the originating record, and avoid implying that hidden
+details are already open. Compare existing status components before choosing one:
+use their supported foreground/background pairs rather than overriding colors
+when a vivid status treatment is difficult to read. These are composition
+choices, not a required layout or an automatic evaluation step.
+Keep the primary action
 outcome separate from persistent record facts; simulating an action must not
 replace a warning or imply that underlying data changed. Keep the primary action
 reachable using supported panel props and ordinary layout sizing; inspect the
