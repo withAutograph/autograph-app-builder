@@ -29,7 +29,7 @@ const preview: Preview = {
           [
             "Flow",
             ["Anonymous Entry", "Page", "Handoff"],
-            "Components",
+            "Connection Drawer",
             "Sections",
             "Primitives",
             "Recovery",
