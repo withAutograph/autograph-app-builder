@@ -1,0 +1,4472 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T00:56:43.352Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <h2>Arrusted adherence: 100/100 · partial</h2>
+    <p>
+      Evidence coverage: 2.13%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>38</td>
+          <td>0</td>
+          <td>4</td>
+          <td>100% (38/38)</td>
+          <td>42 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>64</td>
+          <td>0</td>
+          <td>7</td>
+          <td>100% (64/64)</td>
+          <td>71 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>23</td>
+          <td>0</td>
+          <td>5727</td>
+          <td>100% (23/23)</td>
+          <td>23 / 5727</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence. Source
+        provenance is unknown unless CDP provides a source URL matching an
+        explicit generated path.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (5738)</summary>
+      <article id="finding-9">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-9">src/StockExceptions.tsx:115</a></small
+        >
+        <details id="source-9">
+          <summary>Source location: src/StockExceptions.tsx:115</summary>
+          <pre>
+114:                   &lt;div&gt;{done ? &lt;div role=&quot;status&quot;&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Stock unchanged.&lt;/Typography&gt;&lt;/div&gt; : &lt;Typography tone=&quot;secondary&quot;&gt;Preview only · No supplier contacted&lt;/Typography&gt;}&lt;/div&gt;
+115:                   &lt;Button intent=&quot;primary&quot; disabled={done} onClick={()=&gt;setReplenished(current=&gt;[...current,selected.id])}&gt;{done?&quot;Simulated — no order sent&quot;:`Simulate ${selected.suggested}-unit order`}&lt;/Button&gt;
+116:                 &lt;/div&gt;
+117:               &lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-19">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-19">src/StockExceptions.tsx:72</a></small
+        >
+        <details id="source-19">
+          <summary>Source location: src/StockExceptions.tsx:72</summary>
+          <pre>
+71:       &lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-2 gap-[var(--space-4)]&quot;&gt;
+72:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+73:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+74:       &lt;/section&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-25">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-25">src/StockExceptions.tsx:73</a></small
+        >
+        <details id="source-25">
+          <summary>Source location: src/StockExceptions.tsx:73</summary>
+          <pre>
+72:         &lt;FieldFrame label=&quot;Location&quot; htmlFor=&quot;location-filter&quot;&gt;&lt;Select id=&quot;location-filter&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;Downtown&quot;,label:&quot;Downtown&quot;},{value:&quot;Riverside&quot;,label:&quot;Riverside&quot;},{value:&quot;Northside&quot;,label:&quot;Northside&quot;}]} onValueChange={setLocation} /&gt;&lt;/FieldFrame&gt;
+73:         &lt;FieldFrame label=&quot;Severity&quot; htmlFor=&quot;severity-filter&quot;&gt;&lt;Select id=&quot;severity-filter&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;Critical&quot;,label:&quot;Critical&quot;},{value:&quot;Warning&quot;,label:&quot;Warning&quot;}]} onValueChange={setSeverity} /&gt;&lt;/FieldFrame&gt;
+74:       &lt;/section&gt;
+75:       &lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-39">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-39">src/StockExceptions.tsx:85</a></small
+        >
+        <details id="source-39">
+          <summary>Source location: src/StockExceptions.tsx:85</summary>
+          <pre>
+84:               &lt;div className=&quot;flex flex-wrap items-baseline justify-between gap-[var(--space-2)]&quot;&gt;&lt;Typography as=&quot;h2&quot; variant={level===&quot;Critical&quot;?&quot;section-title&quot;:&quot;body-strong&quot;}&gt;{level} · {records.length}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; tone=&quot;secondary&quot;&gt;{minimumCover===maximumCover ? minimumCover : `${minimumCover}–${maximumCover}`} days of cover&lt;/Typography&gt;&lt;/div&gt;
+85:               {records.map(item=&gt;isNarrow ? &lt;div key={item.id} ref={selected?.id===item.id ? selectedNarrowButtonRef : undefined}&gt;&lt;Card&gt;&lt;div className=&quot;flex items-center justify-between gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid gap-[var(--space-1)]&quot;&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;{item.product}&lt;/Typography&gt;&lt;Typography tone=&quot;secondary&quot;&gt;{item.location} · {item.sku}&lt;/Typography&gt;&lt;/div&gt;&lt;div className=&quot;flex shrink-0 items-center gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/div&gt;&lt;Button intent=&quot;secondary&quot; size=&quot;slim&quot; aria-label={`Review ${item.product}`} onClick={()=&gt;selectException(item.id)}&gt;Review&lt;/Button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt; : &lt;div key={item.id} ref={selected?.id===item.id ? selectedRadioRef : undefined}&gt;&lt;DecisionOptionCard name=&quot;stock-exception&quot; value={item.id} density=&quot;compact&quot; title={item.product} description={`${item.location} · ${item.sku}`} tag={&lt;span className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/span&gt;} selected={selected?.id===item.id &amp;&amp; (!isNarrow || hasNarrowSelection)} onSelect={()=&gt;selectException(item.id)} /&gt;&lt;/div&gt;)}
+86:             &lt;/div&gt; : null;
+87:           })}</pre>
+        </details>
+      </article>
+      <article id="finding-51">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-51">src/StockExceptions.tsx:85</a></small
+        >
+        <details id="source-51">
+          <summary>Source location: src/StockExceptions.tsx:85</summary>
+          <pre>
+84:               &lt;div className=&quot;flex flex-wrap items-baseline justify-between gap-[var(--space-2)]&quot;&gt;&lt;Typography as=&quot;h2&quot; variant={level===&quot;Critical&quot;?&quot;section-title&quot;:&quot;body-strong&quot;}&gt;{level} · {records.length}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; tone=&quot;secondary&quot;&gt;{minimumCover===maximumCover ? minimumCover : `${minimumCover}–${maximumCover}`} days of cover&lt;/Typography&gt;&lt;/div&gt;
+85:               {records.map(item=&gt;isNarrow ? &lt;div key={item.id} ref={selected?.id===item.id ? selectedNarrowButtonRef : undefined}&gt;&lt;Card&gt;&lt;div className=&quot;flex items-center justify-between gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid gap-[var(--space-1)]&quot;&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;{item.product}&lt;/Typography&gt;&lt;Typography tone=&quot;secondary&quot;&gt;{item.location} · {item.sku}&lt;/Typography&gt;&lt;/div&gt;&lt;div className=&quot;flex shrink-0 items-center gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/div&gt;&lt;Button intent=&quot;secondary&quot; size=&quot;slim&quot; aria-label={`Review ${item.product}`} onClick={()=&gt;selectException(item.id)}&gt;Review&lt;/Button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt; : &lt;div key={item.id} ref={selected?.id===item.id ? selectedRadioRef : undefined}&gt;&lt;DecisionOptionCard name=&quot;stock-exception&quot; value={item.id} density=&quot;compact&quot; title={item.product} description={`${item.location} · ${item.sku}`} tag={&lt;span className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/span&gt;} selected={selected?.id===item.id &amp;&amp; (!isNarrow || hasNarrowSelection)} onSelect={()=&gt;selectException(item.id)} /&gt;&lt;/div&gt;)}
+86:             &lt;/div&gt; : null;
+87:           })}</pre>
+        </details>
+      </article>
+      <article id="finding-53">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-53">src/StockExceptions.tsx:93</a></small
+        >
+        <details id="source-53">
+          <summary>Source location: src/StockExceptions.tsx:93</summary>
+          <pre>
+92:             &lt;div className=&quot;grid gap-[var(--space-4)]&quot;&gt;
+93:               &lt;div className=&quot;md:hidden&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={returnToExceptions}&gt;Back to exceptions&lt;/Button&gt;&lt;/div&gt;
+94:               &lt;div className=&quot;grid gap-[var(--space-1)]&quot;&gt;
+95:                 &lt;Typography as=&quot;h2&quot; variant=&quot;section-title&quot;&gt;{selected.product}&lt;/Typography&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-62">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-62">src/StockExceptions.tsx:99</a></small
+        >
+        <details id="source-62">
+          <summary>Source location: src/StockExceptions.tsx:99</summary>
+          <pre>
+98:               &lt;/div&gt;
+99:               &lt;SegmentedControl value={detailTab} onChange={setDetailTab} intent=&quot;neutral&quot; ariaLabel=&quot;Product detail view&quot; options={[{value:&quot;stock&quot;,label:&quot;Stock position&quot;},{value:&quot;supplier&quot;,label:&quot;Supplier details&quot;}]} /&gt;
+100:               &lt;dl className=&quot;grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-[var(--space-4)] gap-y-[var(--space-3)]&quot; aria-label={detailTab===&quot;stock&quot;?&quot;Stock metrics&quot;:&quot;Supplier ordering details&quot;}&gt;
+101:                 {(detailTab===&quot;stock&quot; ? [[&quot;Estimated cover&quot;,`${selected.daysCover} days`],[&quot;On hand&quot;,`${selected.onHand} units`],[&quot;Reorder point&quot;,`${selected.reorderPoint} units`]] : [[&quot;Supplier&quot;,selected.supplier],[&quot;Lead time&quot;,selected.leadTime],[&quot;Order pack&quot;,`${selected.packSize} units`]]).map(([label,value])=&gt;&lt;div key={label} className=&quot;contents&quot;&gt;&lt;dt&gt;&lt;Typography as=&quot;span&quot; tone=&quot;secondary&quot;&gt;{label}&lt;/Typography&gt;&lt;/dt&gt;&lt;dd className=&quot;m-0 max-w-prose text-left&quot;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{value}&lt;/Typography&gt;&lt;/dd&gt;&lt;/div&gt;)}</pre>
+        </details>
+      </article>
+      <article id="finding-71">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-71">src/StockExceptions.tsx:114</a></small
+        >
+        <details id="source-71">
+          <summary>Source location: src/StockExceptions.tsx:114</summary>
+          <pre>
+113:                 &lt;div className=&quot;grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[var(--space-3)]&quot;&gt;
+114:                   &lt;div&gt;{done ? &lt;div role=&quot;status&quot;&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Stock unchanged.&lt;/Typography&gt;&lt;/div&gt; : &lt;Typography tone=&quot;secondary&quot;&gt;Preview only · No supplier contacted&lt;/Typography&gt;}&lt;/div&gt;
+115:                   &lt;Button intent=&quot;primary&quot; disabled={done} onClick={()=&gt;setReplenished(current=&gt;[...current,selected.id])}&gt;{done?&quot;Simulated — no order sent&quot;:`Simulate ${selected.suggested}-unit order`}&lt;/Button&gt;
+116:                 &lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-72">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-72">src/StockExceptions.tsx:83</a></small
+        >
+        <details id="source-72">
+          <summary>Source location: src/StockExceptions.tsx:83</summary>
+          <pre>
+82:             const maximumCover = Math.max(...records.map(item=&gt;item.daysCover));
+83:             return records.length ? &lt;div key={level} role=&quot;group&quot; aria-label={level} className=&quot;grid gap-[var(--space-3)]&quot;&gt;
+84:               &lt;div className=&quot;flex flex-wrap items-baseline justify-between gap-[var(--space-2)]&quot;&gt;&lt;Typography as=&quot;h2&quot; variant={level===&quot;Critical&quot;?&quot;section-title&quot;:&quot;body-strong&quot;}&gt;{level} · {records.length}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; tone=&quot;secondary&quot;&gt;{minimumCover===maximumCover ? minimumCover : `${minimumCover}–${maximumCover}`} days of cover&lt;/Typography&gt;&lt;/div&gt;
+85:               {records.map(item=&gt;isNarrow ? &lt;div key={item.id} ref={selected?.id===item.id ? selectedNarrowButtonRef : undefined}&gt;&lt;Card&gt;&lt;div className=&quot;flex items-center justify-between gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid gap-[var(--space-1)]&quot;&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;{item.product}&lt;/Typography&gt;&lt;Typography tone=&quot;secondary&quot;&gt;{item.location} · {item.sku}&lt;/Typography&gt;&lt;/div&gt;&lt;div className=&quot;flex shrink-0 items-center gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/div&gt;&lt;Button intent=&quot;secondary&quot; size=&quot;slim&quot; aria-label={`Review ${item.product}`} onClick={()=&gt;selectException(item.id)}&gt;Review&lt;/Button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt; : &lt;div key={item.id} ref={selected?.id===item.id ? selectedRadioRef : undefined}&gt;&lt;DecisionOptionCard name=&quot;stock-exception&quot; value={item.id} density=&quot;compact&quot; title={item.product} description={`${item.location} · ${item.sku}`} tag={&lt;span className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/span&gt;} selected={selected?.id===item.id &amp;&amp; (!isNarrow || hasNarrowSelection)} onSelect={()=&gt;selectException(item.id)} /&gt;&lt;/div&gt;)}</pre>
+        </details>
+      </article>
+      <article id="finding-73">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-73">src/StockExceptions.tsx:85</a></small
+        >
+        <details id="source-73">
+          <summary>Source location: src/StockExceptions.tsx:85</summary>
+          <pre>
+84:               &lt;div className=&quot;flex flex-wrap items-baseline justify-between gap-[var(--space-2)]&quot;&gt;&lt;Typography as=&quot;h2&quot; variant={level===&quot;Critical&quot;?&quot;section-title&quot;:&quot;body-strong&quot;}&gt;{level} · {records.length}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; tone=&quot;secondary&quot;&gt;{minimumCover===maximumCover ? minimumCover : `${minimumCover}–${maximumCover}`} days of cover&lt;/Typography&gt;&lt;/div&gt;
+85:               {records.map(item=&gt;isNarrow ? &lt;div key={item.id} ref={selected?.id===item.id ? selectedNarrowButtonRef : undefined}&gt;&lt;Card&gt;&lt;div className=&quot;flex items-center justify-between gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid gap-[var(--space-1)]&quot;&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;{item.product}&lt;/Typography&gt;&lt;Typography tone=&quot;secondary&quot;&gt;{item.location} · {item.sku}&lt;/Typography&gt;&lt;/div&gt;&lt;div className=&quot;flex shrink-0 items-center gap-[var(--space-3)]&quot;&gt;&lt;div className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/div&gt;&lt;Button intent=&quot;secondary&quot; size=&quot;slim&quot; aria-label={`Review ${item.product}`} onClick={()=&gt;selectException(item.id)}&gt;Review&lt;/Button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt; : &lt;div key={item.id} ref={selected?.id===item.id ? selectedRadioRef : undefined}&gt;&lt;DecisionOptionCard name=&quot;stock-exception&quot; value={item.id} density=&quot;compact&quot; title={item.product} description={`${item.location} · ${item.sku}`} tag={&lt;span className=&quot;grid justify-items-end gap-[var(--space-1)]&quot;&gt;&lt;Tag label={item.severity} tone={item.severity===&quot;Critical&quot;?&quot;red&quot;:&quot;amber&quot;} /&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{item.daysCover}d cover&lt;/Typography&gt;&lt;/span&gt;} selected={selected?.id===item.id &amp;&amp; (!isNarrow || hasNarrowSelection)} onSelect={()=&gt;selectException(item.id)} /&gt;&lt;/div&gt;)}
+86:             &lt;/div&gt; : null;
+87:           })}</pre>
+        </details>
+      </article>
+      <article id="finding-74">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-74">src/StockExceptions.tsx:91</a></small
+        >
+        <details id="source-74">
+          <summary>Source location: src/StockExceptions.tsx:91</summary>
+          <pre>
+90:         &lt;aside ref={detailRef} tabIndex={-1} aria-label=&quot;Selected stock exception&quot; className={`${showNarrowDetail ? &quot;block&quot; : &quot;hidden&quot;} md:block`}&gt;
+91:           {selected ? &lt;Card key={selected.id}&gt;
+92:             &lt;div className=&quot;grid gap-[var(--space-4)]&quot;&gt;
+93:               &lt;div className=&quot;md:hidden&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={returnToExceptions}&gt;Back to exceptions&lt;/Button&gt;&lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-136">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence · <a href="#source-136">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-136">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-137">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence · <a href="#source-137">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-137">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-138">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence · <a href="#source-138">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-138">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-139">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence · <a href="#source-139">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-139">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-140">
+        <strong>unknown · unassessed</strong>
+        <p>padding-right: unknown</p>
+        <small
+          >browser evidence · <a href="#source-140">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-140">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-141">
+        <strong>unknown · unassessed</strong>
+        <p>column-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-142">
+        <strong>unknown · unassessed</strong>
+        <p>row-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-143">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence · <a href="#source-143">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-143">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-144">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-width: unknown</p>
+        <small
+          >browser evidence · <a href="#source-144">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-144">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-145">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-color: unknown</p>
+        <small
+          >browser evidence · <a href="#source-145">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-145">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-146">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-147">
+        <strong>unknown · unassessed</strong>
+        <p>margin-top: unknown</p>
+        <small
+          >browser evidence · <a href="#source-147">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-147">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-148">
+        <strong>unknown · unassessed</strong>
+        <p>margin-bottom: unknown</p>
+        <small
+          >browser evidence · <a href="#source-148">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-148">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-149">
+        <strong>unknown · unassessed</strong>
+        <p>column-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-150">
+        <strong>unknown · unassessed</strong>
+        <p>row-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-151">
+        <strong>matching-literal · unassessed</strong>
+        <p>border-top-color: matching-literal</p>
+        <small
+          >browser evidence · <a href="#source-151">/:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-151">
+          <summary>Source location: /:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-152">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-153">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence · <a href="#source-153">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-153">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-154">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence · <a href="#source-154">/:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-154">
+          <summary>Source location: /:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 85/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>3/4</td>
+          <td>
+            The page title, review count, severity groups, selected row, and
+            suggested-order section create a strong scan path. Selected records
+            are visually obvious, but repeating the severity in both group
+            headings and every row adds some redundant emphasis.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>3/4</td>
+          <td>
+            The two-column master-detail composition is consistently aligned at
+            1024–1920px, with compact filters and well-spaced detail sections.
+            At 700px the dedicated list/detail views work well, though the list
+            cards compress severity, cover, and Review actions into a busy
+            right-hand strip.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>3/4</td>
+          <td>
+            Headings, product names, values, labels, and explanatory copy use
+            consistent sizing and weight, and the important quantities remain
+            readable across captures. Severity and arrival-status pills are
+            comparatively small, while several neighboring metadata lines have
+            similar visual weight.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>4/4</td>
+          <td>
+            The composition adapts especially well: 1440px and wider use
+            master-detail, 1024px retains both useful panels without horizontal
+            overflow, and 700px changes to an explicit Review list followed by a
+            full-width detail view with Back navigation. The 1024×768 states
+            require only slight vertical scrolling and preserve usable controls.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>4/4</td>
+          <td>
+            The workflow is immediately understandable from the instructional
+            subtitle, location and severity filters, review selection,
+            stock/supplier tabs, suggested quantity, and prominent simulation
+            action. Copy such as “Preview only · No supplier contacted,” “Stock
+            unchanged,” and “Simulated — no order sent” clearly distinguishes
+            the mock action from a real order.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        Severity grouping and ascending days-of-cover values make urgent
+        products easy to prioritize.
+      </li>
+      <li>
+        Selected-row treatment maintains a clear relationship between the
+        exception list and its detail panel.
+      </li>
+      <li>
+        Stock position and supplier details are separated without hiding the
+        proposed replenishment quantity or risk assessment.
+      </li>
+      <li>
+        Arrival-gap and within-cover messages translate supplier lead time into
+        an operational consequence.
+      </li>
+      <li>
+        The narrow desktop-window treatment is thoughtfully changed to list and
+        detail modes rather than forcing a cramped two-panel composition.
+      </li>
+      <li>
+        The simulated state provides both action-level and explanatory feedback
+        while explicitly confirming that inventory was unchanged.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>low · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        Each product repeats a Critical or Warning pill even though the records
+        are already grouped beneath matching severity headings. This adds visual
+        noise to an otherwise efficient exception list.
+      </p>
+      <p>
+        <strong>Improve:</strong> In grouped list views, rely on the severity
+        heading and cover value for repeated rows, reserving the pill for the
+        selected detail or filtered/ungrouped contexts where severity would
+        otherwise be ambiguous.
+      </p>
+      <small>Screenshot region: x 24, y 198, width 686, height 570</small>
+    </article>
+    <article id="design-1">
+      <h4>
+        low · <a href="#desktop-custom-700x900-0">desktop-custom-700x900-0</a>
+      </h4>
+      <p>
+        Severity pills, cover values, and repeated Review buttons share a narrow
+        right-hand strip. It remains usable in the provided capture, but the
+        stacked controls make the cards denser and leave limited flexibility for
+        longer values or labels.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use a stable two-row card composition: keep
+        product identity on the first row and place severity, cover, and the
+        supported Review button variant in a clearly aligned metadata/action row
+        below.
+      </p>
+      <small>Screenshot region: x 503, y 239, width 156, height 561</small>
+    </article>
+    <article id="design-2">
+      <h4>
+        low · <a href="#desktop-custom-700x900-1">desktop-custom-700x900-1</a>
+      </h4>
+      <p>
+        The Back button occupies its own row above the record heading,
+        introducing a relatively large navigation gap before users see which
+        product they are reviewing.
+      </p>
+      <p>
+        <strong>Improve:</strong> Compose the supported back-button variant and
+        product identity within one compact header area, while preserving the
+        clear return affordance and existing palette.
+      </p>
+      <small>Screenshot region: x 41, y 133, width 618, height 104</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-2&quot;,
+    &quot;desktop-3&quot;,
+    &quot;desktop-4&quot;,
+    &quot;desktop-5&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-wide-2&quot;,
+    &quot;desktop-wide-3&quot;,
+    &quot;desktop-wide-4&quot;,
+    &quot;desktop-wide-5&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;,
+    &quot;desktop-window-2&quot;,
+    &quot;desktop-window-3&quot;,
+    &quot;desktop-window-4&quot;,
+    &quot;desktop-window-5&quot;,
+    &quot;desktop-custom-700x900-0&quot;,
+    &quot;desktop-custom-700x900-1&quot;,
+    &quot;desktop-custom-700x900-2&quot;,
+    &quot;desktop-custom-700x900-3&quot;,
+    &quot;desktop-custom-700x900-4&quot;,
+    &quot;desktop-custom-700x900-5&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The page title, review count, severity groups, selected row, and suggested-order section create a strong scan path. Selected records are visually obvious, but repeating the severity in both group headings and every row adds some redundant emphasis.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The two-column master-detail composition is consistently aligned at 1024–1920px, with compact filters and well-spaced detail sections. At 700px the dedicated list/detail views work well, though the list cards compress severity, cover, and Review actions into a busy right-hand strip.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Headings, product names, values, labels, and explanatory copy use consistent sizing and weight, and the important quantities remain readable across captures. Severity and arrival-status pills are comparatively small, while several neighboring metadata lines have similar visual weight.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The composition adapts especially well: 1440px and wider use master-detail, 1024px retains both useful panels without horizontal overflow, and 700px changes to an explicit Review list followed by a full-width detail view with Back navigation. The 1024×768 states require only slight vertical scrolling and preserve usable controls.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The workflow is immediately understandable from the instructional subtitle, location and severity filters, review selection, stock/supplier tabs, suggested quantity, and prominent simulation action. Copy such as “Preview only · No supplier contacted,” “Stock unchanged,” and “Simulated — no order sent” clearly distinguishes the mock action from a real order.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;Severity grouping and ascending days-of-cover values make urgent products easy to prioritize.&quot;,
+    &quot;Selected-row treatment maintains a clear relationship between the exception list and its detail panel.&quot;,
+    &quot;Stock position and supplier details are separated without hiding the proposed replenishment quantity or risk assessment.&quot;,
+    &quot;Arrival-gap and within-cover messages translate supplier lead time into an operational consequence.&quot;,
+    &quot;The narrow desktop-window treatment is thoughtfully changed to list and detail modes rather than forcing a cramped two-panel composition.&quot;,
+    &quot;The simulated state provides both action-level and explanatory feedback while explicitly confirming that inventory was unchanged.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 24,
+        &quot;y&quot;: 198,
+        &quot;width&quot;: 686,
+        &quot;height&quot;: 570
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;Each product repeats a Critical or Warning pill even though the records are already grouped beneath matching severity headings. This adds visual noise to an otherwise efficient exception list.&quot;,
+      &quot;improvement&quot;: &quot;In grouped list views, rely on the severity heading and cover value for repeated rows, reserving the pill for the selected detail or filtered/ungrouped contexts where severity would otherwise be ambiguous.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-custom-700x900-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 503,
+        &quot;y&quot;: 239,
+        &quot;width&quot;: 156,
+        &quot;height&quot;: 561
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;Severity pills, cover values, and repeated Review buttons share a narrow right-hand strip. It remains usable in the provided capture, but the stacked controls make the cards denser and leave limited flexibility for longer values or labels.&quot;,
+      &quot;improvement&quot;: &quot;Use a stable two-row card composition: keep product identity on the first row and place severity, cover, and the supported Review button variant in a clearly aligned metadata/action row below.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-custom-700x900-1&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 41,
+        &quot;y&quot;: 133,
+        &quot;width&quot;: 618,
+        &quot;height&quot;: 104
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;The Back button occupies its own row above the record heading, introducing a relatively large navigation gap before users see which product they are reviewing.&quot;,
+      &quot;improvement&quot;: &quot;Compose the supported back-button variant and product identity within one compact header area, while preserving the clear return affordance and existing palette.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;No implementation-plan artifact is shown, so the brief’s planning deliverable cannot be evaluated from these interface captures.&quot;,
+    &quot;Only the supplied 700px, 1024px, 1440px, and 1920px desktop sizes and visible states were assessed; intermediate widths, resized panels, menus, focus states, and error or empty states were not shown.&quot;,
+    &quot;Initial-state interaction was not run in several capture sets, although the supplied selection, filtering, tab, and simulation checks passed.&quot;,
+    &quot;Screenshots and static source findings cannot establish backend behavior or prove that particular public components rendered at runtime.&quot;,
+    &quot;Styling provenance is largely unassessed in the supplied evidence, so Arrusted token adherence beyond the visible authoritative palette cannot be determined.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 85,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 46273,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 46270
+    },
+    &quot;outputTokens&quot;: 2717,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 924,
+      &quot;reasoningTokens&quot;: 1793
+    },
+    &quot;totalTokens&quot;: 48990
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Button&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Button&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Card&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Card&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;DecisionOptionCard&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;DecisionOptionCard&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Divider&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Divider&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;FieldFrame&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;FieldFrame&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;SegmentedControl&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;SegmentedControl&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Select&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Select&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Tag&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Tag&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Typography&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Typography&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [],
+    &quot;matchingLiterals&quot;: [],
+    &quot;unknownLiterals&quot;: [],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 136,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;arrusted-compact-decision-card-20260908&quot;,
+    &quot;commit&quot;: &quot;eb696f95b2297bfdf893ea07fc181014904e418c&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: true
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="Each product repeats a Critical or Warning pill even though the records are already grouped beneath matching severity headings. This adds visual noise to an otherwise efficient exception list."
+          aria-label="Each product repeats a Critical or Warning pill even though the records are already grouped beneath matching severity headings. This adds visual noise to an otherwise efficient exception list."
+          style="
+            left: 1.6666666666666667%;
+            top: 22%;
+            width: 47.638888888888886%;
+            height: 63.333333333333336%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 375,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 748,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 860.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1217.859375,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 161,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 147,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 82,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 52,
+        &quot;sampled&quot;: 52
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 95,
+        &quot;sampled&quot;: 68
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 130,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 97
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 227,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 73,
+        &quot;matching-literal&quot;: 81,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 403
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 557,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 70,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 229
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 299,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 22,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 92
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 114,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 103,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 34
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 137,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1454,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — Select and inspect supplier</h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 Select and inspect supplier screenshot"
+        />
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 375,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 748,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 858.359375,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1218.203125,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Clear Springs Co.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-2">
+      <h2>desktop-2 — Simulate replenishment</h2>
+      <div class="capture">
+        <img
+          src="desktop-2.png"
+          alt="desktop-2 Simulate replenishment screenshot"
+        />
+      </div>
+      <a href="desktop-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 375,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 748,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 860.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulated — no order sent&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1194.6875,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 204.3125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Simulated — no order sent&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-3">
+      <h2>desktop-3 — Filter records</h2>
+      <div class="capture">
+        <img src="desktop-3.png" alt="desktop-3 Filter records screenshot" />
+      </div>
+      <a href="desktop-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 375,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 748,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 860.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1217.859375,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Free-range Eggs 12ct&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-4">
+      <h2>desktop-4 — Review delivery within cover</h2>
+      <div class="capture">
+        <img
+          src="desktop-4.png"
+          alt="desktop-4 Review delivery within cover screenshot"
+        />
+      </div>
+      <a href="desktop-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 375,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 748,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 858.359375,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 18-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1219.90625,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 179.09375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Standard delivery fits current cover&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-5">
+      <h2>desktop-5 — Read the stock-view delivery assumption</h2>
+      <div class="capture">
+        <img
+          src="desktop-5.png"
+          alt="desktop-5 Read the stock-view delivery assumption screenshot"
+        />
+      </div>
+      <a href="desktop-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 375,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 335,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 748,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 860.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1218.203125,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;This mock order assumes standard delivery in 4 days.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 603,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 988,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1100.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1481.859375,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 161,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 147,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 82,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 52,
+        &quot;sampled&quot;: 52
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 95,
+        &quot;sampled&quot;: 68
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 130,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 97
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 227,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 73,
+        &quot;matching-literal&quot;: 81,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 403
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 557,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 70,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 229
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 299,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 22,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 92
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 114,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 103,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 34
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 137,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1454,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>desktop-wide-1 — Select and inspect supplier</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 Select and inspect supplier screenshot"
+        />
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 603,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 988,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1098.359375,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1482.203125,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Clear Springs Co.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-2">
+      <h2>desktop-wide-2 — Simulate replenishment</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-2.png"
+          alt="desktop-wide-2 Simulate replenishment screenshot"
+        />
+      </div>
+      <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 603,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 988,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1100.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulated — no order sent&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1458.6875,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 204.3125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Simulated — no order sent&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-3">
+      <h2>desktop-wide-3 — Filter records</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-3.png"
+          alt="desktop-wide-3 Filter records screenshot"
+        />
+      </div>
+      <a href="desktop-wide-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 603,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 988,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1100.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1481.859375,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Free-range Eggs 12ct&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-4">
+      <h2>desktop-wide-4 — Review delivery within cover</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-4.png"
+          alt="desktop-wide-4 Review delivery within cover screenshot"
+        />
+      </div>
+      <a href="desktop-wide-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 603,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 988,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1098.359375,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 18-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1483.90625,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 179.09375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Standard delivery fits current cover&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-5">
+      <h2>desktop-wide-5 — Read the stock-view delivery assumption</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-5.png"
+          alt="desktop-wide-5 Read the stock-view delivery assumption screenshot"
+        />
+      </div>
+      <a href="desktop-wide-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 603,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 347,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 240,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 988,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1100.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1482.203125,
+          &quot;y&quot;: 655.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;This mock order assumes standard delivery in 4 days.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        />
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 792,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 271,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 540,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 652.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 801.859375,
+          &quot;y&quot;: 675.5,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 161,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 147,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 82,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 52,
+        &quot;sampled&quot;: 52
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 95,
+        &quot;sampled&quot;: 68
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 130,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 97
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 227,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 73,
+        &quot;matching-literal&quot;: 81,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 403
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 557,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 70,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 229
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 299,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 22,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 92
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 114,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 103,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 34
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 137,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1454,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>desktop-window-1 — Select and inspect supplier</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 Select and inspect supplier screenshot"
+        />
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 792,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 271,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 540,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 650.359375,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 802.203125,
+          &quot;y&quot;: 675.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Clear Springs Co.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-2">
+      <h2>desktop-window-2 — Simulate replenishment</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-2.png"
+          alt="desktop-window-2 Simulate replenishment screenshot"
+        />
+      </div>
+      <a href="desktop-window-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 792,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 271,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 540,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 652.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulated — no order sent&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 778.6875,
+          &quot;y&quot;: 675.5,
+          &quot;width&quot;: 204.3125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Simulated — no order sent&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-3">
+      <h2>desktop-window-3 — Filter records</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-3.png"
+          alt="desktop-window-3 Filter records screenshot"
+        />
+      </div>
+      <a href="desktop-window-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 271,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 540,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 652.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 30-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 801.859375,
+          &quot;y&quot;: 675.5,
+          &quot;width&quot;: 181.140625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Free-range Eggs 12ct&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-4">
+      <h2>desktop-window-4 — Review delivery within cover</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-4.png"
+          alt="desktop-window-4 Review delivery within cover screenshot"
+        />
+      </div>
+      <a href="desktop-window-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 792,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 271,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 540,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 650.359375,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 18-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 803.90625,
+          &quot;y&quot;: 675.5,
+          &quot;width&quot;: 179.09375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Standard delivery fits current cover&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-5">
+      <h2>desktop-window-5 — Read the stock-view delivery assumption</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-5.png"
+          alt="desktop-window-5 Read the stock-view delivery assumption screenshot"
+        />
+      </div>
+      <a href="desktop-window-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 792,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 271,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 231,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 238,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 323,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 525,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 610,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 695,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 540,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 652.5,
+          &quot;y&quot;: 308.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 802.203125,
+          &quot;y&quot;: 675.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;This mock order assumes standard delivery in 4 days.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-0">
+      <h2>desktop-custom-700x900-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-0.png"
+          alt="desktop-custom-700x900-0 initial screenshot"
+        /><a
+          class="region"
+          href="#design-1"
+          title="Severity pills, cover values, and repeated Review buttons share a narrow right-hand strip. It remains usable in the provided capture, but the stacked controls make the cards denser and leave limited flexibility for longer values or labels."
+          aria-label="Severity pills, cover values, and repeated Review buttons share a narrow right-hand strip. It remains usable in the provided capture, but the stacked controls make the cards denser and leave limited flexibility for longer values or labels."
+          style="
+            left: 71.85714285714286%;
+            top: 26.555555555555557%;
+            width: 22.285714285714285%;
+            height: 62.333333333333336%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-custom-700x900-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 318,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 358,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 318,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 586.671875,
+          &quot;y&quot;: 261.25,
+          &quot;width&quot;: 72.328125,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review Organic Whole Milk 1L&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 586.671875,
+          &quot;y&quot;: 351.75,
+          &quot;width&quot;: 72.328125,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review Avocado Hass Each&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 586.671875,
+          &quot;y&quot;: 442.25,
+          &quot;width&quot;: 72.328125,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review Sourdough Sandwich Loaf&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 586.671875,
+          &quot;y&quot;: 564.75,
+          &quot;width&quot;: 72.328125,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review Sparkling Water Lime 8pk&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 586.671875,
+          &quot;y&quot;: 655.25,
+          &quot;width&quot;: 72.328125,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review Greek Yogurt Plain 500g&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 586.671875,
+          &quot;y&quot;: 745.75,
+          &quot;width&quot;: 72.328125,
+          &quot;height&quot;: 32
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 111,
+  &quot;totalDomElements&quot;: 166,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 111,
+    &quot;sampled&quot;: 111,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 42,
+        &quot;sampled&quot;: 42
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 69,
+        &quot;sampled&quot;: 69
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 108,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 108
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 216,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 82,
+        &quot;matching-literal&quot;: 67,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 400
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 549,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 86,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 167
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 253,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 12,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 99
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 111,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 97,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 28
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 125,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 111
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 111,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1365,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-1">
+      <h2>desktop-custom-700x900-1 — Select and inspect supplier</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-1.png"
+          alt="desktop-custom-700x900-1 Select and inspect supplier screenshot"
+        /><a
+          class="region"
+          href="#design-2"
+          title="The Back button occupies its own row above the record heading, introducing a relatively large navigation gap before users see which product they are reviewing."
+          aria-label="The Back button occupies its own row above the record heading, introducing a relatively large navigation gap before users see which product they are reviewing."
+          style="
+            left: 5.857142857142857%;
+            top: 14.777777777777779%;
+            width: 88.28571428571429%;
+            height: 11.555555555555555%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-custom-700x900-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 133,
+          &quot;width&quot;: 156.5,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 42,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 152.359375,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 478.203125,
+          &quot;y&quot;: 629.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Clear Springs Co.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-2">
+      <h2>desktop-custom-700x900-2 — Simulate replenishment</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-2.png"
+          alt="desktop-custom-700x900-2 Simulate replenishment screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 133,
+          &quot;width&quot;: 156.5,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 42,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 154.5,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulated — no order sent&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 454.6875,
+          &quot;y&quot;: 629.5,
+          &quot;width&quot;: 204.3125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Simulated — no order sent&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-3">
+      <h2>desktop-custom-700x900-3 — Filter records</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-3.png"
+          alt="desktop-custom-700x900-3 Filter records screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsDowntownRiversideNorthside&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 318,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalWarning&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 358,
+          &quot;y&quot;: 138,
+          &quot;width&quot;: 318,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review Free-range Eggs 12ct&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 586.671875,
+          &quot;y&quot;: 261.25,
+          &quot;width&quot;: 72.328125,
+          &quot;height&quot;: 32
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Free-range Eggs 12ct&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-4">
+      <h2>desktop-custom-700x900-4 — Review delivery within cover</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-4.png"
+          alt="desktop-custom-700x900-4 Review delivery within cover screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 133,
+          &quot;width&quot;: 156.5,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 42,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 110.359375,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 152.359375,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 120.171875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 18-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 479.90625,
+          &quot;y&quot;: 629.5,
+          &quot;width&quot;: 179.09375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Standard delivery fits current cover&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-5">
+      <h2>
+        desktop-custom-700x900-5 — Read the stock-view delivery assumption
+      </h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-5.png"
+          alt="desktop-custom-700x900-5 Read the stock-view delivery assumption screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 133,
+          &quot;width&quot;: 156.5,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Stock position&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 42,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 112.5,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Supplier details&quot;,
+        &quot;role&quot;: &quot;radio&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 154.5,
+          &quot;y&quot;: 282.5,
+          &quot;width&quot;: 117.671875,
+          &quot;height&quot;: 31.5
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Simulate 24-unit order&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 478.203125,
+          &quot;y&quot;: 629.5,
+          &quot;width&quot;: 180.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;This mock order assumes standard delivery in 4 days.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>
