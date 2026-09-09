@@ -49,6 +49,13 @@ codex plugin marketplace upgrade autograph
 codex plugin add app-builder@autograph
 ```
 
+Codex setup details display the canonical MCP URL from the authenticated handoff.
+Before sending the prompt, the user must have an App Builder plugin connection
+configured for that endpoint. The official release plugin may target Production;
+local and Preview handoffs require a matching configured connection. Web handoff
+and client OAuth must use the same Autograph origin/resource. This guidance does
+not provide tokens or invent a CLI endpoint override.
+
 Cursor uses
 `cursor://anysphere.cursor-deeplink/prompt?text=<URL-encoded-prompt>`.
 Its prompt does not contain Codex installation commands. Cursor requires the

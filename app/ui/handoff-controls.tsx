@@ -322,6 +322,13 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
             {destination === "codex" ? (
               <>
                 <p>
+                  Required App Builder connection endpoint:{" "}
+                  <code>{data.mcpUrl}</code>. Before sending, confirm your
+                  plugin connection targets this endpoint. The official release
+                  plugin may target Production; local and Preview handoffs need
+                  a matching configured App Builder plugin connection.
+                </p>
+                <p>
                   Install the official App Builder plugin in Codex, enable it,
                   and connect to Autograph. If prompted to reload, open a fresh
                   task and resend the prepared prompt.

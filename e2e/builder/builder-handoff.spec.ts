@@ -200,6 +200,112 @@ test("blocked handoffs remain actionable", async ({ context, page }) => {
   ).toHaveValue(/autograph_start/u);
 });
 
+test("expired handoff renews in place without changing intent or provisioning resources", async ({
+  context,
+  page,
+}) => {
+  await installBrowserBoundaries(context);
+  await finishOAuth(page, "GitHub");
+  await page.goto("/");
+  await page
+    .locator("#app-brief")
+    .fill("Build a support console that survives handoff expiry.");
+  await page.getByLabel("App Name").fill("Renewal Console");
+  await completeHandoff(page);
+
+  const handoffUrl = page.url();
+  const handoffId = new URL(handoffUrl).pathname.split("/").at(-1)!;
+  const statusPath = `/api/builder/handoffs/${handoffId}`;
+  const preparedResponse = await page.request.get(statusPath);
+  expect(preparedResponse.ok()).toBe(true);
+  const prepared = await preparedResponse.json();
+  expect(prepared.status).toBe("prepared");
+
+  const provisioningRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/builder/provision"
+    )
+      provisioningRequests.push(request.url());
+  });
+  const sql = postgres(databaseUrl, { max: 1 });
+  try {
+    // Include any existing resource receipts, without requiring provisioning
+    // to be enabled for this real database expiry/CAS acceptance case.
+    const journalSnapshot = () => sql`
+      SELECT j.request_id, j.request_digest, j.state, j.revision, j.record
+      FROM builder_provisioning_journal j
+      JOIN builder_handoff h ON
+        j.issuer = h.issuer AND j.audience = h.audience AND
+        j.workspace_id = h.workspace_id AND j.owner_user_id = h.owner_user_id
+      WHERE h.handoff_id = ${handoffId}
+      ORDER BY j.request_id
+    `;
+    const journalsBefore = await journalSnapshot();
+    const expired = await sql`
+      UPDATE builder_handoff
+      SET created_at = now() - interval '2 minutes',
+          expires_at = now() - interval '1 minute'
+      WHERE handoff_id = ${handoffId} AND redeemed_at IS NULL AND session_id IS NULL
+      RETURNING handoff_id
+    `;
+    expect(expired).toHaveLength(1);
+
+    await page.reload();
+    await expect(
+      page.getByText("This handoff has expired.", { exact: false }),
+    ).toBeVisible();
+    const launch = page.getByRole("button", {
+      name: "Open in Codex",
+      exact: true,
+    });
+    await expect(launch).toBeDisabled();
+    const renewalResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === `${statusPath}/renew`,
+    );
+    await page
+      .getByRole("button", { name: "Renew handoff", exact: true })
+      .click();
+    const renewedResponse = await renewalResponse;
+    expect(renewedResponse.ok()).toBe(true);
+    expect((await renewedResponse.json()).handoffId).toBe(handoffId);
+    await expect(launch).toBeEnabled();
+    await expect(page).toHaveURL(handoffUrl);
+    await expect(
+      page.getByText("This handoff has expired.", { exact: false }),
+    ).toHaveCount(0);
+
+    const statusResponse = await page.request.get(statusPath);
+    expect(statusResponse.ok()).toBe(true);
+    const renewed = await statusResponse.json();
+    expect(renewed.handoffId).toBe(handoffId);
+    expect(renewed.status).toBe("prepared");
+    expect(renewed.intent).toEqual(prepared.intent);
+    const rows = await sql`
+      SELECT intent, expires_at > now() AS unexpired, redeemed_at, session_id
+      FROM builder_handoff WHERE handoff_id = ${handoffId}
+    `;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      intent: prepared.intent,
+      unexpired: true,
+      redeemed_at: null,
+      session_id: null,
+    });
+    expect(await journalSnapshot()).toEqual(journalsBefore);
+    expect(provisioningRequests).toEqual([]);
+    expect(await browserBoundaryState(page)).toEqual({
+      clipboard: [],
+      opened: [],
+    });
+  } finally {
+    await sql.end();
+  }
+});
+
 test("large briefs use fixed-size opaque handoff links", async ({
   context,
   page,

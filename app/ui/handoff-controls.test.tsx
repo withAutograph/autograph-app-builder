@@ -113,6 +113,23 @@ describe("destination adapters", () => {
 });
 
 describe("durable handoff controls", () => {
+  it("identifies the canonical endpoint required for the Codex plugin connection", async () => {
+    const data = { ...initial, mcpUrl: "https://preview.builder.example/mcp" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      Response.json(data),
+    );
+    await render(data);
+    expect(container.textContent).toContain(
+      "Required App Builder connection endpoint:",
+    );
+    expect(container.textContent).toContain(data.mcpUrl);
+    expect(container.textContent).toContain(
+      "Before sending, confirm your plugin connection targets this endpoint.",
+    );
+    expect(container.textContent).toContain(
+      "local and Preview handoffs need a matching configured App Builder plugin connection.",
+    );
+  });
   it("never reports a launch as continuation, and only polls while visible", async () => {
     vi.useFakeTimers();
     const request = vi
