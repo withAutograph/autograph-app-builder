@@ -1,0 +1,28 @@
+[
+  {
+    "name": "recommend the consolidation proposal",
+    "steps": [
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Recommend proposal"
+      }
+    ],
+    "expect": {
+      "text": "Recommendation recorded"
+    }
+  },
+  {
+    "name": "request a revision to the proposal",
+    "steps": [
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Request revision"
+      }
+    ],
+    "expect": {
+      "text": "Revision requested"
+    }
+  }
+]

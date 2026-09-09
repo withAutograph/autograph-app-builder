@@ -1,0 +1,28 @@
+[
+  {
+    "name": "recommend the draft for planning",
+    "steps": [
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Recommend for planning"
+      }
+    ],
+    "expect": {
+      "text": "Planning recommendation recorded in this preview"
+    }
+  },
+  {
+    "name": "hold the draft for further review",
+    "steps": [
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Keep draft for review"
+      }
+    ],
+    "expect": {
+      "text": "Draft kept for further review"
+    }
+  }
+]
