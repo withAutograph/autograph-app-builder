@@ -59,6 +59,10 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   selection alone is unclear. Preserve visible selection and keyboard behavior;
   do not add a redundant button to every row or a global instruction paragraph
   when the existing interaction is already obvious.
+- If an initial record is suggested before the user opens it, label that
+  suggestion rather than implying the user already chose it. Keep guidance
+  consistent with the visible state: invite opening when details are absent,
+  and reviewing or changing the selection when details are already present.
 - When ordering affects interpretation, label its basis beside the results
   (for example, “Sorted by: newest”). Keep it readable and subordinate to the
   records. A passive ordering label must not look like an interactive control;
