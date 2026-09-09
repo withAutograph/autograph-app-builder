@@ -12,9 +12,24 @@ Browser assets are transport only. Keep the Browser preview as pure product UI.
 
 ## Minimum viable UI
 
-For every app and material revision, use `references/information-composition.md`
-to organize information around the user's task before choosing containers. Apply
-its hierarchy and grouping principles, not a fixed review-queue layout.
+Compose around the user's task, not a fixed page template:
+
+- Keep purpose, collection counts/order, record identity, deciding evidence, and
+  actions visually distinct. Place each beside the content it explains.
+- Choose public compositions for their behavior. A Button with row styling is
+  not a record-list composition: its internal layout may defeat alignment.
+  Prefer a supported table or record selector when reviewing records.
+- Keep related decision evidence together and use supported typography roles
+  for readable labels and primary values. Do not use disabled styling for active
+  facts or compensate with palette overrides.
+- Keep selection, visible results, and actions coherent after filtering. An empty
+  result must not silently leave an unrelated record actionable. In narrow
+  desktop panels, keep the chosen record and next action reachable without
+  traversing the entire collection again; use the composition's navigation when
+  available.
+
+Use `references/information-composition.md` for expanded guidance and contrasting
+task examples. These are design decisions, not runtime gates or extra prompts.
 
 Require a clear job to be done, then infer a reversible interface pattern and
 show the smallest useful workflow early. Do not block the first UI on a full
