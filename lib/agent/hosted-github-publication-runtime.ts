@@ -1,4 +1,5 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { BuilderHandoffIntent } from "../handoff/contracts";
 import * as databaseSchema from "../db/schema";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import {
@@ -13,6 +14,7 @@ import type {
 import {
   createPostgresHostedGitHubInstallationStore,
   hostedGitHubInstallationBindingSchema,
+  mergeHostedGitHubInstallationBindings,
   type HostedGitHubInstallationBinding,
   type HostedGitHubInstallationStore,
   type HostedGitHubTenantAuthority,
@@ -60,6 +62,12 @@ type PublicationStores = {
 };
 
 export type HostedGitHubPublicationRuntimeResolverDependencies = {
+  readPreparedHandoff(
+    sessionAuth: unknown,
+  ): Promise<
+    | (BuilderHandoffIntent & { providers?: { githubInstallationId?: string } })
+    | undefined
+  >;
   membership: (database: Database) => HostedWorkspaceMembership;
   installations: (database: Database) => HostedGitHubInstallationStore;
   publicationStores: (
@@ -70,6 +78,10 @@ export type HostedGitHubPublicationRuntimeResolverDependencies = {
 
 const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies =
   {
+    async readPreparedHandoff(sessionAuth) {
+      const { readPreparedHandoffContext } = await import("./handoff-context");
+      return readPreparedHandoffContext(sessionAuth);
+    },
     membership: createPostgresWorkspaceMembership,
     installations: createPostgresHostedGitHubInstallationStore,
     publicationStores: createPostgresGitHubPublicationStores,
@@ -114,6 +126,12 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
 
       const { authority, principal } =
         exactGitHubPublicationAuthority(sessionAuth);
+      const prepared = await dependencies.readPreparedHandoff(sessionAuth);
+      const selectedInstallationId =
+        prepared?.providers?.githubInstallationId ??
+        (prepared?.provisioning?.github.status === "succeeded"
+          ? prepared.provisioning.github.installationId
+          : undefined);
       const pool = await database();
       const membership = dependencies.membership(pool);
       if (
@@ -125,10 +143,19 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
         throw new Error("Hosted GitHub publication membership is not active.");
       }
 
+      const installations = dependencies.installations(pool);
+      const legacy = await installations.read(authority);
+      const selected =
+        selectedInstallationId === undefined
+          ? legacy
+          : mergeHostedGitHubInstallationBindings(
+              (await installations.list?.(authority)) ?? [],
+              legacy,
+            ).find(
+              (binding) => binding.installationId === selectedInstallationId,
+            );
       const installationResult =
-        hostedGitHubInstallationBindingSchema.safeParse(
-          await dependencies.installations(pool).read(authority),
-        );
+        hostedGitHubInstallationBindingSchema.safeParse(selected);
       if (!installationResult.success || !installationResult.data.active) {
         throw new Error(
           "Hosted GitHub publication installation is inactive or unavailable.",

@@ -7,7 +7,12 @@ import {
   type RepositoryAccessResult,
 } from "../integrations/repository-access";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
+import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import type { RepositoryAccessToolInput } from "./repository-access-tool";
+
+// Cache infrastructure only. Handoff, membership, bindings, and decrypted
+// credentials are re-read for the authenticated tenant on each invocation.
+let providerDatabase: ReturnType<typeof openHostedPostgresDatabase> | undefined;
 
 // The additive providers field is supplied by the handoff backend. The
 // intersection also accepts records written before provider selections existed.
@@ -380,9 +385,9 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
             config.resource !== authority.audience
           )
             throw new Error("Provider authority is unavailable.");
-          const database = openHostedPostgresDatabase(
+          const database = (providerDatabase ??= openHostedPostgresDatabase(
             environment.DATABASE_URL ?? "",
-          );
+          ));
           if (
             !(await createPostgresWorkspaceMembership(database).isMember({
               principal,
