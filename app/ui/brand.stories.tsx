@@ -3,7 +3,7 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { AutographMark } from "./app-builder";
 
 const meta = {
-  title: "Create App/Primitives/Brand",
+  title: "Components/Create App/Primitives/Brand",
   component: AutographMark,
   decorators: [
     (Story) => (

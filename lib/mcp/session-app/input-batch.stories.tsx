@@ -17,7 +17,7 @@ const mixedResult = sessionResult([
   authorizationRequest,
 ]);
 const meta = {
-  title: "Create App/MCP Blocks/Input Batch",
+  title: "MCP/Inputs/Input Batch",
   component: SessionAppView,
   args: {
     canCallTools: true,

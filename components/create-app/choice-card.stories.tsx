@@ -7,7 +7,7 @@ import styles from "../../app/ui/app-builder.module.css";
 import { ChoiceCard } from "./choice-card";
 
 const meta = {
-  title: "Create App/Primitives/Choice Card",
+  title: "Components/Create App/Primitives/Choice Card",
   component: ChoiceCard,
   args: {
     checked: false,

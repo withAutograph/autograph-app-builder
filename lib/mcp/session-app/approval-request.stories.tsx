@@ -5,7 +5,7 @@ import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { InputControl } from "./view";
 
 const meta = {
-  title: "Create App/MCP Blocks/Approval Request",
+  title: "MCP/Authorization/Approval Request",
   component: InputControl,
   args: { request: approvalRequest, onAnswer: fn() },
   decorators: [

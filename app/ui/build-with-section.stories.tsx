@@ -4,7 +4,7 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { BuildWithSection } from "./app-builder";
 
 const meta = {
-  title: "Create App/Sections/Build With",
+  title: "Components/Create App/Sections/Build With",
   component: BuildWithSection,
   args: { selected: "codex", onChange: fn() },
   decorators: [

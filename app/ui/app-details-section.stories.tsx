@@ -7,7 +7,7 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { AppDetailsSection, appNameFromBrief } from "./app-builder";
 
 const meta = {
-  title: "Create App/Sections/App Details",
+  title: "Components/Create App/Sections/App Details",
   component: AppDetailsSection,
   args: {
     appName: "Vendor Portal",

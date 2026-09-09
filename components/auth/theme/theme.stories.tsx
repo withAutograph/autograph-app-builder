@@ -17,7 +17,7 @@ function ThemeControls() {
 }
 
 const meta = {
-  title: "Auth/Theme Controls",
+  title: "Components/Auth/Theme Controls",
   component: ThemeControls,
   parameters: {
     authSession: storybookAuthenticatedSession,

@@ -5,7 +5,7 @@ import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { InputControl } from "./view";
 
 const meta = {
-  title: "Create App/MCP Blocks/Freeform Request",
+  title: "MCP/Inputs/Freeform Request",
   component: InputControl,
   args: { request: freeformRequest, onAnswer: fn() },
   decorators: [

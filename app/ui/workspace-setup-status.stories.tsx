@@ -4,7 +4,7 @@ import { expect, within } from "storybook/test";
 import { WorkspaceSetupStatus } from "./workspace-setup-status";
 
 const meta = {
-  title: "Pages/Auth Setup/Workspace Setup",
+  title: "Pages/Auth/Workspace Setup",
   component: WorkspaceSetupStatus,
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof WorkspaceSetupStatus>;

@@ -10,12 +10,14 @@ import "../app/globals.css";
 import "./preview.css";
 
 const CREATE_APP_STORY_PREFIX = "Create App/";
-const CREATE_APP_COMPONENT_STORY = "Components/Connection Drawer";
+const CREATE_APP_COMPONENT_STORY_PREFIX = "Components/Create App/";
+const CONNECTION_DRAWER_STORY = "Components/Connections/Connection Drawer";
 
 function usesCreateAppShell(title: string) {
   return (
     title.startsWith(CREATE_APP_STORY_PREFIX) ||
-    title === CREATE_APP_COMPONENT_STORY
+    title.startsWith(CREATE_APP_COMPONENT_STORY_PREFIX) ||
+    title === CONNECTION_DRAWER_STORY
   );
 }
 
@@ -30,12 +32,43 @@ const preview: Preview = {
       storySort: {
         order: [
           "Create App",
+          ["Flow", ["Anonymous Entry", "Page", "Handoff"], "Recovery"],
+          "Components",
           [
-            "Flow",
-            ["Anonymous Entry", "Page", "Handoff"],
-            "Sections",
-            "Primitives",
-            "Recovery",
+            "Create App",
+            [
+              "Sections",
+              [
+                "App Details",
+                "Build With",
+                "Connections",
+                "Deploy To",
+                "Store In",
+              ],
+              "Primitives",
+              [
+                "Brand",
+                "Choice Card",
+                "Search Combobox",
+                "Section Shell",
+                "Tooltip",
+              ],
+            ],
+            "Connections",
+            ["Connection Drawer", "Provider Connection"],
+            "Workspace",
+            ["Onboarding"],
+            "Auth",
+            ["Theme Controls"],
+          ],
+          "Pages",
+          ["Auth", ["Workspace Setup"]],
+          "MCP",
+          [
+            "Authorization",
+            ["Approval Request", "Authorization Request"],
+            "Inputs",
+            ["Choice Request", "Freeform Request", "Input Batch"],
           ],
           "*",
         ],

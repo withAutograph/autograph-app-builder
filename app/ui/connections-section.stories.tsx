@@ -4,7 +4,7 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { ConnectionsSection } from "./app-builder";
 
 const meta = {
-  title: "Create App/Sections/Connections",
+  title: "Components/Create App/Sections/Connections",
   component: ConnectionsSection,
   args: {
     connected: [],
