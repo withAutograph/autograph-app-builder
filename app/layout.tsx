@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Suspense } from "react";
 import { GeistSans } from "geist/font/sans";
 
 import { AppShell } from "@/components/app-shell";
-import { passkeysFlag } from "@/lib/feature-flags";
 
 import "./globals.css";
 
@@ -14,11 +12,7 @@ export const metadata: Metadata = {
     "Design, plan, create, and validate supported apps with Autograph App Builder.",
 };
 
-function ShellLoading() {
-  return <main id="main-content" aria-busy="true" />;
-}
-
-async function ShellContent({
+function ShellContent({
   children,
   githubAuthEnabled,
   vercelAuthEnabled,
@@ -27,12 +21,11 @@ async function ShellContent({
   githubAuthEnabled: boolean;
   vercelAuthEnabled: boolean;
 }) {
-  const passkeysEnabled = await passkeysFlag();
   return (
     <AppShell
       githubAuthEnabled={githubAuthEnabled}
       vercelAuthEnabled={vercelAuthEnabled}
-      passkeysEnabled={passkeysEnabled}
+      passkeysEnabled={false}
     >
       {children}
     </AppShell>
@@ -56,24 +49,21 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <Suspense fallback={<ShellLoading />}>
-          <ShellContent
-            githubAuthEnabled={Boolean(
-              showLocalAuthProviders ||
-              showPreviewEmulatedAuthProviders ||
-              (process.env.GITHUB_CLIENT_ID &&
-                process.env.GITHUB_CLIENT_SECRET),
-            )}
-            vercelAuthEnabled={Boolean(
-              showLocalAuthProviders ||
-              showPreviewEmulatedAuthProviders ||
-              (process.env.VERCEL_AUTH_CLIENT_ID &&
-                process.env.VERCEL_AUTH_CLIENT_SECRET),
-            )}
-          >
-            {children}
-          </ShellContent>
-        </Suspense>
+        <ShellContent
+          githubAuthEnabled={Boolean(
+            showLocalAuthProviders ||
+            showPreviewEmulatedAuthProviders ||
+            (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+          )}
+          vercelAuthEnabled={Boolean(
+            showLocalAuthProviders ||
+            showPreviewEmulatedAuthProviders ||
+            (process.env.VERCEL_AUTH_CLIENT_ID &&
+              process.env.VERCEL_AUTH_CLIENT_SECRET),
+          )}
+        >
+          {children}
+        </ShellContent>
       </body>
     </html>
   );
