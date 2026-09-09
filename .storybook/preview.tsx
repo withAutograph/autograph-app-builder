@@ -10,9 +10,13 @@ import "../app/globals.css";
 import "./preview.css";
 
 const CREATE_APP_STORY_PREFIX = "Create App/";
+const CREATE_APP_COMPONENT_STORY = "Components/Connection Drawer";
 
-function isCreateAppStory(title: string) {
-  return title.startsWith(CREATE_APP_STORY_PREFIX);
+function usesCreateAppShell(title: string) {
+  return (
+    title.startsWith(CREATE_APP_STORY_PREFIX) ||
+    title === CREATE_APP_COMPONENT_STORY
+  );
 }
 
 const storybookQueryClient = getQueryClient();
@@ -29,7 +33,6 @@ const preview: Preview = {
           [
             "Flow",
             ["Anonymous Entry", "Page", "Handoff"],
-            "Connection Drawer",
             "Sections",
             "Primitives",
             "Recovery",
@@ -60,7 +63,7 @@ const preview: Preview = {
   decorators: [
     (Story, context) => (
       <AppShell>
-        {isCreateAppStory(context.title) ? (
+        {usesCreateAppShell(context.title) ? (
           <div className={appStyles.appShell} data-create-app-story-environment>
             <Story />
           </div>
@@ -71,7 +74,7 @@ const preview: Preview = {
     ),
   ],
   afterEach: ({ canvasElement, title }) => {
-    if (!isCreateAppStory(title)) return;
+    if (!usesCreateAppShell(title)) return;
 
     expect(
       canvasElement.querySelector("[data-create-app-story-environment]"),

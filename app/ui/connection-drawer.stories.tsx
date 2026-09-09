@@ -3,7 +3,7 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { ConnectionDrawer } from "./app-builder";
 
 const meta = {
-  title: "Create App/Connection Drawer",
+  title: "Components/Connection Drawer",
   component: ConnectionDrawer,
   args: {
     flow: { name: "QuickBooks", stage: "connect" },
