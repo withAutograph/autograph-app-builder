@@ -21,6 +21,33 @@ Evidence paths are research references, never runtime eligibility checks. Read
 their current contents and distinguish a domain model or template from a complete
 working product. Repository commits in reports are diagnostic only.
 
+## Applying the recurring findings
+
+Use the [generation composition guidance](../../agent/skills/design-app/references/information-composition.md)
+and [current Arrusted capabilities](arrusted-composition-capabilities.md) together.
+The guidance applies across product domains; the capability notes point into the
+existing public API rather than defining a second component registry.
+
+- Keep the selected choice, available action, recorded outcome, and status copy
+  consistent. Acknowledging an issue is not the same as resolving it.
+- Put material units, periods, current/proposed values, denominators and
+  assumptions beside the decision they explain. Do not impose a KPI layout.
+- Keep decision-relevant detail readable when desktop panels resize, using
+  supported typography and composition variants without changing the palette.
+- Make synthetic interactions update the data being reviewed. Mapping, editing
+  an assumption, and recording a decision should have observable consequences,
+  not merely display a success message.
+
+The import and compensation examples include small, reusable fixture-state
+examples. They demonstrate interaction semantics, not a mandatory application
+architecture or proof of a working backend. Historical reports remain unchanged.
+When comparing a revised example, keep the original brief and clearly distinguish
+a hand-edited reference example from a fresh model-generated result.
+
+These are authoring principles and advisory review questions—not runtime checks,
+score thresholds, automatic repair loops, or new user approval steps. Test concrete
+interaction changes once, then let CI handle broad regression coverage.
+
 ```sh
 mise run eval:design -- --list-cases
 mise run eval:design -- --case revenue-analysis --preview-url URL \
