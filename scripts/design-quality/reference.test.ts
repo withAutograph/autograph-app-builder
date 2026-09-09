@@ -6,6 +6,68 @@ import { describe, expect, it } from "vitest";
 import { checkJsxAttributes, readReference } from "./reference";
 
 describe("readReference", () => {
+  it("checks immutable same-file JSX aliases without admitting mutable or external values", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          jsx: "preserve",
+          paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "compositions.tsx"),
+      `export function RecordListDetailLayout(_props: { list: JSX.Element; detail: JSX.Element | null; nonNullable?: JSX.Element; value: string; callback: () => void }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { RecordListDetailLayout } from "@autograph/compositions";
+            import { imported } from "./imported";
+            declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { main: {}; aside: {} } } }
+            declare function useState<T>(): readonly [T, () => void];
+            declare function makeLabel(): string;
+            export function Page() {
+              const list = <main />;
+              const detail = Math.random() ? <aside /> : null;
+              let mutable = <main />;
+              const throughMutable = mutable;
+              const cycleA = cycleB;
+              const cycleB = cycleA;
+              const { destructured } = { destructured: <main /> };
+              const [state] = useState<string>();
+              const derived = makeLabel();
+              return <><RecordListDetailLayout list={list} detail={detail} value={derived} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} value={state} callback={() => undefined} /><RecordListDetailLayout list={cycleA} detail={destructured} nonNullable={null} value={state} callback={() => undefined} /></>;
+            }`,
+        },
+        {
+          path: "app/imported.tsx",
+          content: `export const imported = <main />;`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "conforming",
+      "conforming",
+      "unassessed",
+      "unassessed",
+      "unassessed",
+      "conforming",
+      "unassessed",
+      "unassessed",
+      "unassessed",
+      "nonconforming",
+      "conforming",
+      "unassessed",
+    ]);
+  });
+
   it("checks finite nested JSX props through selected TypeScript paths", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     await mkdir(join(root, "core"), { recursive: true });
