@@ -477,7 +477,9 @@ export async function measureStyles(
           parsed &&
           parsed.version === 3 &&
           Array.isArray(parsed.sources) &&
-          parsed.sources.every((source: unknown) => typeof source === "string") &&
+          parsed.sources.every(
+            (source: unknown) => typeof source === "string",
+          ) &&
           (parsed.sourceRoot === undefined ||
             typeof parsed.sourceRoot === "string") &&
           typeof parsed.mappings === "string"
