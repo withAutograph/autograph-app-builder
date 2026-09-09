@@ -9,6 +9,7 @@ import {
   uniqueIntrinsicSignature,
   type IntrinsicClassSignature,
 } from "./class-evidence";
+import { generatedCssRule, type CssRuleEvidence } from "./css-evidence";
 
 export const viewports = [
   { name: "desktop", width: 1440, height: 900 },
@@ -403,6 +404,8 @@ export async function measureStyles(
   generatedSourcePaths: string[] = [],
   generatedClassSignatures: IntrinsicClassSignature[] = [],
   sharedClassSignatures?: IntrinsicClassSignature[],
+  generatedCssRules: CssRuleEvidence[] = [],
+  sharedCssRules: CssRuleEvidence[] = [],
 ) {
   await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
@@ -586,9 +589,20 @@ export async function measureStyles(
                     selector: matchedSelector(m),
                   })),
               );
-        const declarations = declarationEntries.map(({ p }) => p.value);
-        const rule = declarationEntries[0]?.rule;
-        const selector = declarationEntries[0]?.selector;
+        // Chrome can report the same matched rule twice. Collapse only entries
+        // with the same owning rule location, selector, property, and value;
+        // distinct cascade declarations remain deliberately ambiguous.
+        const uniqueDeclarationEntries = [
+          ...new Map(
+            declarationEntries.map((entry) => [
+              `${entry.rule?.styleSheetId ?? entry.rule?.style?.styleSheetId ?? "inline"}:${entry.rule?.style?.range?.startLine ?? -1}:${entry.rule?.style?.range?.startColumn ?? -1}:${entry.selector ?? ""}:${entry.p.name}:${entry.p.value}`,
+              entry,
+            ]),
+          ).values(),
+        ];
+        const declarations = uniqueDeclarationEntries.map(({ p }) => p.value);
+        const rule = uniqueDeclarationEntries[0]?.rule;
+        const selector = uniqueDeclarationEntries[0]?.selector;
         const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
         const path = sourcePath(
           styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined,
@@ -599,9 +613,27 @@ export async function measureStyles(
         // A shared component can assemble the same classes at runtime (including
         // through spreads), so a signature is reviewer evidence, never scored
         // declaration provenance. A direct stylesheet source is required.
-        const generated = generatedSource(path, generatedSourcePaths);
+        const generatedByPath = generatedSource(path, generatedSourcePaths);
+        const generatedRule = !rule?.media?.length && !rule?.layer
+          ? generatedCssRule(
+          generatedCssRules,
+          sharedCssRules,
+          selector,
+          property,
+          uniqueDeclarationEntries.length === 1
+            ? uniqueDeclarationEntries[0]?.p.value
+            : undefined,
+          (rule?.style.cssProperties ?? []).filter(
+            (entry) =>
+              !entry.disabled &&
+              entry.parsedOk !== false &&
+              typeof entry.text === "string",
+          ),
+            )
+          : undefined;
+        const generated = generatedByPath || Boolean(generatedRule);
         const inheritedDeclaration =
-          !inline.length && !own.length && declarationEntries.length > 0;
+          !inline.length && !own.length && uniqueDeclarationEntries.length > 0;
         let classification: string = classifyStyle(
           declarations,
           cv[property] ?? "",
@@ -646,13 +678,15 @@ export async function measureStyles(
           width: model.width,
           height: model.height,
         };
-        const cssSource = path
-          ? {
+        const cssSource = generatedRule
+          ? generatedRule.source
+          : path
+            ? {
               path,
               line: (rule?.style?.range?.startLine ?? 0) + 1,
               column: (rule?.style?.range?.startColumn ?? 0) + 1,
-            }
-          : undefined;
+              }
+            : undefined;
         const originCandidate =
           signatureGenerated && signatureOrigin.source
             ? {
@@ -772,7 +806,7 @@ export async function measureStyles(
       limitations: [
         "Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.",
         "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.",
-        "A shared bundle is never treated as positive generated adherence. Source provenance is unknown unless CDP provides a source URL matching an explicit generated path.",
+        "A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.",
         "Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.",
       ],
     };
@@ -789,6 +823,8 @@ export async function capturePreview(input: {
   generatedSourcePaths?: string[];
   generatedClassSignatures?: IntrinsicClassSignature[];
   sharedClassSignatures?: IntrinsicClassSignature[];
+  generatedCssRules?: CssRuleEvidence[];
+  sharedCssRules?: CssRuleEvidence[];
   additionalDesktopSize?: DesktopSize;
 }) {
   const browser = await chromium.launch();
@@ -852,6 +888,8 @@ export async function capturePreview(input: {
                 input.generatedSourcePaths,
                 input.generatedClassSignatures,
                 input.sharedClassSignatures,
+                input.generatedCssRules,
+                input.sharedCssRules,
               )
             : undefined;
         if (styles)

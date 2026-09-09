@@ -1,6 +1,7 @@
 import { expect, test } from "playwright/test";
 import { measurePage, measureStyles } from "./browser";
 import { collectIntrinsicClassSignatures } from "./class-evidence";
+import { collectCssRuleEvidence } from "./css-evidence";
 
 // Authored calibration candidates, not human-validated aesthetic gold labels.
 test("measurements distinguish concrete defects from intentional layout", async ({
@@ -182,6 +183,35 @@ test("browser signature attribution is reviewer evidence, not score provenance",
         item.property === "color" &&
         item.provenance === "unknown" &&
         item.verdict === "unassessed",
+    ),
+  ).toBe(true);
+});
+
+test("attributes an anonymous live stylesheet only through an exact supplied CSS rule", async ({
+  page,
+}) => {
+  const css = ".screen { color: var(--color-text-primary); }";
+  await page.goto("about:blank");
+  await page.setContent(
+    `<style>:root { --color-text-primary: rgb(20, 20, 20) }${css}</style><main class="screen">Stock</main>`,
+  );
+  const rules = collectCssRuleEvidence([{ path: "src/screen.css", content: css }]);
+  const styles = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    [],
+    [],
+    rules,
+    [],
+  );
+  expect(
+    styles.observations.some(
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "generated" &&
+        item.verdict === "conforming" &&
+        item.source?.path === "src/screen.css",
     ),
   ).toBe(true);
 });

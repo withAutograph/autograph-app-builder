@@ -50,6 +50,28 @@ describe("adherence report", () => {
     );
     expect(renderReport(base)).toContain("Historical report");
   });
+  it("renders generated-source diagnostics with an escaped source location", () => {
+    const html = renderReport({
+      createdAt: "today",
+      source: {
+        implementationDiagnostics: [
+          {
+            path: "src/Screen.tsx",
+            line: 2,
+            column: 8,
+            code: 2532,
+            message: "Object is possibly 'undefined'.",
+          },
+        ],
+      },
+      sourceFiles: [{ path: "src/Screen.tsx", content: "first\nsecond" }],
+      judge: {},
+      captures: [],
+    });
+    expect(html).toContain("Generated-code implementation diagnostics (1)");
+    expect(html).toContain("src/Screen.tsx:2:8");
+    expect(html).toContain("Object is possibly &#39;undefined&#39;.");
+  });
   it("shows candidate provenance without giving it adherence credit", () => {
     const adherence = scoreAdherence([
       {

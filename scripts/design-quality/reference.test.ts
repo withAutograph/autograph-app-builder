@@ -70,6 +70,40 @@ describe("readReference", () => {
     ]);
   });
 
+  it("keeps source safety diagnostics visible without scoring them as prop misuse", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          noUncheckedIndexedAccess: true,
+          paths: { "@autograph/components": ["./core/components.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "components.tsx"),
+      `export function PageHeader(_props: { actions: { label: string }[] }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { PageHeader } from "@autograph/components"; const items: Array<{ label: string }> = []; export function Page(){ return <PageHeader actions={[{ label: items[0].label }]} /> }`,
+        },
+      ],
+    });
+    expect(result.attributes[0]).toMatchObject({ verdict: "unassessed" });
+    expect(result.implementationDiagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: expect.any(Number), message: expect.stringMatching(/possibly .*undefined/i) }),
+      ]),
+    );
+  });
+
   it("checks concrete JSX nodes against recursive public slots without crediting callbacks or unknowns", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     await mkdir(join(root, "core"), { recursive: true });

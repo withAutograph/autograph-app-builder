@@ -21,6 +21,13 @@ export type SourceAnalysis = {
   matchingLiterals: string[];
   unknownLiterals: string[];
   observations: Observation[];
+  implementationDiagnostics: Array<{
+    path: string;
+    line: number;
+    column: number;
+    code: number;
+    message: string;
+  }>;
   limitations: string[];
 };
 
@@ -294,6 +301,14 @@ export function analyzeSource({
       attribute,
     ]),
   );
+  const implementationDiagnostics = [
+    ...new Map(
+      (typedJsx?.implementationDiagnostics ?? []).map((diagnostic) => [
+        `${diagnostic.path}:${diagnostic.line}:${diagnostic.column}:${diagnostic.code}:${diagnostic.message}`,
+        diagnostic,
+      ]),
+    ).values(),
+  ];
   const reachableCss = new Set<string>();
   const referencedClasses = new Set<string>();
   for (const file of files.filter(
@@ -866,6 +881,7 @@ export function analyzeSource({
     observations: observations.sort((left, right) =>
       left.id.localeCompare(right.id),
     ),
+    implementationDiagnostics,
     limitations: unique(limitations),
   };
 }

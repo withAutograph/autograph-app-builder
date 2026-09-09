@@ -12,6 +12,7 @@ import { renderReport } from "./design-quality/report";
 import { readReference } from "./design-quality/reference";
 import { scoreAdherence } from "./design-quality/evidence";
 import { collectIntrinsicClassSignatures } from "./design-quality/class-evidence";
+import { collectCssRuleEvidence } from "./design-quality/css-evidence";
 import { execFileSync } from "node:child_process";
 
 const { values } = parseArgs({
@@ -103,6 +104,8 @@ async function main() {
   const sharedFiles = await sources(
     join(referenceRoot, "packages", "design-systems"),
   ).catch(() => undefined);
+  const generatedCssRules = collectCssRuleEvidence(sourceFiles);
+  const sharedCssRules = sharedFiles ? collectCssRuleEvidence(sharedFiles) : [];
   const source = values["source-dir"]
     ? {
         status: "available",
@@ -134,6 +137,8 @@ async function main() {
     sharedClassSignatures: sharedFiles
       ? collectIntrinsicClassSignatures(sharedFiles)
       : undefined,
+    generatedCssRules,
+    sharedCssRules,
     additionalDesktopSize,
   });
   limitations.push(...("limitations" in source ? source.limitations : []));

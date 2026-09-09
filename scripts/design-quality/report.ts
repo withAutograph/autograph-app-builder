@@ -68,6 +68,35 @@ export function renderReport(report: {
       return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${visible.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}${visible.length < entries.length ? '<p>Showing 30 representative unknowns. <a href="report.json">Download every observation and source location</a>.</p>' : ""}</details>`;
     })
     .join("");
+  const implementationDiagnostics = (
+    report.source as {
+      implementationDiagnostics?: Array<{
+        path: string;
+        line: number;
+        column: number;
+        code: number;
+        message: string;
+      }>;
+    }
+  )?.implementationDiagnostics ?? [];
+  const implementationFindings = implementationDiagnostics.length
+    ? `<details open><summary>Generated-code implementation diagnostics (${implementationDiagnostics.length})</summary>${implementationDiagnostics
+        .map((diagnostic, index) => {
+          const file = report.sourceFiles?.find(
+            (candidate) => candidate.path === diagnostic.path,
+          );
+          const excerpt = file?.content
+            .split("\n")
+            .slice(Math.max(0, diagnostic.line - 2), diagnostic.line + 1)
+            .map(
+              (text, offset) =>
+                `${Math.max(1, diagnostic.line - 1) + offset}: ${text}`,
+            )
+            .join("\n");
+          return `<article id="implementation-${index}"><strong>TypeScript ${escapeHtml(diagnostic.code)}</strong><p>${escapeHtml(diagnostic.message)}</p><small>Generated source · <a href="#implementation-source-${index}">${escapeHtml(diagnostic.path)}:${diagnostic.line}:${diagnostic.column}</a></small><details id="implementation-source-${index}"><summary>Source location</summary>${excerpt ? `<pre>${escapeHtml(excerpt)}</pre>` : "Source text not supplied; location only."}</details></article>`;
+        })
+        .join("")}</details>`
+    : "";
   const measuredSummary =
     (report.evaluationNotes?.length
       ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul></details>`
@@ -83,7 +112,7 @@ export function renderReport(report: {
           .join(
             "",
           )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
-      : "<p>Historical report: this evaluation predates measured adherence scoring.</p>");
+      : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") + implementationFindings;
   const annotated = (c: {
     name: string;
     state: string;

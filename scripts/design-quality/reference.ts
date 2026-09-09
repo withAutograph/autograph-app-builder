@@ -28,6 +28,13 @@ export type TypedJsxAttribute = {
   verdict: "conforming" | "nonconforming" | "unassessed";
   reason: string;
 };
+export type ImplementationDiagnostic = {
+  path: string;
+  line: number;
+  column: number;
+  code: number;
+  message: string;
+};
 
 type PackageJson = {
   name?: string;
@@ -506,7 +513,11 @@ export function checkJsxAttributes({
 }: {
   arrustedRoot: string;
   files: Array<{ path: string; content: string }>;
-}): { attributes: TypedJsxAttribute[]; limitations: string[] } {
+}): {
+  attributes: TypedJsxAttribute[];
+  limitations: string[];
+  implementationDiagnostics: ImplementationDiagnostic[];
+} {
   const limitations: string[] = [];
   const config = ts.readConfigFile(
     join(arrustedRoot, "tsconfig.json"),
@@ -518,6 +529,7 @@ export function checkJsxAttributes({
       limitations: [
         "Could not read selected Arrusted TypeScript configuration; JSX prop types are unassessed.",
       ],
+      implementationDiagnostics: [],
     };
   const parsed = ts.parseJsonConfigFileContent(
     config.config,
@@ -561,6 +573,7 @@ export function checkJsxAttributes({
     );
     const checker = program.getTypeChecker();
     const attributes: TypedJsxAttribute[] = [];
+    const implementationDiagnostics: ImplementationDiagnostic[] = [];
     for (const [path] of virtual) {
       const source = program.getSourceFile(path);
       if (!source) continue;
@@ -604,11 +617,37 @@ export function checkJsxAttributes({
             const end = start + (item.length ?? 0);
             return start >= initializerStart && end <= initializerEnd;
           });
-          if (attributeDiagnostics.length)
+          const implementationOnlyDiagnostics = attributeDiagnostics.filter(
+            (item) => ![2322, 2353].includes(item.code),
+          );
+          for (const item of implementationOnlyDiagnostics) {
+            const position = source.getLineAndCharacterOfPosition(item.start ?? 0);
+            implementationDiagnostics.push({
+              path: key.path,
+              line: position.line + 1,
+              column: position.character + 1,
+              code: item.code,
+              message: ts.flattenDiagnosticMessageText(item.messageText, " "),
+            });
+          }
+          const safetyDiagnostics = implementationOnlyDiagnostics.filter((item) =>
+            [2531, 2532, 18047, 18048].includes(item.code),
+          );
+          const propDiagnostics = attributeDiagnostics.filter((item) =>
+            [2322, 2353].includes(item.code),
+          );
+          if (safetyDiagnostics.length)
+            attributes.push({
+              ...key,
+              verdict: "unassessed",
+              reason:
+                "A generated-source TypeScript diagnostic affects this expression; prop assignability is unassessed.",
+            });
+          else if (propDiagnostics.length)
             attributes.push({
               ...key,
               verdict: "nonconforming",
-              reason: `TypeScript prop error: ${attributeDiagnostics
+              reason: `TypeScript prop error: ${propDiagnostics
                 .slice(0, 3)
                 .map((item) =>
                   ts.flattenDiagnosticMessageText(item.messageText, " "),
@@ -651,7 +690,14 @@ export function checkJsxAttributes({
                   verdict: assignable ? "conforming" : "nonconforming",
                   reason: assignable
                     ? "The static JSX expression is assignable to the selected Arrusted prop type."
-                    : "The static JSX expression is not assignable to the selected Arrusted prop type.",
+                    : propDiagnostics.length
+                      ? `TypeScript prop error: ${propDiagnostics
+                          .slice(0, 3)
+                          .map((item) =>
+                            ts.flattenDiagnosticMessageText(item.messageText, " "),
+                          )
+                          .join("; ")}`
+                      : "The static JSX expression is not assignable to the selected Arrusted prop type.",
                 });
             }
           }
@@ -660,11 +706,11 @@ export function checkJsxAttributes({
       };
       visit(source);
     }
-    return { attributes, limitations };
+    return { attributes, limitations, implementationDiagnostics };
   } catch {
     limitations.push(
       "Selected Arrusted TypeScript types could not be loaded for generated JSX; prop conformance is unassessed.",
     );
-    return { attributes: [], limitations };
+    return { attributes: [], limitations, implementationDiagnostics: [] };
   }
 }
