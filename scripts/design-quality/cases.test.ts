@@ -26,7 +26,6 @@ describe("design-quality cases", () => {
       join(root, metadata.id, "case.json"),
       JSON.stringify(metadata),
     );
-    await writeFile(join(root, metadata.id, "brief.md"), "brief");
     expect(await listDesignCases(root)).toEqual([
       { id: "vendor-review", title: "Vendor review", status: "ready" },
     ]);

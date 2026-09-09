@@ -1,1 +1,41 @@
-{"id":"spend-import-review","title":"Spend import review","status":"advisory","notes":"Synthetic review scenario grounded in implemented Vendor transaction-import and derived-fact substrate; the proposed reconciliation decision contract is a planned extension.","evidence":[{"repo":"arrusted","path":"apps/vendor/schema/vendor.cue","status":"implemented"},{"repo":"ag2","path":"backend/src/services/vendor/derivedFacts.ts","status":"implemented"},{"repo":"arrusted","path":"docs/plans/2026-07-23-vendor-spend-reconciliation-review-contract.md","status":"planned"}],"reviewQuestions":["Can a reviewer verify field mappings and preview the changes before saving?","Can a reviewer see uncertain matches, source provenance, and the bounded correction without overwriting source evidence?"],"outcomes":["A user can save an import after checking its mappings and change preview.","The save outcome separates imported transactions from uncertain matches that remain in review."]}
+{
+  "id": "spend-import-review",
+  "title": "Spend import review",
+  "status": "advisory",
+  "notes": "Synthetic review scenario grounded in implemented Vendor transaction-import and derived-fact substrate; the proposed reconciliation decision contract is a planned extension.",
+  "evidence": [
+    {
+      "repo": "arrusted",
+      "path": "apps/vendor/frontend/src/review/ReviewQueueServerPage.tsx",
+      "status": "implemented"
+    },
+    {
+      "repo": "ag2",
+      "path": "frontend/src/pages/settings/integrations/pages/import/ImportWizard.tsx",
+      "status": "implemented"
+    },
+    {
+      "repo": "arrusted",
+      "path": "apps/vendor/schema/vendor.cue",
+      "status": "implemented"
+    },
+    {
+      "repo": "ag2",
+      "path": "backend/src/services/vendor/derivedFacts.ts",
+      "status": "implemented"
+    },
+    {
+      "repo": "arrusted",
+      "path": "docs/plans/2026-07-23-vendor-spend-reconciliation-review-contract.md",
+      "status": "planned"
+    }
+  ],
+  "reviewQuestions": [
+    "Can a reviewer verify field mappings and preview the changes before saving?",
+    "Can a reviewer see uncertain matches, source provenance, and the bounded correction without overwriting source evidence?"
+  ],
+  "outcomes": [
+    "A user can save an import after checking its mappings and change preview.",
+    "The save outcome separates imported transactions from uncertain matches that remain in review."
+  ]
+}

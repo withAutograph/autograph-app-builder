@@ -3,6 +3,26 @@ import { renderReport } from "./report";
 import { scoreAdherence } from "./evidence";
 
 describe("adherence report", () => {
+  it("shows escaped case context without claiming intended outcomes passed", () => {
+    const html = renderReport({
+      createdAt: "today",
+      source: {},
+      judge: {},
+      captures: [],
+      case: {
+        id: "position-request",
+        title: "Position <request>",
+        notes: "Synthetic only",
+        evidence: [{ repo: "ag2", path: "docs/example.md", status: "planned" }],
+        reviewQuestions: ["Can a user correct the form?"],
+        outcomes: ["Save a draft"],
+      },
+    });
+    expect(html).toContain("Position &lt;request&gt;");
+    expect(html).toContain("docs/example.md");
+    expect(html).toContain("Intended outcomes, not asserted results");
+    expect(html).toContain('href="report.json"');
+  });
   it("links escaped source findings and annotated regions without changing screenshots", () => {
     const html = renderReport({
       createdAt: "today",

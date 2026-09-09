@@ -1,1 +1,35 @@
-{"synthetic":true,"request":{"id":"REQ-104","role":"Senior Data Engineer","department":"Data","manager":"Jordan Lee","startDate":"2026-11-02","status":"draft","annualizedCost":184000,"reason":"Support enterprise reporting commitments"},"corrections":{"baseSalary":{"entered":176000,"recommended":184000,"reason":"Level L5 market range"},"startDate":{"entered":"2026-10-05","recommended":"2026-11-02","reason":"Approved hiring-plan start"}},"draftConfirmation":{"id":"REQ-104","status":"saved-draft","nextStep":"Submit for Finance review"},"context":{"openPositions":3,"approvedBudget":720000,"committedBudget":596000}}
+{
+  "synthetic": true,
+  "request": {
+    "id": "REQ-104",
+    "role": "Senior Data Engineer",
+    "department": "Data",
+    "manager": "Jordan Lee",
+    "startDate": "2026-11-02",
+    "status": "draft",
+    "annualizedCost": 184000,
+    "reason": "Support enterprise reporting commitments"
+  },
+  "corrections": {
+    "baseSalary": {
+      "entered": 176000,
+      "recommended": 184000,
+      "reason": "Level L5 market range"
+    },
+    "startDate": {
+      "entered": "2026-10-05",
+      "recommended": "2026-11-02",
+      "reason": "Approved hiring-plan start"
+    }
+  },
+  "draftConfirmation": {
+    "id": "REQ-104",
+    "status": "saved-draft",
+    "nextStep": "Submit for Finance review"
+  },
+  "context": {
+    "openPositions": 3,
+    "approvedBudget": 720000,
+    "committedBudget": 596000
+  }
+}

@@ -1,0 +1,3088 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T13:14:30.037Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <section>
+      <h2>Reorganization scenario review</h2>
+      <p>
+        Synthetic draft-scenario case grounded in AG2&#39;s implemented
+        org-redesign template; the roadmap&#39;s workforce-cost scenario and
+        approval extension is planned.
+      </p>
+      <details>
+        <summary>Case evidence and review questions</summary>
+        <ul>
+          <li>
+            ag2:
+            <code
+              >frontend/src/app-templates/templates/org-redesign/manifest.ts</code
+            >
+            — implemented
+          </li>
+          <li>
+            ag2: <code>docs/plans/product/mini-app-roadmap.md</code> — planned
+          </li>
+          <li>ag2: <code>docs/product/foundation.md</code> — planned</li>
+        </ul>
+        <h3>Review questions</h3>
+        <ul>
+          <li>
+            Can a leader compare proposed reporting changes with current
+            structure and cost exposure?
+          </li>
+          <li>
+            Does the design make the proposal a reviewable draft rather than
+            current organizational truth?
+          </li>
+        </ul>
+        <h3>Intended outcomes, not asserted results</h3>
+        <ul>
+          <li>
+            A reviewer can understand a proposed reorganization, its affected
+            people, and cost or span/layer tradeoffs.
+          </li>
+          <li>
+            A reviewer can send the draft back for revision or prepare an
+            approval summary without changing the current org.
+          </li>
+        </ul>
+      </details>
+    </section>
+    <h2>Arrusted adherence: 99/100 · partial</h2>
+    <p>
+      Evidence coverage: 1.05%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>9</td>
+          <td>0</td>
+          <td>0</td>
+          <td>100% (9/9)</td>
+          <td>9 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>30</td>
+          <td>1</td>
+          <td>11</td>
+          <td>96.77% (30/31)</td>
+          <td>42 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>6</td>
+          <td>0</td>
+          <td>4326</td>
+          <td>100% (6/6)</td>
+          <td>6 / 4326</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence.
+        Anonymous rules require a unique exact generated selector/property/value
+        and complete matched-rule declaration set; conditional or ambiguous
+        source rules remain unknown.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+      <li>
+        No generated CSS source files were supplied; compiled stylesheet source
+        maps cannot establish generated declaration provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (1)</summary>
+      <article id="finding-17">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Typography has no public id prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-17">src/ReorganizationReview.tsx:86</a></small
+        >
+        <details id="source-17">
+          <summary>Source location: src/ReorganizationReview.tsx:86</summary>
+          <pre>
+85:           &lt;div&gt;
+86:             &lt;Typography as=&quot;h2&quot; variant=&quot;section-title&quot; className=&quot;m-0&quot; id=&quot;affected-heading&quot;&gt;Affected people&lt;/Typography&gt;
+87:             &lt;Typography tone=&quot;secondary&quot; className=&quot;mt-[var(--space-1)] mb-0&quot;&gt;2 named examples shown from 18 affected people. Select a person to inspect the simulated transition.&lt;/Typography&gt;
+88:           &lt;/div&gt;</pre>
+        </details>
+      </article>
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (4337)</summary>
+      <article id="finding-11">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-11">src/ReorganizationReview.tsx:38</a></small
+        >
+        <details id="source-11">
+          <summary>Source location: src/ReorganizationReview.tsx:38</summary>
+          <pre>
+37:           actionsPlacement=&quot;header&quot;
+38:           actions={[
+39:             { id: &quot;revise&quot;, label: &quot;Request revision&quot;, intent: &quot;secondary&quot; },
+40:             { id: &quot;recommend&quot;, label: &quot;Recommend proposal&quot;, intent: &quot;primary-strong&quot; },</pre>
+        </details>
+      </article>
+      <article id="finding-12">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-12">src/ReorganizationReview.tsx:43</a></small
+        >
+        <details id="source-12">
+          <summary>Source location: src/ReorganizationReview.tsx:43</summary>
+          <pre>
+42:           ]}
+43:           onAction={(action) =&gt; {
+44:             if (action === &quot;recommend&quot;) setDecision(&quot;recommend&quot;);
+45:             if (action === &quot;revise&quot;) setDecision(&quot;revise&quot;);</pre>
+        </details>
+      </article>
+      <article id="finding-13">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-13">src/ReorganizationReview.tsx:48</a></small
+        >
+        <details id="source-13">
+          <summary>Source location: src/ReorganizationReview.tsx:48</summary>
+          <pre>
+47:           }}
+48:           sections={[
+49:             {
+50:               id: &quot;decision-evidence&quot;,</pre>
+        </details>
+      </article>
+      <article id="finding-23">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-23">src/ReorganizationReview.tsx:93</a></small
+        >
+        <details id="source-23">
+          <summary>Source location: src/ReorganizationReview.tsx:93</summary>
+          <pre>
+92:             showDetailOnConstrained={established}
+93:             onBack={() =&gt; setEstablished(false)}
+94:             backLabel=&quot;Back to affected people&quot;
+95:             list={({ isDetailVisible }) =&gt; (</pre>
+        </details>
+      </article>
+      <article id="finding-25">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-25">src/ReorganizationReview.tsx:95</a></small
+        >
+        <details id="source-25">
+          <summary>Source location: src/ReorganizationReview.tsx:95</summary>
+          <pre>
+94:             backLabel=&quot;Back to affected people&quot;
+95:             list={({ isDetailVisible }) =&gt; (
+96:               &lt;RecordList
+97:                 ariaLabel=&quot;Affected people in the draft proposal&quot;</pre>
+        </details>
+      </article>
+      <article id="finding-31">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-31">src/ReorganizationReview.tsx:102</a></small
+        >
+        <details id="source-31">
+          <summary>Source location: src/ReorganizationReview.tsx:102</summary>
+          <pre>
+101:                 selectedId={isDetailVisible ? selectedId : undefined}
+102:                 onSelect={(id) =&gt; { setSelectedId(id); setEstablished(true); }}
+103:                 items={people.map((person) =&gt; ({
+104:                   id: person.id,</pre>
+        </details>
+      </article>
+      <article id="finding-32">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-32">src/ReorganizationReview.tsx:103</a></small
+        >
+        <details id="source-32">
+          <summary>Source location: src/ReorganizationReview.tsx:103</summary>
+          <pre>
+102:                 onSelect={(id) =&gt; { setSelectedId(id); setEstablished(true); }}
+103:                 items={people.map((person) =&gt; ({
+104:                   id: person.id,
+105:                   primary: person.name,</pre>
+        </details>
+      </article>
+      <article id="finding-33">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-33">src/ReorganizationReview.tsx:107</a></small
+        >
+        <details id="source-33">
+          <summary>Source location: src/ReorganizationReview.tsx:107</summary>
+          <pre>
+106:                   secondary: person.from,
+107:                   trailing: &lt;StatusPill label={person.kind} tone={person.id === &quot;casey&quot; ? &quot;info&quot; : &quot;neutral&quot;} size=&quot;xs&quot; /&gt;,
+108:                 }))}
+109:               /&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-37">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-37">src/ReorganizationReview.tsx:113</a></small
+        >
+        <details id="source-37">
+          <summary>Source location: src/ReorganizationReview.tsx:113</summary>
+          <pre>
+112:               &lt;RecordDetailPanel
+113:                 title={selected.name}
+114:                 subtitle=&quot;Proposed transition · simulation only&quot;
+115:                 status={{ label: selected.kind, tone: selected.id === &quot;casey&quot; ? &quot;info&quot; : &quot;neutral&quot; }}</pre>
+        </details>
+      </article>
+      <article id="finding-39">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-39">src/ReorganizationReview.tsx:115</a></small
+        >
+        <details id="source-39">
+          <summary>Source location: src/ReorganizationReview.tsx:115</summary>
+          <pre>
+114:                 subtitle=&quot;Proposed transition · simulation only&quot;
+115:                 status={{ label: selected.kind, tone: selected.id === &quot;casey&quot; ? &quot;info&quot; : &quot;neutral&quot; }}
+116:                 labelEmphasis=&quot;primary&quot;
+117:                 sections={[</pre>
+        </details>
+      </article>
+      <article id="finding-41">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-41">src/ReorganizationReview.tsx:117</a></small
+        >
+        <details id="source-41">
+          <summary>Source location: src/ReorganizationReview.tsx:117</summary>
+          <pre>
+116:                 labelEmphasis=&quot;primary&quot;
+117:                 sections={[
+118:                   {
+119:                     id: &quot;transition&quot;,</pre>
+        </details>
+      </article>
+      <article id="finding-57">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-57">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-57">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-58">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-58">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-58">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-59">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-59">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-59">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-60">
+        <strong>unknown · unassessed</strong>
+        <p>font-weight: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-60">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-60">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-61">
+        <strong>unknown · unassessed</strong>
+        <p>line-height: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-61">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-61">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-62">
+        <strong>unknown · unassessed</strong>
+        <p>letter-spacing: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-62">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-62">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-63">
+        <strong>semantic-token-reference · unassessed</strong>
+        <p>column-gap: semantic-token-reference</p>
+        <small
+          >browser evidence ·
+          <a href="#source-63"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-63">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-64">
+        <strong>semantic-token-reference · unassessed</strong>
+        <p>row-gap: semantic-token-reference</p>
+        <small
+          >browser evidence ·
+          <a href="#source-64"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-64">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-65">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-65">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-65">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-66">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-width: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-66">/reorganization-scenario:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-66">
+          <summary>Source location: /reorganization-scenario:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-67">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-67">/reorganization-scenario:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-67">
+          <summary>Source location: /reorganization-scenario:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-68">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-69">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-69">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-69">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-70">
+        <strong>semantic-token-reference · unassessed</strong>
+        <p>column-gap: semantic-token-reference</p>
+        <small
+          >browser evidence ·
+          <a href="#source-70"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-70">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-71">
+        <strong>semantic-token-reference · unassessed</strong>
+        <p>row-gap: semantic-token-reference</p>
+        <small
+          >browser evidence ·
+          <a href="#source-71"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-71">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-72">
+        <strong>matching-literal · unassessed</strong>
+        <p>border-top-color: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-72">/reorganization-scenario:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-72">
+          <summary>Source location: /reorganization-scenario:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-73">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown; shared origin candidate requires review.</p>
+        <p>
+          Possible generated source (unassessed):
+          core/components/RecordList.tsx:101. Exact escaped Tailwind utility
+          token occurs once in static source; it is reviewer evidence only, not
+          declaration provenance.
+        </p>
+        <small
+          >browser evidence ·
+          <a href="#source-73">/reorganization-scenario:1785</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-73">
+          <summary>Source location: /reorganization-scenario:1785</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-74">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-74">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-74">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-75">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-75">/reorganization-scenario:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-75">
+          <summary>Source location: /reorganization-scenario:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 90/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>4/4</td>
+          <td>
+            The page establishes a clear sequence from case identity and draft
+            status to review decision, decision evidence, affected people, and
+            individual detail. Current versus proposed values and the
+            material-change column are especially easy to scan.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>4/4</td>
+          <td>
+            Cards, table columns, action groups, and the list-detail region are
+            consistently aligned with balanced spacing. The centered maximum
+            width works well at 1920px, while the 1024px view remains compact
+            and usable without horizontal clipping.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>3/4</td>
+          <td>
+            Headings, body copy, labels, and numeric values are visually
+            consistent and readable overall. Some 10–12px status tags and muted
+            supporting text are very small, and the supplied audit reports
+            marginal or insufficient contrast for several of these elements.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>4/4</td>
+          <td>
+            The composition remains coherent across the supplied 1024px, 1440px,
+            and 1920px desktop widths. Actions stay visible, the comparison
+            table retains all columns, and the affected-person list and detail
+            panel resize without overlap; ordinary document scrolling
+            accommodates the shorter 768px viewport.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>3/4</td>
+          <td>
+            Repeated labels such as “Draft simulation,” “Draft — Not applied,”
+            “hypothetical,” and “Simulation only” strongly prevent the proposal
+            from appearing applied. Cost, manager, layer, and affected-person
+            exposure are directly comparable, but only 2 of 18 affected people
+            are exposed and the visible person detail compares teams rather than
+            reporting lines, leaving a key review question incompletely
+            answered.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        The draft is unmistakably separated from organizational truth through
+        redundant but useful status and explanatory language.
+      </li>
+      <li>
+        The evidence table provides a concise side-by-side comparison of current
+        organization, proposed organization, and material change, including
+        annual cost exposure.
+      </li>
+      <li>
+        Decision actions are explicit, and recorded recommendation or revision
+        states remain labeled as simulation-only.
+      </li>
+      <li>
+        The affected-person list-detail composition connects a selected
+        individual to current and proposed assignments without implying that the
+        move has occurred.
+      </li>
+      <li>
+        The desktop layout scales cleanly from 1024px to 1920px while preserving
+        alignment and control visibility.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>high · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The page states that 18 people are affected but exposes only two named
+        examples, and the selected detail shows current and proposed teams
+        without current and proposed manager or reporting-line information. A
+        leader therefore cannot fully inspect who is affected or compare the
+        proposed reporting changes requested by the brief.
+      </p>
+      <p>
+        <strong>Improve:</strong> Provide a reviewable path to all 18 affected
+        people and include explicit current manager/reporting line and proposed
+        manager/reporting line fields in each person’s detail, alongside the
+        team change and material impact.
+      </p>
+      <small>Screenshot region: x 80, y 667, width 1280, height 400</small>
+    </article>
+    <article id="design-1">
+      <h4>medium · <a href="#desktop-2">desktop-2</a></h4>
+      <p>
+        After “Revision requested” is recorded, “Recommend proposal” remains the
+        strongest visible action while “Request revision” has no persistent
+        selected treatment. The status pill communicates the outcome, but the
+        action group can still read as though recommendation is the active or
+        preferred state.
+      </p>
+      <p>
+        <strong>Improve:</strong> Make the recorded outcome evident within the
+        action composition using supported selected or disabled states, or
+        relabel the available actions as changes to the existing decision while
+        keeping the status summary adjacent.
+      </p>
+      <small>Screenshot region: x 876, y 136, width 460, height 108</small>
+    </article>
+    <article id="design-2">
+      <h4>low · <a href="#desktop-window-0">desktop-window-0</a></h4>
+      <p>
+        The compact “Team change” and “No team change” tags use very small text;
+        the supplied accessibility evidence also flags these status treatments
+        as low contrast. Their meaning is recoverable from surrounding content,
+        but quick scanning is weaker in the narrower desktop panel.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use the supported medium Tag size or repeat
+        the status as regular supporting text in the row, preserving the
+        existing Arrusted palette and component variants.
+      </p>
+      <small>Screenshot region: x 289, y 842, width 111, height 91</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-2&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-wide-2&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;,
+    &quot;desktop-window-2&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The page establishes a clear sequence from case identity and draft status to review decision, decision evidence, affected people, and individual detail. Current versus proposed values and the material-change column are especially easy to scan.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;Cards, table columns, action groups, and the list-detail region are consistently aligned with balanced spacing. The centered maximum width works well at 1920px, while the 1024px view remains compact and usable without horizontal clipping.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Headings, body copy, labels, and numeric values are visually consistent and readable overall. Some 10–12px status tags and muted supporting text are very small, and the supplied audit reports marginal or insufficient contrast for several of these elements.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The composition remains coherent across the supplied 1024px, 1440px, and 1920px desktop widths. Actions stay visible, the comparison table retains all columns, and the affected-person list and detail panel resize without overlap; ordinary document scrolling accommodates the shorter 768px viewport.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Repeated labels such as “Draft simulation,” “Draft — Not applied,” “hypothetical,” and “Simulation only” strongly prevent the proposal from appearing applied. Cost, manager, layer, and affected-person exposure are directly comparable, but only 2 of 18 affected people are exposed and the visible person detail compares teams rather than reporting lines, leaving a key review question incompletely answered.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;The draft is unmistakably separated from organizational truth through redundant but useful status and explanatory language.&quot;,
+    &quot;The evidence table provides a concise side-by-side comparison of current organization, proposed organization, and material change, including annual cost exposure.&quot;,
+    &quot;Decision actions are explicit, and recorded recommendation or revision states remain labeled as simulation-only.&quot;,
+    &quot;The affected-person list-detail composition connects a selected individual to current and proposed assignments without implying that the move has occurred.&quot;,
+    &quot;The desktop layout scales cleanly from 1024px to 1920px while preserving alignment and control visibility.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 80,
+        &quot;y&quot;: 667,
+        &quot;width&quot;: 1280,
+        &quot;height&quot;: 400
+      },
+      &quot;severity&quot;: &quot;high&quot;,
+      &quot;explanation&quot;: &quot;The page states that 18 people are affected but exposes only two named examples, and the selected detail shows current and proposed teams without current and proposed manager or reporting-line information. A leader therefore cannot fully inspect who is affected or compare the proposed reporting changes requested by the brief.&quot;,
+      &quot;improvement&quot;: &quot;Provide a reviewable path to all 18 affected people and include explicit current manager/reporting line and proposed manager/reporting line fields in each person’s detail, alongside the team change and material impact.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-2&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 876,
+        &quot;y&quot;: 136,
+        &quot;width&quot;: 460,
+        &quot;height&quot;: 108
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;After “Revision requested” is recorded, “Recommend proposal” remains the strongest visible action while “Request revision” has no persistent selected treatment. The status pill communicates the outcome, but the action group can still read as though recommendation is the active or preferred state.&quot;,
+      &quot;improvement&quot;: &quot;Make the recorded outcome evident within the action composition using supported selected or disabled states, or relabel the available actions as changes to the existing decision while keeping the status summary adjacent.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-window-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 289,
+        &quot;y&quot;: 842,
+        &quot;width&quot;: 111,
+        &quot;height&quot;: 91
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;The compact “Team change” and “No team change” tags use very small text; the supplied accessibility evidence also flags these status treatments as low contrast. Their meaning is recoverable from surrounding content, but quick scanning is weaker in the narrower desktop panel.&quot;,
+      &quot;improvement&quot;: &quot;Use the supported medium Tag size or repeat the status as regular supporting text in the row, preserving the existing Arrusted palette and component variants.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Only Casey Morgan’s detail is visible; Riley Park’s selected detail and any additional affected-person states were not provided.&quot;,
+    &quot;The narrowest supplied desktop capture is 1024px, so behavior in smaller desktop windows or embedded panels is unknown.&quot;,
+    &quot;Screenshots and passed interaction text do not establish persistence, authorization, notifications, or whether organizational records remain unchanged in a backend.&quot;,
+    &quot;The contrast observations come from supplied automated evidence; no independent visual or assistive-technology testing was performed.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 90,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 38642,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 38639
+    },
+    &quot;outputTokens&quot;: 2006,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 917,
+      &quot;reasoningTokens&quot;: 1089
+    },
+    &quot;totalTokens&quot;: 40648
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/ReorganizationReview.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/ReorganizationReview.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordList&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;RecordList&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/ReorganizationReview.tsx&quot;,
+        &quot;localName&quot;: &quot;StatusPill&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;StatusPill&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/ReorganizationReview.tsx&quot;,
+        &quot;localName&quot;: &quot;Typography&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Typography&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/ReorganizationReview.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordDetailPanel&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordDetailPanel&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/ReorganizationReview.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordListDetailLayout&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordListDetailLayout&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [],
+    &quot;matchingLiterals&quot;: [],
+    &quot;unknownLiterals&quot;: [],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 57,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;implementationDiagnostics&quot;: [],
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;repo&quot;,
+    &quot;commit&quot;: &quot;ba2808f0e1664ef299868abac999859fbfc6a974&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: true
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="The page states that 18 people are affected but exposes only two named examples, and the selected detail shows current and proposed teams without current and proposed manager or reporting-line information. A leader therefore cannot fully inspect who is affected or compare the proposed reporting changes requested by the brief."
+          aria-label="The page states that 18 people are affected but exposes only two named examples, and the selected detail shows current and proposed teams without current and proposed manager or reporting-line information. A leader therefore cannot fully inspect who is affected or compare the proposed reporting changes requested by the brief."
+          style="
+            left: 5.555555555555555%;
+            top: 61.08058608058608%;
+            width: 88.88888888888889%;
+            height: 36.63003663003663%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 1092,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1010.640625,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1160.25,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 81,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 81,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\].py-\\[var\\(--space-1\\)\\].text-\\[length\\:var\\(--text-badge-xs\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].items-center &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 128,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 127,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 94,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 33,
+        &quot;sampled&quot;: 33
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 93,
+        &quot;sampled&quot;: 86
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 1,
+        &quot;sampled&quot;: 1
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 111,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 231,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 101,
+        &quot;matching-literal&quot;: 58,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 407
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 566,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 50,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 228
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 278,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 17,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 101
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 118,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 95,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 34
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 129,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1442,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — recommend the consolidation proposal</h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 recommend the consolidation proposal screenshot"
+        />
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 1092,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 876.734375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1026.34375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Clear decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1210.09375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 125.90625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 81,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 81,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent.justify-center.font-\\[family-name\\:var\\(--font-sans\\)\\]:nth-child(3) &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f5f5, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].shrink-0 &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Recommendation recorded&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-2">
+      <h2>desktop-2 — request a revision to the proposal</h2>
+      <div class="capture">
+        <img
+          src="desktop-2.png"
+          alt="desktop-2 request a revision to the proposal screenshot"
+        /><a
+          class="region"
+          href="#design-1"
+          title="After “Revision requested” is recorded, “Recommend proposal” remains the strongest visible action while “Request revision” has no persistent selected treatment. The status pill communicates the outcome, but the action group can still read as though recommendation is the active or preferred state."
+          aria-label="After “Revision requested” is recorded, “Recommend proposal” remains the strongest visible action while “Request revision” has no persistent selected treatment. The status pill communicates the outcome, but the action group can still read as though recommendation is the active or preferred state."
+          style="
+            left: 60.833333333333336%;
+            top: 12.454212454212454%;
+            width: 31.944444444444443%;
+            height: 9.89010989010989%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 1092,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 876.734375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1026.34375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Clear decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1210.09375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 125.90625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 81,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 81,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-\\[var\\(--color-status-warning\\)\\].border-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-\\[var\\(--color-status-warning\\)\\].border-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent.justify-center.font-\\[family-name\\:var\\(--font-sans\\)\\]:nth-child(3) &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].shrink-0 &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Revision requested&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1092,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1250.640625,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1400.25,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 321,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 321,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\].py-\\[var\\(--space-1\\)\\].text-\\[length\\:var\\(--text-badge-xs\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].items-center &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 128,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 127,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 94,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 33,
+        &quot;sampled&quot;: 33
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 93,
+        &quot;sampled&quot;: 86
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 1,
+        &quot;sampled&quot;: 1
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 111,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 231,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 101,
+        &quot;matching-literal&quot;: 58,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 407
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 566,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 50,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 228
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 278,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 17,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 101
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 118,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 95,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 34
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 129,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1442,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>desktop-wide-1 — recommend the consolidation proposal</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 recommend the consolidation proposal screenshot"
+        />
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1092,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1116.734375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1266.34375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Clear decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1450.09375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 125.90625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 321,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 321,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent.justify-center.font-\\[family-name\\:var\\(--font-sans\\)\\]:nth-child(3) &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f5f5, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].shrink-0 &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Recommendation recorded&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-2">
+      <h2>desktop-wide-2 — request a revision to the proposal</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-2.png"
+          alt="desktop-wide-2 request a revision to the proposal screenshot"
+        />
+      </div>
+      <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1092,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1116.734375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1266.34375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Clear decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1450.09375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 125.90625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 321,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 321,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 516.234375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-\\[var\\(--color-status-warning\\)\\].border-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-\\[var\\(--color-status-warning\\)\\].border-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent.justify-center.font-\\[family-name\\:var\\(--font-sans\\)\\]:nth-child(3) &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].shrink-0 &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Revision requested&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        /><a
+          class="region"
+          href="#design-2"
+          title="The compact “Team change” and “No team change” tags use very small text; the supplied accessibility evidence also flags these status treatments as low contrast. Their meaning is recoverable from surrounding content, but quick scanning is weaker in the narrower desktop panel."
+          aria-label="The compact “Team change” and “No team change” tags use very small text; the supplied accessibility evidence also flags these status treatments as low contrast. Their meaning is recoverable from surrounding content, but quick scanning is weaker in the narrower desktop panel."
+          style="
+            left: 28.22265625%;
+            top: 75.85585585585585%;
+            width: 10.83984375%;
+            height: 8.198198198198199%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 1110,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 650.640625,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 800.25,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\].py-\\[var\\(--space-1\\)\\].text-\\[length\\:var\\(--text-badge-xs\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].items-center &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 128,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 127,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 94,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 33,
+        &quot;sampled&quot;: 33
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 93,
+        &quot;sampled&quot;: 86
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 1,
+        &quot;sampled&quot;: 1
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 111,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 231,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 101,
+        &quot;matching-literal&quot;: 58,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 407
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 566,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 50,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 228
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 278,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 17,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 101
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 118,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 95,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 34
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 129,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1442,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>desktop-window-1 — recommend the consolidation proposal</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 recommend the consolidation proposal screenshot"
+        />
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 1110,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 516.734375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 666.34375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Clear decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 850.09375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 125.90625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent.justify-center.font-\\[family-name\\:var\\(--font-sans\\)\\]:nth-child(3) &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f5f5, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].shrink-0 &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Recommendation recorded&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-2">
+      <h2>desktop-window-2 — request a revision to the proposal</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-2.png"
+          alt="desktop-window-2 request a revision to the proposal screenshot"
+        />
+      </div>
+      <a href="desktop-window-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;reorganization-review&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 1110,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Request revision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 516.734375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 141.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend proposal&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 666.34375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 175.75,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Clear decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 850.09375,
+          &quot;y&quot;: 203,
+          &quot;width&quot;: 125.90625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Casey MorganData PlatformTeam change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 831,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 66
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Riley ParkEngineering PlatformNo team change&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 898,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 66
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2-5\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-\\[var\\(--color-status-warning\\)\\].border-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-\\[var\\(--color-status-warning\\)\\].border-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.py-\\[var\\(--space-4\\)\\] &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent.justify-center.font-\\[family-name\\:var\\(--font-sans\\)\\]:nth-child(3) &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;casey\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.text-right.items-end.flex-col &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.57 (foreground color: #8192ff, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[data-record-list-id=\&quot;riley\&quot;] &gt; .flex-1 &gt; .leading-\\[var\\(--leading-caption\\)\\].mt-\\[var\\(--space-0-5\\)\\].block&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.gap-\\[var\\(--space-2\\)\\].shrink-0 &gt; .text-\\[var\\(--color-action-primary\\)\\].border-\\[var\\(--color-action-primary\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #8192ff, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.focus\\:outline-none &gt; article &gt; header &gt; .mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-body\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 2
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Revision requested&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>

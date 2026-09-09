@@ -1,0 +1,2576 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T13:15:21.865Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <section>
+      <h2>Vendor spend forecast review</h2>
+      <p>
+        Synthetic forecast-review case grounded in implemented Vendor
+        transaction and derived-fact substrate; the planning ontology and
+        forecast KPI contract are planned extensions.
+      </p>
+      <details>
+        <summary>Case evidence and review questions</summary>
+        <ul>
+          <li>
+            arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented
+          </li>
+          <li>
+            ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> —
+            implemented
+          </li>
+          <li>
+            arrusted:
+            <code>docs/plans/2026-07-16-vendor-planning-ontology.md</code> —
+            planned
+          </li>
+          <li>
+            arrusted:
+            <code
+              >docs/plans/2026-07-23-vendor-analytics-kpi-definitions.md</code
+            >
+            — planned
+          </li>
+        </ul>
+        <h3>Review questions</h3>
+        <ul>
+          <li>
+            Can finance compare actual spend, expected charges, and forecast
+            assumptions without conflating them?
+          </li>
+          <li>
+            Does the design clearly identify which vendor commitments or
+            renewals need action?
+          </li>
+        </ul>
+        <h3>Intended outcomes, not asserted results</h3>
+        <ul>
+          <li>
+            A reviewer can explain a forecast variance and identify the
+            assumption behind it.
+          </li>
+          <li>
+            A reviewer can prioritize a vendor follow-up or return the forecast
+            for revision.
+          </li>
+        </ul>
+      </details>
+    </section>
+    <h2>Arrusted adherence: 99/100 · partial</h2>
+    <p>
+      Evidence coverage: 5.04%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>55</td>
+          <td>0</td>
+          <td>1</td>
+          <td>100% (55/55)</td>
+          <td>56 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>99</td>
+          <td>0</td>
+          <td>3</td>
+          <td>100% (99/99)</td>
+          <td>102 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>35</td>
+          <td>1</td>
+          <td>3577</td>
+          <td>97.22% (35/36)</td>
+          <td>34 / 3579</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence.
+        Anonymous rules require a unique exact generated selector/property/value
+        and complete matched-rule declaration set; conditional or ambiguous
+        source rules remain unknown.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (1)</summary>
+      <article id="finding-158">
+        <strong>raw-literal · nonconforming</strong>
+        <p>
+          CSS declaration uses raw literal 1px; matching a token value is not
+          token provenance.
+        </p>
+        <small>static evidence · <a href="#source-158">src/app.css:6</a></small>
+        <details id="source-158">
+          <summary>Source location: src/app.css:6</summary>
+          <pre>
+5: .result-copy { margin: var(--space-1) 0 0; }
+6: .identity-row { display: flex; align-items: end; justify-content: space-between; gap: var(--space-6); padding: var(--space-4) 0; border-top: 1px solid var(--color-border-subtle); border-bottom: 1px solid var(--color-border-subtle); }
+7: .identity-title, .measure-value, .variance-value { margin: var(--space-1) 0 0; }
+8: .period-block { text-align: right; }</pre>
+        </details>
+      </article>
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (3581)</summary>
+      <article id="finding-2">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small>static evidence · <a href="#source-2">src/App.tsx:11</a></small>
+        <details id="source-2">
+          <summary>Source location: src/App.tsx:11</summary>
+          <pre>
+10:     &lt;PageHeader title=&quot;Vendor spend forecast review&quot; subtitle=&quot;Review the FY27-Q1 outlook before Northstar Cloud&#39;s renewal. Forecast figures are advisory and all actions are simulation only.&quot; actions={&lt;StatusPill label=&quot;Needs review&quot; detail=&quot;Renewal&quot; tone=&quot;warning&quot; /&gt;} /&gt;
+11:     {reviewed ? &lt;Card className=&quot;simulation-result&quot;&gt;&lt;div className=&quot;result-row&quot;&gt;&lt;div&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Review simulation recorded&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot; className=&quot;result-copy&quot;&gt;The prototype now shows this forecast as reviewed for the current session. No forecast, commitment, or provider record changed.&lt;/Typography&gt;&lt;/div&gt;&lt;Button size=&quot;sm&quot; intent=&quot;secondary&quot; onClick={() =&gt; setReviewed(false)}&gt;Reset simulation&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt; : null}
+12:     &lt;section className=&quot;identity-row&quot; aria-label=&quot;Vendor and review period&quot;&gt;&lt;div&gt;&lt;Typography variant=&quot;micro&quot; tone=&quot;muted&quot;&gt;Vendor&lt;/Typography&gt;&lt;Typography as=&quot;h2&quot; variant=&quot;section-title&quot; className=&quot;identity-title&quot;&gt;Northstar Cloud&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;V-21 · Owner: Infrastructure&lt;/Typography&gt;&lt;/div&gt;&lt;div className=&quot;period-block&quot;&gt;&lt;Typography variant=&quot;micro&quot; tone=&quot;muted&quot;&gt;Review period&lt;/Typography&gt;&lt;Typography variant=&quot;title&quot;&gt;FY27-Q1&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Renewal due Nov 15, 2026&lt;/Typography&gt;&lt;/div&gt;&lt;/section&gt;
+13:     &lt;div className=&quot;content-grid&quot;&gt;&lt;section className=&quot;evidence-stack&quot; aria-label=&quot;Forecast evidence&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-60">
+        <strong>prop · unassessed</strong>
+        <p>
+          Disclosure.defaultOpen is dynamic or spread-derived; its public
+          variant cannot be verified statically.
+        </p>
+        <small>static evidence · <a href="#source-60">src/App.tsx:21</a></small>
+        <details id="source-60">
+          <summary>Source location: src/App.tsx:21</summary>
+          <pre>
+20:       &lt;Card title=&quot;Forecast bridge&quot;&gt;&lt;div className=&quot;bridge-row&quot;&gt;&lt;div&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Expected charges&lt;/Typography&gt;&lt;Typography variant=&quot;title&quot;&gt;{money(96000)}&lt;/Typography&gt;&lt;/div&gt;&lt;Typography variant=&quot;title&quot; tone=&quot;muted&quot;&gt;−&lt;/Typography&gt;&lt;div&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Committed&lt;/Typography&gt;&lt;Typography variant=&quot;title&quot;&gt;{money(72000)}&lt;/Typography&gt;&lt;/div&gt;&lt;Typography variant=&quot;title&quot; tone=&quot;muted&quot;&gt;=&lt;/Typography&gt;&lt;div&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Uncommitted exposure&lt;/Typography&gt;&lt;Typography variant=&quot;title&quot;&gt;{money(24000)}&lt;/Typography&gt;&lt;/div&gt;&lt;/div&gt;&lt;Divider className=&quot;bridge-divider&quot; /&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;The {money(12000)} plan variance sits inside a larger {money(24000)} uncommitted portion of the expected forecast.&lt;/Typography&gt;&lt;/Card&gt;
+21:       &lt;Card&gt;&lt;Disclosure defaultOpen summary={&lt;Typography variant=&quot;body-strong&quot;&gt;Forecast assumption&lt;/Typography&gt;} summaryClassName=&quot;assumption-summary&quot;&gt;&lt;div className=&quot;assumption-body&quot;&gt;&lt;Typography variant=&quot;title&quot;&gt;Annual renewal at 8% uplift&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Advisory input supporting expected charges. Confirm the uplift and renewal scope before relying on the forecast.&lt;/Typography&gt;&lt;/div&gt;&lt;/Disclosure&gt;&lt;/Card&gt;
+22:     &lt;/section&gt;&lt;aside aria-label=&quot;Variance decision&quot;&gt;&lt;Card title=&quot;Variance to plan&quot; className=&quot;decision-card&quot;&gt;&lt;Typography as=&quot;div&quot; variant=&quot;page-title&quot; className=&quot;variance-value&quot;&gt;+{money(12000)}&lt;/Typography&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Expected charges are above plan&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;secondary&quot; className=&quot;decision-copy&quot;&gt;The variance is actionable because the renewal is still marked for review and {money(24000)} of expected charges are not represented by the commitment.&lt;/Typography&gt;&lt;div className=&quot;watch-box&quot;&gt;&lt;div className=&quot;watch-heading&quot;&gt;&lt;Typography variant=&quot;micro&quot; tone=&quot;muted&quot;&gt;Renewal watch item&lt;/Typography&gt;&lt;StatusPill label=&quot;Needs review&quot; tone=&quot;warning&quot; /&gt;&lt;/div&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Due Nov 15, 2026&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Validate the 8% uplift, confirm what the {money(72000)} commitment covers, and reconcile the remaining {money(24000)} before renewal.&lt;/Typography&gt;&lt;/div&gt;&lt;Divider className=&quot;action-divider&quot; /&gt;&lt;Button intent=&quot;primary-strong&quot; className=&quot;review-action&quot; disabled={reviewed} onClick={() =&gt; setReviewed(true)}&gt;{reviewed ? &quot;Review simulated&quot; : &quot;Mark review complete&quot;}&lt;/Button&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;muted&quot; className=&quot;simulation-note&quot;&gt;Simulation only. This does not change the forecast, commitment, watch item, or renewal.&lt;/Typography&gt;&lt;/Card&gt;&lt;/aside&gt;&lt;/div&gt;
+23:   &lt;/div&gt;&lt;/main&gt;;</pre>
+        </details>
+      </article>
+      <article id="finding-89">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small>static evidence · <a href="#source-89">src/App.tsx:22</a></small>
+        <details id="source-89">
+          <summary>Source location: src/App.tsx:22</summary>
+          <pre>
+21:       &lt;Card&gt;&lt;Disclosure defaultOpen summary={&lt;Typography variant=&quot;body-strong&quot;&gt;Forecast assumption&lt;/Typography&gt;} summaryClassName=&quot;assumption-summary&quot;&gt;&lt;div className=&quot;assumption-body&quot;&gt;&lt;Typography variant=&quot;title&quot;&gt;Annual renewal at 8% uplift&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Advisory input supporting expected charges. Confirm the uplift and renewal scope before relying on the forecast.&lt;/Typography&gt;&lt;/div&gt;&lt;/Disclosure&gt;&lt;/Card&gt;
+22:     &lt;/section&gt;&lt;aside aria-label=&quot;Variance decision&quot;&gt;&lt;Card title=&quot;Variance to plan&quot; className=&quot;decision-card&quot;&gt;&lt;Typography as=&quot;div&quot; variant=&quot;page-title&quot; className=&quot;variance-value&quot;&gt;+{money(12000)}&lt;/Typography&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Expected charges are above plan&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;secondary&quot; className=&quot;decision-copy&quot;&gt;The variance is actionable because the renewal is still marked for review and {money(24000)} of expected charges are not represented by the commitment.&lt;/Typography&gt;&lt;div className=&quot;watch-box&quot;&gt;&lt;div className=&quot;watch-heading&quot;&gt;&lt;Typography variant=&quot;micro&quot; tone=&quot;muted&quot;&gt;Renewal watch item&lt;/Typography&gt;&lt;StatusPill label=&quot;Needs review&quot; tone=&quot;warning&quot; /&gt;&lt;/div&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Due Nov 15, 2026&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Validate the 8% uplift, confirm what the {money(72000)} commitment covers, and reconcile the remaining {money(24000)} before renewal.&lt;/Typography&gt;&lt;/div&gt;&lt;Divider className=&quot;action-divider&quot; /&gt;&lt;Button intent=&quot;primary-strong&quot; className=&quot;review-action&quot; disabled={reviewed} onClick={() =&gt; setReviewed(true)}&gt;{reviewed ? &quot;Review simulated&quot; : &quot;Mark review complete&quot;}&lt;/Button&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;muted&quot; className=&quot;simulation-note&quot;&gt;Simulation only. This does not change the forecast, commitment, watch item, or renewal.&lt;/Typography&gt;&lt;/Card&gt;&lt;/aside&gt;&lt;/div&gt;
+23:   &lt;/div&gt;&lt;/main&gt;;
+24: }</pre>
+        </details>
+      </article>
+      <article id="finding-102">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence · <a href="#source-102">src/App.tsx:11</a></small
+        >
+        <details id="source-102">
+          <summary>Source location: src/App.tsx:11</summary>
+          <pre>
+10:     &lt;PageHeader title=&quot;Vendor spend forecast review&quot; subtitle=&quot;Review the FY27-Q1 outlook before Northstar Cloud&#39;s renewal. Forecast figures are advisory and all actions are simulation only.&quot; actions={&lt;StatusPill label=&quot;Needs review&quot; detail=&quot;Renewal&quot; tone=&quot;warning&quot; /&gt;} /&gt;
+11:     {reviewed ? &lt;Card className=&quot;simulation-result&quot;&gt;&lt;div className=&quot;result-row&quot;&gt;&lt;div&gt;&lt;Typography variant=&quot;body-strong&quot;&gt;Review simulation recorded&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot; className=&quot;result-copy&quot;&gt;The prototype now shows this forecast as reviewed for the current session. No forecast, commitment, or provider record changed.&lt;/Typography&gt;&lt;/div&gt;&lt;Button size=&quot;sm&quot; intent=&quot;secondary&quot; onClick={() =&gt; setReviewed(false)}&gt;Reset simulation&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt; : null}
+12:     &lt;section className=&quot;identity-row&quot; aria-label=&quot;Vendor and review period&quot;&gt;&lt;div&gt;&lt;Typography variant=&quot;micro&quot; tone=&quot;muted&quot;&gt;Vendor&lt;/Typography&gt;&lt;Typography as=&quot;h2&quot; variant=&quot;section-title&quot; className=&quot;identity-title&quot;&gt;Northstar Cloud&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;V-21 · Owner: Infrastructure&lt;/Typography&gt;&lt;/div&gt;&lt;div className=&quot;period-block&quot;&gt;&lt;Typography variant=&quot;micro&quot; tone=&quot;muted&quot;&gt;Review period&lt;/Typography&gt;&lt;Typography variant=&quot;title&quot;&gt;FY27-Q1&lt;/Typography&gt;&lt;Typography variant=&quot;caption&quot; tone=&quot;secondary&quot;&gt;Renewal due Nov 15, 2026&lt;/Typography&gt;&lt;/div&gt;&lt;/section&gt;
+13:     &lt;div className=&quot;content-grid&quot;&gt;&lt;section className=&quot;evidence-stack&quot; aria-label=&quot;Forecast evidence&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-166">
+        <strong>token-reference · unassessed</strong>
+        <p>
+          CSS declaration references --space-1, whose semantic token status
+          cannot be established.
+        </p>
+        <small
+          >static evidence · <a href="#source-166">src/app.css:14</a></small
+        >
+        <details id="source-166">
+          <summary>Source location: src/app.css:14</summary>
+          <pre>
+13: .bridge-divider { margin: var(--space-4) 0; }
+14: .assumption-summary { padding: var(--space-1) 0; }
+15: .assumption-body { display: grid; gap: var(--space-1); padding: var(--space-3) 0 0 var(--space-5); }
+16: .decision-card { position: sticky; top: var(--space-6); }</pre>
+        </details>
+      </article>
+      <article id="finding-192">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-192">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-192">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-193">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-193">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-193">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-194">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-194">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-194">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-195">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-195">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-195">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-196">
+        <strong>unknown · unassessed</strong>
+        <p>font-weight: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-196">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-196">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-197">
+        <strong>unknown · unassessed</strong>
+        <p>line-height: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-197">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-197">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-198">
+        <strong>unknown · unassessed</strong>
+        <p>letter-spacing: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-198">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-198">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-199">
+        <strong>semantic-token-reference · unassessed</strong>
+        <p>column-gap: semantic-token-reference</p>
+        <small
+          >browser evidence ·
+          <a href="#source-199"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-199">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-200">
+        <strong>semantic-token-reference · unassessed</strong>
+        <p>row-gap: semantic-token-reference</p>
+        <small
+          >browser evidence ·
+          <a href="#source-200"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-200">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-201">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-201">/vendor-spend-forecast:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-201">
+          <summary>Source location: /vendor-spend-forecast:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-202">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-width: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-202">/vendor-spend-forecast:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-202">
+          <summary>Source location: /vendor-spend-forecast:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-203">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-203">/vendor-spend-forecast:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-203">
+          <summary>Source location: /vendor-spend-forecast:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-204">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-204">/vendor-spend-forecast:1502</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-204">
+          <summary>Source location: /vendor-spend-forecast:1502</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-205">
+        <strong>semantic-token-reference · unassessed</strong>
+        <p>color: semantic-token-reference</p>
+        <small
+          >browser evidence ·
+          <a href="#source-205">/vendor-spend-forecast:1928</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-205">
+          <summary>Source location: /vendor-spend-forecast:1928</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-206">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-207">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-207">/vendor-spend-forecast:190</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-207">
+          <summary>Source location: /vendor-spend-forecast:190</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-208">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-209">
+        <strong>unknown · unassessed</strong>
+        <p>font-weight: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-210">
+        <strong>matching-literal · unassessed</strong>
+        <p>line-height: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-210">/vendor-spend-forecast:190</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-210">
+          <summary>Source location: /vendor-spend-forecast:190</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-211">
+        <strong>unknown · unassessed</strong>
+        <p>letter-spacing: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-212">
+        <strong>unknown · unassessed</strong>
+        <p>column-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-213">
+        <strong>unknown · unassessed</strong>
+        <p>row-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-214">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-215">
+        <strong>matching-literal · unassessed</strong>
+        <p>border-top-color: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-215">/vendor-spend-forecast:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-215">
+          <summary>Source location: /vendor-spend-forecast:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-216">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 80/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>4/4</td>
+          <td>
+            The page establishes an excellent review sequence: vendor and period
+            context lead into four clearly labeled measures, the forecast bridge
+            explains their relationship, and the visually prominent right panel
+            elevates the +$12,000 variance and renewal watch item. Warning
+            treatment and the primary completion action make the priority
+            immediately scannable.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>3/4</td>
+          <td>
+            Cards, dividers, and columns align consistently, with a sensible
+            capped content width at 1440px and 1920px. Density is appropriate
+            for a single-vendor review, though the persistent two-column
+            arrangement becomes compressed at 1024px and causes additional
+            wrapping in the watch item.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>3/4</td>
+          <td>
+            Large monetary values, concise descriptions, and consistent heading
+            weights provide strong numerical readability. Several uppercase
+            metadata labels and status texts are only 11–12px, and the supplied
+            accessibility evidence repeatedly flags marginal or insufficient
+            contrast for these secondary and warning texts, reducing effortless
+            reading.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>3/4</td>
+          <td>
+            The composition remains functional at all supplied desktop widths
+            from 1024px to 1920px, with no horizontal overflow and controls
+            remaining usable. At 1024px the 324px variance column forces the
+            watch-item label and status pill to wrap, while the completed state
+            increases document height from 918px to 1020px; this is usable but
+            not fully optimized for constrained desktop panels.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>3/4</td>
+          <td>
+            Actual prior-quarter spend, actual current QTD, expected charges,
+            committed spend, and the 8% forecast assumption are explicitly
+            labeled and not presented as equivalent facts. The design also
+            identifies the renewal date and concrete checks involving the
+            uplift, commitment scope, and $24,000 exposure. However, the
+            underlying plan amount is absent, so the +$12,000 variance cannot be
+            independently reconstructed, and “Mark review complete” acknowledges
+            the review without capturing whether the identified renewal issues
+            were resolved.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        Actuals, expected charges, commitments, and assumptions are placed in
+        separate, plainly labeled regions with useful explanatory subtitles such
+        as “Forecast total, not an actual.”
+      </li>
+      <li>
+        The forecast bridge makes the most important relationship explicit:
+        $96,000 expected charges minus $72,000 committed equals $24,000
+        uncommitted exposure.
+      </li>
+      <li>
+        The variance panel converts the numbers into a specific renewal task:
+        validate the 8% uplift, confirm what the commitment covers, and
+        reconcile the remaining $24,000.
+      </li>
+      <li>
+        Vendor identity, ownership, review period, renewal date, and review
+        status are visible without opening another view.
+      </li>
+      <li>
+        The simulated completion state is clearly disclosed and reversible, and
+        it explicitly states that no forecast, commitment, or provider record
+        changed.
+      </li>
+      <li>
+        The constrained 1024px view preserves all substantive information and
+        usable controls without horizontal overflow.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>high · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The panel emphasizes a +$12,000 variance to plan, but it never displays
+        the plan value used to calculate that variance. Finance can see expected
+        charges of $96,000 elsewhere, yet cannot independently verify the
+        variance calculation.
+      </p>
+      <p>
+        <strong>Improve:</strong> Add a compact calculation in this panel or the
+        forecast bridge, such as “Expected $96,000 − Plan $84,000 = +$12,000,”
+        while keeping the existing variance as the primary outcome.
+      </p>
+      <small>Screenshot region: x 910, y 254, width 399, height 214</small>
+    </article>
+    <article id="design-1">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The assumption is visually distinct, but “Annual renewal at 8% uplift”
+        lacks its base amount, covered term or scope, and resulting contribution
+        to the $96,000 forecast. This limits auditability of the expected-charge
+        figure.
+      </p>
+      <p>
+        <strong>Improve:</strong> Expand the disclosure with structured
+        assumption details such as source amount, uplift calculation, effective
+        period, included services, and owner or confirmation status.
+      </p>
+      <small>Screenshot region: x 130, y 726, width 756, height 121</small>
+    </article>
+    <article id="design-2">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        “Mark review complete” records acknowledgement even though the adjacent
+        watch item still says “Needs review.” The simulation disclaimer prevents
+        a false claim of backend change, but the completion wording does not
+        distinguish reviewed-with-open-issues from resolved.
+      </p>
+      <p>
+        <strong>Improve:</strong> Before completion, provide a supported review
+        disposition such as “Reviewed—follow-up required” versus “Reviewed—no
+        follow-up,” or rename the action to “Acknowledge review” and retain the
+        open renewal status.
+      </p>
+      <small>Screenshot region: x 927, y 647, width 366, height 101</small>
+    </article>
+    <article id="design-3">
+      <h4>low · <a href="#desktop-window-0">desktop-window-0</a></h4>
+      <p>
+        At the 1024px desktop window, the narrow right column makes “Renewal
+        watch item” and the warning pill wrap, increasing visual density and
+        separating the action panel from the wider evidence area.
+      </p>
+      <p>
+        <strong>Improve:</strong> At constrained desktop panel widths, place the
+        variance panel below the KPI and bridge content or allow it to span the
+        available width, while keeping the review action adjacent to the
+        variance summary.
+      </p>
+      <small>Screenshot region: x 668, y 274, width 324, height 547</small>
+    </article>
+    <article id="design-4">
+      <h4>medium · <a href="#desktop-window-0">desktop-window-0</a></h4>
+      <p>
+        The watch-item eyebrow and warning status use small text, and the
+        supplied audit reports insufficient contrast for both warning and
+        secondary metadata treatments. The content remains understandable, but
+        these important action cues are less readable than the surrounding body
+        copy.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use the supported medium Tag size for the
+        status and promote “Renewal watch item” to a regular heading treatment
+        rather than relying on micro uppercase text; preserve the existing
+        Arrusted palette.
+      </p>
+      <small>Screenshot region: x 685, y 515, width 290, height 164</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-2&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-wide-2&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;,
+    &quot;desktop-window-2&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The page establishes an excellent review sequence: vendor and period context lead into four clearly labeled measures, the forecast bridge explains their relationship, and the visually prominent right panel elevates the +$12,000 variance and renewal watch item. Warning treatment and the primary completion action make the priority immediately scannable.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Cards, dividers, and columns align consistently, with a sensible capped content width at 1440px and 1920px. Density is appropriate for a single-vendor review, though the persistent two-column arrangement becomes compressed at 1024px and causes additional wrapping in the watch item.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Large monetary values, concise descriptions, and consistent heading weights provide strong numerical readability. Several uppercase metadata labels and status texts are only 11–12px, and the supplied accessibility evidence repeatedly flags marginal or insufficient contrast for these secondary and warning texts, reducing effortless reading.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The composition remains functional at all supplied desktop widths from 1024px to 1920px, with no horizontal overflow and controls remaining usable. At 1024px the 324px variance column forces the watch-item label and status pill to wrap, while the completed state increases document height from 918px to 1020px; this is usable but not fully optimized for constrained desktop panels.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Actual prior-quarter spend, actual current QTD, expected charges, committed spend, and the 8% forecast assumption are explicitly labeled and not presented as equivalent facts. The design also identifies the renewal date and concrete checks involving the uplift, commitment scope, and $24,000 exposure. However, the underlying plan amount is absent, so the +$12,000 variance cannot be independently reconstructed, and “Mark review complete” acknowledges the review without capturing whether the identified renewal issues were resolved.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;Actuals, expected charges, commitments, and assumptions are placed in separate, plainly labeled regions with useful explanatory subtitles such as “Forecast total, not an actual.”&quot;,
+    &quot;The forecast bridge makes the most important relationship explicit: $96,000 expected charges minus $72,000 committed equals $24,000 uncommitted exposure.&quot;,
+    &quot;The variance panel converts the numbers into a specific renewal task: validate the 8% uplift, confirm what the commitment covers, and reconcile the remaining $24,000.&quot;,
+    &quot;Vendor identity, ownership, review period, renewal date, and review status are visible without opening another view.&quot;,
+    &quot;The simulated completion state is clearly disclosed and reversible, and it explicitly states that no forecast, commitment, or provider record changed.&quot;,
+    &quot;The constrained 1024px view preserves all substantive information and usable controls without horizontal overflow.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 910,
+        &quot;y&quot;: 254,
+        &quot;width&quot;: 399,
+        &quot;height&quot;: 214
+      },
+      &quot;severity&quot;: &quot;high&quot;,
+      &quot;explanation&quot;: &quot;The panel emphasizes a +$12,000 variance to plan, but it never displays the plan value used to calculate that variance. Finance can see expected charges of $96,000 elsewhere, yet cannot independently verify the variance calculation.&quot;,
+      &quot;improvement&quot;: &quot;Add a compact calculation in this panel or the forecast bridge, such as “Expected $96,000 − Plan $84,000 = +$12,000,” while keeping the existing variance as the primary outcome.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 130,
+        &quot;y&quot;: 726,
+        &quot;width&quot;: 756,
+        &quot;height&quot;: 121
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;The assumption is visually distinct, but “Annual renewal at 8% uplift” lacks its base amount, covered term or scope, and resulting contribution to the $96,000 forecast. This limits auditability of the expected-charge figure.&quot;,
+      &quot;improvement&quot;: &quot;Expand the disclosure with structured assumption details such as source amount, uplift calculation, effective period, included services, and owner or confirmation status.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 927,
+        &quot;y&quot;: 647,
+        &quot;width&quot;: 366,
+        &quot;height&quot;: 101
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;“Mark review complete” records acknowledgement even though the adjacent watch item still says “Needs review.” The simulation disclaimer prevents a false claim of backend change, but the completion wording does not distinguish reviewed-with-open-issues from resolved.&quot;,
+      &quot;improvement&quot;: &quot;Before completion, provide a supported review disposition such as “Reviewed—follow-up required” versus “Reviewed—no follow-up,” or rename the action to “Acknowledge review” and retain the open renewal status.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-window-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 668,
+        &quot;y&quot;: 274,
+        &quot;width&quot;: 324,
+        &quot;height&quot;: 547
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;At the 1024px desktop window, the narrow right column makes “Renewal watch item” and the warning pill wrap, increasing visual density and separating the action panel from the wider evidence area.&quot;,
+      &quot;improvement&quot;: &quot;At constrained desktop panel widths, place the variance panel below the KPI and bridge content or allow it to span the available width, while keeping the review action adjacent to the variance summary.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-window-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 685,
+        &quot;y&quot;: 515,
+        &quot;width&quot;: 290,
+        &quot;height&quot;: 164
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;The watch-item eyebrow and warning status use small text, and the supplied audit reports insufficient contrast for both warning and secondary metadata treatments. The content remains understandable, but these important action cues are less readable than the surrounding body copy.&quot;,
+      &quot;improvement&quot;: &quot;Use the supported medium Tag size for the status and promote “Renewal watch item” to a regular heading treatment rather than relying on micro uppercase text; preserve the existing Arrusted palette.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Only desktop screenshots at 1024px, 1440px, and 1920px were supplied; behavior in narrower desktop panels or split views was not observed.&quot;,
+    &quot;The tested interaction only demonstrates recording and resetting a simulated review. No assumption expansion, data editing, renewal workflow, or error state was tested.&quot;,
+    &quot;Screenshots cannot establish persistence, authorization, calculation correctness, or operational follow-up behavior.&quot;,
+    &quot;The forecast contains one synthetic vendor and one assumption, so scalability to multiple commitments, renewals, or conflicting assumptions is uncertain.&quot;,
+    &quot;Contrast observations rely on the supplied automated audit and are advisory; this evaluation does not recommend overriding the authoritative Arrusted palette or primary Button styling.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 80,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 32787,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 32784
+    },
+    &quot;outputTokens&quot;: 1988,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 1307,
+      &quot;reasoningTokens&quot;: 681
+    },
+    &quot;totalTokens&quot;: 34775
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/App.tsx&quot;,
+        &quot;localName&quot;: &quot;Button&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Button&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/App.tsx&quot;,
+        &quot;localName&quot;: &quot;Card&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Card&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/App.tsx&quot;,
+        &quot;localName&quot;: &quot;Disclosure&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Disclosure&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/App.tsx&quot;,
+        &quot;localName&quot;: &quot;Divider&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Divider&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/App.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/App.tsx&quot;,
+        &quot;localName&quot;: &quot;StatusPill&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;StatusPill&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/App.tsx&quot;,
+        &quot;localName&quot;: &quot;Typography&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Typography&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--color-status-success&quot;,
+      &quot;--color-status-warning-bg&quot;,
+      &quot;--color-status-warning-ink&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--radius-control&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--space-8&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--color-status-success&quot;,
+      &quot;--color-status-warning-bg&quot;,
+      &quot;--color-status-warning-ink&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--radius-control&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--space-8&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [
+      &quot;100vh&quot;,
+      &quot;1180px&quot;,
+      &quot;1px&quot;,
+      &quot;320px&quot;
+    ],
+    &quot;matchingLiterals&quot;: [
+      &quot;1px&quot;
+    ],
+    &quot;unknownLiterals&quot;: [
+      &quot;100vh&quot;,
+      &quot;1180px&quot;,
+      &quot;320px&quot;
+    ],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 194,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;implementationDiagnostics&quot;: [],
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;repo&quot;,
+    &quot;commit&quot;: &quot;ba2808f0e1664ef299868abac999859fbfc6a974&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: true
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="The panel emphasizes a +$12,000 variance to plan, but it never displays the plan value used to calculate that variance. Finance can see expected charges of $96,000 elsewhere, yet cannot independently verify the variance calculation."
+          aria-label="The panel emphasizes a +$12,000 variance to plan, but it never displays the plan value used to calculate that variance. Finance can see expected charges of $96,000 elsewhere, yet cannot independently verify the variance calculation."
+          style="
+            left: 63.19444444444444%;
+            top: 28.22222222222222%;
+            width: 27.708333333333332%;
+            height: 23.77777777777778%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-1"
+          title="The assumption is visually distinct, but “Annual renewal at 8% uplift” lacks its base amount, covered term or scope, and resulting contribution to the $96,000 forecast. This limits auditability of the expected-charge figure."
+          aria-label="The assumption is visually distinct, but “Annual renewal at 8% uplift” lacks its base amount, covered term or scope, and resulting contribution to the $96,000 forecast. This limits auditability of the expected-charge figure."
+          style="
+            left: 9.027777777777779%;
+            top: 80.66666666666667%;
+            width: 52.5%;
+            height: 13.444444444444445%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-2"
+          title="“Mark review complete” records acknowledgement even though the adjacent watch item still says “Needs review.” The simulation disclaimer prevents a false claim of backend change, but the completion wording does not distinguish reviewed-with-open-issues from resolved."
+          aria-label="“Mark review complete” records acknowledgement even though the adjacent watch item still says “Needs review.” The simulation disclaimer prevents a false claim of backend change, but the completion wording does not distinguish reviewed-with-open-issues from resolved."
+          style="
+            left: 64.375%;
+            top: 71.88888888888889%;
+            width: 25.416666666666668%;
+            height: 11.222222222222221%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Mark review complete&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 926.84375,
+          &quot;y&quot;: 663.5,
+          &quot;width&quot;: 366.15625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 93,
+  &quot;totalDomElements&quot;: 94,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 93,
+    &quot;sampled&quot;: 93,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 37,
+        &quot;sampled&quot;: 37
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 56,
+        &quot;sampled&quot;: 56
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 96,
+        &quot;matching-literal&quot;: 2,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 86
+      },
+      &quot;assessed&quot;: 1,
+      &quot;total&quot;: 184,
+      &quot;coveragePercent&quot;: 1,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 134,
+        &quot;matching-literal&quot;: 50,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 281
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 465,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 32,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 222
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 254,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 12,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 81
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 93,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 80,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 24
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 104,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 93
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 93,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1193,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — record a simulated review</h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 record a simulated review screenshot"
+        />
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 981,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Reset simulation&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1166.28125,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 126.71875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review simulated&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 926.84375,
+          &quot;y&quot;: 765.5,
+          &quot;width&quot;: 366.15625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\].border-\\[var\\(--color-status-warning\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\].border-\\[var\\(--color-status-warning\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Review simulation recorded&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-2">
+      <h2>desktop-2 — reset a simulated review</h2>
+      <div class="capture">
+        <img
+          src="desktop-2.png"
+          alt="desktop-2 reset a simulated review screenshot"
+        />
+      </div>
+      <a href="desktop-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Mark review complete&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 926.84375,
+          &quot;y&quot;: 663.5,
+          &quot;width&quot;: 366.15625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Mark review complete&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Mark review complete&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1166.84375,
+          &quot;y&quot;: 663.5,
+          &quot;width&quot;: 366.15625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 93,
+  &quot;totalDomElements&quot;: 94,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 93,
+    &quot;sampled&quot;: 93,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 37,
+        &quot;sampled&quot;: 37
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 56,
+        &quot;sampled&quot;: 56
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 96,
+        &quot;matching-literal&quot;: 2,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 86
+      },
+      &quot;assessed&quot;: 1,
+      &quot;total&quot;: 184,
+      &quot;coveragePercent&quot;: 1,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 134,
+        &quot;matching-literal&quot;: 50,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 281
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 465,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 32,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 222
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 254,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 12,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 81
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 93,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 80,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 24
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 104,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 93
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 93,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1193,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>desktop-wide-1 — record a simulated review</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 record a simulated review screenshot"
+        />
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Reset simulation&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1406.28125,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 126.71875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review simulated&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1166.84375,
+          &quot;y&quot;: 765.5,
+          &quot;width&quot;: 366.15625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\].border-\\[var\\(--color-status-warning\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\].border-\\[var\\(--color-status-warning\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Review simulation recorded&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-2">
+      <h2>desktop-wide-2 — reset a simulated review</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-2.png"
+          alt="desktop-wide-2 reset a simulated review screenshot"
+        />
+      </div>
+      <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Mark review complete&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1166.84375,
+          &quot;y&quot;: 663.5,
+          &quot;width&quot;: 366.15625,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Mark review complete&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        /><a
+          class="region"
+          href="#design-3"
+          title="At the 1024px desktop window, the narrow right column makes “Renewal watch item” and the warning pill wrap, increasing visual density and separating the action panel from the wider evidence area."
+          aria-label="At the 1024px desktop window, the narrow right column makes “Renewal watch item” and the warning pill wrap, increasing visual density and separating the action panel from the wider evidence area."
+          style="
+            left: 65.234375%;
+            top: 29.847494553376908%;
+            width: 31.640625%;
+            height: 59.58605664488017%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-4"
+          title="The watch-item eyebrow and warning status use small text, and the supplied audit reports insufficient contrast for both warning and secondary metadata treatments. The content remains understandable, but these important action cues are less readable than the surrounding body copy."
+          aria-label="The watch-item eyebrow and warning status use small text, and the supplied audit reports insufficient contrast for both warning and secondary metadata treatments. The content remains understandable, but these important action cues are less readable than the surrounding body copy."
+          style="
+            left: 66.89453125%;
+            top: 56.10021786492375%;
+            width: 28.3203125%;
+            height: 17.864923747276688%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 918,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Mark review complete&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 685,
+          &quot;y&quot;: 715.5,
+          &quot;width&quot;: 290,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 93,
+  &quot;totalDomElements&quot;: 94,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 93,
+    &quot;sampled&quot;: 93,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 35,
+        &quot;sampled&quot;: 35
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 58,
+        &quot;sampled&quot;: 58
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 96,
+        &quot;matching-literal&quot;: 2,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 86
+      },
+      &quot;assessed&quot;: 1,
+      &quot;total&quot;: 184,
+      &quot;coveragePercent&quot;: 1,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 134,
+        &quot;matching-literal&quot;: 50,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 281
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 465,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 32,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 222
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 254,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 12,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 81
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 93,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 80,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 24
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 104,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 93
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 93,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1193,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>desktop-window-1 — record a simulated review</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 record a simulated review screenshot"
+        />
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 1020,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Reset simulation&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 848.28125,
+          &quot;y&quot;: 171,
+          &quot;width&quot;: 126.71875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review simulated&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 685,
+          &quot;y&quot;: 817.5,
+          &quot;width&quot;: 290,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\].border-\\[var\\(--color-status-warning\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\].border-\\[var\\(--color-status-warning\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Review simulation recorded&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-2">
+      <h2>desktop-window-2 — reset a simulated review</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-2.png"
+          alt="desktop-window-2 reset a simulated review screenshot"
+        />
+      </div>
+      <a href="desktop-window-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;vendor-spend-forecast&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 918,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Mark review complete&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 685,
+          &quot;y&quot;: 715.5,
+          &quot;width&quot;: 290,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.identity-row &gt; div:nth-child(1) &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.period-block &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(1) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(2) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(3) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.rounded-\\[var\\(--radius-panel\\)\\].bg-\\[var\\(--color-bg-surface\\)\\]:nth-child(4) &gt; .p-\\[var\\(--space-4\\)\\] &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .text-\\[length\\:var\\(--text-micro\\)\\].leading-\\[var\\(--leading-micro\\)\\].uppercase&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.98 (foreground color: #747778, background color: #ffeede, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.watch-heading &gt; .bg-transparent.px-\\[var\\(--space-2-5\\)\\].py-\\[var\\(--space-0-5\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.34 (foreground color: #eb8526, background color: #ffeede, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.simulation-note&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 1
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Mark review complete&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>

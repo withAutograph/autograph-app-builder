@@ -1,5 +1,28 @@
 import { expect, test } from "playwright/test";
-import { measurePage, measureStyles } from "./browser";
+import { capturePreview, measurePage, measureStyles } from "./browser";
+import { createServer } from "node:http";
+
+test("an unavailable preview is not captured or scored as an empty design", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No listener");
+    await expect(
+      capturePreview({
+        url: `http://127.0.0.1:${address.port}/missing`,
+        output: test.info().outputDir,
+        tokens: {},
+        scenarios: [],
+      }),
+    ).rejects.toThrow("Preview returned HTTP 404");
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
 import {
   collectClassTokenEvidence,
   collectIntrinsicClassSignatures,

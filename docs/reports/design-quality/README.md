@@ -2,7 +2,9 @@
 
 Shared, advisory observations of generated previews. No pass threshold or runtime gate.
 
-**Latest report:** [stock-exceptions-explained-addition](2026-09-09/stock-exceptions-explained-addition-123910739Z/README.md)
+**Six-case evaluation:** [Arrusted and AG2 results, screenshots and limitations](2026-09-09/arrusted-ag2-batch.md).
+
+**Latest report:** [spend-import-review](2026-09-09/spend-import-review-132244628Z/README.md)
 
 ## Convention
 
@@ -20,6 +22,12 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 | Evaluated (UTC)          | App                                                                                                                    | Subjective score / 100 |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 2026-09-09T13:22:44.628Z | [spend-import-review](2026-09-09/spend-import-review-132244628Z/README.md)                                             | 75                     |
+| 2026-09-09T13:19:50.277Z | [revenue-analysis](2026-09-09/revenue-analysis-131950277Z/README.md)                                                   | 80                     |
+| 2026-09-09T13:15:21.865Z | [vendor-spend-forecast](2026-09-09/vendor-spend-forecast-131521865Z/README.md)                                         | 80                     |
+| 2026-09-09T13:14:30.037Z | [reorganization-scenario](2026-09-09/reorganization-scenario-131430037Z/README.md)                                     | 90                     |
+| 2026-09-09T13:13:05.302Z | [compensation-planning](2026-09-09/compensation-planning-131305302Z/README.md)                                         | 75                     |
+| 2026-09-09T13:12:50.013Z | [position-request](2026-09-09/position-request-131250013Z/README.md)                                                   | 85                     |
 | 2026-09-09T12:39:10.739Z | [stock-exceptions-explained-addition](2026-09-09/stock-exceptions-explained-addition-123910739Z/README.md)             | 95                     |
 | 2026-09-09T12:22:01.012Z | [stock-exceptions-ranked-selection](2026-09-09/stock-exceptions-ranked-selection-122201012Z/README.md)                 | 90                     |
 | 2026-09-09T12:10:38.077Z | [stock-exceptions-readable-description](2026-09-09/stock-exceptions-readable-description-121038077Z/README.md)         | 90                     |

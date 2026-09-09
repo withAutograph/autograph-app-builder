@@ -1,1 +1,31 @@
-{"id":"revenue-analysis","title":"Revenue movement analysis","status":"advisory","notes":"Synthetic analysis case grounded in AG2's implemented revenue template and derived-fact substrate; the roadmap's Stripe Snapshot product packaging is a planned extension.","evidence":[{"repo":"ag2","path":"frontend/src/app-templates/templates/revenue/manifest.ts","status":"implemented"},{"repo":"ag2","path":"backend/src/services/revenue/derivedFacts.ts","status":"implemented"},{"repo":"ag2","path":"docs/plans/product/mini-app-roadmap.md","status":"planned"}],"reviewQuestions":["Can an executive distinguish the current revenue figure from the movements that explain it?","Are anomalies, period, and source freshness clear enough to support a follow-up decision?"],"outcomes":["A user can explain the period-over-period movement without reconstructing it from raw rows.","A user can identify which anomalies deserve investigation and export a concise summary."]}
+{
+  "id": "revenue-analysis",
+  "title": "Revenue movement analysis",
+  "status": "advisory",
+  "notes": "Synthetic analysis case grounded in AG2's implemented revenue template and derived-fact substrate; the roadmap's Stripe Snapshot product packaging is a planned extension.",
+  "evidence": [
+    {
+      "repo": "ag2",
+      "path": "frontend/src/app-templates/templates/revenue/manifest.ts",
+      "status": "implemented"
+    },
+    {
+      "repo": "ag2",
+      "path": "backend/src/services/revenue/derivedFacts.ts",
+      "status": "implemented"
+    },
+    {
+      "repo": "ag2",
+      "path": "docs/plans/product/mini-app-roadmap.md",
+      "status": "planned"
+    }
+  ],
+  "reviewQuestions": [
+    "Can an executive distinguish the current revenue figure from the movements that explain it?",
+    "Are anomalies, period, and source freshness clear enough to support a follow-up decision?"
+  ],
+  "outcomes": [
+    "A user can explain the period-over-period movement without reconstructing it from raw rows.",
+    "A user can identify which anomalies deserve investigation and export a concise summary."
+  ]
+}

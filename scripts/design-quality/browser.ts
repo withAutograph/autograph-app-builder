@@ -1088,7 +1088,9 @@ export async function capturePreview(input: {
       await context.addInitScript("globalThis.__name = (value) => value;");
       const page = await context.newPage();
       // Never attach project OIDC, cookies, or provider headers to preview requests.
-      await page.goto(input.url, { waitUntil: "load" });
+      const response = await page.goto(input.url, { waitUntil: "load" });
+      if (response && !response.ok())
+        throw new Error(`Preview returned HTTP ${response.status()}`);
       await page.evaluate(() => document.fonts.ready);
       for (let index = 0; index <= input.scenarios.length; index++) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
@@ -1096,7 +1098,9 @@ export async function capturePreview(input: {
           status: "not-run",
         };
         if (scenario) {
-          await page.reload({ waitUntil: "load" });
+          const refreshed = await page.reload({ waitUntil: "load" });
+          if (refreshed && !refreshed.ok())
+            throw new Error(`Preview returned HTTP ${refreshed.status()}`);
           try {
             for (const step of scenario.steps) {
               const locator = step.selector
