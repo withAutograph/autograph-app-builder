@@ -18,16 +18,16 @@ changes still present. This attempt changed no application code or deployment.
    surface was used to bypass the unavailable Computer connection or the
    previously recorded Preview URL-policy restriction.
 
-| Case | Status | Evidence |
-| --- | --- | --- |
-| Computer availability | BLOCKED | Discovery and session reset both returned `Transport closed` |
-| N1 web preparation | BLOCKED | No UI access; no login or provider connection attempted |
-| N2 Codex/Cursor install and OAuth | BLOCKED | Current versions, profiles, and connections could not be inspected |
-| N3 launch and redemption | NOT RUN | Requires N1/N2 |
-| N4 authenticated provider readbacks | NOT RUN | Requires native connection and session |
-| N5 refresh/restart/recovery | NOT RUN | Requires native connection and session |
-| N6 duplicate and cross-client attachment | NOT RUN | Requires both native clients |
-| Failure/fallback UI cases | NOT RUN | Requires accessible approved fixtures and profiles |
+| Case                                     | Status  | Evidence                                                           |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------ |
+| Computer availability                    | BLOCKED | Discovery and session reset both returned `Transport closed`       |
+| N1 web preparation                       | BLOCKED | No UI access; no login or provider connection attempted            |
+| N2 Codex/Cursor install and OAuth        | BLOCKED | Current versions, profiles, and connections could not be inspected |
+| N3 launch and redemption                 | NOT RUN | Requires N1/N2                                                     |
+| N4 authenticated provider readbacks      | NOT RUN | Requires native connection and session                             |
+| N5 refresh/restart/recovery              | NOT RUN | Requires native connection and session                             |
+| N6 duplicate and cross-client attachment | NOT RUN | Requires both native clients                                       |
+| Failure/fallback UI cases                | NOT RUN | Requires accessible approved fixtures and profiles                 |
 
 The previous local receipt reports 11 browser E2E tests and 59 focused
 protocol/unit tests passing. These were not rerun in this attempt and are not

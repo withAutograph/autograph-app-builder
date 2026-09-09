@@ -16,14 +16,14 @@ No Codex UI state or version was returned. No alternate surface was used to
 circumvent the restriction. The previously recorded Preview URL-policy denial
 was not retried through another surface, and Preview access was not reverified.
 
-| Case | Status | Observation |
-| --- | --- | --- |
-| Computer transport | PASS | Discovery returned current inventory |
-| N1 web preparation | BLOCKED | Prior Preview access restriction unresolved; no approved fresh test profile identified |
-| N2 Codex installation/OAuth | BLOCKED | Explicit Computer safety-policy denial |
-| N2 Cursor installation/OAuth | BLOCKED | Cursor not listed; installation/location and disposable profile require operator direction |
-| N3–N6 native continuation/readbacks/recovery/attachment | NOT RUN | Native prerequisites unavailable |
-| Failure/fallback cases | NOT RUN | No accessible approved native test session |
+| Case                                                    | Status  | Observation                                                                                |
+| ------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| Computer transport                                      | PASS    | Discovery returned current inventory                                                       |
+| N1 web preparation                                      | BLOCKED | Prior Preview access restriction unresolved; no approved fresh test profile identified     |
+| N2 Codex installation/OAuth                             | BLOCKED | Explicit Computer safety-policy denial                                                     |
+| N2 Cursor installation/OAuth                            | BLOCKED | Cursor not listed; installation/location and disposable profile require operator direction |
+| N3–N6 native continuation/readbacks/recovery/attachment | NOT RUN | Native prerequisites unavailable                                                           |
+| Failure/fallback cases                                  | NOT RUN | No accessible approved native test session                                                 |
 
 No authentication, consent, installation, provider mutation, build, publication,
 or deployment was performed. No credentials or screenshots were collected.
