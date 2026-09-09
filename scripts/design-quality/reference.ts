@@ -621,7 +621,9 @@ export function checkJsxAttributes({
             (item) => ![2322, 2353].includes(item.code),
           );
           for (const item of implementationOnlyDiagnostics) {
-            const position = source.getLineAndCharacterOfPosition(item.start ?? 0);
+            const position = source.getLineAndCharacterOfPosition(
+              item.start ?? 0,
+            );
             implementationDiagnostics.push({
               path: key.path,
               line: position.line + 1,
@@ -630,8 +632,8 @@ export function checkJsxAttributes({
               message: ts.flattenDiagnosticMessageText(item.messageText, " "),
             });
           }
-          const safetyDiagnostics = implementationOnlyDiagnostics.filter((item) =>
-            [2531, 2532, 18047, 18048].includes(item.code),
+          const safetyDiagnostics = implementationOnlyDiagnostics.filter(
+            (item) => [2531, 2532, 18047, 18048].includes(item.code),
           );
           const propDiagnostics = attributeDiagnostics.filter((item) =>
             [2322, 2353].includes(item.code),
@@ -694,7 +696,10 @@ export function checkJsxAttributes({
                       ? `TypeScript prop error: ${propDiagnostics
                           .slice(0, 3)
                           .map((item) =>
-                            ts.flattenDiagnosticMessageText(item.messageText, " "),
+                            ts.flattenDiagnosticMessageText(
+                              item.messageText,
+                              " ",
+                            ),
                           )
                           .join("; ")}`
                       : "The static JSX expression is not assignable to the selected Arrusted prop type.",

@@ -45,14 +45,9 @@ describe("CSS rule evidence", () => {
       },
     ]);
     expect(
-      generatedCssRule(
-        generated,
-        [],
-        ".screen",
-        "color",
-        "#292929",
-        [{ name: "color", value: "#292929" }],
-      ),
+      generatedCssRule(generated, [], ".screen", "color", "#292929", [
+        { name: "color", value: "#292929" },
+      ]),
     ).toBeUndefined();
     expect(
       generatedCssRule(
@@ -72,7 +67,8 @@ describe("CSS rule evidence", () => {
         collectCssRuleEvidence([
           {
             path: "src/conditional.css",
-            content: "@media (min-width: 800px) { .screen { color: var(--color-text-primary); } }",
+            content:
+              "@media (min-width: 800px) { .screen { color: var(--color-text-primary); } }",
           },
         ]),
         [],
@@ -89,14 +85,9 @@ describe("CSS rule evidence", () => {
       },
     ]);
     expect(
-      generatedCssRule(
-        strings,
-        [],
-        ".copy::before",
-        "content",
-        '"a  b"',
-        [{ name: "content", value: '"a b"' }],
-      ),
+      generatedCssRule(strings, [], ".copy::before", "content", '"a  b"', [
+        { name: "content", value: '"a b"' },
+      ]),
     ).toBeUndefined();
   });
 });

@@ -99,7 +99,10 @@ describe("readReference", () => {
     expect(result.attributes[0]).toMatchObject({ verdict: "unassessed" });
     expect(result.implementationDiagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: expect.any(Number), message: expect.stringMatching(/possibly .*undefined/i) }),
+        expect.objectContaining({
+          code: expect.any(Number),
+          message: expect.stringMatching(/possibly .*undefined/i),
+        }),
       ]),
     );
   });

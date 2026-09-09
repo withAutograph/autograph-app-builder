@@ -68,17 +68,18 @@ export function renderReport(report: {
       return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${visible.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}${visible.length < entries.length ? '<p>Showing 30 representative unknowns. <a href="report.json">Download every observation and source location</a>.</p>' : ""}</details>`;
     })
     .join("");
-  const implementationDiagnostics = (
-    report.source as {
-      implementationDiagnostics?: Array<{
-        path: string;
-        line: number;
-        column: number;
-        code: number;
-        message: string;
-      }>;
-    }
-  )?.implementationDiagnostics ?? [];
+  const implementationDiagnostics =
+    (
+      report.source as {
+        implementationDiagnostics?: Array<{
+          path: string;
+          line: number;
+          column: number;
+          code: number;
+          message: string;
+        }>;
+      }
+    )?.implementationDiagnostics ?? [];
   const implementationFindings = implementationDiagnostics.length
     ? `<details open><summary>Generated-code implementation diagnostics (${implementationDiagnostics.length})</summary>${implementationDiagnostics
         .map((diagnostic, index) => {
@@ -112,7 +113,8 @@ export function renderReport(report: {
           .join(
             "",
           )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
-      : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") + implementationFindings;
+      : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") +
+    implementationFindings;
   const annotated = (c: {
     name: string;
     state: string;

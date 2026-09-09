@@ -614,23 +614,24 @@ export async function measureStyles(
         // through spreads), so a signature is reviewer evidence, never scored
         // declaration provenance. A direct stylesheet source is required.
         const generatedByPath = generatedSource(path, generatedSourcePaths);
-        const generatedRule = !rule?.media?.length && !rule?.layer
-          ? generatedCssRule(
-          generatedCssRules,
-          sharedCssRules,
-          selector,
-          property,
-          uniqueDeclarationEntries.length === 1
-            ? uniqueDeclarationEntries[0]?.p.value
-            : undefined,
-          (rule?.style.cssProperties ?? []).filter(
-            (entry) =>
-              !entry.disabled &&
-              entry.parsedOk !== false &&
-              typeof entry.text === "string",
-          ),
-            )
-          : undefined;
+        const generatedRule =
+          !rule?.media?.length && !rule?.layer
+            ? generatedCssRule(
+                generatedCssRules,
+                sharedCssRules,
+                selector,
+                property,
+                uniqueDeclarationEntries.length === 1
+                  ? uniqueDeclarationEntries[0]?.p.value
+                  : undefined,
+                (rule?.style.cssProperties ?? []).filter(
+                  (entry) =>
+                    !entry.disabled &&
+                    entry.parsedOk !== false &&
+                    typeof entry.text === "string",
+                ),
+              )
+            : undefined;
         const generated = generatedByPath || Boolean(generatedRule);
         const inheritedDeclaration =
           !inline.length && !own.length && uniqueDeclarationEntries.length > 0;
@@ -682,9 +683,9 @@ export async function measureStyles(
           ? generatedRule.source
           : path
             ? {
-              path,
-              line: (rule?.style?.range?.startLine ?? 0) + 1,
-              column: (rule?.style?.range?.startColumn ?? 0) + 1,
+                path,
+                line: (rule?.style?.range?.startLine ?? 0) + 1,
+                column: (rule?.style?.range?.startColumn ?? 0) + 1,
               }
             : undefined;
         const originCandidate =

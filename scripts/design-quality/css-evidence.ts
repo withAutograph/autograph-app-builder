@@ -39,11 +39,7 @@ function canonicalSelector(value: string) {
     }
     if (pendingSpace) {
       const previous = output.at(-1);
-      if (
-        previous &&
-        !/[>+~([,:=]/.test(previous) &&
-        !/[>+~),:=]/.test(char)
-      )
+      if (previous && !/[>+~([,:=]/.test(previous) && !/[>+~),:=]/.test(char))
         output += " ";
     }
     pendingSpace = false;
@@ -62,20 +58,26 @@ function ruleSignature(
       (property, index) =>
         properties.indexOf(property) !== index ||
         properties.some(
-          (other) => other !== property && (other.startsWith(`${property}-`) || property.startsWith(`${other}-`)),
+          (other) =>
+            other !== property &&
+            (other.startsWith(`${property}-`) ||
+              property.startsWith(`${other}-`)),
         ),
     )
   )
     return undefined;
   return `${canonicalSelector(selector)}\u0000${declarations
-    .map((declaration) =>
-      `${declaration.prop}\u0000${declaration.value.trim()}\u0000${Boolean(declaration.important)}`,
+    .map(
+      (declaration) =>
+        `${declaration.prop}\u0000${declaration.value.trim()}\u0000${Boolean(declaration.important)}`,
     )
     .sort()
     .join("\u0001")}`;
 }
 
-export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
+export function collectCssRuleEvidence(
+  files: CssSourceFile[],
+): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
   for (const file of files.filter((file) => /\.css$/i.test(file.path))) {
     const css = postcss.parse(file.content, { from: file.path });
@@ -83,9 +85,10 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
       // Conditional rule context is not represented reliably by every CDP
       // backend, so it deliberately stays unassessed.
       if (rule.parent?.type !== "root") return;
-      const declarations = rule.nodes?.filter(
-        (node): node is postcss.Declaration => node.type === "decl",
-      ) ?? [];
+      const declarations =
+        rule.nodes?.filter(
+          (node): node is postcss.Declaration => node.type === "decl",
+        ) ?? [];
       const signature = ruleSignature(rule.selector, declarations);
       if (!signature) return;
       for (const declaration of declarations) {
@@ -131,7 +134,9 @@ export function generatedCssRule(
   const matchingShared = shared.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
   );
-  return loaded.length === 1 && matchingGenerated.length === 1 && !matchingShared.length
+  return loaded.length === 1 &&
+    matchingGenerated.length === 1 &&
+    !matchingShared.length
     ? loaded[0]
     : undefined;
 }

@@ -195,7 +195,9 @@ test("attributes an anonymous live stylesheet only through an exact supplied CSS
   await page.setContent(
     `<style>:root { --color-text-primary: rgb(20, 20, 20) }${css}</style><main class="screen">Stock</main>`,
   );
-  const rules = collectCssRuleEvidence([{ path: "src/screen.css", content: css }]);
+  const rules = collectCssRuleEvidence([
+    { path: "src/screen.css", content: css },
+  ]);
   const styles = await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
