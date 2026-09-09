@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { Observation } from "./evidence";
 import {
+  classTokenAttribution,
   generatedSignatureSelector,
   signatureAttribution,
   uniqueIntrinsicSignature,
+  type ClassTokenEvidence,
   type IntrinsicClassSignature,
 } from "./class-evidence";
 import { generatedCssRule, type CssRuleEvidence } from "./css-evidence";
@@ -447,6 +449,8 @@ export async function measureStyles(
   sharedCssRules: CssRuleEvidence[] = [],
   generatedCssSourceFiles: Array<{ path: string; content: string }> = [],
   sharedCssSourceFiles: CssSourceFile[] = [],
+  generatedClassTokens: ClassTokenEvidence[] = [],
+  sharedClassTokens?: ClassTokenEvidence[],
 ) {
   await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
@@ -747,6 +751,11 @@ export async function measureStyles(
         const signatureGenerated =
           signatureOrigin.provenance === "generated" &&
           generatedSignatureSelector(generatedSignature, selector);
+        const tokenOrigin = classTokenAttribution(
+          generatedClassTokens,
+          sharedClassTokens,
+          selector,
+        );
         // A shared component can assemble the same classes at runtime (including
         // through spreads), so a signature is reviewer evidence, never scored
         // declaration provenance. A direct stylesheet source is required.
@@ -865,7 +874,14 @@ export async function measureStyles(
                   "Exact rendered intrinsic tag/class signature and simple matched class selector match generated source; shared runtime assembly remains possible.",
                 source: signatureOrigin.source,
               }
-            : undefined;
+            : tokenOrigin.provenance !== "unknown" && tokenOrigin.source
+              ? {
+                  provenance: tokenOrigin.provenance,
+                  reason:
+                    "Exact escaped Tailwind utility token occurs once in static source; it is reviewer evidence only, not declaration provenance.",
+                  source: tokenOrigin.source,
+                }
+              : undefined;
         const source = cssSource;
         observations.push({
           node: `node-${nodeId}`,
@@ -897,7 +913,7 @@ export async function measureStyles(
           provenance,
           evidence: "browser",
           summary: originCandidate
-            ? `${property}: ${classification}; generated origin candidate requires review.`
+            ? `${property}: ${classification}; ${originCandidate.provenance} origin candidate requires review.`
             : `${property}: ${classification}`,
           source,
           selector,
@@ -978,6 +994,11 @@ export async function measureStyles(
         "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.",
         "A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.",
         "Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.",
+        ...(generatedCssSourceFiles.length
+          ? []
+          : [
+              "No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.",
+            ]),
       ],
     };
   } finally {
@@ -993,6 +1014,8 @@ export async function capturePreview(input: {
   generatedSourcePaths?: string[];
   generatedClassSignatures?: IntrinsicClassSignature[];
   sharedClassSignatures?: IntrinsicClassSignature[];
+  generatedClassTokens?: ClassTokenEvidence[];
+  sharedClassTokens?: ClassTokenEvidence[];
   generatedCssRules?: CssRuleEvidence[];
   sharedCssRules?: CssRuleEvidence[];
   generatedCssSourceFiles?: Array<{ path: string; content: string }>;
@@ -1064,6 +1087,8 @@ export async function capturePreview(input: {
                 input.sharedCssRules,
                 input.generatedCssSourceFiles,
                 input.sharedCssSourceFiles,
+                input.generatedClassTokens,
+                input.sharedClassTokens,
               )
             : undefined;
         if (styles)

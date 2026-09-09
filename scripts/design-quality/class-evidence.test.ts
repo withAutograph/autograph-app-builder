@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   collectIntrinsicClassSignatures,
+  classTokenAttribution,
+  collectClassTokenEvidence,
+  escapedTailwindClassToken,
   generatedSignatureSelector,
   signatureAttribution,
   uniqueIntrinsicSignature,
@@ -66,5 +69,41 @@ describe("intrinsic class evidence", () => {
         "tokenized",
       ]).provenance,
     ).toBe("unknown");
+  });
+
+  it("offers a uniquely escaped utility token only as an origin candidate", () => {
+    const shared = collectClassTokenEvidence([
+      {
+        path: "packages/design-systems/RecordList.tsx",
+        content:
+          'export function RecordList(){ return <button className={cx("data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]", focusRing)}>Stock</button> }',
+      },
+    ]);
+    const selector =
+      '.data-\\[selected\\=true\\]\\:shadow-\\[inset_3px_0_0_var\\(--color-action-primary\\)\\][data-selected="true"]';
+    expect(escapedTailwindClassToken(selector)).toBe(
+      "data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]",
+    );
+    expect(escapedTailwindClassToken('.token[data-label="a]b"][data-x]')).toBe(
+      "token",
+    );
+    for (const invalid of [
+      ".token[data-x] .other",
+      ".token[data-x]:hover",
+      ".token[data-x],.other",
+      ".token[data-x",
+    ])
+      expect(escapedTailwindClassToken(invalid)).toBeUndefined();
+    expect(classTokenAttribution([], shared, selector)).toMatchObject({
+      provenance: "shared",
+      source: { path: "packages/design-systems/RecordList.tsx" },
+    });
+    expect(
+      classTokenAttribution([], [...shared, { ...shared[0]! }], selector)
+        .provenance,
+    ).toBe("unknown");
+    expect(classTokenAttribution([], shared, ".item:hover").provenance).toBe(
+      "unknown",
+    );
   });
 });

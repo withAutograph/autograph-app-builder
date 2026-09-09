@@ -8,6 +8,11 @@ export type IntrinsicClassSignature = {
   source: { path: string; line: number; column: number };
 };
 
+export type ClassTokenEvidence = {
+  token: string;
+  source: IntrinsicClassSignature["source"];
+};
+
 function staticClassName(attribute: ts.JsxAttribute): string | undefined {
   const initializer = attribute.initializer;
   if (!initializer) return undefined;
@@ -80,6 +85,62 @@ export function collectIntrinsicClassSignatures(
   return candidates;
 }
 
+/**
+ * Collect static utility tokens from intrinsic className attributes and the
+ * local `cx("...")` composition convention. These are reviewer candidates,
+ * not declaration provenance.
+ */
+export function collectClassTokenEvidence(
+  files: SourceFile[],
+): ClassTokenEvidence[] {
+  const candidates: ClassTokenEvidence[] = [];
+  const add = (source: ts.SourceFile, node: ts.Node, value: string) => {
+    const start = source.getLineAndCharacterOfPosition(node.getStart(source));
+    for (const token of value.trim().split(/\s+/).filter(Boolean))
+      candidates.push({
+        token,
+        source: {
+          path: source.fileName,
+          line: start.line + 1,
+          column: start.character + 1,
+        },
+      });
+  };
+  for (const file of files.filter((file) => /\.tsx?$/i.test(file.path))) {
+    const source = ts.createSourceFile(
+      file.path,
+      file.content,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isJsxAttribute(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === "className"
+      ) {
+        const value = staticClassName(node);
+        if (value) add(source, node, value);
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "cx"
+      )
+        for (const argument of node.arguments)
+          if (
+            ts.isStringLiteral(argument) ||
+            ts.isNoSubstitutionTemplateLiteral(argument)
+          )
+            add(source, argument, argument.text);
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return candidates;
+}
+
 const signatureKey = (tag: string, classes: string[]) =>
   `${tag}:${[...classes].sort().join(" ")}`;
 
@@ -136,4 +197,73 @@ export function generatedSignatureSelector(
   return Boolean(
     signature && className && signature.classes.includes(className),
   );
+}
+
+/** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
+export function escapedTailwindClassToken(selector: string | undefined) {
+  if (!selector?.startsWith(".")) return undefined;
+  let token = "";
+  let index = 1;
+  for (; index < selector.length; index++) {
+    const character = selector[index]!;
+    if (character === "\\") {
+      const escaped = selector[index + 1];
+      if (!escaped) return undefined;
+      token += escaped;
+      index++;
+    } else if (character === "[") break;
+    else if (/[A-Za-z0-9_-]/.test(character)) token += character;
+    else return undefined;
+  }
+  if (!token) return undefined;
+  while (index < selector.length) {
+    if (selector[index] !== "[") return undefined;
+    index++;
+    let quote: string | undefined;
+    let closed = false;
+    for (; index < selector.length; index++) {
+      const character = selector[index]!;
+      if (character === "\\") {
+        if (index + 1 >= selector.length) return undefined;
+        index++;
+        continue;
+      }
+      if (quote) {
+        if (character === quote) quote = undefined;
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        quote = character;
+        continue;
+      }
+      if (character === "]") {
+        closed = true;
+        index++;
+        break;
+      }
+      if (character === "[") return undefined;
+    }
+    if (!closed || quote) return undefined;
+  }
+  return token;
+}
+
+export function classTokenAttribution(
+  generated: ClassTokenEvidence[],
+  shared: ClassTokenEvidence[] | undefined,
+  selector: string | undefined,
+): SignatureAttribution {
+  const token = escapedTailwindClassToken(selector);
+  if (!token || !shared) return { provenance: "unknown" };
+  const generatedMatches = generated.filter(
+    (candidate) => candidate.token === token,
+  );
+  const sharedMatches = shared.filter((candidate) => candidate.token === token);
+  if (generatedMatches.length + sharedMatches.length !== 1)
+    return { provenance: "unknown" };
+  const match = generatedMatches[0] ?? sharedMatches[0]!;
+  return {
+    provenance: generatedMatches.length ? "generated" : "shared",
+    source: match.source,
+  };
 }

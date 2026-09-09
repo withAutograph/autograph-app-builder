@@ -11,7 +11,10 @@ import { judgeDesign } from "./design-quality/judge";
 import { renderReport } from "./design-quality/report";
 import { readReference } from "./design-quality/reference";
 import { scoreAdherence } from "./design-quality/evidence";
-import { collectIntrinsicClassSignatures } from "./design-quality/class-evidence";
+import {
+  collectClassTokenEvidence,
+  collectIntrinsicClassSignatures,
+} from "./design-quality/class-evidence";
 import { collectCssRuleEvidence } from "./design-quality/css-evidence";
 import { execFileSync } from "node:child_process";
 
@@ -136,6 +139,10 @@ async function main() {
     generatedClassSignatures: collectIntrinsicClassSignatures(sourceFiles),
     sharedClassSignatures: sharedFiles
       ? collectIntrinsicClassSignatures(sharedFiles)
+      : undefined,
+    generatedClassTokens: collectClassTokenEvidence(sourceFiles),
+    sharedClassTokens: sharedFiles
+      ? collectClassTokenEvidence(sharedFiles)
       : undefined,
     generatedCssRules,
     sharedCssRules,
