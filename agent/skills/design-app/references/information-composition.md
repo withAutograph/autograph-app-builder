@@ -16,6 +16,10 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   metadata. Keep counts, filters, and sorting with their collection, including
   when desktop panels narrow; keep help beside the relevant action or field. A
   subtitle must not become a catch-all sentence. Omit redundant instructions.
+  Keep collection summaries concise. When useful instructions need more room,
+  use a supported full-width description below the heading and metadata rather
+  than stacking prose inside a right-aligned summary. Preserve the wider
+  composition when only the constrained view needs this help.
 - Establish hierarchy with Arrusted's supported typography, spacing, and
   surfaces. Use consistent roles for headings, primary values, explanations,
   labels, and metadata. Do not solve hierarchy by enlarging everything, making
