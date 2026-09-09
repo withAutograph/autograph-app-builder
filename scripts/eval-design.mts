@@ -142,6 +142,9 @@ async function main() {
     generatedCssSourceFiles: sourceFiles.filter((file) =>
       /\.css$/i.test(file.path),
     ),
+    sharedCssSourceFiles: sharedFiles?.filter((file) =>
+      /\.css$/i.test(file.path),
+    ),
     additionalDesktopSize,
   });
   limitations.push(...("limitations" in source ? source.limitations : []));

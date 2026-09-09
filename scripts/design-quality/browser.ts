@@ -181,6 +181,44 @@ export const arrustedSharedSource = (path: string | undefined) =>
     path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/),
   );
 
+type CssSourceFile = { path: string; content: string };
+
+/**
+ * Verify that a rendered declaration maps to one exact checked-in shared CSS
+ * declaration. A map path, a matching utility name, or a matching value alone
+ * is deliberately insufficient provenance.
+ */
+export function mappedSharedCssRule(input: {
+  map: CssSourceMap | undefined;
+  mapped: ReturnType<typeof originalCssSource>;
+  property: string;
+  value: string | undefined;
+  sharedCssRules: CssRuleEvidence[];
+  sharedCssSourceFiles: CssSourceFile[];
+}) {
+  const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } =
+    input;
+  if (!map || !mapped || value === undefined) return undefined;
+  const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
+  if (typeof sourceContent !== "string") return undefined;
+  const files = sharedCssSourceFiles.filter(
+    (file) =>
+      arrustedSharedSource(file.path) &&
+      generatedSource(mapped.path, [file.path]) &&
+      file.content === sourceContent,
+  );
+  if (files.length !== 1) return undefined;
+  const declarations = sharedCssRules.filter(
+    (candidate) =>
+      candidate.source.path === files[0]!.path &&
+      candidate.source.line === mapped.line &&
+      candidate.source.column === mapped.column &&
+      candidate.property === property &&
+      candidate.value === value,
+  );
+  return declarations.length === 1 ? declarations[0] : undefined;
+}
+
 /** Wait for currently active finite CSS motion before sampling visual evidence. */
 export async function settleFiniteMotion(page: Page) {
   await page.evaluate(async () => {
@@ -408,6 +446,7 @@ export async function measureStyles(
   generatedCssRules: CssRuleEvidence[] = [],
   sharedCssRules: CssRuleEvidence[] = [],
   generatedCssSourceFiles: Array<{ path: string; content: string }> = [],
+  sharedCssSourceFiles: CssSourceFile[] = [],
 ) {
   await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
@@ -442,7 +481,9 @@ export async function measureStyles(
       const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//.exec(
         css,
       )?.[1];
-      const url = header?.sourceMapURL ?? declared;
+      // CDP may report optional URLs as empty strings. In that case the
+      // stylesheet's sourceMappingURL comment is the only usable evidence.
+      const url = header?.sourceMapURL || declared;
       let text: string | undefined;
       if (url?.startsWith("data:application/json")) {
         try {
@@ -458,7 +499,7 @@ export async function measureStyles(
         }
       } else if (url) {
         try {
-          const target = new URL(url, header?.sourceURL ?? page.url());
+          const target = new URL(url, header?.sourceURL || page.url());
           // Source maps are diagnostic evidence, never a reason to contact an
           // unrelated origin from a preview capture.
           if (target.origin === new URL(page.url()).origin)
@@ -746,6 +787,17 @@ export async function measureStyles(
               candidate.value === declaration?.value,
           ).length === 1,
         );
+        const mappedShared =
+          uniqueDeclarationEntries.length === 1
+            ? mappedSharedCssRule({
+                map: styleMap,
+                mapped,
+                property,
+                value: declaration?.value,
+                sharedCssRules,
+                sharedCssSourceFiles,
+              })
+            : undefined;
         const generated =
           generatedByPath || Boolean(generatedRule) || mappedGenerated;
         const inheritedDeclaration =
@@ -768,7 +820,7 @@ export async function measureStyles(
           classification = "generated-override";
         if (
           !generated &&
-          arrustedSharedSource(path) &&
+          (arrustedSharedSource(path) || Boolean(mappedShared)) &&
           classification !== "semantic-token-reference" &&
           classification !== "matching-literal" &&
           classification !== "structural"
@@ -784,7 +836,7 @@ export async function measureStyles(
         if (classification === "structural") continue;
         const provenance: Observation["provenance"] = generated
           ? "generated"
-          : arrustedSharedSource(path)
+          : arrustedSharedSource(path) || mappedShared
             ? "shared"
             : "unknown";
         const quad = model.content;
@@ -796,7 +848,8 @@ export async function measureStyles(
         };
         const cssSource = generatedRule
           ? generatedRule.source
-          : (mapped ??
+          : (mappedShared?.source ??
+            mapped ??
             (path
               ? {
                   path,
@@ -943,6 +996,7 @@ export async function capturePreview(input: {
   generatedCssRules?: CssRuleEvidence[];
   sharedCssRules?: CssRuleEvidence[];
   generatedCssSourceFiles?: Array<{ path: string; content: string }>;
+  sharedCssSourceFiles?: CssSourceFile[];
   additionalDesktopSize?: DesktopSize;
 }) {
   const browser = await chromium.launch();
@@ -1009,6 +1063,7 @@ export async function capturePreview(input: {
                 input.generatedCssRules,
                 input.sharedCssRules,
                 input.generatedCssSourceFiles,
+                input.sharedCssSourceFiles,
               )
             : undefined;
         if (styles)
