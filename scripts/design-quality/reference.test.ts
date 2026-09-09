@@ -31,6 +31,7 @@ describe("readReference", () => {
             import { imported } from "./imported";
             declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { main: {}; aside: {} } } }
             declare function useState<T>(): readonly [T, () => void];
+            declare function makeLabel(): string;
             export function Page() {
               const list = <main />;
               const detail = Math.random() ? <aside /> : null;
@@ -40,7 +41,8 @@ describe("readReference", () => {
               const cycleB = cycleA;
               const { destructured } = { destructured: <main /> };
               const [state] = useState<string>();
-              return <><RecordListDetailLayout list={list} detail={detail} value={state} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} value={state} callback={() => undefined} /><RecordListDetailLayout list={cycleA} detail={destructured} nonNullable={null} value={state} callback={() => undefined} /></>;
+              const derived = makeLabel();
+              return <><RecordListDetailLayout list={list} detail={detail} value={derived} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} value={state} callback={() => undefined} /><RecordListDetailLayout list={cycleA} detail={destructured} nonNullable={null} value={state} callback={() => undefined} /></>;
             }`,
         },
         {

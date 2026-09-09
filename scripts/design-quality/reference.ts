@@ -568,23 +568,12 @@ function requiresFiniteIdentifierEvidence(
   checker: ts.TypeChecker,
 ): boolean {
   if (!ts.isIdentifier(expression)) return false;
-  const declaration = checker.getSymbolAtLocation(expression)?.valueDeclaration;
-  if (!declaration) return false;
-  if (ts.isImportSpecifier(declaration)) return true;
-  if (ts.isVariableDeclaration(declaration)) return true;
-  // Object destructuring can conceal a JSX/object literal alias. Array
-  // destructuring from hooks remains ordinary state evidence and is left to
-  // the existing reliable-type path.
-  if (!ts.isBindingElement(declaration)) return false;
-  const pattern = declaration.parent;
-  const variable = pattern?.parent;
-  return Boolean(
-    ts.isObjectBindingPattern(pattern) &&
-      variable &&
-      ts.isVariableDeclaration(variable) &&
-      variable.initializer &&
-      ts.isObjectLiteralExpression(variable.initializer),
-  );
+  const actual = checker.getTypeAtLocation(expression);
+  const members = actual.isUnion() ? actual.types : [actual];
+  // Scalar values retain the existing reliable type-only path. JSX and object
+  // aliases need finite ownership proof because a matching type alone does not
+  // say whether a mutable/generated/shared value supplied the prop.
+  return members.some((member) => member.flags & ts.TypeFlags.Object);
 }
 
 /**
