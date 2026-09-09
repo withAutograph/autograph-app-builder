@@ -217,3 +217,123 @@ test("attributes an anonymous live stylesheet only through an exact supplied CSS
     ),
   ).toBe(true);
 });
+
+test("attributes a matched stylesheet declaration through its CSS source map", async ({
+  page,
+}) => {
+  // Keep selector lengths equal so the generated declaration's range maps to
+  // the authored property range, while preventing exact-rule attribution.
+  const authoredCss = ".origin { color: var(--color-text-primary); }";
+  const compiledCss = ".screen { color: var(--color-text-primary); }";
+  const map = JSON.stringify({
+    version: 3,
+    sources: ["src/generated.css"],
+    sourcesContent: [authoredCss],
+    // CDP begins the declaration range at its preceding space (column 9),
+    // while the authored declaration itself begins at column 10.
+    mappings: "SAAU",
+  });
+  await page.route("http://example.test/page", (route) =>
+    route.fulfill({ body: "" }),
+  );
+  await page.route("http://example.test/generated.css.map", (route) =>
+    route.fulfill({ contentType: "application/json", body: map }),
+  );
+  await page.route("http://example.test/compiled.css", (route) =>
+    route.fulfill({
+      contentType: "text/css",
+      body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
+    }),
+  );
+  await page.goto("http://example.test/page");
+  const sourceFiles = [{ path: "src/generated.css", content: authoredCss }];
+  const sourceRules = collectCssRuleEvidence(sourceFiles);
+  await page.setContent(
+    `<style>${compiledCss}</style><main class="screen">Stock</main>`,
+  );
+  const withoutMap = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    ["src/generated.css"],
+    [],
+    undefined,
+    sourceRules,
+    [],
+    sourceFiles,
+  );
+  expect(
+    withoutMap.observations.some(
+      (item) => item.property === "color" && item.provenance === "generated",
+    ),
+  ).toBe(false);
+  await page.setContent(
+    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,
+  );
+  await page.locator(".screen").waitFor();
+  const styles = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    ["src/generated.css"],
+    [],
+    undefined,
+    sourceRules,
+    [],
+    sourceFiles,
+  );
+  expect(
+    styles.observations.some(
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "generated" &&
+        item.cssSource?.path === "src/generated.css",
+    ),
+  ).toBe(true);
+});
+
+test("does not trust mismatched CSS source-map content", async ({ page }) => {
+  const authoredCss = ".origin { color: var(--color-text-primary); }";
+  const compiledCss = ".screen { color: var(--color-text-primary); }";
+  const map = JSON.stringify({
+    version: 3,
+    sources: ["src/generated.css"],
+    sourcesContent: [".origin { color: red; }"],
+    mappings: "SAAU",
+  });
+  await page.route("http://example.test/page", (route) =>
+    route.fulfill({ body: "" }),
+  );
+  await page.route("http://example.test/generated.css.map", (route) =>
+    route.fulfill({ contentType: "application/json", body: map }),
+  );
+  await page.route("http://example.test/compiled.css", (route) =>
+    route.fulfill({
+      contentType: "text/css",
+      body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
+    }),
+  );
+  await page.goto("http://example.test/page");
+  await page.setContent(
+    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,
+  );
+  await page.locator(".screen").waitFor();
+  const styles = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    ["src/generated.css"],
+    [],
+    undefined,
+    collectCssRuleEvidence([
+      { path: "src/generated.css", content: authoredCss },
+    ]),
+    [],
+    [{ path: "src/generated.css", content: authoredCss }],
+  );
+  expect(
+    styles.observations.some(
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "unknown" &&
+        item.verdict === "unassessed",
+    ),
+  ).toBe(true);
+});
