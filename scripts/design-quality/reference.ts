@@ -381,6 +381,7 @@ function finiteLiteralEvidence(
   expected: ts.Type,
   checker: ts.TypeChecker,
   depth = 0,
+  seen = new Set<ts.Symbol>(),
 ): true | undefined {
   if (depth > 8) return undefined;
   if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
@@ -405,6 +406,37 @@ function finiteLiteralEvidence(
       return undefined;
     return checker.isTypeAssignableTo(actual, expected) ? true : undefined;
   }
+  // A generated prop may name a local, immutable JSX literal. Follow only a
+  // single declaration in this source file; imports, lets, parameters, and
+  // aliases with ambiguous ownership remain unassessed.
+  if (ts.isIdentifier(expression)) {
+    const symbol = checker.getSymbolAtLocation(expression);
+    const declaration = symbol?.valueDeclaration;
+    const declarations = symbol?.declarations;
+    const list = declaration?.parent;
+    if (
+      !symbol ||
+      seen.has(symbol) ||
+      declarations?.length !== 1 ||
+      !declaration ||
+      !ts.isVariableDeclaration(declaration) ||
+      !declaration.initializer ||
+      declaration.getSourceFile() !== expression.getSourceFile() ||
+      !list ||
+      !ts.isVariableDeclarationList(list) ||
+      !(list.flags & ts.NodeFlags.Const)
+    )
+      return undefined;
+    const nextSeen = new Set(seen);
+    nextSeen.add(symbol);
+    return finiteLiteralEvidence(
+      declaration.initializer,
+      expected,
+      checker,
+      depth + 1,
+      nextSeen,
+    );
+  }
   // A conditional is finite only when every possible branch is independently
   // finite. The condition itself may be runtime state; TypeScript remains the
   // authority for the conditional expression's final assignability.
@@ -414,12 +446,14 @@ function finiteLiteralEvidence(
       expected,
       checker,
       depth + 1,
+      seen,
     ) === true &&
       finiteLiteralEvidence(
         expression.whenFalse,
         expected,
         checker,
         depth + 1,
+        seen,
       ) === true
       ? true
       : undefined;
@@ -427,7 +461,7 @@ function finiteLiteralEvidence(
     const actual = checker.getTypeAtLocation(expression);
     return expected.types.some(
       (member) =>
-        finiteLiteralEvidence(expression, member, checker, depth + 1) &&
+        finiteLiteralEvidence(expression, member, checker, depth + 1, seen) &&
         checker.isTypeAssignableTo(actual, member),
     )
       ? true
@@ -444,7 +478,7 @@ function finiteLiteralEvidence(
     if (items.length !== 1) return undefined;
     return expression.elements.every((element) =>
       ts.isExpression(element)
-        ? finiteLiteralEvidence(element, items[0], checker, depth + 1)
+        ? finiteLiteralEvidence(element, items[0], checker, depth + 1, seen)
         : false,
     )
       ? true
@@ -482,6 +516,7 @@ function finiteLiteralEvidence(
           propertyType,
           checker,
           depth + 1,
+          seen,
         ) !== true
       )
         return undefined;
@@ -496,6 +531,14 @@ function finiteLiteralEvidence(
     expression.kind === ts.SyntaxKind.FalseKeyword
   ) {
     return reliableExpressionType(expected, checker) ? true : undefined;
+  }
+  if (expression.kind === ts.SyntaxKind.NullKeyword) {
+    const actual = checker.getTypeAtLocation(expression);
+    return actual.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+      ? undefined
+      : checker.isTypeAssignableTo(actual, expected)
+        ? true
+        : undefined;
   }
   return undefined;
 }
@@ -685,7 +728,12 @@ export function checkJsxAttributes({
             const finite = finiteLiteralEvidence(expression, expected, checker);
             if (
               finite === undefined &&
-              !reliableExpressionType(actual, checker)
+              // An identifier can hide a mutable, imported, or otherwise
+              // externally-owned value even when its widened type is reliable.
+              // It needs the finite same-file const proof above before type
+              // assignability can receive evidence credit.
+              (ts.isIdentifier(expression) ||
+                !reliableExpressionType(actual, checker))
             )
               attributes.push({
                 ...key,

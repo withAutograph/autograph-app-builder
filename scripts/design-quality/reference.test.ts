@@ -6,6 +6,54 @@ import { describe, expect, it } from "vitest";
 import { checkJsxAttributes, readReference } from "./reference";
 
 describe("readReference", () => {
+  it("checks immutable same-file JSX aliases without admitting mutable or external values", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          jsx: "preserve",
+          paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "compositions.tsx"),
+      `export function RecordListDetailLayout(_props: { list: JSX.Element; detail: JSX.Element | null; callback: () => void }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { RecordListDetailLayout } from "@autograph/compositions";
+            import { imported } from "./imported";
+            declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { main: {}; aside: {} } } }
+            export function Page() {
+              const list = <main />;
+              const detail = Math.random() ? <aside /> : null;
+              let mutable = <main />;
+              const throughMutable = mutable;
+              return <><RecordListDetailLayout list={list} detail={detail} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} callback={() => undefined} /></>;
+            }`,
+        },
+        {
+          path: "app/imported.tsx",
+          content: `export const imported = <main />;`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "conforming",
+      "unassessed",
+      "unassessed",
+      "unassessed",
+      "unassessed",
+    ]);
+  });
+
   it("checks finite nested JSX props through selected TypeScript paths", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     await mkdir(join(root, "core"), { recursive: true });
