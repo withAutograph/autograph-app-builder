@@ -20,7 +20,7 @@ describe("readReference", () => {
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
-      `export function RecordListDetailLayout(_props: { list: JSX.Element; detail: JSX.Element | null; callback: () => void }) { return null; }`,
+      `export function RecordListDetailLayout(_props: { list: JSX.Element; detail: JSX.Element | null; nonNullable?: JSX.Element; callback: () => void }) { return null; }`,
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
@@ -35,7 +35,10 @@ describe("readReference", () => {
               const detail = Math.random() ? <aside /> : null;
               let mutable = <main />;
               const throughMutable = mutable;
-              return <><RecordListDetailLayout list={list} detail={detail} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} callback={() => undefined} /></>;
+              const cycleA = cycleB;
+              const cycleB = cycleA;
+              const { destructured } = { destructured: <main /> };
+              return <><RecordListDetailLayout list={list} detail={detail} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} callback={() => undefined} /><RecordListDetailLayout list={cycleA} detail={destructured} nonNullable={null} callback={() => undefined} /></>;
             }`,
         },
         {
@@ -50,6 +53,10 @@ describe("readReference", () => {
       "unassessed",
       "unassessed",
       "unassessed",
+      "unassessed",
+      "unassessed",
+      "unassessed",
+      "nonconforming",
       "unassessed",
     ]);
   });
