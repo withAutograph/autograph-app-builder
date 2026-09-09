@@ -1975,7 +1975,7 @@ export function AppBuilder({
   const [handoffAttempt, setHandoffAttempt] = useState<HandoffAttempt>("idle");
   const [handoffClipboardState, setHandoffClipboardState] =
     useState<ClipboardState>("idle");
-  const pendingLaunch = useRef<ReservedHandoffLaunch | undefined>(undefined);
+  const [pendingLaunch, setPendingLaunch] = useState<ReservedHandoffLaunch>();
   const [savedBrief, setSavedBrief] = useState("");
   const resumedDraft = useSyncExternalStore(
     () => () => undefined,
@@ -2052,7 +2052,7 @@ export function AppBuilder({
             setProvisioning(undefined);
             setHandoff(undefined);
             setHandoffClipboardState("idle");
-            pendingLaunch.current = launch;
+            setPendingLaunch(launch);
             setScreen("handoff");
           }}
         />
@@ -2066,7 +2066,7 @@ export function AppBuilder({
           requestId={provisionRequestId}
           handoffCreationRequestId={handoffCreationRequestId}
           provisioningEnabled={provisioningEnabled}
-          launch={pendingLaunch.current}
+          launch={pendingLaunch}
           onReady={(result) => {
             persistActiveProvisioning({
               version: 1,
@@ -2081,7 +2081,7 @@ export function AppBuilder({
             setHandoff(result.handoff);
             setHandoffAttempt(result.handoffAttempt);
             setHandoffClipboardState(result.clipboardState);
-            pendingLaunch.current = undefined;
+            setPendingLaunch(undefined);
             setScreen("ready");
             router.push(
               `/handoff/${encodeURIComponent(result.handoff.handoffId)}`,
@@ -2104,8 +2104,8 @@ export function AppBuilder({
           initialAttempt={handoffAttempt}
           initialClipboardState={handoffClipboardState}
           onReset={() => {
-            pendingLaunch.current?.abandon();
-            pendingLaunch.current = undefined;
+            pendingLaunch?.abandon();
+            setPendingLaunch(undefined);
             clearActiveProvisioning();
             setSubmitted(undefined);
             setProvisionRequestId(undefined);

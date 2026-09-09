@@ -250,12 +250,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     .poll(() => page.evaluate(() => document.visibilityState))
     .toBe("visible");
   const continued = page.getByText("Continued in your app.", { exact: false });
-  await page
-    .getByRole("button", { name: "Open in Codex", exact: true })
-    .click();
-  await expect(
-    page.getByText("Launch requested for Codex", { exact: false }),
-  ).toBeVisible();
+  expect((await browserBoundaryState(page)).opened).toHaveLength(1);
   await expect(continued).toHaveCount(0);
   const before = await page.request.get(handoff.statusPath);
   expect(before.ok()).toBe(true);
@@ -411,6 +406,11 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   await page.getByLabel("Private repository").uncheck();
   await completeHandoff(page);
 
+  const automaticallyOpened = await browserBoundaryState(page);
+  expect(automaticallyOpened.clipboard).toEqual([]);
+  expect(automaticallyOpened.opened).toHaveLength(1);
+  expect(automaticallyOpened.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
+
   const handoffUrl = page.url();
   await page.reload();
   await expect(
@@ -427,10 +427,6 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   expect(saved.status).toBe("prepared");
   expect(saved.intent.appName).toBe("Support Console");
   expect(saved.intent.repository.requestedName).toBe("support-console");
-  const automaticallyOpened = await browserBoundaryState(page);
-  expect(automaticallyOpened.clipboard).toEqual([]);
-  expect(automaticallyOpened.opened).toHaveLength(1);
-  expect(automaticallyOpened.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
   await page
     .getByRole("button", { name: "Open in Codex", exact: true })
     .click();
@@ -438,7 +434,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
 
   const state = await browserBoundaryState(page);
   expect(state.clipboard).toHaveLength(1);
-  expect(state.opened).toHaveLength(2);
+  expect(state.opened).toHaveLength(1);
   expect(state.clipboard[0]).toMatch(
     /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/u,
   );
