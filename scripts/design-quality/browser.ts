@@ -615,7 +615,7 @@ export async function measureStyles(
         // declaration provenance. A direct stylesheet source is required.
         const generatedByPath = generatedSource(path, generatedSourcePaths);
         const generatedRule =
-          !rule?.media?.length && !rule?.layer
+          !rule?.media?.length && !rule?.layers?.length
             ? generatedCssRule(
                 generatedCssRules,
                 sharedCssRules,
