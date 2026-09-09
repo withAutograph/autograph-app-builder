@@ -37,6 +37,169 @@ const principal: HostedPrincipal = {
   scopes: Object.values(hostedEveOperationScopes),
 };
 
+describe("prepared handoff session continuity", () => {
+  const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
+  it("retains the internal reference across service recreation, follow-ups, and approval responses", async () => {
+    const store = new InMemoryHostedEveStore();
+    const adapter = transport({
+      start: vi.fn(async () => ({
+        adapterSessionId: "eve_prepared",
+        snapshot: approvalSnapshot(["build"]),
+      })),
+      get: vi.fn(async () => approvalSnapshot(["build"])),
+    });
+    const createService = () =>
+      createHostedEveSessionService({ principal, store, transport: adapter });
+    const request = {
+      prompt: "Prepared app",
+      sourceHandoffId,
+      clientRequestId: "prepared-start",
+    };
+    const result = await createService().start(request);
+    expect(await createService().start(request)).toEqual(result);
+    expect(adapter.start).toHaveBeenCalledOnce();
+    expect(await store.getSession(principal, result.sessionId)).toMatchObject({
+      sourceHandoffId,
+    });
+    expect(JSON.stringify(result)).not.toContain(sourceHandoffId);
+    await createService().send({
+      sessionId: result.sessionId,
+      message: "Continue",
+      clientRequestId: "prepared-send",
+    });
+    expect(adapter.send).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceHandoffId }),
+    );
+    await createService().respond({
+      sessionId: result.sessionId,
+      clientRequestId: "prepared-respond",
+      responses: [{ requestId: "build", response: { kind: "approve" } }],
+    });
+    expect(adapter.respond).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceHandoffId }),
+    );
+  });
+
+  it("carries the reference into a recovered terminal session", async () => {
+    const store = new InMemoryHostedEveStore();
+    let starts = 0;
+    const adapter = transport({
+      start: vi.fn(async () => ({
+        adapterSessionId: `eve_${++starts}`,
+        snapshot: { status: "completed" as const, events: [] },
+      })),
+    });
+    const createService = () =>
+      createHostedEveSessionService({ principal, store, transport: adapter });
+    const first = await createService().start({
+      prompt: "Prepared app",
+      sourceHandoffId,
+      clientRequestId: "prepared-start",
+    });
+    const recovered = await createService().start({
+      resumeSessionId: first.sessionId,
+      clientRequestId: "prepared-resume",
+    });
+    expect(adapter.start).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceHandoffId }),
+    );
+    expect(
+      await store.getSession(principal, recovered.sessionId),
+    ).toMatchObject({ sourceHandoffId, parentSessionId: first.sessionId });
+  });
+
+  it("converges simultaneous prepared starts and a lost response on one session", async () => {
+    const store = new InMemoryHostedEveStore();
+    let accept!: (value: {
+      adapterSessionId: string;
+      snapshot: HostedEngineSnapshot;
+    }) => void;
+    let dispatched!: () => void;
+    const dispatchStarted = new Promise<void>((resolve) => {
+      dispatched = resolve;
+    });
+    const adapter = transport({
+      start: vi.fn<HostedEveTransport["start"]>(
+        () =>
+          new Promise((resolve) => {
+            accept = resolve;
+            dispatched();
+          }),
+      ),
+    });
+    const createService = () =>
+      createHostedEveSessionService({ principal, store, transport: adapter });
+    const request = {
+      prompt: "Prepared app",
+      sourceHandoffId,
+      clientRequestId: "same-preparation",
+    };
+    const first = createService().start(request);
+    await dispatchStarted;
+    await expect(createService().start(request)).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    accept({ adapterSessionId: "eve_prepared", snapshot });
+    const original = await first;
+    expect(await createService().start(request)).toEqual(original);
+    expect(adapter.start).toHaveBeenCalledOnce();
+    expect(await store.getSession(principal, original.sessionId)).toMatchObject(
+      { sourceHandoffId },
+    );
+  });
+
+  it("retains prepared context when the engine disappears and during readback recovery", async () => {
+    const store = new InMemoryHostedEveStore();
+    let missing = false;
+    let starts = 0;
+    const adapter = transport({
+      start: vi.fn(async () => ({
+        adapterSessionId: `eve_${++starts}`,
+        snapshot,
+      })),
+      get: vi.fn(async () => {
+        if (missing) throw new HostedAdapterSessionUnavailableError();
+        return snapshot;
+      }),
+    });
+    const beforeRead = vi.fn(async () => {});
+    const createService = () =>
+      createHostedEveSessionService({
+        principal,
+        store,
+        transport: adapter,
+        beforeRead,
+      });
+    const first = await createService().start({
+      prompt: "Prepared app",
+      sourceHandoffId,
+      clientRequestId: "prepared-start",
+    });
+    missing = true;
+    const recovered = await createService().start({
+      resumeSessionId: first.sessionId,
+      clientRequestId: "prepared-resume",
+    });
+    expect(recovered.sessionId).toBe(first.sessionId);
+    expect(adapter.start).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceHandoffId }),
+    );
+    expect(await store.getSession(principal, first.sessionId)).toMatchObject({
+      sourceHandoffId,
+      adapterGeneration: 2,
+    });
+    missing = false;
+    await createService().get({
+      sessionId: first.sessionId,
+      cursor: 0,
+      limit: 100,
+    });
+    expect(beforeRead).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceHandoffId }),
+    );
+  });
+});
+
 const snapshot: HostedEngineSnapshot = {
   status: "waiting",
   events: [

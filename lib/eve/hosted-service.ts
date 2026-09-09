@@ -80,6 +80,7 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     operationId: string;
     prompt: string;
+    sourceHandoffId?: string;
   }): Promise<{ adapterSessionId: string; snapshot: HostedEngineSnapshot }>;
   get(input: {
     principal: HostedPrincipal;
@@ -90,6 +91,7 @@ export interface HostedEveTransport {
     operationId: string;
     adapterSessionId: string;
     message: string;
+    sourceHandoffId?: string;
   }): Promise<HostedEngineSnapshot>;
   respond(input: {
     principal: HostedPrincipal;
@@ -102,6 +104,7 @@ export interface HostedEveTransport {
         | { kind: "deny" }
         | { kind: "answer"; value: string; optionId?: string };
     }>;
+    sourceHandoffId?: string;
   }): Promise<HostedEngineSnapshot>;
   cancel(input: {
     principal: HostedPrincipal;
@@ -412,6 +415,7 @@ export function createHostedEveSessionService(input: {
     principal: HostedPrincipal;
     sessionId: string;
     adapterSessionId: string;
+    sourceHandoffId?: string;
   }) => Promise<void>;
   now?: () => number;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
@@ -752,6 +756,7 @@ export function createHostedEveSessionService(input: {
       principal,
       sessionId,
       adapterSessionId: session.adapterSessionId,
+      sourceHandoffId: session.sourceHandoffId,
     });
     try {
       const snapshot = await input.transport.get({
@@ -849,6 +854,9 @@ export function createHostedEveSessionService(input: {
                 principal,
                 operationId,
                 prompt: recoveryPrompt(existing),
+                ...(existing.sourceHandoffId
+                  ? { sourceHandoffId: existing.sourceHandoffId }
+                  : {}),
               });
               const sessionId = stableId("ses", {
                 operationId,
@@ -871,6 +879,9 @@ export function createHostedEveSessionService(input: {
                   originAdapterSessionId: response.adapterSessionId,
                   adapterGeneration: 1,
                   title: existing.title,
+                  ...(existing.sourceHandoffId
+                    ? { sourceHandoffId: existing.sourceHandoffId }
+                    : {}),
                   ...(result.implementationPlan?.appId === undefined
                     ? existing.appId === undefined
                       ? {}
@@ -923,6 +934,9 @@ export function createHostedEveSessionService(input: {
               principal,
               operationId,
               prompt: recoveryPrompt(existing),
+              ...(existing.sourceHandoffId
+                ? { sourceHandoffId: existing.sourceHandoffId }
+                : {}),
             });
             const result = projectSnapshot(
               existing.sessionId,
@@ -977,6 +991,9 @@ export function createHostedEveSessionService(input: {
             principal,
             operationId,
             prompt,
+            ...(request.sourceHandoffId
+              ? { sourceHandoffId: request.sourceHandoffId }
+              : {}),
           });
           const sessionId = stableId("ses", {
             operationId,
@@ -999,6 +1016,9 @@ export function createHostedEveSessionService(input: {
               originAdapterSessionId: response.adapterSessionId,
               adapterGeneration: 1,
               title: titleFromPrompt(prompt),
+              ...(request.sourceHandoffId
+                ? { sourceHandoffId: request.sourceHandoffId }
+                : {}),
               ...(result.implementationPlan?.appId === undefined
                 ? {}
                 : { appId: result.implementationPlan.appId }),
@@ -1055,6 +1075,9 @@ export function createHostedEveSessionService(input: {
             operationId,
             adapterSessionId: session.adapterSessionId,
             message: request.message,
+            ...(session.version === 2 && session.sourceHandoffId
+              ? { sourceHandoffId: session.sourceHandoffId }
+              : {}),
           });
           const result = projectSnapshot(request.sessionId, snapshot);
           await observeSnapshot(request.sessionId, snapshot);
@@ -1095,6 +1118,9 @@ export function createHostedEveSessionService(input: {
             operationId,
             adapterSessionId: session.adapterSessionId,
             responses: request.responses,
+            ...(session.version === 2 && session.sourceHandoffId
+              ? { sourceHandoffId: session.sourceHandoffId }
+              : {}),
           });
           const result = projectSnapshot(request.sessionId, snapshot);
           await observeSnapshot(request.sessionId, snapshot);

@@ -30,12 +30,18 @@ type RecheckRepositoryAccess = (input: {
   repository: string;
 }) => ReturnType<HostedBuilderHandoffRuntime["recheckRepositoryAccess"]>;
 
-function forwardedSessionAuth(principal: HostedPrincipal) {
+function forwardedSessionAuth(
+  principal: HostedPrincipal,
+  sourceHandoffId?: string,
+) {
   const context = {
     attributes: {
       "mcp:audience": principal.audience,
       "mcp:scopes": principal.scopes,
       "mcp:workspace-id": principal.workspaceId,
+      ...(sourceHandoffId === undefined
+        ? {}
+        : { "autograph:source-handoff-id": sourceHandoffId }),
     },
     authenticator: "mcp-oauth-jwks" as const,
     issuer: principal.issuer,
@@ -130,22 +136,29 @@ export function createDeploymentMcpRequestHandler(input: {
             ...runtime,
             handoffs: {
               ...handoffService,
-              async recheckRepositoryAccess({ principal, repository }) {
+              async recheckRepositoryAccess({
+                principal,
+                repository,
+                sourceHandoffId,
+              }) {
                 if (input.recheckRepositoryAccess !== undefined)
                   return input.recheckRepositoryAccess({
-                    sessionAuth: forwardedSessionAuth(principal),
+                    sessionAuth: forwardedSessionAuth(
+                      principal,
+                      sourceHandoffId,
+                    ),
                     repository,
                   });
                 const repositoryAccessRuntime =
                   await import("../agent/deployment-repository-access-runtime");
                 return (
                   await repositoryAccessRuntime.repositoryAccessRuntimeForSession(
-                    forwardedSessionAuth(principal),
+                    forwardedSessionAuth(principal, sourceHandoffId),
                   )
                 ).classify({ repository });
               },
             },
-            async beforeRead({ principal, adapterSessionId }) {
+            async beforeRead({ principal, adapterSessionId, sourceHandoffId }) {
               try {
                 const resumeRepositoryAccess =
                   input.resumeRepositoryAccess ??
@@ -153,7 +166,7 @@ export function createDeploymentMcpRequestHandler(input: {
                     await import("../agent/deployment-repository-access-runtime")
                   ).resumeAuthorizedRepositoryAccessForSession;
                 await resumeRepositoryAccess({
-                  sessionAuth: forwardedSessionAuth(principal),
+                  sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   sessionId: adapterSessionId,
                   ...(input.fetchImplementation === undefined
                     ? {}

@@ -128,6 +128,7 @@ export const durableHostedSessionRecordSchema = z
   .object({
     version: z.literal(2),
     sessionId: z.string().min(1).max(200),
+    sourceHandoffId: z.string().uuid().optional(),
     principal: hostedPrincipalSchema,
     adapterSessionId: z.string().min(1).max(500),
     originAdapterSessionId: z.string().min(1).max(500),
@@ -339,6 +340,9 @@ export function hostedSessionCreationDigest(
             ? parsed.adapterSessionId
             : parsed.originAdapterSessionId,
         createdAtEpochMs: parsed.createdAtEpochMs,
+        ...(parsed.version === 2 && parsed.sourceHandoffId
+          ? { sourceHandoffId: parsed.sourceHandoffId }
+          : {}),
       }),
     )
     .digest("hex")}`;

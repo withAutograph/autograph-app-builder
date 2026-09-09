@@ -10,6 +10,7 @@ import {
   HostedSubmissionUnknownError,
 } from "../eve/hosted-service";
 import { AdapterNotConfiguredError } from "../eve/service";
+import { BuilderHandoffUnavailableError } from "../handoff/service";
 import {
   McpToolAuthenticationRequiredError,
   safeToolError,
@@ -20,6 +21,7 @@ describe("safe MCP tool errors", () => {
   it.each([
     [new AdapterNotConfiguredError(), "adapter_not_configured"],
     [new HostedSessionNotFoundError(), "not_found"],
+    [new BuilderHandoffUnavailableError(), "not_found"],
     [new HostedAuthorizationError("insufficient_scope"), "forbidden"],
     [new HostedIdempotencyConflictError(), "request_conflict"],
     [new HostedSubmissionUnknownError(), "submission_unknown"],
@@ -45,6 +47,14 @@ describe("safe MCP tool errors", () => {
     expect(result.structuredContent.error?.message).toBe(
       "Autograph App Builder is not connected to its production service yet.",
     );
+  });
+
+  it("gives same-account guidance without disclosing handoff ownership", () => {
+    const result = safeToolError(new BuilderHandoffUnavailableError());
+    expect(result.structuredContent.error?.message).toContain(
+      "same account used on the web",
+    );
+    expect(result.structuredContent.error?.code).toBe("not_found");
   });
 
   it("returns the MCP OAuth challenge as protected tool metadata", () => {

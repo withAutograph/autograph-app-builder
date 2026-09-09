@@ -110,6 +110,7 @@ export interface HostedBuilderHandoffRuntime {
   recheckRepositoryAccess(input: {
     principal: HostedPrincipal;
     repository: string;
+    sourceHandoffId?: string;
   }): Promise<
     | { status: "ready" }
     | {
@@ -165,6 +166,7 @@ export function withHostedBuilderHandoffs(input: {
         resolved.record.intent.repository.resolvedFullName;
       if (resolvedRepository !== undefined) {
         const access = await input.handoffs.recheckRepositoryAccess({
+          sourceHandoffId: request.handoffId,
           principal: input.principal,
           repository: resolvedRepository,
         });
@@ -173,6 +175,7 @@ export function withHostedBuilderHandoffs(input: {
       }
       const result = await input.service.start({
         prompt: resolved.prompt,
+        sourceHandoffId: request.handoffId,
         clientRequestId: resolved.deterministicClientRequestId,
       });
       await input.handoffs.bindSession({

@@ -32,6 +32,8 @@ export interface EveSessionService {
   start(input: {
     prompt?: string;
     handoffId?: string;
+    /** Internal only: set after authenticated handoff resolution, never by MCP input. */
+    sourceHandoffId?: string;
     resumeSessionId?: string;
     clientRequestId: string;
   }): Promise<EveSessionResult>;

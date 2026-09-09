@@ -13,6 +13,7 @@ const forwardedAttributesSchema = z
     "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
     "mcp:workspace-id": z.string().min(1).max(200),
     "eve:forwarded-by": hostedIdentifierSchema.optional(),
+    "autograph:source-handoff-id": z.string().uuid().optional(),
   })
   .strict();
 
@@ -93,4 +94,25 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
     throw new HostedSessionAuthorityError("invalid");
   const authority = authorityResult.data;
   return { authority, principal: currentPrincipal.data };
+}
+
+/** A prepared app belongs to the initiating session, not a later message. */
+export function sourceHandoffIdForSessionAuth(sessionAuth: unknown) {
+  const parsed = forwardedSessionAuthSchema.safeParse(sessionAuth);
+  if (!parsed.success) {
+    // Local sessions have no prepared hosted context. A malformed hosted
+    // envelope must not silently become an unbound session.
+    const current = (
+      sessionAuth as { current?: { authenticator?: string } } | null
+    )?.current;
+    if (current?.authenticator === "mcp-oauth-jwks")
+      throw new HostedSessionAuthorityError("invalid");
+    return undefined;
+  }
+  exactForwardedSessionAuthority(sessionAuth);
+  const current = parsed.data.current.attributes["autograph:source-handoff-id"];
+  const initiator =
+    parsed.data.initiator.attributes["autograph:source-handoff-id"];
+  if (current !== initiator) throw new HostedSessionAuthorityError("mismatch");
+  return initiator;
 }
