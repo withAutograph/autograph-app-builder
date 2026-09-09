@@ -34,10 +34,16 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   fields. Use progressive disclosure for genuinely secondary information. Decide
   what is secondary by its role in the decision, not by its domain or section
   name: a delivery estimate, permission scope, or cost can be essential evidence.
+  When users expand content, reveal it within its existing scroll region so the
+  requested information is discoverable without losing context.
 - Structure detail views around the question being answered. For a decision,
   explain the issue and relevant evidence before the recommendation and action.
+  When a recommendation is derived, explain beside it how key inputs and
+  constraints, such as rounding, produce it. Combine redundant intermediate
+  rows rather than repeating facts or leaving the reader to infer the formula.
   For a result state, lead with the outcome; calculation inputs support its
-  explanation rather than displacing it.
+  explanation rather than displacing it. Keep the baseline available beside the
+  result when understanding the change is part of the decision.
   For reference content, identity and navigable facts may come first. Avoid
   repeated warnings, metric duplication, arbitrary empty panels, and filler.
 - Keep the primary action near the information that justifies it. Explain its
@@ -78,15 +84,18 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   rather than oversized panels. Do not impose a fixed maximum on dense comparisons.
 - In an action-oriented detail panel, account for the page heading, filters, and
   navigation above it when choosing the available height. A full-viewport panel
-  placed below page chrome can push its action out of reach. Prefer the shared
+  placed below page chrome can push its action out of reach. Prefer sizing that
+  follows content within the available space over fixed height that leaves an
+  unused band between evidence and action. Use the shared
   composition's scrolling body and non-overlapping action region when appropriate;
   ordinary document scrolling remains valid for reading-oriented pages. Ensure
   action feedback can be read completely, not hidden underneath a footer.
 - Choose supported type and status sizes by information importance. Small
   secondary styling suits incidental metadata, not the sole presentation of a
   deciding status or fact. Avoid duplicating that fact simply to make it legible;
-  use a readable existing variant without altering its colors. A badge can name
-  a state while its deciding quantity uses ordinary readable text nearby.
+  use a readable supported status variant that retains meaningful distinctions
+  between states without changing palette tokens. A badge can name a state while
+  its deciding quantity uses ordinary readable text nearby.
 - Give related panes one coherent empty-state explanation. Distinguish no
   matching records from records available but none selected; do not invite an
   impossible selection. Offer the relevant recovery, such as adjusting filters,

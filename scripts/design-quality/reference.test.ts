@@ -184,6 +184,40 @@ describe("readReference", () => {
     expect(result.attributes[5].reason).toContain("not assignable");
   });
 
+  it("checks finite conditional branches against recursive public props", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "compositions.tsx"),
+      `type Node = string | { children?: Node };
+       type Action = { id: string; label: Node; intent?: "primary" | "secondary" };
+       export function RecordDetailPanel(_props: { actions: readonly Action[] }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { RecordDetailPanel } from "@autograph/compositions";
+            declare const stage: "ready" | "done";
+            export function Page() { return <><RecordDetailPanel actions={stage === "ready" ? [{ id: "try", label: "Try", intent: "primary" }] : [{ id: "reset", label: "Reset" }]} /><RecordDetailPanel actions={stage === "ready" ? [{ id: "try", label: "Try", intent: "primary" }] : [{ id: "reset", label: "Reset", intent: "invalid" }]} /></>; }`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "unassessed",
+    ]);
+  });
+
   it("leaves tuple cardinality to TypeScript and admits finite index entries", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     await mkdir(join(root, "core"), { recursive: true });

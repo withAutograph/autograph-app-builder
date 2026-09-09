@@ -1,0 +1,3625 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T06:19:07.936Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <h2>Arrusted adherence: 100/100 · partial</h2>
+    <p>
+      Evidence coverage: 1.2%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>15</td>
+          <td>0</td>
+          <td>2</td>
+          <td>100% (15/15)</td>
+          <td>17 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>35</td>
+          <td>0</td>
+          <td>12</td>
+          <td>100% (35/35)</td>
+          <td>47 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>13</td>
+          <td>0</td>
+          <td>5193</td>
+          <td>100% (13/13)</td>
+          <td>13 / 5193</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence.
+        Anonymous rules require a unique exact generated selector/property/value
+        and complete matched-rule declaration set; conditional or ambiguous
+        source rules remain unknown.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (5207)</summary>
+      <article id="finding-5">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-5">src/StockExceptions.tsx:7</a></small
+        >
+        <details id="source-5">
+          <summary>Source location: src/StockExceptions.tsx:7</summary>
+          <pre>
+6: export default function StockExceptions(){const[location,setLocation]=useState(&quot;all&quot;);const[severity,setSeverity]=useState(&quot;all&quot;);const[selectedId,setSelectedId]=useState(&quot;atlas&quot;);const[stage,setStage]=useState&lt;&quot;ready&quot;|&quot;confirm&quot;|&quot;done&quot;&gt;(&quot;ready&quot;);const filtered=useMemo(()=&gt;products.filter(p=&gt;(location===&quot;all&quot;||p.location===location)&amp;&amp;(severity===&quot;all&quot;||p.severity===severity)),[location,severity]);const selected=filtered.find(p=&gt;p.id===selectedId);const changeFilters=(nextLocation:string,nextSeverity:string)=&gt;{const next=products.filter(p=&gt;(nextLocation===&quot;all&quot;||p.location===nextLocation)&amp;&amp;(nextSeverity===&quot;all&quot;||p.severity===nextSeverity));setSelectedId(current=&gt;next.some(p=&gt;p.id===current)?current:(next[0]?.id??&quot;&quot;));setStage(&quot;ready&quot;)};const resetFilters=()=&gt;{setLocation(&quot;all&quot;);setSeverity(&quot;all&quot;);setSelectedId(&quot;atlas&quot;);setStage(&quot;ready&quot;)};const shortfall=selected?Math.max(0,selected.reorderPoint-selected.onHand):0;const quantity=selected?Math.ceil(shortfall/selected.pack)*selected.pack:0;const projected=selected?selected.onHand+quantity:0;
+7: const filters=&lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-1 gap-[var(--space-3)] rounded-[var(--radius-panel)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-[var(--space-3)] sm:grid-cols-2&quot;&gt;&lt;FieldFrame label=&quot;Location&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;oakland&quot;,label:&quot;Oakland DC&quot;},{value:&quot;reno&quot;,label:&quot;Reno Clinic&quot;},{value:&quot;none&quot;,label:&quot;Portland Hub (0)&quot;}]} onValueChange={v=&gt;{setLocation(v);changeFilters(v,severity)}}/&gt;&lt;/FieldFrame&gt;&lt;FieldFrame label=&quot;Severity&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;critical&quot;,label:&quot;Critical&quot;},{value:&quot;warning&quot;,label:&quot;Low&quot;}]} onValueChange={v=&gt;{setSeverity(v);changeFilters(location,v)}}/&gt;&lt;/FieldFrame&gt;&lt;/section&gt;;
+8: const resultItems=selected?[{type:&quot;field&quot; as const,id:&quot;modeled&quot;,label:&quot;Modeled replenishment quantity&quot;,value:`${quantity} units (${quantity/selected.pack} cases)`},{type:&quot;field&quot; as const,id:&quot;projected&quot;,label:&quot;Projected on-hand&quot;,value:`${projected} units`},{type:&quot;field&quot; as const,id:&quot;shortfall&quot;,label:&quot;Shortfall before replenishment&quot;,value:`${shortfall} units`},{type:&quot;field&quot; as const,id:&quot;pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;note&quot; as const,id:&quot;no-order&quot;,title:&quot;Simulation only&quot;,body:&quot;No order was placed and underlying stock is unchanged.&quot;,tone:&quot;info&quot; as const},{type:&quot;note&quot; as const,id:&quot;assumption&quot;,title:&quot;Model assumption&quot;,body:`This simple fixture targets gross on-hand; ${selected.reserved} reserved units are context and are not subtracted.`,tone:&quot;neutral&quot; as const}]:[];
+9: const stockSection=selected?{id:&quot;stock&quot;,title:&quot;Stock evidence&quot;,collapsible:stage===&quot;done&quot;,defaultOpen:stage!==&quot;done&quot;,items:[{type:&quot;field&quot; as const,id:&quot;onHand&quot;,label:&quot;On hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot; as const,id:&quot;reserved&quot;,label:&quot;Reserved&quot;,value:`${selected.reserved} units`},{type:&quot;field&quot; as const,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot; as const,id:&quot;cover&quot;,label:&quot;Days of cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot; as const,id:&quot;supplier&quot;,label:&quot;Supplier&quot;,value:selected.supplier},{type:&quot;field&quot; as const,id:&quot;lead&quot;,label:&quot;Lead time&quot;,value:selected.leadTime}]}:null;const supplierSection=selected?{id:&quot;supplier-secondary&quot;,title:&quot;Secondary supplier facts&quot;,defaultOpen:false,items:[{type:&quot;field&quot; as const,id:&quot;supplier-pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;field&quot; as const,id:&quot;receipt&quot;,label:&quot;Last receipt&quot;,value:selected.lastReceipt},{type:&quot;field&quot; as const,id:&quot;contact&quot;,label:&quot;Order contact&quot;,value:selected.contact},{type:&quot;field&quot; as const,id:&quot;terms&quot;,label:&quot;Terms&quot;,value:selected.terms}]}:null;</pre>
+        </details>
+      </article>
+      <article id="finding-11">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-11">src/StockExceptions.tsx:7</a></small
+        >
+        <details id="source-11">
+          <summary>Source location: src/StockExceptions.tsx:7</summary>
+          <pre>
+6: export default function StockExceptions(){const[location,setLocation]=useState(&quot;all&quot;);const[severity,setSeverity]=useState(&quot;all&quot;);const[selectedId,setSelectedId]=useState(&quot;atlas&quot;);const[stage,setStage]=useState&lt;&quot;ready&quot;|&quot;confirm&quot;|&quot;done&quot;&gt;(&quot;ready&quot;);const filtered=useMemo(()=&gt;products.filter(p=&gt;(location===&quot;all&quot;||p.location===location)&amp;&amp;(severity===&quot;all&quot;||p.severity===severity)),[location,severity]);const selected=filtered.find(p=&gt;p.id===selectedId);const changeFilters=(nextLocation:string,nextSeverity:string)=&gt;{const next=products.filter(p=&gt;(nextLocation===&quot;all&quot;||p.location===nextLocation)&amp;&amp;(nextSeverity===&quot;all&quot;||p.severity===nextSeverity));setSelectedId(current=&gt;next.some(p=&gt;p.id===current)?current:(next[0]?.id??&quot;&quot;));setStage(&quot;ready&quot;)};const resetFilters=()=&gt;{setLocation(&quot;all&quot;);setSeverity(&quot;all&quot;);setSelectedId(&quot;atlas&quot;);setStage(&quot;ready&quot;)};const shortfall=selected?Math.max(0,selected.reorderPoint-selected.onHand):0;const quantity=selected?Math.ceil(shortfall/selected.pack)*selected.pack:0;const projected=selected?selected.onHand+quantity:0;
+7: const filters=&lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-1 gap-[var(--space-3)] rounded-[var(--radius-panel)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-[var(--space-3)] sm:grid-cols-2&quot;&gt;&lt;FieldFrame label=&quot;Location&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;oakland&quot;,label:&quot;Oakland DC&quot;},{value:&quot;reno&quot;,label:&quot;Reno Clinic&quot;},{value:&quot;none&quot;,label:&quot;Portland Hub (0)&quot;}]} onValueChange={v=&gt;{setLocation(v);changeFilters(v,severity)}}/&gt;&lt;/FieldFrame&gt;&lt;FieldFrame label=&quot;Severity&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;critical&quot;,label:&quot;Critical&quot;},{value:&quot;warning&quot;,label:&quot;Low&quot;}]} onValueChange={v=&gt;{setSeverity(v);changeFilters(location,v)}}/&gt;&lt;/FieldFrame&gt;&lt;/section&gt;;
+8: const resultItems=selected?[{type:&quot;field&quot; as const,id:&quot;modeled&quot;,label:&quot;Modeled replenishment quantity&quot;,value:`${quantity} units (${quantity/selected.pack} cases)`},{type:&quot;field&quot; as const,id:&quot;projected&quot;,label:&quot;Projected on-hand&quot;,value:`${projected} units`},{type:&quot;field&quot; as const,id:&quot;shortfall&quot;,label:&quot;Shortfall before replenishment&quot;,value:`${shortfall} units`},{type:&quot;field&quot; as const,id:&quot;pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;note&quot; as const,id:&quot;no-order&quot;,title:&quot;Simulation only&quot;,body:&quot;No order was placed and underlying stock is unchanged.&quot;,tone:&quot;info&quot; as const},{type:&quot;note&quot; as const,id:&quot;assumption&quot;,title:&quot;Model assumption&quot;,body:`This simple fixture targets gross on-hand; ${selected.reserved} reserved units are context and are not subtracted.`,tone:&quot;neutral&quot; as const}]:[];
+9: const stockSection=selected?{id:&quot;stock&quot;,title:&quot;Stock evidence&quot;,collapsible:stage===&quot;done&quot;,defaultOpen:stage!==&quot;done&quot;,items:[{type:&quot;field&quot; as const,id:&quot;onHand&quot;,label:&quot;On hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot; as const,id:&quot;reserved&quot;,label:&quot;Reserved&quot;,value:`${selected.reserved} units`},{type:&quot;field&quot; as const,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot; as const,id:&quot;cover&quot;,label:&quot;Days of cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot; as const,id:&quot;supplier&quot;,label:&quot;Supplier&quot;,value:selected.supplier},{type:&quot;field&quot; as const,id:&quot;lead&quot;,label:&quot;Lead time&quot;,value:selected.leadTime}]}:null;const supplierSection=selected?{id:&quot;supplier-secondary&quot;,title:&quot;Secondary supplier facts&quot;,defaultOpen:false,items:[{type:&quot;field&quot; as const,id:&quot;supplier-pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;field&quot; as const,id:&quot;receipt&quot;,label:&quot;Last receipt&quot;,value:selected.lastReceipt},{type:&quot;field&quot; as const,id:&quot;contact&quot;,label:&quot;Order contact&quot;,value:selected.contact},{type:&quot;field&quot; as const,id:&quot;terms&quot;,label:&quot;Terms&quot;,value:selected.terms}]}:null;</pre>
+        </details>
+      </article>
+      <article id="finding-16">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-16">src/StockExceptions.tsx:10</a></small
+        >
+        <details id="source-16">
+          <summary>Source location: src/StockExceptions.tsx:10</summary>
+          <pre>
+9: const stockSection=selected?{id:&quot;stock&quot;,title:&quot;Stock evidence&quot;,collapsible:stage===&quot;done&quot;,defaultOpen:stage!==&quot;done&quot;,items:[{type:&quot;field&quot; as const,id:&quot;onHand&quot;,label:&quot;On hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot; as const,id:&quot;reserved&quot;,label:&quot;Reserved&quot;,value:`${selected.reserved} units`},{type:&quot;field&quot; as const,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot; as const,id:&quot;cover&quot;,label:&quot;Days of cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot; as const,id:&quot;supplier&quot;,label:&quot;Supplier&quot;,value:selected.supplier},{type:&quot;field&quot; as const,id:&quot;lead&quot;,label:&quot;Lead time&quot;,value:selected.leadTime}]}:null;const supplierSection=selected?{id:&quot;supplier-secondary&quot;,title:&quot;Secondary supplier facts&quot;,defaultOpen:false,items:[{type:&quot;field&quot; as const,id:&quot;supplier-pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;field&quot; as const,id:&quot;receipt&quot;,label:&quot;Last receipt&quot;,value:selected.lastReceipt},{type:&quot;field&quot; as const,id:&quot;contact&quot;,label:&quot;Order contact&quot;,value:selected.contact},{type:&quot;field&quot; as const,id:&quot;terms&quot;,label:&quot;Terms&quot;,value:selected.terms}]}:null;
+10: const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={`${filtered.length} matching · ${products.length} total`} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;,trailing:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-17">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-17">src/StockExceptions.tsx:10</a></small
+        >
+        <details id="source-17">
+          <summary>Source location: src/StockExceptions.tsx:10</summary>
+          <pre>
+9: const stockSection=selected?{id:&quot;stock&quot;,title:&quot;Stock evidence&quot;,collapsible:stage===&quot;done&quot;,defaultOpen:stage!==&quot;done&quot;,items:[{type:&quot;field&quot; as const,id:&quot;onHand&quot;,label:&quot;On hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot; as const,id:&quot;reserved&quot;,label:&quot;Reserved&quot;,value:`${selected.reserved} units`},{type:&quot;field&quot; as const,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot; as const,id:&quot;cover&quot;,label:&quot;Days of cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot; as const,id:&quot;supplier&quot;,label:&quot;Supplier&quot;,value:selected.supplier},{type:&quot;field&quot; as const,id:&quot;lead&quot;,label:&quot;Lead time&quot;,value:selected.leadTime}]}:null;const supplierSection=selected?{id:&quot;supplier-secondary&quot;,title:&quot;Secondary supplier facts&quot;,defaultOpen:false,items:[{type:&quot;field&quot; as const,id:&quot;supplier-pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;field&quot; as const,id:&quot;receipt&quot;,label:&quot;Last receipt&quot;,value:selected.lastReceipt},{type:&quot;field&quot; as const,id:&quot;contact&quot;,label:&quot;Order contact&quot;,value:selected.contact},{type:&quot;field&quot; as const,id:&quot;terms&quot;,label:&quot;Terms&quot;,value:selected.terms}]}:null;
+10: const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={`${filtered.length} matching · ${products.length} total`} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;,trailing:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-28">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-28">src/StockExceptions.tsx:11</a></small
+        >
+        <details id="source-28">
+          <summary>Source location: src/StockExceptions.tsx:11</summary>
+          <pre>
+10: const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={`${filtered.length} matching · ${products.length} total`} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;,trailing:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-29">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-29">src/StockExceptions.tsx:11</a></small
+        >
+        <details id="source-29">
+          <summary>Source location: src/StockExceptions.tsx:11</summary>
+          <pre>
+10: const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={`${filtered.length} matching · ${products.length} total`} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;,trailing:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-30">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-30">src/StockExceptions.tsx:11</a></small
+        >
+        <details id="source-30">
+          <summary>Source location: src/StockExceptions.tsx:11</summary>
+          <pre>
+10: const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={`${filtered.length} matching · ${products.length} total`} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;,trailing:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-31">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-31">src/StockExceptions.tsx:11</a></small
+        >
+        <details id="source-31">
+          <summary>Source location: src/StockExceptions.tsx:11</summary>
+          <pre>
+10: const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={`${filtered.length} matching · ${products.length} total`} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;,trailing:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-40">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-40">src/StockExceptions.tsx:12</a></small
+        >
+        <details id="source-40">
+          <summary>Source location: src/StockExceptions.tsx:12</summary>
+          <pre>
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-41">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-41">src/StockExceptions.tsx:12</a></small
+        >
+        <details id="source-41">
+          <summary>Source location: src/StockExceptions.tsx:12</summary>
+          <pre>
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-42">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-42">src/StockExceptions.tsx:12</a></small
+        >
+        <details id="source-42">
+          <summary>Source location: src/StockExceptions.tsx:12</summary>
+          <pre>
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-45">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-45">src/StockExceptions.tsx:12</a></small
+        >
+        <details id="source-45">
+          <summary>Source location: src/StockExceptions.tsx:12</summary>
+          <pre>
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-47">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-47">src/StockExceptions.tsx:11</a></small
+        >
+        <details id="source-47">
+          <summary>Source location: src/StockExceptions.tsx:11</summary>
+          <pre>
+10: const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={`${filtered.length} matching · ${products.length} total`} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;,trailing:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-48">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-48">src/StockExceptions.tsx:12</a></small
+        >
+        <details id="source-48">
+          <summary>Source location: src/StockExceptions.tsx:12</summary>
+          <pre>
+11: const detail=selected?&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={`${selected.sku} · ${selected.locationLabel}`} status={{label:selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;,tone:selected.severity===&quot;critical&quot;?&quot;danger&quot;:&quot;warning&quot;}} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;primary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;primary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;:null;
+12: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+13: </pre>
+        </details>
+      </article>
+      <article id="finding-77">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-77"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-77">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-78">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-78"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-78">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-79">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-79"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-79">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-80">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-80"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-80">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-81">
+        <strong>unknown · unassessed</strong>
+        <p>padding-right: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-81"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-81">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-82">
+        <strong>unknown · unassessed</strong>
+        <p>column-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-83">
+        <strong>unknown · unassessed</strong>
+        <p>row-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-84">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-84"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-84">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-85">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-width: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-85"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-85">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-86">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-86"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-86">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-87">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-88">
+        <strong>matching-literal · unassessed</strong>
+        <p>column-gap: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-88"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-88">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-89">
+        <strong>matching-literal · unassessed</strong>
+        <p>row-gap: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-89"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-89">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-90">
+        <strong>matching-literal · unassessed</strong>
+        <p>border-top-color: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-90"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-90">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:185
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-91">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-92">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-92"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-92">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/b81ca2a7ed58654b5f42fee220319c61b4f2499da178f9ebe16f2643bc8c24ed:267
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 80/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>3/4</td>
+          <td>
+            The page title, filter block, exception list, selected-record
+            header, evidence, supplier disclosure, and replenishment action form
+            a clear review sequence. Selection highlighting and bold
+            days-of-cover values support scanning, although the very small
+            Critical pill and abbreviated “— M” product descriptor weaken
+            immediate identification.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>3/4</td>
+          <td>
+            The two-column list-detail composition is consistently aligned at
+            1024, 1440, and 1920 widths, with compact filters and well-spaced
+            evidence rows. The result state becomes vertically constrained at
+            1024×768, where explanatory content is partly hidden within the
+            detail scroller behind the persistent action footer.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>3/4</td>
+          <td>
+            Heading levels, row labels, values, and explanatory callouts are
+            visually consistent and generally readable. Some 12px muted metadata
+            and the approximately 10px severity pill are marginal; the supplied
+            accessibility evidence also flags these text treatments, though the
+            palette itself should remain unchanged.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>3/4</td>
+          <td>
+            The composition adapts effectively from a centered wide layout to a
+            tighter 1024 split view and then to a 700px detail-only view with a
+            clear Back to exceptions control. There is no horizontal overflow in
+            the supplied captures, but the 1024 result and expanded states rely
+            heavily on an internal 403px-tall scroller, and the 700px
+            list/filter view after using Back was not shown.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>4/4</td>
+          <td>
+            The interface directly supports location and severity filtering,
+            low-stock selection, stock and supplier review, and a mock
+            replenishment. The result clearly states the modeled quantity and
+            projected stock, labels the action as simulation-only, confirms that
+            inventory was unchanged, explains the model assumption, and offers a
+            reset.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        The master-detail structure keeps exception context visible while
+        reviewing stock and supplier evidence at standard desktop widths.
+      </li>
+      <li>
+        Selected rows combine product identity, location, severity, and days of
+        cover in a compact, highly scannable format.
+      </li>
+      <li>
+        The mock result communicates both the modeled outcome and its safety
+        boundary: no order was placed and underlying stock remains unchanged.
+      </li>
+      <li>
+        Secondary supplier facts are progressively disclosed, keeping the
+        initial record view concise without removing procurement context.
+      </li>
+      <li>
+        The 700px desktop-panel treatment appropriately replaces the split view
+        with a focused detail view and an explicit route back to exceptions.
+      </li>
+      <li>
+        Reset and supplier-expansion interaction captures show coherent visual
+        states across 1024, 1440, and 1920 widths.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>low · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The selected product is labeled “Atlas nitrile gloves — M” in both the
+        list and detail heading. If “M” represents a size or variant, the
+        abbreviation is ambiguous rather than visibly truncated with an
+        ellipsis.
+      </p>
+      <p>
+        <strong>Improve:</strong> Present the variant explicitly, such as “Atlas
+        nitrile gloves” with “Size M” in the metadata line, or show the complete
+        product name when space permits.
+      </p>
+      <small>Screenshot region: x 642, y 140, width 286, height 60</small>
+    </article>
+    <article id="design-1">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The Critical status is rendered as a very small caption-sized pill,
+        making an important exception attribute visually weaker than the
+        surrounding record metadata. The supplied accessibility scan also
+        identifies this treatment as difficult to read.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use the regular supported StatusPill size or
+        repeat “Critical” as ordinary header metadata while preserving the
+        existing Arrusted palette and component styling.
+      </p>
+      <small>Screenshot region: x 1248, y 137, width 70, height 28</small>
+    </article>
+    <article id="design-2">
+      <h4>low · <a href="#desktop-window-1">desktop-window-1</a></h4>
+      <p>
+        In the 1024×768 result state, the Model assumption sentence is visibly
+        cut off at the bottom as the fixed footer begins. The panel is
+        scrollable, so the content remains recoverable, but an important
+        modeling caveat is not fully readable in the initial result view.
+      </p>
+      <p>
+        <strong>Improve:</strong> Reserve footer clearance within the scroll
+        content or compact the result spacing so the complete simulation notice
+        and model assumption are visible before scrolling.
+      </p>
+      <small>Screenshot region: x 458, y 578, width 518, height 55</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-2&quot;,
+    &quot;desktop-3&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-wide-2&quot;,
+    &quot;desktop-wide-3&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;,
+    &quot;desktop-window-2&quot;,
+    &quot;desktop-window-3&quot;,
+    &quot;desktop-custom-700x900-0&quot;,
+    &quot;desktop-custom-700x900-1&quot;,
+    &quot;desktop-custom-700x900-2&quot;,
+    &quot;desktop-custom-700x900-3&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The page title, filter block, exception list, selected-record header, evidence, supplier disclosure, and replenishment action form a clear review sequence. Selection highlighting and bold days-of-cover values support scanning, although the very small Critical pill and abbreviated “— M” product descriptor weaken immediate identification.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The two-column list-detail composition is consistently aligned at 1024, 1440, and 1920 widths, with compact filters and well-spaced evidence rows. The result state becomes vertically constrained at 1024×768, where explanatory content is partly hidden within the detail scroller behind the persistent action footer.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Heading levels, row labels, values, and explanatory callouts are visually consistent and generally readable. Some 12px muted metadata and the approximately 10px severity pill are marginal; the supplied accessibility evidence also flags these text treatments, though the palette itself should remain unchanged.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The composition adapts effectively from a centered wide layout to a tighter 1024 split view and then to a 700px detail-only view with a clear Back to exceptions control. There is no horizontal overflow in the supplied captures, but the 1024 result and expanded states rely heavily on an internal 403px-tall scroller, and the 700px list/filter view after using Back was not shown.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The interface directly supports location and severity filtering, low-stock selection, stock and supplier review, and a mock replenishment. The result clearly states the modeled quantity and projected stock, labels the action as simulation-only, confirms that inventory was unchanged, explains the model assumption, and offers a reset.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;The master-detail structure keeps exception context visible while reviewing stock and supplier evidence at standard desktop widths.&quot;,
+    &quot;Selected rows combine product identity, location, severity, and days of cover in a compact, highly scannable format.&quot;,
+    &quot;The mock result communicates both the modeled outcome and its safety boundary: no order was placed and underlying stock remains unchanged.&quot;,
+    &quot;Secondary supplier facts are progressively disclosed, keeping the initial record view concise without removing procurement context.&quot;,
+    &quot;The 700px desktop-panel treatment appropriately replaces the split view with a focused detail view and an explicit route back to exceptions.&quot;,
+    &quot;Reset and supplier-expansion interaction captures show coherent visual states across 1024, 1440, and 1920 widths.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 642,
+        &quot;y&quot;: 140,
+        &quot;width&quot;: 286,
+        &quot;height&quot;: 60
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;The selected product is labeled “Atlas nitrile gloves — M” in both the list and detail heading. If “M” represents a size or variant, the abbreviation is ambiguous rather than visibly truncated with an ellipsis.&quot;,
+      &quot;improvement&quot;: &quot;Present the variant explicitly, such as “Atlas nitrile gloves” with “Size M” in the metadata line, or show the complete product name when space permits.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 1248,
+        &quot;y&quot;: 137,
+        &quot;width&quot;: 70,
+        &quot;height&quot;: 28
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;The Critical status is rendered as a very small caption-sized pill, making an important exception attribute visually weaker than the surrounding record metadata. The supplied accessibility scan also identifies this treatment as difficult to read.&quot;,
+      &quot;improvement&quot;: &quot;Use the regular supported StatusPill size or repeat “Critical” as ordinary header metadata while preserving the existing Arrusted palette and component styling.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-window-1&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 458,
+        &quot;y&quot;: 578,
+        &quot;width&quot;: 518,
+        &quot;height&quot;: 55
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;In the 1024×768 result state, the Model assumption sentence is visibly cut off at the bottom as the fixed footer begins. The panel is scrollable, so the content remains recoverable, but an important modeling caveat is not fully readable in the initial result view.&quot;,
+      &quot;improvement&quot;: &quot;Reserve footer clearance within the scroll content or compact the result spacing so the complete simulation notice and model assumption are visible before scrolling.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;The supplied captures do not show the exception-list and filter view at 700px after activating Back to exceptions, so that constrained state cannot be assessed.&quot;,
+    &quot;Filter changes, empty results, alternate product selection, keyboard behavior, and disclosure scrolling were not visually demonstrated.&quot;,
+    &quot;Screenshots cannot confirm backend behavior; the assessment only observes the displayed simulation messaging and recorded interaction results.&quot;,
+    &quot;No implementation-plan artifact or publication state was provided, so completion of the brief’s planning and stop-before-publication requirements cannot be judged visually.&quot;,
+    &quot;Static source evidence does not prove that particular public components rendered, and styling provenance coverage is too limited to make a separate Arrusted token-adherence judgment.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 80,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 38407,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 38404
+    },
+    &quot;outputTokens&quot;: 2274,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 988,
+      &quot;reasoningTokens&quot;: 1286
+    },
+    &quot;totalTokens&quot;: 40681
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Button&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Button&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Card&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Card&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;FieldFrame&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;FieldFrame&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordList&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;RecordList&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Select&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Select&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Typography&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Typography&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordDetailPanel&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordDetailPanel&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordListDetailLayout&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordListDetailLayout&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-bg-surface&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--radius-panel&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--space-8&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-bg-surface&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--radius-panel&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--space-8&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [],
+    &quot;matchingLiterals&quot;: [],
+    &quot;unknownLiterals&quot;: [],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 79,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;implementationDiagnostics&quot;: [],
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;arrusted-detail-field-gap-20260909&quot;,
+    &quot;commit&quot;: &quot;fa54387e5daec817bbf0d9d9f09624217441c446&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: true
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="The selected product is labeled “Atlas nitrile gloves — M” in both the list and detail heading. If “M” represents a size or variant, the abbreviation is ambiguous rather than visibly truncated with an ellipsis."
+          aria-label="The selected product is labeled “Atlas nitrile gloves — M” in both the list and detail heading. If “M” represents a size or variant, the abbreviation is ambiguous rather than visibly truncated with an ellipsis."
+          style="
+            left: 44.583333333333336%;
+            top: 15.555555555555555%;
+            width: 19.86111111111111%;
+            height: 6.666666666666667%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-1"
+          title="The Critical status is rendered as a very small caption-sized pill, making an important exception attribute visually weaker than the surrounding record metadata. The supplied accessibility scan also identifies this treatment as difficult to read."
+          aria-label="The Critical status is rendered as a very small caption-sized pill, making an important exception attribute visually weaker than the surrounding record metadata. The supplied accessibility scan also identifies this treatment as difficult to read."
+          style="
+            left: 86.66666666666667%;
+            top: 15.222222222222221%;
+            width: 4.861111111111111%;
+            height: 3.111111111111111%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1129.203125,
+          &quot;y&quot;: 619,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 146,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 133,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 90,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 57,
+        &quot;sampled&quot;: 57
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 76,
+        &quot;sampled&quot;: 63
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 108,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 124
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 232,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 120,
+        &quot;matching-literal&quot;: 58,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 348
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 526,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 46,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 229
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 7,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 109
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 116,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 106,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 20
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 126,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1395,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 Mock replenishment result screenshot"
+        />
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 72 units · 90 projected on-handModeled replenishment quantity72 units (3 cases)Projected on-hand90 unitsShortfall before replenishment54 &quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 722,
+        &quot;scrollHeight&quot;: 587,
+        &quot;clientWidth&quot;: 722,
+        &quot;clientHeight&quot;: 535,
+        &quot;region&quot;: {
+          &quot;x&quot;: 617.828125,
+          &quot;y&quot;: 224,
+          &quot;width&quot;: 722.171875,
+          &quot;height&quot;: 535
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1209.921875,
+          &quot;y&quot;: 772,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-2">
+      <h2>desktop-2 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-2.png"
+          alt="desktop-2 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1129.203125,
+          &quot;y&quot;: 619,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-3">
+      <h2>desktop-3 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-3.png"
+          alt="desktop-3 Expanded supplier facts screenshot"
+        />
+      </div>
+      <a href="desktop-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Stock evidenceOn hand18 unitsReserved12 unitsReorder point72 unitsDays of cover1.4 daysSupplierNorthstar Medical SupplyLead time4 business daysSecondary supplie&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 722,
+        &quot;scrollHeight&quot;: 538,
+        &quot;clientWidth&quot;: 722,
+        &quot;clientHeight&quot;: 535,
+        &quot;region&quot;: {
+          &quot;x&quot;: 617.828125,
+          &quot;y&quot;: 224,
+          &quot;width&quot;: 722.171875,
+          &quot;height&quot;: 535
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1129.203125,
+          &quot;y&quot;: 772,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1369.203125,
+          &quot;y&quot;: 619,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 146,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 133,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 90,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 57,
+        &quot;sampled&quot;: 57
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 76,
+        &quot;sampled&quot;: 63
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 108,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 124
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 232,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 120,
+        &quot;matching-literal&quot;: 58,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 348
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 526,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 46,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 229
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 7,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 109
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 116,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 106,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 20
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 126,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1395,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>desktop-wide-1 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 Mock replenishment result screenshot"
+        />
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1449.921875,
+          &quot;y&quot;: 824,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-2">
+      <h2>desktop-wide-2 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-2.png"
+          alt="desktop-wide-2 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1369.203125,
+          &quot;y&quot;: 619,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-3">
+      <h2>desktop-wide-3 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-3.png"
+          alt="desktop-wide-3 Expanded supplier facts screenshot"
+        />
+      </div>
+      <a href="desktop-wide-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1369.203125,
+          &quot;y&quot;: 775,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        />
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 789.203125,
+          &quot;y&quot;: 619,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 146,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 133,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 90,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 57,
+        &quot;sampled&quot;: 57
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 76,
+        &quot;sampled&quot;: 63
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 108,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 124
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 232,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 120,
+        &quot;matching-literal&quot;: 58,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 348
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 526,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 46,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 229
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 7,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 109
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 116,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 106,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 20
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 126,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1395,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>desktop-window-1 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 Mock replenishment result screenshot"
+        /><a
+          class="region"
+          href="#design-2"
+          title="In the 1024×768 result state, the Model assumption sentence is visibly cut off at the bottom as the fixed footer begins. The panel is scrollable, so the content remains recoverable, but an important modeling caveat is not fully readable in the initial result view."
+          aria-label="In the 1024×768 result state, the Model assumption sentence is visibly cut off at the bottom as the fixed footer begins. The panel is scrollable, so the content remains recoverable, but an important modeling caveat is not fully readable in the initial result view."
+          style="
+            left: 44.7265625%;
+            top: 75.26041666666667%;
+            width: 50.5859375%;
+            height: 7.161458333333333%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 72 units · 90 projected on-handModeled replenishment quantity72 units (3 cases)Projected on-hand90 unitsShortfall before replenishment54 &quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 566,
+        &quot;scrollHeight&quot;: 605,
+        &quot;clientWidth&quot;: 566,
+        &quot;clientHeight&quot;: 403,
+        &quot;region&quot;: {
+          &quot;x&quot;: 433.59375,
+          &quot;y&quot;: 224,
+          &quot;width&quot;: 566.40625,
+          &quot;height&quot;: 403
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 869.921875,
+          &quot;y&quot;: 640,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-2">
+      <h2>desktop-window-2 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-2.png"
+          alt="desktop-window-2 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-window-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 789.203125,
+          &quot;y&quot;: 619,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-3">
+      <h2>desktop-window-3 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-3.png"
+          alt="desktop-window-3 Expanded supplier facts screenshot"
+        />
+      </div>
+      <a href="desktop-window-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Stock evidenceOn hand18 unitsReserved12 unitsReorder point72 unitsDays of cover1.4 daysSupplierNorthstar Medical SupplyLead time4 business daysSecondary supplie&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 566,
+        &quot;scrollHeight&quot;: 537,
+        &quot;clientWidth&quot;: 566,
+        &quot;clientHeight&quot;: 403,
+        &quot;region&quot;: {
+          &quot;x&quot;: 433.59375,
+          &quot;y&quot;: 224,
+          &quot;width&quot;: 566.40625,
+          &quot;height&quot;: 403
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — MHW-1048 · Oakland DCCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 270,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DCLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 339,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno ClinicCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 408,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno ClinicLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 477,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 68
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 789.203125,
+          &quot;y&quot;: 640,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-baseline &gt; .text-\\[length\\:var\\(--text-caption\\)\\].text-\\[var\\(--color-text-muted\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-0">
+      <h2>desktop-custom-700x900-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-0.png"
+          alt="desktop-custom-700x900-0 initial screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 465.203125,
+          &quot;y&quot;: 659,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 82,
+  &quot;totalDomElements&quot;: 146,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 82,
+    &quot;sampled&quot;: 82,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 31,
+        &quot;sampled&quot;: 31
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 51,
+        &quot;sampled&quot;: 51
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 80,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 82
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 162,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 73,
+        &quot;matching-literal&quot;: 44,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 293
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 410,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 24,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 162
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 186,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 5,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 77
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 82,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 75,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 11
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 86,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 82
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 82,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1008,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-1">
+      <h2>desktop-custom-700x900-1 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-1.png"
+          alt="desktop-custom-700x900-1 Mock replenishment result screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 72 units · 90 projected on-handModeled replenishment quantity72 units (3 cases)Projected on-hand90 unitsShortfall before replenishment54 &quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 652,
+        &quot;scrollHeight&quot;: 587,
+        &quot;clientWidth&quot;: 652,
+        &quot;clientHeight&quot;: 535,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 264,
+          &quot;width&quot;: 652,
+          &quot;height&quot;: 535
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 545.921875,
+          &quot;y&quot;: 812,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-2">
+      <h2>desktop-custom-700x900-2 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-2.png"
+          alt="desktop-custom-700x900-2 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 465.203125,
+          &quot;y&quot;: 659,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-3">
+      <h2>desktop-custom-700x900-3 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-3.png"
+          alt="desktop-custom-700x900-3 Expanded supplier facts screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Stock evidenceOn hand18 unitsReserved12 unitsReorder point72 unitsDays of cover1.4 daysSupplierNorthstar Medical SupplyLead time4 business daysSecondary supplie&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 652,
+        &quot;scrollHeight&quot;: 538,
+        &quot;clientWidth&quot;: 652,
+        &quot;clientHeight&quot;: 535,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 264,
+          &quot;width&quot;: 652,
+          &quot;height&quot;: 535
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 465.203125,
+          &quot;y&quot;: 812,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-transparent &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>
