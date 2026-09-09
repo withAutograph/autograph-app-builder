@@ -42,6 +42,30 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   when desktop panels narrow. Do not force a new navigation pattern if the
   existing composition remains useful.
 
+## Make the next step legible
+
+- Distinguish selecting a value from opening a record or starting an action.
+  When a row opens details, use a supported link or contextual row action when
+  selection alone is unclear. Preserve visible selection and keyboard behavior;
+  do not add a redundant button to every row or a global instruction paragraph
+  when the existing interaction is already obvious.
+- When ordering affects interpretation, label its basis beside the results
+  (for example, “Sorted by: newest”). Keep it readable and subordinate to the
+  records. A passive ordering label must not look like an interactive control;
+  a changeable sort must use a real supported control. Do not invent sorting
+  requirements for forms or reading views.
+- Summarize a consequential outcome near its section heading with concise text
+  or a supported status treatment, then show the evidence that explains it.
+  Distinguish predicted risk from actual failure or a breached promise. Avoid
+  repeating the same warning in a badge, heading, and paragraph; ordinary facts
+  do not all need badges. Preserve the Arrusted palette and supported variants.
+- Let action areas accommodate realistic long labels, values, and resized
+  desktop panels. Use supported wrapping or stacked arrangements when needed
+  rather than clipping, tiny text, fixed heights, or arbitrary minimum widths.
+  Keep contextual help adjacent and the primary action identifiable. Check a
+  representative long-content state during the normal material-revision review,
+  not through another automatic acceptance gate.
+
 ## Different tasks need different compositions
 
 These are examples of reasoning, not mandatory sections or layouts:
