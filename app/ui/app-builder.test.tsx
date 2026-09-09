@@ -861,7 +861,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(gitScope.value).toBe("withAutograph");
   });
 
-  it("prepares a durable handoff before an explicit client launch", async () => {
+  it("launches a durable handoff from Create App", async () => {
     vi.useFakeTimers();
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -903,11 +903,11 @@ describe("Vercel-faithful App Builder flow", () => {
       JSON.parse(String(request.mock.calls[0]?.[1]?.body)).destination,
     ).toBe("codex");
     expect(writeText).not.toHaveBeenCalled();
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(view.textContent).toContain("Preparing secure handoff");
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
-    expect(view.textContent).not.toContain("Launch requested");
+    expect(view.textContent).toContain("Launch requested");
     await click(
       [...view.querySelectorAll("button")].find(
         (button) => button.textContent === "Open in ChatGPT / Codex",
@@ -935,7 +935,7 @@ describe("Vercel-faithful App Builder flow", () => {
       "_blank",
       "noopener,noreferrer",
     );
-    const initialUrl = open.mock.calls[0]?.[0] as string;
+    const initialUrl = open.mock.calls[1]?.[0] as string;
     expect(new URL(initialUrl).searchParams.get("prompt")).toBe(copiedPrompt);
 
     for (let index = 0; index < 6; index += 1) {
@@ -952,12 +952,12 @@ describe("Vercel-faithful App Builder flow", () => {
         (button) => button.textContent === "Open in ChatGPT / Codex",
       )!,
     );
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(open.mock.calls[1]?.[0]).toBe(initialUrl);
+    expect(open).toHaveBeenCalledTimes(4);
+    expect(open.mock.calls[3]?.[0]).toBe(initialUrl);
     expect(view.textContent).not.toContain("deployed");
   });
 
-  it("retries a failed handoff with the same creation request before opening a client", async () => {
+  it("retries a failed handoff with the same creation request and launches it", async () => {
     vi.useFakeTimers();
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     Object.defineProperty(navigator, "clipboard", {
@@ -995,7 +995,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain(
       "We couldn’t finish preparing this handoff.",
     );
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
 
     await click(
       [...view.querySelectorAll("button")].find(
@@ -1005,11 +1005,12 @@ describe("Vercel-faithful App Builder flow", () => {
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(creationRequestIds).toHaveLength(2);
     expect(new Set(creationRequestIds).size).toBe(1);
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open.mock.calls[1]?.[0]).toMatch(/^codex:\/\/new\?prompt=/u);
     expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
   });
 
-  it("settles GitHub then Vercel before handoff and reopens only after an explicit successful retry", async () => {
+  it("settles GitHub then Vercel and launches the prepared handoff", async () => {
     vi.useFakeTimers();
     const requestId = "123e4567-e89b-42d3-a456-426614174000";
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(requestId);
@@ -1135,7 +1136,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("App created with an issue");
     expect(view.textContent).toContain("Setup needs attention");
     expect(view.textContent).toContain("Retry to finish setting up Vercel");
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(2);
 
     await click(
       [...view.querySelectorAll("button")].find(
@@ -1146,13 +1147,13 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("apps-provider-app");
     expect(view.textContent).toContain("App Brief Ready!");
     expect(view.textContent).not.toContain("Setup needs attention");
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(2);
     await click(
       [...view.querySelectorAll("button")].find(
         (button) => button.textContent === "Open in ChatGPT / Codex",
       )!,
     );
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(3);
     expect(writeText.mock.calls.at(-1)?.[0]).toContain(refreshedHandoffId);
     expect(writeText.mock.calls.at(-1)?.[0]).not.toContain("Project ID");
   });
@@ -1252,7 +1253,7 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
 
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(writeText).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
@@ -1274,7 +1275,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const copiedPrompt = writeText.mock.calls[0]?.[0];
     expect(copiedPrompt).not.toContain("codex plugin");
     expect(view.textContent).not.toContain("codex plugin");
-    const initialUrl = open.mock.calls[0]?.[0] as string;
+    const initialUrl = open.mock.calls[1]?.[0] as string;
     expect(new URL(initialUrl).searchParams.get("text")).toBe(copiedPrompt);
 
     for (let index = 0; index < 6; index += 1) {
@@ -1286,8 +1287,8 @@ describe("Vercel-faithful App Builder flow", () => {
         (button) => button.textContent === "Open in Cursor",
       )!,
     );
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(open.mock.calls[1]?.[0]).toBe(initialUrl);
+    expect(open).toHaveBeenCalledTimes(4);
+    expect(open.mock.calls[3]?.[0]).toBe(initialUrl);
   });
 
   it("keeps the Ready fallback actionable when launching and copying fail", async () => {
@@ -1320,9 +1321,7 @@ describe("Vercel-faithful App Builder flow", () => {
       await act(async () => vi.advanceTimersByTimeAsync(700));
     }
 
-    expect(view.textContent).not.toContain(
-      "The browser blocked ChatGPT / Codex.",
-    );
+    expect(view.textContent).toContain("The browser blocked ChatGPT / Codex.");
     await click(
       [...view.querySelectorAll("button")].find(
         (button) => button.textContent === "Open in ChatGPT / Codex",
@@ -1361,14 +1360,14 @@ describe("Vercel-faithful App Builder flow", () => {
       await act(async () => vi.advanceTimersByTimeAsync(700));
     }
 
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(2);
     await click(
       [...view.querySelectorAll("button")].find(
         (button) => button.textContent === "Open in ChatGPT / Codex",
       )!,
     );
-    expect(open).toHaveBeenCalledOnce();
-    const launchedUrl = open.mock.calls[0]?.[0] as string;
+    expect(open).toHaveBeenCalledTimes(3);
+    const launchedUrl = open.mock.calls[1]?.[0] as string;
     expect(launchedUrl.length).toBeLessThan(8_000);
     expect(decodeURIComponent(launchedUrl)).not.toContain("A".repeat(100));
     expect(view.textContent).toContain("Open in ChatGPT / Codex");

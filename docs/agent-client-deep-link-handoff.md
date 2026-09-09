@@ -1,7 +1,11 @@
 # Web-to-client handoff
 
 The form prepares the selected resources, saves an owner-bound handoff, and
-navigates to `/handoff/[id]`. Preparation does not launch a client or copy text.
+launches the selected client from the original **Create App** gesture. The
+browser reserves that native launch before asynchronous preparation, then sends
+only the saved opaque handoff ID when it is ready. It also navigates to
+`/handoff/[id]` as a durable recovery and reopen surface; it does not require a
+second click for the normal path.
 The durable page loads from the authenticated server record, so reloading or
 opening its URL in another tab preserves the app brief, repository, Vercel
 project/team, connection choices, and provisioning outcomes.

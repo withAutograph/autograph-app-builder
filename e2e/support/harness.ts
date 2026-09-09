@@ -287,8 +287,17 @@ export async function installBrowserBoundaries(
     });
     window.open = ((url?: string | URL) => {
       if (boundaryMode === "blocked") throw new Error("Protocol blocked");
-      state.opened.push(String(url ?? ""));
-      return null;
+      const value = String(url ?? "");
+      if (value !== "about:blank") state.opened.push(value);
+      return {
+        close() {},
+        location: {
+          set href(next: string) {
+            state.opened.push(next);
+          },
+        },
+        opener: null,
+      } as unknown as Window;
     }) as typeof window.open;
   }, mode);
 }

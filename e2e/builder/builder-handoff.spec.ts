@@ -142,7 +142,6 @@ test("multiple handoffs reload independently without replacing saved app context
       const boundary = await browserBoundaryState(activePage);
       expect(boundary.clipboard.at(-1)).toContain(handoff.id);
       expect(boundary.clipboard.at(-1)).not.toContain(otherHandoff.id);
-      expect(boundary.opened).toEqual([]);
     }
   } finally {
     await otherPage.close();
@@ -412,10 +411,6 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   await page.getByLabel("Private repository").uncheck();
   await completeHandoff(page);
 
-  expect(await browserBoundaryState(page)).toEqual({
-    clipboard: [],
-    opened: [],
-  });
   const handoffUrl = page.url();
   await page.reload();
   await expect(
@@ -432,6 +427,10 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   expect(saved.status).toBe("prepared");
   expect(saved.intent.appName).toBe("Support Console");
   expect(saved.intent.repository.requestedName).toBe("support-console");
+  const automaticallyOpened = await browserBoundaryState(page);
+  expect(automaticallyOpened.clipboard).toEqual([]);
+  expect(automaticallyOpened.opened).toHaveLength(1);
+  expect(automaticallyOpened.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
   await page
     .getByRole("button", { name: "Open in Codex", exact: true })
     .click();
@@ -439,7 +438,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
 
   const state = await browserBoundaryState(page);
   expect(state.clipboard).toHaveLength(1);
-  expect(state.opened).toHaveLength(1);
+  expect(state.opened).toHaveLength(2);
   expect(state.clipboard[0]).toMatch(
     /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/u,
   );
@@ -448,8 +447,8 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   expect(state.clipboard[0]).not.toMatch(
     /GitHub Resource|Vercel Resource|Installation[ _-]?ID|Repository ID|Head SHA|digest/iu,
   );
-  expect(state.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
-  expect(new URL(state.opened[0]!).searchParams.get("prompt")).toBe(
+  expect(state.opened.at(-1)).toMatch(/^codex:\/\/new\?prompt=/u);
+  expect(new URL(state.opened.at(-1)!).searchParams.get("prompt")).toBe(
     state.clipboard[0],
   );
 
@@ -486,9 +485,10 @@ test("Cursor handoff carries the exact copied prompt", async ({
   await page.getByRole("radio", { name: "Cursor" }).check();
   await completeHandoff(page);
 
-  expect(await browserBoundaryState(page)).toEqual({
+  const automaticallyOpened = await browserBoundaryState(page);
+  expect(automaticallyOpened).toEqual({
     clipboard: [],
-    opened: [],
+    opened: [expect.stringMatching(/^cursor:\/\//u)],
   });
   await expect(
     page.getByRole("radio", { name: "Cursor", exact: true }),
@@ -514,10 +514,10 @@ test("Cursor handoff carries the exact copied prompt", async ({
 
   const state = await browserBoundaryState(page);
   expect(state.clipboard[0]).not.toContain("codex plugin");
-  expect(state.opened[0]).toMatch(
+  expect(state.opened.at(-1)).toMatch(
     /^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u,
   );
-  expect(new URL(state.opened[0]!).searchParams.get("text")).toBe(
+  expect(new URL(state.opened.at(-1)!).searchParams.get("text")).toBe(
     state.clipboard[0],
   );
   await expect(

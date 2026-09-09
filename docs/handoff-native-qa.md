@@ -128,9 +128,12 @@ profile constant between web preparation and client OAuth.
    Record one successful connection ceremony per provider. Select the approved
    repository/installation and Vercel team/project; record sanitized IDs.
 3. Prepare an app with a distinctive brief/name. Select the client destination
-   and click **Create App**. Record the handoff ID privately in the QA receipt.
+   and click **Create App**. Expect the selected client to receive the prepared
+   prompt automatically after preparation; record the handoff ID privately in
+   the QA receipt.
 4. Reload `/handoff/[id]`. Expect the same name, brief, selections and preparation
-   status. Expect an explicit launch button and no **Continued in your app**.
+   status. The explicit launch button is a retry/reopen fallback, not a normal
+   path requirement; expect no **Continued in your app** before submission.
    If a feature flag hides a required selection, mark that selection case
    BLOCKED; do not claim it from metadata or toggle unrelated live flags.
 
@@ -161,9 +164,10 @@ Cursor's desktop callback is `http://localhost:8787/callback`; see
 
 ### N3 — Launch and submit the prepared prompt
 
-1. Return to the handoff page and click its explicit **Open in Codex/Cursor**.
-   Complete the permitted OS launch confirmation. Expect the selected client
-   with the handoff prompt, not a new provider login or an automatic build.
+1. In the client opened by **Create App**, complete any permitted OS launch
+   confirmation. Expect the selected client with the handoff prompt, not a new
+   provider login or an automatic build. If launch was blocked, use the
+   handoff page's explicit **Open in Codex/Cursor** retry.
 2. Review the prompt before submission. It must invoke `autograph_start` with
    the opaque handoff reference and deterministic request ID; it must not carry
    provider credentials. Submit explicitly in the native client.

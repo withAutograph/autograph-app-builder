@@ -94,6 +94,10 @@ export type {
 } from "./builder-types";
 
 type Screen = "builder" | "handoff" | "ready";
+type ReservedHandoffLaunch = {
+  launch: (destination: BuildDestination, handoffId: string) => HandoffAttempt;
+  abandon: () => void;
+};
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -145,6 +149,40 @@ function attemptAppHandoff(
     return "attempted";
   } catch {
     return "blocked";
+  }
+}
+
+// Desktop custom protocols need to be opened from the Create App gesture.
+// Provisioning is necessarily asynchronous, so reserve the native window now
+// and navigate it only after the server has saved the opaque handoff.
+function reserveAppHandoff(
+  destination: BuildDestination,
+): ReservedHandoffLaunch | undefined {
+  if (destination === "web") return undefined;
+  try {
+    const target = window.open("about:blank", "_blank");
+    if (!target) return undefined;
+    target.opener = null;
+    let used = false;
+    return {
+      launch(nextDestination, handoffId) {
+        if (used || nextDestination === "web") return "blocked";
+        const url = buildAppHandoffUrl(nextDestination, handoffId);
+        if (url.length > maximumHandoffUrlLength) return "too-long";
+        try {
+          target.location.href = url;
+          used = true;
+          return "attempted";
+        } catch {
+          return attemptAppHandoff(nextDestination, handoffId);
+        }
+      },
+      abandon() {
+        if (!used) target.close();
+      },
+    };
+  } catch {
+    return undefined;
   }
 }
 
@@ -1108,7 +1146,11 @@ export function Builder({
 }: {
   initialBrief: string;
   generatedNameSeed: string;
-  onCreate: (form: BuilderForm, resumeKey?: string) => void;
+  onCreate: (
+    form: BuilderForm,
+    resumeKey?: string,
+    launch?: ReservedHandoffLaunch,
+  ) => void;
   connectionsEnabled: boolean;
   comingSoonEnabled: boolean;
   integrations: BuilderIntegrationState;
@@ -1325,21 +1367,23 @@ export function Builder({
     if (canSubmit) {
       const appName =
         form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
+      const nextForm = {
+        ...form,
+        appName,
+        repository:
+          form.repository.trim() || repositoryNameFromAppName(appName),
+        ...(deploymentProvider === "vercel" && team
+          ? { vercelInstallationId: team }
+          : {}),
+        ...(storageProvider === "github" && gitScope
+          ? { githubInstallationId: gitScope }
+          : {}),
+        modelId: preferredModelId,
+      };
       onCreate(
-        {
-          ...form,
-          appName,
-          repository:
-            form.repository.trim() || repositoryNameFromAppName(appName),
-          ...(deploymentProvider === "vercel" && team
-            ? { vercelInstallationId: team }
-            : {}),
-          ...(storageProvider === "github" && gitScope
-            ? { githubInstallationId: gitScope }
-            : {}),
-          modelId: preferredModelId,
-        },
+        nextForm,
         resumeKey,
+        reserveAppHandoff(nextForm.buildDestination),
       );
     }
   }
@@ -1601,6 +1645,7 @@ export function Handoff({
   requestId,
   handoffCreationRequestId,
   provisioningEnabled,
+  launch,
   createHandoffTask = createBuilderHandoff,
   onReady,
 }: {
@@ -1608,6 +1653,7 @@ export function Handoff({
   requestId: string;
   handoffCreationRequestId: string;
   provisioningEnabled: boolean;
+  launch?: ReservedHandoffLaunch;
   createHandoffTask?: typeof createBuilderHandoff;
   onReady: (result: {
     provisioning: BuilderProvisionResponse;
@@ -1691,6 +1737,7 @@ export function Handoff({
           creationRequestId: handoffCreationRequestId,
         });
       } catch {
+        launch?.abandon();
         if (mounted.current) setHandoffError(true);
         return;
       }
@@ -1702,7 +1749,9 @@ export function Handoff({
       onReady({
         provisioning,
         handoff,
-        handoffAttempt: "idle",
+        handoffAttempt:
+          launch?.launch(form.buildDestination, handoff.handoffId) ??
+          attemptAppHandoff(form.buildDestination, handoff.handoffId),
         clipboardState: "idle",
       });
     })();
@@ -1714,6 +1763,7 @@ export function Handoff({
     createHandoffTask,
     form,
     handoffCreationRequestId,
+    launch,
     onReady,
     provisioningEnabled,
     requestId,
@@ -1925,6 +1975,7 @@ export function AppBuilder({
   const [handoffAttempt, setHandoffAttempt] = useState<HandoffAttempt>("idle");
   const [handoffClipboardState, setHandoffClipboardState] =
     useState<ClipboardState>("idle");
+  const pendingLaunch = useRef<ReservedHandoffLaunch | undefined>(undefined);
   const [savedBrief, setSavedBrief] = useState("");
   const resumedDraft = useSyncExternalStore(
     () => () => undefined,
@@ -1984,7 +2035,7 @@ export function AppBuilder({
           comingSoonEnabled={comingSoonEnabled}
           integrations={integrations}
           providerNotices={providerNotices}
-          onCreate={(form) => {
+          onCreate={(form, _resumeKey, launch) => {
             if (providerResumeKey) clearBuilderDraft(providerResumeKey);
             const requestId = crypto.randomUUID();
             const creationRequestId = crypto.randomUUID();
@@ -2001,6 +2052,7 @@ export function AppBuilder({
             setProvisioning(undefined);
             setHandoff(undefined);
             setHandoffClipboardState("idle");
+            pendingLaunch.current = launch;
             setScreen("handoff");
           }}
         />
@@ -2014,6 +2066,7 @@ export function AppBuilder({
           requestId={provisionRequestId}
           handoffCreationRequestId={handoffCreationRequestId}
           provisioningEnabled={provisioningEnabled}
+          launch={pendingLaunch.current}
           onReady={(result) => {
             persistActiveProvisioning({
               version: 1,
@@ -2028,6 +2081,7 @@ export function AppBuilder({
             setHandoff(result.handoff);
             setHandoffAttempt(result.handoffAttempt);
             setHandoffClipboardState(result.clipboardState);
+            pendingLaunch.current = undefined;
             setScreen("ready");
             router.push(
               `/handoff/${encodeURIComponent(result.handoff.handoffId)}`,
@@ -2050,6 +2104,8 @@ export function AppBuilder({
           initialAttempt={handoffAttempt}
           initialClipboardState={handoffClipboardState}
           onReset={() => {
+            pendingLaunch.current?.abandon();
+            pendingLaunch.current = undefined;
             clearActiveProvisioning();
             setSubmitted(undefined);
             setProvisionRequestId(undefined);
