@@ -64,6 +64,9 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   Name the same measure consistently across evidence, confirmation, and result
   states. Explain any calculation basis that could change interpretation before
   the user acts; detailed derivations may use existing progressive disclosure.
+  Show a concise governing reason beside a recommendation, using supported
+  description text rather than a decorative change badge. Keep the complete
+  derivation expandable; do not hide the reason needed to judge the action.
 
 ## Make the next step legible
 
