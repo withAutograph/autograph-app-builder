@@ -11,8 +11,13 @@ import {
 import { basename, join, relative, resolve } from "node:path";
 
 export const APP_CREATION_SKILL_ROOTS = [
+  "arrusted-next-app-like-experience",
   "create-app",
   "design-app",
+  "next-cache-components-adoption",
+  "next-cache-components-optimizer",
+  "next-dev-loop",
+  "next-partial-prefetching-adoption",
   "plan-app-creation",
   "scaffold-app-workspace",
 ] as const;
@@ -22,6 +27,7 @@ export const APP_CREATION_SKILL_EXPORT_DEPENDENCY_PATHS = [
   ".config/mise/mise.lock",
   ".config/mise/scripts/trusted-node-launcher",
   ".config/mise/tasks/skills/export",
+  "agent/vercel-next-workflows.lock.json",
   "lib/repository/app-creation-skill-export.ts",
   "package.json",
   "pnpm-lock.yaml",

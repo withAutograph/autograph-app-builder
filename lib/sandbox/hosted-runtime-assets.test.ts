@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { HOSTED_ARTIFACT_URL } from "./hosted-artifact";
+import { HOSTED_MANAGED_SKILL_CONTENTS } from "./hosted-managed-seeds.generated";
 
 const temporaryRoots: string[] = [];
 
@@ -47,7 +48,7 @@ process.stdout.write(JSON.stringify({ artifactUrl: artifact.HOSTED_ARTIFACT_URL,
 
     expect(JSON.parse(output)).toEqual({
       artifactUrl: HOSTED_ARTIFACT_URL,
-      seedCount: 14,
+      seedCount: HOSTED_MANAGED_SKILL_CONTENTS.length,
     });
   });
 });

@@ -77,7 +77,11 @@ app-owned files and reuse the same component-backed preview flow.
    only the exact app-owned paths returned by that error, rebuild the
    replacements, and retry planning without resolving or preparing the source
    again. Never expose this repair or substitute prose. Return only product
-   blockers without workarounds or internal validator mechanics.
+   blockers without workarounds or internal validator mechanics. When the
+   accepted change creates or evolves a native Arrusted Next App Router zone,
+   load `$arrusted-next-app-like-experience` before applying it. It selects the
+   relevant published Vercel workflow while preserving this Builder's typed-tool
+   boundary.
 6. For a new app, compose the actual product implementation from the prototype,
    brief, and inspected Arrusted conventions, using only existing public
    components and compositions without local replacement components. Include the app-owned TSX,

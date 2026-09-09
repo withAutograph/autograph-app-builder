@@ -44,6 +44,9 @@ through a generic shell.
 6. Give `{ "version": 1, "appId": "<id>" }` to the builder-owned planning
    operation. The selected adapter owns the exact target command; never
    construct or guess a repository script path.
+   When the proposal changes a native Arrusted Next App Router zone, the
+   subsequent apply flow must load `$arrusted-next-app-like-experience`; do not
+   substitute its workflow guidance with raw target commands.
 
 7. If existing-app planning reports a missing exact source preimage, call
    `inspect_existing_app` only for the exact app-owned candidate paths in that

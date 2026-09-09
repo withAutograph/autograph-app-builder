@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "source": "https://github.com/vercel/next.js",
+  "revision": "be2c3fdb3aaa742ae549c7109d101a6eb8ab59c4",
+  "license": "MIT",
+  "skills": {
+    "next-cache-components-adoption": "ee32a97b1f9b19f3d792e00a98c4bc9c000984daebe2fa458215b5c45313ff36",
+    "next-cache-components-optimizer": "9b538b7f58241f8d6d808a35967bd8b0624f3ae97f7904ab51b294b05e533210",
+    "next-dev-loop": "dc0d71d7b605451cb20478fb36532602397a4c1ee83640c5facba753b16ed13c",
+    "next-partial-prefetching-adoption": "21ec863374c8e5d67c2e7bd44e7c4483450a938bdefb7742ae2abd2ec8c7e231"
+  }
+}

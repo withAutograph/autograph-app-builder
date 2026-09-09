@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Export the four app-creation skills deterministically"
+#MISE description="Export managed App Builder skills deterministically"
 set -eu
 
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
