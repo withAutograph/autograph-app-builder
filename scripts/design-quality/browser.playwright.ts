@@ -1,5 +1,28 @@
 import { expect, test } from "playwright/test";
-import { measurePage, measureStyles } from "./browser";
+import { capturePreview, measurePage, measureStyles } from "./browser";
+import { createServer } from "node:http";
+
+test("an unavailable preview is not captured or scored as an empty design", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No listener");
+    await expect(
+      capturePreview({
+        url: `http://127.0.0.1:${address.port}/missing`,
+        output: test.info().outputDir,
+        tokens: {},
+        scenarios: [],
+      }),
+    ).rejects.toThrow("Preview returned HTTP 404");
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
 import {
   collectClassTokenEvidence,
   collectIntrinsicClassSignatures,
@@ -188,6 +211,55 @@ test("browser signature attribution is reviewer evidence, not score provenance",
         item.verdict === "unassessed",
     ),
   ).toBe(true);
+});
+
+test("uses only a one-value gap shorthand as longhand diagnostic evidence", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setContent(`<!doctype html><style>
+    :root { --space-1: 4px; --space-2: 8px }
+    .one { gap: var(--space-1) }
+    .first { gap: var(--space-1) }.second { gap: var(--space-2) }
+    .two { gap: var(--space-1) var(--space-2) }
+  </style><div class="one">one</div><div class="first second">conflict</div><div class="two">two</div>`);
+  const styles = await measureStyles(page, {
+    "--space-1": "4px",
+    "--space-2": "8px",
+  });
+  for (const property of ["row-gap", "column-gap"]) {
+    expect(
+      styles.observations.some(
+        (item) =>
+          item.property === property &&
+          item.declarations.length === 1 &&
+          item.declarations[0] === "var(--space-1)" &&
+          item.classification === "semantic-token-reference" &&
+          item.provenance === "unknown" &&
+          item.verdict === "unassessed",
+      ),
+    ).toBe(true);
+    expect(
+      styles.observations.some(
+        (item) =>
+          item.property === property &&
+          item.declarations.includes("var(--space-1)") &&
+          item.declarations.includes("var(--space-2)") &&
+          item.classification === "unknown" &&
+          item.verdict === "unassessed",
+      ),
+    ).toBe(true);
+    expect(
+      styles.observations.some(
+        (item) =>
+          item.property === property &&
+          item.declarations.length === 1 &&
+          item.declarations[0] === "" &&
+          item.classification === "unknown" &&
+          item.verdict === "unassessed",
+      ),
+    ).toBe(true);
+  }
 });
 
 test("reports a unique escaped utility token as a shared reviewer candidate", async ({

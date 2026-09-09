@@ -88,11 +88,28 @@ The design-quality evaluation is an on-demand advisory review for an Arrusted
 preview. It gives a design reviewer structured observations; it is not a CI or
 runtime gate, and it does not automatically rerun.
 
-Run it with a preview URL, the Arrusted checkout, and the design brief:
+Run it with a preview URL, the Arrusted checkout, and either a design brief or
+a named case:
 
 ```sh
-mise run eval:design -- --preview-url URL --arrusted-root ROOT --brief-file FILE [--source-dir DIR] [--scenario FILE --fixture-interactions] [--measurements-only] [--output-dir DIR]
+mise run eval:design -- --preview-url URL --arrusted-root ROOT (--brief-file FILE | --case ID) [--source-dir DIR] [--scenario FILE --fixture-interactions] [--measurements-only] [--output-dir DIR]
 ```
+
+`--case ID` reads `docs/design-quality-cases/ID/case.json` and its `brief.md`.
+It is mutually exclusive with `--brief-file`, appends the case's review
+questions under a visibly separate heading for the advisory judge, and records
+the case metadata in `report.json`. It does not generate an app or alter
+scoring. Discover available IDs without opening a preview or starting an
+evaluation:
+
+```sh
+mise run eval:design -- --list-cases
+```
+
+An explicit `--scenario FILE` remains the user-selected scenario. If a selected
+case has `scenarios.json`, it is used only when `--fixture-interactions` is
+also supplied; otherwise no case interactions run. Case fixture data is for
+approved fixture pages only.
 
 The evaluator samples desktop-class windows at `1440x900`, `1920x1080`, and
 `1024x768`. These samples do not impose a minimum supported width. Phone/tablet

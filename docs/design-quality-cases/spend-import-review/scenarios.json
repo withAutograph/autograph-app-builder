@@ -1,0 +1,108 @@
+[
+  {
+    "name": "inspect mapped import preview",
+    "steps": [
+      {
+        "action": "select",
+        "selector": "select >> nth=0",
+        "value": "Vendor name"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Preview imported changes"
+      }
+    ],
+    "expect": {
+      "text": "Six representative rows are shown."
+    }
+  },
+  {
+    "name": "save identifies imported and unresolved counts",
+    "steps": [
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Preview imported changes"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Save import"
+      }
+    ],
+    "expect": {
+      "text": "38 rows imported into the simulated spend register. 4 rows remain in human review"
+    }
+  },
+  {
+    "name": "record a chosen vendor match",
+    "steps": [
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Preview imported changes"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Save import"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Review 4 exception rows"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Northstar Cloud Inc. TX-042 · AP-4192 · 2026-08-31 $12,950.00 Needs review"
+      },
+      {
+        "action": "click",
+        "selector": "label[data-decision-option-card]:has(input[value=\"nsc-1008\"])"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Apply simulated decision"
+      }
+    ],
+    "expect": {
+      "text": "Simulated decision recorded."
+    }
+  },
+  {
+    "name": "retain uncertain match for follow-up",
+    "steps": [
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Preview imported changes"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Save import"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Review 4 exception rows"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Northstar Cloud Inc. TX-042 · AP-4192 · 2026-08-31 $12,950.00 Needs review"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Leave unresolved"
+      }
+    ],
+    "expect": {
+      "text": "Left unresolved for follow-up."
+    }
+  }
+]

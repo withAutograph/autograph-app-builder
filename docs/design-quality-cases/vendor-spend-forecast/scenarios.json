@@ -1,0 +1,17 @@
+[
+  {
+    "name": "record a simulated review",
+    "steps": [
+      { "action": "click", "role": "button", "name": "Mark review complete" }
+    ],
+    "expect": { "text": "Review simulation recorded" }
+  },
+  {
+    "name": "reset a simulated review",
+    "steps": [
+      { "action": "click", "role": "button", "name": "Mark review complete" },
+      { "action": "click", "role": "button", "name": "Reset simulation" }
+    ],
+    "expect": { "text": "Mark review complete" }
+  }
+]

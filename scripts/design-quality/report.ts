@@ -16,6 +16,14 @@ export function renderReport(report: {
   sourceFiles?: Array<{ path: string; content: string }>;
   reference?: unknown;
   evaluationNotes?: string[];
+  case?: {
+    id: string;
+    title: string;
+    notes: string;
+    evidence: Array<{ repo: string; path: string; status: string }>;
+    reviewQuestions: string[];
+    outcomes: string[];
+  };
   judge: unknown;
   captures: Array<{
     name: string;
@@ -99,6 +107,9 @@ export function renderReport(report: {
         .join("")}</details>`
     : "";
   const measuredSummary =
+    (report.case
+      ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map((item) => `<li>${escapeHtml(item.repo)}: <code>${escapeHtml(item.path)}</code> — ${escapeHtml(item.status)}</li>`).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map((question) => `<li>${escapeHtml(question)}</li>`).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map((outcome) => `<li>${escapeHtml(outcome)}</li>`).join("")}</ul></details></section>`
+      : "") +
     (report.evaluationNotes?.length
       ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul></details>`
       : "") +

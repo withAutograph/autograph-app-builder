@@ -2,7 +2,9 @@
 
 Shared, advisory observations of generated previews. No pass threshold or runtime gate.
 
-**Latest report:** [stock-exceptions-native-scroll](2026-09-09/stock-exceptions-native-scroll-084608340Z/README.md)
+**Six-case evaluation:** [Arrusted and AG2 results, screenshots and limitations](2026-09-09/arrusted-ag2-batch.md).
+
+**Latest report:** [spend-import-review](2026-09-09/spend-import-review-132244628Z/README.md)
 
 ## Convention
 
@@ -20,6 +22,29 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 | Evaluated (UTC)          | App                                                                                                                    | Subjective score / 100 |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 2026-09-09T13:22:44.628Z | [spend-import-review](2026-09-09/spend-import-review-132244628Z/README.md)                                             | 75                     |
+| 2026-09-09T13:19:50.277Z | [revenue-analysis](2026-09-09/revenue-analysis-131950277Z/README.md)                                                   | 80                     |
+| 2026-09-09T13:15:21.865Z | [vendor-spend-forecast](2026-09-09/vendor-spend-forecast-131521865Z/README.md)                                         | 80                     |
+| 2026-09-09T13:14:30.037Z | [reorganization-scenario](2026-09-09/reorganization-scenario-131430037Z/README.md)                                     | 90                     |
+| 2026-09-09T13:13:05.302Z | [compensation-planning](2026-09-09/compensation-planning-131305302Z/README.md)                                         | 75                     |
+| 2026-09-09T13:12:50.013Z | [position-request](2026-09-09/position-request-131250013Z/README.md)                                                   | 85                     |
+| 2026-09-09T12:39:10.739Z | [stock-exceptions-explained-addition](2026-09-09/stock-exceptions-explained-addition-123910739Z/README.md)             | 95                     |
+| 2026-09-09T12:22:01.012Z | [stock-exceptions-ranked-selection](2026-09-09/stock-exceptions-ranked-selection-122201012Z/README.md)                 | 90                     |
+| 2026-09-09T12:10:38.077Z | [stock-exceptions-readable-description](2026-09-09/stock-exceptions-readable-description-121038077Z/README.md)         | 90                     |
+| 2026-09-09T12:02:36.378Z | [stock-exceptions-header-description](2026-09-09/stock-exceptions-header-description-120236378Z/README.md)             | 95                     |
+| 2026-09-09T11:38:02.027Z | [stock-exceptions-consistent-basis](2026-09-09/stock-exceptions-consistent-basis-113802027Z/README.md)                 | 95                     |
+| 2026-09-09T11:25:25.416Z | [stock-exceptions-calculation-disclosure](2026-09-09/stock-exceptions-calculation-disclosure-112525416Z/README.md)     | 90                     |
+| 2026-09-09T11:16:16.454Z | [stock-exceptions-compact-orientation](2026-09-09/stock-exceptions-compact-orientation-111616454Z/README.md)           | 95                     |
+| 2026-09-09T11:04:34.428Z | [stock-exceptions-focused-context](2026-09-09/stock-exceptions-focused-context-110434428Z/README.md)                   | 90                     |
+| 2026-09-09T10:53:42.438Z | [stock-exceptions-visible-selection](2026-09-09/stock-exceptions-visible-selection-105342438Z/README.md)               | 95                     |
+| 2026-09-09T10:41:07.615Z | [stock-exceptions-selection-guidance](2026-09-09/stock-exceptions-selection-guidance-104107615Z/README.md)             | 90                     |
+| 2026-09-09T10:26:22.321Z | [stock-exceptions-compact-outcome](2026-09-09/stock-exceptions-compact-outcome-102622321Z/README.md)                   | 95                     |
+| 2026-09-09T10:04:09.431Z | [stock-exceptions-full-outcome](2026-09-09/stock-exceptions-full-outcome-100409431Z/README.md)                         | 90                     |
+| 2026-09-09T09:54:32.378Z | [stock-exceptions-header-actions](2026-09-09/stock-exceptions-header-actions-095432378Z/README.md)                     | 80                     |
+| 2026-09-09T09:46:19.617Z | [stock-exceptions-reachable-actions](2026-09-09/stock-exceptions-reachable-actions-094619617Z/README.md)               | 80                     |
+| 2026-09-09T09:29:55.074Z | [stock-exceptions-primary-labels](2026-09-09/stock-exceptions-primary-labels-092955074Z/README.md)                     | 90                     |
+| 2026-09-09T09:17:03.978Z | [stock-exceptions-decision-composition](2026-09-09/stock-exceptions-decision-composition-091703978Z/README.md)         | 90                     |
+| 2026-09-09T08:56:31.747Z | [stock-exceptions-natural-window](2026-09-09/stock-exceptions-natural-window-085631747Z/README.md)                     | 90                     |
 | 2026-09-09T08:46:08.340Z | [stock-exceptions-native-scroll](2026-09-09/stock-exceptions-native-scroll-084608340Z/README.md)                       | 90                     |
 | 2026-09-09T08:40:18.759Z | [stock-exceptions-minimal-scroll](2026-09-09/stock-exceptions-minimal-scroll-084018759Z/README.md)                     | 90                     |
 | 2026-09-09T08:28:16.955Z | [stock-exceptions-aligned-header](2026-09-09/stock-exceptions-aligned-header-082816955Z/README.md)                     | 90                     |

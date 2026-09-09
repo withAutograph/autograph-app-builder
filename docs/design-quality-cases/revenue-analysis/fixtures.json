@@ -1,0 +1,10 @@
+{
+  "synthetic": true,
+  "period": "2026-08",
+  "metrics": { "arr": 4860000, "mrr": 405000, "previousMrr": 389000 },
+  "movements": [
+    { "type": "expansion", "amount": 24000, "account": "Aster Labs" },
+    { "type": "contraction", "amount": -8000, "account": "Beacon Co." }
+  ],
+  "freshness": "2026-09-01T06:00:00Z"
+}

@@ -1,0 +1,21 @@
+{
+  "synthetic": true,
+  "vendor": {
+    "id": "V-21",
+    "name": "Northstar Cloud",
+    "owner": "Infrastructure"
+  },
+  "period": "FY27-Q1",
+  "actuals": { "priorQuarter": 84000, "currentQuarterToDate": 31000 },
+  "forecast": {
+    "expectedCharges": 96000,
+    "committed": 72000,
+    "assumption": "Annual renewal at 8% uplift",
+    "varianceToPlan": 12000
+  },
+  "watchItem": {
+    "type": "renewal",
+    "dueDate": "2026-11-15",
+    "status": "needs-review"
+  }
+}

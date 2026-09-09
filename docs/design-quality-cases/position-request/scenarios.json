@@ -1,0 +1,50 @@
+[
+  {
+    "name": "empty form explains required fields",
+    "steps": [
+      { "action": "click", "role": "button", "name": "Clear form" },
+      { "action": "click", "role": "button", "name": "Save draft" }
+    ],
+    "expect": { "text": "Enter a position title." }
+  },
+  {
+    "name": "invalid salary is explained",
+    "steps": [
+      {
+        "action": "fill",
+        "role": "spinbutton",
+        "name": "Annual base salary (USD) (required) Enter the annual amount in whole US dollars.",
+        "value": "-1"
+      },
+      { "action": "click", "role": "button", "name": "Save draft" }
+    ],
+    "expect": { "text": "Enter an annual base salary greater than $0." }
+  },
+  {
+    "name": "correct salary and confirm draft",
+    "steps": [
+      {
+        "action": "fill",
+        "role": "spinbutton",
+        "name": "Annual base salary (USD) (required) Enter the annual amount in whole US dollars.",
+        "value": "-1"
+      },
+      { "action": "click", "role": "button", "name": "Save draft" },
+      { "action": "fill", "selector": "input[type=number]", "value": "120000" },
+      { "action": "click", "role": "button", "name": "Save draft" }
+    ],
+    "expect": { "text": "Draft saved in this preview" }
+  },
+  {
+    "name": "date order is explained",
+    "steps": [
+      {
+        "action": "fill",
+        "selector": "input[type=date] >> nth=1",
+        "value": "2025-01-01"
+      },
+      { "action": "click", "role": "button", "name": "Save draft" }
+    ],
+    "expect": { "text": "End date must be on or after the start date." }
+  }
+]

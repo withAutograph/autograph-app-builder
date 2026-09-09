@@ -1,0 +1,36 @@
+{
+  "id": "position-request",
+  "title": "Position request drafting",
+  "status": "advisory",
+  "notes": "Synthetic drafting scenario grounded in implemented position fields and AG2's implemented requisition actions; the position-specific salary/date correction and draft-confirmation composition is an advisory extension.",
+  "evidence": [
+    {
+      "repo": "arrusted",
+      "path": "apps/hc/frontend/src/pages/NewPositionSheet.tsx",
+      "status": "implemented"
+    },
+    {
+      "repo": "arrusted",
+      "path": "apps/hc/frontend/src/pages/ApprovalsPage.tsx",
+      "status": "implemented"
+    },
+    {
+      "repo": "arrusted",
+      "path": "domain-libs/position/src/model-position.ts",
+      "status": "implemented"
+    },
+    {
+      "repo": "ag2",
+      "path": "frontend/src/app-templates/templates/hiring/manifest.ts",
+      "status": "implemented"
+    }
+  ],
+  "reviewQuestions": [
+    "Can a manager understand salary and date fields and correct errors without losing other values?",
+    "Does the draft confirmation clearly show the saved fixture values and distinguish them from a real submission?"
+  ],
+  "outcomes": [
+    "A user can save a corrected position request as a draft with salary and timing context.",
+    "The resulting confirmation identifies the saved fixture request and supports returning to edit it."
+  ]
+}

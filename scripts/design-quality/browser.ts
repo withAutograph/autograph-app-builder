@@ -148,6 +148,25 @@ function matchedSelector(match: {
   return selectors.length === 1 ? selectors[0]?.text : undefined;
 }
 
+/**
+ * CDP expands `gap` into empty row/column longhands. A shorthand can support
+ * either axis only when it contains exactly one top-level CSS value; two-value
+ * gaps deliberately remain ambiguous rather than being assigned to both axes.
+ */
+function singleGapValue(value: string): string | undefined {
+  const candidate = value.trim();
+  if (!candidate) return undefined;
+  let depth = 0;
+  for (const character of candidate) {
+    if (character === "(") depth++;
+    else if (character === ")") {
+      depth--;
+      if (depth < 0) return undefined;
+    } else if (depth === 0 && /\s/.test(character)) return undefined;
+  }
+  return depth === 0 ? candidate : undefined;
+}
+
 export const sourcePath = (value: string | undefined) => {
   if (!value) return undefined;
   try {
@@ -689,10 +708,43 @@ export async function measureStyles(
             )
             .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) })),
         );
+        const needsGapFallback =
+          (property === "row-gap" || property === "column-gap") &&
+          own.every((entry) => !entry.p.value.trim());
+        const gapShorthands = needsGapFallback
+          ? rules.flatMap((m) =>
+              m.rule.style.cssProperties.filter(
+                (p) => p.name === "gap" && !p.disabled && p.parsedOk !== false,
+              ),
+            )
+          : [];
+        const unsupportedGap = gapShorthands.some(
+          (declaration) =>
+            declaration.value.trim() && !singleGapValue(declaration.value),
+        );
+        const gapFallback =
+          needsGapFallback && !unsupportedGap
+            ? rules.flatMap((m) =>
+                m.rule.style.cssProperties
+                  .filter(
+                    (p) =>
+                      p.name === "gap" &&
+                      !p.disabled &&
+                      p.parsedOk !== false &&
+                      singleGapValue(p.value),
+                  )
+                  .map((p) => ({
+                    p,
+                    rule: m.rule,
+                    selector: matchedSelector(m),
+                  })),
+              )
+            : [];
+        const ownEvidence = gapFallback.length ? gapFallback : own;
         const declarationEntries = inline.length
           ? inline.map((p) => ({ p, rule: undefined, selector: undefined }))
-          : own.length
-            ? own
+          : ownEvidence.length
+            ? ownEvidence
             : inherited.flatMap((m) =>
                 m.rule.style.cssProperties
                   .filter(
@@ -816,6 +868,7 @@ export async function measureStyles(
           cv[property] ?? "",
           normalized[property] ?? [],
         );
+        if (unsupportedGap) classification = "unknown";
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
@@ -1035,7 +1088,9 @@ export async function capturePreview(input: {
       await context.addInitScript("globalThis.__name = (value) => value;");
       const page = await context.newPage();
       // Never attach project OIDC, cookies, or provider headers to preview requests.
-      await page.goto(input.url, { waitUntil: "load" });
+      const response = await page.goto(input.url, { waitUntil: "load" });
+      if (response && !response.ok())
+        throw new Error(`Preview returned HTTP ${response.status()}`);
       await page.evaluate(() => document.fonts.ready);
       for (let index = 0; index <= input.scenarios.length; index++) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
@@ -1043,7 +1098,9 @@ export async function capturePreview(input: {
           status: "not-run",
         };
         if (scenario) {
-          await page.reload({ waitUntil: "load" });
+          const refreshed = await page.reload({ waitUntil: "load" });
+          if (refreshed && !refreshed.ok())
+            throw new Error(`Preview returned HTTP ${refreshed.status()}`);
           try {
             for (const step of scenario.steps) {
               const locator = step.selector

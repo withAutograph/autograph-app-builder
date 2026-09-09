@@ -16,6 +16,10 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   metadata. Keep counts, filters, and sorting with their collection, including
   when desktop panels narrow; keep help beside the relevant action or field. A
   subtitle must not become a catch-all sentence. Omit redundant instructions.
+  Keep collection summaries concise. When useful instructions need more room,
+  use a supported full-width description below the heading and metadata rather
+  than stacking prose inside a right-aligned summary. Preserve the wider
+  composition when only the constrained view needs this help.
 - Establish hierarchy with Arrusted's supported typography, spacing, and
   surfaces. Use consistent roles for headings, primary values, explanations,
   labels, and metadata. Do not solve hierarchy by enlarging everything, making
@@ -51,6 +55,18 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   Preserve selection, logical reading order, keyboard focus, and task context
   when desktop panels narrow. Do not force a new navigation pattern if the
   existing composition remains useful.
+- In a constrained detail view, avoid repeating the full page introduction
+  above navigation and record identity. Preserve orientation and a clear way
+  back; keep the wider overview unchanged when it still supports comparison.
+- When a calculation explains an action, expose its meaningful steps as short
+  labeled facts using existing detail components. Preserve assumptions and
+  quantities; do not replace them with decorative metrics or invented context.
+  Name the same measure consistently across evidence, confirmation, and result
+  states. Explain any calculation basis that could change interpretation before
+  the user acts; detailed derivations may use existing progressive disclosure.
+  Show a concise governing reason beside a recommendation, using supported
+  description text rather than a decorative change badge. Keep the complete
+  derivation expandable; do not hide the reason needed to judge the action.
 
 ## Make the next step legible
 
@@ -59,7 +75,15 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   selection alone is unclear. Preserve visible selection and keyboard behavior;
   do not add a redundant button to every row or a global instruction paragraph
   when the existing interaction is already obvious.
+- If an initial record is suggested before the user opens it, label that
+  suggestion rather than implying the user already chose it. Keep guidance
+  consistent with the visible state: invite opening when details are absent,
+  and reviewing or changing the selection when details are already present.
 - When ordering affects interpretation, label its basis beside the results
+  and align an automatically suggested record with that ordering. Reuse the
+  same ordering when filters change; preserve a user- or route-selected record
+  while it remains relevant instead of replacing an intentional choice.
+  Keep the ordering label close to the records
   (for example, “Sorted by: newest”). Keep it readable and subordinate to the
   records. A passive ordering label must not look like an interactive control;
   a changeable sort must use a real supported control. Do not invent sorting
