@@ -10,3 +10,8 @@ pnpm = "11.7.0"
 
 [settings]
 experimental = true
+
+[tasks."test:handoff-e2e"]
+description = "Run handoff browser acceptance with isolated local emulator ports"
+run = "mise run auth-e2e:test -- e2e/builder/builder-handoff.spec.ts e2e/auth/client-oauth-handoff.spec.ts"
+env = { APP_BUILDER_LOCAL_PORT = "3101", APP_BUILDER_DATABASE_PORT = "54339", EMULATE_BASE_PORT = "4100" }

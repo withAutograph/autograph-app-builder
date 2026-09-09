@@ -53,6 +53,10 @@ without re-running provider provisioning.
 
 ## Acceptance boundaries
 
+Use [the Computer-assisted native QA runbook](handoff-native-qa.md) for the
+automated commands, coverage boundaries, remaining Codex/Cursor walkthrough,
+failure cases, and sanitized receipt template.
+
 Local deterministic tests and provider-emulated browser tests are not native
 desktop acceptance. Before claiming native-client support on a deployment,
 record the Preview URL/revision, Codex and Cursor versions, fresh-profile setup,
@@ -101,4 +105,49 @@ Native Preview acceptance has not yet been performed for this change.
   the same handoff without triggering another OAuth challenge.
 
 These checks do not prove the complete browser-to-native-client-to-hosted-engine
-journey on Preview. No live provider registration or deployment was performed.
+journey on Preview. No live provider registration or deployment was performed
+as part of that local acceptance pass.
+
+### Preview deployment receipt (2026-09-09 UTC)
+
+- Source: `da24d44432d75dcdff7575aa3110f040822b810c`, published to
+  `codex/authenticated-client-handoff`; Production was not changed.
+- Ready deployment: `dpl_2MY8fxDFGsV836kg6h1VhK8NQuq7`, immutable URL
+  <https://autograph-app-builder-6hfwzcduv-autographing.vercel.app>.
+- Canonical branch origin:
+  <https://autograph-app-builder-git-codex-authenticat-457163-autographing.vercel.app>.
+- Neon integration created isolated branch `br-twilight-band-au3jzlsj`
+  (`preview/codex/authenticated-client-handoff`) in project
+  `wispy-cherry-74541901`. Cursor setup ran against this branch, not its parent.
+- The existing Cursor setup implementation returned `ready: true` twice for
+  `autograph-cursor-desktop` bound to the canonical origin's `/mcp` resource.
+  The second run verified idempotent registration/readback.
+- The first ready deployment exposed missing branch-specific MCP settings as
+  `503 service_unavailable`. Six nonsecret branch-only settings were added:
+  `BETTER_AUTH_URL`, `MCP_RESOURCE_URL`, `MCP_OAUTH_ISSUER`,
+  `MCP_OAUTH_AUDIENCE`, `MCP_OAUTH_JWKS_URL`, and `MCP_OAUTH_ALGORITHM=ES256`.
+  Redeploying the same source produced the ready deployment above.
+- Through authenticated `vercel curl`, Better Auth metadata advertised CIMD,
+  PKCE-S256, and refresh tokens on the canonical origin. Protected-resource
+  metadata returned the matching issuer/resource; MCP initialize succeeded;
+  `autograph_get` without an Autograph token returned `authentication_required`
+  and the matching MCP authentication challenge. This is server smoke evidence,
+  not an exchanged-token or provider-continuity acceptance test.
+
+Native acceptance remains blocked/unperformed:
+
+- Preview Vercel Authentication remains enabled. A direct credential-free MCP
+  POST received HTTP 401 without the application's authentication challenge;
+  authorized Vercel access is not evidence of a fresh native client's access.
+  No protection exception, bypass credential in client configuration, or
+  Production change was introduced.
+- Browser automation explicitly rejected the Preview tab under its URL policy.
+  No alternate browser surface was used to circumvent that rejection.
+- Installed Codex desktop (`com.openai.codex`, displayed as ChatGPT) reports
+  version `26.903.61454`. Cursor was not found in the inspected application
+  locations or available native-app inventory; its installation/location awaits
+  user direction. Neither client completed fresh-profile acceptance.
+- First/repeated consent, refresh continuation, handoff redemption, and provider
+  readbacks through the deployed native clients remain unverified. A user-driven
+  walkthrough and an approved native-client-compatible Preview access path are
+  still required before claiming support.

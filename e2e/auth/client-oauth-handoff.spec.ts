@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { createServer, type Server } from "node:http";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { expect, test, type Page } from "playwright/test";
@@ -26,6 +27,17 @@ import {
 // Authorization codes, browser cookies, and tokens must not enter artifacts.
 test.use({ trace: "off", screenshot: "off", video: "off" });
 test.beforeEach(async () => resetApplicationState());
+let callbackServer: Server | undefined;
+test.afterEach(async () => {
+  const server = callbackServer;
+  callbackServer = undefined;
+  if (server?.listening) {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+    });
+  }
+});
 
 const issuer = `${appOrigin}/api/auth`;
 const resource = `${appOrigin}/mcp`;
@@ -71,9 +83,11 @@ async function verifyOwner(
   ownerUserId: string,
   workspaceId: string,
 ) {
+  let stage = "JWKS readback";
   try {
     const response = await page.request.get(`${issuer}/jwks`);
     if (!response.ok()) throw new Error();
+    stage = "signature, issuer, audience, and lifetime verification";
     const { payload } = await jwtVerify(
       tokens.access_token,
       createLocalJWKSet(await response.json()),
@@ -83,27 +97,30 @@ async function verifyOwner(
         algorithms: ["ES256"],
       },
     );
-    if (payload.sub !== ownerUserId || payload.workspace_id !== workspaceId)
-      throw new Error();
+    stage = "web owner comparison";
+    if (payload.sub !== ownerUserId) throw new Error();
+    stage = "web workspace comparison";
+    if (payload.workspace_id !== workspaceId) throw new Error();
   } catch {
-    throw new Error(
-      "Client OAuth token did not verify against the web user's identity and workspace.",
-    );
+    throw new Error(`Client OAuth ${stage} failed; sensitive details omitted.`);
   }
 }
 
 test("web login and both emulated connections survive Cursor consent, token refresh, and repeat grants", async ({
   page,
 }) => {
+  // The first cold Next development run compiles two provider callbacks,
+  // provisioning, handoff, and consent routes within this single journey.
+  test.setTimeout(180_000);
   await finishOAuth(page, "GitHub");
   await page.goto("/");
   await installProvider(page, "GitHub");
   await installProvider(page, "Vercel");
   const browserSession = await currentSession(page);
   const ownerUserId = browserSession?.user?.id;
-  const workspaceId = browserSession?.session?.activeOrganizationId;
+  const organizationId = browserSession?.session?.activeOrganizationId;
   expect(typeof ownerUserId).toBe("string");
-  expect(typeof workspaceId).toBe("string");
+  expect(typeof organizationId).toBe("string");
   const before = await applicationCounts();
   expect(before.githubInstallations).toBeGreaterThan(0);
   expect(before.vercelInstallations).toBeGreaterThan(0);
@@ -111,7 +128,19 @@ test("web login and both emulated connections survive Cursor consent, token refr
   // Explicit local setup after the real browser login initializes OAuth. This
   // is the existing deployment helper, never request-time registration.
   const sql = postgres(databaseUrl, { max: 1 });
+  let workspaceId: string;
   try {
+    // Better Auth organization IDs and hosted workspace IDs are distinct.
+    // Resolve the existing web membership instead of assuming they are equal.
+    const memberships = await sql<Array<{ workspace_id: string }>>`
+      SELECT o.workspace_id FROM organization o
+      JOIN member m ON m.organization_id = o.id
+      WHERE o.id = ${organizationId} AND m.user_id = ${ownerUserId}
+        AND o.issuer = ${issuer} AND o.audience = ${resource}
+    `;
+    expect(memberships.length).toBe(1);
+    workspaceId = memberships[0].workspace_id;
+    expect(typeof workspaceId).toBe("string");
     await setupCursorClient(drizzle(sql, { schema }), resource);
   } finally {
     await sql.end();
@@ -132,18 +161,27 @@ test("web login and both emulated connections survive Cursor consent, token refr
     page.getByRole("link", { name: "Add Autograph to Cursor" }),
   ).toBeVisible();
 
-  let providerAuthorizationRequests = 0;
+  const providerAuthorizationRequests: string[] = [];
   let consentSubmissions = 0;
   page.on("request", (request) => {
     const url = new URL(request.url());
+    // The signed-in user's avatar is a provider read, not authorization.
+    const avatarRead =
+      url.origin === githubEmulatorOrigin &&
+      url.pathname.startsWith("/avatars/") &&
+      request.method() === "GET" &&
+      request.resourceType() === "image";
     if (
-      [githubEmulatorOrigin, vercelEmulatorOrigin].includes(url.origin) ||
+      ([githubEmulatorOrigin, vercelEmulatorOrigin].includes(url.origin) &&
+        !avatarRead) ||
       /^\/(?:local-oauth|local-connections)\//u.test(url.pathname) ||
       /\/api\/auth\/(?:sign-in|oauth2\/authorize-provider|oauth2\/link)/u.test(
         url.pathname,
       )
     )
-      providerAuthorizationRequests += 1;
+      providerAuthorizationRequests.push(
+        `${request.method()} ${url.pathname} ${request.resourceType()} prefetch=${request.headers()["next-router-prefetch"] ?? "none"}`,
+      );
     if (
       url.origin === appOrigin &&
       url.pathname === "/api/auth/oauth2/consent" &&
@@ -153,19 +191,29 @@ test("web login and both emulated connections survive Cursor consent, token refr
   });
 
   let callback: URL | undefined;
-  // Capture the actual authorization redirect at the native callback boundary.
-  // No desktop listener is started; neither code issuance nor tokens are mocked.
-  await page.route(
-    (url) => url.origin + url.pathname === cursorRedirectUri,
-    async (route) => {
-      callback = new URL(route.request().url());
-      await route.fulfill({
-        status: 200,
-        contentType: "text/html",
-        body: "<!doctype html><title>OAuth callback received</title>",
-      });
-    },
-  );
+  // A loopback test receiver handles both consent's browser navigation and
+  // repeat consent's HTTP redirect. It stands in for the desktop callback
+  // listener only; no authorization response or token is fabricated.
+  callbackServer = createServer((request, response) => {
+    const target = new URL(request.url ?? "/", cursorRedirectUri);
+    if (request.method !== "GET" || target.pathname !== "/callback") {
+      response.writeHead(404).end();
+      return;
+    }
+    callback = target;
+    response.writeHead(200, {
+      "content-type": "text/html",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    });
+    response.end("<!doctype html><title>OAuth callback received</title>");
+  });
+  await new Promise<void>((resolve, reject) => {
+    callbackServer!.once("error", () =>
+      reject(new Error("Local OAuth callback port 8787 is unavailable.")),
+    );
+    callbackServer!.listen(8787, "127.0.0.1", resolve);
+  });
 
   async function grant(first: boolean) {
     callback = undefined;
@@ -182,7 +230,11 @@ test("web login and both emulated connections survive Cursor consent, token refr
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",
     }).toString();
-    await page.goto(url.toString());
+    try {
+      await page.goto(url.toString());
+    } catch {
+      throw new Error("OAuth browser navigation failed; URL omitted.");
+    }
     if (first) {
       // Read pathname/signature presence as booleans, avoiding sensitive URLs in reports.
       await expect
@@ -207,7 +259,17 @@ test("web login and both emulated connections survive Cursor consent, token refr
       );
     }
     const code = received.searchParams.get("code")!;
-    await page.goto(`${appOrigin}${handoffPath}`);
+    try {
+      // Receiving the request precedes the browser committing the callback
+      // document. Wait for that navigation before leaving it.
+      await page.waitForURL(
+        (target) => target.origin + target.pathname === cursorRedirectUri,
+        { waitUntil: "load" },
+      );
+      await page.goto(`${appOrigin}${handoffPath}`);
+    } catch {
+      throw new Error("OAuth callback navigation failed; URL omitted.");
+    }
     return exchange(page, {
       grant_type: "authorization_code",
       code,
@@ -228,7 +290,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   const repeated = await grant(false);
   await verifyOwner(page, repeated, ownerUserId, workspaceId);
   expect(consentSubmissions).toBe(1);
-  expect(providerAuthorizationRequests).toBe(0);
+  expect(providerAuthorizationRequests).toEqual([]);
 
   const after = await applicationCounts();
   expect(after.githubInstallations).toBe(before.githubInstallations);

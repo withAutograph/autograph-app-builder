@@ -4,6 +4,7 @@
 
 See [Authenticated client handoff](authenticated-client-handoff.md) for the
 architecture and native Preview acceptance boundary.
+For acceptance, follow [the Codex + Computer QA runbook](handoff-native-qa.md).
 
 Use the same Autograph origin and browser profile where you prepared the app.
 Codex and Cursor authorize their own Autograph connection through the existing
