@@ -7,10 +7,10 @@ No app regeneration, palette changes, deployment, or live business writes.
 
 ## Results
 
-| Reference | Earlier subjective score | Fresh subjective score | Assessed adherence | Evidence coverage | Scenario results |
-| --- | ---: | ---: | ---: | ---: | --- |
-| [Spend import](spend-import-review-merged-refresh-150731341Z/index.html) | 65 | 70 | 100, partial | 2.67% | 16/16 passed |
-| [Compensation](compensation-planning-merged-refresh-150934530Z/index.html) | 75 | 75 | 100, partial | 1.67% | 8/12 passed |
+| Reference                                                                  | Earlier subjective score | Fresh subjective score | Assessed adherence | Evidence coverage | Scenario results |
+| -------------------------------------------------------------------------- | -----------------------: | ---------------------: | -----------------: | ----------------: | ---------------- |
+| [Spend import](spend-import-review-merged-refresh-150731341Z/index.html)   |                       65 |                     70 |       100, partial |             2.67% | 16/16 passed     |
+| [Compensation](compensation-planning-merged-refresh-150934530Z/index.html) |                       75 |                     75 |       100, partial |             1.67% | 8/12 passed      |
 
 These are advisory single-model judgments, not objective progress percentages.
 The reference checkout and captured states differ from the earlier reports, so
