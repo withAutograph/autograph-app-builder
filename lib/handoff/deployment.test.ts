@@ -46,6 +46,25 @@ function route(input: { authenticated?: boolean } = {}) {
       async bindSession() {
         return undefined;
       },
+      async renewExpired(input) {
+        const record = rows.get(input.handoffId);
+        if (
+          !record ||
+          JSON.stringify(record.authority) !==
+            JSON.stringify(input.authority) ||
+          record.requestDigest !== input.requestDigest
+        )
+          return undefined;
+        if (
+          record.sessionId !== undefined ||
+          record.expiresAt > input.now ||
+          record.expiresAt.getTime() !== input.expectedExpiresAt.getTime()
+        )
+          return { disposition: "existing", record };
+        const updated = { ...record, expiresAt: input.expiresAt };
+        rows.set(record.handoffId, updated);
+        return { disposition: "renewed", record: updated };
+      },
     },
   });
   const journal = {
@@ -174,7 +193,7 @@ describe("builder handoff deployment", () => {
     ).toBe(400);
   });
 
-  it("renews the saved intent with one fresh reference and never calls provisioning", async () => {
+  it("extends the same reference and never calls provisioning", async () => {
     const { handler, renew, rows, clock, journal } = route();
     await handler(request({ ...validBody, destination: "cursor" }));
     const original = rows.get(handoffId)!;
@@ -194,7 +213,12 @@ describe("builder handoff deployment", () => {
       "handoffId",
       "version",
     ]);
-    expect(reference.handoffId).not.toBe(handoffId);
+    expect(reference.handoffId).toBe(handoffId);
+    expect(rows.size).toBe(1);
+    expect(rows.get(handoffId)).toEqual({
+      ...original,
+      expiresAt: new Date(reference.expiresAt),
+    });
     expect(rows.get(reference.handoffId)?.intent).toEqual(original.intent);
     expect(journal.read).not.toHaveBeenCalled();
     expect(journal.reserve).not.toHaveBeenCalled();

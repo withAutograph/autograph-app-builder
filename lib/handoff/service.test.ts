@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { randomUUID } from "node:crypto";
 
@@ -24,7 +24,10 @@ const authority = {
 function memoryStore(): BuilderHandoffStore {
   const byId = new Map<string, BuilderHandoffRecord>();
   const byRequest = new Map<string, BuilderHandoffRecord>();
-  const read: BuilderHandoffStore["read"] = async (input) => {
+  const readOwned = (input: {
+    authority: BuilderHandoffRecord["authority"];
+    handoffId: string;
+  }) => {
     const record = byId.get(input.handoffId);
     return record &&
       JSON.stringify(record.authority) === JSON.stringify(input.authority)
@@ -40,9 +43,29 @@ function memoryStore(): BuilderHandoffStore {
       byRequest.set(key, record);
       return { disposition: "created", record };
     },
-    read,
+    async read(input) {
+      return readOwned(input);
+    },
+    async renewExpired(input) {
+      const record = readOwned(input);
+      if (!record || record.requestDigest !== input.requestDigest)
+        return undefined;
+      if (
+        record.sessionId !== undefined ||
+        record.expiresAt > input.now ||
+        record.expiresAt.getTime() !== input.expectedExpiresAt.getTime()
+      )
+        return { disposition: "existing", record };
+      const updated = { ...record, expiresAt: input.expiresAt };
+      byId.set(record.handoffId, updated);
+      byRequest.set(
+        JSON.stringify([record.authority, record.creationRequestId]),
+        updated,
+      );
+      return { disposition: "renewed", record: updated };
+    },
     async bindSession(input) {
-      const record = await read(input);
+      const record = readOwned(input);
       if (
         !record ||
         record.requestDigest !== input.requestDigest ||
@@ -142,7 +165,7 @@ describe("opaque App Builder handoffs", () => {
     }
   });
 
-  it("renews an expired generation once across concurrent tabs, lost replies, and service restart", async () => {
+  it("renews the same start identity across concurrent tabs, lost replies, and service restart", async () => {
     let time = new Date("2026-09-01T12:00:00Z");
     const store = memoryStore();
     const options = { store, now: () => time, lifetimeMs: 60_000 };
@@ -165,6 +188,7 @@ describe("opaque App Builder handoffs", () => {
       handoffId: original.handoffId,
       creationRequestId: randomUUID(),
     };
+    const originalRecord = await service.read(request);
     time = original.expiresAt;
     const renewed = await Promise.all([
       service.renew(request),
@@ -176,33 +200,223 @@ describe("opaque App Builder handoffs", () => {
     ]);
     expect(new Set(renewed.map((value) => value.handoffId)).size).toBe(1);
     expect(
-      renewed.filter((value) => value.disposition === "created"),
+      renewed.filter((value) => value.disposition === "renewed"),
     ).toHaveLength(1);
-    expect(renewed[0].handoffId).not.toBe(original.handoffId);
-    const successor = await service.read({
+    expect(renewed[0].handoffId).toBe(original.handoffId);
+    const extended = await service.read({
       authority,
       handoffId: renewed[0].handoffId,
     });
-    expect(successor.intent).toEqual(prepared);
-    expect(successor.expiresAt.getTime()).toBe(
+    expect(extended).toEqual({
+      ...originalRecord,
+      expiresAt: renewed[0].expiresAt,
+    });
+    expect(extended.intent).toEqual(prepared);
+    expect(extended.expiresAt.getTime()).toBe(
       original.expiresAt.getTime() + 60_000,
     );
     expect(
       await createBuilderHandoffService(options).renew(request),
     ).toMatchObject({
-      handoffId: successor.handoffId,
+      handoffId: original.handoffId,
       disposition: "existing",
     });
-    time = successor.expiresAt;
-    // An old retry keeps its original result; renew the successor for the next generation.
+    time = extended.expiresAt;
+    const next = await service.renew(request);
+    expect(next.handoffId).toBe(original.handoffId);
+    expect(next.expiresAt.getTime()).toBe(
+      extended.expiresAt.getTime() + 60_000,
+    );
+    expect(await service.read(request)).toEqual({
+      ...originalRecord,
+      expiresAt: next.expiresAt,
+    });
+  });
+
+  it("recovers the same durable start when its bind was lost across expiry", async () => {
+    let time = new Date("2026-09-01T12:00:00Z");
+    const store = memoryStore();
+    const options = { store, now: () => time, lifetimeMs: 60_000 };
+    const service = createBuilderHandoffService(options);
+    const created = await service.create({
+      authority,
+      creationRequestId: randomUUID(),
+      intent,
+    });
+    const lookup = { authority, handoffId: created.handoffId };
+    time = new Date(created.expiresAt.getTime() - 1);
+    const before = await service.resolve(lookup);
+    if (before.status !== "unredeemed") throw new Error("unexpected state");
+    // Models a durable engine start, deduplicated by the supplied client key.
+    const starts = new Map<string, string>();
+    const start = (key: string) => {
+      if (!starts.has(key)) starts.set(key, randomUUID());
+      return starts.get(key)!;
+    };
+    const sessionId = start(before.deterministicClientRequestId);
+    time = created.expiresAt;
+    const binding = {
+      ...lookup,
+      requestDigest: before.record.requestDigest,
+      sessionId,
+    };
+    await expect(service.bindSession(binding)).rejects.toBeInstanceOf(
+      BuilderHandoffUnavailableError,
+    );
+    await expect(service.resolve(lookup)).rejects.toBeInstanceOf(
+      BuilderHandoffUnavailableError,
+    );
+    await service.renew({ ...lookup, creationRequestId: randomUUID() });
+    const restarted = createBuilderHandoffService(options);
+    const after = await restarted.resolve(lookup);
+    if (after.status !== "unredeemed") throw new Error("unexpected state");
+    expect(after.deterministicClientRequestId).toBe(
+      before.deterministicClientRequestId,
+    );
+    expect(after.prompt).toBe(before.prompt);
+    expect(after.record.handoffId).toBe(before.record.handoffId);
+    expect(start(after.deterministicClientRequestId)).toBe(sessionId);
+    expect(starts.size).toBe(1);
+    await restarted.bindSession(binding);
+    expect(await restarted.resolve(lookup)).toMatchObject({
+      status: "redeemed",
+      sessionId,
+    });
+    const continued = await restarted.read(lookup);
+    time = continued.expiresAt;
+    expect(
+      await restarted.renew({ ...lookup, creationRequestId: randomUUID() }),
+    ).toMatchObject({
+      handoffId: created.handoffId,
+      expiresAt: continued.expiresAt,
+      disposition: "existing",
+    });
+    expect(await restarted.read(lookup)).toEqual(continued);
+  });
+
+  it("fails closed on expired renewal when a legacy store has no atomic renewal", async () => {
+    let time = new Date("2026-09-01T12:00:00Z");
+    const store = memoryStore();
+    delete store.renewExpired;
+    const service = createBuilderHandoffService({
+      store,
+      now: () => time,
+      lifetimeMs: 60_000,
+    });
+    const original = await service.create({
+      authority,
+      creationRequestId: randomUUID(),
+      intent,
+    });
+    const request = {
+      authority,
+      handoffId: original.handoffId,
+      creationRequestId: randomUUID(),
+    };
     expect(await service.renew(request)).toMatchObject({
-      handoffId: successor.handoffId,
+      handoffId: original.handoffId,
     });
-    const next = await service.renew({
-      ...request,
-      handoffId: successor.handoffId,
+    time = original.expiresAt;
+    await expect(service.renew(request)).rejects.toBeInstanceOf(
+      BuilderHandoffUnavailableError,
+    );
+    expect((await service.read(request)).expiresAt).toEqual(original.expiresAt);
+  });
+
+  it.each(["handoffId", "issuer", "audience", "workspaceId", "ownerUserId"])(
+    "rejects a store read that substitutes %s",
+    async (field) => {
+      const store = memoryStore();
+      const service = createBuilderHandoffService({ store });
+      const created = await service.create({
+        authority,
+        creationRequestId: randomUUID(),
+        intent,
+      });
+      const lookup = { authority, handoffId: created.handoffId };
+      const record = await service.read(lookup);
+      const forged =
+        field === "handoffId"
+          ? { ...record, handoffId: randomUUID() }
+          : {
+              ...record,
+              authority: {
+                ...authority,
+                [field]:
+                  field === "issuer"
+                    ? "https://builder.example:443/api/auth"
+                    : field === "audience"
+                      ? "https://builder.example:443/mcp"
+                      : "other",
+              },
+            };
+      vi.spyOn(store, "read").mockResolvedValue(forged);
+      for (const read of [service.read, service.status, service.resolve])
+        await expect(read(lookup)).rejects.toBeInstanceOf(
+          BuilderHandoffUnavailableError,
+        );
+      await expect(
+        service.renew({ ...lookup, creationRequestId: randomUUID() }),
+      ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+    },
+  );
+
+  it("rejects substituted reserve, renewal, and bind results", async () => {
+    let time = new Date("2026-09-01T12:00:00Z");
+    const store = memoryStore();
+    const service = createBuilderHandoffService({
+      store,
+      now: () => time,
+      lifetimeMs: 60_000,
     });
-    expect(next.handoffId).not.toBe(successor.handoffId);
+    const creation = { authority, creationRequestId: randomUUID(), intent };
+    const created = await service.create(creation);
+    const lookup = { authority, handoffId: created.handoffId };
+    const record = await service.read(lookup);
+    const forged = {
+      ...record,
+      authority: { ...authority, ownerUserId: "other" },
+    };
+    vi.spyOn(store, "reserve").mockResolvedValue({
+      disposition: "existing",
+      record: forged,
+    });
+    await expect(service.create(creation)).rejects.toBeInstanceOf(
+      BuilderHandoffUnavailableError,
+    );
+    time = record.expiresAt;
+    vi.spyOn(store, "renewExpired").mockResolvedValue({
+      disposition: "renewed",
+      record: forged,
+    });
+    await expect(
+      service.renew({ ...lookup, creationRequestId: randomUUID() }),
+    ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+    vi.spyOn(store, "bindSession").mockResolvedValue({
+      ...forged,
+      redeemedAt: record.createdAt,
+      sessionId: "session-one",
+    });
+    await expect(
+      service.bindSession({
+        ...lookup,
+        requestDigest: record.requestDigest,
+        sessionId: "session-one",
+      }),
+    ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+    vi.mocked(store.bindSession).mockResolvedValue({
+      ...record,
+      requestDigest: "b".repeat(64),
+      redeemedAt: record.createdAt,
+      sessionId: "session-one",
+    });
+    await expect(
+      service.bindSession({
+        ...lookup,
+        requestDigest: record.requestDigest,
+        sessionId: "session-one",
+      }),
+    ).rejects.toBeInstanceOf(BuilderHandoffConflictError);
   });
 
   it("does not fork live or continued handoffs even after the continued handoff expires", async () => {
