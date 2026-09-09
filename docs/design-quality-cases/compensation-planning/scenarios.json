@@ -1,5 +1,24 @@
 [
   {
+    "name": "edit assumptions and recalculate the proposal",
+    "steps": [
+      {
+        "action": "fill",
+        "role": "spinbutton",
+        "name": "Planned base increase",
+        "value": "10"
+      },
+      {
+        "action": "click",
+        "role": "button",
+        "name": "Use these assumptions"
+      }
+    ],
+    "expect": {
+      "text": "$220,791"
+    }
+  },
+  {
     "name": "recommend the draft for planning",
     "steps": [
       {

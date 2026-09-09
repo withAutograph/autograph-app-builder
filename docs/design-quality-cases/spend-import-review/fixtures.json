@@ -11,15 +11,88 @@
   "fieldMapping": {
     "vendor_name": "Supplier",
     "amount": "Invoice total",
+    "currency": "Currency",
     "transaction_date": "Invoice date",
     "source_record_ref": "Invoice number"
   },
   "preview": { "creates": 38, "needsReview": 4, "unchanged": 0 },
+  "representativeRows": [
+    {
+      "id": "TX-001",
+      "source": {
+        "Supplier": "Acme Industrial",
+        "Invoice total": 1240,
+        "Currency": "USD",
+        "Invoice date": "2026-08-03",
+        "Invoice number": "AP-4101"
+      }
+    },
+    {
+      "id": "TX-018",
+      "source": {
+        "Supplier": "Cedar Labs",
+        "Invoice total": 780.5,
+        "Currency": "USD",
+        "Invoice date": "2026-08-17",
+        "Invoice number": "AP-4148"
+      }
+    },
+    {
+      "id": "TX-039",
+      "source": {
+        "Supplier": "Atlas Office Supply",
+        "Invoice total": 486.2,
+        "Currency": "USD",
+        "Invoice date": "2026-08-29",
+        "Invoice number": "AP-4187"
+      },
+      "issue": "Possible duplicate source reference"
+    },
+    {
+      "id": "TX-040",
+      "source": {
+        "Supplier": "Brightline Travel",
+        "Invoice total": 2280,
+        "Currency": "USD",
+        "Invoice date": "2026-08-30",
+        "Invoice number": "AP-4189"
+      },
+      "issue": "Cost center is missing"
+    },
+    {
+      "id": "TX-041",
+      "source": {
+        "Supplier": "Harbor Freight Services",
+        "Invoice total": 9150,
+        "Currency": "USD",
+        "Invoice date": "2026-09-01",
+        "Invoice number": "AP-4190"
+      },
+      "issue": "Date is outside the August batch period"
+    },
+    {
+      "id": "TX-042",
+      "source": {
+        "Supplier": "Northstar Cloud Inc.",
+        "Invoice total": 12950,
+        "Currency": "USD",
+        "Invoice date": "2026-08-31",
+        "Invoice number": "AP-4192"
+      },
+      "issue": "Two candidate vendor identities"
+    }
+  ],
   "uncertainMatches": [
     {
       "id": "TX-042",
       "vendorRaw": "Northstar Cloud Inc.",
-      "candidates": ["Northstar Cloud", "North Star Cloud Services"],
+      "candidates": [
+        { "id": "nsc-1008", "label": "Northstar Cloud" },
+        {
+          "id": "nsc-2041",
+          "label": "North Star Cloud Services"
+        }
+      ],
       "amount": 12950,
       "currency": "USD",
       "transactionDate": "2026-08-31",

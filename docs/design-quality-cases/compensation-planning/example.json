@@ -1,0 +1,8 @@
+{
+  "appId": "compensation-planning-example",
+  "route": "/",
+  "entry": "src/CompensationPlanning.tsx",
+  "source": "scripts/design-quality/examples/compensation-planning.tsx.fixture",
+  "stateSource": "scripts/design-quality/examples/compensation-state.ts",
+  "stateTarget": "src/compensation-state.ts"
+}

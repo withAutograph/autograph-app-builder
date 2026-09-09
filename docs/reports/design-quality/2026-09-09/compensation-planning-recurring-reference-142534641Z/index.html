@@ -1,0 +1,3032 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T14:25:34.641Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <section>
+      <h2>Compensation planning review</h2>
+      <p>
+        Synthetic planning case grounded in implemented compensation policy,
+        template, and derived-fact substrate; the roadmap&#39;s broader
+        compensation-planning workflow is planned.
+      </p>
+      <details>
+        <summary>Case evidence and review questions</summary>
+        <ul>
+          <li>
+            arrusted:
+            <code>domain-libs/compensation/src/model-compensation.ts</code> —
+            implemented
+          </li>
+          <li>
+            ag2:
+            <code
+              >frontend/src/app-templates/templates/compensation/manifest.ts</code
+            >
+            — implemented
+          </li>
+          <li>
+            ag2:
+            <code>backend/src/services/compensation/derivedFacts.ts</code> —
+            implemented
+          </li>
+          <li>
+            ag2: <code>docs/plans/product/mini-app-roadmap.md</code> — planned
+          </li>
+        </ul>
+        <h3>Review questions</h3>
+        <ul>
+          <li>
+            Can a reviewer assess proposed compensation with base, bonus,
+            benefits, and employer-tax context?
+          </li>
+          <li>
+            Does the design show uncertainty and policy assumptions instead of
+            presenting a draft as payroll truth?
+          </li>
+        </ul>
+        <h3>Intended outcomes, not asserted results</h3>
+        <ul>
+          <li>
+            A reviewer can identify out-of-band proposals and their cost
+            drivers.
+          </li>
+          <li>
+            A reviewer can request changes or prepare a decision-ready
+            compensation summary.
+          </li>
+        </ul>
+      </details>
+    </section>
+    <h2>Arrusted adherence: 93/100 · partial</h2>
+    <p>
+      Evidence coverage: 1.91%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>24</td>
+          <td>0</td>
+          <td>4</td>
+          <td>100% (24/24)</td>
+          <td>28 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>19</td>
+          <td>5</td>
+          <td>14</td>
+          <td>79.17% (19/24)</td>
+          <td>38 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>12</td>
+          <td>0</td>
+          <td>3057</td>
+          <td>100% (12/12)</td>
+          <td>12 / 3057</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence.
+        Anonymous rules require a unique exact generated selector/property/value
+        and complete matched-rule declaration set; conditional or ambiguous
+        source rules remain unknown.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+      <li>
+        No generated CSS source files were supplied; compiled stylesheet source
+        maps cannot establish generated declaration provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (5)</summary>
+      <article id="finding-9">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-9">src/CompensationPlanning.tsx:122</a></small
+        >
+        <details id="source-9">
+          <summary>Source location: src/CompensationPlanning.tsx:122</summary>
+          <pre>
+121:                   size=&quot;sm&quot;
+122:                   onClick={() =&gt; dispatch({ type: &quot;clear-decision&quot; })}
+123:                 &gt;
+124:                   Clear simulation</pre>
+        </details>
+      </article>
+      <article id="finding-32">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public disabled prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-32">src/CompensationPlanning.tsx:204</a></small
+        >
+        <details id="source-32">
+          <summary>Source location: src/CompensationPlanning.tsx:204</summary>
+          <pre>
+203:                   intent=&quot;primary&quot;
+204:                   disabled={
+205:                     !state.assumptionsApplied || !totals || state.decision === &quot;recommended&quot;
+206:                   }</pre>
+        </details>
+      </article>
+      <article id="finding-33">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-33">src/CompensationPlanning.tsx:207</a></small
+        >
+        <details id="source-33">
+          <summary>Source location: src/CompensationPlanning.tsx:207</summary>
+          <pre>
+206:                   }
+207:                   onClick={() =&gt; dispatch({ type: &quot;recommend&quot; })}
+208:                 &gt;
+209:                   {decision.primaryLabel}</pre>
+        </details>
+      </article>
+      <article id="finding-34">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public disabled prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-34">src/CompensationPlanning.tsx:212</a></small
+        >
+        <details id="source-34">
+          <summary>Source location: src/CompensationPlanning.tsx:212</summary>
+          <pre>
+211:                 &lt;Button
+212:                   disabled={!state.assumptionsApplied || !totals || state.decision === &quot;held&quot;}
+213:                   onClick={() =&gt; dispatch({ type: &quot;hold&quot; })}
+214:                 &gt;</pre>
+        </details>
+      </article>
+      <article id="finding-35">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-35">src/CompensationPlanning.tsx:213</a></small
+        >
+        <details id="source-35">
+          <summary>Source location: src/CompensationPlanning.tsx:213</summary>
+          <pre>
+212:                   disabled={!state.assumptionsApplied || !totals || state.decision === &quot;held&quot;}
+213:                   onClick={() =&gt; dispatch({ type: &quot;hold&quot; })}
+214:                 &gt;
+215:                   {state.decision === &quot;held&quot;</pre>
+        </details>
+      </article>
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (3075)</summary>
+      <article id="finding-0">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-0">src/CompensationPlanning.tsx:107</a></small
+        >
+        <details id="source-0">
+          <summary>Source location: src/CompensationPlanning.tsx:107</summary>
+          <pre>
+106:         &lt;PageHeader
+107:           title=&quot;Compensation planning review&quot;
+108:           subtitle=&quot;Edit Taylor Nguyen’s synthetic FY27 assumptions and compare calculated current and proposed totals.&quot;
+109:           actions={&lt;StatusPill tone=&quot;neutral&quot; label=&quot;Draft&quot; detail=&quot;CMP-29&quot; /&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-1">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-1">src/CompensationPlanning.tsx:108</a></small
+        >
+        <details id="source-1">
+          <summary>Source location: src/CompensationPlanning.tsx:108</summary>
+          <pre>
+107:           title=&quot;Compensation planning review&quot;
+108:           subtitle=&quot;Edit Taylor Nguyen’s synthetic FY27 assumptions and compare calculated current and proposed totals.&quot;
+109:           actions={&lt;StatusPill tone=&quot;neutral&quot; label=&quot;Draft&quot; detail=&quot;CMP-29&quot; /&gt;}
+110:         /&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-2">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-2">src/CompensationPlanning.tsx:109</a></small
+        >
+        <details id="source-2">
+          <summary>Source location: src/CompensationPlanning.tsx:109</summary>
+          <pre>
+108:           subtitle=&quot;Edit Taylor Nguyen’s synthetic FY27 assumptions and compare calculated current and proposed totals.&quot;
+109:           actions={&lt;StatusPill tone=&quot;neutral&quot; label=&quot;Draft&quot; detail=&quot;CMP-29&quot; /&gt;}
+110:         /&gt;
+111: </pre>
+        </details>
+      </article>
+      <article id="finding-4">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-4">src/CompensationPlanning.tsx:109</a></small
+        >
+        <details id="source-4">
+          <summary>Source location: src/CompensationPlanning.tsx:109</summary>
+          <pre>
+108:           subtitle=&quot;Edit Taylor Nguyen’s synthetic FY27 assumptions and compare calculated current and proposed totals.&quot;
+109:           actions={&lt;StatusPill tone=&quot;neutral&quot; label=&quot;Draft&quot; detail=&quot;CMP-29&quot; /&gt;}
+110:         /&gt;
+111: </pre>
+        </details>
+      </article>
+      <article id="finding-5">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-5">src/CompensationPlanning.tsx:109</a></small
+        >
+        <details id="source-5">
+          <summary>Source location: src/CompensationPlanning.tsx:109</summary>
+          <pre>
+108:           subtitle=&quot;Edit Taylor Nguyen’s synthetic FY27 assumptions and compare calculated current and proposed totals.&quot;
+109:           actions={&lt;StatusPill tone=&quot;neutral&quot; label=&quot;Draft&quot; detail=&quot;CMP-29&quot; /&gt;}
+110:         /&gt;
+111: </pre>
+        </details>
+      </article>
+      <article id="finding-10">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-10">src/CompensationPlanning.tsx:132</a></small
+        >
+        <details id="source-10">
+          <summary>Source location: src/CompensationPlanning.tsx:132</summary>
+          <pre>
+131:         &lt;div className=&quot;grid items-start gap-[var(--space-6)] lg:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]&quot;&gt;
+132:           &lt;Card title=&quot;Editable policy assumptions&quot;&gt;
+133:             &lt;SchemaFormComposition
+134:               spec={{</pre>
+        </details>
+      </article>
+      <article id="finding-11">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-11">src/CompensationPlanning.tsx:134</a></small
+        >
+        <details id="source-11">
+          <summary>Source location: src/CompensationPlanning.tsx:134</summary>
+          <pre>
+133:             &lt;SchemaFormComposition
+134:               spec={{
+135:                 type: &quot;schema_form&quot;,
+136:                 config: {</pre>
+        </details>
+      </article>
+      <article id="finding-12">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-12">src/CompensationPlanning.tsx:143</a></small
+        >
+        <details id="source-12">
+          <summary>Source location: src/CompensationPlanning.tsx:143</summary>
+          <pre>
+142:               }}
+143:               onFieldChange={change}
+144:               onSubmit={() =&gt; dispatch({ type: &quot;assumptions-applied&quot; })}
+145:               onReset={() =&gt; dispatch({ type: &quot;reset&quot;, fixture })}</pre>
+        </details>
+      </article>
+      <article id="finding-13">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-13">src/CompensationPlanning.tsx:144</a></small
+        >
+        <details id="source-13">
+          <summary>Source location: src/CompensationPlanning.tsx:144</summary>
+          <pre>
+143:               onFieldChange={change}
+144:               onSubmit={() =&gt; dispatch({ type: &quot;assumptions-applied&quot; })}
+145:               onReset={() =&gt; dispatch({ type: &quot;reset&quot;, fixture })}
+146:             /&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-14">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-14">src/CompensationPlanning.tsx:145</a></small
+        >
+        <details id="source-14">
+          <summary>Source location: src/CompensationPlanning.tsx:145</summary>
+          <pre>
+144:               onSubmit={() =&gt; dispatch({ type: &quot;assumptions-applied&quot; })}
+145:               onReset={() =&gt; dispatch({ type: &quot;reset&quot;, fixture })}
+146:             /&gt;
+147:           &lt;/Card&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-15">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-15">src/CompensationPlanning.tsx:151</a></small
+        >
+        <details id="source-15">
+          <summary>Source location: src/CompensationPlanning.tsx:151</summary>
+          <pre>
+150:             &lt;Card
+151:               title=&quot;Calculated package comparison&quot;
+152:               actions={
+153:                 &lt;StatusPill</pre>
+        </details>
+      </article>
+      <article id="finding-16">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-16">src/CompensationPlanning.tsx:152</a></small
+        >
+        <details id="source-16">
+          <summary>Source location: src/CompensationPlanning.tsx:152</summary>
+          <pre>
+151:               title=&quot;Calculated package comparison&quot;
+152:               actions={
+153:                 &lt;StatusPill
+154:                   tone={state.assumptionsApplied ? &quot;success&quot; : &quot;warning&quot;}</pre>
+        </details>
+      </article>
+      <article id="finding-18">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-18">src/CompensationPlanning.tsx:155</a></small
+        >
+        <details id="source-18">
+          <summary>Source location: src/CompensationPlanning.tsx:155</summary>
+          <pre>
+154:                   tone={state.assumptionsApplied ? &quot;success&quot; : &quot;warning&quot;}
+155:                   label={
+156:                     state.assumptionsApplied
+157:                       ? &quot;Assumptions applied&quot;</pre>
+        </details>
+      </article>
+      <article id="finding-28">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-28">src/CompensationPlanning.tsx:192</a></small
+        >
+        <details id="source-28">
+          <summary>Source location: src/CompensationPlanning.tsx:192</summary>
+          <pre>
+191: 
+192:             &lt;Card title=&quot;Next decision&quot;&gt;
+193:               &lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;
+194:                 &lt;Typography variant=&quot;body-strong&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-38">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-38">src/CompensationPlanning.tsx:112</a></small
+        >
+        <details id="source-38">
+          <summary>Source location: src/CompensationPlanning.tsx:112</summary>
+          <pre>
+111: 
+112:         {decision.status ? (
+113:           &lt;Card&gt;
+114:             &lt;div role=&quot;status&quot; className=&quot;grid gap-[var(--space-2)]&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-39">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-39">src/CompensationPlanning.tsx:163</a></small
+        >
+        <details id="source-39">
+          <summary>Source location: src/CompensationPlanning.tsx:163</summary>
+          <pre>
+162:             &gt;
+163:               {totals ? &lt;div className=&quot;grid gap-[var(--space-5)] md:grid-cols-2&quot;&gt;
+164:                 &lt;div className=&quot;grid gap-[var(--space-2)]&quot;&gt;
+165:                   &lt;Typography variant=&quot;body-strong&quot;&gt;Current package&lt;/Typography&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-40">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-40">src/CompensationPlanning.tsx:185</a></small
+        >
+        <details id="source-40">
+          <summary>Source location: src/CompensationPlanning.tsx:185</summary>
+          <pre>
+184:               &lt;/div&gt; : &lt;Typography tone=&quot;danger&quot;&gt;Fix the highlighted assumptions to calculate package totals.&lt;/Typography&gt;}
+185:               {totals ? &lt;Typography tone=&quot;secondary&quot; className=&quot;mt-[var(--space-4)]&quot;&gt;
+186:                 Proposed base is {money(Math.abs(totals.proposedMidpointDelta))}{&quot; &quot;}
+187:                 {totals.proposedMidpointDelta &gt;= 0 ? &quot;above&quot; : &quot;below&quot;} the</pre>
+        </details>
+      </article>
+      <article id="finding-41">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-41">src/CompensationPlanning.tsx:197</a></small
+        >
+        <details id="source-41">
+          <summary>Source location: src/CompensationPlanning.tsx:197</summary>
+          <pre>
+196:                 &lt;/Typography&gt;
+197:                 {!state.assumptionsApplied ? (
+198:                   &lt;Typography tone=&quot;secondary&quot;&gt;
+199:                     Apply the edited assumptions before recording a decision.</pre>
+        </details>
+      </article>
+      <article id="finding-78">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-78">/compensation-planning:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-78">
+          <summary>Source location: /compensation-planning:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-79">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-79">/compensation-planning:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-79">
+          <summary>Source location: /compensation-planning:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-80">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-80">/compensation-planning:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-80">
+          <summary>Source location: /compensation-planning:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-81">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-81">/compensation-planning:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-81">
+          <summary>Source location: /compensation-planning:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-82">
+        <strong>unknown · unassessed</strong>
+        <p>column-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-83">
+        <strong>unknown · unassessed</strong>
+        <p>row-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-84">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-84">/compensation-planning:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-84">
+          <summary>Source location: /compensation-planning:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-85">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-width: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-85">/compensation-planning:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-85">
+          <summary>Source location: /compensation-planning:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-86">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-86">/compensation-planning:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-86">
+          <summary>Source location: /compensation-planning:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-87">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-88">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-88">/compensation-planning:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-88">
+          <summary>Source location: /compensation-planning:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-89">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-89">/compensation-planning:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-89">
+          <summary>Source location: /compensation-planning:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 75/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>3/4</td>
+          <td>
+            The page title, editable assumptions, package comparison, and next
+            decision form a clear review sequence. Current and proposed totals
+            are prominent, and draft/applied statuses are visible, though the
+            detailed compensation components are not given comparable visual
+            priority.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>3/4</td>
+          <td>
+            The two-column composition is aligned and comfortably spaced at
+            1024, 1440, and 1920 widths, with consistent card boundaries and
+            field rhythm. The wide view leaves substantial unused space, but the
+            bounded content width remains coherent; the 768px-tall capture
+            requires modest page scrolling to reach the assumption actions.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>3/4</td>
+          <td>
+            Headings, labels, totals, and supporting copy use a consistent,
+            readable hierarchy. Readability is weakened by the employer-tax
+            input displaying 7.6499999999999995 and by several small muted
+            captions that automated evidence flags as marginal or insufficient
+            contrast.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>3/4</td>
+          <td>
+            The two-column review remains usable without clipping at the tested
+            1024, 1440, and 1920 desktop widths, and controls resize sensibly.
+            At the 1024×768 viewport, the apply/reset controls begin below the
+            visible viewport while the resulting comparison and decision remain
+            visible, creating some separation between editing and applying
+            assumptions.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>3/4</td>
+          <td>
+            The interface repeatedly identifies the case as synthetic,
+            assumption-based, and a draft; the footer explicitly says
+            calculations and decisions exist only in the preview, avoiding a
+            payroll or approval claim. Base and employer-tax figures are
+            visible, but bonus and benefits are only represented as editable
+            inputs and are not itemized in the current/proposed comparison,
+            while band context is reduced to a midpoint delta.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        Clear separation between editable policy assumptions, calculated
+        comparison, and the reviewer’s next decision.
+      </li>
+      <li>
+        Current and proposed totals are easy to compare, with base and
+        employer-tax context shown directly beneath each total.
+      </li>
+      <li>
+        Labels such as “Draft,” “synthetic,” “calculated draft,” and “Keep draft
+        for review” appropriately frame the proposal as planning material rather
+        than payroll truth.
+      </li>
+      <li>
+        Helper text explains which values are held constant and clarifies that
+        the band midpoint is a comparison point rather than a policy limit.
+      </li>
+      <li>
+        The tested edit/apply interaction updates the displayed synthetic total
+        consistently across the supplied desktop sizes.
+      </li>
+      <li>
+        The composition remains unclipped and legible across all three tested
+        desktop widths.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>high · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The comparison emphasizes aggregate totals but itemizes only base and
+        estimated employer tax. Target bonus and annual benefits are absent from
+        both package breakdowns, so a reviewer cannot directly reconcile all
+        requested compensation components.
+      </p>
+      <p>
+        <strong>Improve:</strong> Add a compact, aligned breakdown under each
+        package for base, target bonus, benefits, employer-tax estimate, and
+        total. Mark held-constant items explicitly and distinguish estimates
+        from entered amounts.
+      </p>
+      <small>Screenshot region: x 674, y 120, width 636, height 223</small>
+    </article>
+    <article id="design-1">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        Band comparison is limited to “$20,680 above the supplied midpoint.”
+        This identifies direction and distance but gives no range, position, or
+        explanation of how the midpoint should inform the decision.
+      </p>
+      <p>
+        <strong>Improve:</strong> Present the supplied band information in a
+        dedicated comparison row and state what is known versus unavailable—for
+        example, proposed base, midpoint, dollar/percent variance, and “band
+        limits not supplied” if no range exists.
+      </p>
+      <small>Screenshot region: x 691, y 303, width 472, height 25</small>
+    </article>
+    <article id="design-2">
+      <h4>medium · <a href="#desktop-1">desktop-1</a></h4>
+      <p>
+        The employer-tax assumption is displayed as 7.6499999999999995, which
+        looks like calculation leakage rather than an intentional policy
+        assumption and makes an estimate appear falsely precise.
+      </p>
+      <p>
+        <strong>Improve:</strong> Format the displayed assumption to an
+        appropriate planning precision such as 7.65%, while preserving any
+        internal numeric precision separately.
+      </p>
+      <small>Screenshot region: x 147, y 487, width 486, height 80</small>
+    </article>
+    <article id="design-3">
+      <h4>low · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The draft badge communicates status, but “CMP-29” is unexplained and the
+        badge does not indicate whether inputs are sourced, provisional, or
+        reviewer-entered.
+      </p>
+      <p>
+        <strong>Improve:</strong> Pair the draft identifier with concise
+        provenance or timing information, such as “Draft CMP-29 · reviewer
+        assumptions,” if that information is available.
+      </p>
+      <small>Screenshot region: x 1195, y 71, width 114, height 25</small>
+    </article>
+    <article id="design-4">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The strongest disclaimer—that calculations and decisions exist only in
+        this preview—is visually remote from the calculated totals and decision
+        controls. Reviewers may act before encountering it, especially in
+        shorter desktop windows.
+      </p>
+      <p>
+        <strong>Improve:</strong> Repeat a concise preview/estimate notice
+        inside the comparison or next-decision card, while retaining the footer
+        disclosure.
+      </p>
+      <small>Screenshot region: x 130, y 866, width 495, height 22</small>
+    </article>
+    <article id="design-5">
+      <h4>low · <a href="#desktop-window-0">desktop-window-0</a></h4>
+      <p>
+        At the measured 1024×768 desktop viewport, the final assumption field
+        and apply/reset controls extend below the initial viewport, while
+        comparison and decision controls remain visible to the right. This
+        weakens the perceived sequence from edit to apply to decide.
+      </p>
+      <p>
+        <strong>Improve:</strong> At shorter desktop windows, reduce vertical
+        field spacing or use a denser supported form composition so the apply
+        controls remain closer to the assumptions and comparison; scrolling can
+        remain available.
+      </p>
+      <small>Screenshot region: x 24, y 688, width 428, height 154</small>
+    </article>
+    <article id="design-6">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        The two decision options are understandable, but neither summarizes the
+        consequences. “Recommend for planning” may be mistaken for an
+        approval-like action despite the broader draft language.
+      </p>
+      <p>
+        <strong>Improve:</strong> Add short consequence text near the controls,
+        such as “Records a recommendation in this preview; does not approve or
+        send to payroll,” and clarify what retaining the draft means.
+      </p>
+      <small>Screenshot region: x 691, y 427, width 602, height 122</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The page title, editable assumptions, package comparison, and next decision form a clear review sequence. Current and proposed totals are prominent, and draft/applied statuses are visible, though the detailed compensation components are not given comparable visual priority.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The two-column composition is aligned and comfortably spaced at 1024, 1440, and 1920 widths, with consistent card boundaries and field rhythm. The wide view leaves substantial unused space, but the bounded content width remains coherent; the 768px-tall capture requires modest page scrolling to reach the assumption actions.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Headings, labels, totals, and supporting copy use a consistent, readable hierarchy. Readability is weakened by the employer-tax input displaying 7.6499999999999995 and by several small muted captions that automated evidence flags as marginal or insufficient contrast.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The two-column review remains usable without clipping at the tested 1024, 1440, and 1920 desktop widths, and controls resize sensibly. At the 1024×768 viewport, the apply/reset controls begin below the visible viewport while the resulting comparison and decision remain visible, creating some separation between editing and applying assumptions.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The interface repeatedly identifies the case as synthetic, assumption-based, and a draft; the footer explicitly says calculations and decisions exist only in the preview, avoiding a payroll or approval claim. Base and employer-tax figures are visible, but bonus and benefits are only represented as editable inputs and are not itemized in the current/proposed comparison, while band context is reduced to a midpoint delta.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;Clear separation between editable policy assumptions, calculated comparison, and the reviewer’s next decision.&quot;,
+    &quot;Current and proposed totals are easy to compare, with base and employer-tax context shown directly beneath each total.&quot;,
+    &quot;Labels such as “Draft,” “synthetic,” “calculated draft,” and “Keep draft for review” appropriately frame the proposal as planning material rather than payroll truth.&quot;,
+    &quot;Helper text explains which values are held constant and clarifies that the band midpoint is a comparison point rather than a policy limit.&quot;,
+    &quot;The tested edit/apply interaction updates the displayed synthetic total consistently across the supplied desktop sizes.&quot;,
+    &quot;The composition remains unclipped and legible across all three tested desktop widths.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 674,
+        &quot;y&quot;: 120,
+        &quot;width&quot;: 636,
+        &quot;height&quot;: 223
+      },
+      &quot;severity&quot;: &quot;high&quot;,
+      &quot;explanation&quot;: &quot;The comparison emphasizes aggregate totals but itemizes only base and estimated employer tax. Target bonus and annual benefits are absent from both package breakdowns, so a reviewer cannot directly reconcile all requested compensation components.&quot;,
+      &quot;improvement&quot;: &quot;Add a compact, aligned breakdown under each package for base, target bonus, benefits, employer-tax estimate, and total. Mark held-constant items explicitly and distinguish estimates from entered amounts.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 691,
+        &quot;y&quot;: 303,
+        &quot;width&quot;: 472,
+        &quot;height&quot;: 25
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;Band comparison is limited to “$20,680 above the supplied midpoint.” This identifies direction and distance but gives no range, position, or explanation of how the midpoint should inform the decision.&quot;,
+      &quot;improvement&quot;: &quot;Present the supplied band information in a dedicated comparison row and state what is known versus unavailable—for example, proposed base, midpoint, dollar/percent variance, and “band limits not supplied” if no range exists.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-1&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 147,
+        &quot;y&quot;: 487,
+        &quot;width&quot;: 486,
+        &quot;height&quot;: 80
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;The employer-tax assumption is displayed as 7.6499999999999995, which looks like calculation leakage rather than an intentional policy assumption and makes an estimate appear falsely precise.&quot;,
+      &quot;improvement&quot;: &quot;Format the displayed assumption to an appropriate planning precision such as 7.65%, while preserving any internal numeric precision separately.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 1195,
+        &quot;y&quot;: 71,
+        &quot;width&quot;: 114,
+        &quot;height&quot;: 25
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;The draft badge communicates status, but “CMP-29” is unexplained and the badge does not indicate whether inputs are sourced, provisional, or reviewer-entered.&quot;,
+      &quot;improvement&quot;: &quot;Pair the draft identifier with concise provenance or timing information, such as “Draft CMP-29 · reviewer assumptions,” if that information is available.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 130,
+        &quot;y&quot;: 866,
+        &quot;width&quot;: 495,
+        &quot;height&quot;: 22
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;The strongest disclaimer—that calculations and decisions exist only in this preview—is visually remote from the calculated totals and decision controls. Reviewers may act before encountering it, especially in shorter desktop windows.&quot;,
+      &quot;improvement&quot;: &quot;Repeat a concise preview/estimate notice inside the comparison or next-decision card, while retaining the footer disclosure.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-window-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 24,
+        &quot;y&quot;: 688,
+        &quot;width&quot;: 428,
+        &quot;height&quot;: 154
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;At the measured 1024×768 desktop viewport, the final assumption field and apply/reset controls extend below the initial viewport, while comparison and decision controls remain visible to the right. This weakens the perceived sequence from edit to apply to decide.&quot;,
+      &quot;improvement&quot;: &quot;At shorter desktop windows, reduce vertical field spacing or use a denser supported form composition so the apply controls remain closer to the assumptions and comparison; scrolling can remain available.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 691,
+        &quot;y&quot;: 427,
+        &quot;width&quot;: 602,
+        &quot;height&quot;: 122
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;The two decision options are understandable, but neither summarizes the consequences. “Recommend for planning” may be mistaken for an approval-like action despite the broader draft language.&quot;,
+      &quot;improvement&quot;: &quot;Add short consequence text near the controls, such as “Records a recommendation in this preview; does not approve or send to payroll,” and clarify what retaining the draft means.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Only static captures at 1024, 1440, and 1920 desktop widths were provided; narrower desktop panels, zoomed layouts, focus states, errors, and long localized content were not observed.&quot;,
+    &quot;The passed interaction evidence confirms a displayed synthetic total changed to $228,542, but it does not establish calculation correctness, persistence, payroll behavior, or an approval workflow.&quot;,
+    &quot;Exact source provenance, policy provenance, and whether compensation band limits exist were not supplied.&quot;,
+    &quot;Contrast observations rely on the supplied automated evidence and are advisory; the existing Arrusted palette is treated as authoritative.&quot;,
+    &quot;Static JSX and source measurements do not prove that every dynamic state or component branch rendered.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 75,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 24008,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 24005
+    },
+    &quot;outputTokens&quot;: 1892,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 1376,
+      &quot;reasoningTokens&quot;: 516
+    },
+    &quot;totalTokens&quot;: 25900
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/CompensationPlanning.tsx&quot;,
+        &quot;localName&quot;: &quot;Button&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Button&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/CompensationPlanning.tsx&quot;,
+        &quot;localName&quot;: &quot;Card&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Card&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/CompensationPlanning.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/CompensationPlanning.tsx&quot;,
+        &quot;localName&quot;: &quot;StatusPill&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;StatusPill&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/CompensationPlanning.tsx&quot;,
+        &quot;localName&quot;: &quot;Typography&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Typography&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/CompensationPlanning.tsx&quot;,
+        &quot;localName&quot;: &quot;SchemaFormComposition&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;SchemaFormComposition&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [],
+    &quot;matchingLiterals&quot;: [],
+    &quot;unknownLiterals&quot;: [],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 78,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;implementationDiagnostics&quot;: [],
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;arrusted-recurring-reference&quot;,
+    &quot;commit&quot;: &quot;5d868b64bad9c0c83f4faa314aa0fb2368c88176&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: false
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="The comparison emphasizes aggregate totals but itemizes only base and estimated employer tax. Target bonus and annual benefits are absent from both package breakdowns, so a reviewer cannot directly reconcile all requested compensation components."
+          aria-label="The comparison emphasizes aggregate totals but itemizes only base and estimated employer tax. Target bonus and annual benefits are absent from both package breakdowns, so a reviewer cannot directly reconcile all requested compensation components."
+          style="
+            left: 46.80555555555556%;
+            top: 13.186813186813186%;
+            width: 44.166666666666664%;
+            height: 24.505494505494507%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-1"
+          title="Band comparison is limited to “$20,680 above the supplied midpoint.” This identifies direction and distance but gives no range, position, or explanation of how the midpoint should inform the decision."
+          aria-label="Band comparison is limited to “$20,680 above the supplied midpoint.” This identifies direction and distance but gives no range, position, or explanation of how the midpoint should inform the decision."
+          style="
+            left: 47.986111111111114%;
+            top: 33.2967032967033%;
+            width: 32.77777777777778%;
+            height: 2.7472527472527473%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-3"
+          title="The draft badge communicates status, but “CMP-29” is unexplained and the badge does not indicate whether inputs are sourced, provisional, or reviewer-entered."
+          aria-label="The draft badge communicates status, but “CMP-29” is unexplained and the badge does not indicate whether inputs are sourced, provisional, or reviewer-entered."
+          style="
+            left: 82.98611111111111%;
+            top: 7.802197802197802%;
+            width: 7.916666666666667%;
+            height: 2.7472527472527473%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-4"
+          title="The strongest disclaimer—that calculations and decisions exist only in this preview—is visually remote from the calculated totals and decision controls. Reviewers may act before encountering it, especially in shorter desktop windows."
+          aria-label="The strongest disclaimer—that calculations and decisions exist only in this preview—is visually remote from the calculated totals and decision controls. Reviewers may act before encountering it, especially in shorter desktop windows."
+          style="
+            left: 9.027777777777779%;
+            top: 95.16483516483517%;
+            width: 34.375%;
+            height: 2.4175824175824174%;
+          "
+        ></a
+        ><a
+          class="region"
+          href="#design-6"
+          title="The two decision options are understandable, but neither summarizes the consequences. “Recommend for planning” may be mistaken for an approval-like action despite the broader draft language."
+          aria-label="The two decision options are understandable, but neither summarizes the consequences. “Recommend for planning” may be mistaken for an approval-like action despite the broader draft language."
+          style="
+            left: 47.986111111111114%;
+            top: 46.92307692307692%;
+            width: 41.80555555555556%;
+            height: 13.406593406593407%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;compensation-planning-example&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 910,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 206.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 306.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 406.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 506.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 606.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 706.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Use these assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 185.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 340.265625,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 157.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend for planning&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 691.1875,
+          &quot;y&quot;: 455.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Keep draft for review&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 691.1875,
+          &quot;y&quot;: 507.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\].font-\\[var\\(--font-weight-normal\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(1) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(2) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(3) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(4) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(5) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(6) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[type=\&quot;submit\&quot;] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.border-b.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 84,
+  &quot;totalDomElements&quot;: 85,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 84,
+    &quot;sampled&quot;: 84,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 45,
+        &quot;sampled&quot;: 45
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 39,
+        &quot;sampled&quot;: 39
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 72,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 92
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 164,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 59,
+        &quot;matching-literal&quot;: 56,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 287
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 402,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 64,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 122
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 186,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 7,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 77
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 84,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 66,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 33
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 99,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 84
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 84,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1019,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>
+        desktop-1 — edit, apply, hold, and clear synthetic compensation
+        assumptions
+      </h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 edit, apply, hold, and clear synthetic compensation assumptions screenshot"
+        /><a
+          class="region"
+          href="#design-2"
+          title="The employer-tax assumption is displayed as 7.6499999999999995, which looks like calculation leakage rather than an intentional policy assumption and makes an estimate appear falsely precise."
+          aria-label="The employer-tax assumption is displayed as 7.6499999999999995, which looks like calculation leakage rather than an intentional policy assumption and makes an estimate appear falsely precise."
+          style="
+            left: 10.208333333333334%;
+            top: 53.51648351648352%;
+            width: 33.75%;
+            height: 8.791208791208792%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;compensation-planning-example&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 910,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 206.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 306.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 406.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 506.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 606.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 706.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Use these assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 147,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 185.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 340.265625,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 157.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend for planning&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 691.1875,
+          &quot;y&quot;: 455.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Keep draft for review&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 691.1875,
+          &quot;y&quot;: 507.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\].font-\\[var\\(--font-weight-normal\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(1) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(2) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(3) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(4) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(5) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(6) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[type=\&quot;submit\&quot;] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.border-b.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;$228,542&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;compensation-planning-example&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 206.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 306.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 406.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 506.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 606.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 706.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Use these assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 185.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 580.265625,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 157.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend for planning&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 931.1875,
+          &quot;y&quot;: 455.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Keep draft for review&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 931.1875,
+          &quot;y&quot;: 507.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\].font-\\[var\\(--font-weight-normal\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(1) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(2) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(3) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(4) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(5) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(6) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[type=\&quot;submit\&quot;] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.border-b.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 84,
+  &quot;totalDomElements&quot;: 85,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 84,
+    &quot;sampled&quot;: 84,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 45,
+        &quot;sampled&quot;: 45
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 39,
+        &quot;sampled&quot;: 39
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 72,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 92
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 164,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 59,
+        &quot;matching-literal&quot;: 56,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 287
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 402,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 64,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 122
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 186,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 7,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 77
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 84,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 66,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 33
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 99,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 84
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 84,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1019,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>
+        desktop-wide-1 — edit, apply, hold, and clear synthetic compensation
+        assumptions
+      </h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 edit, apply, hold, and clear synthetic compensation assumptions screenshot"
+        />
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;compensation-planning-example&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 206.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 306.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 406.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 506.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 606.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 706.5,
+          &quot;width&quot;: 486.1875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Use these assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 387,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 185.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 580.265625,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 157.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend for planning&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 931.1875,
+          &quot;y&quot;: 455.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Keep draft for review&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 931.1875,
+          &quot;y&quot;: 507.5,
+          &quot;width&quot;: 601.8125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\].font-\\[var\\(--font-weight-normal\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(1) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(2) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(3) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(4) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(5) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(6) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[type=\&quot;submit\&quot;] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.border-b.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;$228,542&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        /><a
+          class="region"
+          href="#design-5"
+          title="At the measured 1024×768 desktop viewport, the final assumption field and apply/reset controls extend below the initial viewport, while comparison and decision controls remain visible to the right. This weakens the perceived sequence from edit to apply to decide."
+          aria-label="At the measured 1024×768 desktop viewport, the final assumption field and apply/reset controls extend below the initial viewport, while comparison and decision controls remain visible to the right. This weakens the perceived sequence from edit to apply to decide."
+          style="
+            left: 2.34375%;
+            top: 75.6043956043956%;
+            width: 41.796875%;
+            height: 16.923076923076923%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;compensation-planning-example&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 910,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 206.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 306.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 406.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 506.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 606.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 706.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Use these assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 185.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 234.265625,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 157.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend for planning&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 493.390625,
+          &quot;y&quot;: 455.5,
+          &quot;width&quot;: 489.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Keep draft for review&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 493.390625,
+          &quot;y&quot;: 507.5,
+          &quot;width&quot;: 489.609375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\].font-\\[var\\(--font-weight-normal\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(1) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(2) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(3) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(4) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(5) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(6) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[type=\&quot;submit\&quot;] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.border-b.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 84,
+  &quot;totalDomElements&quot;: 85,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 84,
+    &quot;sampled&quot;: 84,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 45,
+        &quot;sampled&quot;: 45
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 39,
+        &quot;sampled&quot;: 39
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 72,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 92
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 164,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 59,
+        &quot;matching-literal&quot;: 56,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 287
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 402,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 64,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 122
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 186,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 7,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 77
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 84,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 66,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 33
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 99,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 84
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 84,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1019,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>
+        desktop-window-1 — edit, apply, hold, and clear synthetic compensation
+        assumptions
+      </h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 edit, apply, hold, and clear synthetic compensation assumptions screenshot"
+        />
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;compensation-planning-example&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 910,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 206.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 306.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 406.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 506.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 606.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 706.5,
+          &quot;width&quot;: 394.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Use these assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 185.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset assumptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 234.265625,
+          &quot;y&quot;: 784.5,
+          &quot;width&quot;: 157.390625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Recommend for planning&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 493.390625,
+          &quot;y&quot;: 455.5,
+          &quot;width&quot;: 489.609375,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Keep draft for review&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 493.390625,
+          &quot;y&quot;: 507.5,
+          &quot;width&quot;: 489.609375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.break-words.min-w-\\[var\\(--space-0\\)\\].font-\\[var\\(--font-weight-normal\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(1) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(2) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(3) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(4) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(5) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex-col.gap-\\[var\\(--space-1\\)\\].flex:nth-child(6) &gt; label &gt; .text-\\[var\\(--color-text-muted\\)\\].text-\\[length\\:var\\(--text-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;button[type=\&quot;submit\&quot;] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.border-\\[var\\(--color-status-success\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-3\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.border-b.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;$228,542&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>

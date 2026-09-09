@@ -23,6 +23,11 @@ Compose around the user's task, not a fixed page template:
   secondary details. Use readable typography for deciding quantities rather than
   packing them into status badges. Do not use disabled styling for active facts
   or compensate with palette overrides.
+- Keep the selected decision, recommendation, action, and resulting status in
+  agreement. Distinguish acknowledging, recommending, and resolving in the
+  product's own terms. Put the unit, period, and meaningful comparison basis or
+  denominator beside a deciding number when it changes the interpretation; do
+  not rely on tiny desktop metadata or a distant tooltip for that evidence.
 - Keep selection, visible results, and actions coherent after filtering. An empty
   result must not silently leave an unrelated record actionable or tell users to
   select a record that does not exist. Related panes share one recovery story. In narrow
@@ -93,6 +98,8 @@ routes, catalog gaps, and one synchronized manifest. The manifest inventories:
 - every imported public component, composition, and icon;
 - deterministic fixture facts;
 - accepted visible-product decisions;
+- selected decision state, recommendation, action result, and decision-critical
+  numeric bases when the preview shows them;
 - provisional assumptions, kept separate from decisions;
 - unresolved questions that could alter the visible experience; and
 - the future production meaning of visible elements.

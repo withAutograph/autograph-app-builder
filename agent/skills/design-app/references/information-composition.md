@@ -50,6 +50,14 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   result when understanding the change is part of the decision.
   For reference content, identity and navigable facts may come first. Avoid
   repeated warnings, metric duplication, arbitrary empty panels, and filler.
+- Keep a decision's state language synchronized across its selected record,
+  evidence, recommendation, action, and confirmation. An acknowledgement says
+  what was seen or recorded; it does not imply endorsement. A recommendation
+  explains a proposed next step; it remains a recommendation until the fixture
+  records a distinct resolution. Do not retain an emphasized recommendation as
+  though it remains selected after a different action, or call an unresolved
+  watch item complete. Use the product's own terms for these states rather than
+  inventing a universal workflow.
 - Keep the primary action near the information that justifies it. Explain its
   visible effect; distinguish a simulated outcome from changed record facts.
   Preserve selection, logical reading order, keyboard focus, and task context
@@ -67,6 +75,14 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   Show a concise governing reason beside a recommendation, using supported
   description text rather than a decorative change badge. Keep the complete
   derivation expandable; do not hide the reason needed to judge the action.
+- For a number that supports a decision, show the meaningful basis beside the
+  value or in the same immediately visible evidence group: unit, covered period
+  or as-of point, and comparison population, plan, prior value, denominator, or
+  assumption as relevant. Label current and proposed values distinctly and keep
+  their periods comparable. A percentage, variance, total, or uplift without
+  its base is incomplete evidence; do not make users reconstruct it from a
+  distant caption, tooltip, or another screen. This does not require a KPI
+  layout or every number to carry every kind of metadata.
 
 ## Make the next step legible
 
@@ -120,6 +136,13 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   use a readable supported status variant that retains meaningful distinctions
   between states without changing palette tokens. A badge can name a state while
   its deciding quantity uses ordinary readable text nearby.
+- In desktop tables and panels, keep identity and decision-critical evidence
+  readable at the working width. Do not let a result, basis, or status needed to
+  choose the next action disappear behind incidental columns, compressed count
+  pills, or tiny metadata. Reorder, disclose supporting fields, or use the
+  selected composition's legitimate overflow behavior according to the task;
+  useful comparison scrolling remains valid and no arbitrary minimum width is
+  required.
 - Give related panes one coherent empty-state explanation. Distinguish no
   matching records from records available but none selected; do not invite an
   impossible selection. Offer the relevant recovery, such as adjusting filters,
