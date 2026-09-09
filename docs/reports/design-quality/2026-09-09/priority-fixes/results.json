@@ -1,0 +1,22 @@
+[
+  {
+    "case": "import",
+    "width": 1024,
+    "passed": true
+  },
+  {
+    "case": "compensation",
+    "width": 1024,
+    "passed": true
+  },
+  {
+    "case": "import",
+    "width": 1440,
+    "passed": true
+  },
+  {
+    "case": "compensation",
+    "width": 1440,
+    "passed": true
+  }
+]

@@ -82,7 +82,6 @@ export default function CompensationPlanning() {
       label: "Planned base increase",
       control: "number" as const,
       value: Number((state.assumptions.plannedIncrease * 100).toFixed(4)),
-      helper: "Percent applied to current base salary",
       error: errors.plannedIncrease,
     },
   ];
@@ -131,6 +130,10 @@ export default function CompensationPlanning() {
 
         <div className="grid items-start gap-[var(--space-6)] lg:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
           <Card title="Editable policy assumptions">
+            <Typography tone="secondary" className="mb-[var(--space-4)]">
+              Percentage fields are entered as whole percentages. Planned base
+              increase is applied to the current base salary.
+            </Typography>
             <SchemaFormComposition
               spec={{
                 type: "schema_form",
