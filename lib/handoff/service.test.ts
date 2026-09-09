@@ -467,10 +467,14 @@ describe("opaque App Builder handoffs", () => {
       handoffId: created.handoffId,
     });
     expect(resolved.status).toBe("unredeemed");
-    if (resolved.status === "unredeemed")
-      expect(resolved.prompt).toMatch(
-        /^Call prepared_app_context before any provider work/u,
+    if (resolved.status === "unredeemed") {
+      expect(resolved.prompt.split("\n", 1)[0]).toBe(
+        `Create ${intent.appName} with Autograph App Builder.`,
       );
+      expect(resolved.prompt).toContain(
+        "Call prepared_app_context before any provider work",
+      );
+    }
   });
 
   it("returns one opaque handoff for an idempotent creation request", async () => {

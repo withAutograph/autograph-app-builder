@@ -84,8 +84,8 @@ export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
   const repository =
     intent.repository.resolvedFullName ?? intent.repository.requestedName;
   return [
-    "Call prepared_app_context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
     `Create ${intent.appName} with Autograph App Builder.`,
+    "Call prepared_app_context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
     `App id: ${intent.appId}`,
     `Requested repository: ${repository}`,
     `Model preference: ${intent.modelId}`,
