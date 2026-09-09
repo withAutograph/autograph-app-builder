@@ -2,7 +2,7 @@
 
 Shared, advisory observations of generated previews. No pass threshold or runtime gate.
 
-**Latest report:** [stock-exceptions-state-aware-confirmation](2026-09-09/stock-exceptions-state-aware-confirmation-080404459Z/README.md)
+**Latest report:** [stock-exceptions-aligned-header](2026-09-09/stock-exceptions-aligned-header-082816955Z/README.md)
 
 ## Convention
 
@@ -20,6 +20,9 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 | Evaluated (UTC)          | App                                                                                                                    | Subjective score / 100 |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 2026-09-09T08:28:16.955Z | [stock-exceptions-aligned-header](2026-09-09/stock-exceptions-aligned-header-082816955Z/README.md)                     | 90                     |
+| 2026-09-09T08:22:18.776Z | [stock-exceptions-strong-actions](2026-09-09/stock-exceptions-strong-actions-082218776Z/README.md)                     | 90                     |
+| 2026-09-09T08:12:05.324Z | [stock-exceptions-outlined-actions](2026-09-09/stock-exceptions-outlined-actions-081205324Z/README.md)                 | 95                     |
 | 2026-09-09T08:04:04.459Z | [stock-exceptions-state-aware-confirmation](2026-09-09/stock-exceptions-state-aware-confirmation-080404459Z/README.md) | 95                     |
 | 2026-09-09T07:55:11.473Z | [stock-exceptions-concise-confirmation](2026-09-09/stock-exceptions-concise-confirmation-075511473Z/README.md)         | 85                     |
 | 2026-09-09T07:50:47.921Z | [stock-exceptions-consistent-confirmation](2026-09-09/stock-exceptions-consistent-confirmation-075047921Z/README.md)   | 85                     |

@@ -1,0 +1,4060 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T08:12:05.324Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <h2>Arrusted adherence: 100/100 · partial</h2>
+    <p>
+      Evidence coverage: 1.63%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>20</td>
+          <td>0</td>
+          <td>2</td>
+          <td>100% (20/20)</td>
+          <td>22 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>53</td>
+          <td>0</td>
+          <td>10</td>
+          <td>100% (53/53)</td>
+          <td>63 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>13</td>
+          <td>0</td>
+          <td>5165</td>
+          <td>100% (13/13)</td>
+          <td>13 / 5165</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence.
+        Anonymous rules require a unique exact generated selector/property/value
+        and complete matched-rule declaration set; conditional or ambiguous
+        source rules remain unknown.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+      <li>
+        No generated CSS source files were supplied; compiled stylesheet source
+        maps cannot establish generated declaration provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (5177)</summary>
+      <article id="finding-0">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-0">src/StockExceptions.tsx:13</a></small
+        >
+        <details id="source-0">
+          <summary>Source location: src/StockExceptions.tsx:13</summary>
+          <pre>
+12: const summaryText=location===&quot;all&quot;&amp;&amp;severity===&quot;all&quot;?`${products.length} exceptions`:`${filtered.length} matching · ${products.length} total`;const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{summaryText}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; tone=&quot;primary&quot; className=&quot;block&quot;&gt;Critical first · lowest cover&lt;/Typography&gt;&lt;/&gt;} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{Math.max(0,p.reorderPoint-p.onHand)} units below reorder point&lt;/Typography&gt;&lt;/&gt;,trailing:&lt;&gt;&lt;Tag size=&quot;md&quot; tone={p.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-9">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-9">src/StockExceptions.tsx:14</a></small
+        >
+        <details id="source-9">
+          <summary>Source location: src/StockExceptions.tsx:14</summary>
+          <pre>
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-10">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-10">src/StockExceptions.tsx:14</a></small
+        >
+        <details id="source-10">
+          <summary>Source location: src/StockExceptions.tsx:14</summary>
+          <pre>
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-11">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-11">src/StockExceptions.tsx:14</a></small
+        >
+        <details id="source-11">
+          <summary>Source location: src/StockExceptions.tsx:14</summary>
+          <pre>
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-14">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-14">src/StockExceptions.tsx:14</a></small
+        >
+        <details id="source-14">
+          <summary>Source location: src/StockExceptions.tsx:14</summary>
+          <pre>
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-21">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-21">src/StockExceptions.tsx:8</a></small
+        >
+        <details id="source-21">
+          <summary>Source location: src/StockExceptions.tsx:8</summary>
+          <pre>
+7: const revealSupplier=(open:boolean)=&gt;{if(!open)return;requestAnimationFrame(()=&gt;{const root=detailShellRef.current;if(!root)return;const initialSummary=[...root.querySelectorAll(&quot;summary&quot;)].find(node=&gt;node.textContent?.includes(&quot;Secondary supplier facts&quot;));const details=initialSummary?.closest(&quot;details&quot;);if(!details)return;const animations=details.getAnimations({subtree:true}).filter(animation=&gt;{const endTime=animation.effect?.getComputedTiming().endTime;return animation.playState!==&quot;finished&quot;&amp;&amp;typeof endTime===&quot;number&quot;&amp;&amp;Number.isFinite(endTime)});Promise.allSettled(animations.map(animation=&gt;animation.finished)).then(()=&gt;requestAnimationFrame(()=&gt;{const currentRoot=detailShellRef.current;if(!currentRoot)return;const summary=[...currentRoot.querySelectorAll(&quot;summary&quot;)].find(node=&gt;node.textContent?.includes(&quot;Secondary supplier facts&quot;));if(!summary)return;let scroller:HTMLElement|null=summary.parentElement;while(scroller&amp;&amp;scroller!==currentRoot){const overflow=getComputedStyle(scroller).overflowY;if((overflow===&quot;auto&quot;||overflow===&quot;scroll&quot;)&amp;&amp;scroller.scrollHeight&gt;scroller.clientHeight)break;scroller=scroller.parentElement}if(!scroller||scroller===currentRoot)return;const offset=summary.getBoundingClientRect().top-scroller.getBoundingClientRect().top;scroller.scrollTop=Math.min(scroller.scrollHeight-scroller.clientHeight,scroller.scrollTop+offset)}))})};
+8: const filters=&lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-1 gap-[var(--space-3)] rounded-[var(--radius-panel)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-[var(--space-3)] sm:grid-cols-2&quot;&gt;&lt;FieldFrame label=&quot;Location&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;oakland&quot;,label:&quot;Oakland DC&quot;},{value:&quot;reno&quot;,label:&quot;Reno Clinic&quot;},{value:&quot;none&quot;,label:&quot;Portland Hub (0)&quot;}]} onValueChange={v=&gt;{setLocation(v);changeFilters(v,severity)}}/&gt;&lt;/FieldFrame&gt;&lt;FieldFrame label=&quot;Severity&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;critical&quot;,label:&quot;Critical&quot;},{value:&quot;warning&quot;,label:&quot;Low&quot;}]} onValueChange={v=&gt;{setSeverity(v);changeFilters(location,v)}}/&gt;&lt;/FieldFrame&gt;&lt;/section&gt;;
+9: const replenishmentExplanation=selected?selected.minCases&gt;roundedCases?`${shortfall}-unit gap rounds to ${roundedCases} cases. Supplier minimum: ${caseCount} × ${selected.pack} = ${quantity} units.`:`${shortfall}-unit gap rounds to ${caseCount} × ${selected.pack} = ${quantity} units.`:&quot;&quot;;
+10: const resultItems=selected?[{type:&quot;field&quot; as const,id:&quot;no-order&quot;,label:&quot;Simulation only&quot;,value:stage===&quot;confirm&quot;?&quot;No order will be placed and underlying stock will remain unchanged.&quot;:&quot;No order was placed and underlying stock is unchanged.&quot;,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;projected&quot;,label:&quot;Projected on-hand&quot;,value:`${projected} units`,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;baseline&quot;,label:&quot;Current baseline&quot;,value:`${selected.onHand} on-hand · ${selected.reserved} reserved · ${selected.reorderPoint} reorder point`,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;assumption&quot;,label:&quot;Model assumption&quot;,value:&quot;Uses gross on-hand; reserved stock is shown separately.&quot;,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;replenishment&quot;,label:&quot;Replenishment&quot;,value:replenishmentExplanation,layout:&quot;stacked&quot; as const}]:[];</pre>
+        </details>
+      </article>
+      <article id="finding-27">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-27">src/StockExceptions.tsx:8</a></small
+        >
+        <details id="source-27">
+          <summary>Source location: src/StockExceptions.tsx:8</summary>
+          <pre>
+7: const revealSupplier=(open:boolean)=&gt;{if(!open)return;requestAnimationFrame(()=&gt;{const root=detailShellRef.current;if(!root)return;const initialSummary=[...root.querySelectorAll(&quot;summary&quot;)].find(node=&gt;node.textContent?.includes(&quot;Secondary supplier facts&quot;));const details=initialSummary?.closest(&quot;details&quot;);if(!details)return;const animations=details.getAnimations({subtree:true}).filter(animation=&gt;{const endTime=animation.effect?.getComputedTiming().endTime;return animation.playState!==&quot;finished&quot;&amp;&amp;typeof endTime===&quot;number&quot;&amp;&amp;Number.isFinite(endTime)});Promise.allSettled(animations.map(animation=&gt;animation.finished)).then(()=&gt;requestAnimationFrame(()=&gt;{const currentRoot=detailShellRef.current;if(!currentRoot)return;const summary=[...currentRoot.querySelectorAll(&quot;summary&quot;)].find(node=&gt;node.textContent?.includes(&quot;Secondary supplier facts&quot;));if(!summary)return;let scroller:HTMLElement|null=summary.parentElement;while(scroller&amp;&amp;scroller!==currentRoot){const overflow=getComputedStyle(scroller).overflowY;if((overflow===&quot;auto&quot;||overflow===&quot;scroll&quot;)&amp;&amp;scroller.scrollHeight&gt;scroller.clientHeight)break;scroller=scroller.parentElement}if(!scroller||scroller===currentRoot)return;const offset=summary.getBoundingClientRect().top-scroller.getBoundingClientRect().top;scroller.scrollTop=Math.min(scroller.scrollHeight-scroller.clientHeight,scroller.scrollTop+offset)}))})};
+8: const filters=&lt;section aria-label=&quot;Exception filters&quot; className=&quot;grid grid-cols-1 gap-[var(--space-3)] rounded-[var(--radius-panel)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-[var(--space-3)] sm:grid-cols-2&quot;&gt;&lt;FieldFrame label=&quot;Location&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={location} options={[{value:&quot;all&quot;,label:&quot;All locations&quot;},{value:&quot;oakland&quot;,label:&quot;Oakland DC&quot;},{value:&quot;reno&quot;,label:&quot;Reno Clinic&quot;},{value:&quot;none&quot;,label:&quot;Portland Hub (0)&quot;}]} onValueChange={v=&gt;{setLocation(v);changeFilters(v,severity)}}/&gt;&lt;/FieldFrame&gt;&lt;FieldFrame label=&quot;Severity&quot; className=&quot;min-w-0 w-full&quot;&gt;&lt;Select size=&quot;sm&quot; value={severity} options={[{value:&quot;all&quot;,label:&quot;All severities&quot;},{value:&quot;critical&quot;,label:&quot;Critical&quot;},{value:&quot;warning&quot;,label:&quot;Low&quot;}]} onValueChange={v=&gt;{setSeverity(v);changeFilters(location,v)}}/&gt;&lt;/FieldFrame&gt;&lt;/section&gt;;
+9: const replenishmentExplanation=selected?selected.minCases&gt;roundedCases?`${shortfall}-unit gap rounds to ${roundedCases} cases. Supplier minimum: ${caseCount} × ${selected.pack} = ${quantity} units.`:`${shortfall}-unit gap rounds to ${caseCount} × ${selected.pack} = ${quantity} units.`:&quot;&quot;;
+10: const resultItems=selected?[{type:&quot;field&quot; as const,id:&quot;no-order&quot;,label:&quot;Simulation only&quot;,value:stage===&quot;confirm&quot;?&quot;No order will be placed and underlying stock will remain unchanged.&quot;:&quot;No order was placed and underlying stock is unchanged.&quot;,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;projected&quot;,label:&quot;Projected on-hand&quot;,value:`${projected} units`,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;baseline&quot;,label:&quot;Current baseline&quot;,value:`${selected.onHand} on-hand · ${selected.reserved} reserved · ${selected.reorderPoint} reorder point`,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;assumption&quot;,label:&quot;Model assumption&quot;,value:&quot;Uses gross on-hand; reserved stock is shown separately.&quot;,layout:&quot;stacked&quot; as const},{type:&quot;field&quot; as const,id:&quot;replenishment&quot;,label:&quot;Replenishment&quot;,value:replenishmentExplanation,layout:&quot;stacked&quot; as const}]:[];</pre>
+        </details>
+      </article>
+      <article id="finding-39">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-39">src/StockExceptions.tsx:12</a></small
+        >
+        <details id="source-39">
+          <summary>Source location: src/StockExceptions.tsx:12</summary>
+          <pre>
+11: const stockSection=selected?{id:&quot;stock&quot;,title:`Stock evidence · ${shortfall} units below reorder point`,collapsible:stage===&quot;done&quot;,defaultOpen:stage!==&quot;done&quot;,items:[{type:&quot;field&quot; as const,id:&quot;onHand&quot;,label:&quot;Gross on-hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot; as const,id:&quot;reserved&quot;,label:&quot;Reserved&quot;,value:`${selected.reserved} units`},{type:&quot;field&quot; as const,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot; as const,id:&quot;cover&quot;,label:&quot;Days of cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot; as const,id:&quot;supplier&quot;,label:&quot;Supplier&quot;,value:selected.supplier},{type:&quot;field&quot; as const,id:&quot;lead&quot;,label:&quot;Lead time&quot;,value:selected.leadTime}]}:null;const supplierSection=selected?{id:&quot;supplier-secondary&quot;,title:&quot;Secondary supplier facts&quot;,defaultOpen:false,onOpenChange:revealSupplier,items:[{type:&quot;field&quot; as const,id:&quot;supplier-pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;field&quot; as const,id:&quot;receipt&quot;,label:&quot;Last receipt&quot;,value:selected.lastReceipt},{type:&quot;field&quot; as const,id:&quot;contact&quot;,label:&quot;Order contact&quot;,value:selected.contact},{type:&quot;field&quot; as const,id:&quot;terms&quot;,label:&quot;Terms&quot;,value:selected.terms}]}:null;
+12: const summaryText=location===&quot;all&quot;&amp;&amp;severity===&quot;all&quot;?`${products.length} exceptions`:`${filtered.length} matching · ${products.length} total`;const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{summaryText}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; tone=&quot;primary&quot; className=&quot;block&quot;&gt;Critical first · lowest cover&lt;/Typography&gt;&lt;/&gt;} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{Math.max(0,p.reorderPoint-p.onHand)} units below reorder point&lt;/Typography&gt;&lt;/&gt;,trailing:&lt;&gt;&lt;Tag size=&quot;md&quot; tone={p.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-40">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-40">src/StockExceptions.tsx:12</a></small
+        >
+        <details id="source-40">
+          <summary>Source location: src/StockExceptions.tsx:12</summary>
+          <pre>
+11: const stockSection=selected?{id:&quot;stock&quot;,title:`Stock evidence · ${shortfall} units below reorder point`,collapsible:stage===&quot;done&quot;,defaultOpen:stage!==&quot;done&quot;,items:[{type:&quot;field&quot; as const,id:&quot;onHand&quot;,label:&quot;Gross on-hand&quot;,value:`${selected.onHand} units`},{type:&quot;field&quot; as const,id:&quot;reserved&quot;,label:&quot;Reserved&quot;,value:`${selected.reserved} units`},{type:&quot;field&quot; as const,id:&quot;reorder&quot;,label:&quot;Reorder point&quot;,value:`${selected.reorderPoint} units`},{type:&quot;field&quot; as const,id:&quot;cover&quot;,label:&quot;Days of cover&quot;,value:`${selected.daysCover} days`},{type:&quot;field&quot; as const,id:&quot;supplier&quot;,label:&quot;Supplier&quot;,value:selected.supplier},{type:&quot;field&quot; as const,id:&quot;lead&quot;,label:&quot;Lead time&quot;,value:selected.leadTime}]}:null;const supplierSection=selected?{id:&quot;supplier-secondary&quot;,title:&quot;Secondary supplier facts&quot;,defaultOpen:false,onOpenChange:revealSupplier,items:[{type:&quot;field&quot; as const,id:&quot;supplier-pack&quot;,label:&quot;Case pack&quot;,value:`${selected.pack} units`},{type:&quot;field&quot; as const,id:&quot;receipt&quot;,label:&quot;Last receipt&quot;,value:selected.lastReceipt},{type:&quot;field&quot; as const,id:&quot;contact&quot;,label:&quot;Order contact&quot;,value:selected.contact},{type:&quot;field&quot; as const,id:&quot;terms&quot;,label:&quot;Terms&quot;,value:selected.terms}]}:null;
+12: const summaryText=location===&quot;all&quot;&amp;&amp;severity===&quot;all&quot;?`${products.length} exceptions`:`${filtered.length} matching · ${products.length} total`;const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{summaryText}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; tone=&quot;primary&quot; className=&quot;block&quot;&gt;Critical first · lowest cover&lt;/Typography&gt;&lt;/&gt;} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{Math.max(0,p.reorderPoint-p.onHand)} units below reorder point&lt;/Typography&gt;&lt;/&gt;,trailing:&lt;&gt;&lt;Tag size=&quot;md&quot; tone={p.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-61">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-61">src/StockExceptions.tsx:13</a></small
+        >
+        <details id="source-61">
+          <summary>Source location: src/StockExceptions.tsx:13</summary>
+          <pre>
+12: const summaryText=location===&quot;all&quot;&amp;&amp;severity===&quot;all&quot;?`${products.length} exceptions`:`${filtered.length} matching · ${products.length} total`;const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{summaryText}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; tone=&quot;primary&quot; className=&quot;block&quot;&gt;Critical first · lowest cover&lt;/Typography&gt;&lt;/&gt;} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{Math.max(0,p.reorderPoint-p.onHand)} units below reorder point&lt;/Typography&gt;&lt;/&gt;,trailing:&lt;&gt;&lt;Tag size=&quot;md&quot; tone={p.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-63">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-63">src/StockExceptions.tsx:14</a></small
+        >
+        <details id="source-63">
+          <summary>Source location: src/StockExceptions.tsx:14</summary>
+          <pre>
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-64">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-64">src/StockExceptions.tsx:13</a></small
+        >
+        <details id="source-64">
+          <summary>Source location: src/StockExceptions.tsx:13</summary>
+          <pre>
+12: const summaryText=location===&quot;all&quot;&amp;&amp;severity===&quot;all&quot;?`${products.length} exceptions`:`${filtered.length} matching · ${products.length} total`;const recordList=&lt;RecordList ariaLabel=&quot;Low-stock products&quot; heading=&quot;Exceptions&quot; summary={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{summaryText}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; tone=&quot;primary&quot; className=&quot;block&quot;&gt;Critical first · lowest cover&lt;/Typography&gt;&lt;/&gt;} selectedId={selectedId} onSelect={id=&gt;{setSelectedId(id);setStage(&quot;ready&quot;)}} items={filtered.map(p=&gt;({id:p.id,primary:p.name,secondary:&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{p.sku} · {p.locationLabel}&lt;/Typography&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot; className=&quot;block&quot;&gt;{Math.max(0,p.reorderPoint-p.onHand)} units below reorder point&lt;/Typography&gt;&lt;/&gt;,trailing:&lt;&gt;&lt;Tag size=&quot;md&quot; tone={p.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={p.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body-strong&quot;&gt;{p.daysCover} days cover&lt;/Typography&gt;&lt;/&gt;}))}/&gt;;const list=&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}{recordList}&lt;/div&gt;;
+13: const detail=selected?&lt;div ref={detailShellRef}&gt;&lt;RecordDetailPanel className=&quot;max-h-[calc(100vh-12rem)]&quot; labelEmphasis=&quot;primary&quot; title={selected.name} subtitle={&lt;&gt;&lt;Typography as=&quot;span&quot; variant=&quot;body&quot;&gt;{selected.sku} · {selected.locationLabel} · &lt;/Typography&gt;&lt;Tag size=&quot;md&quot; tone={selected.severity===&quot;critical&quot;?&quot;red&quot;:&quot;amber&quot;} label={selected.severity===&quot;critical&quot;?&quot;Critical&quot;:&quot;Low&quot;}/&gt;&lt;/&gt;} sections={stage===&quot;confirm&quot;?[{id:&quot;confirm&quot;,title:`Confirm ${quantity}-unit modeled replenishment`,collapsible:false,items:resultItems}]:stage===&quot;done&quot;?[{id:&quot;mock-result&quot;,title:`Modeled replenishment: ${quantity} units · ${projected} projected on-hand`,collapsible:false,items:resultItems},stockSection!,supplierSection!]:[stockSection!,supplierSection!]} actions={stage===&quot;ready&quot;?[{id:&quot;try&quot;,label:&quot;Try mock replenishment&quot;,intent:&quot;secondary&quot;}]:stage===&quot;confirm&quot;?[{id:&quot;cancel&quot;,label:&quot;Cancel&quot;},{id:&quot;confirm&quot;,label:&quot;Confirm mock&quot;,intent:&quot;secondary&quot;}]:[{id:&quot;reset&quot;,label:&quot;Reset mock&quot;}]} onAction={id=&gt;{if(id===&quot;try&quot;)setStage(&quot;confirm&quot;);if(id===&quot;cancel&quot;||id===&quot;reset&quot;)setStage(&quot;ready&quot;);if(id===&quot;confirm&quot;)setStage(&quot;done&quot;)}}/&gt;&lt;/div&gt;:null;
+14: return &lt;main className=&quot;min-h-screen bg-[var(--color-bg-page)] px-[var(--space-6)] py-[var(--space-6)]&quot;&gt;&lt;div className=&quot;mx-auto w-full max-w-[1440px]&quot;&gt;&lt;PageHeader title=&quot;Stock exceptions&quot; subtitle=&quot;Review low-stock evidence and model a replenishment without changing inventory.&quot;/&gt;&lt;div className=&quot;mx-auto mt-[var(--space-5)] w-full max-w-[1240px]&quot;&gt;{filtered.length===0?&lt;div className=&quot;grid gap-[var(--space-3)]&quot;&gt;{filters}&lt;Card&gt;&lt;div className=&quot;px-[var(--space-6)] py-[var(--space-8)]&quot;&gt;&lt;Typography variant=&quot;section-title&quot;&gt;No exceptions match these filters&lt;/Typography&gt;&lt;Typography variant=&quot;body&quot; tone=&quot;muted&quot; className=&quot;mt-[var(--space-2)]&quot;&gt;Change location or severity, or reset both filters to return to the full exception list.&lt;/Typography&gt;&lt;Button size=&quot;sm&quot; className=&quot;mt-[var(--space-4)]&quot; onClick={resetFilters}&gt;Reset filters&lt;/Button&gt;&lt;/div&gt;&lt;/Card&gt;&lt;/div&gt;:&lt;RecordListDetailLayout list={list} detail={detail} hasSelection={Boolean(selected)} selectedId={selectedId||undefined} onBack={()=&gt;setSelectedId(&quot;&quot;)} backLabel=&quot;Back to exceptions&quot;/&gt;}&lt;/div&gt;&lt;/div&gt;&lt;/main&gt;}
+15: </pre>
+        </details>
+      </article>
+      <article id="finding-98">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-98"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-98">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-99">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-99"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-99">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-100">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-100"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-100">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-101">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-101"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-101">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-102">
+        <strong>unknown · unassessed</strong>
+        <p>padding-right: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-102"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-102">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-103">
+        <strong>unknown · unassessed</strong>
+        <p>column-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-104">
+        <strong>unknown · unassessed</strong>
+        <p>row-gap: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-105">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-left-radius: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-105"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-105">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-106">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-width: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-106"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-106">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-107">
+        <strong>unknown · unassessed</strong>
+        <p>border-top-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-107"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-107">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-108">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown</p>
+        <small
+          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
+        >
+      </article>
+      <article id="finding-109">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-109"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-109">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-110">
+        <strong>matching-literal · unassessed</strong>
+        <p>column-gap: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-110"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-110">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-111">
+        <strong>matching-literal · unassessed</strong>
+        <p>row-gap: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-111"
+            >node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-111">
+          <summary>
+            Source location:
+            node_modules/.bun/tailwindcss@4.3.3/node_modules/tailwindcss/index.css:949
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-112">
+        <strong>matching-literal · unassessed</strong>
+        <p>border-top-color: matching-literal</p>
+        <small
+          >browser evidence ·
+          <a href="#source-112"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-112">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:184
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-113">
+        <strong>unknown · unassessed</strong>
+        <p>box-shadow: unknown; shared origin candidate requires review.</p>
+        <p>
+          Possible generated source (unassessed):
+          core/components/RecordList.tsx:69. Exact escaped Tailwind utility
+          token occurs once in static source; it is reviewer evidence only, not
+          declaration provenance.
+        </p>
+        <small
+          >browser evidence ·
+          <a href="#source-113"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:1787</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-113">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:1787
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-114">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-114"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-114">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-115">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-115"
+            >/preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-115">
+          <summary>
+            Source location:
+            /preview/wrun_01M22BYTGT0JJ3YTDTWGH9AP98/368b8fea8c8d70f0d97350c1b17faf1255a8b1577174e477b13478d8db837e8a:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 95/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>3/4</td>
+          <td>
+            The page title, exception list, selected-record heading, and stock
+            evidence form a clear scan path. Selected-row treatment and severity
+            pills make status easy to locate, while confirmation and result
+            headings clearly replace the evidence view. The main replenishment
+            action is comparatively subdued as an outlined footer control, so
+            its priority is weaker than the otherwise strong hierarchy.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>4/4</td>
+          <td>
+            The two-column list-detail composition is consistently aligned, with
+            compact filters, uniform 86 px list rows, stable field/value
+            columns, and actions anchored in panel footers. At 1024, both panes
+            remain usable without horizontal overflow; at 1920, the centered
+            content width keeps lines readable despite substantial surrounding
+            whitespace.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>4/4</td>
+          <td>
+            Heading levels, field labels, values, metadata, and severity labels
+            are visually consistent and readable across all supplied sizes. Bold
+            labels and restrained body text support quick comparison, and long
+            content such as the supplier email and replenishment explanation
+            remains legible without awkward wrapping.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>4/4</td>
+          <td>
+            The composition adapts effectively from a wide list-detail workspace
+            at 1920 and 1024 to a focused detail panel at 700 px, where a clear
+            Back to exceptions control replaces the list. Controls remain
+            available, action groups fit, and constrained-height detail/result
+            states use intentional vertical scrolling without document overflow.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>4/4</td>
+          <td>
+            The purpose is stated directly, location and severity filters are
+            labeled, each exception exposes product, location, deficit,
+            severity, and cover, and selection reveals stock and supplier
+            evidence. The mock flow clearly distinguishes review, confirmation,
+            result, and reset, repeatedly stating that no order is placed and
+            inventory remains unchanged.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        Strong master-detail relationship: the selected Atlas row is visibly
+        highlighted and its identity is repeated in the detail header.
+      </li>
+      <li>
+        Exception rows expose both the reorder gap and days of cover, supporting
+        fast prioritization without opening every record.
+      </li>
+      <li>
+        The confirmation view explains how the 96-unit quantity derives from
+        case rounding and the supplier minimum.
+      </li>
+      <li>
+        Simulation safety is communicated before and after confirmation with
+        explicit statements that no order is placed and underlying stock is
+        unchanged.
+      </li>
+      <li>
+        Secondary supplier facts are progressively disclosed, keeping the
+        default evidence view concise while preserving access to case pack,
+        receipt, contact, and terms.
+      </li>
+      <li>
+        The 700 px constrained desktop treatment preserves context with a Back
+        to exceptions affordance rather than squeezing both panes together.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        Try mock replenishment is the principal task action, but its neutral
+        outlined presentation gives it similar emphasis to secondary controls
+        and makes it easy to overlook at the far edge of a large panel.
+      </p>
+      <p>
+        <strong>Improve:</strong> Use the supported primary Button variant for
+        this single task-advancing action while retaining the existing Arrusted
+        palette and keeping Cancel and Reset as secondary actions.
+      </p>
+      <small>Screenshot region: x 1129, y 626, width 191, height 40</small>
+    </article>
+    <article id="design-1">
+      <h4>
+        low · <a href="#desktop-custom-700x900-0">desktop-custom-700x900-0</a>
+      </h4>
+      <p>
+        The full page title and explanatory subtitle remain above the Back
+        control in constrained detail mode, consuming vertical space before the
+        selected product and stock evidence begin.
+      </p>
+      <p>
+        <strong>Improve:</strong> In constrained detail mode, compact the page
+        introduction or place the Back control on the same header row where
+        composition allows, while retaining enough context to identify Stock
+        exceptions.
+      </p>
+      <small>Screenshot region: x 24, y 24, width 652, height 124</small>
+    </article>
+    <article id="design-2">
+      <h4>low · <a href="#desktop-window-5">desktop-window-5</a></h4>
+      <p>
+        After expanding supplier facts in the shorter window, the internally
+        scrolled detail begins mid-way through stock evidence at Reorder point.
+        The persistent product header helps, but the missing stock-section
+        heading makes the visible field group less self-explanatory.
+      </p>
+      <p>
+        <strong>Improve:</strong> When disclosure expansion adjusts the internal
+        scroll position, keep the Stock evidence heading visible until the
+        supplier section reaches the top, or avoid moving the panel farther than
+        needed to reveal the expanded section.
+      </p>
+      <small>Screenshot region: x 433, y 231, width 567, height 169</small>
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-2&quot;,
+    &quot;desktop-3&quot;,
+    &quot;desktop-4&quot;,
+    &quot;desktop-5&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-wide-2&quot;,
+    &quot;desktop-wide-3&quot;,
+    &quot;desktop-wide-4&quot;,
+    &quot;desktop-wide-5&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;,
+    &quot;desktop-window-2&quot;,
+    &quot;desktop-window-3&quot;,
+    &quot;desktop-window-4&quot;,
+    &quot;desktop-window-5&quot;,
+    &quot;desktop-custom-700x900-0&quot;,
+    &quot;desktop-custom-700x900-1&quot;,
+    &quot;desktop-custom-700x900-2&quot;,
+    &quot;desktop-custom-700x900-3&quot;,
+    &quot;desktop-custom-700x900-4&quot;,
+    &quot;desktop-custom-700x900-5&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The page title, exception list, selected-record heading, and stock evidence form a clear scan path. Selected-row treatment and severity pills make status easy to locate, while confirmation and result headings clearly replace the evidence view. The main replenishment action is comparatively subdued as an outlined footer control, so its priority is weaker than the otherwise strong hierarchy.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The two-column list-detail composition is consistently aligned, with compact filters, uniform 86 px list rows, stable field/value columns, and actions anchored in panel footers. At 1024, both panes remain usable without horizontal overflow; at 1920, the centered content width keeps lines readable despite substantial surrounding whitespace.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;Heading levels, field labels, values, metadata, and severity labels are visually consistent and readable across all supplied sizes. Bold labels and restrained body text support quick comparison, and long content such as the supplier email and replenishment explanation remains legible without awkward wrapping.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The composition adapts effectively from a wide list-detail workspace at 1920 and 1024 to a focused detail panel at 700 px, where a clear Back to exceptions control replaces the list. Controls remain available, action groups fit, and constrained-height detail/result states use intentional vertical scrolling without document overflow.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 4,
+      &quot;reason&quot;: &quot;The purpose is stated directly, location and severity filters are labeled, each exception exposes product, location, deficit, severity, and cover, and selection reveals stock and supplier evidence. The mock flow clearly distinguishes review, confirmation, result, and reset, repeatedly stating that no order is placed and inventory remains unchanged.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;Strong master-detail relationship: the selected Atlas row is visibly highlighted and its identity is repeated in the detail header.&quot;,
+    &quot;Exception rows expose both the reorder gap and days of cover, supporting fast prioritization without opening every record.&quot;,
+    &quot;The confirmation view explains how the 96-unit quantity derives from case rounding and the supplier minimum.&quot;,
+    &quot;Simulation safety is communicated before and after confirmation with explicit statements that no order is placed and underlying stock is unchanged.&quot;,
+    &quot;Secondary supplier facts are progressively disclosed, keeping the default evidence view concise while preserving access to case pack, receipt, contact, and terms.&quot;,
+    &quot;The 700 px constrained desktop treatment preserves context with a Back to exceptions affordance rather than squeezing both panes together.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 1129,
+        &quot;y&quot;: 626,
+        &quot;width&quot;: 191,
+        &quot;height&quot;: 40
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;Try mock replenishment is the principal task action, but its neutral outlined presentation gives it similar emphasis to secondary controls and makes it easy to overlook at the far edge of a large panel.&quot;,
+      &quot;improvement&quot;: &quot;Use the supported primary Button variant for this single task-advancing action while retaining the existing Arrusted palette and keeping Cancel and Reset as secondary actions.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-custom-700x900-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 24,
+        &quot;y&quot;: 24,
+        &quot;width&quot;: 652,
+        &quot;height&quot;: 124
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;The full page title and explanatory subtitle remain above the Back control in constrained detail mode, consuming vertical space before the selected product and stock evidence begin.&quot;,
+      &quot;improvement&quot;: &quot;In constrained detail mode, compact the page introduction or place the Back control on the same header row where composition allows, while retaining enough context to identify Stock exceptions.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-window-5&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 433,
+        &quot;y&quot;: 231,
+        &quot;width&quot;: 567,
+        &quot;height&quot;: 169
+      },
+      &quot;severity&quot;: &quot;low&quot;,
+      &quot;explanation&quot;: &quot;After expanding supplier facts in the shorter window, the internally scrolled detail begins mid-way through stock evidence at Reorder point. The persistent product header helps, but the missing stock-section heading makes the visible field group less self-explanatory.&quot;,
+      &quot;improvement&quot;: &quot;When disclosure expansion adjusts the internal scroll position, keep the Stock evidence heading visible until the supplier section reaches the top, or avoid moving the panel farther than needed to reveal the expanded section.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;No screenshot or other reviewable artifact shows the requested implementation plan, so its completeness and stop-before-publication status cannot be evaluated visually.&quot;,
+    &quot;Filter menus and filtered empty/result states were not shown or interaction-tested; only the presence of the location and severity controls is established.&quot;,
+    &quot;The constrained 700 px captures show detail mode but not the corresponding exception-list mode after using Back, so that state is unverified.&quot;,
+    &quot;Only the supplied desktop dimensions and states were assessed; intermediate panel widths, keyboard focus appearance, loading states, and long localized strings were not shown.&quot;,
+    &quot;Static screenshots and source evidence do not establish backend behavior, persistence, or whether any real inventory operation can occur.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 95,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 47660,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 47657
+    },
+    &quot;outputTokens&quot;: 1840,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 972,
+      &quot;reasoningTokens&quot;: 868
+    },
+    &quot;totalTokens&quot;: 49500
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Button&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Button&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Card&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Card&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;FieldFrame&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;FieldFrame&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordList&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;RecordList&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Select&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Select&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Tag&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Tag&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;Typography&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Typography&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordDetailPanel&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordDetailPanel&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptions.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordListDetailLayout&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordListDetailLayout&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-bg-surface&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--radius-panel&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--space-8&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-bg-surface&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--radius-panel&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--space-8&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [],
+    &quot;matchingLiterals&quot;: [],
+    &quot;unknownLiterals&quot;: [],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 100,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;implementationDiagnostics&quot;: [],
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;repo&quot;,
+    &quot;commit&quot;: &quot;88dd4b586587d3cd54bc2fb80f274131503bbb92&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: true
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="Try mock replenishment is the principal task action, but its neutral outlined presentation gives it similar emphasis to secondary controls and makes it easy to overlook at the far edge of a large panel."
+          aria-label="Try mock replenishment is the principal task action, but its neutral outlined presentation gives it similar emphasis to secondary controls and makes it easy to overlook at the far edge of a large panel."
+          style="
+            left: 78.40277777777777%;
+            top: 69.55555555555556%;
+            width: 13.26388888888889%;
+            height: 4.444444444444445%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1129.203125,
+          &quot;y&quot;: 626,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 151,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 138,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 87,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 57,
+        &quot;sampled&quot;: 57
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 81,
+        &quot;sampled&quot;: 63
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 114,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 118
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 232,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 132,
+        &quot;matching-literal&quot;: 55,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 335
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 522,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 42,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 233
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 10,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 106
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 116,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 107,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 18
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 125,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1390,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — Review modeled quantity before confirming</h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 Review modeled quantity before confirming screenshot"
+        />
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cancel&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1107.859375,
+          &quot;y&quot;: 633,
+          &quot;width&quot;: 78.640625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Confirm mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1194.5,
+          &quot;y&quot;: 633,
+          &quot;width&quot;: 125.5,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Confirm 96-unit modeled replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-2">
+      <h2>desktop-2 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-2.png"
+          alt="desktop-2 Mock replenishment result screenshot"
+        />
+      </div>
+      <a href="desktop-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 96 units · 114 projected on-handSimulation onlyNo order was placed and underlying stock is unchanged.Projected on-hand114 unitsCurrent ba&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 722,
+        &quot;scrollHeight&quot;: 535,
+        &quot;clientWidth&quot;: 722,
+        &quot;clientHeight&quot;: 528,
+        &quot;region&quot;: {
+          &quot;x&quot;: 617.828125,
+          &quot;y&quot;: 231,
+          &quot;width&quot;: 722.171875,
+          &quot;height&quot;: 528
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1209.921875,
+          &quot;y&quot;: 772,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-3">
+      <h2>desktop-3 — Result evidence at scroll boundary</h2>
+      <div class="capture">
+        <img
+          src="desktop-3.png"
+          alt="desktop-3 Result evidence at scroll boundary screenshot"
+        />
+      </div>
+      <a href="desktop-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 96 units · 114 projected on-handSimulation onlyNo order was placed and underlying stock is unchanged.Projected on-hand114 unitsCurrent ba&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 722,
+        &quot;scrollHeight&quot;: 535,
+        &quot;clientWidth&quot;: 722,
+        &quot;clientHeight&quot;: 528,
+        &quot;region&quot;: {
+          &quot;x&quot;: 617.828125,
+          &quot;y&quot;: 231,
+          &quot;width&quot;: 722.171875,
+          &quot;height&quot;: 528
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1209.921875,
+          &quot;y&quot;: 772,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;114 units&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-4">
+      <h2>desktop-4 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-4.png"
+          alt="desktop-4 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1129.203125,
+          &quot;y&quot;: 626,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-5">
+      <h2>desktop-5 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-5.png"
+          alt="desktop-5 Expanded supplier facts screenshot"
+        />
+      </div>
+      <a href="desktop-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Stock evidence · 54 units below reorder pointGross on-hand18 unitsReserved12 unitsReorder point72 unitsDays of cover1.4 daysSupplierNorthstar Medical SupplyLead&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 722,
+        &quot;scrollHeight&quot;: 538,
+        &quot;clientWidth&quot;: 722,
+        &quot;clientHeight&quot;: 528,
+        &quot;region&quot;: {
+          &quot;x&quot;: 617.828125,
+          &quot;y&quot;: 231,
+          &quot;width&quot;: 722.171875,
+          &quot;height&quot;: 528
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 113,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 356.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 101,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1129.203125,
+          &quot;y&quot;: 772,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1369.203125,
+          &quot;y&quot;: 626,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 151,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 138,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 87,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 57,
+        &quot;sampled&quot;: 57
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 81,
+        &quot;sampled&quot;: 63
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 114,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 118
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 232,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 132,
+        &quot;matching-literal&quot;: 55,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 335
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 522,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 42,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 233
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 10,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 106
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 116,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 107,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 18
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 125,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1390,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>desktop-wide-1 — Review modeled quantity before confirming</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 Review modeled quantity before confirming screenshot"
+        />
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cancel&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1347.859375,
+          &quot;y&quot;: 633,
+          &quot;width&quot;: 78.640625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Confirm mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1434.5,
+          &quot;y&quot;: 633,
+          &quot;width&quot;: 125.5,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Confirm 96-unit modeled replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-2">
+      <h2>desktop-wide-2 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-2.png"
+          alt="desktop-wide-2 Mock replenishment result screenshot"
+        />
+      </div>
+      <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1449.921875,
+          &quot;y&quot;: 779,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-3">
+      <h2>desktop-wide-3 — Result evidence at scroll boundary</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-3.png"
+          alt="desktop-wide-3 Result evidence at scroll boundary screenshot"
+        />
+      </div>
+      <a href="desktop-wide-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1449.921875,
+          &quot;y&quot;: 779,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;114 units&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-4">
+      <h2>desktop-wide-4 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-4.png"
+          alt="desktop-wide-4 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-wide-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1369.203125,
+          &quot;y&quot;: 626,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-5">
+      <h2>desktop-wide-5 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-5.png"
+          alt="desktop-wide-5 Expanded supplier facts screenshot"
+        />
+      </div>
+      <a href="desktop-wide-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 353,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 596.90625,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 231.921875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 341,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 499.828125,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1369.203125,
+          &quot;y&quot;: 782,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        />
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 789.203125,
+          &quot;y&quot;: 626,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 151,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 138,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 87,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 57,
+        &quot;sampled&quot;: 57
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 81,
+        &quot;sampled&quot;: 63
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 114,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 118
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 232,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 132,
+        &quot;matching-literal&quot;: 55,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 335
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 522,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 42,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 233
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 10,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 106
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 116,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 107,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 18
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 125,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 120
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1390,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>desktop-window-1 — Review modeled quantity before confirming</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 Review modeled quantity before confirming screenshot"
+        />
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cancel&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 767.859375,
+          &quot;y&quot;: 633,
+          &quot;width&quot;: 78.640625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Confirm mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 854.5,
+          &quot;y&quot;: 633,
+          &quot;width&quot;: 125.5,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Confirm 96-unit modeled replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-2">
+      <h2>desktop-window-2 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-2.png"
+          alt="desktop-window-2 Mock replenishment result screenshot"
+        />
+      </div>
+      <a href="desktop-window-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 96 units · 114 projected on-handSimulation onlyNo order was placed and underlying stock is unchanged.Projected on-hand114 unitsCurrent ba&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 566,
+        &quot;scrollHeight&quot;: 535,
+        &quot;clientWidth&quot;: 566,
+        &quot;clientHeight&quot;: 396,
+        &quot;region&quot;: {
+          &quot;x&quot;: 433.59375,
+          &quot;y&quot;: 231,
+          &quot;width&quot;: 566.40625,
+          &quot;height&quot;: 396
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 869.921875,
+          &quot;y&quot;: 640,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-3">
+      <h2>desktop-window-3 — Result evidence at scroll boundary</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-3.png"
+          alt="desktop-window-3 Result evidence at scroll boundary screenshot"
+        />
+      </div>
+      <a href="desktop-window-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 96 units · 114 projected on-handSimulation onlyNo order was placed and underlying stock is unchanged.Projected on-hand114 unitsCurrent ba&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 566,
+        &quot;scrollHeight&quot;: 535,
+        &quot;clientWidth&quot;: 566,
+        &quot;clientHeight&quot;: 396,
+        &quot;region&quot;: {
+          &quot;x&quot;: 433.59375,
+          &quot;y&quot;: 231,
+          &quot;width&quot;: 566.40625,
+          &quot;height&quot;: 396
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 869.921875,
+          &quot;y&quot;: 640,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;114 units&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-4">
+      <h2>desktop-window-4 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-4.png"
+          alt="desktop-window-4 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-window-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 789.203125,
+          &quot;y&quot;: 626,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-5">
+      <h2>desktop-window-5 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-5.png"
+          alt="desktop-window-5 Expanded supplier facts screenshot"
+        /><a
+          class="region"
+          href="#design-2"
+          title="After expanding supplier facts in the shorter window, the internally scrolled detail begins mid-way through stock evidence at Reorder point. The persistent product header helps, but the missing stock-section heading makes the visible field group less self-explanatory."
+          aria-label="After expanding supplier facts in the shorter window, the internally scrolled detail begins mid-way through stock evidence at Reorder point. The persistent product header helps, but the missing stock-section heading makes the visible field group less self-explanatory."
+          style="
+            left: 42.28515625%;
+            top: 30.078125%;
+            width: 55.37109375%;
+            height: 22.005208333333332%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-window-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Stock evidence · 54 units below reorder pointGross on-hand18 unitsReserved12 unitsReorder point72 unitsDays of cover1.4 daysSupplierNorthstar Medical SupplyLead&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 566,
+        &quot;scrollHeight&quot;: 537,
+        &quot;clientWidth&quot;: 566,
+        &quot;clientHeight&quot;: 396,
+        &quot;region&quot;: {
+          &quot;x&quot;: 433.59375,
+          &quot;y&quot;: 231,
+          &quot;width&quot;: 566.40625,
+          &quot;height&quot;: 396
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;All locationsOakland DCReno ClinicPortland Hub (0)&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 37,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;All severitiesCriticalLow&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 226.796875,
+          &quot;y&quot;: 151,
+          &quot;width&quot;: 177.796875,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cedar specimen bagsPK-0912 · Reno Clinic39 units below reorder pointCritical1.1 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 287,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Atlas nitrile gloves — Size MHW-1048 · Oakland DC54 units below reorder pointCritical1.4 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 374,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Beacon surface disinfectantCL-2201 · Oakland DC26 units below reorder pointLow3.8 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 461,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Delta isolation gownsPP-3140 · Reno Clinic18 units below reorder pointLow4.2 days cover&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 548,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 86
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 789.203125,
+          &quot;y&quot;: 640,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-0">
+      <h2>desktop-custom-700x900-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-0.png"
+          alt="desktop-custom-700x900-0 initial screenshot"
+        /><a
+          class="region"
+          href="#design-1"
+          title="The full page title and explanatory subtitle remain above the Back control in constrained detail mode, consuming vertical space before the selected product and stock evidence begin."
+          aria-label="The full page title and explanatory subtitle remain above the Back control in constrained detail mode, consuming vertical space before the selected product and stock evidence begin."
+          style="
+            left: 3.4285714285714284%;
+            top: 2.6666666666666665%;
+            width: 93.14285714285714%;
+            height: 13.777777777777779%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-custom-700x900-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 465.203125,
+          &quot;y&quot;: 666,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 81,
+  &quot;totalDomElements&quot;: 151,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 81,
+    &quot;sampled&quot;: 81,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 30,
+        &quot;sampled&quot;: 30
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 51,
+        &quot;sampled&quot;: 51
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 81,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 79
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 160,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 72,
+        &quot;matching-literal&quot;: 44,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 289
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 405,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 20,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 164
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 184,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 4,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 77
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 81,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 75,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 9
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 84,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 81
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 81,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 995,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-1">
+      <h2>
+        desktop-custom-700x900-1 — Review modeled quantity before confirming
+      </h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-1.png"
+          alt="desktop-custom-700x900-1 Review modeled quantity before confirming screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Cancel&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 443.859375,
+          &quot;y&quot;: 673,
+          &quot;width&quot;: 78.640625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Confirm mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 530.5,
+          &quot;y&quot;: 673,
+          &quot;width&quot;: 125.5,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Confirm 96-unit modeled replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-2">
+      <h2>desktop-custom-700x900-2 — Mock replenishment result</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-2.png"
+          alt="desktop-custom-700x900-2 Mock replenishment result screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-2.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 96 units · 114 projected on-handSimulation onlyNo order was placed and underlying stock is unchanged.Projected on-hand114 unitsCurrent ba&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 652,
+        &quot;scrollHeight&quot;: 535,
+        &quot;clientWidth&quot;: 652,
+        &quot;clientHeight&quot;: 528,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 271,
+          &quot;width&quot;: 652,
+          &quot;height&quot;: 528
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 545.921875,
+          &quot;y&quot;: 812,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;No order was placed and underlying stock is unchanged.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-3">
+      <h2>desktop-custom-700x900-3 — Result evidence at scroll boundary</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-3.png"
+          alt="desktop-custom-700x900-3 Result evidence at scroll boundary screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-3.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Modeled replenishment: 96 units · 114 projected on-handSimulation onlyNo order was placed and underlying stock is unchanged.Projected on-hand114 unitsCurrent ba&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 652,
+        &quot;scrollHeight&quot;: 535,
+        &quot;clientWidth&quot;: 652,
+        &quot;clientHeight&quot;: 528,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 271,
+          &quot;width&quot;: 652,
+          &quot;height&quot;: 528
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Reset mock&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 545.921875,
+          &quot;y&quot;: 812,
+          &quot;width&quot;: 110.078125,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;114 units&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-4">
+      <h2>desktop-custom-700x900-4 — Reset from result footer</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-4.png"
+          alt="desktop-custom-700x900-4 Reset from result footer screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-4.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 465.203125,
+          &quot;y&quot;: 666,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Try mock replenishment&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-custom-700x900-5">
+      <h2>desktop-custom-700x900-5 — Expanded supplier facts</h2>
+      <div class="capture">
+        <img
+          src="desktop-custom-700x900-5.png"
+          alt="desktop-custom-700x900-5 Expanded supplier facts screenshot"
+        />
+      </div>
+      <a href="desktop-custom-700x900-5.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 700,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 700,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;Stock evidence · 54 units below reorder pointGross on-hand18 unitsReserved12 unitsReorder point72 unitsDays of cover1.4 daysSupplierNorthstar Medical SupplyLead&quot;,
+        &quot;axis&quot;: &quot;y&quot;,
+        &quot;scrollWidth&quot;: 652,
+        &quot;scrollHeight&quot;: 538,
+        &quot;clientWidth&quot;: 652,
+        &quot;clientHeight&quot;: 528,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 271,
+          &quot;width&quot;: 652,
+          &quot;height&quot;: 528
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Back to exceptions&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 24,
+          &quot;y&quot;: 116,
+          &quot;width&quot;: 160.90625,
+          &quot;height&quot;: 32
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 465.203125,
+          &quot;y&quot;: 812,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;Net 30 · minimum 4 cases&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>
