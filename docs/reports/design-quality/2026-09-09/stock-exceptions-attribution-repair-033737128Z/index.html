@@ -1,0 +1,2092 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T03:37:37.128Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <h2>Arrusted adherence: 100/100 · partial</h2>
+    <p>
+      Evidence coverage: 3.24%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>15</td>
+          <td>0</td>
+          <td>3</td>
+          <td>100% (15/15)</td>
+          <td>18 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>34</td>
+          <td>0</td>
+          <td>17</td>
+          <td>100% (34/34)</td>
+          <td>51 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>99</td>
+          <td>0</td>
+          <td>4405</td>
+          <td>100% (99/99)</td>
+          <td>25 / 4479</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence.
+        Anonymous rules require a unique exact generated selector/property/value
+        and complete matched-rule declaration set; conditional or ambiguous
+        source rules remain unknown.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (4425)</summary>
+      <article id="finding-2">
+        <strong>prop · unassessed</strong>
+        <p>
+          A generated-source TypeScript diagnostic affects this expression; prop
+          assignability is unassessed.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-2">src/StockExceptionsScreen.tsx:79</a></small
+        >
+        <details id="source-2">
+          <summary>Source location: src/StockExceptionsScreen.tsx:79</summary>
+          <pre>
+78:     &lt;main className=&quot;stock-page&quot;&gt;
+79:       &lt;PageHeader title=&quot;Stock Exceptions&quot; subtitle=&quot;Review products below their reorder point and simulate a replenishment before taking action in the inventory system.&quot; actions={&lt;Button intent=&quot;secondary&quot; leading={&lt;Refresh aria-hidden=&quot;true&quot; className=&quot;size-[var(--size-icon-md)]&quot; /&gt;} onClick={() =&gt; { setLocation(&quot;all&quot;); setSeverity(&quot;all&quot;); setSelectedId(ITEMS[0].id); }}&gt;Reset view&lt;/Button&gt;} /&gt;
+80: 
+81:       &lt;section className=&quot;filter-bar&quot; aria-label=&quot;Exception filters&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-7">
+        <strong>prop · unassessed</strong>
+        <p>
+          A generated-source TypeScript diagnostic affects this expression; prop
+          assignability is unassessed.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-7">src/StockExceptionsScreen.tsx:79</a></small
+        >
+        <details id="source-7">
+          <summary>Source location: src/StockExceptionsScreen.tsx:79</summary>
+          <pre>
+78:     &lt;main className=&quot;stock-page&quot;&gt;
+79:       &lt;PageHeader title=&quot;Stock Exceptions&quot; subtitle=&quot;Review products below their reorder point and simulate a replenishment before taking action in the inventory system.&quot; actions={&lt;Button intent=&quot;secondary&quot; leading={&lt;Refresh aria-hidden=&quot;true&quot; className=&quot;size-[var(--size-icon-md)]&quot; /&gt;} onClick={() =&gt; { setLocation(&quot;all&quot;); setSeverity(&quot;all&quot;); setSelectedId(ITEMS[0].id); }}&gt;Reset view&lt;/Button&gt;} /&gt;
+80: 
+81:       &lt;section className=&quot;filter-bar&quot; aria-label=&quot;Exception filters&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-12">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-12">src/StockExceptionsScreen.tsx:82</a></small
+        >
+        <details id="source-12">
+          <summary>Source location: src/StockExceptionsScreen.tsx:82</summary>
+          <pre>
+81:       &lt;section className=&quot;filter-bar&quot; aria-label=&quot;Exception filters&quot;&gt;
+82:         &lt;FieldFrame label=&quot;Location&quot;&gt;&lt;Select aria-label=&quot;Location&quot; value={location} options={[{ value: &quot;all&quot;, label: &quot;All locations&quot; }, { value: &quot;Downtown&quot;, label: &quot;Downtown&quot; }, { value: &quot;Airport&quot;, label: &quot;Airport&quot; }, { value: &quot;Northside&quot;, label: &quot;Northside&quot; }]} onValueChange={(value) =&gt; changeFilters(value, severity)} /&gt;&lt;/FieldFrame&gt;
+83:         &lt;FieldFrame label=&quot;Severity&quot;&gt;&lt;Select aria-label=&quot;Severity&quot; value={severity} options={[{ value: &quot;all&quot;, label: &quot;All severities&quot; }, { value: &quot;Critical&quot;, label: &quot;Critical&quot; }, { value: &quot;Low&quot;, label: &quot;Low&quot; }]} onValueChange={(value) =&gt; changeFilters(location, value)} /&gt;&lt;/FieldFrame&gt;
+84:         &lt;p className=&quot;filter-summary&quot; role=&quot;status&quot;&gt;{filtered.length} {filtered.length === 1 ? &quot;exception&quot; : &quot;exceptions&quot;}&lt;/p&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-17">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-17">src/StockExceptionsScreen.tsx:83</a></small
+        >
+        <details id="source-17">
+          <summary>Source location: src/StockExceptionsScreen.tsx:83</summary>
+          <pre>
+82:         &lt;FieldFrame label=&quot;Location&quot;&gt;&lt;Select aria-label=&quot;Location&quot; value={location} options={[{ value: &quot;all&quot;, label: &quot;All locations&quot; }, { value: &quot;Downtown&quot;, label: &quot;Downtown&quot; }, { value: &quot;Airport&quot;, label: &quot;Airport&quot; }, { value: &quot;Northside&quot;, label: &quot;Northside&quot; }]} onValueChange={(value) =&gt; changeFilters(value, severity)} /&gt;&lt;/FieldFrame&gt;
+83:         &lt;FieldFrame label=&quot;Severity&quot;&gt;&lt;Select aria-label=&quot;Severity&quot; value={severity} options={[{ value: &quot;all&quot;, label: &quot;All severities&quot; }, { value: &quot;Critical&quot;, label: &quot;Critical&quot; }, { value: &quot;Low&quot;, label: &quot;Low&quot; }]} onValueChange={(value) =&gt; changeFilters(location, value)} /&gt;&lt;/FieldFrame&gt;
+84:         &lt;p className=&quot;filter-summary&quot; role=&quot;status&quot;&gt;{filtered.length} {filtered.length === 1 ? &quot;exception&quot; : &quot;exceptions&quot;}&lt;/p&gt;
+85:       &lt;/section&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-21">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-21">src/StockExceptionsScreen.tsx:91</a></small
+        >
+        <details id="source-21">
+          <summary>Source location: src/StockExceptionsScreen.tsx:91</summary>
+          <pre>
+90:           {filtered.length ? filtered.map((item) =&gt; (
+91:             &lt;Button key={item.id} intent=&quot;ghost&quot; className={`exception-row ${selected?.id === item.id ? &quot;is-selected&quot; : &quot;&quot;}`} aria-pressed={selected?.id === item.id} onClick={() =&gt; setSelectedId(item.id)}&gt;
+92:               &lt;span className=&quot;row-main&quot;&gt;&lt;strong&gt;{item.product}&lt;/strong&gt;&lt;small&gt;SKU {item.sku} · {item.location}&lt;/small&gt;&lt;/span&gt;
+93:               &lt;span className=&quot;row-evidence&quot;&gt;&lt;StatusPill label={item.severity} tone={item.severity === &quot;Critical&quot; ? &quot;danger&quot; : &quot;warning&quot;} size=&quot;xs&quot; /&gt;&lt;strong&gt;{item.onHand} / {item.reorderPoint}&lt;/strong&gt;&lt;/span&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-22">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-22">src/StockExceptionsScreen.tsx:93</a></small
+        >
+        <details id="source-22">
+          <summary>Source location: src/StockExceptionsScreen.tsx:93</summary>
+          <pre>
+92:               &lt;span className=&quot;row-main&quot;&gt;&lt;strong&gt;{item.product}&lt;/strong&gt;&lt;small&gt;SKU {item.sku} · {item.location}&lt;/small&gt;&lt;/span&gt;
+93:               &lt;span className=&quot;row-evidence&quot;&gt;&lt;StatusPill label={item.severity} tone={item.severity === &quot;Critical&quot; ? &quot;danger&quot; : &quot;warning&quot;} size=&quot;xs&quot; /&gt;&lt;strong&gt;{item.onHand} / {item.reorderPoint}&lt;/strong&gt;&lt;/span&gt;
+94:             &lt;/Button&gt;
+95:           )) : &lt;div className=&quot;empty-state&quot;&gt;&lt;strong&gt;No matching exceptions&lt;/strong&gt;&lt;span&gt;Change a location or severity filter to continue reviewing.&lt;/span&gt;&lt;/div&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-27">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-27">src/StockExceptionsScreen.tsx:102</a></small
+        >
+        <details id="source-27">
+          <summary>Source location: src/StockExceptionsScreen.tsx:102</summary>
+          <pre>
+101:             subtitle={`SKU ${selected.sku} · ${selected.location}`}
+102:             status={{ label: selected.severity, tone: selected.severity === &quot;Critical&quot; ? &quot;danger&quot; : &quot;warning&quot;, detail: `${selected.onHand} on hand` }}
+103:             metadata={[{ id: &quot;demand&quot;, label: &quot;Avg. daily sales&quot;, value: String(selected.dailySales) }, { id: &quot;coverage&quot;, label: &quot;Estimated cover&quot;, value: `${Math.max(0.4, selected.onHand / selected.dailySales).toFixed(1)} days` }]}
+104:             sections={[</pre>
+        </details>
+      </article>
+      <article id="finding-29">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-29">src/StockExceptionsScreen.tsx:104</a></small
+        >
+        <details id="source-29">
+          <summary>Source location: src/StockExceptionsScreen.tsx:104</summary>
+          <pre>
+103:             metadata={[{ id: &quot;demand&quot;, label: &quot;Avg. daily sales&quot;, value: String(selected.dailySales) }, { id: &quot;coverage&quot;, label: &quot;Estimated cover&quot;, value: `${Math.max(0.4, selected.onHand / selected.dailySales).toFixed(1)} days` }]}
+104:             sections={[
+105:               { id: &quot;stock&quot;, title: &quot;Stock position&quot;, collapsible: false, items: [
+106:                 { type: &quot;field&quot;, id: &quot;on-hand&quot;, label: &quot;On hand&quot;, value: selected.onHand },</pre>
+        </details>
+      </article>
+      <article id="finding-30">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-30">src/StockExceptionsScreen.tsx:119</a></small
+        >
+        <details id="source-30">
+          <summary>Source location: src/StockExceptionsScreen.tsx:119</summary>
+          <pre>
+118:             ]}
+119:             actions={[{ id: &quot;replenish&quot;, label: mockOrders[selected.id] ? &quot;Revise mock replenishment&quot; : &quot;Try mock replenishment&quot;, intent: &quot;primary&quot; }]}
+120:             onAction={openReplenishment}
+121:           /&gt; : &lt;div className=&quot;empty-state&quot;&gt;&lt;strong&gt;Select a product&lt;/strong&gt;&lt;span&gt;Choose an exception to review its stock and supplier facts.&lt;/span&gt;&lt;/div&gt;}</pre>
+        </details>
+      </article>
+      <article id="finding-31">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-31">src/StockExceptionsScreen.tsx:120</a></small
+        >
+        <details id="source-31">
+          <summary>Source location: src/StockExceptionsScreen.tsx:120</summary>
+          <pre>
+119:             actions={[{ id: &quot;replenish&quot;, label: mockOrders[selected.id] ? &quot;Revise mock replenishment&quot; : &quot;Try mock replenishment&quot;, intent: &quot;primary&quot; }]}
+120:             onAction={openReplenishment}
+121:           /&gt; : &lt;div className=&quot;empty-state&quot;&gt;&lt;strong&gt;Select a product&lt;/strong&gt;&lt;span&gt;Choose an exception to review its stock and supplier facts.&lt;/span&gt;&lt;/div&gt;}
+122:         &lt;/section&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-34">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-34">src/StockExceptionsScreen.tsx:125</a></small
+        >
+        <details id="source-34">
+          <summary>Source location: src/StockExceptionsScreen.tsx:125</summary>
+          <pre>
+124: 
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-35">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-35">src/StockExceptionsScreen.tsx:125</a></small
+        >
+        <details id="source-35">
+          <summary>Source location: src/StockExceptionsScreen.tsx:125</summary>
+          <pre>
+124: 
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-38">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-38">src/StockExceptionsScreen.tsx:125</a></small
+        >
+        <details id="source-38">
+          <summary>Source location: src/StockExceptionsScreen.tsx:125</summary>
+          <pre>
+124: 
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-40">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-40">src/StockExceptionsScreen.tsx:125</a></small
+        >
+        <details id="source-40">
+          <summary>Source location: src/StockExceptionsScreen.tsx:125</summary>
+          <pre>
+124: 
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-42">
+        <strong>prop · unassessed</strong>
+        <p>
+          FieldFrame.required is dynamic or spread-derived; its public variant
+          cannot be verified statically.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-42">src/StockExceptionsScreen.tsx:126</a></small
+        >
+        <details id="source-42">
+          <summary>Source location: src/StockExceptionsScreen.tsx:126</summary>
+          <pre>
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;
+128:     &lt;/main&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-43">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-43">src/StockExceptionsScreen.tsx:126</a></small
+        >
+        <details id="source-43">
+          <summary>Source location: src/StockExceptionsScreen.tsx:126</summary>
+          <pre>
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;
+128:     &lt;/main&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-50">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-50">src/StockExceptionsScreen.tsx:126</a></small
+        >
+        <details id="source-50">
+          <summary>Source location: src/StockExceptionsScreen.tsx:126</summary>
+          <pre>
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;
+128:     &lt;/main&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-51">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-51">src/StockExceptionsScreen.tsx:90</a></small
+        >
+        <details id="source-51">
+          <summary>Source location: src/StockExceptionsScreen.tsx:90</summary>
+          <pre>
+89:           &lt;div className=&quot;list-heading&quot;&gt;&lt;h2 id=&quot;exception-list-title&quot;&gt;Products to review&lt;/h2&gt;&lt;span&gt;On hand / reorder point&lt;/span&gt;&lt;/div&gt;
+90:           {filtered.length ? filtered.map((item) =&gt; (
+91:             &lt;Button key={item.id} intent=&quot;ghost&quot; className={`exception-row ${selected?.id === item.id ? &quot;is-selected&quot; : &quot;&quot;}`} aria-pressed={selected?.id === item.id} onClick={() =&gt; setSelectedId(item.id)}&gt;
+92:               &lt;span className=&quot;row-main&quot;&gt;&lt;strong&gt;{item.product}&lt;/strong&gt;&lt;small&gt;SKU {item.sku} · {item.location}&lt;/small&gt;&lt;/span&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-52">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-52">src/StockExceptionsScreen.tsx:99</a></small
+        >
+        <details id="source-52">
+          <summary>Source location: src/StockExceptionsScreen.tsx:99</summary>
+          <pre>
+98:         &lt;section className=&quot;detail-slot&quot; aria-label=&quot;Selected stock exception&quot;&gt;
+99:           {selected ? &lt;RecordDetailPanel
+100:             title={selected.product}
+101:             subtitle={`SKU ${selected.sku} · ${selected.location}`}</pre>
+        </details>
+      </article>
+      <article id="finding-53">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-53">src/StockExceptionsScreen.tsx:126</a></small
+        >
+        <details id="source-53">
+          <summary>Source location: src/StockExceptionsScreen.tsx:126</summary>
+          <pre>
+125:       &lt;Modal open={modalOpen} title=&quot;Mock replenishment&quot; description={selected ? `${selected.product} · ${selected.location}` : undefined} onClose={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }} actions={&lt;div className=&quot;modal-actions&quot;&gt;&lt;Button intent=&quot;secondary&quot; onClick={() =&gt; { setModalOpen(false); setError(&quot;&quot;); }}&gt;Cancel&lt;/Button&gt;&lt;Button intent=&quot;primary&quot; onClick={confirmMockOrder}&gt;Prepare simulation&lt;/Button&gt;&lt;/div&gt;}&gt;
+126:         {selected ? &lt;div className=&quot;modal-body&quot;&gt;&lt;p&gt;This only previews a replenishment. No purchase order will be created or sent.&lt;/p&gt;&lt;FieldFrame label=&quot;Quantity&quot; required error={error || undefined} helper={`Suggested ${selected.suggested}; supplier minimum ${selected.minimumOrder}.`}&gt;&lt;TextField type=&quot;number&quot; min={selected.minimumOrder} step=&quot;1&quot; value={quantity} aria-invalid={Boolean(error)} onValueChange={(value) =&gt; { setQuantity(value); setError(&quot;&quot;); }} /&gt;&lt;/FieldFrame&gt;&lt;div className=&quot;order-summary&quot;&gt;&lt;span&gt;Supplier&lt;/span&gt;&lt;strong&gt;{selected.supplier}&lt;/strong&gt;&lt;span&gt;Lead time&lt;/span&gt;&lt;strong&gt;{selected.leadTime}&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt; : null}
+127:       &lt;/Modal&gt;
+128:     &lt;/main&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-70">
+        <strong>raw-literal · unassessed</strong>
+        <p>CSS selector is not referenced by static rendered class evidence.</p>
+        <small
+          >static evidence ·
+          <a href="#source-70">src/stock-exceptions.css:1</a></small
+        >
+        <details id="source-70">
+          <summary>Source location: src/stock-exceptions.css:1</summary>
+          <pre>
+1: .stock-page{min-height:100vh;background:var(--color-bg-page);color:var(--color-text-primary);padding:var(--space-6);display:grid;gap:var(--space-5)}.filter-bar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,280px) 1fr;align-items:end;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.filter-summary{margin:0 0 var(--space-2);justify-self:end;color:var(--color-text-muted);font-size:var(--text-body)}.review-layout{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(390px,1.18fr);gap:var(--space-4);min-height:620px}.exception-list{min-width:0;align-self:start;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.list-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);padding:var(--space-4);border-bottom:1px solid var(--color-border-subtle)}.list-heading h2{margin:0;font-size:var(--text-section-title);line-height:var(--leading-section-title);font-weight:var(--font-weight-semibold)}.list-heading span{color:var(--color-text-muted);font-size:var(--text-caption)}.exception-row{width:100%;height:auto;min-height:76px;border:0;border-radius:0;border-bottom:1px solid var(--color-border-subtle);padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;text-align:left;white-space:normal}.exception-row:last-child{border-bottom:0}.exception-row.is-selected{background:var(--color-bg-selected);box-shadow:inset 3px 0 0 var(--color-action-primary)}.row-main,.row-evidence{display:flex;min-width:0;flex-direction:column;gap:var(--space-1)}.row-main{align-items:flex-start}.row-main strong{font-size:var(--text-body);color:var(--color-text-primary)}.row-main small{font-size:var(--text-caption);color:var(--color-text-muted)}.row-evidence{align-items:flex-end}.row-evidence&gt;strong{font-size:var(--text-caption);color:var(--color-text-secondary)}.detail-slot{min-width:0;display:flex}.detail-slot&gt;article{max-height:720px}.empty-state{display:grid;gap:var(--space-2);place-content:center;min-height:220px;padding:var(--space-6);text-align:center;color:var(--color-text-muted)}.modal-body{display:grid;gap:var(--space-4)}.modal-body p{margin:0;color:var(--color-text-secondary)}.modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}.order-summary{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-control);background:var(--color-bg-subtle);font-size:var(--text-body)}.order-summary span{color:var(--color-text-muted)}@media(max-width:860px){.stock-page{padding:var(--space-4)}.filter-bar{grid-template-columns:1fr 1fr}.filter-summary{grid-column:1/-1;justify-self:start;margin:0}.review-layout{grid-template-columns:1fr}.detail-slot&gt;article{max-height:none}}@media(max-width:620px){.filter-bar{grid-template-columns:1fr}.filter-summary{grid-column:auto}.exception-row{gap:var(--space-2)}}</pre>
+        </details>
+      </article>
+      <article id="finding-71">
+        <strong>raw-literal · unassessed</strong>
+        <p>CSS selector is not referenced by static rendered class evidence.</p>
+        <small
+          >static evidence ·
+          <a href="#source-71">src/stock-exceptions.css:1</a></small
+        >
+        <details id="source-71">
+          <summary>Source location: src/stock-exceptions.css:1</summary>
+          <pre>
+1: .stock-page{min-height:100vh;background:var(--color-bg-page);color:var(--color-text-primary);padding:var(--space-6);display:grid;gap:var(--space-5)}.filter-bar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,280px) 1fr;align-items:end;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.filter-summary{margin:0 0 var(--space-2);justify-self:end;color:var(--color-text-muted);font-size:var(--text-body)}.review-layout{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(390px,1.18fr);gap:var(--space-4);min-height:620px}.exception-list{min-width:0;align-self:start;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.list-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);padding:var(--space-4);border-bottom:1px solid var(--color-border-subtle)}.list-heading h2{margin:0;font-size:var(--text-section-title);line-height:var(--leading-section-title);font-weight:var(--font-weight-semibold)}.list-heading span{color:var(--color-text-muted);font-size:var(--text-caption)}.exception-row{width:100%;height:auto;min-height:76px;border:0;border-radius:0;border-bottom:1px solid var(--color-border-subtle);padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;text-align:left;white-space:normal}.exception-row:last-child{border-bottom:0}.exception-row.is-selected{background:var(--color-bg-selected);box-shadow:inset 3px 0 0 var(--color-action-primary)}.row-main,.row-evidence{display:flex;min-width:0;flex-direction:column;gap:var(--space-1)}.row-main{align-items:flex-start}.row-main strong{font-size:var(--text-body);color:var(--color-text-primary)}.row-main small{font-size:var(--text-caption);color:var(--color-text-muted)}.row-evidence{align-items:flex-end}.row-evidence&gt;strong{font-size:var(--text-caption);color:var(--color-text-secondary)}.detail-slot{min-width:0;display:flex}.detail-slot&gt;article{max-height:720px}.empty-state{display:grid;gap:var(--space-2);place-content:center;min-height:220px;padding:var(--space-6);text-align:center;color:var(--color-text-muted)}.modal-body{display:grid;gap:var(--space-4)}.modal-body p{margin:0;color:var(--color-text-secondary)}.modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}.order-summary{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-control);background:var(--color-bg-subtle);font-size:var(--text-body)}.order-summary span{color:var(--color-text-muted)}@media(max-width:860px){.stock-page{padding:var(--space-4)}.filter-bar{grid-template-columns:1fr 1fr}.filter-summary{grid-column:1/-1;justify-self:start;margin:0}.review-layout{grid-template-columns:1fr}.detail-slot&gt;article{max-height:none}}@media(max-width:620px){.filter-bar{grid-template-columns:1fr}.filter-summary{grid-column:auto}.exception-row{gap:var(--space-2)}}</pre>
+        </details>
+      </article>
+      <article id="finding-72">
+        <strong>token-reference · unassessed</strong>
+        <p>
+          CSS declaration references --color-action-primary, whose semantic
+          token status cannot be established.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-72">src/stock-exceptions.css:1</a></small
+        >
+        <details id="source-72">
+          <summary>Source location: src/stock-exceptions.css:1</summary>
+          <pre>
+1: .stock-page{min-height:100vh;background:var(--color-bg-page);color:var(--color-text-primary);padding:var(--space-6);display:grid;gap:var(--space-5)}.filter-bar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,280px) 1fr;align-items:end;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.filter-summary{margin:0 0 var(--space-2);justify-self:end;color:var(--color-text-muted);font-size:var(--text-body)}.review-layout{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(390px,1.18fr);gap:var(--space-4);min-height:620px}.exception-list{min-width:0;align-self:start;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.list-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);padding:var(--space-4);border-bottom:1px solid var(--color-border-subtle)}.list-heading h2{margin:0;font-size:var(--text-section-title);line-height:var(--leading-section-title);font-weight:var(--font-weight-semibold)}.list-heading span{color:var(--color-text-muted);font-size:var(--text-caption)}.exception-row{width:100%;height:auto;min-height:76px;border:0;border-radius:0;border-bottom:1px solid var(--color-border-subtle);padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;text-align:left;white-space:normal}.exception-row:last-child{border-bottom:0}.exception-row.is-selected{background:var(--color-bg-selected);box-shadow:inset 3px 0 0 var(--color-action-primary)}.row-main,.row-evidence{display:flex;min-width:0;flex-direction:column;gap:var(--space-1)}.row-main{align-items:flex-start}.row-main strong{font-size:var(--text-body);color:var(--color-text-primary)}.row-main small{font-size:var(--text-caption);color:var(--color-text-muted)}.row-evidence{align-items:flex-end}.row-evidence&gt;strong{font-size:var(--text-caption);color:var(--color-text-secondary)}.detail-slot{min-width:0;display:flex}.detail-slot&gt;article{max-height:720px}.empty-state{display:grid;gap:var(--space-2);place-content:center;min-height:220px;padding:var(--space-6);text-align:center;color:var(--color-text-muted)}.modal-body{display:grid;gap:var(--space-4)}.modal-body p{margin:0;color:var(--color-text-secondary)}.modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}.order-summary{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-control);background:var(--color-bg-subtle);font-size:var(--text-body)}.order-summary span{color:var(--color-text-muted)}@media(max-width:860px){.stock-page{padding:var(--space-4)}.filter-bar{grid-template-columns:1fr 1fr}.filter-summary{grid-column:1/-1;justify-self:start;margin:0}.review-layout{grid-template-columns:1fr}.detail-slot&gt;article{max-height:none}}@media(max-width:620px){.filter-bar{grid-template-columns:1fr}.filter-summary{grid-column:auto}.exception-row{gap:var(--space-2)}}</pre>
+        </details>
+      </article>
+      <article id="finding-74">
+        <strong>token-reference · unassessed</strong>
+        <p>
+          CSS declaration references --color-bg-selected, whose semantic token
+          status cannot be established.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-74">src/stock-exceptions.css:1</a></small
+        >
+        <details id="source-74">
+          <summary>Source location: src/stock-exceptions.css:1</summary>
+          <pre>
+1: .stock-page{min-height:100vh;background:var(--color-bg-page);color:var(--color-text-primary);padding:var(--space-6);display:grid;gap:var(--space-5)}.filter-bar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,280px) 1fr;align-items:end;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.filter-summary{margin:0 0 var(--space-2);justify-self:end;color:var(--color-text-muted);font-size:var(--text-body)}.review-layout{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(390px,1.18fr);gap:var(--space-4);min-height:620px}.exception-list{min-width:0;align-self:start;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.list-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);padding:var(--space-4);border-bottom:1px solid var(--color-border-subtle)}.list-heading h2{margin:0;font-size:var(--text-section-title);line-height:var(--leading-section-title);font-weight:var(--font-weight-semibold)}.list-heading span{color:var(--color-text-muted);font-size:var(--text-caption)}.exception-row{width:100%;height:auto;min-height:76px;border:0;border-radius:0;border-bottom:1px solid var(--color-border-subtle);padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;text-align:left;white-space:normal}.exception-row:last-child{border-bottom:0}.exception-row.is-selected{background:var(--color-bg-selected);box-shadow:inset 3px 0 0 var(--color-action-primary)}.row-main,.row-evidence{display:flex;min-width:0;flex-direction:column;gap:var(--space-1)}.row-main{align-items:flex-start}.row-main strong{font-size:var(--text-body);color:var(--color-text-primary)}.row-main small{font-size:var(--text-caption);color:var(--color-text-muted)}.row-evidence{align-items:flex-end}.row-evidence&gt;strong{font-size:var(--text-caption);color:var(--color-text-secondary)}.detail-slot{min-width:0;display:flex}.detail-slot&gt;article{max-height:720px}.empty-state{display:grid;gap:var(--space-2);place-content:center;min-height:220px;padding:var(--space-6);text-align:center;color:var(--color-text-muted)}.modal-body{display:grid;gap:var(--space-4)}.modal-body p{margin:0;color:var(--color-text-secondary)}.modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}.order-summary{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-control);background:var(--color-bg-subtle);font-size:var(--text-body)}.order-summary span{color:var(--color-text-muted)}@media(max-width:860px){.stock-page{padding:var(--space-4)}.filter-bar{grid-template-columns:1fr 1fr}.filter-summary{grid-column:1/-1;justify-self:start;margin:0}.review-layout{grid-template-columns:1fr}.detail-slot&gt;article{max-height:none}}@media(max-width:620px){.filter-bar{grid-template-columns:1fr}.filter-summary{grid-column:auto}.exception-row{gap:var(--space-2)}}</pre>
+        </details>
+      </article>
+      <article id="finding-77">
+        <strong>token-reference · unassessed</strong>
+        <p>
+          CSS declaration references --color-border-subtle, whose semantic token
+          status cannot be established.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-77">src/stock-exceptions.css:1</a></small
+        >
+        <details id="source-77">
+          <summary>Source location: src/stock-exceptions.css:1</summary>
+          <pre>
+1: .stock-page{min-height:100vh;background:var(--color-bg-page);color:var(--color-text-primary);padding:var(--space-6);display:grid;gap:var(--space-5)}.filter-bar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,280px) 1fr;align-items:end;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.filter-summary{margin:0 0 var(--space-2);justify-self:end;color:var(--color-text-muted);font-size:var(--text-body)}.review-layout{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(390px,1.18fr);gap:var(--space-4);min-height:620px}.exception-list{min-width:0;align-self:start;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.list-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);padding:var(--space-4);border-bottom:1px solid var(--color-border-subtle)}.list-heading h2{margin:0;font-size:var(--text-section-title);line-height:var(--leading-section-title);font-weight:var(--font-weight-semibold)}.list-heading span{color:var(--color-text-muted);font-size:var(--text-caption)}.exception-row{width:100%;height:auto;min-height:76px;border:0;border-radius:0;border-bottom:1px solid var(--color-border-subtle);padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;text-align:left;white-space:normal}.exception-row:last-child{border-bottom:0}.exception-row.is-selected{background:var(--color-bg-selected);box-shadow:inset 3px 0 0 var(--color-action-primary)}.row-main,.row-evidence{display:flex;min-width:0;flex-direction:column;gap:var(--space-1)}.row-main{align-items:flex-start}.row-main strong{font-size:var(--text-body);color:var(--color-text-primary)}.row-main small{font-size:var(--text-caption);color:var(--color-text-muted)}.row-evidence{align-items:flex-end}.row-evidence&gt;strong{font-size:var(--text-caption);color:var(--color-text-secondary)}.detail-slot{min-width:0;display:flex}.detail-slot&gt;article{max-height:720px}.empty-state{display:grid;gap:var(--space-2);place-content:center;min-height:220px;padding:var(--space-6);text-align:center;color:var(--color-text-muted)}.modal-body{display:grid;gap:var(--space-4)}.modal-body p{margin:0;color:var(--color-text-secondary)}.modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}.order-summary{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-control);background:var(--color-bg-subtle);font-size:var(--text-body)}.order-summary span{color:var(--color-text-muted)}@media(max-width:860px){.stock-page{padding:var(--space-4)}.filter-bar{grid-template-columns:1fr 1fr}.filter-summary{grid-column:1/-1;justify-self:start;margin:0}.review-layout{grid-template-columns:1fr}.detail-slot&gt;article{max-height:none}}@media(max-width:620px){.filter-bar{grid-template-columns:1fr}.filter-summary{grid-column:auto}.exception-row{gap:var(--space-2)}}</pre>
+        </details>
+      </article>
+      <article id="finding-81">
+        <strong>token-reference · unassessed</strong>
+        <p>
+          CSS declaration references --font-weight-semibold, whose semantic
+          token status cannot be established.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-81">src/stock-exceptions.css:1</a></small
+        >
+        <details id="source-81">
+          <summary>Source location: src/stock-exceptions.css:1</summary>
+          <pre>
+1: .stock-page{min-height:100vh;background:var(--color-bg-page);color:var(--color-text-primary);padding:var(--space-6);display:grid;gap:var(--space-5)}.filter-bar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,280px) 1fr;align-items:end;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.filter-summary{margin:0 0 var(--space-2);justify-self:end;color:var(--color-text-muted);font-size:var(--text-body)}.review-layout{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(390px,1.18fr);gap:var(--space-4);min-height:620px}.exception-list{min-width:0;align-self:start;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.list-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);padding:var(--space-4);border-bottom:1px solid var(--color-border-subtle)}.list-heading h2{margin:0;font-size:var(--text-section-title);line-height:var(--leading-section-title);font-weight:var(--font-weight-semibold)}.list-heading span{color:var(--color-text-muted);font-size:var(--text-caption)}.exception-row{width:100%;height:auto;min-height:76px;border:0;border-radius:0;border-bottom:1px solid var(--color-border-subtle);padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;text-align:left;white-space:normal}.exception-row:last-child{border-bottom:0}.exception-row.is-selected{background:var(--color-bg-selected);box-shadow:inset 3px 0 0 var(--color-action-primary)}.row-main,.row-evidence{display:flex;min-width:0;flex-direction:column;gap:var(--space-1)}.row-main{align-items:flex-start}.row-main strong{font-size:var(--text-body);color:var(--color-text-primary)}.row-main small{font-size:var(--text-caption);color:var(--color-text-muted)}.row-evidence{align-items:flex-end}.row-evidence&gt;strong{font-size:var(--text-caption);color:var(--color-text-secondary)}.detail-slot{min-width:0;display:flex}.detail-slot&gt;article{max-height:720px}.empty-state{display:grid;gap:var(--space-2);place-content:center;min-height:220px;padding:var(--space-6);text-align:center;color:var(--color-text-muted)}.modal-body{display:grid;gap:var(--space-4)}.modal-body p{margin:0;color:var(--color-text-secondary)}.modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}.order-summary{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-control);background:var(--color-bg-subtle);font-size:var(--text-body)}.order-summary span{color:var(--color-text-muted)}@media(max-width:860px){.stock-page{padding:var(--space-4)}.filter-bar{grid-template-columns:1fr 1fr}.filter-summary{grid-column:1/-1;justify-self:start;margin:0}.review-layout{grid-template-columns:1fr}.detail-slot&gt;article{max-height:none}}@media(max-width:620px){.filter-bar{grid-template-columns:1fr}.filter-summary{grid-column:auto}.exception-row{gap:var(--space-2)}}</pre>
+        </details>
+      </article>
+      <article id="finding-86">
+        <strong>token-reference · unassessed</strong>
+        <p>
+          CSS declaration references --space-2, whose semantic token status
+          cannot be established.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-86">src/stock-exceptions.css:1</a></small
+        >
+        <details id="source-86">
+          <summary>Source location: src/stock-exceptions.css:1</summary>
+          <pre>
+1: .stock-page{min-height:100vh;background:var(--color-bg-page);color:var(--color-text-primary);padding:var(--space-6);display:grid;gap:var(--space-5)}.filter-bar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,280px) 1fr;align-items:end;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.filter-summary{margin:0 0 var(--space-2);justify-self:end;color:var(--color-text-muted);font-size:var(--text-body)}.review-layout{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(390px,1.18fr);gap:var(--space-4);min-height:620px}.exception-list{min-width:0;align-self:start;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-panel);background:var(--color-bg-surface)}.list-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);padding:var(--space-4);border-bottom:1px solid var(--color-border-subtle)}.list-heading h2{margin:0;font-size:var(--text-section-title);line-height:var(--leading-section-title);font-weight:var(--font-weight-semibold)}.list-heading span{color:var(--color-text-muted);font-size:var(--text-caption)}.exception-row{width:100%;height:auto;min-height:76px;border:0;border-radius:0;border-bottom:1px solid var(--color-border-subtle);padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;text-align:left;white-space:normal}.exception-row:last-child{border-bottom:0}.exception-row.is-selected{background:var(--color-bg-selected);box-shadow:inset 3px 0 0 var(--color-action-primary)}.row-main,.row-evidence{display:flex;min-width:0;flex-direction:column;gap:var(--space-1)}.row-main{align-items:flex-start}.row-main strong{font-size:var(--text-body);color:var(--color-text-primary)}.row-main small{font-size:var(--text-caption);color:var(--color-text-muted)}.row-evidence{align-items:flex-end}.row-evidence&gt;strong{font-size:var(--text-caption);color:var(--color-text-secondary)}.detail-slot{min-width:0;display:flex}.detail-slot&gt;article{max-height:720px}.empty-state{display:grid;gap:var(--space-2);place-content:center;min-height:220px;padding:var(--space-6);text-align:center;color:var(--color-text-muted)}.modal-body{display:grid;gap:var(--space-4)}.modal-body p{margin:0;color:var(--color-text-secondary)}.modal-actions{display:flex;justify-content:flex-end;gap:var(--space-2)}.order-summary{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-control);background:var(--color-bg-subtle);font-size:var(--text-body)}.order-summary span{color:var(--color-text-muted)}@media(max-width:860px){.stock-page{padding:var(--space-4)}.filter-bar{grid-template-columns:1fr 1fr}.filter-summary{grid-column:1/-1;justify-self:start;margin:0}.review-layout{grid-template-columns:1fr}.detail-slot&gt;article{max-height:none}}@media(max-width:620px){.filter-bar{grid-template-columns:1fr}.filter-summary{grid-column:auto}.exception-row{gap:var(--space-2)}}</pre>
+        </details>
+      </article>
+      <article id="finding-94">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-94"
+            >/preview/wrun_01M221WF0JQJK1PXBBMT65YYYX/70ccb71cb675efcf6b001a96f03174a0707b68ad555210318f76e6be8918a3b2:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-94">
+          <summary>
+            Source location:
+            /preview/wrun_01M221WF0JQJK1PXBBMT65YYYX/70ccb71cb675efcf6b001a96f03174a0707b68ad555210318f76e6be8918a3b2:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-95">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-95"
+            >/preview/wrun_01M221WF0JQJK1PXBBMT65YYYX/70ccb71cb675efcf6b001a96f03174a0707b68ad555210318f76e6be8918a3b2:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-95">
+          <summary>
+            Source location:
+            /preview/wrun_01M221WF0JQJK1PXBBMT65YYYX/70ccb71cb675efcf6b001a96f03174a0707b68ad555210318f76e6be8918a3b2:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-96">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-96"
+            >/preview/wrun_01M221WF0JQJK1PXBBMT65YYYX/70ccb71cb675efcf6b001a96f03174a0707b68ad555210318f76e6be8918a3b2:266</a
+          >
+          · <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-96">
+          <summary>
+            Source location:
+            /preview/wrun_01M221WF0JQJK1PXBBMT65YYYX/70ccb71cb675efcf6b001a96f03174a0707b68ad555210318f76e6be8918a3b2:266
+          </summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <details open>
+      <summary>Generated-code implementation diagnostics (1)</summary>
+      <article id="implementation-0">
+        <strong>TypeScript 2532</strong>
+        <p>Object is possibly &#39;undefined&#39;.</p>
+        <small
+          >Generated source ·
+          <a href="#implementation-source-0"
+            >src/StockExceptionsScreen.tsx:79:359</a
+          ></small
+        >
+        <details id="implementation-source-0">
+          <summary>Source location</summary>
+          <pre>
+78:     &lt;main className=&quot;stock-page&quot;&gt;
+79:       &lt;PageHeader title=&quot;Stock Exceptions&quot; subtitle=&quot;Review products below their reorder point and simulate a replenishment before taking action in the inventory system.&quot; actions={&lt;Button intent=&quot;secondary&quot; leading={&lt;Refresh aria-hidden=&quot;true&quot; className=&quot;size-[var(--size-icon-md)]&quot; /&gt;} onClick={() =&gt; { setLocation(&quot;all&quot;); setSeverity(&quot;all&quot;); setSelectedId(ITEMS[0].id); }}&gt;Reset view&lt;/Button&gt;} /&gt;
+80: </pre>
+        </details>
+      </article>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Measurements-only requested</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;status&quot;: &quot;not-run&quot;,
+  &quot;reason&quot;: &quot;Measurements-only requested&quot;
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;Button&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Button&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;FieldFrame&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;FieldFrame&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;Modal&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Modal&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;Select&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Select&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;StatusPill&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;StatusPill&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;TextField&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;TextField&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;RecordDetailPanel&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;RecordDetailPanel&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;localName&quot;: &quot;Refresh&quot;,
+        &quot;source&quot;: &quot;@autograph/icons&quot;,
+        &quot;name&quot;: &quot;Refresh&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-action-primary&quot;,
+      &quot;--color-bg-page&quot;,
+      &quot;--color-bg-selected&quot;,
+      &quot;--color-bg-subtle&quot;,
+      &quot;--color-bg-surface&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--color-text-muted&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--color-text-secondary&quot;,
+      &quot;--font-weight-semibold&quot;,
+      &quot;--leading-section-title&quot;,
+      &quot;--radius-control&quot;,
+      &quot;--radius-panel&quot;,
+      &quot;--size-icon-md&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--text-body&quot;,
+      &quot;--text-caption&quot;,
+      &quot;--text-section-title&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-action-primary&quot;,
+      &quot;--color-bg-page&quot;,
+      &quot;--color-bg-selected&quot;,
+      &quot;--color-bg-subtle&quot;,
+      &quot;--color-bg-surface&quot;,
+      &quot;--color-border-subtle&quot;,
+      &quot;--color-text-muted&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--color-text-secondary&quot;,
+      &quot;--leading-section-title&quot;,
+      &quot;--radius-control&quot;,
+      &quot;--radius-panel&quot;,
+      &quot;--size-icon-md&quot;,
+      &quot;--space-1&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-5&quot;,
+      &quot;--space-6&quot;,
+      &quot;--text-body&quot;,
+      &quot;--text-caption&quot;,
+      &quot;--text-section-title&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [
+      &quot;100vh&quot;,
+      &quot;180px&quot;,
+      &quot;1px&quot;,
+      &quot;220px&quot;,
+      &quot;280px&quot;,
+      &quot;300px&quot;,
+      &quot;390px&quot;,
+      &quot;3px&quot;,
+      &quot;620px&quot;,
+      &quot;720px&quot;,
+      &quot;76px&quot;
+    ],
+    &quot;matchingLiterals&quot;: [
+      &quot;1px&quot;,
+      &quot;280px&quot;
+    ],
+    &quot;unknownLiterals&quot;: [
+      &quot;100vh&quot;,
+      &quot;180px&quot;,
+      &quot;220px&quot;,
+      &quot;300px&quot;,
+      &quot;390px&quot;,
+      &quot;3px&quot;,
+      &quot;620px&quot;,
+      &quot;720px&quot;,
+      &quot;76px&quot;
+    ],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 125,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;implementationDiagnostics&quot;: [
+      {
+        &quot;path&quot;: &quot;src/StockExceptionsScreen.tsx&quot;,
+        &quot;line&quot;: 79,
+        &quot;column&quot;: 359,
+        &quot;code&quot;: 2532,
+        &quot;message&quot;: &quot;Object is possibly &#39;undefined&#39;.&quot;
+      }
+    ],
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;arrusted-compact-decision-card-20260908&quot;,
+    &quot;commit&quot;: &quot;eb696f95b2297bfdf893ea07fc181014904e418c&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: true
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" />
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 931,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Reset view&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1287.953125,
+          &quot;y&quot;: 56,
+          &quot;width&quot;: 128.046875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Location&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 155,
+          &quot;width&quot;: 280,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Severity&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 333,
+          &quot;y&quot;: 155,
+          &quot;width&quot;: 280,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Organic Oat Milk 1LSKU 1048 · DowntownCritical3 / 18&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 294,
+          &quot;width&quot;: 562.15625,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Sparkling Water · Lime 8pkSKU 2271 · DowntownLow11 / 24&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 409,
+          &quot;width&quot;: 562.15625,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Whole Bean Coffee 340gSKU 3180 · AirportCritical2 / 14&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 524,
+          &quot;width&quot;: 562.15625,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Almond Butter 250gSKU 4426 · NorthsideLow8 / 15&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 639,
+          &quot;width&quot;: 562.15625,
+          &quot;height&quot;: 114
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1205.1875,
+          &quot;y&quot;: 855,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.filter-summary&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.list-heading &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.is-selected &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.is-selected &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.96 (foreground color: #f45d48, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(3) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(3) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(4) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(4) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(5) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(5) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.max-w-full.shrink-0 &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) &gt; dt&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) &gt; dd&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) &gt; dt&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) &gt; dd&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;on-hand\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;reorder-point\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;suggested\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;open-po\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;supplier\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;lead-time\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;minimum\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;cost\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.bg-\\[var\\(--color-action-primary\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 145,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 137,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 88,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 43,
+        &quot;sampled&quot;: 43
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 94,
+        &quot;sampled&quot;: 77
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 87,
+        &quot;matching-literal&quot;: 3,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 141
+      },
+      &quot;assessed&quot;: 15,
+      &quot;total&quot;: 231,
+      &quot;coveragePercent&quot;: 6,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 82,
+        &quot;matching-literal&quot;: 43,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 469
+      },
+      &quot;assessed&quot;: 11,
+      &quot;total&quot;: 594,
+      &quot;coveragePercent&quot;: 2,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 2,
+        &quot;matching-literal&quot;: 76,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 215
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 293,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 15,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 105
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 102,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 33
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 135,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 1,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 119
+      },
+      &quot;assessed&quot;: 1,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 1,
+      &quot;tokenReferencePercent&quot;: 100
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1493,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Reset view&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1767.953125,
+          &quot;y&quot;: 106.03125,
+          &quot;width&quot;: 128.046875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Location&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 255.078125,
+          &quot;width&quot;: 280,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Severity&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 333,
+          &quot;y&quot;: 255.078125,
+          &quot;width&quot;: 280,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Organic Oat Milk 1LSKU 1048 · DowntownCritical3 / 18&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 394.078125,
+          &quot;width&quot;: 758.953125,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Sparkling Water · Lime 8pkSKU 2271 · DowntownLow11 / 24&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 509.078125,
+          &quot;width&quot;: 758.953125,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Whole Bean Coffee 340gSKU 3180 · AirportCritical2 / 14&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 624.078125,
+          &quot;width&quot;: 758.953125,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Almond Butter 250gSKU 4426 · NorthsideLow8 / 15&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 739.078125,
+          &quot;width&quot;: 758.953125,
+          &quot;height&quot;: 114
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 1685.203125,
+          &quot;y&quot;: 1000.078125,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.filter-summary&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.list-heading &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.is-selected &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.is-selected &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.96 (foreground color: #f45d48, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(3) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(3) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(4) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(4) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(5) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(5) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.max-w-full.shrink-0 &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) &gt; dt&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) &gt; dd&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) &gt; dt&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) &gt; dd&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;on-hand\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;reorder-point\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;suggested\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;open-po\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;supplier\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;lead-time\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;minimum\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;cost\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.bg-\\[var\\(--color-action-primary\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 145,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 137,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 88,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 26,
+        &quot;sampled&quot;: 26
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 109,
+        &quot;sampled&quot;: 92
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 2,
+        &quot;sampled&quot;: 2
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 86,
+        &quot;matching-literal&quot;: 3,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 142
+      },
+      &quot;assessed&quot;: 15,
+      &quot;total&quot;: 231,
+      &quot;coveragePercent&quot;: 6,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 82,
+        &quot;matching-literal&quot;: 42,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 470
+      },
+      &quot;assessed&quot;: 11,
+      &quot;total&quot;: 594,
+      &quot;coveragePercent&quot;: 2,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 2,
+        &quot;matching-literal&quot;: 76,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 215
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 293,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 15,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 105
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 102,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 33
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 135,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 1,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 119
+      },
+      &quot;assessed&quot;: 1,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 1,
+      &quot;tokenReferencePercent&quot;: 100
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1493,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        />
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;stock-exceptions&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 931,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Reset view&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 871.953125,
+          &quot;y&quot;: 56,
+          &quot;width&quot;: 128.046875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Location&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 155,
+          &quot;width&quot;: 280,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Severity&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 333,
+          &quot;y&quot;: 155,
+          &quot;width&quot;: 280,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Organic Oat Milk 1LSKU 1048 · DowntownCritical3 / 18&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 294,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Sparkling Water · Lime 8pkSKU 2271 · DowntownLow11 / 24&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 409,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Whole Bean Coffee 340gSKU 3180 · AirportCritical2 / 14&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 524,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 115
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Almond Butter 250gSKU 4426 · NorthsideLow8 / 15&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 25,
+          &quot;y&quot;: 639,
+          &quot;width&quot;: 391.59375,
+          &quot;height&quot;: 114
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Try mock replenishment&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 789.203125,
+          &quot;y&quot;: 855,
+          &quot;width&quot;: 190.796875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.filter-summary&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.list-heading &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.is-selected &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.14 (foreground color: #747778, background color: #f5f4ff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.is-selected &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.96 (foreground color: #f45d48, background color: #f5f4ff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(3) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(3) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(4) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(4) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(5) &gt; span &gt; .row-main &gt; small&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.exception-row.border-transparent.hover\\:bg-\\[var\\(--color-bg-hover\\)\\]:nth-child(5) &gt; span &gt; .row-evidence &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-end.max-w-full.shrink-0 &gt; .border-\\[var\\(--color-status-danger\\)\\].text-\\[var\\(--color-status-danger\\)\\].px-\\[var\\(--space-2\\)\\] &gt; .break-words:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.font-\\[var\\(--font-weight-normal\\)\\].text-\\[var\\(--color-text-muted\\)\\].break-words&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.mt-\\[var\\(--space-0-5\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) &gt; dt&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) &gt; dd&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) &gt; dt&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) &gt; dd&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;on-hand\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;reorder-point\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;suggested\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;open-po\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;supplier\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;lead-time\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;minimum\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;dl[data-field-id=\&quot;cost\&quot;] &gt; .\\@sm\\/record-detail\\:grid-cols-\\[var\\(--size-record-detail-label-column\\)_minmax\\(var\\(--size-detail-value-column\\)\\,1fr\\)\\].\\@sm\\/record-detail\\:gap-\\[var\\(--space-0\\)\\].grid &gt; .text-\\[var\\(--color-text-disabled\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.bg-\\[var\\(--color-action-primary\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 120,
+  &quot;totalDomElements&quot;: 145,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 137,
+    &quot;sampled&quot;: 120,
+    &quot;coveragePercent&quot;: 88,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 43,
+        &quot;sampled&quot;: 43
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 94,
+        &quot;sampled&quot;: 77
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 87,
+        &quot;matching-literal&quot;: 3,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 141
+      },
+      &quot;assessed&quot;: 15,
+      &quot;total&quot;: 231,
+      &quot;coveragePercent&quot;: 6,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 82,
+        &quot;matching-literal&quot;: 43,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 469
+      },
+      &quot;assessed&quot;: 11,
+      &quot;total&quot;: 594,
+      &quot;coveragePercent&quot;: 2,
+      &quot;tokenReferencePercent&quot;: 100
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 2,
+        &quot;matching-literal&quot;: 76,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 215
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 293,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 15,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 105
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 102,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 33
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 135,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 1,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 119
+      },
+      &quot;assessed&quot;: 1,
+      &quot;total&quot;: 120,
+      &quot;coveragePercent&quot;: 1,
+      &quot;tokenReferencePercent&quot;: 100
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 1493,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+  </main>
+</html>
