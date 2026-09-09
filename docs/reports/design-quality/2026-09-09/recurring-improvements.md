@@ -20,15 +20,20 @@ reports and screenshots are unchanged.
 - Editable compensation assumptions that recalculate both packages, preserve
   edits when a decision is cleared, and expose invalid input as field errors.
 
-The reference uses Arrusted main `5d868b64bad9c0c83f4faa314aa0fb2368c88176`.
-Some APIs used by earlier previews were removed on that main. These examples use
-current exports; no Arrusted component was changed and no removed API was recreated
-inside Builder. See the [capability notes](../../../design-quality-cases/arrusted-composition-capabilities.md).
+The evaluated reference used local Arrusted checkout
+`5d868b64bad9c0c83f4faa314aa0fb2368c88176`, initially misidentified as GitHub main
+because its remote pointed to another local checkout. GitHub main
+`7e44acbd14b4871fe285664a06e85d028eb5f301` already exports selectable tables,
+record list/detail navigation, and the richer detail/KPI APIs. The earlier
+missing-capability finding was incorrect. No Arrusted component was changed.
+The historical report bytes and screenshots retain their actual reference;
+they have not been rerun against the corrected GitHub revision. See the
+[corrected capability notes](../../../design-quality-cases/arrusted-composition-capabilities.md).
 
 ## One advisory review, then targeted corrections
 
-Both examples rendered through the existing Vercel Sandbox renderer with current
-Arrusted sources. Each was scored once at the existing three desktop sizes.
+Both examples rendered through the existing Vercel Sandbox renderer with the
+local Arrusted checkout above. Each was scored once at the existing three desktop sizes.
 
 | Reference                                                                      | Subjective score | Assessed adherence | Coverage | Fixture flow            |
 | ------------------------------------------------------------------------------ | ---------------: | -----------------: | -------: | ----------------------- |
@@ -67,9 +72,8 @@ Other sizes: [Import 1440](recurring-corrections/spend-import-review-1440.png),
 
 - A future ordinary generation run should show whether the general guidance
   transfers beyond these references. No automatic scoring or repair loop was added.
-- Rich selectable tables and list/detail navigation are a shared Arrusted gap on
-  current main. Restoring or replacing that capability belongs in a separate
-  Arrusted change, not a Builder-local primitive.
+- Use the existing Arrusted selectable-table and list/detail APIs for future
+  examples that need record navigation; no new shared capability is required.
 - The report only captures initial and final states of these combined scenarios;
   it does not visually establish every intermediate mapping/save or hold state.
   Focused state tests cover transitions, but do not constitute backend proof.
