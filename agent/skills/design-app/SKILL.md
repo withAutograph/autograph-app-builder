@@ -27,6 +27,11 @@ Compose around the user's task, not a fixed page template:
   desktop panels, keep the chosen record and next action reachable without
   traversing the entire collection again; use the composition's navigation when
   available.
+- Size controls for their content rather than filling every available column.
+  For action-oriented panels, budget for surrounding page chrome and keep the
+  action and its complete feedback reachable in short desktop windows. Use
+  readable supported sizes for decision-relevant status and supporting text;
+  the smallest variant is not the default for important information.
 
 Use `references/information-composition.md` for expanded guidance and contrasting
 task examples. These are design decisions, not runtime gates or extra prompts.
