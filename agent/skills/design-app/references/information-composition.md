@@ -51,6 +51,12 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   Preserve selection, logical reading order, keyboard focus, and task context
   when desktop panels narrow. Do not force a new navigation pattern if the
   existing composition remains useful.
+- In a constrained detail view, avoid repeating the full page introduction
+  above navigation and record identity. Preserve orientation and a clear way
+  back; keep the wider overview unchanged when it still supports comparison.
+- When a calculation explains an action, expose its meaningful steps as short
+  labeled facts using existing detail components. Preserve assumptions and
+  quantities; do not replace them with decorative metrics or invented context.
 
 ## Make the next step legible
 
