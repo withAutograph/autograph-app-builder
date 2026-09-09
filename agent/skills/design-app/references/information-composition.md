@@ -77,6 +77,10 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   consistent with the visible state: invite opening when details are absent,
   and reviewing or changing the selection when details are already present.
 - When ordering affects interpretation, label its basis beside the results
+  and align an automatically suggested record with that ordering. Reuse the
+  same ordering when filters change; preserve a user- or route-selected record
+  while it remains relevant instead of replacing an intentional choice.
+  Keep the ordering label close to the records
   (for example, “Sorted by: newest”). Keep it readable and subordinate to the
   records. A passive ordering label must not look like an interactive control;
   a changeable sort must use a real supported control. Do not invent sorting
