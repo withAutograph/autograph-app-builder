@@ -10,6 +10,7 @@ import {
   type IntrinsicClassSignature,
 } from "./class-evidence";
 import { generatedCssRule, type CssRuleEvidence } from "./css-evidence";
+import { originalCssSource, type CssSourceMap } from "./css-source-map";
 
 export const viewports = [
   { name: "desktop", width: 1440, height: 900 },
@@ -406,18 +407,90 @@ export async function measureStyles(
   sharedClassSignatures?: IntrinsicClassSignature[],
   generatedCssRules: CssRuleEvidence[] = [],
   sharedCssRules: CssRuleEvidence[] = [],
+  generatedCssSourceFiles: Array<{ path: string; content: string }> = [],
 ) {
   await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
   try {
-    const headers = new Map<string, { sourceURL?: string }>();
+    const headers = new Map<
+      string,
+      { sourceURL?: string; sourceMapURL?: string }
+    >();
     session.on(
       "CSS.styleSheetAdded",
-      ({ header }: { header: { styleSheetId: string; sourceURL?: string } }) =>
-        headers.set(header.styleSheetId, header),
+      ({
+        header,
+      }: {
+        header: {
+          styleSheetId: string;
+          sourceURL?: string;
+          sourceMapURL?: string;
+        };
+      }) => headers.set(header.styleSheetId, header),
     );
     await session.send("DOM.enable");
     await session.send("CSS.enable");
+    const sourceMaps = new Map<string, CssSourceMap | undefined>();
+    const sourceMapFor = async (styleSheetId: string | undefined) => {
+      if (!styleSheetId) return undefined;
+      if (sourceMaps.has(styleSheetId)) return sourceMaps.get(styleSheetId);
+      const header = headers.get(styleSheetId);
+      const css = await session
+        .send("CSS.getStyleSheetText", { styleSheetId })
+        .then((result: { text: string }) => result.text)
+        .catch(() => "");
+      const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//.exec(
+        css,
+      )?.[1];
+      const url = header?.sourceMapURL ?? declared;
+      let text: string | undefined;
+      if (url?.startsWith("data:application/json")) {
+        try {
+          const comma = url.indexOf(",");
+          if (comma >= 0) {
+            const body = url.slice(comma + 1);
+            text = /;base64/i.test(url.slice(0, comma))
+              ? Buffer.from(body, "base64").toString("utf8")
+              : decodeURIComponent(body);
+          }
+        } catch {
+          /* Malformed embedded maps remain unassigned. */
+        }
+      } else if (url) {
+        try {
+          const target = new URL(url, header?.sourceURL ?? page.url());
+          // Source maps are diagnostic evidence, never a reason to contact an
+          // unrelated origin from a preview capture.
+          if (target.origin === new URL(page.url()).origin)
+            text = await page.evaluate(async (href) => {
+              const response = await fetch(href);
+              return response.ok ? response.text() : undefined;
+            }, target.href);
+        } catch {
+          /* Missing or malformed maps remain unassigned. */
+        }
+      }
+      let map: CssSourceMap | undefined;
+      try {
+        const parsed = text ? JSON.parse(text) : undefined;
+        if (
+          parsed &&
+          parsed.version === 3 &&
+          Array.isArray(parsed.sources) &&
+          parsed.sources.every(
+            (source: unknown) => typeof source === "string",
+          ) &&
+          (parsed.sourceRoot === undefined ||
+            typeof parsed.sourceRoot === "string") &&
+          typeof parsed.mappings === "string"
+        )
+          map = parsed;
+      } catch {
+        /* Source maps are optional evidence. */
+      }
+      sourceMaps.set(styleSheetId, map);
+      return map;
+    };
     const { root } = await session.send("DOM.getDocument");
     const { nodeIds } = await session.send("DOM.querySelectorAll", {
       nodeId: root.nodeId,
@@ -607,6 +680,29 @@ export async function measureStyles(
         const path = sourcePath(
           styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined,
         );
+        const declaration = uniqueDeclarationEntries[0]?.p;
+        const styleMap = await sourceMapFor(styleSheetId);
+        // CDP omits CSSProperty.range in some backends. A rule range can only
+        // stand in when it contains one usable declaration, so it still names
+        // this property rather than an arbitrary sibling declaration.
+        const mappingRange =
+          declaration?.range ??
+          ((rule?.style.cssProperties ?? []).filter(
+            (entry) =>
+              !entry.disabled &&
+              entry.parsedOk !== false &&
+              typeof entry.text === "string",
+          ).length === 1
+            ? rule?.style.range
+            : undefined);
+        const mapped = styleMap
+          ? originalCssSource(
+              styleMap,
+              mappingRange?.startLine ?? -1,
+              mappingRange?.startColumn ?? -1,
+            )
+          : undefined;
+        const mappedPath = mapped?.path;
         const signatureGenerated =
           signatureOrigin.provenance === "generated" &&
           generatedSignatureSelector(generatedSignature, selector);
@@ -632,7 +728,26 @@ export async function measureStyles(
                 ),
               )
             : undefined;
-        const generated = generatedByPath || Boolean(generatedRule);
+        const mappedSourceContent =
+          mapped && styleMap?.sourcesContent?.[mapped.sourceIndex];
+        const mappedFile = generatedCssSourceFiles.find(
+          (file) =>
+            generatedSource(mappedPath, [file.path]) &&
+            file.content === mappedSourceContent,
+        );
+        const mappedGenerated = Boolean(
+          mappedFile &&
+          generatedCssRules.filter(
+            (candidate) =>
+              candidate.source.path === mappedFile.path &&
+              candidate.source.line === mapped?.line &&
+              candidate.source.column === mapped?.column &&
+              candidate.property === property &&
+              candidate.value === declaration?.value,
+          ).length === 1,
+        );
+        const generated =
+          generatedByPath || Boolean(generatedRule) || mappedGenerated;
         const inheritedDeclaration =
           !inline.length && !own.length && uniqueDeclarationEntries.length > 0;
         let classification: string = classifyStyle(
@@ -681,13 +796,14 @@ export async function measureStyles(
         };
         const cssSource = generatedRule
           ? generatedRule.source
-          : path
-            ? {
-                path,
-                line: (rule?.style?.range?.startLine ?? 0) + 1,
-                column: (rule?.style?.range?.startColumn ?? 0) + 1,
-              }
-            : undefined;
+          : (mapped ??
+            (path
+              ? {
+                  path,
+                  line: (rule?.style?.range?.startLine ?? 0) + 1,
+                  column: (rule?.style?.range?.startColumn ?? 0) + 1,
+                }
+              : undefined));
         const originCandidate =
           signatureGenerated && signatureOrigin.source
             ? {
@@ -826,6 +942,7 @@ export async function capturePreview(input: {
   sharedClassSignatures?: IntrinsicClassSignature[];
   generatedCssRules?: CssRuleEvidence[];
   sharedCssRules?: CssRuleEvidence[];
+  generatedCssSourceFiles?: Array<{ path: string; content: string }>;
   additionalDesktopSize?: DesktopSize;
 }) {
   const browser = await chromium.launch();
@@ -891,6 +1008,7 @@ export async function capturePreview(input: {
                 input.sharedClassSignatures,
                 input.generatedCssRules,
                 input.sharedCssRules,
+                input.generatedCssSourceFiles,
               )
             : undefined;
         if (styles)

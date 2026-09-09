@@ -39,6 +39,12 @@ comparable across scoring versions, reference changes or different captured stat
 
 ## Share reports through Git
 
+CSS source maps can supply additional declaration provenance when present. Credit
+requires a matched browser declaration, a mapped source location, identical
+supplied CSS source content, and one matching authored declaration. Missing or
+malformed maps and shared-looking filenames alone remain unassessed. This does
+not manufacture provenance for bundled utility classes or change score denominators.
+
 See the [report archive](reports/design-quality/README.md). Generate locally,
 review the screenshots and report for sensitive information, then run:
 
