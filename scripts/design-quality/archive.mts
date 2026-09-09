@@ -78,7 +78,7 @@ const lines = [
   "",
   `**Subjective design score:** ${report.judge.subjectiveScore === undefined ? "Not available" : `${report.judge.subjectiveScore}/100`}. Model: ${report.judge.model ?? "not run"}. Rubric: ${report.judge.rubricVersion ?? "not run"}.`,
   "",
-  "This is the saved component-backed preview, not a new generation or a built backend. Scores are advisory and not human-calibrated.",
+  "This report evaluates the captured preview; evaluation itself does not regenerate the app or prove a built backend. Scores are advisory and not human-calibrated.",
   "",
   "## Ratings",
   "",

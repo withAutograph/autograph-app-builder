@@ -300,7 +300,6 @@ export async function registerDevelopmentPackage(input: {
     installed.marketplaceName !== DEVELOPMENT_MARKETPLACE_NAME ||
     installed.version !== input.version ||
     installed.installed !== true ||
-    installed.enabled !== true ||
     installed.source?.source !== "local" ||
     installed.source.path !==
       join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||

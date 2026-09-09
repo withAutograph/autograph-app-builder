@@ -117,7 +117,7 @@ describe("development Codex package", () => {
                       marketplaceName: "autograph-dev",
                       version: "0.0.0-development.3210",
                       installed: true,
-                      enabled: true,
+                      enabled: false,
                       source: {
                         source: "local",
                         path: "/private/dev/marketplace/plugins/app-builder",
