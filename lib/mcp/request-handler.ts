@@ -41,6 +41,7 @@ import {
 } from "./request-auth";
 import {
   McpToolAuthenticationRequiredError,
+  McpProviderUnavailableError,
   safeToolError,
   SESSION_RESOURCE_URI,
   toolResult,
@@ -171,7 +172,7 @@ export function withHostedBuilderHandoffs(input: {
           repository: resolvedRepository,
         });
         if (access.status === "provider-unavailable")
-          throw new Error("handoff-repository-access-unavailable");
+          throw new McpProviderUnavailableError();
       }
       const result = await input.service.start({
         prompt: resolved.prompt,

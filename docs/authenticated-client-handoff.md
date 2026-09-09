@@ -91,6 +91,14 @@ Native Preview acceptance has not yet been performed for this change.
 - Session tests cover durable references across server recreation, approval
   responses, engine replacement, terminal-session recovery, and rejection of a
   public attempt to inject the internal reference.
+- The final six-case browser run kept the original five scenarios green and
+  exposed a PostgreSQL microsecond/JavaScript millisecond expiry comparison bug.
+  After removing that unnecessary equality predicate, the isolated renewal
+  rerun passed with the original microsecond fixture. It verifies the same ID,
+  unchanged intent/journals, extended expiry, and no provisioning or launch.
+- Follow-up UI tests (47), MCP outage/error tests (34), TypeScript checking, and
+  changed-code ESLint passed. Provider outages now explicitly instruct retrying
+  the same handoff without triggering another OAuth challenge.
 
 These checks do not prove the complete browser-to-native-client-to-hosted-engine
 journey on Preview. No live provider registration or deployment was performed.

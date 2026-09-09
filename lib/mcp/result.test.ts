@@ -13,6 +13,7 @@ import { AdapterNotConfiguredError } from "../eve/service";
 import { BuilderHandoffUnavailableError } from "../handoff/service";
 import {
   McpToolAuthenticationRequiredError,
+  McpProviderUnavailableError,
   safeToolError,
   toolResult,
 } from "./result";
@@ -21,6 +22,7 @@ describe("safe MCP tool errors", () => {
   it.each([
     [new AdapterNotConfiguredError(), "adapter_not_configured"],
     [new HostedSessionNotFoundError(), "not_found"],
+    [new McpProviderUnavailableError(), "provider_unavailable"],
     [new BuilderHandoffUnavailableError(), "not_found"],
     [new HostedAuthorizationError("insufficient_scope"), "forbidden"],
     [new HostedIdempotencyConflictError(), "request_conflict"],
@@ -47,6 +49,17 @@ describe("safe MCP tool errors", () => {
     expect(result.structuredContent.error?.message).toBe(
       "Autograph App Builder is not connected to its production service yet.",
     );
+  });
+
+  it("makes a provider outage retryable without a new OAuth challenge", () => {
+    const result = safeToolError(new McpProviderUnavailableError());
+    expect(result.structuredContent.error?.message).toContain(
+      "Retry this same handoff",
+    );
+    expect(result.structuredContent.error?.message).toContain(
+      "No provider login",
+    );
+    expect(result._meta).toBeUndefined();
   });
 
   it("gives same-account guidance without disclosing handoff ownership", () => {

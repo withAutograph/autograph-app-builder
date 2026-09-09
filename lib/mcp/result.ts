@@ -21,6 +21,13 @@ export class McpToolAuthenticationRequiredError extends Error {
   }
 }
 
+export class McpProviderUnavailableError extends Error {
+  constructor() {
+    super("Provider access is temporarily unavailable.");
+    this.name = "McpProviderUnavailableError";
+  }
+}
+
 export function toolResult<
   const Result extends EveSessionListResult | EveSessionResult,
 >(result: Result, text: string) {
@@ -39,6 +46,23 @@ export function toolResult<
 }
 
 export function safeToolError(error: unknown, sessionId = "") {
+  if (error instanceof McpProviderUnavailableError) {
+    const message =
+      "Provider access is temporarily unavailable. Retry this same handoff shortly; your prepared app and connections are saved. No provider login is needed for this outage.";
+    return {
+      ...toolResult(
+        {
+          sessionId,
+          status: "failed",
+          cursor: 0,
+          events: [],
+          error: { code: "provider_unavailable", message },
+        },
+        message,
+      ),
+      isError: true,
+    };
+  }
   const authenticationRequired =
     error instanceof McpToolAuthenticationRequiredError;
   const notConfigured = error instanceof AdapterNotConfiguredError;
