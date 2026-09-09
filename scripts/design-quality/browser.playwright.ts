@@ -1,6 +1,9 @@
 import { expect, test } from "playwright/test";
 import { measurePage, measureStyles } from "./browser";
-import { collectIntrinsicClassSignatures } from "./class-evidence";
+import {
+  collectClassTokenEvidence,
+  collectIntrinsicClassSignatures,
+} from "./class-evidence";
 import { collectCssRuleEvidence } from "./css-evidence";
 
 // Authored calibration candidates, not human-validated aesthetic gold labels.
@@ -185,6 +188,50 @@ test("browser signature attribution is reviewer evidence, not score provenance",
         item.verdict === "unassessed",
     ),
   ).toBe(true);
+});
+
+test("reports a unique escaped utility token as a shared reviewer candidate", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setContent(`<!doctype html><style>
+    .data-\\[selected\\=true\\]\\:shadow-\\[inset_3px_0_0_var\\(--color-action-primary\\)\\][data-selected="true"] { box-shadow: inset 3px 0 0 var(--color-action-primary) }
+    :root { --color-action-primary: rgb(129, 146, 255) }
+  </style><button data-selected="true" class="data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)] extra">Stock</button>`);
+  const sharedTokens = collectClassTokenEvidence([
+    {
+      path: "packages/design-systems/RecordList.tsx",
+      content:
+        'export function RecordList(){ return <button className={cx("data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]", focusRing)}>Stock</button> }',
+    },
+  ]);
+  const styles = await measureStyles(
+    page,
+    { "--color-action-primary": "rgb(129, 146, 255)" },
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    sharedTokens,
+  );
+  expect(
+    styles.observations.some(
+      (item) =>
+        item.property === "box-shadow" &&
+        item.provenance === "unknown" &&
+        item.verdict === "unassessed" &&
+        item.originCandidate?.provenance === "shared" &&
+        item.originCandidate.source.path ===
+          "packages/design-systems/RecordList.tsx",
+    ),
+  ).toBe(true);
+  expect(styles.limitations).toContain(
+    "No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.",
+  );
 });
 
 test("attributes an anonymous live stylesheet only through an exact supplied CSS rule", async ({
