@@ -65,6 +65,20 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   Keep contextual help adjacent and the primary action identifiable. Check a
   representative long-content state during the normal material-revision review,
   not through another automatic acceptance gate.
+- Size simple choices for the content they contain. A wide page need not produce
+  page-wide selects or long spans between labels and values. Let substantial
+  comparison or reading content use the space; keep small control groups compact
+  with supported layout values and useful wrapping.
+- In an action-oriented detail panel, account for the page heading, filters, and
+  navigation above it when choosing the available height. A full-viewport panel
+  placed below page chrome can push its action out of reach. Prefer the shared
+  composition's scrolling body and non-overlapping action region when appropriate;
+  ordinary document scrolling remains valid for reading-oriented pages. Ensure
+  action feedback can be read completely, not hidden underneath a footer.
+- Choose supported type and status sizes by information importance. Small
+  secondary styling suits incidental metadata, not the sole presentation of a
+  deciding status or fact. Avoid duplicating that fact simply to make it legible;
+  use a readable existing variant without altering its colors.
 
 ## Different tasks need different compositions
 
