@@ -17,13 +17,25 @@ export function buildAppHandoffPrompt(
     throw new Error("handoff-id-invalid");
   const setup =
     destination === "codex"
-      ? `Use the Autograph App Builder plugin. If it is unavailable, install the official plugin first:\n\n${codexInstallCommand}\n\nEnable app-builder@autograph and connect it to Autograph. Open a fresh task if installation requires it, then resend this prompt.`
+      ? `Use the official Autograph App Builder plugin to continue this app.
+
+First check whether app-builder@autograph is installed and enabled and whether its autograph_start tool is callable. If callable, immediately use the start input below. Do not reinstall or upgrade a working plugin.
+
+If the official plugin is missing, disabled, or outdated, you are authorized to install, enable, or update it automatically. Run the necessary commands yourself, subject to native client approval requirements:
+
+${codexInstallCommand}
+
+Verify that app-builder@autograph is enabled, then rediscover its tools and continue with autograph_start.
+
+If the official plugin is installed and enabled but its tools remain unavailable, treat this as a connection or tool-loading problem, not proof that an update is needed. Use available supported reconnect or reload capabilities and retry discovery. Do not substitute the development plugin or another app builder, and do not edit a repository directly.
+
+Do not ask the user to run installation or upgrade commands. If recovery requires a user-only action, explain the specific blocker and request only that minimal action. Never claim the handoff has started until autograph_start succeeds.`
       : `Use the Autograph MCP connection in Cursor. If it is unavailable, return to the prepared app's web handoff page and use “Add Autograph to Cursor”, then enable the connection and resend this prompt.`;
   return `${setup}
 
 Continue the prepared app by calling autograph_start with {"handoffId":"${handoffId}","clientRequestId":"web-handoff:${handoffId}"}.
 
-Use the same Autograph account as the web form. Reuse its saved GitHub and Vercel connections and selected resources through Autograph. Do not request provider tokens or separate provider logins. If access needs attention, use Autograph's recovery flow. If autograph_start is unavailable, explain the setup step and stop. This handoff does not approve building, publishing, or deploying; retain the normal approval flow.`;
+Use the same Autograph account as the web form. Reuse its saved GitHub and Vercel connections and selected resources through Autograph. Do not request provider tokens or separate provider logins. If access needs attention, use Autograph's recovery flow. If autograph_start remains unavailable after the destination-specific recovery above, explain the specific blocker and stop. This handoff does not approve building, publishing, or deploying; retain the normal approval flow.`;
 }
 
 export function buildAppHandoffUrl(

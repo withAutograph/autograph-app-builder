@@ -49,6 +49,14 @@ codex plugin marketplace upgrade autograph
 codex plugin add app-builder@autograph
 ```
 
+The Codex prompt first checks for a callable official plugin and uses it without
+reinstalling or upgrading it. If missing, disabled, or outdated, it authorizes
+the agent to perform the required setup itself, subject to native approvals.
+Unavailable tools in an installed plugin trigger supported connection/reload
+recovery, not an assumed upgrade. Only genuinely user-only actions are handed
+back to the user. Successful continuation still requires `autograph_start`;
+the deterministic handoff request ID and normal build approvals are preserved.
+
 Codex setup details display the canonical MCP URL from the authenticated handoff.
 Before sending the prompt, the user must have an App Builder plugin connection
 configured for that endpoint. The official release plugin may target Production;
