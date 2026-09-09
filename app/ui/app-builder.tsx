@@ -182,19 +182,19 @@ async function createBuilderHandoff(input: {
   creationRequestId: string;
 }): Promise<BuilderHandoffReference> {
   const value = await createBuilderHandoffAction({
-      version: 1,
-      creationRequestId: input.creationRequestId,
-      ...(input.provisioning.requestDigest === "0".repeat(64)
-        ? {}
-        : { provisioningRequestId: input.provisioning.requestId }),
-      appName: input.form.appName,
-      repository: {
-        name: input.form.repository,
-        private: input.form.privateRepository,
-      },
-      brief: input.form.brief,
-      modelId: activeBuilderModelId,
-      connections: input.form.connections,
+    version: 1,
+    creationRequestId: input.creationRequestId,
+    ...(input.provisioning.requestDigest === "0".repeat(64)
+      ? {}
+      : { provisioningRequestId: input.provisioning.requestId }),
+    appName: input.form.appName,
+    repository: {
+      name: input.form.repository,
+      private: input.form.privateRepository,
+    },
+    brief: input.form.brief,
+    modelId: activeBuilderModelId,
+    connections: input.form.connections,
   });
   if (
     value.version !== 1 ||
@@ -1607,7 +1607,9 @@ async function provisionSelectedProvider(
   requestId: string,
   operation: "github" | "vercel",
 ) {
-  return provisionBuilderProvider(provisioningRequest(form, requestId, operation));
+  return provisionBuilderProvider(
+    provisioningRequest(form, requestId, operation),
+  );
 }
 
 export function Handoff({
