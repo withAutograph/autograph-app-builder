@@ -6,12 +6,12 @@ This is a source-only reassessment of the saved [delivery-signal report](stock-e
 
 The same saved `sourceFiles` were analyzed against the same Arrusted checkout (`eb696f95b2297bfdf893ea07fc181014904e418c`) before and after the static-JSX assignability repair.
 
-| API evidence | Before | After |
-| --- | ---: | ---: |
-| Conforming | 54 | 55 |
-| Nonconforming | 0 | 0 |
-| Unassessed | 7 | 6 |
-| Total | 61 | 61 |
+| API evidence      | Before |  After |
+| ----------------- | -----: | -----: |
+| Conforming        |     54 |     55 |
+| Nonconforming     |      0 |      0 |
+| Unassessed        |      7 |      6 |
+| Total             |     61 |     61 |
 | Assessed coverage | 88.52% | 90.16% |
 
 Exactly one observation changed: `api:prop:src/StockExceptions.tsx:6403:tag`. TypeScript proves that the inline JSX value is assignable to the selected public component's slot prop. This is static API evidence only: it does not prove rendered component identity, execution of dynamic descendants, or styling provenance.
