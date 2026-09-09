@@ -86,8 +86,13 @@ Design reports remain on demand: no automatic score threshold or polish loop.
 For every app, follow `design-app`'s `references/information-composition.md`:
 separate page purpose from collection metadata, group related facts, establish
 consistent Arrusted typography roles, and keep decision-critical evidence with
-its action. Choose the structure by task; do not impose a queue, severity groups,
-cards, or tabs on unrelated workflows. Reusable missing visual capabilities
+its action. Keep a decision's selected state, recommendation, available action,
+and confirmation in agreement: acknowledging a result is not recommending it,
+and recommending or preparing it is not resolving it. Put a decision-relevant
+number's unit, period, comparison basis, and denominator or assumptions nearby
+when those change its meaning; make that context readable in desktop panels.
+Choose the structure by task; do not impose a queue, severity groups, cards, or
+tabs on unrelated workflows. Reusable missing visual capabilities
 belong in authorized Arrusted component work, not generated local replacements.
 For list/detail workflows, keep the list focused on fields needed to choose a
 record; put supporting information in the detail panel. Preserve selection when
@@ -120,7 +125,9 @@ An enabled control promises a working interaction. Follow `design-app`'s
 renderer’s route mechanism, implement meaningful fixture-backed state changes,
 and verify every enabled control's visible outcome in the Browser, including
 secondary, row, menu, and dialog actions. A changed URL, selected tab, compiled
-preview, or success toast alone does not prove the intended behavior. Repair
-no-op controls before calling the workflow ready; disable unavailable actions
-with a visible reason. Carry these behaviors into the implementation plan and
-focused product tests.
+preview, or success toast alone does not prove the intended behavior. When an
+action changes a fixture, update the derived rows, counts, totals, status, and
+next action that depend on it, rather than leaving static data under a toast.
+Repair no-op controls before calling the workflow ready; disable unavailable
+actions with a visible reason. Carry these behaviors into the implementation
+plan and focused product tests.

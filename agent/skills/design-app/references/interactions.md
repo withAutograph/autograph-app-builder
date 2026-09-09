@@ -55,8 +55,11 @@ shared data in an owner that survives that transition rather than resetting
 each screen from its initial fixture.
 
 When an action changes data, update every dependent count, total, badge, table,
-summary, or selection in the same interaction. Preserve those changes while
-the user moves among prototype routes during the current preview session.
+summary, selection, recommendation, and next available action in the same
+interaction. Preserve those changes while the user moves among prototype routes
+during the current preview session. A toast, changed button label, or isolated
+confirmation is supplemental feedback, not the action result: the affected
+fixture rows and derived facts must visibly agree with it.
 
 ## Forms and consequential actions
 
@@ -70,6 +73,14 @@ Consequential actions remain simulations. Label their prototype result in
 product terms without claiming a provider call, durable save, notification, or
 approval occurred. Do not add production code or broaden Build or publication
 authority to make the prototype feel complete.
+
+Keep the resulting state semantically precise. Acknowledging an item may update
+its acknowledgement state and a related inbox count, but it must not silently
+resolve the item. Choosing a recommendation may mark that choice as selected,
+but it must not present the underlying record as resolved until the simulated
+resolution occurs. If an action changes the current-versus-proposed comparison,
+refresh its visible values and their bases together so the confirmation does not
+contradict the decision evidence.
 
 Concrete compensation examples:
 
@@ -86,6 +97,10 @@ Concrete compensation examples:
   changes the item to a pending state and updates the relevant queue or badge.
   A cancel or unavailable path leaves the item unchanged and explains what is
   required. Never imply that a real approver was contacted.
+- **Save import mapping:** saving a valid mapping updates the affected preview
+  rows, mapped/unmapped or review counts, and the next available review action.
+  A success toast alone while static rows still show the prior mapping is not a
+  representative simulation.
 
 ## Browser acceptance
 
