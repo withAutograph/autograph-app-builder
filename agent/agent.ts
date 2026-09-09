@@ -1818,6 +1818,15 @@ const localDevelopmentAgent =
   process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development";
 
 export default defineAgent({
+  build: {
+    // Preserve emulator package-relative assets and module scope. Inlining its
+    // __dirname into Eve's authored bundle collides with Eve's own banner.
+    externalDependencies: [
+      "@emulators/adapter-next",
+      "@emulators/github",
+      "@emulators/vercel",
+    ],
+  },
   model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-sol",
   ...(!hasTestCapability("mock-model")
     ? {
