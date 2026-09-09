@@ -1,10 +1,20 @@
 import { z } from "zod";
 
 const resumeKeySchema = z.string().uuid();
-const returnToSchema = z.literal("/");
+export const providerConnectionReturnToSchema = z.union([
+  z.literal("/"),
+  z
+    .string()
+    .refine(
+      (value) =>
+        value.startsWith("/handoff/") &&
+        z.string().uuid().safeParse(value.slice(9)).success,
+    )
+    .transform((value) => value as `/handoff/${string}`),
+]);
 
 export type ProviderConnectionReturn = {
-  returnTo: "/";
+  returnTo: z.infer<typeof providerConnectionReturnToSchema>;
   resumeKey?: string;
 };
 
@@ -19,7 +29,7 @@ export function parseProviderConnectionReturn(input: {
   const returnTo = first(input.returnTo);
   const resumeKey = first(input.resumeKey);
   return {
-    returnTo: returnToSchema.parse(returnTo ?? "/"),
+    returnTo: providerConnectionReturnToSchema.parse(returnTo ?? "/"),
     ...(resumeKey === undefined
       ? {}
       : { resumeKey: resumeKeySchema.parse(resumeKey) }),
@@ -53,7 +63,10 @@ export function providerConnectionRedirect(input: {
   reason?: string;
   returnState?: ProviderConnectionReturn;
 }) {
-  const url = new URL(input.returnState?.returnTo ?? "/", input.origin);
+  const url = new URL(
+    providerConnectionReturnToSchema.parse(input.returnState?.returnTo ?? "/"),
+    input.origin,
+  );
   url.searchParams.set(input.provider, input.status);
   if (input.status === "failed" && input.reason)
     url.searchParams.set(`${input.provider}Reason`, input.reason);

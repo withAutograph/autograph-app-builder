@@ -2,6 +2,7 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import { parseProviderConnectionReturn } from "./provider-connection-return";
 import * as databaseSchema from "../db/schema";
 import {
   hostedVercelInstallations,
@@ -130,10 +131,10 @@ export function createPostgresVercelAuthorizationStateStore(
           resumeKey: vercelInstallationAuthorizationStates.resumeKey,
         });
       if (rows.length !== 1) return undefined;
-      return {
-        returnTo: "/",
+      return parseProviderConnectionReturn({
+        returnTo: rows[0]!.returnTo,
         ...(rows[0]?.resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
-      };
+      });
     },
     async recover(input) {
       const rows = await database
@@ -171,11 +172,11 @@ export function createPostgresVercelAuthorizationStateStore(
           ),
         )
         .limit(1);
-      if (rows[0]?.returnTo !== "/") return undefined;
-      return {
-        returnTo: "/",
+      if (!rows[0]) return undefined;
+      return parseProviderConnectionReturn({
+        returnTo: rows[0].returnTo,
         ...(rows[0].resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
-      };
+      });
     },
   };
 }
