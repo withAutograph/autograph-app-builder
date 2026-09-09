@@ -104,7 +104,9 @@ export function createPostgresBuilderHandoffStore(
             authorityPredicate(input.authority),
             eq(builderHandoffs.handoffId, input.handoffId),
             eq(builderHandoffs.requestDigest, input.requestDigest),
-            eq(builderHandoffs.expiresAt, input.expectedExpiresAt),
+            // PostgreSQL timestamps may retain microseconds lost by JS Date.
+            // Expired + unbound is the atomic guard; do not compare a readback
+            // timestamp for equality. A winning renewal moves expiry past now.
             lte(builderHandoffs.expiresAt, input.now),
             isNull(builderHandoffs.redeemedAt),
             isNull(builderHandoffs.sessionId),
@@ -115,7 +117,8 @@ export function createPostgresBuilderHandoffStore(
         return { disposition: "renewed", record: rowRecord(updated[0]) };
       // A concurrent renewal or bind won the CAS. Return its current reference.
       const existing = await read(input);
-      return existing?.requestDigest === input.requestDigest
+      return existing?.requestDigest === input.requestDigest &&
+        (existing.sessionId !== undefined || existing.expiresAt > input.now)
         ? { disposition: "existing", record: existing }
         : undefined;
     },

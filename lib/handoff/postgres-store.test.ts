@@ -33,7 +33,6 @@ const renewal = {
   authority,
   handoffId: row.handoffId,
   requestDigest: row.requestDigest,
-  expectedExpiresAt: row.expiresAt,
   now: row.expiresAt,
   expiresAt: new Date("2026-09-01T12:02:00Z"),
 };
@@ -102,7 +101,7 @@ describe("PostgreSQL handoff renewal", () => {
       "request_digest",
     ])
       expect(query.sql).toContain(`"builder_handoff"."${column}" =`);
-    expect(query.sql).toContain('"builder_handoff"."expires_at" =');
+    expect(query.sql).not.toContain('"builder_handoff"."expires_at" =');
     expect(query.sql).toContain('"builder_handoff"."expires_at" <=');
     expect(query.sql).toContain('"builder_handoff"."redeemed_at" is null');
     expect(query.sql).toContain('"builder_handoff"."session_id" is null');
@@ -113,10 +112,44 @@ describe("PostgreSQL handoff renewal", () => {
       authority.ownerUserId,
       row.handoffId,
       row.requestDigest,
-      row.expiresAt.toISOString(),
       renewal.now.toISOString(),
     ]);
     expect(test.select).not.toHaveBeenCalled();
+  });
+
+  it("does not compare PostgreSQL microseconds against a rounded Date readback", async () => {
+    const databaseExpiry = "2026-09-01T12:01:00.000789Z";
+    const readback = new Date(databaseExpiry);
+    expect(readback.toISOString()).toBe("2026-09-01T12:01:00.000Z");
+    const test = store({ updated: [{ ...row, expiresAt: renewal.expiresAt }] });
+    const timestamp = new Date("2026-09-01T12:01:00.001Z");
+    expect(
+      await test.handoffs.renewExpired!({ ...renewal, now: timestamp }),
+    ).toMatchObject({ disposition: "renewed" });
+    const query = test.updateWhere.mock.calls[0][0];
+    // The SQL must compare expiry only against current time, not the lossy
+    // readback. The stored .000789 timestamp is already before .001000.
+    expect(query.sql.match(/"expires_at"/gu)).toHaveLength(1);
+    expect(query.sql).toContain('"expires_at" <=');
+    expect(query.params).toContain(timestamp.toISOString());
+    expect(query.params).not.toContain(readback.toISOString());
+  });
+
+  it("fails closed when a missed update reads back an expired unbound row", async () => {
+    expect(
+      await store({ current: [row] }).handoffs.renewExpired!(renewal),
+    ).toBeUndefined();
+    // A previously bound session remains recoverable even after expiry.
+    expect(
+      await store({
+        current: [
+          { ...row, redeemedAt: row.createdAt, sessionId: "session-one" },
+        ],
+      }).handoffs.renewExpired!(renewal),
+    ).toMatchObject({
+      disposition: "existing",
+      record: { sessionId: "session-one" },
+    });
   });
 
   it.each([false, true])(

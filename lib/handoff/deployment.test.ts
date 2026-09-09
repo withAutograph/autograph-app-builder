@@ -55,11 +55,7 @@ function route(input: { authenticated?: boolean } = {}) {
           record.requestDigest !== input.requestDigest
         )
           return undefined;
-        if (
-          record.sessionId !== undefined ||
-          record.expiresAt > input.now ||
-          record.expiresAt.getTime() !== input.expectedExpiresAt.getTime()
-        )
+        if (record.sessionId !== undefined || record.expiresAt > input.now)
           return { disposition: "existing", record };
         const updated = { ...record, expiresAt: input.expiresAt };
         rows.set(record.handoffId, updated);

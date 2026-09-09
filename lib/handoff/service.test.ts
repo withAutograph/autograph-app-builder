@@ -50,11 +50,7 @@ function memoryStore(): BuilderHandoffStore {
       const record = readOwned(input);
       if (!record || record.requestDigest !== input.requestDigest)
         return undefined;
-      if (
-        record.sessionId !== undefined ||
-        record.expiresAt > input.now ||
-        record.expiresAt.getTime() !== input.expectedExpiresAt.getTime()
-      )
+      if (record.sessionId !== undefined || record.expiresAt > input.now)
         return { disposition: "existing", record };
       const updated = { ...record, expiresAt: input.expiresAt };
       byId.set(record.handoffId, updated);
@@ -322,6 +318,34 @@ describe("opaque App Builder handoffs", () => {
     );
     expect((await service.read(request)).expiresAt).toEqual(original.expiresAt);
   });
+
+  it.each(["renewed", "existing"] as const)(
+    "rejects a %s store result that still leaves the handoff expired",
+    async (disposition) => {
+      let time = new Date("2026-09-01T12:00:00Z");
+      const store = memoryStore();
+      const service = createBuilderHandoffService({
+        store,
+        now: () => time,
+        lifetimeMs: 60_000,
+      });
+      const created = await service.create({
+        authority,
+        creationRequestId: randomUUID(),
+        intent,
+      });
+      const lookup = { authority, handoffId: created.handoffId };
+      const record = await service.read(lookup);
+      time = created.expiresAt;
+      vi.spyOn(store, "renewExpired").mockResolvedValue({
+        disposition,
+        record,
+      });
+      await expect(
+        service.renew({ ...lookup, creationRequestId: randomUUID() }),
+      ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+    },
+  );
 
   it.each(["handoffId", "issuer", "audience", "workspaceId", "ownerUserId"])(
     "rejects a store read that substitutes %s",

@@ -27,7 +27,6 @@ export interface BuilderHandoffStore {
     authority: Authority;
     handoffId: string;
     requestDigest: string;
-    expectedExpiresAt: Date;
     now: Date;
     expiresAt: Date;
   }): Promise<
@@ -228,7 +227,6 @@ export function createBuilderHandoffService(input: {
         authority: record.authority,
         handoffId: record.handoffId,
         requestDigest: record.requestDigest,
-        expectedExpiresAt: record.expiresAt,
         now: timestamp,
         expiresAt: new Date(timestamp.getTime() + lifetimeMs),
       });
@@ -239,6 +237,8 @@ export function createBuilderHandoffService(input: {
         parsed.creationRequestId !== record.creationRequestId
       )
         throw new BuilderHandoffConflictError();
+      if (parsed.sessionId === undefined && now() >= parsed.expiresAt)
+        throw new BuilderHandoffUnavailableError();
       return {
         handoffId: parsed.handoffId,
         expiresAt: parsed.expiresAt,
