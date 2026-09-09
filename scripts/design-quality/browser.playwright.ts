@@ -76,16 +76,18 @@ test("settles a finite border transition before style evidence", async ({
     .panel { border-top: 4px solid rgb(41, 41, 41); transition: border-color 120ms linear; }
     .panel.selected { border-color: rgb(77, 95, 193); }
   </style><div class="panel">Stock</div>`);
-  await page.locator(".panel").evaluate((element) =>
-    element.classList.add("selected"),
-  );
+  await page
+    .locator(".panel")
+    .evaluate((element) => element.classList.add("selected"));
   const styles = await measureStyles(page, {
     "--color-border-subtle": "rgb(41, 41, 41)",
     "--color-action-primary-ink": "rgb(77, 95, 193)",
   });
-  expect(await page.locator(".panel").evaluate((element) =>
-    getComputedStyle(element).borderTopColor,
-  )).toBe("rgb(77, 95, 193)");
+  expect(
+    await page
+      .locator(".panel")
+      .evaluate((element) => getComputedStyle(element).borderTopColor),
+  ).toBe("rgb(77, 95, 193)");
   expect(
     styles.observations.some(
       (item) =>

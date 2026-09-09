@@ -187,14 +187,15 @@ export async function settleFiniteMotion(page: Page) {
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
-    const finite = document.getAnimations({ subtree: true }).filter((motion) => {
-      if (motion.playState !== "running" && motion.playState !== "pending")
-        return false;
+    const finite = document.getAnimations().filter((motion) => {
+      if (motion.playState !== "running" && !motion.pending) return false;
       const timing = motion.effect?.getComputedTiming();
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    await Promise.all(finite.map((motion) => motion.finished.catch(() => undefined)));
+    await Promise.all(
+      finite.map((motion) => motion.finished.catch(() => undefined)),
+    );
   });
 }
 
