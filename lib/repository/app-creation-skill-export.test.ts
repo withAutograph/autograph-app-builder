@@ -53,27 +53,30 @@ describe("app-creation skill export", () => {
     ).rejects.toThrow("destination must be absent");
   });
 
-  it("ships the interaction reference unchanged in exports and hosted seeds", async () => {
-    const repositoryRoot = resolve(import.meta.dirname, "../..");
-    const reference = "design-app/references/interactions.md";
-    const source = readFileSync(
-      join(repositoryRoot, "agent/skills", reference),
-      "utf8",
-    );
-    const outputRoot = join(
-      mkdtempSync(join(tmpdir(), "interaction-skill-export-")),
-      "payload",
-    );
-    const manifest = await exportAppCreationSkills({
-      repositoryRoot,
-      outputRoot,
-    });
+  it.each(["interactions.md", "information-composition.md"])(
+    "ships %s unchanged in exports and hosted seeds",
+    async (name) => {
+      const repositoryRoot = resolve(import.meta.dirname, "../..");
+      const reference = `design-app/references/${name}`;
+      const source = readFileSync(
+        join(repositoryRoot, "agent/skills", reference),
+        "utf8",
+      );
+      const outputRoot = join(
+        mkdtempSync(join(tmpdir(), "interaction-skill-export-")),
+        "payload",
+      );
+      const manifest = await exportAppCreationSkills({
+        repositoryRoot,
+        outputRoot,
+      });
 
-    expect(manifest.files.some((file) => file.path === reference)).toBe(true);
-    expect(readFileSync(join(outputRoot, reference), "utf8")).toBe(source);
-    expect(
-      HOSTED_MANAGED_SKILL_CONTENTS.find((file) => file.path === reference)
-        ?.content,
-    ).toBe(source);
-  });
+      expect(manifest.files.some((file) => file.path === reference)).toBe(true);
+      expect(readFileSync(join(outputRoot, reference), "utf8")).toBe(source);
+      expect(
+        HOSTED_MANAGED_SKILL_CONTENTS.find((file) => file.path === reference)
+          ?.content,
+      ).toBe(source);
+    },
+  );
 });

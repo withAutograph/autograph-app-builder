@@ -12,6 +12,10 @@ Browser assets are transport only. Keep the Browser preview as pure product UI.
 
 ## Minimum viable UI
 
+For every app and material revision, use `references/information-composition.md`
+to organize information around the user's task before choosing containers. Apply
+its hierarchy and grouping principles, not a fixed review-queue layout.
+
 Require a clear job to be done, then infer a reversible interface pattern and
 show the smallest useful workflow early. Do not block the first UI on a full
 data model, integrations, permissions, delivery choices, or backend design.
@@ -142,6 +146,8 @@ References are bundled files, not skills. Never pass a reference path to
 `read_skill_reference` with:
 
 - `design-app` and `references/questions.md` before asking discovery questions;
+- `design-app` and `references/information-composition.md` when composing any
+  app or material revision;
 - `design-app` and `references/target-repository-routing.md` before inspecting
   prepared Arrusted source;
 - `design-app` and `references/interactions.md` when wiring routes and actions,

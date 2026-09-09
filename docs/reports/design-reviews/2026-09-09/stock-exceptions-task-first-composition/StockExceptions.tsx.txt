@@ -1,0 +1,129 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Card, DecisionOptionCard, Divider, FieldFrame, PageHeader, Select, Tag, Typography } from "@autograph/components";
+
+const exceptions = [
+  {id:"ex-101",product:"Organic Whole Milk 1L",sku:"DRY-1048",location:"Downtown",severity:"Critical",onHand:3,reorderPoint:18,daysCover:0.6,supplier:"North Valley Dairy",leadTime:"2 days",packSize:12,suggested:36},
+  {id:"ex-102",product:"Sparkling Water Lime 8pk",sku:"BEV-2281",location:"Downtown",severity:"Warning",onHand:9,reorderPoint:16,daysCover:2.1,supplier:"Clear Springs Co.",leadTime:"4 days",packSize:8,suggested:24},
+  {id:"ex-103",product:"Free-range Eggs 12ct",sku:"DRY-1312",location:"Riverside",severity:"Critical",onHand:2,reorderPoint:14,daysCover:0.4,supplier:"Meadow Farm Foods",leadTime:"1 day",packSize:10,suggested:30},
+  {id:"ex-104",product:"Sourdough Sandwich Loaf",sku:"BAK-0782",location:"Riverside",severity:"Warning",onHand:6,reorderPoint:12,daysCover:1.8,supplier:"City Bakehouse",leadTime:"1 day",packSize:6,suggested:18},
+  {id:"ex-105",product:"Avocado Hass Each",sku:"PRD-0426",location:"Northside",severity:"Critical",onHand:5,reorderPoint:24,daysCover:0.8,supplier:"Pacific Produce",leadTime:"3 days",packSize:24,suggested:48},
+  {id:"ex-106",product:"Greek Yogurt Plain 500g",sku:"DRY-1159",location:"Northside",severity:"Warning",onHand:7,reorderPoint:15,daysCover:2.3,supplier:"North Valley Dairy",leadTime:"2 days",packSize:6,suggested:18},
+];
+
+export default function StockExceptions() {
+  const [location,setLocation] = useState("all");
+  const [severity,setSeverity] = useState("all");
+  const [selectedId,setSelectedId] = useState("ex-103");
+  const [replenished,setReplenished] = useState<string[]>([]);
+  const [showNarrowDetail,setShowNarrowDetail] = useState(false);
+  const [isNarrow,setIsNarrow] = useState(false);
+  const [hasNarrowSelection,setHasNarrowSelection] = useState(false);
+  const detailRef = useRef<HTMLElement>(null);
+  const selectedRadioRef = useRef<HTMLDivElement>(null);
+  const selectedNarrowButtonRef = useRef<HTMLDivElement>(null);
+  const shouldFocusDetailRef = useRef(false);
+  const visible = useMemo(() => exceptions.filter(item =>
+    (location === "all" || item.location === location) &&
+    (severity === "all" || item.severity === severity)).sort((a,b) => a.daysCover-b.daysCover), [location,severity]);
+  const selected = visible.find(item => item.id === selectedId) ?? visible[0];
+  const done = selected ? replenished.includes(selected.id) : false;
+  const deliveryGap = selected ? Math.max(0, Number.parseFloat(selected.leadTime) - selected.daysCover) : 0;
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const updateViewport = () => setIsNarrow(media.matches);
+    updateViewport();
+    media.addEventListener("change", updateViewport);
+    return () => media.removeEventListener("change", updateViewport);
+  }, []);
+  useEffect(() => {
+    if (showNarrowDetail && isNarrow && shouldFocusDetailRef.current) {
+      detailRef.current?.focus();
+      shouldFocusDetailRef.current = false;
+    } else if (showNarrowDetail && !isNarrow) {
+      shouldFocusDetailRef.current = false;
+    }
+  }, [isNarrow, selectedId, showNarrowDetail]);
+
+  const selectException = (id: string) => {
+    setSelectedId(id);
+    setHasNarrowSelection(true);
+    shouldFocusDetailRef.current = window.matchMedia("(max-width: 767px)").matches;
+    setShowNarrowDetail(true);
+  };
+
+  const returnToExceptions = () => {
+    setShowNarrowDetail(false);
+    requestAnimationFrame(() => {
+      if (isNarrow) {
+        selectedNarrowButtonRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      } else {
+        selectedRadioRef.current?.querySelector<HTMLInputElement>('input[type="radio"]')?.focus();
+      }
+    });
+  };
+
+  return <main className="min-h-screen bg-[var(--color-bg-page)] p-[var(--space-6)] text-[var(--color-text-primary)]">
+    <div className="mx-auto grid max-w-[1440px] gap-[var(--space-5)]">
+      <PageHeader title="Stock exceptions" subtitle="Review products at risk of running out." />
+      <div className={`${showNarrowDetail ? "hidden" : "grid"} gap-[var(--space-5)] md:grid md:grid-cols-2`}>
+      <section aria-label="Exception filters" className="grid grid-cols-2 gap-[var(--space-4)]">
+        <FieldFrame label="Location" htmlFor="location-filter"><Select id="location-filter" value={location} options={[{value:"all",label:"All locations"},{value:"Downtown",label:"Downtown"},{value:"Riverside",label:"Riverside"},{value:"Northside",label:"Northside"}]} onValueChange={setLocation} /></FieldFrame>
+        <FieldFrame label="Severity" htmlFor="severity-filter"><Select id="severity-filter" value={severity} options={[{value:"all",label:"All severities"},{value:"Critical",label:"Critical"},{value:"Warning",label:"Warning"}]} onValueChange={setSeverity} /></FieldFrame>
+      </section>
+      </div>
+      <div className="grid items-start gap-[var(--space-5)] md:grid-cols-2">
+        <section aria-label="Product review list" className={`${showNarrowDetail ? "hidden" : "grid"} gap-[var(--space-2)] md:grid`}>
+        <div className="flex flex-wrap items-baseline justify-between gap-[var(--space-2)] pb-[var(--space-3)]"><Typography variant="body-strong">{visible.length} {visible.length===1?"product needs":"products need"} review</Typography><Typography variant="caption" tone="secondary">Lowest cover first</Typography></div>
+        <div aria-label="Low-stock products" role={isNarrow ? undefined : "radiogroup"} className="grid gap-[var(--space-8)]">
+          {["Critical","Warning"].map(level => {
+            const records = visible.filter(item => item.severity === level);
+            const minimumCover = Math.min(...records.map(item=>item.daysCover));
+            const maximumCover = Math.max(...records.map(item=>item.daysCover));
+            return records.length ? <div key={level} role="group" aria-label={level} className="grid gap-[var(--space-3)]">
+              <div className="grid gap-[var(--space-2)]"><div className="flex items-center gap-[var(--space-2)]"><Typography as="h2" variant="section-title">{level}</Typography><Tag label={`${records.length} ${records.length===1?"product":"products"}`} tone={level==="Critical"?"red":"amber"} /></div><Typography variant="caption" tone="secondary">Stock remaining in this group: {minimumCover===maximumCover ? minimumCover : `${minimumCover}–${maximumCover}`} days</Typography><Divider /></div>
+              {records.map(item=>isNarrow ? <div key={item.id} ref={selected?.id===item.id ? selectedNarrowButtonRef : undefined}><Card><div className="flex items-center justify-between gap-[var(--space-3)]"><div className="grid gap-[var(--space-1)]"><Typography variant="body-strong">{item.product}</Typography><Typography tone="secondary">{item.location} · {item.sku}</Typography></div><div className="flex shrink-0 items-center gap-[var(--space-3)]"><div className="grid justify-items-end gap-[var(--space-1)]"><Tag label={item.severity} tone={item.severity==="Critical"?"red":"amber"} /><Typography as="span" variant="body-strong">{item.daysCover}d cover</Typography></div><Button intent="secondary" size="slim" aria-label={`Review ${item.product}`} onClick={()=>selectException(item.id)}>Review</Button></div></div></Card></div> : <div key={item.id} ref={selected?.id===item.id ? selectedRadioRef : undefined}><DecisionOptionCard name="stock-exception" value={item.id} density="compact" title={item.product} description={`${item.location} · ${item.sku}`} tag={<span className="grid justify-items-end gap-[var(--space-1)]"><Tag label={item.severity} tone={item.severity==="Critical"?"red":"amber"} /><Typography as="span" variant="body-strong">{item.daysCover}d cover</Typography></span>} selected={selected?.id===item.id && (!isNarrow || hasNarrowSelection)} onSelect={()=>selectException(item.id)} /></div>)}
+            </div> : null;
+          })}
+        </div>
+        </section>
+        <aside ref={detailRef} tabIndex={-1} aria-label="Selected stock exception" className={`${showNarrowDetail ? "block" : "hidden"} md:block`}>
+          {selected ? <Card key={selected.id}>
+            <div className="grid gap-[var(--space-4)]">
+              <div className="md:hidden"><Button intent="secondary" onClick={returnToExceptions}>Back to exceptions</Button></div>
+              <div className="grid gap-[var(--space-1)]">
+                <Typography as="h2" variant="section-title">{selected.product}</Typography>
+                <Typography variant="caption" tone="secondary">{selected.location} · {selected.sku}</Typography>
+              </div>
+              <section aria-label="Stock position" className="grid gap-[var(--space-3)]">
+                <div className="flex flex-wrap items-center gap-[var(--space-3)]"><Typography as="h3" variant="title">{selected.daysCover} days of stock remaining</Typography><Tag label={selected.severity} tone={selected.severity==="Critical"?"red":"amber"} /></div>
+                <dl className="grid grid-cols-2 gap-[var(--space-4)]">
+                  {[["On hand",`${selected.onHand} units`],["Reorder point",`${selected.reorderPoint} units`]].map(([label,value])=><div key={label} className="grid gap-[var(--space-1)]"><dt><Typography as="span" variant="caption" tone="secondary">{label}</Typography></dt><dd className="m-0"><Typography as="span" variant="body-strong">{value}</Typography></dd></div>)}
+                </dl>
+              </section>
+              <Divider />
+              <section aria-label="Delivery assessment" className="grid gap-[var(--space-3)]">
+                  <Typography as="h3" variant="body-strong">Delivery impact</Typography>
+                  <Typography>{deliveryGap>0?`Standard delivery arrives ${deliveryGap.toFixed(1)} days after stock is expected to run out.`:"Standard delivery fits current cover."}</Typography>
+                  <dl className="grid grid-cols-2 gap-[var(--space-4)]">
+                    {[["Supplier",selected.supplier],["Standard lead time",selected.leadTime]].map(([label,value])=><div key={label} className="grid gap-[var(--space-1)]"><dt><Typography as="span" variant="caption" tone="secondary">{label}</Typography></dt><dd className="m-0"><Typography as="span" variant="body-strong">{value}</Typography></dd></div>)}
+                  </dl>
+                </section>
+                <Divider />
+              <section aria-label="Suggested replenishment" className="grid gap-[var(--space-2)]">
+                <Typography as="h3" variant="body-strong">Suggested replenishment</Typography>
+                <Typography variant="title">{selected.suggested} units</Typography>
+                <Typography tone="secondary">{selected.suggested/selected.packSize} packs × {selected.packSize} units per pack</Typography>
+                <Typography variant="caption" tone="secondary">Illustrative quantities and delivery estimates. Confirm demand before ordering.</Typography>
+              </section>
+                <Divider />
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[var(--space-3)]">
+                  <div>{done ? <div role="status"><Typography variant="body-strong">Stock unchanged.</Typography></div> : <Typography variant="caption" tone="secondary">Preview only · No supplier contacted</Typography>}</div>
+                  <Button intent="primary" disabled={done} onClick={()=>setReplenished(current=>[...current,selected.id])}>{done?"Simulated — no order sent":`Simulate ${selected.suggested}-unit order`}</Button>
+                </div>
+            </div>
+          </Card> : <Card><Typography as="h2" variant="section-title">No products to review</Typography><Typography>Try a different location or severity.</Typography></Card>}
+        </aside>
+      </div>
+    </div>
+  </main>;
+}
