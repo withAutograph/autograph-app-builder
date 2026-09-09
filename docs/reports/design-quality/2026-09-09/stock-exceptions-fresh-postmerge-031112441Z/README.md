@@ -16,7 +16,7 @@ GitHub renders this summary and the screenshots. Download or clone this folder t
 
 Scores from different evaluator versions or captured states are not directly comparable.
 
-This is the saved component-backed preview, not a new generation or a built backend. Scores are advisory and not human-calibrated.
+This report evaluates a fresh generated component-backed preview; evaluation itself did not regenerate it or prove a built backend. Scores are advisory and not human-calibrated. See [comparison notes](comparison-notes.md) for the generation context and limitations.
 
 ## Ratings
 
