@@ -1,0 +1,17 @@
+[
+  {
+    "name": "selecting expansion updates the attention explanation",
+    "steps": [
+      {"action":"click","role":"button","name":"Select"}
+    ],
+    "expect": {"text":"Aster Labs added $24,000 MRR, more than accounting for the net gain after Beacon Co.’s contraction."}
+  },
+  {
+    "name": "switching back to contraction restores its explanation",
+    "steps": [
+      {"action":"click","role":"button","name":"Select"},
+      {"action":"click","role":"button","name":"Select"}
+    ],
+    "expect": {"text":"Beacon Co. reduced MRR by $8,000, offsetting one-third of Aster Labs’ expansion and half of the net monthly gain."}
+  }
+]
