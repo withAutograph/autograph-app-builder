@@ -1941,12 +1941,13 @@ export function AppBuilder({
         setSubmitted(active.form);
         setProvisionRequestId(active.requestId);
         setHandoffCreationRequestId(active.handoffCreationRequestId);
-        if (active.phase === "ready" && active.provisioning) {
+        const activeHandoff = active.handoff;
+        if (active.phase === "ready" && active.provisioning && activeHandoff) {
           setProvisioning(active.provisioning);
-          setHandoff(active.handoff);
+          setHandoff(activeHandoff);
           setScreen("ready");
           router.replace(
-            `/handoff/${encodeURIComponent(active.handoff.handoffId)}`,
+            `/handoff/${encodeURIComponent(activeHandoff.handoffId)}`,
           );
           clearActiveProvisioning();
         } else {
