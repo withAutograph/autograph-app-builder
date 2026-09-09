@@ -1010,6 +1010,43 @@ export const builderHandoffs = pgTable(
   ],
 );
 
+/** Durable, tenant-scoped builder state used to resume across auth/provider redirects. */
+export const builderDrafts = pgTable(
+  "builder_draft",
+  {
+    ...hostedGitHubTenantColumns,
+    draftId: text("draft_id").notNull(),
+    revision: integer("revision").notNull().default(1),
+    record: jsonb("record").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "builder_draft_pk",
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.draftId,
+      ],
+    }),
+    index("builder_draft_updated_idx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.updatedAt,
+    ),
+    check("builder_draft_revision_check", sql`${table.revision} > 0`),
+    check(
+      "builder_draft_record_check",
+      sql`jsonb_typeof(${table.record}) = 'object'`,
+    ),
+  ],
+);
+
 export const vercelInstallationAuthorizationStates = pgTable(
   "vercel_installation_authorization_state",
   {

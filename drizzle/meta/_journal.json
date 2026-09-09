@@ -134,6 +134,13 @@
       "when": 1788267600000,
       "tag": "0019_opaque_builder_handoff",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788354000000,
+      "tag": "0020_durable_builder_draft",
+      "breakpoints": true
     }
   ]
 }

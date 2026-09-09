@@ -8,7 +8,7 @@ import {
   type AuthPageSearchParams,
 } from "@/lib/auth/preview-auth-ui";
 
-export default async function PreviewSignInPage({
+async function SignInContent({
   searchParams,
 }: {
   searchParams: Promise<AuthPageSearchParams>;
@@ -28,3 +28,14 @@ export default async function PreviewSignInPage({
     </main>
   );
 }
+
+export default function PreviewSignInPage(props: {
+  searchParams: Promise<AuthPageSearchParams>;
+}) {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <SignInContent {...props} />
+    </Suspense>
+  );
+}
+import { Suspense } from "react";
