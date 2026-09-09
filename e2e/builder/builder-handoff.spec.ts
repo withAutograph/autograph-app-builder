@@ -52,10 +52,20 @@ async function prepareNamedHandoff(
   destination: "Codex" | "Cursor" = "Codex",
 ) {
   await page.goto("/");
+  // A cold tab can expose the SSR textarea before React installs its value
+  // and handlers. Exercise an actual form interaction before replacing text;
+  // otherwise browser fill can insert ahead of the late default example.
+  await page
+    .getByRole("button", { name: "Try another app brief example" })
+    .click();
+  await expect(page.locator("#app-brief")).toHaveValue(
+    /^# Customer feedback portal/u,
+  );
   await page.locator("#app-brief").fill(brief);
   await page.getByLabel("App Name").fill(appName);
   if (destination === "Cursor")
     await page.getByRole("radio", { name: "Cursor", exact: true }).check();
+  await expect(page.locator("#app-brief")).toHaveValue(brief);
   await completeHandoff(page);
   const url = page.url();
   const pathname = new URL(url).pathname;
@@ -124,6 +134,7 @@ test("multiple handoffs reload independently without replacing saved app context
       const status = await response.json();
       expect(status.handoffId).toBe(handoff.id);
       expect(status.intent.appName).toBe(name);
+      expect(status.intent.brief).toBe(brief);
       expect(status.status).toBe("prepared");
       await activePage
         .getByRole("button", { name: "Copy prompt", exact: true })
