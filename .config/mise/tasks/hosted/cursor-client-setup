@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Explicitly register and verify the dedicated Cursor public OAuth client"
+set -eu
+
+if [ "$#" -ne 2 ] || [ "$1" != "--resource" ]; then
+  echo "usage: mise run hosted:cursor-client-setup -- --resource https://builder.example/mcp" >&2
+  exit 64
+fi
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "hosted:cursor-client-setup requires DATABASE_URL" >&2
+  exit 64
+fi
+cursor_database_url=$DATABASE_URL
+unset DATABASE_URL
+printf '%s' "$cursor_database_url" | (
+  unset cursor_database_url
+  exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+    "$(mise which node)" --import tsx lib/auth/cursor-client-setup.mts \
+    --database-url-fd 0 --resource "$2"
+)
