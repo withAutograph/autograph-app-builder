@@ -70,6 +70,46 @@ describe("readReference", () => {
     ]);
   });
 
+  it("checks concrete JSX nodes against recursive public slots without crediting callbacks or unknowns", async () => {
+    const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
+    await mkdir(join(root, "core"), { recursive: true });
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          jsx: "preserve",
+          paths: { "@autograph/components": ["./core/components.tsx"] },
+        },
+      }),
+    );
+    await writeFile(
+      join(root, "core", "components.tsx"),
+      `export type Slot = string | JSX.Element | { readonly children?: Slot };
+       export function Card(_props: { tag?: Slot; invalid?: string; onSelect: () => void; loose?: any }) { return null; }`,
+    );
+    const result = checkJsxAttributes({
+      arrustedRoot: root,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { Card } from "@autograph/components";
+            declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { span: {} } } }
+            declare const uncertain: any;
+            export function Page() { return <><Card tag={<span />} onSelect={() => undefined} loose={uncertain} /><Card invalid={<span />} onSelect={uncertain} /><Card tag={uncertain} onSelect={() => undefined} /></>; }`,
+        },
+      ],
+    });
+    expect(result.attributes.map((attribute) => attribute.verdict)).toEqual([
+      "conforming",
+      "unassessed",
+      "unassessed",
+      "nonconforming",
+      "unassessed",
+      "unassessed",
+      "unassessed",
+    ]);
+  });
+
   it("checks finite object literals and empty arrays against recursive props", async () => {
     const root = await mkdtemp(join(tmpdir(), "arrusted-reference-"));
     await mkdir(join(root, "core"), { recursive: true });

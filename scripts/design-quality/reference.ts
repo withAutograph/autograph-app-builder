@@ -378,6 +378,26 @@ function finiteLiteralEvidence(
   if (depth > 8) return undefined;
   if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
     return undefined;
+  // A JSX element or fragment is a concrete expression with a compiler-owned
+  // element type. Its descendants may still be dynamic, but that does not make
+  // the outer prop callback-shaped or unresolved. Do not admit any/unknown
+  // types, or unions with an any/unknown escape hatch.
+  if (
+    ts.isJsxElement(expression) ||
+    ts.isJsxSelfClosingElement(expression) ||
+    ts.isJsxFragment(expression)
+  ) {
+    const actual = checker.getTypeAtLocation(expression);
+    if (
+      actual.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown) ||
+      (expected.isUnion() &&
+        expected.types.some(
+          (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
+        ))
+    )
+      return undefined;
+    return checker.isTypeAssignableTo(actual, expected) ? true : undefined;
+  }
   if (expected.isUnion()) {
     const actual = checker.getTypeAtLocation(expression);
     return expected.types.some(
