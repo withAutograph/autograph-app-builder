@@ -4,10 +4,12 @@ import {
   captureViewports,
   classifyStyle,
   generatedSource,
+  mappedSharedCssRule,
   parseAdditionalDesktopSize,
   scenariosSchema,
   sourcePath,
 } from "./browser";
+import { collectCssRuleEvidence } from "./css-evidence";
 import { escapeHtml, renderReport } from "./report";
 describe("conservative design measurements", () => {
   it("keeps token references distinct from lookalikes", () => {
@@ -73,6 +75,71 @@ describe("conservative design measurements", () => {
       arrustedSharedSource("/workspace/packages/design-systems/theme.css"),
     ).toBe(true);
     expect(arrustedSharedSource("/workspace/apps/preview/app.css")).toBe(false);
+  });
+  it("verifies mapped shared CSS by exact file bytes and declaration location", () => {
+    const path = "packages/design-systems/core/card.css";
+    const content = ".card {\n  color: var(--color-text-primary);\n}";
+    const rules = collectCssRuleEvidence([{ path, content }]);
+    const mapped = { path, line: 2, column: 3, sourceIndex: 0 };
+    const map = {
+      version: 3,
+      sources: [path],
+      sourcesContent: [content],
+      mappings: "",
+    };
+    const input = {
+      map,
+      mapped,
+      property: "color",
+      value: "var(--color-text-primary)",
+      sharedCssRules: rules,
+      sharedCssSourceFiles: [{ path, content }],
+    };
+    expect(mappedSharedCssRule(input)?.source).toEqual({
+      path,
+      line: 2,
+      column: 3,
+    });
+    // Bundlers may add a sandbox prefix, but a basename by itself is not a
+    // reference to the checked-in source path.
+    expect(
+      mappedSharedCssRule({
+        ...input,
+        mapped: { ...mapped, path: `/sandbox/source/${path}` },
+      })?.source.path,
+    ).toBe(path);
+    expect(
+      mappedSharedCssRule({
+        ...input,
+        mapped: {
+          ...mapped,
+          path: "packages/design-systems/core/misleading.css",
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      mappedSharedCssRule({
+        ...input,
+        mapped: { ...mapped, path: "card.css" },
+      }),
+    ).toBeUndefined();
+    expect(
+      mappedSharedCssRule({
+        ...input,
+        map: { ...map, sourcesContent: [".card { color: red; }"] },
+      }),
+    ).toBeUndefined();
+    // A utility map that lands on the root rather than an authored declaration
+    // cannot claim shared provenance.
+    expect(
+      mappedSharedCssRule({
+        ...input,
+        mapped: { ...mapped, line: 1, column: 1 },
+      }),
+    ).toBeUndefined();
+    expect(
+      mappedSharedCssRule({ ...input, sharedCssRules: [...rules, rules[0]!] }),
+    ).toBeUndefined();
   });
   it("escapes untrusted model/page copy in reports", () => {
     expect(escapeHtml('<script>"&')).toBe("&lt;script&gt;&quot;&amp;");

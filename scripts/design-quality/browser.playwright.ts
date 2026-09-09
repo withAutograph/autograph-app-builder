@@ -270,6 +270,7 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
     `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,
   );
   await page.locator(".screen").waitFor();
+  await page.evaluate(() => document.styleSheets[0]?.cssRules.length);
   const styles = await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
@@ -288,6 +289,134 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
         item.cssSource?.path === "src/generated.css",
     ),
   ).toBe(true);
+});
+
+test("reports an exactly mapped shared declaration as shared without scoring credit", async ({
+  page,
+}) => {
+  const sharedPath = "packages/design-systems/core/card.css";
+  const authoredCss = ".origin { color: var(--color-text-primary); }";
+  const compiledCss = ".screen { color: var(--color-text-primary); }";
+  const map = JSON.stringify({
+    version: 3,
+    sources: [sharedPath],
+    sourcesContent: [authoredCss],
+    mappings: "SAAU",
+  });
+  await page.route("http://example.test/page", (route) =>
+    route.fulfill({ body: "" }),
+  );
+  await page.route("http://example.test/shared.css.map", (route) =>
+    route.fulfill({ contentType: "application/json", body: map }),
+  );
+  await page.route("http://example.test/compiled.css", (route) =>
+    route.fulfill({
+      contentType: "text/css",
+      body: `${compiledCss}\n/*# sourceMappingURL=/shared.css.map */`,
+    }),
+  );
+  await page.goto("http://example.test/page");
+  const sharedFiles = [{ path: sharedPath, content: authoredCss }];
+  const withoutMap = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    [],
+    undefined,
+    [],
+    collectCssRuleEvidence(sharedFiles),
+    [],
+    sharedFiles,
+  );
+  expect(
+    withoutMap.observations.some(
+      (item) => item.property === "color" && item.provenance === "shared",
+    ),
+  ).toBe(false);
+  await page.setContent(
+    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,
+  );
+  await page.locator(".screen").waitFor();
+  await page.evaluate(() => document.styleSheets[0]?.cssRules.length);
+  const styles = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    [],
+    undefined,
+    [],
+    collectCssRuleEvidence(sharedFiles),
+    [],
+    sharedFiles,
+  );
+  expect(
+    styles.observations.some(
+      (item) =>
+        item.property === "color" &&
+        item.provenance === "shared" &&
+        item.verdict === "unassessed" &&
+        item.cssSource?.path === sharedPath,
+    ),
+  ).toBe(true);
+});
+
+test("keeps multiple mapped cascade declarations unknown", async ({ page }) => {
+  const sharedPath = "packages/design-systems/core/card.css";
+  const authoredCss = ".origin { color: var(--color-text-primary); }";
+  const compiledCss =
+    ".screen { color: var(--color-text-primary); }\n.screen { color: var(--color-text-primary); }";
+  const map = JSON.stringify({
+    version: 3,
+    sources: [sharedPath],
+    sourcesContent: [authoredCss],
+    mappings: "SAAU;SAAA",
+  });
+  await page.route("http://example.test/page", (route) =>
+    route.fulfill({ body: "" }),
+  );
+  await page.route("http://example.test/ambiguous.css.map", (route) =>
+    route.fulfill({ contentType: "application/json", body: map }),
+  );
+  await page.route("http://example.test/ambiguous.css", (route) =>
+    route.fulfill({
+      contentType: "text/css",
+      body: `${compiledCss}\n/*# sourceMappingURL=/ambiguous.css.map */`,
+    }),
+  );
+  await page.goto("http://example.test/page");
+  const sharedFiles = [{ path: sharedPath, content: authoredCss }];
+  await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    [],
+    undefined,
+    [],
+    collectCssRuleEvidence(sharedFiles),
+    [],
+    sharedFiles,
+  );
+  await page.setContent(
+    `<link rel="stylesheet" href="/ambiguous.css"><main class="screen">Stock</main>`,
+  );
+  await page.locator(".screen").waitFor();
+  await page.evaluate(() => document.styleSheets[0]?.cssRules.length);
+  const styles = await measureStyles(
+    page,
+    { "--color-text-primary": "rgb(20, 20, 20)" },
+    [],
+    [],
+    undefined,
+    [],
+    collectCssRuleEvidence(sharedFiles),
+    [],
+    sharedFiles,
+  );
+  expect(
+    styles.observations.some(
+      (item) => item.property === "color" && item.provenance === "shared",
+    ),
+  ).toBe(false);
 });
 
 test("does not trust mismatched CSS source-map content", async ({ page }) => {
