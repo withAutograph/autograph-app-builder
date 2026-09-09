@@ -19,15 +19,18 @@ Compose around the user's task, not a fixed page template:
 - Choose public compositions for their behavior. A Button with row styling is
   not a record-list composition: its internal layout may defeat alignment.
   Prefer a supported table or record selector when reviewing records.
-- Keep related decision evidence together and use supported typography roles
-  for readable labels and primary values. Do not use disabled styling for active
-  facts or compensate with palette overrides.
+- Keep evidence needed to judge the next action visible beside it; disclose only
+  secondary details. Use readable typography for deciding quantities rather than
+  packing them into status badges. Do not use disabled styling for active facts
+  or compensate with palette overrides.
 - Keep selection, visible results, and actions coherent after filtering. An empty
-  result must not silently leave an unrelated record actionable. In narrow
+  result must not silently leave an unrelated record actionable or tell users to
+  select a record that does not exist. Related panes share one recovery story. In narrow
   desktop panels, keep the chosen record and next action reachable without
   traversing the entire collection again; use the composition's navigation when
   available.
-- Size controls for their content rather than filling every available column.
+- Size controls and reading regions for their content rather than filling every
+  available column; wide comparison data may legitimately need more space.
   For action-oriented panels, budget for surrounding page chrome and keep the
   action and its complete feedback reachable in short desktop windows. Use
   readable supported sizes for decision-relevant status and supporting text;

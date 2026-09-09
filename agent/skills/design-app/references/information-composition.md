@@ -31,7 +31,9 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   value. Preserve row status when mixed, detached, or filtered views need it.
 - Keep evidence needed for one decision visible together. Tabs are for distinct
   tasks or substantial alternate views, not a way to separate three related
-  fields. Use progressive disclosure for genuinely secondary information.
+  fields. Use progressive disclosure for genuinely secondary information. Decide
+  what is secondary by its role in the decision, not by its domain or section
+  name: a delivery estimate, permission scope, or cost can be essential evidence.
 - Structure detail views around the question being answered. For a decision,
   explain the issue and relevant evidence before the recommendation and action.
   For reference content, identity and navigable facts may come first. Avoid
@@ -68,7 +70,9 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
 - Size simple choices for the content they contain. A wide page need not produce
   page-wide selects or long spans between labels and values. Let substantial
   comparison or reading content use the space; keep small control groups compact
-  with supported layout values and useful wrapping.
+  with supported layout values and useful wrapping. Bound prose and sparse
+  label-value regions to a comfortable measure; spare width can be outer space
+  rather than oversized panels. Do not impose a fixed maximum on dense comparisons.
 - In an action-oriented detail panel, account for the page heading, filters, and
   navigation above it when choosing the available height. A full-viewport panel
   placed below page chrome can push its action out of reach. Prefer the shared
@@ -78,7 +82,12 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
 - Choose supported type and status sizes by information importance. Small
   secondary styling suits incidental metadata, not the sole presentation of a
   deciding status or fact. Avoid duplicating that fact simply to make it legible;
-  use a readable existing variant without altering its colors.
+  use a readable existing variant without altering its colors. A badge can name
+  a state while its deciding quantity uses ordinary readable text nearby.
+- Give related panes one coherent empty-state explanation. Distinguish no
+  matching records from records available but none selected; do not invite an
+  impossible selection. Offer the relevant recovery, such as adjusting filters,
+  without repeating contradictory placeholders in each pane.
 
 ## Different tasks need different compositions
 
