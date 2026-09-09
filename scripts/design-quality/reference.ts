@@ -405,6 +405,24 @@ function finiteLiteralEvidence(
       return undefined;
     return checker.isTypeAssignableTo(actual, expected) ? true : undefined;
   }
+  // A conditional is finite only when every possible branch is independently
+  // finite. The condition itself may be runtime state; TypeScript remains the
+  // authority for the conditional expression's final assignability.
+  if (ts.isConditionalExpression(expression))
+    return finiteLiteralEvidence(
+      expression.whenTrue,
+      expected,
+      checker,
+      depth + 1,
+    ) === true &&
+      finiteLiteralEvidence(
+        expression.whenFalse,
+        expected,
+        checker,
+        depth + 1,
+      ) === true
+      ? true
+      : undefined;
   if (expected.isUnion()) {
     const actual = checker.getTypeAtLocation(expression);
     return expected.types.some(
