@@ -18,11 +18,11 @@ Do not interpret a screenshot of a partially scrolled row as proven overlap.
 
 All assessed observations conform, but confidence is not uniform:
 
-| Dimension | Conforming | Unassessed | Coverage |
-| --- | ---: | ---: | ---: |
-| Component usage (static JSX) | 18 | 2 | 90% |
-| API usage (static JSX) | 41 | 13 | 75.93% |
-| Styling (source and browser) | 13 | 5,181 | 0.25% |
+| Dimension                    | Conforming | Unassessed | Coverage |
+| ---------------------------- | ---------: | ---------: | -------: |
+| Component usage (static JSX) |         18 |          2 |      90% |
+| API usage (static JSX)       |         41 |         13 |   75.93% |
+| Styling (source and browser) |         13 |      5,181 |    0.25% |
 
 The combined coverage is 1.37%. Browser attribution remains unknown where utility
 rules cannot be reliably attributed to authored versus inherited styling. Static
