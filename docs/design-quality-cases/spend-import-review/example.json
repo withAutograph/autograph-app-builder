@@ -1,0 +1,8 @@
+{
+  "appId": "spend-import-review-example",
+  "route": "/",
+  "entry": "src/SpendImportReview.tsx",
+  "source": "scripts/design-quality/examples/spend-import-review.tsx.fixture",
+  "stateSource": "scripts/design-quality/examples/spend-import-state.ts",
+  "stateTarget": "src/spend-import-state.ts"
+}

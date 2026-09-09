@@ -1,0 +1,259 @@
+import { useReducer } from "react";
+import {
+  Button,
+  Card,
+  PageHeader,
+  StatusPill,
+  Typography,
+} from "@autograph/components";
+import {
+  SchemaFormComposition,
+  type SchemaFormValue,
+} from "@autograph/compositions";
+import fixture from "./fixture";
+import {
+  calculateCompensation,
+  compensationDecisionModel,
+  initialCompensationState,
+  reduceCompensationState,
+  validateCompensation,
+  type CompensationAssumptions,
+} from "./compensation-state";
+
+const money = (value: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+
+export default function CompensationPlanning() {
+  const [state, dispatch] = useReducer(
+    reduceCompensationState,
+    fixture,
+    initialCompensationState,
+  );
+  const totals = calculateCompensation(state.assumptions);
+  const errors = validateCompensation(state.assumptions);
+  const decision = compensationDecisionModel(state);
+  const fields = [
+    {
+      id: "baseSalary",
+      label: "Current base salary",
+      control: "number" as const,
+      value: state.assumptions.baseSalary,
+      helper: "Annual USD",
+      error: errors.baseSalary,
+    },
+    {
+      id: "targetBonus",
+      label: "Target bonus",
+      control: "number" as const,
+      value: state.assumptions.targetBonus,
+      helper: "Annual USD; held constant in the proposed total",
+      error: errors.targetBonus,
+    },
+    {
+      id: "annualBenefits",
+      label: "Annual benefits",
+      control: "number" as const,
+      value: state.assumptions.annualBenefits,
+      helper: "Annual USD; held constant in the proposed total",
+      error: errors.annualBenefits,
+    },
+    {
+      id: "employerTaxRate",
+      label: "Employer tax rate",
+      control: "number" as const,
+      value: Number((state.assumptions.employerTaxRate * 100).toFixed(4)),
+      helper: "Percent of base salary",
+      error: errors.employerTaxRate,
+    },
+    {
+      id: "bandMidpoint",
+      label: "L5 band midpoint",
+      control: "number" as const,
+      value: state.assumptions.bandMidpoint,
+      helper: "Comparison point, not a policy limit",
+      error: errors.bandMidpoint,
+    },
+    {
+      id: "plannedIncrease",
+      label: "Planned base increase",
+      control: "number" as const,
+      value: Number((state.assumptions.plannedIncrease * 100).toFixed(4)),
+      helper: "Percent applied to current base salary",
+      error: errors.plannedIncrease,
+    },
+  ];
+
+  function change(field: string, value: SchemaFormValue) {
+    const numeric = typeof value === "number" ? value : Number.NaN;
+    const normalized =
+      field === "employerTaxRate" || field === "plannedIncrease"
+        ? numeric / 100
+        : numeric;
+    dispatch({
+      type: "assumption-changed",
+      field: field as keyof CompensationAssumptions,
+      value: normalized,
+    });
+  }
+
+  return (
+    <main className="min-h-screen bg-[var(--color-bg-page)] p-[var(--space-6)] text-[var(--color-text-primary)]">
+      <div className="mx-auto grid max-w-[1180px] gap-[var(--space-6)]">
+        <PageHeader
+          title="Compensation planning review"
+          subtitle="Edit Taylor Nguyen’s synthetic FY27 assumptions and compare calculated current and proposed totals."
+          actions={<StatusPill tone="neutral" label="Draft" detail="CMP-29" />}
+        />
+
+        {decision.status ? (
+          <Card>
+            <div role="status" className="grid gap-[var(--space-2)]">
+              <Typography variant="body-strong">{decision.status}</Typography>
+              <Typography tone="secondary">
+                This simulation does not contact an approver or write to
+                payroll.
+              </Typography>
+              <div>
+                <Button
+                  size="sm"
+                  onClick={() => dispatch({ type: "clear-decision" })}
+                >
+                  Clear simulation
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        <div className="grid items-start gap-[var(--space-6)] lg:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
+          <Card title="Editable policy assumptions">
+            <SchemaFormComposition
+              spec={{
+                type: "schema_form",
+                config: {
+                  layout: "grid",
+                  submitLabel: "Use these assumptions",
+                  resetLabel: "Reset assumptions",
+                  fields,
+                },
+              }}
+              onFieldChange={change}
+              onSubmit={() => dispatch({ type: "assumptions-applied" })}
+              onReset={() => dispatch({ type: "reset", fixture })}
+            />
+          </Card>
+
+          <div className="grid gap-[var(--space-4)]">
+            <Card
+              title="Calculated package comparison"
+              actions={
+                <StatusPill
+                  tone={state.assumptionsApplied ? "success" : "warning"}
+                  label={
+                    state.assumptionsApplied
+                      ? "Assumptions applied"
+                      : "Review edited assumptions"
+                  }
+                />
+              }
+            >
+              {totals ? (
+                <div className="grid gap-[var(--space-5)] md:grid-cols-2">
+                  <div className="grid gap-[var(--space-2)]">
+                    <Typography variant="body-strong">
+                      Current package
+                    </Typography>
+                    <Typography variant="section-title">
+                      {money(totals.currentTotal)}
+                    </Typography>
+                    <Typography tone="secondary">
+                      Base {money(state.assumptions.baseSalary)} · tax estimate{" "}
+                      {money(totals.currentTax)}
+                    </Typography>
+                    <Typography tone="secondary">
+                      Bonus {money(state.assumptions.targetBonus)} · benefits{" "}
+                      {money(state.assumptions.annualBenefits)}
+                    </Typography>
+                  </div>
+                  <div className="grid gap-[var(--space-2)]">
+                    <Typography variant="body-strong">
+                      Proposed package
+                    </Typography>
+                    <Typography variant="section-title">
+                      {money(totals.proposedTotal)}
+                    </Typography>
+                    <Typography tone="secondary">
+                      Proposed base {money(totals.proposedBase)} · tax estimate{" "}
+                      {money(totals.proposedTax)}
+                    </Typography>
+                    <Typography tone="secondary">
+                      Bonus {money(state.assumptions.targetBonus)} · benefits{" "}
+                      {money(state.assumptions.annualBenefits)}
+                    </Typography>
+                  </div>
+                </div>
+              ) : (
+                <Typography tone="danger">
+                  Fix the highlighted assumptions to calculate package totals.
+                </Typography>
+              )}
+              {totals ? (
+                <Typography tone="secondary" className="mt-[var(--space-4)]">
+                  Proposed base is{" "}
+                  {money(Math.abs(totals.proposedMidpointDelta))}{" "}
+                  {totals.proposedMidpointDelta >= 0 ? "above" : "below"} the
+                  supplied midpoint.
+                </Typography>
+              ) : null}
+            </Card>
+
+            <Card title="Next decision">
+              <div className="grid gap-[var(--space-3)]">
+                <Typography variant="body-strong">
+                  Is the calculated draft suitable to carry into the plan?
+                </Typography>
+                {!state.assumptionsApplied ? (
+                  <Typography tone="secondary">
+                    Apply the edited assumptions before recording a decision.
+                  </Typography>
+                ) : null}
+                <Button
+                  intent="primary"
+                  disabled={
+                    !state.assumptionsApplied ||
+                    !totals ||
+                    state.decision === "recommended"
+                  }
+                  onClick={() => dispatch({ type: "recommend" })}
+                >
+                  {decision.primaryLabel}
+                </Button>
+                <Button
+                  disabled={
+                    !state.assumptionsApplied ||
+                    !totals ||
+                    state.decision === "held"
+                  }
+                  onClick={() => dispatch({ type: "hold" })}
+                >
+                  {state.decision === "held"
+                    ? "Draft held in preview"
+                    : "Keep draft for review"}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+
+        <Typography variant="caption" tone="muted">
+          Synthetic planning fixture · Calculations and decisions exist only in
+          this preview.
+        </Typography>
+      </div>
+    </main>
+  );
+}

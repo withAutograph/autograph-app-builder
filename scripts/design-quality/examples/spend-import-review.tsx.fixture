@@ -1,0 +1,247 @@
+import { useReducer } from "react";
+import {
+  Button,
+  Card,
+  DecisionOptionCard,
+  FieldFrame,
+  PageHeader,
+  Select,
+  StatusPill,
+  Typography,
+} from "@autograph/components";
+import { DataTableComposition } from "@autograph/compositions";
+import fixture from "./fixture";
+import {
+  deriveSpendPreview,
+  initialSpendState,
+  reduceSpendState,
+  spendActionModel,
+  type SpendTarget,
+} from "./spend-import-state";
+
+const options = [
+  { value: "vendor_name", label: "Vendor name" },
+  { value: "amount", label: "Amount" },
+  { value: "currency", label: "Currency" },
+  { value: "transaction_date", label: "Transaction date" },
+  { value: "source_record_ref", label: "Source reference" },
+  { value: "ignore", label: "Do not import" },
+];
+
+export default function SpendImportReview() {
+  const [state, dispatch] = useReducer(
+    reduceSpendState,
+    fixture,
+    initialSpendState,
+  );
+  const preview = deriveSpendPreview(fixture, state.mapping);
+  const action = spendActionModel(state);
+  const match = fixture.uncertainMatches[0];
+  const remaining = state.saved?.reviewQueue ?? preview.needsReview;
+  const summary = state.saved
+    ? { ready: state.saved.imported, needsReview: state.saved.reviewQueue }
+    : preview;
+  const matchAmount = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: match.currency,
+  }).format(match.amount);
+
+  return (
+    <main className="min-h-screen bg-[var(--color-bg-page)] p-[var(--space-6)] text-[var(--color-text-primary)]">
+      <div className="mx-auto grid max-w-[1280px] gap-[var(--space-6)]">
+        <PageHeader
+          title="Import AP spend"
+          subtitle={`AP export · Batch ${fixture.import.batchId} · ${fixture.import.rows} synthetic rows`}
+          actions={
+            <StatusPill
+              tone={state.saved ? "success" : "neutral"}
+              label={state.saved ? "Saved in simulation" : "Draft import"}
+            />
+          }
+        />
+
+        <div className="grid items-start gap-[var(--space-6)] lg:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.4fr)]">
+          <Card title="Field mapping">
+            <div className="grid gap-[var(--space-4)]">
+              <Typography tone="secondary">
+                Change a source mapping, then preview the derived import rows
+                and outcome.
+              </Typography>
+              {Object.values(fixture.fieldMapping).map((source) => (
+                <FieldFrame
+                  key={source}
+                  label={source}
+                  htmlFor={`mapping-${source.replaceAll(" ", "-").toLowerCase()}`}
+                >
+                  <Select
+                    id={`mapping-${source.replaceAll(" ", "-").toLowerCase()}`}
+                    aria-label={`Spend field for ${source}`}
+                    value={state.mapping[source]}
+                    options={options}
+                    onValueChange={(target) =>
+                      dispatch({
+                        type: "mapping-changed",
+                        source,
+                        target: target as SpendTarget,
+                      })
+                    }
+                  />
+                </FieldFrame>
+              ))}
+              <Button
+                intent="primary"
+                onClick={() => dispatch({ type: "preview-requested" })}
+              >
+                Preview imported changes
+              </Button>
+            </div>
+          </Card>
+
+          <div className="grid gap-[var(--space-4)]">
+            {state.stage === "mapping" ? (
+              <Card title="Preview changes">
+                <Typography tone="secondary">
+                  Confirm the mapping to derive the representative rows and save
+                  outcome.
+                </Typography>
+              </Card>
+            ) : (
+              <Card
+                title="Preview changes"
+                actions={
+                  <div className="flex gap-[var(--space-2)]">
+                    <StatusPill
+                      tone="success"
+                      label={`${summary.ready} ready`}
+                    />
+                    <StatusPill
+                      tone="warning"
+                      label={`${summary.needsReview} need review`}
+                    />
+                  </div>
+                }
+              >
+                <div className="grid gap-[var(--space-4)]">
+                  <Typography tone="secondary">
+                    Six representative rows are shown. {preview.mappingSummary}
+                  </Typography>
+                  <DataTableComposition
+                    spec={{
+                      type: "data_table",
+                      config: {
+                        ariaLabel: "Derived AP import preview",
+                        density: "compact",
+                        columns: [
+                          { id: "id", label: "Row" },
+                          { id: "vendor", label: "Vendor" },
+                          { id: "result", label: "Result" },
+                          { id: "amount", label: "Amount", align: "right" },
+                          { id: "date", label: "Date" },
+                          { id: "sourceRef", label: "Source reference" },
+                        ],
+                        rows: preview.rows,
+                      },
+                    }}
+                  />
+                  {state.saved ? (
+                    <div role="status" className="grid gap-[var(--space-3)]">
+                      <Typography variant="body-strong">
+                        Import saved in simulation
+                      </Typography>
+                      <Typography>{state.saved.message}</Typography>
+                      <Button
+                        intent="primary"
+                        onClick={() => dispatch({ type: "review-requested" })}
+                      >
+                        Review {state.saved.reviewQueue} exception rows
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      intent="primary"
+                      disabled={!action.saveEnabled}
+                      onClick={() =>
+                        dispatch({ type: "save-requested", fixture })
+                      }
+                    >
+                      Save import
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {state.stage === "review" ? (
+              <Card
+                title={`${match.vendorRaw} · ${remaining} remaining`}
+                actions={
+                  <StatusPill
+                    tone={
+                      state.decision === "resolved"
+                        ? "success"
+                        : state.decision === "deferred"
+                          ? "neutral"
+                          : "warning"
+                    }
+                    label={
+                      state.decision === "resolved"
+                        ? "Resolved in simulation"
+                        : state.decision === "deferred"
+                          ? "Deferred in simulation"
+                          : "Needs review"
+                    }
+                  />
+                }
+              >
+                <div className="grid gap-[var(--space-4)]">
+                  <Typography tone="secondary">
+                    Original source evidence remains unchanged. Choose one
+                    bounded simulated outcome.
+                  </Typography>
+                  {match.candidates.map((candidate) => (
+                    <DecisionOptionCard
+                      key={candidate.id}
+                      name="vendor-match"
+                      value={candidate.id}
+                      title={candidate.label}
+                      description={`${matchAmount} · ${match.transactionDate} · ${match.sourceRef} · Candidate ${candidate.id}`}
+                      selected={state.selectedMatchId === candidate.id}
+                      disabled={Boolean(state.decision)}
+                      onSelect={() =>
+                        dispatch({ type: "match-selected", id: candidate.id })
+                      }
+                    />
+                  ))}
+                  <div className="flex flex-wrap gap-[var(--space-2)]">
+                    <Button
+                      disabled={Boolean(state.decision)}
+                      onClick={() => dispatch({ type: "decision-deferred" })}
+                    >
+                      Leave unresolved
+                    </Button>
+                    <Button
+                      intent="primary"
+                      disabled={!action.applyEnabled}
+                      onClick={() => dispatch({ type: "decision-applied" })}
+                    >
+                      Apply simulated decision
+                    </Button>
+                  </div>
+                  {action.result ? (
+                    <Typography variant="body-strong">
+                      {action.result}
+                    </Typography>
+                  ) : null}
+                </div>
+              </Card>
+            ) : null}
+          </div>
+        </div>
+        <Typography variant="caption" tone="muted">
+          Synthetic fixture · All mapping, import, and review changes are
+          in-memory simulations.
+        </Typography>
+      </div>
+    </main>
+  );
+}

@@ -4,8 +4,9 @@
     "steps": [
       {
         "action": "select",
-        "selector": "select >> nth=0",
-        "value": "Vendor name"
+        "role": "combobox",
+        "name": "Spend field for Supplier",
+        "value": "Do not import"
       },
       {
         "action": "click",
@@ -14,7 +15,7 @@
       }
     ],
     "expect": {
-      "text": "Six representative rows are shown."
+      "text": "0 ready"
     }
   },
   {
@@ -55,11 +56,6 @@
       },
       {
         "action": "click",
-        "role": "button",
-        "name": "Northstar Cloud Inc. TX-042 · AP-4192 · 2026-08-31 $12,950.00 Needs review"
-      },
-      {
-        "action": "click",
         "selector": "label[data-decision-option-card]:has(input[value=\"nsc-1008\"])"
       },
       {
@@ -89,11 +85,6 @@
         "action": "click",
         "role": "button",
         "name": "Review 4 exception rows"
-      },
-      {
-        "action": "click",
-        "role": "button",
-        "name": "Northstar Cloud Inc. TX-042 · AP-4192 · 2026-08-31 $12,950.00 Needs review"
       },
       {
         "action": "click",
