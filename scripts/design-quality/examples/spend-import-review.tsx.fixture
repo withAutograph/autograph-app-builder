@@ -3,13 +3,17 @@ import {
   Button,
   Card,
   DecisionOptionCard,
+  Disclosure,
   FieldFrame,
   PageHeader,
   Select,
   StatusPill,
   Typography,
 } from "@autograph/components";
-import { DataTableComposition } from "@autograph/compositions";
+import {
+  DataTableComposition,
+  RecordDetailPanel,
+} from "@autograph/compositions";
 import fixture from "./fixture";
 import {
   deriveSpendPreview,
@@ -60,41 +64,53 @@ export default function SpendImportReview() {
           }
         />
 
-        <div className="grid items-start gap-[var(--space-6)] lg:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.4fr)]">
+        <div
+          className={`grid items-start gap-[var(--space-6)] ${state.stage === "review" ? "" : "xl:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.4fr)]"}`}
+        >
           <Card title="Field mapping">
-            <div className="grid gap-[var(--space-4)]">
-              <Typography tone="secondary">
-                Change a source mapping, then preview the derived import rows
-                and outcome.
-              </Typography>
-              {Object.values(fixture.fieldMapping).map((source) => (
-                <FieldFrame
-                  key={source}
-                  label={source}
-                  htmlFor={`mapping-${source.replaceAll(" ", "-").toLowerCase()}`}
+            <Disclosure
+              key={state.stage === "review" ? "review" : "setup"}
+              summary={
+                state.stage === "review"
+                  ? "View or change completed mapping"
+                  : "Source field mapping"
+              }
+              defaultOpen={state.stage !== "review"}
+            >
+              <div className="grid gap-[var(--space-4)]">
+                <Typography tone="secondary">
+                  Change a source mapping, then preview the derived import rows
+                  and outcome.
+                </Typography>
+                {Object.values(fixture.fieldMapping).map((source) => (
+                  <FieldFrame
+                    key={source}
+                    label={source}
+                    htmlFor={`mapping-${source.replaceAll(" ", "-").toLowerCase()}`}
+                  >
+                    <Select
+                      id={`mapping-${source.replaceAll(" ", "-").toLowerCase()}`}
+                      aria-label={`Spend field for ${source}`}
+                      value={state.mapping[source]}
+                      options={options}
+                      onValueChange={(target) =>
+                        dispatch({
+                          type: "mapping-changed",
+                          source,
+                          target: target as SpendTarget,
+                        })
+                      }
+                    />
+                  </FieldFrame>
+                ))}
+                <Button
+                  intent="primary"
+                  onClick={() => dispatch({ type: "preview-requested" })}
                 >
-                  <Select
-                    id={`mapping-${source.replaceAll(" ", "-").toLowerCase()}`}
-                    aria-label={`Spend field for ${source}`}
-                    value={state.mapping[source]}
-                    options={options}
-                    onValueChange={(target) =>
-                      dispatch({
-                        type: "mapping-changed",
-                        source,
-                        target: target as SpendTarget,
-                      })
-                    }
-                  />
-                </FieldFrame>
-              ))}
-              <Button
-                intent="primary"
-                onClick={() => dispatch({ type: "preview-requested" })}
-              >
-                Preview imported changes
-              </Button>
-            </div>
+                  Preview imported changes
+                </Button>
+              </div>
+            </Disclosure>
           </Card>
 
           <div className="grid gap-[var(--space-4)]">
@@ -139,7 +155,11 @@ export default function SpendImportReview() {
                           { id: "date", label: "Date" },
                           { id: "sourceRef", label: "Source reference" },
                         ],
-                        rows: preview.rows,
+                        rows: preview.rows.map((row) =>
+                          row.id === match.id && state.decision === "resolved"
+                            ? { ...row, result: "Resolved" }
+                            : row,
+                        ),
                       },
                     }}
                   />
@@ -194,9 +214,51 @@ export default function SpendImportReview() {
                 }
               >
                 <div className="grid gap-[var(--space-4)]">
-                  <Typography tone="secondary">
-                    Original source evidence remains unchanged. Choose one
-                    bounded simulated outcome.
+                  <RecordDetailPanel
+                    title="Original transaction"
+                    subtitle="Imported source values—not a proposed vendor match"
+                    labelEmphasis="primary"
+                    sections={[
+                      {
+                        id: "source",
+                        title: "Source evidence",
+                        items: [
+                          {
+                            type: "field",
+                            id: "row",
+                            label: "Source row",
+                            value: match.id,
+                          },
+                          {
+                            type: "field",
+                            id: "supplier",
+                            label: "Imported supplier",
+                            value: match.vendorRaw,
+                          },
+                          {
+                            type: "field",
+                            id: "amount",
+                            label: "Amount",
+                            value: matchAmount,
+                          },
+                          {
+                            type: "field",
+                            id: "date",
+                            label: "Transaction date",
+                            value: match.transactionDate,
+                          },
+                          {
+                            type: "field",
+                            id: "reference",
+                            label: "Source reference",
+                            value: match.sourceRef,
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                  <Typography variant="body-strong">
+                    Choose the matching vendor
                   </Typography>
                   {match.candidates.map((candidate) => (
                     <DecisionOptionCard
@@ -204,7 +266,7 @@ export default function SpendImportReview() {
                       name="vendor-match"
                       value={candidate.id}
                       title={candidate.label}
-                      description={`${matchAmount} · ${match.transactionDate} · ${match.sourceRef} · Candidate ${candidate.id}`}
+                      description={`Proposed vendor identity · ${candidate.id}`}
                       selected={state.selectedMatchId === candidate.id}
                       disabled={Boolean(state.decision)}
                       onSelect={() =>

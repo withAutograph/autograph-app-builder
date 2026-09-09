@@ -38,6 +38,7 @@ const exampleManifests: Record<
       "Button",
       "Card",
       "DecisionOptionCard",
+      "Disclosure",
       "FieldFrame",
       "PageHeader",
       "Select",
@@ -46,6 +47,7 @@ const exampleManifests: Record<
     ].map((name) => ({ name, source: "@autograph/components" as const })),
     productionCompositions: [
       { name: "DataTableComposition", source: "@autograph/compositions" },
+      { name: "RecordDetailPanel", source: "@autograph/compositions" },
     ],
     fixtureFacts: [
       {
