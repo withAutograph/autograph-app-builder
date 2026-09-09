@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "playwright/test";
 
 const authenticatedStory =
-  "/iframe.html?id=create-app-page--default&viewMode=story";
+  "/iframe.html?id=create-app-flow-page--default&viewMode=story";
 const anonymousStory =
   "/iframe.html?id=create-app-flow-anonymous-entry--empty&viewMode=story";
 
