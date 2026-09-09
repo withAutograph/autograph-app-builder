@@ -33,6 +33,11 @@ import {
 } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
+import {
+  buildAppHandoffPrompt,
+  buildAppHandoffUrl,
+} from "../../lib/handoff/client";
+export { buildAppHandoffPrompt } from "../../lib/handoff/client";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
@@ -128,40 +133,11 @@ function providerSetupMessage(
   return `${provider}: ${reason}.`;
 }
 
-export function buildAppHandoffPrompt(handoffId: string) {
-  if (!uuidPattern.test(handoffId)) throw new Error("handoff-id-invalid");
-  return `Use the official Autograph App Builder plugin to create this app.
-
-Handoff ID: ${handoffId}
-
-First check whether app-builder@autograph is installed and enabled and whether its autograph_start tool is callable.
-
-If the official tool is callable, immediately call autograph_start with the handoffId and a unique clientRequestId. Do not reinstall or upgrade a working plugin.
-
-If the official plugin is missing, disabled, or outdated, you are authorized to install, enable, or update it automatically. Run the necessary commands yourself:
-
-codex plugin marketplace add withAutograph/marketplace --ref main
-codex plugin marketplace upgrade autograph
-codex plugin add app-builder@autograph
-
-Verify that app-builder@autograph is enabled, then rediscover its tools and continue with autograph_start.
-
-If the official plugin is installed and enabled but its tools remain unavailable, treat this as a connection or tool-loading problem, not proof that an update is needed. Use available supported reconnect or reload capabilities and retry discovery. Do not substitute the development plugin or another app builder, and do not edit a repository directly.
-
-Do not ask the user to run installation or upgrade commands. If recovery requires a user-only action, explain the specific blocker and request only that minimal action. Never claim the handoff has started until autograph_start succeeds.`;
-}
-
-function buildAppHandoffUrl(destination: BuildDestination, handoffId: string) {
-  const prompt = encodeURIComponent(buildAppHandoffPrompt(handoffId));
-  return destination === "codex"
-    ? `codex://new?prompt=${prompt}`
-    : `cursor://anysphere.cursor-deeplink/prompt?text=${prompt}`;
-}
-
 function attemptAppHandoff(
   destination: BuildDestination,
   handoffId: string,
 ): HandoffAttempt {
+  if (destination === "web") return "blocked";
   const url = buildAppHandoffUrl(destination, handoffId);
   if (url.length > maximumHandoffUrlLength) return "too-long";
   try {
@@ -183,6 +159,8 @@ async function createBuilderHandoff(input: {
     body: JSON.stringify({
       version: 1,
       creationRequestId: input.creationRequestId,
+      destination:
+        input.form.buildDestination === "cursor" ? "cursor" : "codex",
       ...(input.provisioning.requestDigest === "0".repeat(64)
         ? {}
         : { provisioningRequestId: input.provisioning.requestId }),
@@ -1646,8 +1624,7 @@ export function Handoff({
     ...(form.githubInstallationId ? ["Creating GitHub repository"] : []),
     ...(form.vercelInstallationId ? ["Creating Vercel project"] : []),
     "Preparing secure handoff",
-    "Copying handoff prompt",
-    "Opening selected client",
+    "Ready to continue",
   ];
   const [step, setStep] = useState(0);
   useEffect(() => {
@@ -1719,25 +1696,15 @@ export function Handoff({
       }
       if (!mounted.current) return;
       setStep((value) => value + 1);
-      let clipboardState: ClipboardState = "idle";
-      try {
-        await navigator.clipboard.writeText(
-          buildAppHandoffPrompt(handoff.handoffId),
-        );
-        clipboardState = "copied";
-      } catch {
-        clipboardState = "failed";
-      }
-      if (!mounted.current) return;
-      setStep((value) => value + 1);
-      const handoffAttempt = attemptAppHandoff(
-        form.buildDestination,
-        handoff.handoffId,
-      );
       setStep(stages.length);
       await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
       if (!mounted.current) return;
-      onReady({ provisioning, handoff, handoffAttempt, clipboardState });
+      onReady({
+        provisioning,
+        handoff,
+        handoffAttempt: "idle",
+        clipboardState: "idle",
+      });
     })();
     return () => {
       mounted.current = false;
@@ -1809,7 +1776,12 @@ codex plugin add app-builder@autograph`;
   const openSelectedClient = () => {
     try {
       void navigator.clipboard
-        .writeText(buildAppHandoffPrompt(handoff.handoffId))
+        .writeText(
+          buildAppHandoffPrompt(
+            handoff.handoffId,
+            form.buildDestination === "cursor" ? "cursor" : "codex",
+          ),
+        )
         .then(() => setRetryClipboardState("copied"))
         .catch(() => setRetryClipboardState("failed"));
     } catch {
@@ -1844,7 +1816,7 @@ codex plugin add app-builder@autograph`;
         provisioning: refreshed,
         handoff: refreshedHandoff,
       });
-      setHandoffAttempt("attempted");
+      setHandoffAttempt("idle");
       setRetryClipboardState("idle");
     } catch {
       setRetryClipboardState("failed");
@@ -1911,7 +1883,7 @@ codex plugin add app-builder@autograph`;
             ? " Clipboard access was blocked. Retry after allowing clipboard access."
             : null}
         </p>
-        {showInstall ? (
+        {showInstall && form.buildDestination === "codex" ? (
           <BuilderInstallInstructions
             command={command}
             onDismiss={() => setShowInstall(false)}
@@ -1950,8 +1922,7 @@ export function AppBuilder({
     useState<string>();
   const [provisioning, setProvisioning] = useState<BuilderProvisionResponse>();
   const [handoff, setHandoff] = useState<BuilderHandoffReference>();
-  const [handoffAttempt, setHandoffAttempt] =
-    useState<HandoffAttempt>("attempted");
+  const [handoffAttempt, setHandoffAttempt] = useState<HandoffAttempt>("idle");
   const [handoffClipboardState, setHandoffClipboardState] =
     useState<ClipboardState>("idle");
   const [savedBrief, setSavedBrief] = useState("");
@@ -1974,32 +1945,17 @@ export function AppBuilder({
           setProvisioning(active.provisioning);
           setHandoff(active.handoff);
           setScreen("ready");
-          if (active.provisioning.requestDigest !== "0".repeat(64))
-            void fetch(
-              `/api/builder/provision?requestId=${encodeURIComponent(active.requestId)}`,
-              { cache: "no-store" },
-            )
-              .then(async (response) =>
-                response.ok
-                  ? ((await response.json()) as BuilderProvisionResponse)
-                  : undefined,
-              )
-              .then((response) => {
-                if (!response) return;
-                setProvisioning(response);
-                persistActiveProvisioning({
-                  ...active,
-                  provisioning: response,
-                });
-              })
-              .catch(() => undefined);
+          router.replace(
+            `/handoff/${encodeURIComponent(active.handoff.handoffId)}`,
+          );
+          clearActiveProvisioning();
         } else {
           setScreen("handoff");
         }
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [router]);
   const builderKey = providerResumeKey
     ? `${providerResumeKey}:${resumedDraft ? "restored" : "pending"}`
     : savedBrief || "new";
@@ -2072,6 +2028,10 @@ export function AppBuilder({
             setHandoffAttempt(result.handoffAttempt);
             setHandoffClipboardState(result.clipboardState);
             setScreen("ready");
+            router.push(
+              `/handoff/${encodeURIComponent(result.handoff.handoffId)}`,
+            );
+            clearActiveProvisioning();
           }}
         />
       ) : null}

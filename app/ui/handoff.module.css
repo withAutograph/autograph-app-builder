@@ -1,0 +1,101 @@
+.card {
+  overflow-wrap: anywhere;
+}
+
+.card details {
+  margin: 16px 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.card summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.resources {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.resources article {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 14px;
+}
+
+.resources article > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.resources small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.controls {
+  margin: 24px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.controls fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  border: 0;
+  padding: 0;
+  margin: 20px 0;
+}
+
+.controls legend {
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.controls > button {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 14px;
+}
+
+.controls textarea {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.secondaryButton:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.controls :is(button, a, summary, input, textarea):focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
