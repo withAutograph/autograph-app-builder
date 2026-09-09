@@ -13,9 +13,9 @@ roles for this task rather than filling available cards or copying an example's
 layout. Keep this reasoning internal; do not add a design questionnaire.
 
 - Separate page purpose from workload counts, sorting, instructions, and record
-  metadata. Put counts beside the collection they describe, sorting beside the
-  sorted content, and help beside the relevant action or field. A subtitle must
-  not become a catch-all sentence. Omit redundant instructions.
+  metadata. Keep counts, filters, and sorting with their collection, including
+  when desktop panels narrow; keep help beside the relevant action or field. A
+  subtitle must not become a catch-all sentence. Omit redundant instructions.
 - Establish hierarchy with Arrusted's supported typography, spacing, and
   surfaces. Use consistent roles for headings, primary values, explanations,
   labels, and metadata. Do not solve hierarchy by enlarging everything, making
@@ -36,6 +36,8 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   name: a delivery estimate, permission scope, or cost can be essential evidence.
 - Structure detail views around the question being answered. For a decision,
   explain the issue and relevant evidence before the recommendation and action.
+  For a result state, lead with the outcome; calculation inputs support its
+  explanation rather than displacing it.
   For reference content, identity and navigable facts may come first. Avoid
   repeated warnings, metric duplication, arbitrary empty panels, and filler.
 - Keep the primary action near the information that justifies it. Explain its
@@ -70,7 +72,8 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
 - Size simple choices for the content they contain. A wide page need not produce
   page-wide selects or long spans between labels and values. Let substantial
   comparison or reading content use the space; keep small control groups compact
-  with supported layout values and useful wrapping. Bound prose and sparse
+  but flexible within their panel, avoiding fixed widths that force needless
+  wrapping while usable space remains. Bound prose and sparse
   label-value regions to a comfortable measure; spare width can be outer space
   rather than oversized panels. Do not impose a fixed maximum on dense comparisons.
 - In an action-oriented detail panel, account for the page heading, filters, and
