@@ -2,11 +2,7 @@
 
 Shared, advisory observations of generated previews. No pass threshold or runtime gate.
 
-**Six-case evaluation:** [Arrusted and AG2 results, screenshots and limitations](2026-09-09/arrusted-ag2-batch.md).
-
-**Latest comparison:** [Recurring-improvement reference examples](2026-09-09/recurring-improvements.md). These are hand-authored references, not a new generation benchmark.
-
-**Latest report:** [compensation-planning-recurring-reference](2026-09-09/compensation-planning-recurring-reference-142534641Z/README.md)
+**Latest report:** [compensation-planning-merged-refresh](2026-09-09/compensation-planning-merged-refresh-150934530Z/README.md)
 
 ## Convention
 
@@ -24,6 +20,8 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 | Evaluated (UTC)          | App                                                                                                                    | Subjective score / 100 |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 2026-09-09T15:09:34.530Z | [compensation-planning-merged-refresh](2026-09-09/compensation-planning-merged-refresh-150934530Z/README.md)           | 75                     |
+| 2026-09-09T15:07:31.341Z | [spend-import-review-merged-refresh](2026-09-09/spend-import-review-merged-refresh-150731341Z/README.md)               | 70                     |
 | 2026-09-09T14:25:34.641Z | [compensation-planning-recurring-reference](2026-09-09/compensation-planning-recurring-reference-142534641Z/README.md) | 75                     |
 | 2026-09-09T14:25:30.877Z | [spend-import-review-recurring-reference](2026-09-09/spend-import-review-recurring-reference-142530877Z/README.md)     | 65                     |
 | 2026-09-09T13:22:44.628Z | [spend-import-review](2026-09-09/spend-import-review-132244628Z/README.md)                                             | 75                     |
