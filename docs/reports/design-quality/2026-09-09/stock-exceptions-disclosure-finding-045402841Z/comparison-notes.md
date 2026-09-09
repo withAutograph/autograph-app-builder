@@ -11,3 +11,8 @@ Keep all previous reports unchanged. Repair the disclosure behavior and unsuppor
 ## Subsequent diagnosis
 
 The disclosure interaction failure was a **scenario selector error**, not broken content: Playwright Chromium returns zero matches for the `button` role, while macOS AX exposes the native summary as a button. The exact-text summary exists once and opens all four fields. A focused reproduction found `roleMatches: 0`, `textMatches: 1`; the scenario now targets the native `summary` and retains the expected terms assertion. The original 70-point report is preserved, but should not be treated as a settled assessment of disclosure functionality. The caret direction is independently reversed in the shared stylesheet and has a narrow repair. The unsupported Typography variant remains a real generated API defect.
+
+Focused follow-up on the same preview: selecting its native `summary` and waiting
+for the original expected terms passed at 1440, 1920, 1024, and 700 pixels. No
+score was regenerated for this check. This closes the disclosure-functionality
+question without overwriting the original failed-scenario evidence.
