@@ -2,7 +2,7 @@
 
 Shared, advisory observations of generated previews. No pass threshold or runtime gate.
 
-**Latest report:** [stock-exceptions-action-context](2026-09-08/stock-exceptions-action-context-214152809Z/README.md)
+**Latest report:** [stock-exceptions-delivery-signal](2026-09-09/stock-exceptions-delivery-signal-001913264Z/README.md)
 
 ## Convention
 
@@ -20,6 +20,15 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 | Evaluated (UTC)          | App                                                                                                                | Subjective score / 100 |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| 2026-09-09T00:19:13.264Z | [stock-exceptions-delivery-signal](2026-09-09/stock-exceptions-delivery-signal-001913264Z/README.md)               | 95                     |
+| 2026-09-09T00:15:48.602Z | [stock-exceptions-settled-evidence](2026-09-09/stock-exceptions-settled-evidence-001548602Z/README.md)             | 95                     |
+| 2026-09-09T00:06:57.443Z | [stock-exceptions-concise-completion](2026-09-09/stock-exceptions-concise-completion-000657443Z/README.md)         | 95                     |
+| 2026-09-09T00:03:14.211Z | [stock-exceptions-stable-footer](2026-09-09/stock-exceptions-stable-footer-000314211Z/README.md)                   | 95                     |
+| 2026-09-08T23:58:54.478Z | [stock-exceptions-compact-footer](2026-09-08/stock-exceptions-compact-footer-235854478Z/README.md)                 | 90                     |
+| 2026-09-08T23:53:50.250Z | [stock-exceptions-shared-tags](2026-09-08/stock-exceptions-shared-tags-235350250Z/README.md)                       | 95                     |
+| 2026-09-08T23:47:49.774Z | [stock-exceptions-semantic-severity](2026-09-08/stock-exceptions-semantic-severity-234749774Z/README.md)           | 90                     |
+| 2026-09-08T23:42:38.518Z | [stock-exceptions-focused-detail](2026-09-08/stock-exceptions-focused-detail-234238518Z/README.md)                 | 90                     |
+| 2026-09-08T23:36:24.339Z | [stock-exceptions-narrow-navigation](2026-09-08/stock-exceptions-narrow-navigation-233624339Z/README.md)           | 80                     |
 | 2026-09-08T21:41:52.809Z | [stock-exceptions-action-context](2026-09-08/stock-exceptions-action-context-214152809Z/README.md)                 | 90                     |
 | 2026-09-08T21:34:06.461Z | [stock-exceptions-compact-delivery](2026-09-08/stock-exceptions-compact-delivery-213406461Z/README.md)             | 85                     |
 | 2026-09-08T21:18:54.599Z | [stock-exceptions-selected-context](2026-09-08/stock-exceptions-selected-context-211854599Z/README.md)             | 85                     |

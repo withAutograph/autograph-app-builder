@@ -179,7 +179,28 @@ export const arrustedSharedSource = (path: string | undefined) =>
     path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/),
   );
 
+/** Wait for currently active finite CSS motion before sampling visual evidence. */
+export async function settleFiniteMotion(page: Page) {
+  await page.evaluate(async () => {
+    // Let hydration/class updates start their CSS transitions before taking the
+    // animation snapshot. A second frame is enough without adding a timer gate.
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const finite = document.getAnimations().filter((motion) => {
+      if (motion.playState !== "running" && !motion.pending) return false;
+      const timing = motion.effect?.getComputedTiming();
+      const iterations = timing?.iterations ?? 1;
+      return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
+    });
+    await Promise.all(
+      finite.map((motion) => motion.finished.catch(() => undefined)),
+    );
+  });
+}
+
 export async function measurePage(page: Page) {
+  await settleFiniteMotion(page);
   await page.addScriptTag({ content: axe.source });
   return page.evaluate(async () => {
     const rect = (el: Element) => {
@@ -383,6 +404,7 @@ export async function measureStyles(
   generatedClassSignatures: IntrinsicClassSignature[] = [],
   sharedClassSignatures?: IntrinsicClassSignature[],
 ) {
+  await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
   try {
     const headers = new Map<string, { sourceURL?: string }>();
@@ -838,6 +860,7 @@ export async function capturePreview(input: {
             observation.id = `${name}-${observation.id}`;
           });
         const path = join(input.output, `${name}.png`);
+        await settleFiniteMotion(page);
         await page.screenshot({ path, fullPage: true });
         captures.push({
           name,

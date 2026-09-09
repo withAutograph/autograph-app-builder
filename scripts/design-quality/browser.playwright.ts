@@ -68,6 +68,35 @@ test("reports intentional vertical scrolling as a diagnostic", async ({
   });
 });
 
+test("settles a finite border transition before style evidence", async ({
+  page,
+}) => {
+  await page.goto("about:blank");
+  await page.setContent(`<!doctype html><style>
+    .panel { border-top: 4px solid rgb(41, 41, 41); transition: border-color 120ms linear; }
+    .panel.selected { border-color: rgb(77, 95, 193); }
+  </style><div class="panel">Stock</div>`);
+  await page
+    .locator(".panel")
+    .evaluate((element) => element.classList.add("selected"));
+  const styles = await measureStyles(page, {
+    "--color-border-subtle": "rgb(41, 41, 41)",
+    "--color-action-primary-ink": "rgb(77, 95, 193)",
+  });
+  expect(
+    await page
+      .locator(".panel")
+      .evaluate((element) => getComputedStyle(element).borderTopColor),
+  ).toBe("rgb(77, 95, 193)");
+  expect(
+    styles.observations.some(
+      (item) =>
+        item.property === "border-top-color" &&
+        item.computed === "rgb(77, 95, 193)",
+    ),
+  ).toBe(true);
+});
+
 test("style evidence uses the active theme and reports diversified DOM coverage", async ({
   page,
 }) => {
