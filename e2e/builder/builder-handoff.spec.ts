@@ -1,19 +1,37 @@
-import { expect, test } from "playwright/test";
+import { randomUUID } from "node:crypto";
+import { expect, test, type Page } from "playwright/test";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { eq } from "drizzle-orm";
 
-import { setupCursorClient } from "../../lib/auth/cursor-client";
+import {
+  cursorClientId,
+  setupCursorClient,
+} from "../../lib/auth/cursor-client";
 import * as schema from "../../lib/db/schema";
 
 import {
   browserBoundaryState,
   appOrigin,
   databaseUrl,
+  currentSession,
   finishOAuth,
   installBrowserBoundaries,
   installProvider,
   resetApplicationState,
+  registerPasskey,
 } from "../support/harness";
+
+// OAuth callbacks and browser cookies must not enter failure artifacts.
+test.use({ trace: "off", screenshot: "off", video: "off" });
+
+// These browser cases exercise the web UI with local auth/Postgres. The explicit
+// binding fixture below proves UI observation only, not MCP redemption.
+// Native manual QA still needs fresh Codex/Cursor profiles on the same Preview
+// endpoint: record client versions, one initial consent, no repeated provider
+// auth, actual autograph_start redemption, and authenticated provider readbacks.
+// Record sanitized outcomes only; never attach cookies, tokens, callback URLs,
+// or raw status responses. No native-client acceptance is claimed by this suite.
 
 test.beforeEach(async () => resetApplicationState());
 
@@ -26,6 +44,322 @@ async function completeHandoff(page: import("playwright/test").Page) {
     page.getByRole("region", { name: "Continue your app" }),
   ).toBeVisible();
 }
+
+async function prepareNamedHandoff(
+  page: Page,
+  appName: string,
+  brief: string,
+  destination: "Codex" | "Cursor" = "Codex",
+) {
+  await page.goto("/");
+  await page.locator("#app-brief").fill(brief);
+  await page.getByLabel("App Name").fill(appName);
+  if (destination === "Cursor")
+    await page.getByRole("radio", { name: "Cursor", exact: true }).check();
+  await completeHandoff(page);
+  const url = page.url();
+  const pathname = new URL(url).pathname;
+  const id = pathname.split("/").at(-1)!;
+  return { url, pathname, id, statusPath: `/api/builder/handoffs/${id}` };
+}
+
+test("multiple handoffs reload independently without replacing saved app context", async ({
+  context,
+  page,
+}) => {
+  await installBrowserBoundaries(context);
+  await finishOAuth(page, "GitHub");
+  const first = await prepareNamedHandoff(
+    page,
+    "First Console",
+    "Keep the first prepared app independent.",
+  );
+  const otherPage = await context.newPage();
+  try {
+    const second = await prepareNamedHandoff(
+      otherPage,
+      "Second Console",
+      "Keep the second prepared app independent.",
+      "Cursor",
+    );
+    expect(first.id).not.toBe(second.id);
+    for (const [
+      activePage,
+      handoff,
+      otherHandoff,
+      name,
+      brief,
+      destination,
+    ] of [
+      [
+        page,
+        first,
+        second,
+        "First Console",
+        "Keep the first prepared app independent.",
+        "Codex",
+      ],
+      [
+        otherPage,
+        second,
+        first,
+        "Second Console",
+        "Keep the second prepared app independent.",
+        "Cursor",
+      ],
+    ] as const) {
+      await activePage.bringToFront();
+      await activePage.reload();
+      await expect(activePage).toHaveURL(handoff.url);
+      await expect(
+        activePage.getByRole("heading", { name, exact: true }),
+      ).toBeVisible();
+      await activePage.getByText("Prepared brief", { exact: true }).click();
+      await expect(activePage.getByText(brief, { exact: true })).toBeVisible();
+      await expect(
+        activePage.getByRole("radio", { name: destination, exact: true }),
+      ).toBeChecked();
+      const response = await activePage.request.get(handoff.statusPath);
+      expect(response.ok()).toBe(true);
+      const status = await response.json();
+      expect(status.handoffId).toBe(handoff.id);
+      expect(status.intent.appName).toBe(name);
+      expect(status.status).toBe("prepared");
+      await activePage
+        .getByRole("button", { name: "Copy prompt", exact: true })
+        .click();
+      const boundary = await browserBoundaryState(activePage);
+      expect(boundary.clipboard.at(-1)).toContain(handoff.id);
+      expect(boundary.clipboard.at(-1)).not.toContain(otherHandoff.id);
+      expect(boundary.opened).toEqual([]);
+    }
+  } finally {
+    await otherPage.close();
+  }
+});
+
+test("fresh anonymous and distinct passkey accounts cannot read another user's handoff", async ({
+  browser,
+  context,
+  page,
+}) => {
+  await finishOAuth(page, "GitHub");
+  const ownerId = (await currentSession(page))?.user?.id;
+  expect(typeof ownerId).toBe("string");
+  const handoff = await prepareNamedHandoff(
+    page,
+    "Owner Private Console",
+    "This prepared brief belongs only to its owner.",
+  );
+  const stranger = await browser.newContext({
+    baseURL: appOrigin,
+    ignoreHTTPSErrors: true,
+    storageState: { cookies: [], origins: [] },
+  });
+  let authenticator: Awaited<ReturnType<typeof registerPasskey>> | undefined;
+  try {
+    const strangerPage = await stranger.newPage();
+    const anonymousResponse = await strangerPage.request.get(
+      handoff.statusPath,
+    );
+    expect(anonymousResponse.status()).toBe(401);
+    const anonymousBody = await anonymousResponse.json();
+    expect(Object.keys(anonymousBody)).toEqual(["error"]);
+    expect(anonymousBody.error).toBe("authentication_required");
+    expect(anonymousResponse.headers()["cache-control"]).toContain("no-store");
+    await strangerPage.goto(handoff.url);
+    await expect(strangerPage).toHaveURL(/\/auth\/sign-in\?/u);
+    expect(new URL(strangerPage.url()).searchParams.get("callbackURL")).toBe(
+      handoff.pathname,
+    );
+    await expect(
+      strangerPage.getByRole("heading", { name: "Owner Private Console" }),
+    ).toHaveCount(0);
+
+    // Copy only the test's passkey feature flag, never the owner's auth cookies.
+    await stranger.addCookies(
+      (await context.cookies()).filter(
+        ({ name }) => name === "vercel-flag-overrides",
+      ),
+    );
+    authenticator = await registerPasskey(stranger, strangerPage);
+    await expect(strangerPage).toHaveURL(`${appOrigin}/`);
+    const strangerId = (await currentSession(strangerPage))?.user?.id;
+    expect(typeof strangerId).toBe("string");
+    expect(strangerId).not.toBe(ownerId);
+    const unavailableResponse = await strangerPage.request.get(
+      handoff.statusPath,
+    );
+    expect(unavailableResponse.status()).toBe(404);
+    const unavailableBody = await unavailableResponse.json();
+    expect(Object.keys(unavailableBody)).toEqual(["error"]);
+    expect(unavailableBody.error).toBe("handoff_unavailable");
+    expect(unavailableResponse.headers()["cache-control"]).toContain(
+      "no-store",
+    );
+    await strangerPage.goto(handoff.url);
+    await expect(
+      strangerPage.getByRole("heading", { name: "Handoff unavailable" }),
+    ).toBeVisible();
+    await expect(
+      strangerPage.getByText("Owner Private Console", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      strangerPage.getByText("This prepared brief belongs only to its owner.", {
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await expect(
+      strangerPage.getByRole("textbox", { name: "Handoff prompt" }),
+    ).toHaveCount(0);
+    const ownerResponse = await page.request.get(handoff.statusPath);
+    expect(ownerResponse.ok()).toBe(true);
+    expect((await ownerResponse.json()).status).toBe("prepared");
+  } finally {
+    try {
+      await authenticator?.dispose();
+    } finally {
+      await stranger.close();
+    }
+  }
+});
+
+test("visible polling observes an explicit DB binding fixture (UI observation only, not MCP redemption)", async ({
+  context,
+  page,
+}) => {
+  await installBrowserBoundaries(context);
+  await finishOAuth(page, "GitHub");
+  const handoff = await prepareNamedHandoff(
+    page,
+    "Observed Console",
+    "Observe server-confirmed continuation only.",
+  );
+  await page.bringToFront();
+  await expect
+    .poll(() => page.evaluate(() => document.visibilityState))
+    .toBe("visible");
+  const continued = page.getByText("Continued in your app.", { exact: false });
+  await page
+    .getByRole("button", { name: "Open in Codex", exact: true })
+    .click();
+  await expect(
+    page.getByText("Launch requested for Codex", { exact: false }),
+  ).toBeVisible();
+  await expect(continued).toHaveCount(0);
+  const before = await page.request.get(handoff.statusPath);
+  expect(before.ok()).toBe(true);
+  expect((await before.json()).status).toBe("prepared");
+
+  let polled = 0;
+  let mcpRequests = 0;
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "GET" && pathname === handoff.statusPath)
+      polled += 1;
+    if (pathname === "/mcp") mcpRequests += 1;
+  });
+  const fixtureSessionId = `ui-observation-fixture:${randomUUID()}`;
+  const sql = postgres(databaseUrl, { max: 1 });
+  try {
+    // This fixture deliberately bypasses MCP. Only the persisted web-status
+    // observation is under test; no agent session or provider work is created.
+    const rows = await sql`
+      UPDATE builder_handoff SET redeemed_at = now(), session_id = ${fixtureSessionId}
+      WHERE handoff_id = ${handoff.id} AND redeemed_at IS NULL
+        AND session_id IS NULL AND expires_at > now()
+      RETURNING handoff_id
+    `;
+    expect(rows).toHaveLength(1);
+    await expect(continued).toBeVisible({ timeout: 15_000 });
+    expect(polled).toBeGreaterThan(0);
+    const after = await page.request.get(handoff.statusPath);
+    expect(after.ok()).toBe(true);
+    expect((await after.json()).status).toBe("continued");
+    expect(mcpRequests).toBe(0);
+    expect((await browserBoundaryState(page)).opened).toHaveLength(1);
+  } finally {
+    try {
+      await sql`
+        UPDATE builder_handoff SET redeemed_at = NULL, session_id = NULL
+        WHERE handoff_id = ${handoff.id} AND session_id = ${fixtureSessionId}
+      `;
+    } finally {
+      await sql.end();
+    }
+  }
+});
+
+test("Cursor install link remains hidden until its dedicated local client is registered", async ({
+  page,
+}) => {
+  await finishOAuth(page, "GitHub");
+  const sql = postgres(databaseUrl, { max: 1 });
+  const database = drizzle(sql, { schema });
+  try {
+    const clientsBefore = await database
+      .select()
+      .from(schema.oauthClient)
+      .where(eq(schema.oauthClient.clientId, cursorClientId));
+    const bindingsBefore = await database
+      .select()
+      .from(schema.oauthClientResource)
+      .where(eq(schema.oauthClientResource.clientId, cursorClientId));
+    try {
+      // resetApplicationState does not necessarily remove this public client.
+      // Target only the dedicated local registration and restore it in finally.
+      await database
+        .delete(schema.oauthClient)
+        .where(eq(schema.oauthClient.clientId, cursorClientId));
+      const handoff = await prepareNamedHandoff(
+        page,
+        "Cursor Setup Console",
+        "Wait for the local Cursor connection setup.",
+        "Cursor",
+      );
+      await page.bringToFront();
+      await page
+        .getByText("Set up Autograph in Cursor", { exact: true })
+        .click();
+      const install = page.getByRole("link", {
+        name: "Add Autograph to Cursor",
+      });
+      await expect(install).toHaveCount(0);
+      await expect(
+        page.getByText("Cursor connection setup is not available", {
+          exact: false,
+        }),
+      ).toBeVisible();
+      const before = await page.request.get(handoff.statusPath);
+      expect(before.ok()).toBe(true);
+      expect((await before.json()).cursorInstallReady).toBe(false);
+      await setupCursorClient(database, `${appOrigin}/mcp`);
+      await expect(install).toBeVisible({ timeout: 15_000 });
+      const installUrl = new URL((await install.getAttribute("href"))!);
+      const config = JSON.parse(
+        Buffer.from(installUrl.searchParams.get("config")!, "base64").toString(
+          "utf8",
+        ),
+      );
+      expect(Object.keys(config).sort()).toEqual(["auth", "url"]);
+      expect(config.url).toBe(`${appOrigin}/mcp`);
+      expect(Object.keys(config.auth)).toEqual(["CLIENT_ID"]);
+      expect(config.auth.CLIENT_ID).toBe(cursorClientId);
+    } finally {
+      await database.transaction(async (tx) => {
+        await tx
+          .delete(schema.oauthClient)
+          .where(eq(schema.oauthClient.clientId, cursorClientId));
+        if (clientsBefore.length)
+          await tx.insert(schema.oauthClient).values(clientsBefore);
+        if (bindingsBefore.length)
+          await tx.insert(schema.oauthClientResource).values(bindingsBefore);
+      });
+    }
+  } finally {
+    await sql.end();
+  }
+});
 
 test("builder keeps generated fields user-owned and feature-gated", async ({
   page,
