@@ -2,7 +2,7 @@
 
 Shared, advisory observations of generated previews. No pass threshold or runtime gate.
 
-**Latest report:** [stock-exceptions-structured-result](2026-09-09/stock-exceptions-structured-result-051125618Z/README.md)
+**Latest report:** [stock-exceptions-context-actions](2026-09-09/stock-exceptions-context-actions-052204677Z/README.md)
 
 ## Convention
 
@@ -20,6 +20,7 @@ Archiving copies saved evidence; it does not rerun the evaluator, stage Git chan
 
 | Evaluated (UTC)          | App                                                                                                                | Subjective score / 100 |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| 2026-09-09T05:22:04.677Z | [stock-exceptions-context-actions](2026-09-09/stock-exceptions-context-actions-052204677Z/README.md)               | 80                     |
 | 2026-09-09T05:11:25.618Z | [stock-exceptions-structured-result](2026-09-09/stock-exceptions-structured-result-051125618Z/README.md)           | 75                     |
 | 2026-09-09T05:04:48.232Z | [stock-exceptions-verified-interactions](2026-09-09/stock-exceptions-verified-interactions-050448232Z/README.md)   | 80                     |
 | 2026-09-09T04:54:02.841Z | [stock-exceptions-disclosure-finding](2026-09-09/stock-exceptions-disclosure-finding-045402841Z/README.md)         | 70                     |
