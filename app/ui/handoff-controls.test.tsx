@@ -70,7 +70,13 @@ describe("destination adapters", () => {
       expect(
         url.searchParams.get(destination === "codex" ? "prompt" : "text"),
       ).toBe(prompt);
-      expect(prompt).toContain(`autograph_start with {"handoffId":"${id}"}`);
+      const payload = JSON.parse(
+        prompt.match(/autograph_start with (\{[^\n]+\})\./u)![1]!,
+      );
+      expect(payload).toEqual({
+        handoffId: id,
+        clientRequestId: `web-handoff:${id}`,
+      });
       expect(prompt).toContain("same Autograph account");
       expect(url.href.length).toBeLessThan(8_000);
     }
@@ -96,6 +102,14 @@ describe("destination adapters", () => {
       buildCursorInstallUrl("https://builder.example/mcp?token=secret", true),
     ).toThrow();
   });
+  it.each(["/", "/mcp/", "/api/mcp", "/other", "/mcp/tools"])(
+    "rejects noncanonical MCP pathname %s",
+    (pathname) => {
+      expect(() =>
+        buildCursorInstallUrl(`https://builder.example${pathname}`, true),
+      ).toThrow("mcp-url-invalid");
+    },
+  );
 });
 
 describe("durable handoff controls", () => {

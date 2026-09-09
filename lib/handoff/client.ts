@@ -21,7 +21,7 @@ export function buildAppHandoffPrompt(
       : `Use the Autograph MCP connection in Cursor. If it is unavailable, return to the prepared app's web handoff page and use “Add Autograph to Cursor”, then enable the connection and resend this prompt.`;
   return `${setup}
 
-Continue the prepared app by calling autograph_start with {"handoffId":"${handoffId}"}.
+Continue the prepared app by calling autograph_start with {"handoffId":"${handoffId}","clientRequestId":"web-handoff:${handoffId}"}.
 
 Use the same Autograph account as the web form. Reuse its saved GitHub and Vercel connections and selected resources through Autograph. Do not request provider tokens or separate provider logins. If access needs attention, use Autograph's recovery flow. If autograph_start is unavailable, explain the setup step and stop. This handoff does not approve building, publishing, or deploying; retain the normal approval flow.`;
 }
@@ -47,6 +47,7 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
         url.protocol === "http:" &&
         ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
       )) ||
+    url.pathname !== "/mcp" ||
     url.username ||
     url.password ||
     url.search ||
