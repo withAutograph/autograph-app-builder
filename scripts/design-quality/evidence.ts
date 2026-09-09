@@ -11,7 +11,8 @@ export type Observation = {
   region?: { x: number; y: number; width: number; height: number };
   classification?: string;
   originCandidate?: {
-    provenance: "generated";
+    /** Reviewer-facing source candidate; never score provenance. */
+    provenance: "generated" | "shared";
     reason: string;
     source: { path: string; line: number; column?: number };
   };
