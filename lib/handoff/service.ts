@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
@@ -51,6 +51,7 @@ export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
   const repository =
     intent.repository.resolvedFullName ?? intent.repository.requestedName;
   return [
+    "Call prepared_app_context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
     `Create ${intent.appName} with Autograph App Builder.`,
     `App id: ${intent.appId}`,
     `Requested repository: ${repository}`,
@@ -82,7 +83,33 @@ export function createBuilderHandoffService(input: {
   )
     throw new Error("builder-handoff-lifetime-invalid");
 
-  return {
+  const read = async (value: { authority: Authority; handoffId: string }) => {
+    const authority = hostedTenantAuthoritySchema.parse(value.authority);
+    const parsedId = builderHandoffIdSchema.safeParse(value.handoffId);
+    if (!parsedId.success) throw new BuilderHandoffUnavailableError();
+    const stored = await input.store.read({
+      authority,
+      handoffId: parsedId.data,
+    });
+    if (!stored) throw new BuilderHandoffUnavailableError();
+    return builderHandoffRecordSchema.parse(stored);
+  };
+
+  const service = {
+    // Owner reads intentionally survive expiry; starting still uses resolve.
+    read,
+
+    async status(value: { authority: Authority; handoffId: string }) {
+      const record = await read(value);
+      const status =
+        record.sessionId !== undefined
+          ? ("continued" as const)
+          : now() >= record.expiresAt
+            ? ("expired" as const)
+            : ("prepared" as const);
+      return { status, record };
+    },
+
     async create(value: {
       authority: Authority;
       creationRequestId: string;
@@ -125,11 +152,7 @@ export function createBuilderHandoffService(input: {
     },
 
     async resolve(value: { authority: Authority; handoffId: string }) {
-      const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const handoffId = builderHandoffIdSchema.parse(value.handoffId);
-      const stored = await input.store.read({ authority, handoffId });
-      if (!stored) throw new BuilderHandoffUnavailableError();
-      const record = builderHandoffRecordSchema.parse(stored);
+      const record = await read(value);
       if (record.sessionId !== undefined)
         return {
           status: "redeemed" as const,
@@ -143,6 +166,41 @@ export function createBuilderHandoffService(input: {
         deterministicClientRequestId: `handoff:${record.requestDigest}`,
         record,
       };
+    },
+
+    async renew(value: {
+      authority: Authority;
+      handoffId: string;
+      creationRequestId: string;
+    }) {
+      z.string().uuid().parse(value.creationRequestId);
+      const record = await read(value);
+      // A live handoff can still bind a session. Never create a parallel start.
+      if (record.sessionId !== undefined || now() < record.expiresAt)
+        return {
+          handoffId: record.handoffId,
+          expiresAt: record.expiresAt,
+          disposition: "existing" as const,
+        };
+
+      // Each expired generation has exactly one successor, even when different
+      // tabs submit different client request IDs. The existing unique request
+      // constraint arbitrates concurrent renewals without a schema change.
+      const digest = createHash("sha256")
+        .update(`autograph-handoff-renewal-v1:${record.handoffId}`)
+        .digest("hex");
+      const creationRequestId = [
+        digest.slice(0, 8),
+        digest.slice(8, 12),
+        `8${digest.slice(13, 16)}`,
+        `a${digest.slice(17, 20)}`,
+        digest.slice(20, 32),
+      ].join("-");
+      return service.create({
+        authority: record.authority,
+        creationRequestId,
+        intent: record.intent,
+      });
     },
 
     async bindSession(value: {
@@ -168,4 +226,5 @@ export function createBuilderHandoffService(input: {
       return parsed;
     },
   };
+  return service;
 }

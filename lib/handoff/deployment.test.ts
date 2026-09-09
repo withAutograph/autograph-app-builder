@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
-import { createBuilderHandoffRouteHandler } from "./deployment";
+import { initialBuilderProvisionJournalRecord } from "../provisioning/journal";
+import {
+  createBuilderHandoffRouteHandler,
+  createBuilderHandoffRenewRouteHandler,
+  createBuilderHandoffStatusRouteHandler,
+} from "./deployment";
 import type { BuilderHandoffRecord } from "./contracts";
 import { createBuilderHandoffService } from "./service";
 
@@ -17,9 +23,10 @@ const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 
 function route(input: { authenticated?: boolean } = {}) {
   const rows = new Map<string, BuilderHandoffRecord>();
+  const clock = { now: new Date("2026-09-01T12:00:00.000Z") };
   const handoffs = createBuilderHandoffService({
-    now: () => new Date("2026-09-01T12:00:00.000Z"),
-    createId: () => handoffId,
+    now: () => clock.now,
+    createId: () => (rows.size === 0 ? handoffId : randomUUID()),
     store: {
       async reserve(record) {
         const existing = [...rows.values()].find(
@@ -30,8 +37,11 @@ function route(input: { authenticated?: boolean } = {}) {
         rows.set(record.handoffId, record);
         return { disposition: "created", record };
       },
-      async read({ handoffId: requested }) {
-        return rows.get(requested);
+      async read({ handoffId: requested, authority: owner }) {
+        const row = rows.get(requested);
+        return row && JSON.stringify(row.authority) === JSON.stringify(owner)
+          ? row
+          : undefined;
       },
       async bindSession() {
         return undefined;
@@ -44,7 +54,17 @@ function route(input: { authenticated?: boolean } = {}) {
     compareAndSet: vi.fn(),
   } as unknown as BuilderProvisionJournalStore;
   return {
+    clock,
+    rows,
+    handoffs,
     journal,
+    renew: createBuilderHandoffRenewRouteHandler({
+      origin,
+      handoffs,
+      async authorityForRequest() {
+        return input.authenticated === false ? undefined : authority;
+      },
+    }),
     handler: createBuilderHandoffRouteHandler({
       origin,
       journal,
@@ -78,6 +98,173 @@ const validBody = {
 };
 
 describe("builder handoff deployment", () => {
+  it("stores the destination and journal selections even when provisioning failed", async () => {
+    const { handler, journal, rows } = route();
+    const provisionRequest = {
+      version: 1 as const,
+      requestId: randomUUID(),
+      operation: "github" as const,
+      appName: "Saved App",
+      repository: { name: "saved-app", private: false },
+      providers: {
+        githubInstallationId: "123",
+        vercelInstallationId: "icfg_saved",
+      },
+    };
+    const record = initialBuilderProvisionJournalRecord(
+      provisionRequest,
+      new Date("2026-09-01T12:00:00Z"),
+    );
+    vi.mocked(journal.read).mockResolvedValue({
+      authority,
+      requestId: provisionRequest.requestId,
+      requestDigest: record.response.requestDigest,
+      state: "pending",
+      revision: 0,
+      record,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const response = await handler(
+      request({
+        ...validBody,
+        destination: "cursor",
+        provisioningRequestId: provisionRequest.requestId,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(journal.read).toHaveBeenCalledWith({
+      authority,
+      requestId: provisionRequest.requestId,
+    });
+    expect(rows.get(handoffId)?.intent).toMatchObject({
+      destination: "cursor",
+      appName: "Saved App",
+      appId: "saved-app",
+      repository: { requestedName: "saved-app", private: false },
+      providers: provisionRequest.providers,
+      provisioning: record.response,
+    });
+    expect(
+      rows.get(handoffId)?.intent.repository.resolvedFullName,
+    ).toBeUndefined();
+    expect(journal.reserve).not.toHaveBeenCalled();
+    expect(journal.compareAndSet).not.toHaveBeenCalled();
+  });
+
+  it("does not accept caller-supplied provider selections or another owner's provisioning request", async () => {
+    const { handler } = route();
+    expect(
+      (
+        await handler(
+          request({ ...validBody, providers: { githubInstallationId: "999" } }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await handler(
+          request({ ...validBody, provisioningRequestId: randomUUID() }),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await handler(request({ ...validBody, destination: "other-client" })))
+        .status,
+    ).toBe(400);
+  });
+
+  it("renews the saved intent with one fresh reference and never calls provisioning", async () => {
+    const { handler, renew, rows, clock, journal } = route();
+    await handler(request({ ...validBody, destination: "cursor" }));
+    const original = rows.get(handoffId)!;
+    clock.now = original.expiresAt;
+    const renewal = request({ creationRequestId: randomUUID() });
+    const first = await renew(renewal, handoffId);
+    const retry = await renew(
+      request({ creationRequestId: randomUUID() }),
+      handoffId,
+    );
+    expect(first.status).toBe(200);
+    expect(first.headers.get("cache-control")).toBe("no-store");
+    const reference = await first.json();
+    expect(reference).toEqual(await retry.json());
+    expect(Object.keys(reference).sort()).toEqual([
+      "expiresAt",
+      "handoffId",
+      "version",
+    ]);
+    expect(reference.handoffId).not.toBe(handoffId);
+    expect(rows.get(reference.handoffId)?.intent).toEqual(original.intent);
+    expect(journal.read).not.toHaveBeenCalled();
+    expect(journal.reserve).not.toHaveBeenCalled();
+    expect(journal.compareAndSet).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 without auth and the same no-store 404 for foreign, absent, or malformed IDs", async () => {
+    const renewBody = { creationRequestId: randomUUID() };
+    const unauthenticated = await route({ authenticated: false }).renew(
+      request(renewBody),
+      handoffId,
+    );
+    expect(unauthenticated.status).toBe(401);
+    const { handler, renew, rows } = route();
+    await handler(request(validBody));
+    rows.get(handoffId)!.authority = { ...authority, ownerUserId: "user-two" };
+    for (const id of [handoffId, randomUUID(), "not-a-uuid"]) {
+      const response = await renew(request(renewBody), id);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual({ error: "handoff_unavailable" });
+    }
+  });
+
+  it("protects renewal against CSRF, invalid JSON, unexpected fields, and oversized bodies", async () => {
+    const { renew, rows } = route();
+    const attempts = [
+      request(
+        { creationRequestId: randomUUID() },
+        { origin: "https://evil.test" },
+      ),
+      request({ creationRequestId: "invalid" }),
+      request({ creationRequestId: randomUUID(), intent: validBody }),
+      new Request(`${origin}/api/builder/handoffs/${handoffId}/renew`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: "{",
+      }),
+      new Request(`${origin}/api/builder/handoffs/${handoffId}/renew`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: "x".repeat(70_000),
+      }),
+      new Request(`${origin}/api/builder/handoffs/${handoffId}/renew`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ creationRequestId: randomUUID() }),
+      }),
+    ];
+    for (const attempt of attempts) {
+      const response = await renew(attempt, handoffId);
+      expect(response.status).toBe(400);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+    expect(rows.size).toBe(0);
+  });
+
+  it("maps status authentication and failures without exposing internal errors", async () => {
+    const pageData = vi.fn();
+    const status = createBuilderHandoffStatusRouteHandler({ pageData });
+    const get = new Request(`${origin}/api/builder/handoffs/${handoffId}`);
+    pageData.mockResolvedValue(undefined);
+    expect((await status(get, handoffId)).status).toBe(401);
+    pageData.mockRejectedValue(new Error("database secret"));
+    const failed = await status(get, handoffId);
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toEqual({ error: "handoff_unavailable" });
+    expect(failed.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("creates only an opaque tenant-owned handoff and is idempotent", async () => {
     const { handler, journal } = route();
     const first = await handler(request(validBody));
