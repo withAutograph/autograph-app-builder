@@ -22,6 +22,15 @@ mapping to the compilation entry stylesheet is not proof of which generated or
 shared TSX occurrence requested it. Authored CSS attribution and TSX utility
 ownership are different claims. Keep unresolved utility ownership unassessed.
 
+## Subsequent browser experiment
+
+A controlled Chromium experiment subsequently confirmed that inline `<style>`
+elements can expose real PostCSS data source maps through CDP. External asset
+transport is therefore unnecessary. The smaller implementation to evaluate is
+an inline PostCSS map with `sourcesContent`, keeping that CSS separate from
+Bun-emitted CSS so the map remains associated with its own stylesheet. This does
+not remove the synthesized-utility ownership limitation described above.
+
 This note records an evidence limitation, not a runtime prerequisite or a change
 to the scoring denominator. No source-map generation, deployment transport,
 palette, or runtime change is included in this report PR.
