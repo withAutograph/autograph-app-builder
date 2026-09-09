@@ -38,6 +38,9 @@ layout. Keep this reasoning internal; do not add a design questionnaire.
   requested information is discoverable without losing context.
 - Structure detail views around the question being answered. For a decision,
   explain the issue and relevant evidence before the recommendation and action.
+  When a recommendation is derived, explain beside it how key inputs and
+  constraints, such as rounding, produce it. Combine redundant intermediate
+  rows rather than repeating facts or leaving the reader to infer the formula.
   For a result state, lead with the outcome; calculation inputs support its
   explanation rather than displacing it. Keep the baseline available beside the
   result when understanding the change is part of the decision.
