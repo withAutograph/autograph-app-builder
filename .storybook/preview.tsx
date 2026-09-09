@@ -22,6 +22,22 @@ storybookQueryClient.setQueryDefaults(authQueryKeys.session, {
 
 const preview: Preview = {
   parameters: {
+    options: {
+      storySort: {
+        order: [
+          "Create App",
+          [
+            "Flow",
+            ["Anonymous Entry", "Page", "Handoff"],
+            "Components",
+            "Sections",
+            "Primitives",
+            "Recovery",
+          ],
+          "*",
+        ],
+      },
+    },
     authSession: null,
     nextjs: { appDirectory: true },
     controls: {

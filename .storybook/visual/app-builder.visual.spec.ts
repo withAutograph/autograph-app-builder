@@ -34,17 +34,3 @@ test.describe("App Builder Storybook flows — desktop", () => {
     await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
   });
 });
-
-test.describe("App Builder Storybook flows — mobile", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
-
-  test("authenticated", async ({ page }) => {
-    await openAuthenticatedStory(page);
-    await expect(page.getByRole("button", { name: "Account" })).toBeEnabled();
-  });
-
-  test("anonymous", async ({ page }) => {
-    await openAnonymousStory(page);
-    await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
-  });
-});

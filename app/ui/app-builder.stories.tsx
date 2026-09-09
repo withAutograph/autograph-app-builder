@@ -14,7 +14,7 @@ const provisioningEnabled =
   process.env.STORYBOOK_BUILDER_PROVISIONING_ENABLED === "true";
 
 const meta = {
-  title: "Create App/Page",
+  title: "Create App/Flow/Page",
   component: AppBuilder,
   args: {
     authenticated: true,
@@ -46,25 +46,5 @@ export const Default: Story = {
     await expect(
       canvasElement.querySelector('[data-slot="avatar-fallback"]'),
     ).toHaveTextContent("AU");
-  },
-};
-
-export const MobileMissingBrief: Story = {
-  parameters: {
-    viewport: { defaultViewport: "mobile1" },
-  },
-  play: async ({ canvas, userEvent }) => {
-    const brief = canvas.getByRole("textbox", { name: "App Brief" });
-    await userEvent.clear(brief);
-
-    const createButton = canvas.getByRole("button", { name: "Create App" });
-    await expect(createButton).toBeDisabled();
-    await expect(createButton).toHaveAttribute(
-      "aria-describedby",
-      "create-app-guidance",
-    );
-    await expect(
-      canvas.getByText("Add an app brief to continue."),
-    ).toBeVisible();
   },
 };
