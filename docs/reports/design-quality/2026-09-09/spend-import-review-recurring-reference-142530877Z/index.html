@@ -1,0 +1,3023 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Generated UI design report</title
+  ><style>
+    body {
+      font: 16px/1.5 system-ui;
+      margin: 32px auto;
+      padding: 0 24px;
+      max-width: 1100px;
+      color: #222;
+    }
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f4f4f4;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    section,
+    article {
+      margin: 32px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    a {
+      color: #334ba0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .capture {
+      position: relative;
+    }
+    .region {
+      position: absolute;
+      border: 2px dashed #a94700;
+      box-sizing: border-box;
+    }
+    .region:focus {
+      outline: 3px solid blue;
+    }
+  </style>
+  <main>
+    <h1>Generated UI design report</h1>
+    <p>
+      Advisory evaluation of an existing preview. Not a release gate or proof of
+      backend behavior.
+    </p>
+    <p>
+      2026-09-09T14:25:30.877Z ·
+      <a href="report.json" download>Download full evidence JSON</a>
+    </p>
+    <section>
+      <h2>Spend import review</h2>
+      <p>
+        Synthetic review scenario grounded in implemented Vendor
+        transaction-import and derived-fact substrate; the proposed
+        reconciliation decision contract is a planned extension.
+      </p>
+      <details>
+        <summary>Case evidence and review questions</summary>
+        <ul>
+          <li>
+            arrusted:
+            <code
+              >apps/vendor/frontend/src/review/ReviewQueueServerPage.tsx</code
+            >
+            — implemented
+          </li>
+          <li>
+            ag2:
+            <code
+              >frontend/src/pages/settings/integrations/pages/import/ImportWizard.tsx</code
+            >
+            — implemented
+          </li>
+          <li>
+            arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented
+          </li>
+          <li>
+            ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> —
+            implemented
+          </li>
+          <li>
+            arrusted:
+            <code
+              >docs/plans/2026-07-23-vendor-spend-reconciliation-review-contract.md</code
+            >
+            — planned
+          </li>
+        </ul>
+        <h3>Review questions</h3>
+        <ul>
+          <li>
+            Can a reviewer verify field mappings and preview the changes before
+            saving?
+          </li>
+          <li>
+            Can a reviewer see uncertain matches, source provenance, and the
+            bounded correction without overwriting source evidence?
+          </li>
+        </ul>
+        <h3>Intended outcomes, not asserted results</h3>
+        <ul>
+          <li>
+            A user can save an import after checking its mappings and change
+            preview.
+          </li>
+          <li>
+            The save outcome separates imported transactions from uncertain
+            matches that remain in review.
+          </li>
+        </ul>
+      </details>
+    </section>
+    <h2>Arrusted adherence: 88/100 · partial</h2>
+    <p>
+      Evidence coverage: 3.12%. Evaluator 3. This measures inspected evidence,
+      not all rendered UI.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Conforming</th>
+          <th>Nonconforming</th>
+          <th>Unassessed</th>
+          <th>Adherence</th>
+          <th>Static / browser</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>component</th>
+          <td>26</td>
+          <td>0</td>
+          <td>4</td>
+          <td>100% (26/26)</td>
+          <td>30 / 0</td>
+        </tr>
+        <tr>
+          <th>api</th>
+          <td>20</td>
+          <td>11</td>
+          <td>21</td>
+          <td>64.52% (20/31)</td>
+          <td>52 / 0</td>
+        </tr>
+        <tr>
+          <th>styling</th>
+          <td>12</td>
+          <td>0</td>
+          <td>2121</td>
+          <td>100% (12/12)</td>
+          <td>12 / 2121</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Equal average of available dimension percentages; each is conforming /
+      assessed. Shared-library observations are excluded. Unknown provenance is
+      unassessed. Static JSX is not proof of rendering. Coverage describes
+      inspected evidence, not the entire app.
+    </p>
+    <ul>
+      <li>
+        Conservative matched-style evidence, not a full CSS cascade or React
+        component provenance proof.
+      </li>
+      <li>
+        Conflicting declarations, unknown variables and shorthand-only
+        properties remain unassessed. Sampling is capped at 120 eligible
+        elements and diversified by rendered region.
+      </li>
+      <li>
+        A shared bundle is never treated as positive generated adherence.
+        Anonymous rules require a unique exact generated selector/property/value
+        and complete matched-rule declaration set; conditional or ambiguous
+        source rules remain unknown.
+      </li>
+      <li>
+        Intrinsic tag/class matches are reviewer-facing generated-origin
+        candidates only. Shared components can assemble identical classes
+        dynamically, so they remain unknown and unassessed without direct
+        stylesheet provenance.
+      </li>
+      <li>
+        No generated CSS source files were supplied; compiled stylesheet source
+        maps cannot establish generated declaration provenance.
+      </li>
+    </ul>
+    <details open>
+      <summary>Generated-code changes (11)</summary>
+      <article id="finding-9">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Select has no public id prop in the selected Arrusted type surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-9">src/SpendImportReview.tsx:70</a></small
+        >
+        <details id="source-9">
+          <summary>Source location: src/SpendImportReview.tsx:70</summary>
+          <pre>
+69:                   &lt;Select
+70:                     id={`mapping-${source.replaceAll(&quot; &quot;, &quot;-&quot;).toLowerCase()}`}
+71:                     aria-label={`Spend field for ${source}`}
+72:                     value={state.mapping[source]}</pre>
+        </details>
+      </article>
+      <article id="finding-10">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Select has no public aria-label prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-10">src/SpendImportReview.tsx:71</a></small
+        >
+        <details id="source-10">
+          <summary>Source location: src/SpendImportReview.tsx:71</summary>
+          <pre>
+70:                     id={`mapping-${source.replaceAll(&quot; &quot;, &quot;-&quot;).toLowerCase()}`}
+71:                     aria-label={`Spend field for ${source}`}
+72:                     value={state.mapping[source]}
+73:                     options={options}</pre>
+        </details>
+      </article>
+      <article id="finding-11">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Select has no public value prop in the selected Arrusted type surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-11">src/SpendImportReview.tsx:72</a></small
+        >
+        <details id="source-11">
+          <summary>Source location: src/SpendImportReview.tsx:72</summary>
+          <pre>
+71:                     aria-label={`Spend field for ${source}`}
+72:                     value={state.mapping[source]}
+73:                     options={options}
+74:                     onValueChange={(target) =&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-15">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-15">src/SpendImportReview.tsx:86</a></small
+        >
+        <details id="source-15">
+          <summary>Source location: src/SpendImportReview.tsx:86</summary>
+          <pre>
+85:                 intent=&quot;primary&quot;
+86:                 onClick={() =&gt; dispatch({ type: &quot;preview-requested&quot; })}
+87:               &gt;
+88:                 Preview imported changes</pre>
+        </details>
+      </article>
+      <article id="finding-28">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-28">src/SpendImportReview.tsx:144</a></small
+        >
+        <details id="source-28">
+          <summary>Source location: src/SpendImportReview.tsx:144</summary>
+          <pre>
+143:                         intent=&quot;primary&quot;
+144:                         onClick={() =&gt; dispatch({ type: &quot;review-requested&quot; })}
+145:                       &gt;
+146:                         Review {state.saved.reviewQueue} exception rows</pre>
+        </details>
+      </article>
+      <article id="finding-30">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public disabled prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-30">src/SpendImportReview.tsx:152</a></small
+        >
+        <details id="source-30">
+          <summary>Source location: src/SpendImportReview.tsx:152</summary>
+          <pre>
+151:                       intent=&quot;primary&quot;
+152:                       disabled={!action.saveEnabled}
+153:                       onClick={() =&gt;
+154:                         dispatch({ type: &quot;save-requested&quot;, fixture })</pre>
+        </details>
+      </article>
+      <article id="finding-31">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-31">src/SpendImportReview.tsx:153</a></small
+        >
+        <details id="source-31">
+          <summary>Source location: src/SpendImportReview.tsx:153</summary>
+          <pre>
+152:                       disabled={!action.saveEnabled}
+153:                       onClick={() =&gt;
+154:                         dispatch({ type: &quot;save-requested&quot;, fixture })
+155:                       }</pre>
+        </details>
+      </article>
+      <article id="finding-44">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public disabled prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-44">src/SpendImportReview.tsx:190</a></small
+        >
+        <details id="source-44">
+          <summary>Source location: src/SpendImportReview.tsx:190</summary>
+          <pre>
+189:                     &lt;Button
+190:                       disabled={Boolean(state.decision)}
+191:                       onClick={() =&gt; dispatch({ type: &quot;decision-deferred&quot; })}
+192:                     &gt;</pre>
+        </details>
+      </article>
+      <article id="finding-45">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-45">src/SpendImportReview.tsx:191</a></small
+        >
+        <details id="source-45">
+          <summary>Source location: src/SpendImportReview.tsx:191</summary>
+          <pre>
+190:                       disabled={Boolean(state.decision)}
+191:                       onClick={() =&gt; dispatch({ type: &quot;decision-deferred&quot; })}
+192:                     &gt;
+193:                       Leave unresolved</pre>
+        </details>
+      </article>
+      <article id="finding-47">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public disabled prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-47">src/SpendImportReview.tsx:197</a></small
+        >
+        <details id="source-47">
+          <summary>Source location: src/SpendImportReview.tsx:197</summary>
+          <pre>
+196:                       intent=&quot;primary&quot;
+197:                       disabled={!action.applyEnabled}
+198:                       onClick={() =&gt; dispatch({ type: &quot;decision-applied&quot; })}
+199:                     &gt;</pre>
+        </details>
+      </article>
+      <article id="finding-48">
+        <strong>prop · nonconforming</strong>
+        <p>
+          Button has no public onClick prop in the selected Arrusted type
+          surface.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-48">src/SpendImportReview.tsx:198</a></small
+        >
+        <details id="source-48">
+          <summary>Source location: src/SpendImportReview.tsx:198</summary>
+          <pre>
+197:                       disabled={!action.applyEnabled}
+198:                       onClick={() =&gt; dispatch({ type: &quot;decision-applied&quot; })}
+199:                     &gt;
+200:                       Apply simulated decision</pre>
+        </details>
+      </article>
+    </details>
+    <details>
+      <summary>Shared-library observations (0)</summary>
+      No findings in assessed evidence.
+    </details>
+    <details>
+      <summary>Manual-review unknowns (2146)</summary>
+      <article id="finding-0">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-0">src/SpendImportReview.tsx:46</a></small
+        >
+        <details id="source-0">
+          <summary>Source location: src/SpendImportReview.tsx:46</summary>
+          <pre>
+45:         &lt;PageHeader
+46:           title=&quot;Import AP spend&quot;
+47:           subtitle={`AP export · Batch ${fixture.import.batchId} · ${fixture.import.rows} synthetic rows`}
+48:           actions={</pre>
+        </details>
+      </article>
+      <article id="finding-1">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-1">src/SpendImportReview.tsx:47</a></small
+        >
+        <details id="source-1">
+          <summary>Source location: src/SpendImportReview.tsx:47</summary>
+          <pre>
+46:           title=&quot;Import AP spend&quot;
+47:           subtitle={`AP export · Batch ${fixture.import.batchId} · ${fixture.import.rows} synthetic rows`}
+48:           actions={
+49:             &lt;StatusPill</pre>
+        </details>
+      </article>
+      <article id="finding-2">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-2">src/SpendImportReview.tsx:48</a></small
+        >
+        <details id="source-2">
+          <summary>Source location: src/SpendImportReview.tsx:48</summary>
+          <pre>
+47:           subtitle={`AP export · Batch ${fixture.import.batchId} · ${fixture.import.rows} synthetic rows`}
+48:           actions={
+49:             &lt;StatusPill
+50:               tone={state.saved ? &quot;success&quot; : &quot;neutral&quot;}</pre>
+        </details>
+      </article>
+      <article id="finding-4">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-4">src/SpendImportReview.tsx:51</a></small
+        >
+        <details id="source-4">
+          <summary>Source location: src/SpendImportReview.tsx:51</summary>
+          <pre>
+50:               tone={state.saved ? &quot;success&quot; : &quot;neutral&quot;}
+51:               label={state.saved ? &quot;Saved in simulation&quot; : &quot;Draft import&quot;}
+52:             /&gt;
+53:           }</pre>
+        </details>
+      </article>
+      <article id="finding-5">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-5">src/SpendImportReview.tsx:57</a></small
+        >
+        <details id="source-5">
+          <summary>Source location: src/SpendImportReview.tsx:57</summary>
+          <pre>
+56:         &lt;div className=&quot;grid items-start gap-[var(--space-6)] lg:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.4fr)]&quot;&gt;
+57:           &lt;Card title=&quot;Field mapping&quot;&gt;
+58:             &lt;div className=&quot;grid gap-[var(--space-4)]&quot;&gt;
+59:               &lt;Typography tone=&quot;secondary&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-7">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-7">src/SpendImportReview.tsx:66</a></small
+        >
+        <details id="source-7">
+          <summary>Source location: src/SpendImportReview.tsx:66</summary>
+          <pre>
+65:                   key={source}
+66:                   label={source}
+67:                   htmlFor={`mapping-${source.replaceAll(&quot; &quot;, &quot;-&quot;).toLowerCase()}`}
+68:                 &gt;</pre>
+        </details>
+      </article>
+      <article id="finding-12">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-12">src/SpendImportReview.tsx:73</a></small
+        >
+        <details id="source-12">
+          <summary>Source location: src/SpendImportReview.tsx:73</summary>
+          <pre>
+72:                     value={state.mapping[source]}
+73:                     options={options}
+74:                     onValueChange={(target) =&gt;
+75:                       dispatch({</pre>
+        </details>
+      </article>
+      <article id="finding-13">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-13">src/SpendImportReview.tsx:74</a></small
+        >
+        <details id="source-13">
+          <summary>Source location: src/SpendImportReview.tsx:74</summary>
+          <pre>
+73:                     options={options}
+74:                     onValueChange={(target) =&gt;
+75:                       dispatch({
+76:                         type: &quot;mapping-changed&quot;,</pre>
+        </details>
+      </article>
+      <article id="finding-16">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-16">src/SpendImportReview.tsx:95</a></small
+        >
+        <details id="source-16">
+          <summary>Source location: src/SpendImportReview.tsx:95</summary>
+          <pre>
+94:             {state.stage === &quot;mapping&quot; ? (
+95:               &lt;Card title=&quot;Preview changes&quot;&gt;
+96:                 &lt;Typography tone=&quot;secondary&quot;&gt;
+97:                   Confirm the mapping to derive the representative rows and save</pre>
+        </details>
+      </article>
+      <article id="finding-18">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-18">src/SpendImportReview.tsx:103</a></small
+        >
+        <details id="source-18">
+          <summary>Source location: src/SpendImportReview.tsx:103</summary>
+          <pre>
+102:               &lt;Card
+103:                 title=&quot;Preview changes&quot;
+104:                 actions={
+105:                   &lt;div className=&quot;flex gap-[var(--space-2)]&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-19">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-19">src/SpendImportReview.tsx:104</a></small
+        >
+        <details id="source-19">
+          <summary>Source location: src/SpendImportReview.tsx:104</summary>
+          <pre>
+103:                 title=&quot;Preview changes&quot;
+104:                 actions={
+105:                   &lt;div className=&quot;flex gap-[var(--space-2)]&quot;&gt;
+106:                     &lt;StatusPill tone=&quot;success&quot; label={`${preview.ready} ready`} /&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-21">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-21">src/SpendImportReview.tsx:106</a></small
+        >
+        <details id="source-21">
+          <summary>Source location: src/SpendImportReview.tsx:106</summary>
+          <pre>
+105:                   &lt;div className=&quot;flex gap-[var(--space-2)]&quot;&gt;
+106:                     &lt;StatusPill tone=&quot;success&quot; label={`${preview.ready} ready`} /&gt;
+107:                     &lt;StatusPill
+108:                       tone=&quot;warning&quot;</pre>
+        </details>
+      </article>
+      <article id="finding-23">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-23">src/SpendImportReview.tsx:109</a></small
+        >
+        <details id="source-23">
+          <summary>Source location: src/SpendImportReview.tsx:109</summary>
+          <pre>
+108:                       tone=&quot;warning&quot;
+109:                       label={`${preview.needsReview} need review`}
+110:                     /&gt;
+111:                   &lt;/div&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-25">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-25">src/SpendImportReview.tsx:119</a></small
+        >
+        <details id="source-25">
+          <summary>Source location: src/SpendImportReview.tsx:119</summary>
+          <pre>
+118:                   &lt;DataTableComposition
+119:                     spec={{
+120:                       type: &quot;data_table&quot;,
+121:                       config: {</pre>
+        </details>
+      </article>
+      <article id="finding-32">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-32">src/SpendImportReview.tsx:166</a></small
+        >
+        <details id="source-32">
+          <summary>Source location: src/SpendImportReview.tsx:166</summary>
+          <pre>
+165:               &lt;Card
+166:                 title={`${match.vendorRaw} · ${remaining} remaining`}
+167:                 actions={&lt;StatusPill tone=&quot;warning&quot; label=&quot;Needs review&quot; /&gt;}
+168:               &gt;</pre>
+        </details>
+      </article>
+      <article id="finding-33">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-33">src/SpendImportReview.tsx:167</a></small
+        >
+        <details id="source-33">
+          <summary>Source location: src/SpendImportReview.tsx:167</summary>
+          <pre>
+166:                 title={`${match.vendorRaw} · ${remaining} remaining`}
+167:                 actions={&lt;StatusPill tone=&quot;warning&quot; label=&quot;Needs review&quot; /&gt;}
+168:               &gt;
+169:                 &lt;div className=&quot;grid gap-[var(--space-4)]&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-35">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-35">src/SpendImportReview.tsx:167</a></small
+        >
+        <details id="source-35">
+          <summary>Source location: src/SpendImportReview.tsx:167</summary>
+          <pre>
+166:                 title={`${match.vendorRaw} · ${remaining} remaining`}
+167:                 actions={&lt;StatusPill tone=&quot;warning&quot; label=&quot;Needs review&quot; /&gt;}
+168:               &gt;
+169:                 &lt;div className=&quot;grid gap-[var(--space-4)]&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-38">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-38">src/SpendImportReview.tsx:178</a></small
+        >
+        <details id="source-38">
+          <summary>Source location: src/SpendImportReview.tsx:178</summary>
+          <pre>
+177:                       name=&quot;vendor-match&quot;
+178:                       value={candidate.id}
+179:                       title={candidate.label}
+180:                       description={`Candidate vendor · ${candidate.id}`}</pre>
+        </details>
+      </article>
+      <article id="finding-39">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-39">src/SpendImportReview.tsx:179</a></small
+        >
+        <details id="source-39">
+          <summary>Source location: src/SpendImportReview.tsx:179</summary>
+          <pre>
+178:                       value={candidate.id}
+179:                       title={candidate.label}
+180:                       description={`Candidate vendor · ${candidate.id}`}
+181:                       selected={state.selectedMatchId === candidate.id}</pre>
+        </details>
+      </article>
+      <article id="finding-40">
+        <strong>prop · unassessed</strong>
+        <p>
+          The expected prop type has no independently reliable branch for this
+          static JSX expression.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-40">src/SpendImportReview.tsx:180</a></small
+        >
+        <details id="source-40">
+          <summary>Source location: src/SpendImportReview.tsx:180</summary>
+          <pre>
+179:                       title={candidate.label}
+180:                       description={`Candidate vendor · ${candidate.id}`}
+181:                       selected={state.selectedMatchId === candidate.id}
+182:                       disabled={Boolean(state.decision)}</pre>
+        </details>
+      </article>
+      <article id="finding-43">
+        <strong>prop · unassessed</strong>
+        <p>
+          The JSX expression or expected prop type is dynamic, unresolved, any,
+          unknown, recursive, or callback-shaped.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-43">src/SpendImportReview.tsx:183</a></small
+        >
+        <details id="source-43">
+          <summary>Source location: src/SpendImportReview.tsx:183</summary>
+          <pre>
+182:                       disabled={Boolean(state.decision)}
+183:                       onSelect={() =&gt;
+184:                         dispatch({ type: &quot;match-selected&quot;, id: candidate.id })
+185:                       }</pre>
+        </details>
+      </article>
+      <article id="finding-52">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-52">src/SpendImportReview.tsx:94</a></small
+        >
+        <details id="source-52">
+          <summary>Source location: src/SpendImportReview.tsx:94</summary>
+          <pre>
+93:           &lt;div className=&quot;grid gap-[var(--space-4)]&quot;&gt;
+94:             {state.stage === &quot;mapping&quot; ? (
+95:               &lt;Card title=&quot;Preview changes&quot;&gt;
+96:                 &lt;Typography tone=&quot;secondary&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-53">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-53">src/SpendImportReview.tsx:136</a></small
+        >
+        <details id="source-53">
+          <summary>Source location: src/SpendImportReview.tsx:136</summary>
+          <pre>
+135:                   /&gt;
+136:                   {state.saved ? (
+137:                     &lt;div role=&quot;status&quot; className=&quot;grid gap-[var(--space-3)]&quot;&gt;
+138:                       &lt;Typography variant=&quot;body-strong&quot;&gt;</pre>
+        </details>
+      </article>
+      <article id="finding-54">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-54">src/SpendImportReview.tsx:164</a></small
+        >
+        <details id="source-54">
+          <summary>Source location: src/SpendImportReview.tsx:164</summary>
+          <pre>
+163: 
+164:             {state.stage === &quot;review&quot; ? (
+165:               &lt;Card
+166:                 title={`${match.vendorRaw} · ${remaining} remaining`}</pre>
+        </details>
+      </article>
+      <article id="finding-55">
+        <strong>dynamic-reachability · unassessed</strong>
+        <p>
+          A JSX branch has dynamic reachability; static source cannot establish
+          that it renders.
+        </p>
+        <small
+          >static evidence ·
+          <a href="#source-55">src/SpendImportReview.tsx:203</a></small
+        >
+        <details id="source-55">
+          <summary>Source location: src/SpendImportReview.tsx:203</summary>
+          <pre>
+202:                   &lt;/div&gt;
+203:                   {action.result ? (
+204:                     &lt;Typography variant=&quot;body-strong&quot;&gt;{action.result}&lt;/Typography&gt;
+205:                   ) : null}</pre>
+        </details>
+      </article>
+      <article id="finding-94">
+        <strong>unknown · unassessed</strong>
+        <p>color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-94">/spend-import-review:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-94">
+          <summary>Source location: /spend-import-review:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-95">
+        <strong>unknown · unassessed</strong>
+        <p>background-color: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-95">/spend-import-review:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-95">
+          <summary>Source location: /spend-import-review:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-96">
+        <strong>unknown · unassessed</strong>
+        <p>font-family: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-96">/spend-import-review:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-96">
+          <summary>Source location: /spend-import-review:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-97">
+        <strong>unknown · unassessed</strong>
+        <p>font-size: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-97">/spend-import-review:266</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-97">
+          <summary>Source location: /spend-import-review:266</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <article id="finding-98">
+        <strong>unknown · unassessed</strong>
+        <p>padding-right: unknown</p>
+        <small
+          >browser evidence ·
+          <a href="#source-98">/spend-import-review:184</a> ·
+          <a href="#desktop-0">Screenshot region</a></small
+        >
+        <details id="source-98">
+          <summary>Source location: /spend-import-review:184</summary>
+          Source text not supplied; location only.
+        </details>
+      </article>
+      <p>
+        Showing 30 representative unknowns.
+        <a href="report.json">Download every observation and source location</a
+        >.
+      </p>
+    </details>
+    <details>
+      <summary>All adherence observations</summary>
+      <p>
+        <a href="report.json" download
+          >Download all counts, declarations, locations, and observations as
+          JSON</a
+        >.
+      </p>
+    </details>
+    <details open>
+      <summary>Generated-code implementation diagnostics (4)</summary>
+      <article id="implementation-0">
+        <strong>TypeScript 18046</strong>
+        <p>&#39;source&#39; is of type &#39;unknown&#39;.</p>
+        <small
+          >Generated source ·
+          <a href="#implementation-source-0"
+            >src/SpendImportReview.tsx:67:39</a
+          ></small
+        >
+        <details id="implementation-source-0">
+          <summary>Source location</summary>
+          <pre>
+66:                   label={source}
+67:                   htmlFor={`mapping-${source.replaceAll(&quot; &quot;, &quot;-&quot;).toLowerCase()}`}
+68:                 &gt;</pre>
+        </details>
+      </article>
+      <article id="implementation-1">
+        <strong>TypeScript 18046</strong>
+        <p>&#39;source&#39; is of type &#39;unknown&#39;.</p>
+        <small
+          >Generated source ·
+          <a href="#implementation-source-1"
+            >src/SpendImportReview.tsx:70:36</a
+          ></small
+        >
+        <details id="implementation-source-1">
+          <summary>Source location</summary>
+          <pre>
+69:                   &lt;Select
+70:                     id={`mapping-${source.replaceAll(&quot; &quot;, &quot;-&quot;).toLowerCase()}`}
+71:                     aria-label={`Spend field for ${source}`}</pre>
+        </details>
+      </article>
+      <article id="implementation-2">
+        <strong>TypeScript 7026</strong>
+        <p>
+          JSX element implicitly has type &#39;any&#39; because no interface
+          &#39;JSX.IntrinsicElements&#39; exists.
+        </p>
+        <small
+          >Generated source ·
+          <a href="#implementation-source-2"
+            >src/SpendImportReview.tsx:105:19</a
+          ></small
+        >
+        <details id="implementation-source-2">
+          <summary>Source location</summary>
+          <pre>
+104:                 actions={
+105:                   &lt;div className=&quot;flex gap-[var(--space-2)]&quot;&gt;
+106:                     &lt;StatusPill tone=&quot;success&quot; label={`${preview.ready} ready`} /&gt;</pre>
+        </details>
+      </article>
+      <article id="implementation-3">
+        <strong>TypeScript 7026</strong>
+        <p>
+          JSX element implicitly has type &#39;any&#39; because no interface
+          &#39;JSX.IntrinsicElements&#39; exists.
+        </p>
+        <small
+          >Generated source ·
+          <a href="#implementation-source-3"
+            >src/SpendImportReview.tsx:111:19</a
+          ></small
+        >
+        <details id="implementation-source-3">
+          <summary>Source location</summary>
+          <pre>
+110:                     /&gt;
+111:                   &lt;/div&gt;
+112:                 }</pre>
+        </details>
+      </article>
+    </details>
+    <h2>AI design review</h2>
+    <p><strong>Subjective design score: 65/100</strong></p>
+    <p>
+      One model assessment; not an objective rating. Token adherence is reported
+      separately below.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Rating</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>hierarchy</th>
+          <td>3/4</td>
+          <td>
+            The page title, batch context, field-mapping panel, preview panel,
+            and exception card establish a clear task sequence, while
+            ready/review badges make status scannable. Hierarchy weakens after a
+            decision because “Needs review” and “Simulated decision recorded”
+            remain visible together.
+          </td>
+        </tr>
+        <tr>
+          <th>layout</th>
+          <td>3/4</td>
+          <td>
+            Cards, form controls, headings, and actions use consistent alignment
+            and spacing at 1440px and 1920px. The initial view is somewhat
+            left-heavy, and at 1024px the two-column composition leaves the
+            preview table narrow enough to require horizontal scrolling.
+          </td>
+        </tr>
+        <tr>
+          <th>typography</th>
+          <td>3/4</td>
+          <td>
+            The large page heading, medium-weight section titles, labels, and
+            tabular values are visually consistent and generally readable.
+            Several 12px captions, table headers, and status labels are
+            comparatively faint or compact, as reflected in the reported
+            contrast advisories.
+          </td>
+        </tr>
+        <tr>
+          <th>responsive</th>
+          <td>2/4</td>
+          <td>
+            The centered composition and form controls remain usable across the
+            provided 1024px, 1440px, and 1920px desktop windows. At 1024px,
+            however, the preview remains beside the mapping form, producing a
+            572px-wide horizontally scrolling table whose Result column is
+            initially offscreen; the completed state also extends to a 1096px
+            document height.
+          </td>
+        </tr>
+        <tr>
+          <th>productClarity</th>
+          <td>2/4</td>
+          <td>
+            Mapping labels, representative rows, ready/review counts, the import
+            outcome, and bounded vendor choices are understandable. Two
+            brief-critical gaps remain: the only initial action is labeled as a
+            preview but the next supplied state is already saved, and the
+            exception card does not repeat the immutable source row details
+            alongside the correction choices.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>Strengths</h3>
+    <ul>
+      <li>
+        Field mappings are presented as a concise, clearly labeled set of
+        source-to-spend selections.
+      </li>
+      <li>
+        The preview includes representative transaction rows, source references,
+        results, and aggregate ready/review counts.
+      </li>
+      <li>
+        The save outcome explicitly states that 39 rows were included and 3
+        remain in human review.
+      </li>
+      <li>
+        Vendor correction is bounded to candidate selection, leaving the item
+        unresolved, or applying the selected decision.
+      </li>
+      <li>
+        The interface explicitly states that original source evidence remains
+        unchanged and uses consistent cards and status badges across desktop
+        widths.
+      </li>
+    </ul>
+    <h3>Recommended improvements</h3>
+    <article id="design-0">
+      <h4>high · <a href="#desktop-0">desktop-0</a></h4>
+      <p>
+        “Preview imported changes” is the only visible progression action, yet
+        the next supplied state says the import has already been saved. The
+        presented sequence therefore does not visibly let the reviewer inspect a
+        populated preview and then make a separate save decision.
+      </p>
+      <p>
+        <strong>Improve:</strong> Keep this action limited to generating the
+        preview. Once rows are shown, place a distinct “Save import” action in
+        the preview panel, with an appropriate supported disabled state until a
+        valid preview exists.
+      </p>
+      <small
+        >Screenshot region: x 97, y 630.5, width 422.71875, height 40</small
+      >
+    </article>
+    <article id="design-1">
+      <h4>high · <a href="#desktop-1">desktop-1</a></h4>
+      <p>
+        The uncertain-match card provides candidate vendors and bounded actions,
+        but the source transaction is represented only by the vendor name in its
+        heading. Amount, date, row identifier, and source reference remain in
+        the table above rather than being available together with the decision.
+      </p>
+      <p>
+        <strong>Improve:</strong> Add a compact, read-only “Original source row”
+        summary inside the exception card showing row ID, source vendor text,
+        amount, date, and source reference above the candidate choices. Visually
+        distinguish this evidence from the editable decision without altering
+        it.
+      </p>
+      <small>Screenshot region: x 561, y 615, width 799, height 393</small>
+    </article>
+    <article id="design-2">
+      <h4>medium · <a href="#desktop-wide-1">desktop-wide-1</a></h4>
+      <p>
+        The card simultaneously shows a “Needs review” badge and “Simulated
+        decision recorded.” Although the aggregate count changes to three
+        remaining, the current item’s final status is ambiguous.
+      </p>
+      <p>
+        <strong>Improve:</strong> After applying a decision, either mark the
+        displayed item as resolved/recorded with its choice shown read-only, or
+        advance to the next unresolved item. Provide a clear next-exception
+        action if the current record remains on screen.
+      </p>
+      <small>Screenshot region: x 801, y 615, width 798, height 393</small>
+    </article>
+    <article id="design-3">
+      <h4>medium · <a href="#desktop-window-1">desktop-window-1</a></h4>
+      <p>
+        At the 1024px desktop window, the preview table horizontally overflows
+        and the Result column is initially outside the visible region. This
+        separates exception status from the source row during scanning.
+      </p>
+      <p>
+        <strong>Improve:</strong> At this desktop width, stack mapping above
+        preview or use a more compact row composition that keeps row ID, vendor,
+        source reference, and result visible together. If horizontal scrolling
+        remains intentional, add an obvious scroll cue and preserve key status
+        information outside the scrolling edge.
+      </p>
+      <small
+        >Screenshot region: x 411.171875, y 222, width 571.828125, height
+        240</small
+      >
+    </article>
+    <details>
+      <summary>Full scoring metadata and limitations</summary>
+      <pre>
+{
+  &quot;model&quot;: &quot;openai/gpt-5.6-sol&quot;,
+  &quot;rubricVersion&quot;: 2,
+  &quot;assessedImages&quot;: [
+    &quot;desktop-0&quot;,
+    &quot;desktop-1&quot;,
+    &quot;desktop-wide-0&quot;,
+    &quot;desktop-wide-1&quot;,
+    &quot;desktop-window-0&quot;,
+    &quot;desktop-window-1&quot;
+  ],
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;ratings&quot;: {
+    &quot;hierarchy&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The page title, batch context, field-mapping panel, preview panel, and exception card establish a clear task sequence, while ready/review badges make status scannable. Hierarchy weakens after a decision because “Needs review” and “Simulated decision recorded” remain visible together.&quot;
+    },
+    &quot;layout&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;Cards, form controls, headings, and actions use consistent alignment and spacing at 1440px and 1920px. The initial view is somewhat left-heavy, and at 1024px the two-column composition leaves the preview table narrow enough to require horizontal scrolling.&quot;
+    },
+    &quot;typography&quot;: {
+      &quot;score&quot;: 3,
+      &quot;reason&quot;: &quot;The large page heading, medium-weight section titles, labels, and tabular values are visually consistent and generally readable. Several 12px captions, table headers, and status labels are comparatively faint or compact, as reflected in the reported contrast advisories.&quot;
+    },
+    &quot;responsive&quot;: {
+      &quot;score&quot;: 2,
+      &quot;reason&quot;: &quot;The centered composition and form controls remain usable across the provided 1024px, 1440px, and 1920px desktop windows. At 1024px, however, the preview remains beside the mapping form, producing a 572px-wide horizontally scrolling table whose Result column is initially offscreen; the completed state also extends to a 1096px document height.&quot;
+    },
+    &quot;productClarity&quot;: {
+      &quot;score&quot;: 2,
+      &quot;reason&quot;: &quot;Mapping labels, representative rows, ready/review counts, the import outcome, and bounded vendor choices are understandable. Two brief-critical gaps remain: the only initial action is labeled as a preview but the next supplied state is already saved, and the exception card does not repeat the immutable source row details alongside the correction choices.&quot;
+    }
+  },
+  &quot;strengths&quot;: [
+    &quot;Field mappings are presented as a concise, clearly labeled set of source-to-spend selections.&quot;,
+    &quot;The preview includes representative transaction rows, source references, results, and aggregate ready/review counts.&quot;,
+    &quot;The save outcome explicitly states that 39 rows were included and 3 remain in human review.&quot;,
+    &quot;Vendor correction is bounded to candidate selection, leaving the item unresolved, or applying the selected decision.&quot;,
+    &quot;The interface explicitly states that original source evidence remains unchanged and uses consistent cards and status badges across desktop widths.&quot;
+  ],
+  &quot;findings&quot;: [
+    {
+      &quot;image&quot;: &quot;desktop-0&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 97,
+        &quot;y&quot;: 630.5,
+        &quot;width&quot;: 422.71875,
+        &quot;height&quot;: 40
+      },
+      &quot;severity&quot;: &quot;high&quot;,
+      &quot;explanation&quot;: &quot;“Preview imported changes” is the only visible progression action, yet the next supplied state says the import has already been saved. The presented sequence therefore does not visibly let the reviewer inspect a populated preview and then make a separate save decision.&quot;,
+      &quot;improvement&quot;: &quot;Keep this action limited to generating the preview. Once rows are shown, place a distinct “Save import” action in the preview panel, with an appropriate supported disabled state until a valid preview exists.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-1&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 561,
+        &quot;y&quot;: 615,
+        &quot;width&quot;: 799,
+        &quot;height&quot;: 393
+      },
+      &quot;severity&quot;: &quot;high&quot;,
+      &quot;explanation&quot;: &quot;The uncertain-match card provides candidate vendors and bounded actions, but the source transaction is represented only by the vendor name in its heading. Amount, date, row identifier, and source reference remain in the table above rather than being available together with the decision.&quot;,
+      &quot;improvement&quot;: &quot;Add a compact, read-only “Original source row” summary inside the exception card showing row ID, source vendor text, amount, date, and source reference above the candidate choices. Visually distinguish this evidence from the editable decision without altering it.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-wide-1&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 801,
+        &quot;y&quot;: 615,
+        &quot;width&quot;: 798,
+        &quot;height&quot;: 393
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;The card simultaneously shows a “Needs review” badge and “Simulated decision recorded.” Although the aggregate count changes to three remaining, the current item’s final status is ambiguous.&quot;,
+      &quot;improvement&quot;: &quot;After applying a decision, either mark the displayed item as resolved/recorded with its choice shown read-only, or advance to the next unresolved item. Provide a clear next-exception action if the current record remains on screen.&quot;
+    },
+    {
+      &quot;image&quot;: &quot;desktop-window-1&quot;,
+      &quot;region&quot;: {
+        &quot;x&quot;: 411.171875,
+        &quot;y&quot;: 222,
+        &quot;width&quot;: 571.828125,
+        &quot;height&quot;: 240
+      },
+      &quot;severity&quot;: &quot;medium&quot;,
+      &quot;explanation&quot;: &quot;At the 1024px desktop window, the preview table horizontally overflows and the Result column is initially outside the visible region. This separates exception status from the source row during scanning.&quot;,
+      &quot;improvement&quot;: &quot;At this desktop width, stack mapping above preview or use a more compact row composition that keeps row ID, vendor, source reference, and result visible together. If horizontal scrolling remains intentional, add an obvious scroll cue and preserve key status information outside the scrolling edge.&quot;
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Only the supplied initial and post-interaction screenshots were evaluated; no intermediate preview-before-save state was provided.&quot;,
+    &quot;The screenshots do not demonstrate dropdown menus, alternate mapping values, the unresolved path, or navigation across all exception rows.&quot;,
+    &quot;The interaction evidence is explicitly synthetic and does not establish production backend behavior or persistence.&quot;,
+    &quot;The reported accessibility checks and source measurements are supporting evidence; this review scores product-interface composition rather than implementation or Arrusted API compliance.&quot;
+  ],
+  &quot;subjectiveScore&quot;: 65,
+  &quot;usage&quot;: {
+    &quot;inputTokens&quot;: 22610,
+    &quot;inputTokenDetails&quot;: {
+      &quot;noCacheTokens&quot;: 3,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 22607
+    },
+    &quot;outputTokens&quot;: 2299,
+    &quot;outputTokenDetails&quot;: {
+      &quot;textTokens&quot;: 1065,
+      &quot;reasoningTokens&quot;: 1234
+    },
+    &quot;totalTokens&quot;: 24909
+  }
+}</pre>
+    </details>
+    <details>
+      <summary>Generated-source evidence and reference diagnostics</summary>
+      <pre>
+{
+  &quot;source&quot;: {
+    &quot;status&quot;: &quot;available&quot;,
+    &quot;imports&quot;: [
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;Button&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Button&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;Card&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Card&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;DecisionOptionCard&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;DecisionOptionCard&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;FieldFrame&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;FieldFrame&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;PageHeader&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;PageHeader&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;Select&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Select&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;StatusPill&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;StatusPill&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;Typography&quot;,
+        &quot;source&quot;: &quot;@autograph/components&quot;,
+        &quot;name&quot;: &quot;Typography&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;localName&quot;: &quot;DataTableComposition&quot;,
+        &quot;source&quot;: &quot;@autograph/compositions&quot;,
+        &quot;name&quot;: &quot;DataTableComposition&quot;
+      }
+    ],
+    &quot;tokenRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;semanticVarRefs&quot;: [
+      &quot;--color-bg-page&quot;,
+      &quot;--color-text-primary&quot;,
+      &quot;--space-2&quot;,
+      &quot;--space-3&quot;,
+      &quot;--space-4&quot;,
+      &quot;--space-6&quot;
+    ],
+    &quot;undefinedTokens&quot;: [],
+    &quot;generatedLiterals&quot;: [],
+    &quot;matchingLiterals&quot;: [],
+    &quot;unknownLiterals&quot;: [],
+    &quot;observations&quot;: {
+      &quot;count&quot;: 94,
+      &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+    },
+    &quot;implementationDiagnostics&quot;: [
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;line&quot;: 67,
+        &quot;column&quot;: 39,
+        &quot;code&quot;: 18046,
+        &quot;message&quot;: &quot;&#39;source&#39; is of type &#39;unknown&#39;.&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;line&quot;: 70,
+        &quot;column&quot;: 36,
+        &quot;code&quot;: 18046,
+        &quot;message&quot;: &quot;&#39;source&#39; is of type &#39;unknown&#39;.&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;line&quot;: 105,
+        &quot;column&quot;: 19,
+        &quot;code&quot;: 7026,
+        &quot;message&quot;: &quot;JSX element implicitly has type &#39;any&#39; because no interface &#39;JSX.IntrinsicElements&#39; exists.&quot;
+      },
+      {
+        &quot;path&quot;: &quot;src/SpendImportReview.tsx&quot;,
+        &quot;line&quot;: 111,
+        &quot;column&quot;: 19,
+        &quot;code&quot;: 7026,
+        &quot;message&quot;: &quot;JSX element implicitly has type &#39;any&#39; because no interface &#39;JSX.IntrinsicElements&#39; exists.&quot;
+      }
+    ],
+    &quot;limitations&quot;: []
+  },
+  &quot;reference&quot;: {
+    &quot;name&quot;: &quot;arrusted-recurring-reference&quot;,
+    &quot;commit&quot;: &quot;5d868b64bad9c0c83f4faa314aa0fb2368c88176&quot;,
+    &quot;publicModules&quot;: [
+      &quot;@autograph/components&quot;,
+      &quot;@autograph/compositions&quot;,
+      &quot;@autograph/icons&quot;
+    ],
+    &quot;catalogAvailable&quot;: false
+  }
+}</pre>
+    </details>
+    <section id="desktop-0">
+      <h2>desktop-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-0.png" alt="desktop-0 initial screenshot" /><a
+          class="region"
+          href="#design-0"
+          title="“Preview imported changes” is the only visible progression action, yet the next supplied state says the import has already been saved. The presented sequence therefore does not visibly let the reviewer inspect a populated preview and then make a separate save decision."
+          aria-label="“Preview imported changes” is the only visible progression action, yet the next supplied state says the import has already been saved. The presented sequence therefore does not visibly let the reviewer inspect a populated preview and then make a separate save decision."
+          style="
+            left: 6.736111111111111%;
+            top: 70.05555555555556%;
+            width: 29.35546875%;
+            height: 4.444444444444445%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;spend-import-review-example&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 900,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Spend field for Supplier&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 262.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice total&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 340.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Currency&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 418.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice date&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 496.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice number&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 574.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Preview imported changes&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 630.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;button &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.gap-\\[var\\(--space-3\\)\\].border-b &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 58,
+  &quot;totalDomElements&quot;: 89,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 58,
+    &quot;sampled&quot;: 58,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 31,
+        &quot;sampled&quot;: 31
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 27,
+        &quot;sampled&quot;: 27
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 48,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 67
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 115,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 29,
+        &quot;matching-literal&quot;: 44,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 202
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 28,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 106
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 134,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 4,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 54
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 58,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 47,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 20
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 67,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 58
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 58,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 707,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-1">
+      <h2>desktop-1 — map, save, and resolve a synthetic vendor match</h2>
+      <div class="capture">
+        <img
+          src="desktop-1.png"
+          alt="desktop-1 map, save, and resolve a synthetic vendor match screenshot"
+        /><a
+          class="region"
+          href="#design-1"
+          title="The uncertain-match card provides candidate vendors and bounded actions, but the source transaction is represented only by the vendor name in its heading. Amount, date, row identifier, and source reference remain in the table above rather than being available together with the decision."
+          aria-label="The uncertain-match card provides candidate vendors and bounded actions, but the source transaction is represented only by the vendor name in its heading. Amount, date, row identifier, and source reference remain in the table above rather than being available together with the decision."
+          style="
+            left: 38.958333333333336%;
+            top: 57.15613382899628%;
+            width: 55.486111111111114%;
+            height: 36.52416356877323%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;spend-import-review-example&quot;,
+    &quot;width&quot;: 1440,
+    &quot;height&quot;: 900,
+    &quot;documentWidth&quot;: 1440,
+    &quot;documentHeight&quot;: 1076,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Spend field for Supplier&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 262.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice total&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 340.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Currency&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 418.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice date&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 496.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice number&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 574.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Preview imported changes&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 97,
+          &quot;y&quot;: 630.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review 3 exception rows&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 577.71875,
+          &quot;y&quot;: 542,
+          &quot;width&quot;: 765.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 577.71875,
+          &quot;y&quot;: 717,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 577.71875,
+          &quot;y&quot;: 816,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Leave unresolved&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 577.71875,
+          &quot;y&quot;: 915,
+          &quot;width&quot;: 146.953125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Apply simulated decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 732.671875,
+          &quot;y&quot;: 915,
+          &quot;width&quot;: 196.359375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .border-\\[var\\(--color-status-success\\)\\].text-\\[var\\(--color-status-success\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.58 (foreground color: #17b196, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-4\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].flex &gt; .border-\\[var\\(--color-status-success\\)\\].text-\\[var\\(--color-status-success\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].flex &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(5)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(6)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;div[role=\&quot;status\&quot;] &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-between.py-\\[var\\(--space-3\\)\\] &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.lg\\:grid-cols-\\[minmax\\(320px\\,0\\.8fr\\)_minmax\\(0\\,1\\.4fr\\)\\] &gt; section &gt; .justify-between.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;39 rows are now included in the simulated spend register. 3 rows remain in human review.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-0">
+      <h2>desktop-wide-0 — initial</h2>
+      <div class="capture">
+        <img src="desktop-wide-0.png" alt="desktop-wide-0 initial screenshot" />
+      </div>
+      <a href="desktop-wide-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;spend-import-review-example&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Spend field for Supplier&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 262.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice total&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 340.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Currency&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 418.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice date&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 496.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice number&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 574.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Preview imported changes&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 630.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;button &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.gap-\\[var\\(--space-3\\)\\].border-b &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 58,
+  &quot;totalDomElements&quot;: 89,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 58,
+    &quot;sampled&quot;: 58,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 31,
+        &quot;sampled&quot;: 31
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 27,
+        &quot;sampled&quot;: 27
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 48,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 67
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 115,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 29,
+        &quot;matching-literal&quot;: 44,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 202
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 28,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 106
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 134,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 4,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 54
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 58,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 47,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 20
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 67,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 58
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 58,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 707,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-wide-1">
+      <h2>desktop-wide-1 — map, save, and resolve a synthetic vendor match</h2>
+      <div class="capture">
+        <img
+          src="desktop-wide-1.png"
+          alt="desktop-wide-1 map, save, and resolve a synthetic vendor match screenshot"
+        /><a
+          class="region"
+          href="#design-2"
+          title="The card simultaneously shows a “Needs review” badge and “Simulated decision recorded.” Although the aggregate count changes to three remaining, the current item’s final status is ambiguous."
+          aria-label="The card simultaneously shows a “Needs review” badge and “Simulated decision recorded.” Although the aggregate count changes to three remaining, the current item’s final status is ambiguous."
+          style="
+            left: 41.71875%;
+            top: 56.94444444444444%;
+            width: 41.5625%;
+            height: 36.388888888888886%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;spend-import-review-example&quot;,
+    &quot;width&quot;: 1920,
+    &quot;height&quot;: 1080,
+    &quot;documentWidth&quot;: 1920,
+    &quot;documentHeight&quot;: 1080,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Spend field for Supplier&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 262.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice total&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 340.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Currency&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 418.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice date&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 496.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice number&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 574.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Preview imported changes&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 337,
+          &quot;y&quot;: 630.5,
+          &quot;width&quot;: 422.71875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review 3 exception rows&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 817.71875,
+          &quot;y&quot;: 542,
+          &quot;width&quot;: 765.265625,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 817.71875,
+          &quot;y&quot;: 717,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 817.71875,
+          &quot;y&quot;: 816,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Leave unresolved&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 817.71875,
+          &quot;y&quot;: 915,
+          &quot;width&quot;: 146.953125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Apply simulated decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 972.671875,
+          &quot;y&quot;: 915,
+          &quot;width&quot;: 196.359375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .border-\\[var\\(--color-status-success\\)\\].text-\\[var\\(--color-status-success\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.58 (foreground color: #17b196, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-4\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].flex &gt; .border-\\[var\\(--color-status-success\\)\\].text-\\[var\\(--color-status-success\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].flex &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(5)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(6)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;div[role=\&quot;status\&quot;] &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-between.py-\\[var\\(--space-3\\)\\] &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.lg\\:grid-cols-\\[minmax\\(320px\\,0\\.8fr\\)_minmax\\(0\\,1\\.4fr\\)\\] &gt; section &gt; .justify-between.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;39 rows are now included in the simulated spend register. 3 rows remain in human review.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+    <section id="desktop-window-0">
+      <h2>desktop-window-0 — initial</h2>
+      <div class="capture">
+        <img
+          src="desktop-window-0.png"
+          alt="desktop-window-0 initial screenshot"
+        />
+      </div>
+      <a href="desktop-window-0.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;spend-import-review-example&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 768,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Spend field for Supplier&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 262.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice total&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 340.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Currency&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 418.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice date&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 496.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice number&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 574.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Preview imported changes&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 630.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;button &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.items-start &gt; section &gt; .justify-between.gap-\\[var\\(--space-3\\)\\].border-b &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;not-run&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>
+{
+  &quot;sampledElements&quot;: 58,
+  &quot;totalDomElements&quot;: 89,
+  &quot;sampling&quot;: {
+    &quot;eligible&quot;: 58,
+    &quot;sampled&quot;: 58,
+    &quot;coveragePercent&quot;: 100,
+    &quot;regions&quot;: {
+      &quot;top&quot;: {
+        &quot;eligible&quot;: 31,
+        &quot;sampled&quot;: 31
+      },
+      &quot;middle&quot;: {
+        &quot;eligible&quot;: 27,
+        &quot;sampled&quot;: 27
+      },
+      &quot;bottom&quot;: {
+        &quot;eligible&quot;: 0,
+        &quot;sampled&quot;: 0
+      }
+    }
+  },
+  &quot;categories&quot;: {
+    &quot;color&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 48,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 67
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 115,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;typography&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 29,
+        &quot;matching-literal&quot;: 44,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 202
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 275,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;spacing&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 28,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 106
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 134,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;radius&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 4,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 54
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 58,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;border&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 47,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 20
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 67,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    },
+    &quot;shadow&quot;: {
+      &quot;counts&quot;: {
+        &quot;semantic-token-reference&quot;: 0,
+        &quot;matching-literal&quot;: 0,
+        &quot;generated-override&quot;: 0,
+        &quot;inherited-shared&quot;: 0,
+        &quot;unknown&quot;: 58
+      },
+      &quot;assessed&quot;: 0,
+      &quot;total&quot;: 58,
+      &quot;coveragePercent&quot;: 0,
+      &quot;tokenReferencePercent&quot;: null
+    }
+  },
+  &quot;observations&quot;: {
+    &quot;count&quot;: 707,
+    &quot;details&quot;: &quot;Download report.json for individual observations&quot;
+  },
+  &quot;limitations&quot;: [
+    &quot;Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.&quot;,
+    &quot;Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.&quot;,
+    &quot;A shared bundle is never treated as positive generated adherence. Anonymous rules require a unique exact generated selector/property/value and complete matched-rule declaration set; conditional or ambiguous source rules remain unknown.&quot;,
+    &quot;Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared components can assemble identical classes dynamically, so they remain unknown and unassessed without direct stylesheet provenance.&quot;,
+    &quot;No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.&quot;
+  ]
+}</pre>
+      </details>
+    </section>
+    <section id="desktop-window-1">
+      <h2>
+        desktop-window-1 — map, save, and resolve a synthetic vendor match
+      </h2>
+      <div class="capture">
+        <img
+          src="desktop-window-1.png"
+          alt="desktop-window-1 map, save, and resolve a synthetic vendor match screenshot"
+        /><a
+          class="region"
+          href="#design-3"
+          title="At the 1024px desktop window, the preview table horizontally overflows and the Result column is initially outside the visible region. This separates exception status from the source row during scanning."
+          aria-label="At the 1024px desktop window, the preview table horizontally overflows and the Result column is initially outside the visible region. This separates exception status from the source row during scanning."
+          style="
+            left: 40.15350341796875%;
+            top: 20.255474452554743%;
+            width: 55.84259033203125%;
+            height: 21.8978102189781%;
+          "
+        ></a>
+      </div>
+      <a href="desktop-window-1.png">Original, unmodified screenshot</a>
+      <details>
+        <summary>Browser findings and interactions</summary>
+        <pre>
+{
+  &quot;measurements&quot;: {
+    &quot;title&quot;: &quot;spend-import-review-example&quot;,
+    &quot;width&quot;: 1024,
+    &quot;height&quot;: 768,
+    &quot;documentWidth&quot;: 1024,
+    &quot;documentHeight&quot;: 1096,
+    &quot;findings&quot;: [],
+    &quot;intentionalScrollContainers&quot;: [
+      {
+        &quot;label&quot;: &quot;RowVendorAmountDateSource referenceResultTX-001Acme Industrial$1,240.002026-08-03AP-4101ReadyTX-018Cedar Labs$780.502026-08-17AP-4148ReadyTX-039Atlas Office Sup&quot;,
+        &quot;axis&quot;: &quot;x&quot;,
+        &quot;scrollWidth&quot;: 726,
+        &quot;scrollHeight&quot;: 238,
+        &quot;clientWidth&quot;: 570,
+        &quot;clientHeight&quot;: 238,
+        &quot;region&quot;: {
+          &quot;x&quot;: 411.171875,
+          &quot;y&quot;: 222,
+          &quot;width&quot;: 571.828125,
+          &quot;height&quot;: 240
+        }
+      }
+    ],
+    &quot;controls&quot;: [
+      {
+        &quot;label&quot;: &quot;Spend field for Supplier&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 262.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice total&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 340.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Currency&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 418.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice date&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 496.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Spend field for Invoice number&quot;,
+        &quot;role&quot;: &quot;select&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 574.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Preview imported changes&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 41,
+          &quot;y&quot;: 630.5,
+          &quot;width&quot;: 312.171875,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Review 3 exception rows&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 411.171875,
+          &quot;y&quot;: 562,
+          &quot;width&quot;: 571.828125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 411.171875,
+          &quot;y&quot;: 737,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;INPUT&quot;,
+        &quot;role&quot;: &quot;input&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 411.171875,
+          &quot;y&quot;: 836,
+          &quot;width&quot;: 1,
+          &quot;height&quot;: 1
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Leave unresolved&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 411.171875,
+          &quot;y&quot;: 935,
+          &quot;width&quot;: 146.953125,
+          &quot;height&quot;: 40
+        }
+      },
+      {
+        &quot;label&quot;: &quot;Apply simulated decision&quot;,
+        &quot;role&quot;: &quot;button&quot;,
+        &quot;region&quot;: {
+          &quot;x&quot;: 566.125,
+          &quot;y&quot;: 935,
+          &quot;width&quot;: 196.359375,
+          &quot;height&quot;: 40
+        }
+      }
+    ],
+    &quot;accessibility&quot;: {
+      &quot;violations&quot;: [
+        {
+          &quot;id&quot;: &quot;color-contrast&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Elements must meet minimum color contrast ratio thresholds&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.shrink-0 &gt; .border-\\[var\\(--color-status-success\\)\\].text-\\[var\\(--color-status-success\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.58 (foreground color: #17b196, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-4\\)\\].grid &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].flex &gt; .border-\\[var\\(--color-status-success\\)\\].text-\\[var\\(--color-status-success\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #17b196, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.gap-\\[var\\(--space-2\\)\\].flex &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(1)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(2)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(3)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(4)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(5)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;th:nth-child(6)&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;div[role=\&quot;status\&quot;] &gt; .border-transparent.bg-\\[var\\(--color-action-primary\\)\\].text-\\[var\\(--color-text-inverse\\)\\] &gt; span&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.justify-between.py-\\[var\\(--space-3\\)\\] &gt; .border-\\[var\\(--color-status-warning\\)\\].text-\\[var\\(--color-status-warning\\)\\].font-\\[var\\(--font-weight-medium\\)\\] &gt; .break-words.min-w-\\[var\\(--space-0\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #eb8526, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            },
+            {
+              &quot;target&quot;: [
+                &quot;.leading-\\[var\\(--leading-caption\\)\\]&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;heading-order&quot;,
+          &quot;impact&quot;: &quot;moderate&quot;,
+          &quot;help&quot;: &quot;Heading levels should only increase by one&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.lg\\:grid-cols-\\[minmax\\(320px\\,0\\.8fr\\)_minmax\\(0\\,1\\.4fr\\)\\] &gt; section &gt; .justify-between.py-\\[var\\(--space-3\\)\\] &gt; h3&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Heading order invalid&quot;
+            }
+          ]
+        },
+        {
+          &quot;id&quot;: &quot;scrollable-region-focusable&quot;,
+          &quot;impact&quot;: &quot;serious&quot;,
+          &quot;help&quot;: &quot;Scrollable region must have keyboard access&quot;,
+          &quot;nodes&quot;: [
+            {
+              &quot;target&quot;: [
+                &quot;.overflow-x-auto&quot;
+              ],
+              &quot;summary&quot;: &quot;Fix any of the following:\n  Element should have focusable content\n  Element should be focusable&quot;
+            }
+          ]
+        }
+      ],
+      &quot;manualReviewCount&quot;: 0
+    }
+  },
+  &quot;interaction&quot;: {
+    &quot;status&quot;: &quot;passed&quot;,
+    &quot;expectedText&quot;: &quot;39 rows are now included in the simulated spend register. 3 rows remain in human review.&quot;
+  }
+}</pre>
+      </details>
+      <details>
+        <summary>Token evidence and coverage</summary>
+        <pre>&quot;See initial state for style evidence&quot;</pre>
+      </details>
+    </section>
+  </main>
+</html>

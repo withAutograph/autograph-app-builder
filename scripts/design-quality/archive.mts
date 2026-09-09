@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { renderReport } from "./report";
 import { captureFilename } from "./archive-path";
+import { readArchivedReport } from "./archive-entry";
 import { format, resolveConfig } from "prettier";
 
 async function writeFile(path: string, content: string) {
@@ -172,12 +173,10 @@ for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
     withFileTypes: true,
   })) {
     if (!run.isDirectory()) continue;
-    const saved = JSON.parse(
-      await readFile(
-        join(archiveRoot, day.name, run.name, "report.json"),
-        "utf8",
-      ),
+    const saved = await readArchivedReport(
+      join(archiveRoot, day.name, run.name),
     );
+    if (saved === null) continue;
     rows.push({
       path: `${day.name}/${run.name}`,
       name: saved.archive.name,

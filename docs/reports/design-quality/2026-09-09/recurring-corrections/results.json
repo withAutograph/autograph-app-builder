@@ -1,0 +1,35 @@
+{
+  "kind": "targeted-post-report-correction",
+  "results": [
+    {
+      "case": "spend-import-review",
+      "width": 1440,
+      "passed": true
+    },
+    {
+      "case": "spend-import-review",
+      "width": 1920,
+      "passed": true
+    },
+    {
+      "case": "spend-import-review",
+      "width": 1024,
+      "passed": true
+    },
+    {
+      "case": "compensation-planning",
+      "width": 1440,
+      "passed": true
+    },
+    {
+      "case": "compensation-planning",
+      "width": 1920,
+      "passed": true
+    },
+    {
+      "case": "compensation-planning",
+      "width": 1024,
+      "passed": true
+    }
+  ]
+}

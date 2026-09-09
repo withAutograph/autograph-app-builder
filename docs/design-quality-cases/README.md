@@ -67,8 +67,9 @@ requirements that were added after its generation prompt.
 
 ## Interaction evidence
 
-The checked-in `scenarios.json` files bind to the first batch's generated controls,
-not every future app. Prefer actual accessible roles/names (including aria-labels,
+For import and compensation, `scenarios.json` targets the runnable reference
+example described in the case's `EXAMPLE.md`; other cases retain the first batch's
+generated controls. These bindings are not universal. Prefer actual accessible roles/names (including aria-labels,
 not merely button text). Rebind them after inspecting a new preview. Use an
 explicit `--scenario FILE` to override the case file. Scenario actions run only
 when `--fixture-interactions` is supplied; without it the report is observational.
