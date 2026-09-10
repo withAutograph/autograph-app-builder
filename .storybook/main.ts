@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { StorybookConfig } from "@storybook/nextjs-vite";
 
 import {
@@ -50,6 +52,17 @@ const config: StorybookConfig = {
   framework: "@storybook/nextjs-vite",
   staticDirs: ["../public"],
   async viteFinal(viteConfig) {
+    const existingAliases = viteConfig.resolve?.alias ?? [];
+    const aliases = Array.isArray(existingAliases)
+      ? existingAliases
+      : Object.entries(existingAliases).map(([find, replacement]) => ({
+          find,
+          replacement,
+        }));
+    const storybookBuilderActions = path.join(
+      import.meta.dirname,
+      "builder-actions.ts",
+    );
     const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
       await resolveBuilderFlagsForStorybook();
     viteConfig.define = {
@@ -65,6 +78,32 @@ const config: StorybookConfig = {
       "process.env.STORYBOOK_BUILDER_PROVISIONING_ENABLED": JSON.stringify(
         String(provisioningEnabled),
       ),
+    };
+    viteConfig.resolve = {
+      ...(viteConfig.resolve ?? {}),
+      alias: [
+        {
+          find: "@/app/actions/builder",
+          replacement: storybookBuilderActions,
+        },
+        {
+          // Vitest's root alias can resolve this Server Action before the
+          // Storybook aliases above are considered.
+          find: /[/\\]app[/\\]actions[/\\]builder(?:\.ts)?$/u,
+          replacement: storybookBuilderActions,
+        },
+        // `@flags-sdk/vercel` dynamically imports deployment-generated flag
+        // definitions. That module only exists in a Vercel build, while
+        // Storybook already receives the resolved values above.
+        {
+          find: "@flags-sdk/vercel",
+          replacement: path.join(
+            import.meta.dirname,
+            "vercel-flags-adapter.ts",
+          ),
+        },
+        ...aliases,
+      ],
     };
     return viteConfig;
   },

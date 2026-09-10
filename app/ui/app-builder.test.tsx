@@ -10,10 +10,15 @@ const navigation = vi.hoisted(() => ({
   refresh: vi.fn(),
   replace: vi.fn(),
 }));
+const builderActions = vi.hoisted(() => ({
+  createBuilderHandoff: vi.fn(),
+  provisionBuilderProvider: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
+vi.mock("@/app/actions/builder", () => builderActions);
 vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
@@ -101,14 +106,6 @@ const integrationState = {
 const opaqueHandoffId = "123e4567-e89b-42d3-a456-426614174001";
 const refreshedHandoffId = "123e4567-e89b-42d3-a456-426614174002";
 
-function handoffResponse(handoffId = opaqueHandoffId) {
-  return Response.json({
-    version: 1,
-    handoffId,
-    expiresAt: "2026-09-08T12:00:00.000Z",
-  });
-}
-
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
     user?: { name: string; email: string };
@@ -183,6 +180,11 @@ afterEach(async () => {
   container = undefined;
   sessionStorage.clear();
   vi.restoreAllMocks();
+  navigation.push.mockReset();
+  navigation.refresh.mockReset();
+  navigation.replace.mockReset();
+  builderActions.createBuilderHandoff.mockReset();
+  builderActions.provisionBuilderProvider.mockReset();
 });
 
 describe("Vercel-faithful App Builder flow", () => {
@@ -869,9 +871,11 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText },
     });
-    const request = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(handoffResponse());
+    builderActions.createBuilderHandoff.mockResolvedValue({
+      version: 1,
+      handoffId: opaqueHandoffId,
+      expiresAt: "2026-09-08T12:00:00.000Z",
+    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -898,11 +902,13 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     await act(async () => Promise.resolve());
-    expect(request).toHaveBeenCalledOnce();
-    expect(
-      JSON.parse(String(request.mock.calls[0]?.[1]?.body)).destination,
-    ).toBe("codex");
-    expect(writeText).not.toHaveBeenCalled();
+    expect(builderActions.createBuilderHandoff).toHaveBeenCalledOnce();
+    expect(builderActions.createBuilderHandoff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appName: "support-app",
+        repository: { name: "support-app", private: true },
+      }),
+    );
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(view.textContent).toContain("Preparing secure handoff");
     await act(async () => vi.advanceTimersByTimeAsync(300));
@@ -966,15 +972,15 @@ describe("Vercel-faithful App Builder flow", () => {
     });
     const creationRequestIds: string[] = [];
     let attempts = 0;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as {
-        creationRequestId: string;
-      };
-      creationRequestIds.push(body.creationRequestId);
+    builderActions.createBuilderHandoff.mockImplementation(async (input) => {
+      creationRequestIds.push(input.creationRequestId);
       attempts += 1;
-      return attempts === 1
-        ? Response.json({ error: "handoff_unavailable" }, { status: 503 })
-        : handoffResponse();
+      if (attempts === 1) throw new Error("handoff_unavailable");
+      return {
+        version: 1,
+        handoffId: opaqueHandoffId,
+        expiresAt: "2026-09-08T12:00:00.000Z",
+      };
     });
     const view = await render(
       <AppBuilder
@@ -1054,24 +1060,12 @@ describe("Vercel-faithful App Builder flow", () => {
     };
     let vercelAttempts = 0;
     let handoffAttempts = 0;
-    const request = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (url, init) => {
-        if (String(url) === "/api/builder/handoffs") {
-          events.push("handoff");
-          handoffAttempts += 1;
-          return handoffResponse(
-            handoffAttempts === 1 ? opaqueHandoffId : refreshedHandoffId,
-          );
-        }
-        const body = JSON.parse(String(init?.body)) as {
-          operation: "github" | "vercel";
-          requestId: string;
-        };
-        events.push(body.operation);
-        expect(body.requestId).toBe(requestId);
-        if (body.operation === "github")
-          return Response.json({
+    builderActions.provisionBuilderProvider.mockImplementation(
+      async (input) => {
+        events.push(input.operation);
+        expect(input.requestId).toBe(requestId);
+        if (input.operation === "github")
+          return {
             ...base,
             status: "pending",
             vercel: {
@@ -1079,9 +1073,9 @@ describe("Vercel-faithful App Builder flow", () => {
               code: "provider_unavailable",
               retryable: true,
             },
-          });
+          };
         vercelAttempts += 1;
-        return Response.json({
+        return {
           ...base,
           status: "settled",
           vercel:
@@ -1102,8 +1096,18 @@ describe("Vercel-faithful App Builder flow", () => {
                   rootDirectory: "apps/provider-app",
                   linkedGitHubRepository: "jasonmorganson/provider-app",
                 },
-        });
-      });
+        };
+      },
+    );
+    builderActions.createBuilderHandoff.mockImplementation(async () => {
+      events.push("handoff");
+      handoffAttempts += 1;
+      return {
+        version: 1,
+        handoffId: handoffAttempts === 1 ? opaqueHandoffId : refreshedHandoffId,
+        expiresAt: "2026-09-08T12:00:00.000Z",
+      };
+    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -1130,7 +1134,7 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(events).toEqual(["github", "vercel", "handoff"]);
+    expect(events).toEqual(["github", "vercel", "handoff", "clipboard"]);
     expect(view.textContent).toContain("jasonmorganson/provider-app");
     expect(view.textContent).toContain("Vercel: the provider rejected");
     expect(view.textContent).toContain("App created with an issue");
@@ -1143,7 +1147,8 @@ describe("Vercel-faithful App Builder flow", () => {
         (button) => button.textContent === "Retry",
       )!,
     );
-    expect(request).toHaveBeenCalledTimes(5);
+    expect(builderActions.provisionBuilderProvider).toHaveBeenCalledTimes(3);
+    expect(builderActions.createBuilderHandoff).toHaveBeenCalledTimes(2);
     expect(view.textContent).toContain("apps-provider-app");
     expect(view.textContent).toContain("App Brief Ready!");
     expect(view.textContent).not.toContain("Setup needs attention");
@@ -1230,7 +1235,11 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText },
     });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(handoffResponse());
+    builderActions.createBuilderHandoff.mockResolvedValue({
+      version: 1,
+      handoffId: opaqueHandoffId,
+      expiresAt: "2026-09-08T12:00:00.000Z",
+    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -1254,7 +1263,6 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
-    expect(writeText).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
     await click(
@@ -1300,7 +1308,11 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) },
     });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(handoffResponse());
+    builderActions.createBuilderHandoff.mockResolvedValue({
+      version: 1,
+      handoffId: opaqueHandoffId,
+      expiresAt: "2026-09-08T12:00:00.000Z",
+    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -1339,7 +1351,11 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(handoffResponse());
+    builderActions.createBuilderHandoff.mockResolvedValue({
+      version: 1,
+      handoffId: opaqueHandoffId,
+      expiresAt: "2026-09-08T12:00:00.000Z",
+    });
     const view = await render(
       <AppBuilder
         authenticated
