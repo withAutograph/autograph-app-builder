@@ -163,6 +163,7 @@ async function createBuilderHandoff(input: {
   const value = await createBuilderHandoffAction({
     version: 1,
     creationRequestId: input.creationRequestId,
+    destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
     ...(input.provisioning.requestDigest === "0".repeat(64)
       ? {}
       : { provisioningRequestId: input.provisioning.requestId }),
@@ -251,6 +252,12 @@ const suggestions = [
 
 const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
+
+const unresolvedResume = Symbol("unresolved-resume");
+
+function subscribeToClientSnapshot() {
+  return () => {};
+}
 
 const briefExamples = [
   defaultBrief,
@@ -1188,6 +1195,11 @@ export function Builder({
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
     null,
   );
+  const interactive = useSyncExternalStore(
+    subscribeToClientSnapshot,
+    () => true,
+    () => false,
+  );
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
     initialDraft?.connectedConnections ?? [],
   );
@@ -1289,14 +1301,14 @@ export function Builder({
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
   useEffect(() => {
-    if (!initialDraft) return;
+    if (!initialDraft || !interactive) return;
     const id =
       initialDraft.focusOrigin === "vercel" ? "vercel-team" : "git-scope";
     const frame = window.requestAnimationFrame(() => {
       document.getElementById(id)?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [initialDraft]);
+  }, [initialDraft, interactive]);
   const beginProviderConnection = (provider: ProviderField) => {
     const key = crypto.randomUUID();
     const draft: BuilderDraft = {
@@ -1346,163 +1358,171 @@ export function Builder({
   return (
     <main className={styles.authenticatedPage} id="main-content">
       <form className={styles.builderCard} onSubmit={submit}>
-        <div className={styles.cardTitle}>
-          <div>
-            <h1>Build an app</h1>
-            <p>
-              Describe what you want to build, then choose how it should be
-              created and delivered.
-            </p>
-          </div>
-        </div>
-        <ProviderNotices notices={visibleProviderNotices} />
-        <AppDetailsSection
-          appName={form.appName}
-          brief={form.brief}
-          onAppNameChange={(appName) => {
-            appNameEditedByUser.current = true;
-            if (appName !== form.appName) hasUnsavedChanges.current = true;
-            setForm((current) => ({
-              ...current,
-              appName,
-              repository: repositoryEditedByUser.current
-                ? current.repository
-                : repositoryNameFromAppName(appName),
-            }));
-          }}
-          onBriefChange={updateBrief}
-          onCycleBrief={() => {
-            const currentIndex = briefExamples.indexOf(
-              form.brief as (typeof briefExamples)[number],
-            );
-            const nextIndex =
-              currentIndex < 0 ? 0 : (currentIndex + 1) % briefExamples.length;
-            updateBrief(briefExamples[nextIndex]);
-          }}
-        />
-        <BuildWithSection
-          comingSoonEnabled={comingSoonEnabled}
-          selected={form.buildDestination}
-          onChange={(buildDestination) => {
-            if (buildDestination !== form.buildDestination)
-              hasUnsavedChanges.current = true;
-            setForm((current) => ({ ...current, buildDestination }));
-          }}
+        <fieldset
+          className={styles.builderControls}
+          disabled={!interactive}
+          aria-busy={!interactive}
         >
-          {form.buildDestination === "web" ? (
-            <ModelControls
-              available={integrations.models.status === "ready"}
-              model={model}
-              options={modelOptions}
-              zdrOnly={zdrOnly}
-              onModelChange={(value) => {
-                if (value !== model) hasUnsavedChanges.current = true;
-                setModel(value);
-              }}
-              onZdrChange={(checked) => {
-                if (checked !== zdrOnly) hasUnsavedChanges.current = true;
-                setZdrOnly(checked);
-                if (
-                  checked &&
-                  !integrations.models.entries.some(
-                    (entry) => entry.id === model && entry.zdr === "all",
+          <div className={styles.cardTitle}>
+            <div>
+              <h1>Build an app</h1>
+              <p>
+                Describe what you want to build, then choose how it should be
+                created and delivered.
+              </p>
+            </div>
+          </div>
+          <ProviderNotices notices={visibleProviderNotices} />
+          <AppDetailsSection
+            appName={form.appName}
+            brief={form.brief}
+            onAppNameChange={(appName) => {
+              appNameEditedByUser.current = true;
+              if (appName !== form.appName) hasUnsavedChanges.current = true;
+              setForm((current) => ({
+                ...current,
+                appName,
+                repository: repositoryEditedByUser.current
+                  ? current.repository
+                  : repositoryNameFromAppName(appName),
+              }));
+            }}
+            onBriefChange={updateBrief}
+            onCycleBrief={() => {
+              const currentIndex = briefExamples.indexOf(
+                form.brief as (typeof briefExamples)[number],
+              );
+              const nextIndex =
+                currentIndex < 0
+                  ? 0
+                  : (currentIndex + 1) % briefExamples.length;
+              updateBrief(briefExamples[nextIndex]);
+            }}
+          />
+          <BuildWithSection
+            comingSoonEnabled={comingSoonEnabled}
+            selected={form.buildDestination}
+            onChange={(buildDestination) => {
+              if (buildDestination !== form.buildDestination)
+                hasUnsavedChanges.current = true;
+              setForm((current) => ({ ...current, buildDestination }));
+            }}
+          >
+            {form.buildDestination === "web" ? (
+              <ModelControls
+                available={integrations.models.status === "ready"}
+                model={model}
+                options={modelOptions}
+                zdrOnly={zdrOnly}
+                onModelChange={(value) => {
+                  if (value !== model) hasUnsavedChanges.current = true;
+                  setModel(value);
+                }}
+                onZdrChange={(checked) => {
+                  if (checked !== zdrOnly) hasUnsavedChanges.current = true;
+                  setZdrOnly(checked);
+                  if (
+                    checked &&
+                    !integrations.models.entries.some(
+                      (entry) => entry.id === model && entry.zdr === "all",
+                    )
                   )
-                )
-                  setModel("");
-              }}
-              onRetry={() => router.refresh()}
+                    setModel("");
+                }}
+                onRetry={() => router.refresh()}
+              />
+            ) : null}
+          </BuildWithSection>
+          <StoreInSection
+            available={integrations.github.status !== "unavailable"}
+            comingSoonEnabled={comingSoonEnabled}
+            connected={integrations.github.status === "connected"}
+            selected={storageProvider}
+            gitScope={gitScope}
+            gitScopeOptions={gitScopeOptions}
+            repository={form.repository}
+            privateRepository={form.privateRepository}
+            onProviderChange={(provider) => {
+              hasUnsavedChanges.current = true;
+              setStorageProvider((current) =>
+                current === provider ? null : provider,
+              );
+            }}
+            onGitScopeChange={(value) => {
+              if (value !== gitScope) hasUnsavedChanges.current = true;
+              setGitScope(value);
+            }}
+            onRepositoryChange={(repository) => {
+              repositoryEditedByUser.current = true;
+              if (repository !== form.repository)
+                hasUnsavedChanges.current = true;
+              setForm((current) => ({ ...current, repository }));
+            }}
+            onPrivacyChange={(privateRepository) => {
+              if (privateRepository !== form.privateRepository)
+                hasUnsavedChanges.current = true;
+              setForm((current) => ({ ...current, privateRepository }));
+            }}
+            onConnect={() => beginProviderConnection("github")}
+          />
+          <DeployToSection
+            available={integrations.vercel.status !== "unavailable"}
+            comingSoonEnabled={comingSoonEnabled}
+            connected={integrations.vercel.status === "connected"}
+            selected={deploymentProvider}
+            team={team}
+            teamOptions={teamOptions}
+            onProviderChange={(provider) => {
+              hasUnsavedChanges.current = true;
+              setDeploymentProvider((current) =>
+                current === provider ? null : provider,
+              );
+            }}
+            onTeamChange={(value) => {
+              if (value !== team) hasUnsavedChanges.current = true;
+              setTeam(value);
+            }}
+            onConnect={() => beginProviderConnection("vercel")}
+          />
+          {connectionsEnabled ? (
+            <ConnectionsSection
+              connected={connectedConnections}
+              comingSoonEnabled={comingSoonEnabled}
+              search={search}
+              selected={form.connections}
+              showMore={showMoreConnections}
+              onAdd={addConnection}
+              onRemove={removeConnection}
+              onSearchChange={setSearch}
+              onShowMore={() => setShowMoreConnections(true)}
+              onCustomize={(name) =>
+                setConnectionFlow({
+                  name,
+                  stage: connectedConnections.includes(name)
+                    ? "configure"
+                    : "connect",
+                })
+              }
             />
           ) : null}
-        </BuildWithSection>
-        <StoreInSection
-          available={integrations.github.status !== "unavailable"}
-          comingSoonEnabled={comingSoonEnabled}
-          connected={integrations.github.status === "connected"}
-          selected={storageProvider}
-          gitScope={gitScope}
-          gitScopeOptions={gitScopeOptions}
-          repository={form.repository}
-          privateRepository={form.privateRepository}
-          onProviderChange={(provider) => {
-            hasUnsavedChanges.current = true;
-            setStorageProvider((current) =>
-              current === provider ? null : provider,
-            );
-          }}
-          onGitScopeChange={(value) => {
-            if (value !== gitScope) hasUnsavedChanges.current = true;
-            setGitScope(value);
-          }}
-          onRepositoryChange={(repository) => {
-            repositoryEditedByUser.current = true;
-            if (repository !== form.repository)
-              hasUnsavedChanges.current = true;
-            setForm((current) => ({ ...current, repository }));
-          }}
-          onPrivacyChange={(privateRepository) => {
-            if (privateRepository !== form.privateRepository)
-              hasUnsavedChanges.current = true;
-            setForm((current) => ({ ...current, privateRepository }));
-          }}
-          onConnect={() => beginProviderConnection("github")}
-        />
-        <DeployToSection
-          available={integrations.vercel.status !== "unavailable"}
-          comingSoonEnabled={comingSoonEnabled}
-          connected={integrations.vercel.status === "connected"}
-          selected={deploymentProvider}
-          team={team}
-          teamOptions={teamOptions}
-          onProviderChange={(provider) => {
-            hasUnsavedChanges.current = true;
-            setDeploymentProvider((current) =>
-              current === provider ? null : provider,
-            );
-          }}
-          onTeamChange={(value) => {
-            if (value !== team) hasUnsavedChanges.current = true;
-            setTeam(value);
-          }}
-          onConnect={() => beginProviderConnection("vercel")}
-        />
-        {connectionsEnabled ? (
-          <ConnectionsSection
-            connected={connectedConnections}
-            comingSoonEnabled={comingSoonEnabled}
-            search={search}
-            selected={form.connections}
-            showMore={showMoreConnections}
-            onAdd={addConnection}
-            onRemove={removeConnection}
-            onSearchChange={setSearch}
-            onShowMore={() => setShowMoreConnections(true)}
-            onCustomize={(name) =>
-              setConnectionFlow({
-                name,
-                stage: connectedConnections.includes(name)
-                  ? "configure"
-                  : "connect",
-              })
-            }
-          />
-        ) : null}
-        <div className={styles.submitArea}>
-          <button
-            className={styles.createButton}
-            type="submit"
-            disabled={!canSubmit}
-            aria-describedby={
-              submitGuidance ? "create-app-guidance" : undefined
-            }
-          >
-            Create App
-          </button>
-          {submitGuidance ? (
-            <p className={styles.submitGuidance} id="create-app-guidance">
-              {submitGuidance}
-            </p>
-          ) : null}
-        </div>
+          <div className={styles.submitArea}>
+            <button
+              className={styles.createButton}
+              type="submit"
+              disabled={!canSubmit}
+              aria-describedby={
+                submitGuidance ? "create-app-guidance" : undefined
+              }
+            >
+              Create App
+            </button>
+            {submitGuidance ? (
+              <p className={styles.submitGuidance} id="create-app-guidance">
+                {submitGuidance}
+              </p>
+            ) : null}
+          </div>
+        </fieldset>
       </form>
       {connectionFlow ? (
         <ConnectionDrawer
@@ -1621,7 +1641,6 @@ export function Handoff({
     ...(form.githubInstallationId ? ["Creating GitHub repository"] : []),
     ...(form.vercelInstallationId ? ["Creating Vercel project"] : []),
     "Preparing secure handoff",
-    "Copying handoff prompt",
     "Opening selected client",
   ];
   const [step, setStep] = useState(0);
@@ -1694,19 +1713,6 @@ export function Handoff({
       }
       if (!mounted.current) return;
       setStep((value) => value + 1);
-      let clipboardState: ClipboardState = "idle";
-      try {
-        await navigator.clipboard.writeText(
-          buildAppHandoffPrompt(
-            handoff.handoffId,
-            form.buildDestination === "cursor" ? "cursor" : "codex",
-          ),
-        );
-        clipboardState = "copied";
-      } catch {
-        clipboardState = "failed";
-      }
-      if (!mounted.current) return;
       setStep((value) => value + 1);
       const handoffAttempt = attemptAppHandoff(
         form.buildDestination,
@@ -1716,7 +1722,12 @@ export function Handoff({
       setStep(stages.length);
       await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
       if (!mounted.current) return;
-      onReady({ provisioning, handoff, handoffAttempt, clipboardState });
+      onReady({
+        provisioning,
+        handoff,
+        handoffAttempt,
+        clipboardState: "idle",
+      });
     })();
     return () => {
       mounted.current = false;
@@ -1942,10 +1953,15 @@ export function AppBuilder({
   const [openedHandoffWindow, setOpenedHandoffWindow] =
     useState<Window | null>();
   const [savedBrief, setSavedBrief] = useState("");
-  const resumedDraft = useSyncExternalStore(
-    () => () => undefined,
-    () => (providerResumeKey ? readBuilderDraft(providerResumeKey) : undefined),
-    () => undefined,
+  const resolvedResume = useSyncExternalStore<
+    BuilderDraft | typeof unresolvedResume | undefined
+  >(
+    subscribeToClientSnapshot,
+    () =>
+      providerResumeKey === undefined
+        ? undefined
+        : readBuilderDraft(providerResumeKey),
+    () => unresolvedResume,
   );
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1988,8 +2004,12 @@ export function AppBuilder({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [router]);
+  const resumePending =
+    providerResumeKey !== undefined && resolvedResume === unresolvedResume;
+  const resumedDraft =
+    resolvedResume === unresolvedResume ? undefined : resolvedResume;
   const builderKey = providerResumeKey
-    ? `${providerResumeKey}:${resumedDraft ? "restored" : "pending"}`
+    ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
     : savedBrief || "new";
 
   if (!authenticated)
@@ -2004,7 +2024,14 @@ export function AppBuilder({
   return (
     <div className={styles.appShell}>
       <Header />
-      {screen === "builder" ? (
+      {screen === "builder" && resumePending ? (
+        <main
+          className={styles.authenticatedPage}
+          id="main-content"
+          aria-busy="true"
+        />
+      ) : null}
+      {screen === "builder" && !resumePending ? (
         <Builder
           key={builderKey}
           initialBrief={savedBrief}

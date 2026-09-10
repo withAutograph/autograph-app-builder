@@ -69,6 +69,7 @@ export async function readBuilderProviderProvisioning(requestId: string) {
 export async function createBuilderHandoff(input: {
   version: 1;
   creationRequestId: string;
+  destination: "codex" | "cursor";
   provisioningRequestId?: string;
   appName: string;
   repository: { name: string; private: boolean };

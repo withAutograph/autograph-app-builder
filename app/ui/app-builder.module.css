@@ -205,6 +205,13 @@
   display: grid;
   gap: 22px;
 }
+.builderControls {
+  display: contents;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .cardTitle {
   display: flex;
   align-items: flex-start;

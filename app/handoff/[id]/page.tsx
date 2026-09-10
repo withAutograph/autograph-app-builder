@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { getBuilderHandoffPageData } from "../../../lib/handoff/deployment";
 import { HandoffControls } from "../../ui/handoff-controls";
 import { Header } from "../../ui/builder-shell";
+import { CreateAnotherAppLink } from "../../ui/create-another-app-link";
 import styles from "../../ui/app-builder.module.css";
 import handoffStyles from "../../ui/handoff.module.css";
 
@@ -146,7 +147,7 @@ export async function HandoffContent({
             <p style={{ whiteSpace: "pre-wrap" }}>{intent.brief}</p>
           </details>
           <HandoffControls key={data.handoffId} initial={controls} />
-          <Link href="/">Create another app</Link>
+          <CreateAnotherAppLink />
         </section>
       </main>
     </div>

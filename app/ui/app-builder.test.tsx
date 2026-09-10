@@ -906,6 +906,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(builderActions.createBuilderHandoff).toHaveBeenCalledWith(
       expect.objectContaining({
         appName: "support-app",
+        destination: "codex",
         repository: { name: "support-app", private: true },
       }),
     );
@@ -1134,7 +1135,7 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(events).toEqual(["github", "vercel", "handoff", "clipboard"]);
+    expect(events).toEqual(["github", "vercel", "handoff"]);
     expect(view.textContent).toContain("jasonmorganson/provider-app");
     expect(view.textContent).toContain("Vercel: the provider rejected");
     expect(view.textContent).toContain("App created with an issue");
@@ -1263,6 +1264,9 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(builderActions.createBuilderHandoff).toHaveBeenCalledWith(
+      expect.objectContaining({ destination: "cursor" }),
+    );
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
     await click(
