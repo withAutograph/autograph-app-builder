@@ -45,6 +45,19 @@ async function completeHandoff(page: import("playwright/test").Page) {
   ).toBeVisible();
 }
 
+async function getWithTransientRetry(page: Page, path: string) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await page.request.get(path);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const retryable = /(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT)/u.test(message);
+      if (!retryable || attempt >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+    }
+  }
+}
+
 async function prepareNamedHandoff(
   page: Page,
   appName: string,
@@ -129,7 +142,10 @@ test("multiple handoffs reload independently without replacing saved app context
       await expect(
         activePage.getByRole("radio", { name: destination, exact: true }),
       ).toBeChecked();
-      const response = await activePage.request.get(handoff.statusPath);
+      const response = await getWithTransientRetry(
+        activePage,
+        handoff.statusPath,
+      );
       expect(response.ok()).toBe(true);
       const status = await response.json();
       expect(status.handoffId).toBe(handoff.id);
