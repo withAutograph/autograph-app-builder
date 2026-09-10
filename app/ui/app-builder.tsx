@@ -1177,7 +1177,7 @@ export function Builder({
     (update: SetStateAction<BuilderForm>) => {
       const current = builderForm.getValues();
       const next = typeof update === "function" ? update(current) : update;
-      builderForm.reset(next, { keepDefaultValues: true });
+      builderForm.reset(next);
     },
     [builderForm],
   );
@@ -1187,9 +1187,10 @@ export function Builder({
   const repositoryEditedByUser = useRef(
     initialDraft?.repositoryEditedByUser ?? false,
   );
-  const activeDraftId = useRef(
-    resumeKey ?? durableDraftId ?? crypto.randomUUID(),
+  const [initialActiveDraftId] = useState(
+    () => resumeKey ?? durableDraftId ?? crypto.randomUUID(),
   );
+  const activeDraftId = useRef(initialActiveDraftId);
   const resumedVercelConnection = providerNotices.some(
     (notice) => notice.provider === "vercel" && notice.status === "connected",
   );
@@ -1238,9 +1239,9 @@ export function Builder({
   const draftOutbox = useMemo(
     () =>
       createBuilderDraftOutbox<BuilderDraft>({
-        key: `active:${activeDraftId.current}`,
+        key: `active:${initialActiveDraftId}`,
       }),
-    [],
+    [initialActiveDraftId],
   );
   const saveDraft = useCallback(
     async ({

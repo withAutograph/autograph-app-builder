@@ -90,9 +90,11 @@ export function useBuilderDraftAutosave<T>(
   const isOnline = useRef(options.isOnline);
   const onVisibilityFlush = useRef(options.onVisibilityFlush);
 
-  save.current = options.save;
-  isOnline.current = options.isOnline;
-  onVisibilityFlush.current = options.onVisibilityFlush;
+  useEffect(() => {
+    save.current = options.save;
+    isOnline.current = options.isOnline;
+    onVisibilityFlush.current = options.onVisibilityFlush;
+  }, [options.isOnline, options.onVisibilityFlush, options.save]);
 
   const updateStatus = useCallback(
     (next: BuilderDraftAutosaveStatus, nextError?: Error) => {
