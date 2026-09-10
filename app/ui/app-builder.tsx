@@ -1308,7 +1308,11 @@ export function Builder({
     new Map<
       string,
       {
-        resolve(saved: { draftId: string; revision: number; updatedAt: string }): void;
+        resolve(saved: {
+          draftId: string;
+          revision: number;
+          updatedAt: string;
+        }): void;
         reject(error: Error): void;
       }
     >(),
