@@ -1,6 +1,5 @@
 import { Monitor } from "@geist-ui/icons";
 import type { ReactNode } from "react";
-import { SiOpenai } from "react-icons/si";
 
 import { SectionShell } from "../../components/create-app/choice-card";
 import styles from "./app-builder.module.css";
@@ -65,7 +64,7 @@ export function BuildWithSection({
             </label>
           ) : null}
           <label>
-            <SiOpenai size={18} aria-hidden="true" />
+            <Monitor size={18} aria-hidden="true" />
             ChatGPT / Codex
             <input
               type="radio"
