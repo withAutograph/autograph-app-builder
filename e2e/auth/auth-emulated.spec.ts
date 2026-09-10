@@ -132,7 +132,7 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   await page.goto(
     `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
   );
-  const signInCard = page.locator('[data-slot="card"]');
+  const signInCard = page.locator('[data-slot="card"]:visible');
   const signInCardBox = await signInCard.boundingBox();
   const signUpLink = page.getByRole("link", { name: "Sign Up" });
   await expect(page.getByText("Need to create an account?")).toBeVisible();
@@ -144,7 +144,7 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
 
   await signUpLink.click();
   await expect(page).toHaveURL(/\/auth\/sign-up/u);
-  const signUpCard = page.locator('[data-slot="card"]');
+  const signUpCard = page.locator('[data-slot="card"]:visible');
   const signUpCardBox = await signUpCard.boundingBox();
   const signInLink = page.getByRole("link", { name: "Sign In" });
   await expect(page.getByText("Already have an account?")).toBeVisible();
