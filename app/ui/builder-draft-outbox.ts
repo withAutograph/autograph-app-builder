@@ -1,0 +1,169 @@
+/**
+ * A tiny, origin-scoped outbox for the latest builder edit which has not been
+ * acknowledged by the server. IndexedDB is intentionally an implementation
+ * detail: callers only deal in snapshots and mutation IDs.
+ */
+
+export type BuilderDraftOutboxEntry<T> = {
+  version: 1;
+  mutationId: string;
+  snapshot: T;
+  createdAt: number;
+};
+
+export type BuilderDraftOutbox<T> = {
+  read(): Promise<BuilderDraftOutboxEntry<T> | undefined>;
+  write(entry: BuilderDraftOutboxEntry<T>): Promise<void>;
+  clearIfMutationId(mutationId: string): Promise<boolean>;
+};
+
+export type BuilderDraftOutboxOptions = {
+  /** Namespaces drafts in the browser origin. Include the draft ID in this key. */
+  key: string;
+  /** Injectable for tests and for WebViews that expose a non-global factory. */
+  indexedDB?: IDBFactory | null;
+};
+
+const databaseName = "autograph-builder-draft-outbox";
+const storeName = "pending";
+const memoryFallback = new Map<string, unknown>();
+
+function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.addEventListener("success", () => resolve(request.result), {
+      once: true,
+    });
+    request.addEventListener("error", () => reject(request.error), {
+      once: true,
+    });
+  });
+}
+
+function transactionResult(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.addEventListener("complete", () => resolve(), { once: true });
+    transaction.addEventListener("abort", () => reject(transaction.error), {
+      once: true,
+    });
+    transaction.addEventListener("error", () => reject(transaction.error), {
+      once: true,
+    });
+  });
+}
+
+function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(databaseName, 1);
+    request.addEventListener(
+      "upgradeneeded",
+      () => {
+        const database = request.result;
+        if (!database.objectStoreNames.contains(storeName))
+          database.createObjectStore(storeName);
+      },
+      { once: true },
+    );
+    request.addEventListener("success", () => resolve(request.result), {
+      once: true,
+    });
+    request.addEventListener("error", () => reject(request.error), {
+      once: true,
+    });
+  });
+}
+
+function defaultFactory() {
+  return typeof indexedDB === "undefined" ? undefined : indexedDB;
+}
+
+/**
+ * Saves only the newest unacknowledged snapshot. All operations are serialized
+ * so a delayed older write can never overwrite a newer outbox entry.
+ */
+export function createBuilderDraftOutbox<T>(
+  options: BuilderDraftOutboxOptions,
+): BuilderDraftOutbox<T> {
+  const factory =
+    options.indexedDB === undefined ? defaultFactory() : options.indexedDB;
+  let operations = Promise.resolve();
+
+  function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
+    const result = operations.then(operation);
+    operations = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  async function withDatabase<Result>(
+    operation: (database: IDBDatabase) => Promise<Result>,
+    fallback: () => Result,
+  ): Promise<Result> {
+    if (!factory) return fallback();
+    try {
+      const database = await openDatabase(factory);
+      try {
+        return await operation(database);
+      } finally {
+        database.close();
+      }
+    } catch {
+      return fallback();
+    }
+  }
+
+  return {
+    read: () =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readonly");
+            const result = await requestResult(
+              transaction.objectStore(storeName).get(options.key),
+            );
+            await transactionResult(transaction);
+            return result as BuilderDraftOutboxEntry<T> | undefined;
+          },
+          () =>
+            memoryFallback.get(options.key) as
+              BuilderDraftOutboxEntry<T> | undefined,
+        ),
+      ),
+    write: (entry) =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readwrite");
+            transaction.objectStore(storeName).put(entry, options.key);
+            await transactionResult(transaction);
+          },
+          () => {
+            memoryFallback.set(options.key, entry);
+          },
+        ),
+      ),
+    clearIfMutationId: (mutationId) =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readwrite");
+            const store = transaction.objectStore(storeName);
+            const entry = (await requestResult(store.get(options.key))) as
+              BuilderDraftOutboxEntry<T> | undefined;
+            const cleared = entry?.mutationId === mutationId;
+            if (cleared) store.delete(options.key);
+            await transactionResult(transaction);
+            return cleared;
+          },
+          () => {
+            const entry = memoryFallback.get(options.key) as
+              BuilderDraftOutboxEntry<T> | undefined;
+            if (entry?.mutationId !== mutationId) return false;
+            memoryFallback.delete(options.key);
+            return true;
+          },
+        ),
+      ),
+  };
+}

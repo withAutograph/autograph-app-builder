@@ -4,6 +4,7 @@ import { withEve } from "eve/next";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  partialPrefetching: true,
   outputFileTracingIncludes: {
     "/*": [
       "./node_modules/@emulators/core/dist/fonts/**/*",

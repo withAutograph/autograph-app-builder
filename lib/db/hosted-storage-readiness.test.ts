@@ -71,7 +71,7 @@ describe("hosted storage read-only readiness", () => {
         maxConnections: 1,
       },
       migrations: {
-        count: 20,
+        count: 21,
         exactOrder: true,
         noPendingMigration: true,
         additiveOnly: true,

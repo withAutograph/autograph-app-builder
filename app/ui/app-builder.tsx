@@ -13,13 +13,18 @@ import {
 } from "@geist-ui/icons";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
+import { useForm, useWatch } from "react-hook-form";
 import {
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type FormEvent,
+  type SetStateAction,
 } from "react";
 import {
   SiBitbucket,
@@ -34,8 +39,17 @@ import {
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import {
+  clearBuilderDraft as clearDurableBuilderDraft,
+  saveActiveBuilderDraft,
+} from "@/app/actions/builder-drafts";
+import {
+  builderDraftFormSchema,
+  type BuilderDraftRecord,
+} from "@/lib/builder-drafts/contracts";
+import {
   createBuilderHandoff as createBuilderHandoffAction,
   provisionBuilderProvider,
+  reserveBuilderProvider,
 } from "@/app/actions/builder";
 import {
   buildAppHandoffPrompt,
@@ -64,6 +78,9 @@ import { BuilderNextSteps } from "./builder-next-steps";
 import { BuilderProvisionedResources } from "./builder-provisioned-resources";
 import { BuilderInstallInstructions } from "./builder-install-instructions";
 import { BuilderHandoffProgress } from "./builder-handoff-progress";
+import { ProvisioningProgress } from "./provisioning-progress";
+import { createBuilderDraftOutbox } from "./builder-draft-outbox";
+import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
 import { InfoTooltip } from "./builder-info-tooltip";
@@ -252,8 +269,6 @@ const suggestions = [
 
 const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
-
-const unresolvedResume = Symbol("unresolved-resume");
 
 function subscribeToClientSnapshot() {
   return () => {};
@@ -468,14 +483,10 @@ export function ModelControls({
         value={model}
         options={options}
         onChange={onModelChange}
-        input={{
-          placeholder: available ? "Select model" : "Models unavailable",
-          disabled: !available,
-        }}
-        presentation={{
-          prefix: <Search size={15} />,
-          showSelectedCheck: false,
-        }}
+        placeholder={available ? "Select model" : "Models unavailable"}
+        disabled={!available}
+        prefix={<Search size={15} />}
+        showSelectedCheck={false}
       />
       {!available ? (
         <button className={styles.retryModels} type="button" onClick={onRetry}>
@@ -538,22 +549,18 @@ export function DeployToSection({
                 value={team}
                 options={teamOptions}
                 onChange={onTeamChange}
-                input={{ id: "vercel-team" }}
-                presentation={{
-                  prefix: <span className={styles.teamDot} data-team={team} />,
-                  optionIcon: (option) => (
-                    <span className={styles.teamDot} data-team={option.value} />
-                  ),
-                  footerIcon: <PlusCircle size={18} />,
-                  detailPills: true,
+                inputId="vercel-team"
+                prefix={<span className={styles.teamDot} data-team={team} />}
+                optionIcon={(option) => (
+                  <span className={styles.teamDot} data-team={option.value} />
+                )}
+                footerIcon={<PlusCircle size={18} />}
+                detailPills
+                menuFooter={{
+                  value: "create-team",
+                  label: "Connect another Vercel team",
                 }}
-                footer={{
-                  option: {
-                    value: "create-team",
-                    label: "Connect another Vercel team",
-                  },
-                  onSelect: onConnect,
-                }}
+                onFooterSelect={onConnect}
               />
             ) : (
               <button
@@ -644,19 +651,15 @@ export function StoreInSection({
                     value={gitScope}
                     options={gitScopeOptions}
                     onChange={onGitScopeChange}
-                    input={{ id: "git-scope" }}
-                    presentation={{
-                      prefix: <FaGithub size={16} />,
-                      optionIcon: () => <FaGithub size={16} />,
-                      footerIcon: <Plus size={21} />,
+                    inputId="git-scope"
+                    prefix={<FaGithub size={16} />}
+                    optionIcon={() => <FaGithub size={16} />}
+                    footerIcon={<Plus size={21} />}
+                    menuFooter={{
+                      value: "add-github",
+                      label: githubView.actionLabel,
                     }}
-                    footer={{
-                      option: {
-                        value: "add-github",
-                        label: githubView.actionLabel,
-                      },
-                      onSelect: onConnect,
-                    }}
+                    onFooterSelect={onConnect}
                   />
                 ) : (
                   <button
@@ -1111,6 +1114,8 @@ export function Builder({
   providerNotices,
   initialDraft,
   resumeKey,
+  durableDraftId,
+  durableDraftRevision = 0,
 }: {
   initialBrief: string;
   generatedNameSeed: string;
@@ -1121,6 +1126,8 @@ export function Builder({
   providerNotices: ProviderConnectionNotice[];
   initialDraft?: BuilderDraft;
   resumeKey?: string;
+  durableDraftId?: string;
+  durableDraftRevision?: number;
 }) {
   const router = useRouter();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
@@ -1146,21 +1153,33 @@ export function Builder({
     : defaultBrief;
   const initialAppName =
     appNameFromBrief(effectiveInitialBrief) || randomAppName(generatedNameSeed);
-  const [form, setForm] = useState<BuilderForm>(
-    initialDraft
-      ? {
-          ...initialDraft.form,
-          buildDestination: initialDraft.form.buildDestination ?? "codex",
-        }
-      : {
-          appName: initialAppName,
-          repository: repositoryNameFromAppName(initialAppName),
-          brief: effectiveInitialBrief,
-          privateRepository: true,
-          buildDestination: "codex",
-          connections: [],
-          modelId: defaultModel,
-        },
+  const initialForm: BuilderForm = initialDraft
+    ? {
+        ...initialDraft.form,
+        buildDestination: initialDraft.form.buildDestination ?? "codex",
+      }
+    : {
+        appName: initialAppName,
+        repository: repositoryNameFromAppName(initialAppName),
+        brief: effectiveInitialBrief,
+        privateRepository: true,
+        buildDestination: "codex",
+        connections: [],
+        modelId: defaultModel,
+      };
+  const builderForm = useForm<BuilderForm>({
+    defaultValues: initialForm,
+    mode: "onChange",
+    resolver: zodResolver(builderDraftFormSchema),
+  });
+  const form = useWatch({ control: builderForm.control }) as BuilderForm;
+  const setForm = useCallback(
+    (update: SetStateAction<BuilderForm>) => {
+      const current = builderForm.getValues();
+      const next = typeof update === "function" ? update(current) : update;
+      builderForm.reset(next, { keepDefaultValues: true });
+    },
+    [builderForm],
   );
   const appNameEditedByUser = useRef(
     initialDraft?.appNameEditedByUser ?? false,
@@ -1168,8 +1187,9 @@ export function Builder({
   const repositoryEditedByUser = useRef(
     initialDraft?.repositoryEditedByUser ?? false,
   );
-  const hasUnsavedChanges = useRef(false);
-  const suppressUnsavedWarning = useRef(false);
+  const activeDraftId = useRef(
+    resumeKey ?? durableDraftId ?? crypto.randomUUID(),
+  );
   const resumedVercelConnection = providerNotices.some(
     (notice) => notice.provider === "vercel" && notice.status === "connected",
   );
@@ -1211,6 +1231,65 @@ export function Builder({
     useState<DeploymentProvider | null>(
       initialDraft?.deploymentProvider === "vercel" ? "vercel" : null,
     );
+  const draftRevision = useRef(durableDraftRevision);
+  const focusOrigin = useRef<ProviderField>(
+    initialDraft?.focusOrigin ?? "github",
+  );
+  const draftOutbox = useMemo(
+    () =>
+      createBuilderDraftOutbox<BuilderDraft>({
+        key: `active:${activeDraftId.current}`,
+      }),
+    [],
+  );
+  const saveDraft = useCallback(
+    async ({
+      mutationId,
+      snapshot,
+      keepalive,
+    }: {
+      mutationId: string;
+      snapshot: BuilderDraft;
+      keepalive: boolean;
+    }) => {
+      const input = {
+        version: 1 as const,
+        draftId: activeDraftId.current,
+        expectedRevision: draftRevision.current,
+        clientMutationId: mutationId,
+        record: {
+          version: 1 as const,
+          draft: snapshot,
+        } satisfies BuilderDraftRecord,
+      };
+      const saved = keepalive
+        ? await fetch("/api/builder/draft", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+            keepalive: true,
+          }).then(async (response) => {
+            if (!response.ok) throw new Error("builder-draft-save-failed");
+            return (await response.json()) as {
+              draftId: string;
+              revision: number;
+              updatedAt: string;
+            };
+          })
+        : await saveActiveBuilderDraft(input);
+      activeDraftId.current = saved.draftId;
+      draftRevision.current = saved.revision;
+      return { mutationId, savedAt: saved.updatedAt };
+    },
+    [],
+  );
+  const autosave = useBuilderDraftAutosave({
+    outbox: draftOutbox,
+    save: saveDraft,
+    debounceMs: 500,
+  });
+  const [draftSaveError, setDraftSaveError] = useState("");
+  const initialAutosavePass = useRef(true);
   const visibleProviderNotices = providerNotices.filter(
     (notice) =>
       !(
@@ -1218,6 +1297,36 @@ export function Builder({
         (notice.reason === "configuration-unavailable" ||
           notice.provider === "github")
       ),
+  );
+  const draftSnapshot = useCallback(
+    (origin = focusOrigin.current): BuilderDraft => ({
+      version: 1,
+      form,
+      team,
+      gitScope,
+      model,
+      zdrOnly,
+      showMoreConnections,
+      search,
+      connectedConnections,
+      storageProvider,
+      deploymentProvider,
+      focusOrigin: origin,
+      appNameEditedByUser: appNameEditedByUser.current,
+      repositoryEditedByUser: repositoryEditedByUser.current,
+    }),
+    [
+      connectedConnections,
+      deploymentProvider,
+      form,
+      gitScope,
+      model,
+      search,
+      showMoreConnections,
+      storageProvider,
+      team,
+      zdrOnly,
+    ],
   );
   const modelOptions = zdrOnly
     ? allModelOptions.filter((option) =>
@@ -1248,7 +1357,6 @@ export function Builder({
           ? "Choose an available model to continue."
           : undefined;
   const updateBrief = (brief: string) => {
-    if (brief !== form.brief) hasUnsavedChanges.current = true;
     setForm((current) => {
       if (appNameEditedByUser.current) return { ...current, brief };
       const appName =
@@ -1265,7 +1373,6 @@ export function Builder({
   };
   const addConnection = (name: string) => {
     if (comingSoonConnections.has(name)) return;
-    hasUnsavedChanges.current = true;
     setForm((current) => ({
       ...current,
       connections: current.connections.includes(name)
@@ -1274,7 +1381,6 @@ export function Builder({
     }));
   };
   const removeConnection = (name: string) => {
-    hasUnsavedChanges.current = true;
     setForm((current) => ({
       ...current,
       connections: current.connections.filter((item) => item !== name),
@@ -1293,47 +1399,84 @@ export function Builder({
     setConnectionFlow(null);
   };
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges.current && !suppressUnsavedWarning.current)
-        event.preventDefault();
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, []);
-  useEffect(() => {
-    if (!initialDraft || !interactive) return;
-    const id =
-      initialDraft.focusOrigin === "vercel" ? "vercel-team" : "git-scope";
+    if (!interactive) return;
+    const id = resumedVercelConnection
+      ? "vercel-team"
+      : resumedGitHubConnection
+        ? "git-scope"
+        : initialDraft?.focusOrigin === "vercel"
+          ? "vercel-team"
+          : initialDraft
+            ? "git-scope"
+            : undefined;
+    if (!id) return;
     const frame = window.requestAnimationFrame(() => {
       document.getElementById(id)?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [initialDraft, interactive]);
-  const beginProviderConnection = (provider: ProviderField) => {
-    const key = crypto.randomUUID();
-    const draft: BuilderDraft = {
-      version: 1,
-      form,
-      team,
-      gitScope,
-      model,
-      zdrOnly,
-      showMoreConnections,
-      search,
-      connectedConnections,
-      storageProvider,
-      deploymentProvider,
-      focusOrigin: provider,
-      appNameEditedByUser: appNameEditedByUser.current,
-      repositoryEditedByUser: repositoryEditedByUser.current,
-    };
+  }, [
+    initialDraft,
+    interactive,
+    resumedGitHubConnection,
+    resumedVercelConnection,
+  ]);
+  useEffect(() => {
+    void autosave.restorePending().then((entry) => {
+      if (!entry) return;
+      const snapshot = entry.snapshot;
+      setForm(snapshot.form);
+      setTeam(snapshot.team);
+      setGitScope(snapshot.gitScope);
+      setModel(snapshot.model);
+      setZdrOnly(snapshot.zdrOnly);
+      setShowMoreConnections(snapshot.showMoreConnections);
+      setSearch(snapshot.search);
+      setConnectedConnections(snapshot.connectedConnections);
+      setStorageProvider(snapshot.storageProvider ?? null);
+      setDeploymentProvider(snapshot.deploymentProvider ?? null);
+      focusOrigin.current = snapshot.focusOrigin;
+      appNameEditedByUser.current = snapshot.appNameEditedByUser;
+      repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
+      void autosave.resumePending();
+    });
+  }, [autosave.restorePending, autosave.resumePending]);
+  useEffect(() => {
+    if (initialAutosavePass.current) {
+      initialAutosavePass.current = false;
+      return;
+    }
+    autosave.schedule(draftSnapshot());
+  }, [autosave.schedule, draftSnapshot]);
+  const beginProviderConnection = async (provider: ProviderField) => {
+    const key = activeDraftId.current;
+    focusOrigin.current = provider;
+    const draft = draftSnapshot(provider);
+    // Keep the redirect bridge in this tab only; the server copy is the
+    // authoritative draft used by page loads and other devices.
     persistBuilderDraft(key, draft);
-    suppressUnsavedWarning.current = true;
+    autosave.schedule(draft);
+    await autosave.flush();
+    if (await autosave.restorePending()) {
+      setDraftSaveError(
+        "We couldn’t save your form. Retry saving to connect a provider.",
+      );
+      return;
+    }
+    setDraftSaveError("");
     router.push(`/${provider}/installations?returnTo=%2F&resume=${key}`);
   };
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (canSubmit) {
+    if (canSubmit && (await builderForm.trigger())) {
+      autosave.schedule(draftSnapshot());
+      await autosave.flush();
+      if (await autosave.restorePending()) {
+        setDraftSaveError(
+          "We couldn’t save your form. Retry saving before creating your app.",
+        );
+        return;
+      }
+      setDraftSaveError("");
       const appName =
         form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
       onCreate(
@@ -1350,7 +1493,7 @@ export function Builder({
             : {}),
           modelId: preferredModelId,
         },
-        resumeKey,
+        activeDraftId.current,
       );
     }
   }
@@ -1358,6 +1501,31 @@ export function Builder({
   return (
     <main className={styles.authenticatedPage} id="main-content">
       <form className={styles.builderCard} onSubmit={submit}>
+        <p className={styles.draftStatus} role="status" aria-live="polite">
+          {draftSaveError
+            ? draftSaveError
+            : autosave.status === "saving"
+              ? "Saving your draft…"
+              : autosave.status === "saved"
+                ? "Draft saved"
+                : autosave.status === "offline"
+                  ? "Offline — your draft will retry when you’re back online."
+                  : autosave.status === "error"
+                    ? "Your latest edit is safe on this device and will retry."
+                    : "Your draft saves automatically."}
+          {autosave.status === "error" || draftSaveError ? (
+            <button
+              type="button"
+              className={styles.draftRetry}
+              onClick={() => {
+                setDraftSaveError("");
+                void autosave.retry();
+              }}
+            >
+              Retry
+            </button>
+          ) : null}
+        </p>
         <fieldset
           className={styles.builderControls}
           disabled={!interactive}
@@ -1378,7 +1546,6 @@ export function Builder({
             brief={form.brief}
             onAppNameChange={(appName) => {
               appNameEditedByUser.current = true;
-              if (appName !== form.appName) hasUnsavedChanges.current = true;
               setForm((current) => ({
                 ...current,
                 appName,
@@ -1403,8 +1570,6 @@ export function Builder({
             comingSoonEnabled={comingSoonEnabled}
             selected={form.buildDestination}
             onChange={(buildDestination) => {
-              if (buildDestination !== form.buildDestination)
-                hasUnsavedChanges.current = true;
               setForm((current) => ({ ...current, buildDestination }));
             }}
           >
@@ -1415,11 +1580,9 @@ export function Builder({
                 options={modelOptions}
                 zdrOnly={zdrOnly}
                 onModelChange={(value) => {
-                  if (value !== model) hasUnsavedChanges.current = true;
                   setModel(value);
                 }}
                 onZdrChange={(checked) => {
-                  if (checked !== zdrOnly) hasUnsavedChanges.current = true;
                   setZdrOnly(checked);
                   if (
                     checked &&
@@ -1443,24 +1606,18 @@ export function Builder({
             repository={form.repository}
             privateRepository={form.privateRepository}
             onProviderChange={(provider) => {
-              hasUnsavedChanges.current = true;
               setStorageProvider((current) =>
                 current === provider ? null : provider,
               );
             }}
             onGitScopeChange={(value) => {
-              if (value !== gitScope) hasUnsavedChanges.current = true;
               setGitScope(value);
             }}
             onRepositoryChange={(repository) => {
               repositoryEditedByUser.current = true;
-              if (repository !== form.repository)
-                hasUnsavedChanges.current = true;
               setForm((current) => ({ ...current, repository }));
             }}
             onPrivacyChange={(privateRepository) => {
-              if (privateRepository !== form.privateRepository)
-                hasUnsavedChanges.current = true;
               setForm((current) => ({ ...current, privateRepository }));
             }}
             onConnect={() => beginProviderConnection("github")}
@@ -1473,13 +1630,11 @@ export function Builder({
             team={team}
             teamOptions={teamOptions}
             onProviderChange={(provider) => {
-              hasUnsavedChanges.current = true;
               setDeploymentProvider((current) =>
                 current === provider ? null : provider,
               );
             }}
             onTeamChange={(value) => {
-              if (value !== team) hasUnsavedChanges.current = true;
               setTeam(value);
             }}
             onConnect={() => beginProviderConnection("vercel")}
@@ -1637,6 +1792,9 @@ export function Handoff({
   const mounted = useRef(false);
   const [attempt, setAttempt] = useState(0);
   const [handoffError, setHandoffError] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [streamSnapshot, setStreamSnapshot] =
+    useState<BuilderProvisionResponse>();
   const stages = [
     ...(form.githubInstallationId ? ["Creating GitHub repository"] : []),
     ...(form.vercelInstallationId ? ["Creating Vercel project"] : []),
@@ -1662,6 +1820,11 @@ export function Handoff({
       if (provisioningEnabled) {
         if (form.githubInstallationId) {
           try {
+            await reserveBuilderProvider(
+              provisioningRequest(form, requestId, "github"),
+            );
+            if (!mounted.current) return;
+            setStreaming(true);
             provisioning = await provisionSelectedProvider(
               form,
               requestId,
@@ -1687,6 +1850,11 @@ export function Handoff({
             provisioning.github.status === "succeeded"
           ) {
             try {
+              await reserveBuilderProvider(
+                provisioningRequest(form, requestId, "vercel"),
+              );
+              if (!mounted.current) return;
+              setStreaming(true);
               provisioning = await provisionSelectedProvider(
                 form,
                 requestId,
@@ -1744,12 +1912,26 @@ export function Handoff({
     stages.length,
   ]);
   return (
-    <BuilderHandoffProgress
-      stages={stages}
-      step={step}
-      handoffError={handoffError}
-      onRetry={() => setAttempt((value) => value + 1)}
-    />
+    <>
+      {streaming ? (
+        <ProvisioningProgress
+          requestId={requestId}
+          onSnapshot={setStreamSnapshot}
+          onSettled={setStreamSnapshot}
+        />
+      ) : null}
+      <BuilderHandoffProgress
+        stages={stages}
+        step={
+          streamSnapshot?.github.status === "succeeded" ||
+          streamSnapshot?.github.status === "failed"
+            ? Math.max(step, form.githubInstallationId ? 1 : 0)
+            : step
+        }
+        handoffError={handoffError}
+        onRetry={() => setAttempt((value) => value + 1)}
+      />
+    </>
   );
 }
 
@@ -1928,6 +2110,9 @@ export function AppBuilder({
   integrations,
   providerNotices = [],
   providerResumeKey,
+  initialDurableDraft,
+  durableDraftId,
+  durableDraftRevision,
 }: {
   authenticated: boolean;
   generatedNameSeed?: string;
@@ -1937,6 +2122,9 @@ export function AppBuilder({
   integrations: BuilderIntegrationState;
   providerNotices?: ProviderConnectionNotice[];
   providerResumeKey?: string;
+  initialDurableDraft?: BuilderDraft;
+  durableDraftId?: string;
+  durableDraftRevision?: number;
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("builder");
@@ -1953,16 +2141,7 @@ export function AppBuilder({
   const [openedHandoffWindow, setOpenedHandoffWindow] =
     useState<Window | null>();
   const [savedBrief, setSavedBrief] = useState("");
-  const resolvedResume = useSyncExternalStore<
-    BuilderDraft | typeof unresolvedResume | undefined
-  >(
-    subscribeToClientSnapshot,
-    () =>
-      providerResumeKey === undefined
-        ? undefined
-        : readBuilderDraft(providerResumeKey),
-    () => unresolvedResume,
-  );
+  const [activeBuilderDraftId, setActiveBuilderDraftId] = useState<string>();
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
@@ -2004,10 +2183,12 @@ export function AppBuilder({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [router]);
-  const resumePending =
-    providerResumeKey !== undefined && resolvedResume === unresolvedResume;
-  const resumedDraft =
-    resolvedResume === unresolvedResume ? undefined : resolvedResume;
+  const localResume = useSyncExternalStore<BuilderDraft | undefined>(
+    subscribeToClientSnapshot,
+    () => (providerResumeKey ? readBuilderDraft(providerResumeKey) : undefined),
+    () => undefined,
+  );
+  const resumedDraft = initialDurableDraft ?? localResume;
   const builderKey = providerResumeKey
     ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
     : savedBrief || "new";
@@ -2024,26 +2205,21 @@ export function AppBuilder({
   return (
     <div className={styles.appShell}>
       <Header />
-      {screen === "builder" && resumePending ? (
-        <main
-          className={styles.authenticatedPage}
-          id="main-content"
-          aria-busy="true"
-        />
-      ) : null}
-      {screen === "builder" && !resumePending ? (
+      {screen === "builder" ? (
         <Builder
           key={builderKey}
           initialBrief={savedBrief}
           generatedNameSeed={generatedNameSeed}
           initialDraft={resumedDraft}
           resumeKey={providerResumeKey}
+          durableDraftId={durableDraftId}
+          durableDraftRevision={durableDraftRevision}
           connectionsEnabled={connectionsEnabled}
           comingSoonEnabled={comingSoonEnabled}
           integrations={integrations}
           providerNotices={providerNotices}
-          onCreate={(form) => {
-            if (providerResumeKey) clearBuilderDraft(providerResumeKey);
+          onCreate={(form, draftId) => {
+            setActiveBuilderDraftId(draftId);
             const requestId = crypto.randomUUID();
             const creationRequestId = crypto.randomUUID();
             persistActiveProvisioning({
@@ -2079,6 +2255,10 @@ export function AppBuilder({
           openedWindow={openedHandoffWindow}
           provisioningEnabled={provisioningEnabled}
           onReady={(result) => {
+            if (activeBuilderDraftId) {
+              clearBuilderDraft(activeBuilderDraftId);
+              void clearDurableBuilderDraft(activeBuilderDraftId);
+            }
             persistActiveProvisioning({
               version: 1,
               requestId: provisionRequestId,

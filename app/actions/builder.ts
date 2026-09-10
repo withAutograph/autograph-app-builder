@@ -52,6 +52,28 @@ export async function provisionBuilderProvider(input: {
   return readJson(response, "provisioning_unavailable");
 }
 
+export async function reserveBuilderProvider(input: {
+  version: 1;
+  requestId: string;
+  operation: "github" | "vercel";
+  appName: string;
+  repository: { name: string; private: boolean };
+  providers: {
+    githubInstallationId?: string;
+    vercelInstallationId?: string;
+  };
+}): Promise<BuilderProvisionResponse> {
+  const path = "/api/builder/provision?mode=reserve";
+  const response = await getBuilderProvisioningDeploymentHandler(process.env)(
+    new Request(requestUrl(path), {
+      method: "POST",
+      headers: await sameOriginHeaders("application/json"),
+      body: JSON.stringify(input),
+    }),
+  );
+  return readJson(response, "provisioning_unavailable");
+}
+
 export async function readBuilderProviderProvisioning(requestId: string) {
   const path = `/api/builder/provision?requestId=${encodeURIComponent(requestId)}`;
   const response = await getBuilderProvisioningDeploymentHandler(process.env)(
