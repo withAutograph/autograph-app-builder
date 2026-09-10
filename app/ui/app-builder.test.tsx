@@ -666,7 +666,9 @@ describe("Vercel-faithful App Builder flow", () => {
         },
       },
     } as never);
-    await act(async () => window.dispatchEvent(new Event("focus")));
+    await act(async () =>
+      document.dispatchEvent(new Event("visibilitychange")),
+    );
     await act(async () => undefined);
 
     expect(brief.value).toBe("Saved on another device.");

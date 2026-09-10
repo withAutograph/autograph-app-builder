@@ -1341,7 +1341,10 @@ export function Builder({
   const draftSnapshot = useCallback(
     (origin = focusOrigin.current): BuilderDraft => ({
       version: 1,
-      form,
+      // A provider redirect can follow the final input event immediately.
+      // Read RHF synchronously so the durable checkpoint always contains that
+      // event even before useWatch has produced the next render.
+      form: builderForm.getValues(),
       team,
       gitScope,
       model,
@@ -1357,6 +1360,7 @@ export function Builder({
     }),
     [
       connectedConnections,
+      builderForm,
       deploymentProvider,
       form,
       gitScope,
@@ -1549,15 +1553,15 @@ export function Builder({
         // Autosave owns retry/error presentation; sync polling stays quiet.
       }
     };
-    const onVisible = () => void checkForServerDraft();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void checkForServerDraft();
+    };
     const timer = setInterval(() => void checkForServerDraft(), 10_000);
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onVisible);
     return () => {
       disposed = true;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onVisible);
     };
   }, [applyAuthoritativeDraft, loadActiveBuilderDraftAction]);
   useEffect(() => {
