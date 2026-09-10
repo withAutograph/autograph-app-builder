@@ -1184,8 +1184,10 @@ export function Builder({
     control: builderForm.control,
     defaultValue: initialForm,
   }) as BuilderForm;
+  const localFormMutationVersion = useRef(0);
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
+      localFormMutationVersion.current += 1;
       const current = builderForm.getValues();
       const next = typeof update === "function" ? update(current) : update;
       (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {
@@ -1518,8 +1520,17 @@ export function Builder({
   ]);
   useEffect(() => {
     let disposed = false;
+    const recoveryStartVersion = localFormMutationVersion.current;
     void restorePending().then((entry) => {
       if (disposed || !entry) return;
+      // IndexedDB can resolve after the user has already started editing the
+      // hydrated form. Never let that older recovery snapshot replace those
+      // edits or reset the user-edited field markers. The new local snapshot
+      // will be queued by the normal autosave effect.
+      if (localFormMutationVersion.current !== recoveryStartVersion) {
+        void discardPendingDraft();
+        return;
+      }
       // A recovery outbox is only useful when it is newer than the server
       // snapshot rendered for this visit. Server revisions remain canonical.
       if (
