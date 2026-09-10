@@ -1016,8 +1016,10 @@ export const builderDrafts = pgTable(
   {
     ...hostedGitHubTenantColumns,
     draftId: text("draft_id").notNull(),
+    status: text("status").notNull().default("active"),
     revision: integer("revision").notNull().default(1),
     record: jsonb("record").notNull(),
+    lastClientMutationId: text("last_client_mutation_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
@@ -1039,10 +1041,21 @@ export const builderDrafts = pgTable(
       table.ownerUserId,
       table.updatedAt,
     ),
+    uniqueIndex("builder_draft_active_tenant_uidx")
+      .on(table.issuer, table.audience, table.workspaceId, table.ownerUserId)
+      .where(sql`${table.status} = 'active'`),
     check("builder_draft_revision_check", sql`${table.revision} > 0`),
+    check(
+      "builder_draft_status_check",
+      sql`${table.status} IN ('active', 'archived')`,
+    ),
     check(
       "builder_draft_record_check",
       sql`jsonb_typeof(${table.record}) = 'object'`,
+    ),
+    check(
+      "builder_draft_last_client_mutation_id_check",
+      sql`${table.lastClientMutationId} IS NULL OR ${table.lastClientMutationId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
     ),
   ],
 );

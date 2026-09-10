@@ -28,6 +28,7 @@ export const hostedStorageMigrationTags = [
   "0018_durable_session_resume",
   "0019_opaque_builder_handoff",
   "0020_durable_builder_draft",
+  "0021_builder_draft_active_revision",
 ] as const;
 
 const contractSourcePaths = [
@@ -101,9 +102,11 @@ export const hostedStorageExpectedColumns = [
   ["builder_draft", "created_at", "timestamp with time zone", true],
   ["builder_draft", "draft_id", "text", true],
   ["builder_draft", "issuer", "text", true],
+  ["builder_draft", "last_client_mutation_id", "text", false],
   ["builder_draft", "owner_user_id", "text", true],
   ["builder_draft", "record", "jsonb", true],
   ["builder_draft", "revision", "integer", true],
+  ["builder_draft", "status", "text", true],
   ["builder_draft", "updated_at", "timestamp with time zone", true],
   ["builder_draft", "workspace_id", "text", true],
   ["builder_handoff", "audience", "text", true],
@@ -573,6 +576,7 @@ export const hostedStorageExpectedIndexes = [
   ["agent_session", "agent_session_recent_idx"],
   ["agent_session", "agent_session_retention_idx"],
   ["agent_session", "agent_session_tenant_pk"],
+  ["builder_draft", "builder_draft_active_tenant_uidx"],
   ["builder_draft", "builder_draft_pk"],
   ["builder_draft", "builder_draft_updated_idx"],
   ["builder_handoff", "builder_handoff_creation_uidx"],
@@ -707,9 +711,11 @@ export const hostedStorageExpectedConstraints = [
   ["agent_session", "agent_session_resumability_check"],
   ["agent_session", "agent_session_stage_check"],
   ["agent_session", "agent_session_tenant_pk"],
+  ["builder_draft", "builder_draft_last_client_mutation_id_check"],
   ["builder_draft", "builder_draft_pk"],
   ["builder_draft", "builder_draft_record_check"],
   ["builder_draft", "builder_draft_revision_check"],
+  ["builder_draft", "builder_draft_status_check"],
   ["builder_handoff", "builder_handoff_creation_request_id_check"],
   ["builder_handoff", "builder_handoff_id_check"],
   ["builder_handoff", "builder_handoff_intent_check"],
@@ -1048,6 +1054,7 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
         "0011_self_service_onboarding",
         "0012_provider_connection_return_state",
         "0016_emulate_preview_state",
+        "0021_builder_draft_active_revision",
       ].includes(migration.tag) &&
         /\b(?:UPDATE|INSERT\s+INTO)\b/iu.test(migration.content)) ||
       /\bALTER\b[\s\S]*\bDROP\b/iu.test(migration.content)

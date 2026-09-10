@@ -48,9 +48,10 @@ export function SearchCombobox({
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
-  const [query, setQuery] = useState(selected?.label ?? "");
+  const [query, setQuery] = useState("");
   const [filtering, setFiltering] = useState(false);
   const [active, setActive] = useState(0);
+  const displayedQuery = filtering ? query : (selected?.label ?? "");
   const shown = filtering
     ? options.filter((option) =>
         `${option.label} ${option.detail ?? ""}`
@@ -67,7 +68,7 @@ export function SearchCombobox({
   }, []);
   const restore = () => {
     setOpen(false);
-    setQuery(selected?.label ?? "");
+    setQuery("");
     setFiltering(false);
     setActive(0);
   };
@@ -99,7 +100,7 @@ export function SearchCombobox({
         aria-label={label}
         aria-autocomplete="list"
         aria-controls={`${id}-listbox`}
-        value={query}
+        value={displayedQuery}
         placeholder={placeholder}
         disabled={disabled}
         autoComplete="off"

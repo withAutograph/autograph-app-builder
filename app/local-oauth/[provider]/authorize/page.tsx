@@ -54,6 +54,10 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   }
 
   const details = localOAuthProviderDetails(parsed.provider);
+  // The signed relay intentionally includes a request-time expiry. Keep that
+  // nondeterministic value behind this route-local Suspense boundary so the
+  // approval shell can still be prerendered and navigated to instantly.
+  await connection();
   const approval = signFreshLocalOAuthApproval(
     {
       provider: parsed.provider,

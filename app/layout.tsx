@@ -15,7 +15,17 @@ export const metadata: Metadata = {
 };
 
 function ShellLoading() {
-  return <main id="main-content" aria-busy="true" />;
+  return (
+    <main
+      id="main-content"
+      aria-busy="true"
+      className="flex min-h-svh items-center justify-center p-6"
+    >
+      <p className="text-sm text-muted-foreground" role="status">
+        Loading App Builder…
+      </p>
+    </main>
+  );
 }
 
 async function ShellContent({

@@ -53,6 +53,7 @@
     "@emulators/vercel": "0.10.0",
     "@flags-sdk/vercel": "1.4.7",
     "@geist-ui/icons": "1.0.2",
+    "@hookform/resolvers": "^5.9.1",
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/server": "2.0.0",
     "@octokit/app": "16.1.4",
@@ -80,6 +81,7 @@
     "react": "19.3.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.3.0",
+    "react-hook-form": "^7.87.0",
     "react-icons": "5.7.0",
     "shadcn": "^4.20.1",
     "sonner": "^2.0.8",
@@ -88,6 +90,7 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@next/playwright": "16.3.4",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-docs": "^10.6.0",
     "@storybook/addon-vitest": "^10.6.0",

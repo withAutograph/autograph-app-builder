@@ -90,6 +90,14 @@ export function createBuilderProvisioningRouteHandler(input: {
           { status: 400, headers: noStore },
         );
       const body = builderProvisionRequestSchema.parse(await request.json());
+      if (new URL(request.url).searchParams.get("mode") === "reserve") {
+        const reserved = await input.dependencies.journal.reserve({
+          authority,
+          request: body,
+          now: new Date(),
+        });
+        return Response.json(reserved.record.response, { headers: noStore });
+      }
       const result = await input.execute({
         authority,
         request: body,

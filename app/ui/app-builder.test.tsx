@@ -13,12 +13,44 @@ const navigation = vi.hoisted(() => ({
 const builderActions = vi.hoisted(() => ({
   createBuilderHandoff: vi.fn(),
   provisionBuilderProvider: vi.fn(),
+  reserveBuilderProvider: vi.fn(),
+  saveActiveBuilderDraft: vi.fn(
+    async (input: { draftId: string; expectedRevision: number }) => ({
+      draftId: input.draftId,
+      revision: input.expectedRevision + 1,
+      updatedAt: "2030-01-01T00:00:00.000Z",
+    }),
+  ),
+  loadActiveBuilderDraft: vi.fn(async () => undefined),
+  clearBuilderDraft: vi.fn(),
 }));
+const draftFetch = vi.hoisted(() =>
+  vi.fn(async (_url: string, init?: RequestInit) => {
+    const input = JSON.parse(String(init?.body)) as {
+      draftId: string;
+      expectedRevision: number;
+    };
+    return new Response(
+      JSON.stringify({
+        draftId: input.draftId,
+        revision: input.expectedRevision + 1,
+        updatedAt: "2030-01-01T00:00:00.000Z",
+      }),
+      { status: 200 },
+    );
+  }),
+);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
 vi.mock("@/app/actions/builder", () => builderActions);
+vi.mock("@/app/actions/builder-drafts", () => ({
+  clearBuilderDraft: builderActions.clearBuilderDraft,
+  loadActiveBuilderDraft: builderActions.loadActiveBuilderDraft,
+  saveActiveBuilderDraft: builderActions.saveActiveBuilderDraft,
+}));
+vi.stubGlobal("fetch", draftFetch);
 vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
@@ -124,6 +156,9 @@ function AppBuilder(
       connectionsEnabled={connectionsEnabled}
       comingSoonEnabled={comingSoonEnabled}
       integrations={integrationState}
+      saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
+      loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
+      clearBuilderDraftAction={builderActions.clearBuilderDraft}
     />
   );
 }
@@ -185,6 +220,9 @@ afterEach(async () => {
   navigation.replace.mockReset();
   builderActions.createBuilderHandoff.mockReset();
   builderActions.provisionBuilderProvider.mockReset();
+  builderActions.reserveBuilderProvider.mockReset();
+  builderActions.loadActiveBuilderDraft.mockReset();
+  draftFetch.mockClear();
 });
 
 describe("Vercel-faithful App Builder flow", () => {
@@ -535,7 +573,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
   });
 
-  it("only warns before unloading after a user changes the builder form", async () => {
+  it("never blocks unloading after a user changes the builder form", async () => {
     const view = await render(
       <AppBuilder
         authenticated
@@ -554,7 +592,110 @@ describe("Vercel-faithful App Builder flow", () => {
 
     const afterEditing = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(afterEditing);
-    expect(afterEditing.defaultPrevented).toBe(true);
+    expect(afterEditing.defaultPrevented).toBe(false);
+  });
+
+  it("does not autosave an untouched hydrated builder", async () => {
+    vi.useFakeTimers();
+    await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
+  });
+
+  it("autosaves the latest form revision after editing", async () => {
+    vi.useFakeTimers();
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "Keep this draft.",
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: 0,
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({ brief: "Keep this draft." }),
+          }),
+        }),
+      }),
+    );
+    expect(view.textContent).toContain("Draft saved");
+  });
+
+  it("replaces locally edited RHF values with a newer server revision", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+        durableDraftId="d1210e56-ded0-436d-a6b8-ae96ddec17e0"
+        durableDraftRevision={1}
+      />,
+    );
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    await fill(brief, "This local edit will be replaced.");
+    builderActions.loadActiveBuilderDraft.mockResolvedValueOnce({
+      draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
+      revision: 2,
+      updatedAt: "2030-01-01T00:00:02.000Z",
+      record: {
+        version: 1,
+        draft: {
+          version: 1,
+          form: {
+            appName: "Remote App",
+            repository: "remote-app",
+            brief: "Saved on another device.",
+            privateRepository: true,
+            buildDestination: "codex",
+            connections: [],
+            modelId: "openai/gpt-5.6-sol",
+          },
+          team: "vercel-pylee",
+          gitScope: "101",
+          model: "openai/gpt-5.6-sol",
+          zdrOnly: false,
+          showMoreConnections: false,
+          search: "",
+          connectedConnections: [],
+          storageProvider: "github",
+          deploymentProvider: null,
+          focusOrigin: "github",
+          appNameEditedByUser: false,
+          repositoryEditedByUser: false,
+        },
+      },
+    } as never);
+    await act(async () => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "hidden",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => undefined);
+
+    expect(brief.value).toBe("Saved on another device.");
+    expect(view.textContent).toContain("Updated from another device");
   });
 
   it("preserves a builder draft before a first-use provider connection", async () => {
@@ -568,6 +709,9 @@ describe("Vercel-faithful App Builder flow", () => {
           vercel: { status: "disconnected", scopes: [] },
           github: { status: "disconnected", scopes: [] },
         }}
+        saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
+        loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
+        clearBuilderDraftAction={builderActions.clearBuilderDraft}
       />,
     );
     await fill(
@@ -595,6 +739,20 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(
       sessionStorage.getItem(`autograph-builder-draft:${resumeKey}`),
     ).toContain("Restored App");
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({
+              appName: "Restored App",
+              brief:
+                "# Restored App\n\nKeep this brief through the provider flow.",
+            }),
+            focusOrigin: "vercel",
+          }),
+        }),
+      }),
+    );
   });
 
   it("restores the draft, field focus, and actionable failure after provider return", async () => {
