@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import { useForm, useWatch } from "react-hook-form";
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -1306,7 +1307,23 @@ export function Builder({
               };
             })
           : saveActiveBuilderDraftAction
-            ? await saveActiveBuilderDraftAction(input)
+            ? await new Promise<{
+                draftId: string;
+                revision: number;
+                updatedAt: string;
+              }>((resolve, reject) => {
+                // Next dispatches Server Actions through React transitions.
+                // Keeping the acknowledgement in this transition preserves the
+                // framework's per-client ordering and prevents an RSC update
+                // from racing the controlled form state.
+                startTransition(async () => {
+                  try {
+                    resolve(await saveActiveBuilderDraftAction(input));
+                  } catch (error) {
+                    reject(error);
+                  }
+                });
+              })
             : await Promise.reject(
                 new Error("builder-draft-action-unavailable"),
               );
@@ -1653,12 +1670,11 @@ export function Builder({
     scheduleAutosave(snapshot);
   }, [draftSnapshot, scheduleAutosave]);
   const beginProviderConnection = async (provider: ProviderField) => {
-    const key = activeDraftId.current;
     focusOrigin.current = provider;
     const draft = draftSnapshot(provider);
     // Keep the redirect bridge in this tab only; the server copy is the
     // authoritative draft used by page loads and other devices.
-    persistBuilderDraft(key, draft);
+    persistBuilderDraft(activeDraftId.current, draft);
     autosave.schedule(draft);
     await autosave.flush();
     if (await autosave.restorePending()) {
@@ -1668,7 +1684,13 @@ export function Builder({
       return;
     }
     setDraftSaveError("");
-    router.push(`/${provider}/installations?returnTo=%2F&resume=${key}`);
+    // The service owns the one active draft and may acknowledge a canonical
+    // ID different from the optimistic local ID. Capture it only after the
+    // Server Action checkpoint has completed so a provider return can never
+    // target a stale, non-authoritative draft.
+    router.push(
+      `/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`,
+    );
   };
   async function submit(event: FormEvent) {
     event.preventDefault();

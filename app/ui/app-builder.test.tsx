@@ -750,7 +750,13 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("preserves a builder draft before a first-use provider connection", async () => {
     const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
+    const canonicalDraftId = "d1210e56-ded0-436d-a6b8-ae96ddec17e0";
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(resumeKey);
+    builderActions.saveActiveBuilderDraft.mockResolvedValueOnce({
+      draftId: canonicalDraftId,
+      revision: 1,
+      updatedAt: "2030-01-01T00:00:00.000Z",
+    });
     const view = await render(
       <AppBuilderComponent
         authenticated
@@ -784,10 +790,13 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     expect(navigation.push).toHaveBeenCalledWith(
-      `/vercel/installations?returnTo=%2F&resume=${resumeKey}`,
+      `/vercel/installations?returnTo=%2F&resume=${canonicalDraftId}`,
     );
     expect(
       sessionStorage.getItem(`autograph-builder-draft:${resumeKey}`),
+    ).toContain("Restored App");
+    expect(
+      sessionStorage.getItem(`autograph-builder-draft:${canonicalDraftId}`),
     ).toContain("Restored App");
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenLastCalledWith(
       expect.objectContaining({
