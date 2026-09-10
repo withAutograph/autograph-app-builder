@@ -1,3 +1,4 @@
+import { cacheLife } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -15,12 +16,27 @@ import {
   type AuthPageSearchParams,
 } from "@/lib/auth/preview-auth-ui";
 
+async function hasAuthenticatedVisitor() {
+  "use cache: private";
+  cacheLife("minutes");
+
+  const requestHeaders = await headers();
+  const session = await getPreviewOAuthDeploymentSession({
+    environment: process.env,
+    headers: requestHeaders,
+  });
+
+  return Boolean(session?.user);
+}
+
 async function RedirectAuthenticatedVisitor({
   searchParams,
 }: {
   searchParams: Promise<AuthPageSearchParams>;
 }) {
-  const [query, requestHeaders] = await Promise.all([searchParams, headers()]);
+  if (!(await hasAuthenticatedVisitor())) return null;
+
+  const query = await searchParams;
   const origin = getPreviewOAuthDeploymentOrigin(process.env);
   const search = serializeAuthPageSearchParams(query);
   const signInRedirectTo = resolvePasskeyRedirectTo(
@@ -28,16 +44,8 @@ async function RedirectAuthenticatedVisitor({
     search,
     origin,
   );
-  const session = await getPreviewOAuthDeploymentSession({
-    environment: process.env,
-    headers: requestHeaders,
-  });
 
-  if (session?.user) {
-    redirect(signInRedirectTo);
-  }
-
-  return null;
+  redirect(signInRedirectTo);
 }
 
 function SignUpSurface() {
@@ -50,23 +58,17 @@ function SignUpSurface() {
   );
 }
 
-async function SignUpContent({
-  searchParams,
-}: {
-  searchParams: Promise<AuthPageSearchParams>;
-}) {
-  await RedirectAuthenticatedVisitor({ searchParams });
-  return <SignUpSurface />;
-}
-
 export default function SignUpPage({
   searchParams,
 }: {
   searchParams: Promise<AuthPageSearchParams>;
 }) {
   return (
-    <Suspense fallback={null}>
-      <SignUpContent searchParams={searchParams} />
-    </Suspense>
+    <>
+      <SignUpSurface />
+      <Suspense fallback={null}>
+        <RedirectAuthenticatedVisitor searchParams={searchParams} />
+      </Suspense>
+    </>
   );
 }
