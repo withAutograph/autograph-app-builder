@@ -165,14 +165,13 @@ export function compilerDiagnostics(
 ): TargetValidationDiagnostic[] {
   const diagnostics: TargetValidationDiagnostic[] = [];
   const seen = new Set<string>();
-  let pendingCompiler: { code: `TS${number}`; message: string } | undefined;
-  let pendingVitestMessage: string | undefined;
+  let pendingCompiler: { code: `TS${number}` } | undefined;
+  let pendingVitestMessage = false;
   const append = (
     code: TargetValidationDiagnostic["code"],
     pathValue: string,
     lineValue: string,
     columnValue: string,
-    _message: string,
   ) => {
     const path = safeDiagnosticPath(pathValue);
     const line = Number(lineValue);
@@ -202,50 +201,36 @@ export function compilerDiagnostics(
     if (oxcHeader !== null) {
       pendingCompiler = {
         code: oxcHeader[1] as `TS${number}`,
-        message: oxcHeader[2],
       };
       continue;
     }
     const location = sourceLocationPattern.exec(sourceLine);
     if (location !== null && pendingCompiler !== undefined) {
-      append(
-        pendingCompiler.code,
-        location[1],
-        location[2],
-        location[3],
-        pendingCompiler.message,
-      );
+      append(pendingCompiler.code, location[1], location[2], location[3]);
       pendingCompiler = undefined;
       continue;
     }
     const vitestFailure = vitestFailurePattern.exec(sourceLine);
     if (vitestFailure !== null) {
-      pendingVitestMessage = vitestFailure[2];
+      pendingVitestMessage = true;
       continue;
     }
     const vitestLocation = vitestLocationPattern.exec(sourceLine);
-    if (vitestLocation !== null && pendingVitestMessage !== undefined) {
+    if (vitestLocation !== null && pendingVitestMessage) {
       const recorded = append(
         "VITEST",
         vitestLocation[1],
         vitestLocation[2],
         vitestLocation[3],
-        pendingVitestMessage,
       );
-      if (recorded) pendingVitestMessage = undefined;
+      if (recorded) pendingVitestMessage = false;
       continue;
     }
     for (const pattern of compilerDiagnosticPatterns) {
       const match = pattern.exec(sourceLine);
       if (match === null) continue;
       if (/^TS\d+$/u.test(match[4]))
-        append(
-          match[4] as `TS${number}`,
-          match[1],
-          match[2],
-          match[3],
-          match[5],
-        );
+        append(match[4] as `TS${number}`, match[1], match[2], match[3]);
       break;
     }
   }
