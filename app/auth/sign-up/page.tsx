@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { SignUp } from "@/components/auth/sign-up";
 import { AuthContinuity } from "@/components/auth/auth-continuity";
@@ -14,7 +15,7 @@ import {
   type AuthPageSearchParams,
 } from "@/lib/auth/preview-auth-ui";
 
-export default async function SignUpPage({
+async function SignUpContent({
   searchParams,
 }: {
   searchParams: Promise<AuthPageSearchParams>;
@@ -42,5 +43,15 @@ export default async function SignUpPage({
         <SignUp socialPosition="top" signInRedirectTo={signInRedirectTo} />
       </AuthContinuity>
     </main>
+  );
+}
+
+export default function SignUpPage(props: {
+  searchParams: Promise<AuthPageSearchParams>;
+}) {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <SignUpContent {...props} />
+    </Suspense>
   );
 }
