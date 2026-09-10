@@ -40,7 +40,6 @@ import {
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import {
   clearBuilderDraft as clearDurableBuilderDraft,
-  saveActiveBuilderDraft,
 } from "@/app/actions/builder-drafts";
 import {
   builderDraftFormSchema,
@@ -1263,21 +1262,22 @@ export function Builder({
           draft: snapshot,
         } satisfies BuilderDraftRecord,
       };
-      const saved = keepalive
-        ? await fetch("/api/builder/draft", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(input),
-            keepalive: true,
-          }).then(async (response) => {
-            if (!response.ok) throw new Error("builder-draft-save-failed");
-            return (await response.json()) as {
-              draftId: string;
-              revision: number;
-              updatedAt: string;
-            };
-          })
-        : await saveActiveBuilderDraft(input);
+      // Background Server Actions re-render the current route. That can
+      // replace a newer in-memory form with the previous server snapshot, so
+      // both ordinary and page-hide saves use the same authenticated handler.
+      const saved = await fetch("/api/builder/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+        ...(keepalive ? { keepalive: true } : {}),
+      }).then(async (response) => {
+        if (!response.ok) throw new Error("builder-draft-save-failed");
+        return (await response.json()) as {
+          draftId: string;
+          revision: number;
+          updatedAt: string;
+        };
+      });
       activeDraftId.current = saved.draftId;
       draftRevision.current = saved.revision;
       return { mutationId, savedAt: saved.updatedAt };

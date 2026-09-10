@@ -108,7 +108,6 @@ export function createBuilderDraftRouteHandler(input: {
     try {
       if (
         request.method !== "POST" ||
-        new URL(request.url).origin !== origin ||
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !==
           "application/json"

@@ -23,15 +23,31 @@ const builderActions = vi.hoisted(() => ({
   ),
   clearBuilderDraft: vi.fn(),
 }));
+const draftFetch = vi.hoisted(() =>
+  vi.fn(async (_url: string, init?: RequestInit) => {
+    const input = JSON.parse(String(init?.body)) as {
+      draftId: string;
+      expectedRevision: number;
+    };
+    return new Response(
+      JSON.stringify({
+        draftId: input.draftId,
+        revision: input.expectedRevision + 1,
+        updatedAt: "2030-01-01T00:00:00.000Z",
+      }),
+      { status: 200 },
+    );
+  }),
+);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
 vi.mock("@/app/actions/builder", () => builderActions);
 vi.mock("@/app/actions/builder-drafts", () => ({
-  saveActiveBuilderDraft: builderActions.saveActiveBuilderDraft,
   clearBuilderDraft: builderActions.clearBuilderDraft,
 }));
+vi.stubGlobal("fetch", draftFetch);
 vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
@@ -198,6 +214,8 @@ afterEach(async () => {
   navigation.replace.mockReset();
   builderActions.createBuilderHandoff.mockReset();
   builderActions.provisionBuilderProvider.mockReset();
+  builderActions.reserveBuilderProvider.mockReset();
+  draftFetch.mockClear();
 });
 
 describe("Vercel-faithful App Builder flow", () => {
@@ -585,16 +603,16 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     await act(async () => vi.advanceTimersByTimeAsync(500));
 
-    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
-      expect.objectContaining({
-        expectedRevision: 0,
-        record: expect.objectContaining({
-          draft: expect.objectContaining({
-            form: expect.objectContaining({ brief: "Keep this draft." }),
-          }),
-        }),
-      }),
+    const request = draftFetch.mock.calls.find(
+      ([url]) => url === "/api/builder/draft",
     );
+    expect(request).toBeDefined();
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+      expectedRevision: 0,
+      record: {
+        draft: { form: { brief: "Keep this draft." } },
+      },
+    });
     expect(view.textContent).toContain("Draft saved");
   });
 
