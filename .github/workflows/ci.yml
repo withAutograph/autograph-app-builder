@@ -18,6 +18,10 @@ env:
 jobs:
   repository:
     runs-on: ubuntu-latest
+    # Repository validation normally completes in a few minutes. Bound an
+    # unresponsive formatter, browser harness, or runner so the PR receives a
+    # terminal result rather than staying pending indefinitely.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
@@ -101,6 +105,9 @@ jobs:
 
   auth-e2e-emulated:
     runs-on: ubuntu-latest
+    # Playwright and the app readiness probe have their own timeouts, but the
+    # parent server/cleanup lifecycle also needs a job-level bound.
+    timeout-minutes: 15
     env:
       APP_BUILDER_DATABASE_PORT: "54329"
       APP_BUILDER_EXTERNAL_DATABASE: "1"

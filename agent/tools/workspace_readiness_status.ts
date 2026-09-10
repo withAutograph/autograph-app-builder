@@ -11,7 +11,7 @@ export default defineTool({
   description:
     "Report that the writable Sandbox checkout is ready for normal repository planning commands. Cache and tool observations are diagnostics only: the planner runs the repository commands and handles their actual result.",
   inputSchema: z.object({}),
-  async execute(_input) {
+  async execute() {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace readiness inspection");
     if (current.phase === "empty")

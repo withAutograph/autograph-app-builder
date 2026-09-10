@@ -7,6 +7,7 @@ import {
   ProviderConnection,
   ProviderConnectionNotice,
 } from "@/app/ui/provider-connection";
+import { Suspense } from "react";
 import { SiVercel } from "react-icons/si";
 
 type Props = {
@@ -18,7 +19,7 @@ type Props = {
   }>;
 };
 
-export default async function VercelInstallationsPage({ searchParams }: Props) {
+async function VercelInstallationsContent({ searchParams }: Props) {
   const { status, reason, returnTo, resume } = await searchParams;
   const failureReason = parseProviderConnectionFailureReason(reason);
   const returnState = safeProviderConnectionReturn({
@@ -41,5 +42,13 @@ export default async function VercelInstallationsPage({ searchParams }: Props) {
         </ProviderConnectionNotice>
       ) : null}
     </ProviderConnection>
+  );
+}
+
+export default function VercelInstallationsPage(props: Props) {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <VercelInstallationsContent {...props} />
+    </Suspense>
   );
 }

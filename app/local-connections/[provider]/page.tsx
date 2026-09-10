@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 import {
   EmulationApproval,
@@ -18,10 +19,7 @@ type Props = {
 };
 
 /** Development-only consent surface; real provider installation pages remain external. */
-export default async function LocalConnectionBridge({
-  params,
-  searchParams,
-}: Props) {
+async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   const [{ provider }, query] = await Promise.all([params, searchParams]);
   let emulation;
   try {
@@ -105,5 +103,13 @@ export default async function LocalConnectionBridge({
         </form>
       }
     />
+  );
+}
+
+export default function LocalConnectionBridge(props: Props) {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <LocalConnectionBridgeContent {...props} />
+    </Suspense>
   );
 }

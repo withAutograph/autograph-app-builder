@@ -4,8 +4,6 @@ import {
   unavailableResponse,
 } from "@/lib/mcp/request-auth";
 
-export const runtime = "nodejs";
-
 export function GET(): Response {
   try {
     const metadata = protectedResourceMetadata(

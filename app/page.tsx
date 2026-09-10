@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { Suspense } from "react";
+
 import { headers } from "next/headers";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
@@ -39,7 +41,7 @@ async function currentUser() {
     }),
   );
   if (state.status === "anonymous") {
-    console.error(
+    console.warn(
       JSON.stringify({
         level: "error",
         message: "preview_workspace_reconciliation_skipped",
@@ -70,7 +72,7 @@ async function currentUser() {
   };
 }
 
-export default async function Home({ searchParams }: PageProps) {
+async function HomeContent({ searchParams }: PageProps) {
   const [
     query,
     user,
@@ -134,5 +136,17 @@ export default async function Home({ searchParams }: PageProps) {
       providerNotices={notices}
       providerResumeKey={parseProviderResumeKey(query.resume)}
     />
+  );
+}
+
+function BuilderLoading() {
+  return <main id="main-content" aria-busy="true" />;
+}
+
+export default function Home(props: PageProps) {
+  return (
+    <Suspense fallback={<BuilderLoading />}>
+      <HomeContent {...props} />
+    </Suspense>
   );
 }

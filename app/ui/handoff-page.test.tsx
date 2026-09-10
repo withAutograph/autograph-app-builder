@@ -21,7 +21,7 @@ vi.mock("./builder-shell", () => ({
   Header: () => <header>Autograph</header>,
 }));
 
-import HandoffPage from "../handoff/[id]/page";
+import { HandoffContent } from "../handoff/[id]/handoff-content";
 
 const id = "123e4567-e89b-42d3-a456-426614174001";
 const params = Promise.resolve({ id });
@@ -30,7 +30,7 @@ afterEach(() => vi.clearAllMocks());
 describe("authenticated handoff page", () => {
   it("redirects a missing web session back through the same handoff", async () => {
     server.load.mockResolvedValue(undefined);
-    await expect(HandoffPage({ params })).rejects.toThrow("redirect:");
+    await expect(HandoffContent({ params })).rejects.toThrow("redirect:");
     expect(server.redirect).toHaveBeenCalledWith(
       `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${id}`)}`,
     );
@@ -42,7 +42,7 @@ describe("authenticated handoff page", () => {
     server.load.mockRejectedValue(
       new Error("private-owner@example.com database error"),
     );
-    const html = renderToStaticMarkup(await HandoffPage({ params }));
+    const html = renderToStaticMarkup(await HandoffContent({ params }));
     expect(html).toContain("Handoff unavailable");
     expect(html).not.toContain("private-owner");
     expect(html).not.toContain("database error");
@@ -69,7 +69,7 @@ describe("authenticated handoff page", () => {
           },
         },
       });
-      const html = renderToStaticMarkup(await HandoffPage({ params }));
+      const html = renderToStaticMarkup(await HandoffContent({ params }));
       expect(html).toContain("Support App");
       expect(html).toContain("Help customers");
       expect(html).toContain("QuickBooks");

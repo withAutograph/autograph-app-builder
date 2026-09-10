@@ -27,6 +27,7 @@ export const hostedStorageMigrationTags = [
   "0017_chat_repository_access",
   "0018_durable_session_resume",
   "0019_opaque_builder_handoff",
+  "0020_durable_builder_draft",
 ] as const;
 
 const contractSourcePaths = [
@@ -48,6 +49,7 @@ const contractSourcePaths = [
   "lib/integrations/preview-emulate-persistence.ts",
   "lib/integrations/postgres-repository-access-continuation.ts",
   "lib/handoff/postgres-store.ts",
+  "lib/db/builder-drafts.ts",
 ] as const;
 
 export const hostedStorageExpectedColumns = [
@@ -95,6 +97,15 @@ export const hostedStorageExpectedColumns = [
   ["agent_session", "title", "text", false],
   ["agent_session", "updated_at", "timestamp with time zone", true],
   ["agent_session", "workspace_id", "text", true],
+  ["builder_draft", "audience", "text", true],
+  ["builder_draft", "created_at", "timestamp with time zone", true],
+  ["builder_draft", "draft_id", "text", true],
+  ["builder_draft", "issuer", "text", true],
+  ["builder_draft", "owner_user_id", "text", true],
+  ["builder_draft", "record", "jsonb", true],
+  ["builder_draft", "revision", "integer", true],
+  ["builder_draft", "updated_at", "timestamp with time zone", true],
+  ["builder_draft", "workspace_id", "text", true],
   ["builder_handoff", "audience", "text", true],
   ["builder_handoff", "created_at", "timestamp with time zone", true],
   ["builder_handoff", "creation_request_id", "text", true],
@@ -562,6 +573,8 @@ export const hostedStorageExpectedIndexes = [
   ["agent_session", "agent_session_recent_idx"],
   ["agent_session", "agent_session_retention_idx"],
   ["agent_session", "agent_session_tenant_pk"],
+  ["builder_draft", "builder_draft_pk"],
+  ["builder_draft", "builder_draft_updated_idx"],
   ["builder_handoff", "builder_handoff_creation_uidx"],
   ["builder_handoff", "builder_handoff_expiry_idx"],
   ["builder_handoff", "builder_handoff_pkey"],
@@ -694,6 +707,9 @@ export const hostedStorageExpectedConstraints = [
   ["agent_session", "agent_session_resumability_check"],
   ["agent_session", "agent_session_stage_check"],
   ["agent_session", "agent_session_tenant_pk"],
+  ["builder_draft", "builder_draft_pk"],
+  ["builder_draft", "builder_draft_record_check"],
+  ["builder_draft", "builder_draft_revision_check"],
   ["builder_handoff", "builder_handoff_creation_request_id_check"],
   ["builder_handoff", "builder_handoff_id_check"],
   ["builder_handoff", "builder_handoff_intent_check"],

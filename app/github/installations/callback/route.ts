@@ -4,8 +4,6 @@ import {
   clearLocalGitHubCallbackFixtureCookie,
 } from "@/lib/auth/local-github-callback-fixture";
 
-export const runtime = "nodejs";
-
 const callback = createGitHubAppInstallationDeploymentHandler(
   "callback",
   process.env,

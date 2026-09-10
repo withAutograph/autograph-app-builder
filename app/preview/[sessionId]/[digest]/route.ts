@@ -1,8 +1,6 @@
 import { createVercelWorkloadIdentity } from "@/lib/eve/vercel-workload-identity";
 import { createDeploymentPrototypePreviewRequestHandler } from "@/lib/mcp/browser-preview-deployment";
 
-export const runtime = "nodejs";
-
 const requestHandler = createDeploymentPrototypePreviewRequestHandler({
   environment: process.env,
   workloadIdentity: createVercelWorkloadIdentity(),

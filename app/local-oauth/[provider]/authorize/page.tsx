@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 import {
   EmulationApproval,
@@ -29,10 +30,7 @@ function scalarValues(values: Record<string, string | string[] | undefined>) {
 }
 
 /** App-owned approval UI for Emulate's local authorization-code flow. */
-export default async function LocalOAuthApprovalPage({
-  params,
-  searchParams,
-}: Props) {
+async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   let parsed;
   let emulation: ProviderEmulation;
   try {
@@ -104,5 +102,13 @@ export default async function LocalOAuthApprovalPage({
         )
       }
     />
+  );
+}
+
+export default function LocalOAuthApprovalPage(props: Props) {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <LocalOAuthApprovalContent {...props} />
+    </Suspense>
   );
 }

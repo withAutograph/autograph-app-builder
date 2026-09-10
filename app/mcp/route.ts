@@ -1,8 +1,6 @@
 import { createVercelWorkloadIdentity } from "@/lib/eve/vercel-workload-identity";
 import { createDeploymentMcpRequestHandler } from "@/lib/mcp/hosted-route";
 
-export const runtime = "nodejs";
-
 /**
  * Construction acquires no credential and opens no connection. Hosted
  * capabilities are composed lazily inside the first hosted request, while the

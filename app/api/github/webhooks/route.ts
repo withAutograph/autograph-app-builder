@@ -2,8 +2,6 @@ import { readPreviewOAuthRuntimeConfig } from "@/lib/auth/preview-oauth-runtime"
 import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 import { createGitHubProvisioningWebhookHandler } from "@/lib/provisioning/github-webhook";
 
-export const runtime = "nodejs";
-
 let handler: ((request: Request) => Promise<Response>) | undefined;
 
 export const POST = (request: Request) => {

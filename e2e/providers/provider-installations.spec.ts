@@ -78,6 +78,9 @@ for (const provider of emulatedProviders) {
     await page
       .locator("#app-brief")
       .fill(`Keep this ${provider} brief through authorization.`);
+    await expect(page.locator("#app-brief")).toHaveValue(
+      `Keep this ${provider} brief through authorization.`,
+    );
     await page.getByLabel("App Name").fill(`${provider} Restored App`);
 
     await installProvider(page, provider);
@@ -172,6 +175,9 @@ for (const provider of emulatedProviders) {
     await page
       .locator("#app-brief")
       .fill(`Keep this ${provider} draft when leaving connections.`);
+    await expect(page.locator("#app-brief")).toHaveValue(
+      `Keep this ${provider} draft when leaving connections.`,
+    );
     await page.getByLabel("App Name").fill(`${provider} Back Draft`);
 
     await openProviderConnection(page, provider);

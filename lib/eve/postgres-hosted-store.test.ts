@@ -254,6 +254,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           tag: "0019_opaque_builder_handoff",
           breakpoints: true,
         },
+        {
+          idx: 19,
+          version: "7",
+          when: 1_788_354_000_000,
+          tag: "0020_durable_builder_draft",
+          breakpoints: true,
+        },
       ],
     });
   });
@@ -285,6 +292,22 @@ describe("PostgreSQL hosted Eve row authority", () => {
       '"builder_handoff_creation_uidx"',
       '"builder_handoff_expiry_idx"',
       '"builder_handoff_redemption_check"',
+    ])
+      expect(migration).toContain(required);
+    expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
+  });
+
+  it("adds tenant-scoped durable drafts without rewriting existing rows", async () => {
+    const migration = await readFile(
+      new URL("../../drizzle/0020_durable_builder_draft.sql", import.meta.url),
+      "utf8",
+    );
+    for (const required of [
+      'CREATE TABLE "builder_draft"',
+      '"builder_draft_pk"',
+      '"builder_draft_updated_idx"',
+      '"builder_draft_revision_check"',
+      '"builder_draft_record_check"',
     ])
       expect(migration).toContain(required);
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
