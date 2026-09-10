@@ -3,9 +3,9 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      default-days: 7
     groups:
-      mcp:
-        patterns: ["@modelcontextprotocol/*", "mcp-handler"]
-      vercel-agent:
-        patterns: ["eve", "ai", "@vercel/*"]
+      monthly-batch:
+        patterns: ["*"]
