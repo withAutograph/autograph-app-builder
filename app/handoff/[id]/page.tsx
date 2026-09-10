@@ -15,7 +15,11 @@ export const metadata = {
   referrer: "no-referrer" as const,
 };
 
-async function HandoffContent({ params }: { params: Promise<{ id: string }> }) {
+export async function HandoffContent({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const requestHeaders = await headers();
   let data;
