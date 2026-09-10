@@ -10,7 +10,7 @@ import {
   workspaceOnboardingRedirect,
 } from "@/lib/auth/workspace-onboarding";
 
-async function AccountSettingsContent() {
+async function RedirectAccountVisitor() {
   const requestHeaders = await headers();
   const origin = new URL(
     process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth",
@@ -26,18 +26,19 @@ async function AccountSettingsContent() {
   if (state.status !== "ready")
     redirect(workspaceOnboardingRedirect(origin, state.status));
 
-  return (
-    <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Account settings</h1>
-      <AccountSettings />
-    </main>
-  );
+  return null;
 }
 
 export default function AccountSettingsPage() {
   return (
-    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
-      <AccountSettingsContent />
-    </Suspense>
+    <>
+      <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
+        <h1 className="text-2xl font-semibold">Account settings</h1>
+        <AccountSettings />
+      </main>
+      <Suspense fallback={null}>
+        <RedirectAccountVisitor />
+      </Suspense>
+    </>
   );
 }

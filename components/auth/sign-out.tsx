@@ -16,20 +16,12 @@ export type SignOutProps = {
  * @returns The spinner shown during sign-out
  */
 export function SignOut({ className }: SignOutProps) {
-  const { authClient, basePaths, navigate, viewPaths } = useAuth();
+  const { authClient, basePaths, viewPaths } = useAuth();
+  const signInHref = basePaths.auth + "/" + viewPaths.auth.signIn;
 
   const { mutate: signOut } = useSignOut(authClient, {
-    onError: () => {
-      navigate({
-        to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
-        replace: true,
-      });
-    },
-    onSuccess: () =>
-      navigate({
-        to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
-        replace: true,
-      }),
+    onError: () => window.location.replace(signInHref),
+    onSuccess: () => window.location.replace(signInHref),
   });
 
   const hasSignedOut = useRef(false);

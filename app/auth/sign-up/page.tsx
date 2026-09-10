@@ -15,7 +15,7 @@ import {
   type AuthPageSearchParams,
 } from "@/lib/auth/preview-auth-ui";
 
-async function SignUpContent({
+async function RedirectAuthenticatedVisitor({
   searchParams,
 }: {
   searchParams: Promise<AuthPageSearchParams>;
@@ -37,21 +37,24 @@ async function SignUpContent({
     redirect(signInRedirectTo);
   }
 
-  return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <AuthContinuity action="sign-up">
-        <SignUp socialPosition="top" signInRedirectTo={signInRedirectTo} />
-      </AuthContinuity>
-    </main>
-  );
+  return null;
 }
 
-export default function SignUpPage(props: {
+export default function SignUpPage({
+  searchParams,
+}: {
   searchParams: Promise<AuthPageSearchParams>;
 }) {
   return (
-    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
-      <SignUpContent {...props} />
-    </Suspense>
+    <>
+      <main className="flex min-h-svh items-center justify-center p-6">
+        <AuthContinuity action="sign-up">
+          <SignUp socialPosition="top" />
+        </AuthContinuity>
+      </main>
+      <Suspense fallback={null}>
+        <RedirectAuthenticatedVisitor searchParams={searchParams} />
+      </Suspense>
+    </>
   );
 }

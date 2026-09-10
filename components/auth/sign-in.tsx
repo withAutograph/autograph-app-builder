@@ -13,7 +13,7 @@ import {
 } from "@better-auth-ui/react";
 import { useIsMutating } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
-import { type SyntheticEvent, useState } from "react";
+import { type SyntheticEvent, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
+import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 import { cn } from "@/lib/utils";
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
@@ -77,6 +78,11 @@ export function SignIn({
   const continueSignIn = useSignInContinuation();
 
   const [password, setPassword] = useState("");
+  const [currentSearch, setCurrentSearch] = useState("");
+
+  useEffect(() => {
+    setCurrentSearch(window.location.search);
+  }, []);
 
   const { mutate: signInEmail, isPending: signInEmailPending } = useSignInEmail(
     authClient,
@@ -131,6 +137,15 @@ export function SignIn({
 
   const showSeparator =
     emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
+  const alternateRedirectTo =
+    signUpRedirectTo ??
+    (currentSearch
+      ? resolvePasskeyRedirectTo(
+          redirectTo,
+          currentSearch,
+          window.location.origin,
+        )
+      : redirectTo);
 
   return (
     <div className="relative w-full max-w-sm">
@@ -356,7 +371,7 @@ export function SignIn({
         <Link
           href={getAuthLinkURL(
             `${basePaths.auth}/${viewPaths.auth.signUp}`,
-            signUpRedirectTo ?? redirectTo,
+            alternateRedirectTo,
           )}
           className="underline underline-offset-4"
         >

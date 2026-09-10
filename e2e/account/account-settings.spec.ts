@@ -25,7 +25,7 @@ test("stock account menu updates the profile and signs out", async ({
     page.getByRole("heading", { name: "Account settings" }),
   ).toBeVisible();
 
-  await page.getByLabel("Name").fill("Autograph E2E User");
+  await page.getByLabel("Name", { exact: true }).fill("Autograph E2E User");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(/Profile updated/u)).toBeVisible();
 
