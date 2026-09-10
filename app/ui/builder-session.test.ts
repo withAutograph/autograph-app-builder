@@ -2,10 +2,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  persistBuilderDraft,
-  readBuilderDraftResume,
-} from "./builder-session";
+import { persistBuilderDraft, readBuilderDraftResume } from "./builder-session";
 
 const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
 

@@ -731,7 +731,8 @@ describe("Vercel-faithful App Builder flow", () => {
           draft: expect.objectContaining({
             form: expect.objectContaining({
               appName: "Restored App",
-              brief: "# Restored App\n\nKeep this brief through the provider flow.",
+              brief:
+                "# Restored App\n\nKeep this brief through the provider flow.",
             }),
             focusOrigin: "vercel",
           }),

@@ -43,7 +43,9 @@ export type BuilderDraftResume = {
   acknowledgedRevision?: number;
 };
 
-function parseBuilderDraft(value: string | null): BuilderDraftResume | undefined {
+function parseBuilderDraft(
+  value: string | null,
+): BuilderDraftResume | undefined {
   if (!value) return undefined;
   try {
     const parsed = JSON.parse(value) as Partial<BuilderDraft> & {

@@ -2363,9 +2363,7 @@ export function AppBuilder({
   const localResume = useSyncExternalStore(
     subscribeToClientSnapshot,
     () =>
-      providerResumeKey
-        ? readBuilderDraftResume(providerResumeKey)
-        : undefined,
+      providerResumeKey ? readBuilderDraftResume(providerResumeKey) : undefined,
     () => undefined,
   );
   const resumedDraft =
