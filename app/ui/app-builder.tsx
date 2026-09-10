@@ -1330,7 +1330,14 @@ export function Builder({
   } = autosave;
   const [draftSaveError, setDraftSaveError] = useState("");
   const [draftSyncNotice, setDraftSyncNotice] = useState("");
-  const initialAutosavePass = useRef(true);
+  // Do not infer a user edit from React's post-hydration renders. Apart from
+  // creating needless writes, an initial default-draft save can outlive a
+  // closing tab and race a later authenticated visit. Track the last snapshot
+  // we intentionally queued instead; every actual field or local-control
+  // change produces a distinct snapshot.
+  const autosaveSnapshotFingerprint = useRef<string | undefined>(
+    initialDraft ? JSON.stringify(initialDraft) : undefined,
+  );
   const visibleProviderNotices = providerNotices.filter(
     (notice) =>
       !(
@@ -1398,6 +1405,7 @@ export function Builder({
       focusOrigin.current = snapshot.focusOrigin;
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
+      autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
       await discardPendingDraft();
       setDraftSyncNotice("Updated from another device");
     },
@@ -1535,6 +1543,7 @@ export function Builder({
       focusOrigin.current = snapshot.focusOrigin;
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
+      autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
       if (!disposed) void resumePending();
     });
     return () => {
@@ -1604,11 +1613,17 @@ export function Builder({
     return () => window.clearTimeout(timer);
   }, [draftSyncNotice]);
   useEffect(() => {
-    if (initialAutosavePass.current) {
-      initialAutosavePass.current = false;
+    const snapshot = draftSnapshot();
+    const fingerprint = JSON.stringify(snapshot);
+    if (autosaveSnapshotFingerprint.current === undefined) {
+      // Establish the hydrated server/form state as the baseline. The first
+      // deliberate edit (including a non-RHF builder control) will differ.
+      autosaveSnapshotFingerprint.current = fingerprint;
       return;
     }
-    scheduleAutosave(draftSnapshot());
+    if (autosaveSnapshotFingerprint.current === fingerprint) return;
+    autosaveSnapshotFingerprint.current = fingerprint;
+    scheduleAutosave(snapshot);
   }, [draftSnapshot, scheduleAutosave]);
   const beginProviderConnection = async (provider: ProviderField) => {
     const key = activeDraftId.current;

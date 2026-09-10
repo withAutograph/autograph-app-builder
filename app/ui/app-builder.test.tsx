@@ -595,6 +595,20 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(afterEditing.defaultPrevented).toBe(false);
   });
 
+  it("does not autosave an untouched hydrated builder", async () => {
+    vi.useFakeTimers();
+    await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
+  });
+
   it("autosaves the latest form revision after editing", async () => {
     vi.useFakeTimers();
     const view = await render(

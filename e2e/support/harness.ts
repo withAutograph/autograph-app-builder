@@ -148,6 +148,13 @@ export async function finishOAuth(
     .toMatchObject({ user: { email: "dev@autograph.local" } });
 }
 
+export async function waitForBuilderReady(page: Page) {
+  // The server route streams an instant shell before the client form leaf is
+  // hydrated. Waiting for editability prevents pre-hydration DOM writes from
+  // being replaced when React takes ownership of the controlled fields.
+  await expect(page.getByLabel("App Name")).toBeEditable();
+}
+
 export async function registerPasskey(
   context: BrowserContext,
   page: Page,
@@ -217,6 +224,7 @@ export async function selectProviderIdentity(
   await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"), {
     timeout: 30_000,
   });
+  await waitForBuilderReady(page);
 }
 
 export async function approveProviderConnection(
@@ -258,6 +266,7 @@ export async function expectProviderSelection(
   provider: EmulatedProvider,
 ) {
   const descriptor = providerDescriptor(provider);
+  await waitForBuilderReady(page);
   await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
   await expect(page.getByLabel(descriptor.selectedControl)).toHaveValue(
     descriptor.selectedValue,
