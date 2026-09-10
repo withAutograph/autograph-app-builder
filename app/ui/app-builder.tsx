@@ -1316,6 +1316,7 @@ export function Builder({
     discardPending: discardPendingDraft,
     restorePending,
     resumePending,
+    schedule: scheduleAutosave,
   } = autosave;
   const [draftSaveError, setDraftSaveError] = useState("");
   const [draftSyncNotice, setDraftSyncNotice] = useState("");
@@ -1386,7 +1387,20 @@ export function Builder({
       await discardPendingDraft();
       setDraftSyncNotice("Updated from another device");
     },
-    [builderForm, discardPendingDraft],
+    [
+      builderForm,
+      discardPendingDraft,
+      setConnectedConnections,
+      setDeploymentProvider,
+      setDraftSyncNotice,
+      setGitScope,
+      setModel,
+      setSearch,
+      setShowMoreConnections,
+      setStorageProvider,
+      setTeam,
+      setZdrOnly,
+    ],
   );
   const modelOptions = zdrOnly
     ? allModelOptions.filter((option) =>
@@ -1515,7 +1529,6 @@ export function Builder({
   }, [builderForm, discardPendingDraft, restorePending, resumePending]);
   useEffect(() => {
     let disposed = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
     const checkForServerDraft = async () => {
       if (document.visibilityState === "hidden" || !navigator.onLine) return;
       try {
@@ -1528,12 +1541,12 @@ export function Builder({
     };
     const onVisible = () => void checkForServerDraft();
     void checkForServerDraft();
-    timer = setInterval(() => void checkForServerDraft(), 10_000);
+    const timer = setInterval(() => void checkForServerDraft(), 10_000);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     return () => {
       disposed = true;
-      if (timer) clearInterval(timer);
+      clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
@@ -1573,8 +1586,8 @@ export function Builder({
       initialAutosavePass.current = false;
       return;
     }
-    autosave.schedule(draftSnapshot());
-  }, [autosave.schedule, draftSnapshot]);
+    scheduleAutosave(draftSnapshot());
+  }, [draftSnapshot, scheduleAutosave]);
   const beginProviderConnection = async (provider: ProviderField) => {
     const key = activeDraftId.current;
     focusOrigin.current = provider;
