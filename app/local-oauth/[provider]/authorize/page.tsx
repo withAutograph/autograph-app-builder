@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 
 import {
@@ -31,6 +32,7 @@ function scalarValues(values: Record<string, string | string[] | undefined>) {
 
 /** App-owned approval UI for Emulate's local authorization-code flow. */
 async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
+  await connection();
   let parsed;
   let emulation: ProviderEmulation;
   try {
