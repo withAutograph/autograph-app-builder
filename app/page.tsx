@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Suspense, ViewTransition } from "react";
 
 import { headers } from "next/headers";
+import { connection } from "next/server";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
 import { resolveWorkspaceOnboardingState } from "@/lib/auth/workspace-onboarding";
@@ -73,6 +74,7 @@ async function currentUser() {
 }
 
 async function HomeContent({ searchParams }: PageProps) {
+  await connection();
   const [
     query,
     user,

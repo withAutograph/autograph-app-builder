@@ -6,6 +6,7 @@ import {
 } from "../../../components/create-app/choice-card";
 import { githubRepositoryAccessViewModel } from "../../integrations/store-in-view-model";
 import type { EveSessionResult, PublicInputRequest } from "../contracts";
+import { ApprovalRequest } from "./approval-request";
 import "./styles.css";
 
 export type SessionAnswer =
@@ -20,35 +21,23 @@ export type SessionResponse = {
 
 export function InputControl({
   answer,
+  isSubmitting = false,
   onAnswer,
   request,
 }: {
   answer?: SessionAnswer;
+  isSubmitting?: boolean;
   onAnswer: (answer: SessionAnswer) => void;
   request: PublicInputRequest;
 }) {
   if (request.kind === "approval")
     return (
-      <div className="choices" role="group" aria-label={request.title}>
-        {(["approve", "deny"] as const).map((kind) => (
-          <ChoiceCard
-            key={kind}
-            checked={answer?.kind === kind}
-            name={request.requestId}
-            value={kind}
-            icon={
-              answer?.kind === kind ? (
-                <span className="choice-icon" aria-hidden="true">
-                  {kind === "approve" ? "✓" : "×"}
-                </span>
-              ) : undefined
-            }
-            onChange={() => onAnswer({ kind })}
-          >
-            {kind === "approve" ? "Approve" : "Deny"}
-          </ChoiceCard>
-        ))}
-      </div>
+      <ApprovalRequest
+        description={request.description}
+        isSubmitting={isSubmitting}
+        onAnswer={onAnswer}
+        title={request.title}
+      />
     );
 
   if (request.options?.length)
@@ -261,6 +250,22 @@ export function SessionAppView({
       ? `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`
       : undefined;
 
+  async function submitApproval(
+    request: PublicInputRequest,
+    response: Extract<SessionAnswer, { kind: "approve" | "deny" }>,
+  ) {
+    if (!result || !canCallTools || state === "submitting") return;
+    setState("submitting");
+    setError("");
+    try {
+      await onRespond([{ requestId: request.requestId, response }]);
+      setState("submitted");
+    } catch {
+      setState("idle");
+      setError("Your response could not be submitted. Continue in chat.");
+    }
+  }
+
   async function submit() {
     if (!result || !complete || !canCallTools || state === "submitting") return;
     setState("submitting");
@@ -296,52 +301,79 @@ export function SessionAppView({
       </main>
     );
 
+  const onlyApproval =
+    requests.length === 1 && requests[0]?.kind === "approval";
+
   return (
-    <main className="mcpApp shell">
-      <header>
-        <div>
-          <strong>Autograph App Builder</strong>
-          <p>Complete the requested details</p>
-        </div>
-        <span>{requests.length} requested</span>
-      </header>
+    <main className={`mcpApp shell${onlyApproval ? " approval-shell" : ""}`}>
+      {!onlyApproval ? (
+        <header>
+          <div>
+            <strong>Autograph App Builder</strong>
+            <p>Complete the requested details</p>
+          </div>
+          <span>{requests.length} requested</span>
+        </header>
+      ) : null}
       <div className="request-list">
-        {requests.map((request) => (
-          <SectionShell
-            key={request.requestId}
-            section={request.presentation?.section || "connections"}
-            title={request.title}
-            description={
-              request.description ||
-              (request.kind === "authorization"
-                ? "Connect to continue."
-                : "Choose an option to continue.")
-            }
-          >
-            {request.kind === "authorization" ? (
-              <AuthorizationControl
-                request={request}
-                canOpen={canOpenLinks && Boolean(request.authorization?.url)}
-                canRefresh={canCallTools}
-                onOpenLink={onOpenLink}
-                onRefresh={onRefresh}
-              />
-            ) : (
-              <InputControl
-                request={request}
-                answer={answers[request.requestId]}
-                onAnswer={(answer) =>
-                  setAnswers((current) => ({
-                    ...current,
-                    [request.requestId]: answer,
-                  }))
+        {requests.map((request) =>
+          request.kind === "approval" ? (
+            <InputControl
+              key={request.requestId}
+              request={request}
+              answer={answers[request.requestId]}
+              isSubmitting={state === "submitting"}
+              onAnswer={(answer) => {
+                if (
+                  onlyApproval &&
+                  (answer.kind === "approve" || answer.kind === "deny")
+                ) {
+                  void submitApproval(request, answer);
+                  return;
                 }
-              />
-            )}
-          </SectionShell>
-        ))}
+                setAnswers((current) => ({
+                  ...current,
+                  [request.requestId]: answer,
+                }));
+              }}
+            />
+          ) : (
+            <SectionShell
+              key={request.requestId}
+              section={request.presentation?.section || "connections"}
+              title={request.title}
+              description={
+                request.description ||
+                (request.kind === "authorization"
+                  ? "Connect to continue."
+                  : "Choose an option to continue.")
+              }
+            >
+              {request.kind === "authorization" ? (
+                <AuthorizationControl
+                  request={request}
+                  canOpen={canOpenLinks && Boolean(request.authorization?.url)}
+                  canRefresh={canCallTools}
+                  onOpenLink={onOpenLink}
+                  onRefresh={onRefresh}
+                />
+              ) : (
+                <InputControl
+                  request={request}
+                  answer={answers[request.requestId]}
+                  onAnswer={(answer) =>
+                    setAnswers((current) => ({
+                      ...current,
+                      [request.requestId]: answer,
+                    }))
+                  }
+                />
+              )}
+            </SectionShell>
+          ),
+        )}
       </div>
-      {respondable.length ? (
+      {respondable.length && !onlyApproval ? (
         <footer>
           <button
             type="button"
