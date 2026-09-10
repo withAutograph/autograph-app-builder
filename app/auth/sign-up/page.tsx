@@ -65,7 +65,7 @@ export default function SignUpPage({
   searchParams: Promise<AuthPageSearchParams>;
 }) {
   return (
-    <Suspense fallback={<SignUpSurface />}>
+    <Suspense fallback={null}>
       <SignUpContent searchParams={searchParams} />
     </Suspense>
   );
