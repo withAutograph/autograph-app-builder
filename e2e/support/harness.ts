@@ -150,8 +150,9 @@ export async function finishOAuth(
 
 export async function waitForBuilderReady(page: Page) {
   // The server route streams an instant shell before the client form leaf is
-  // hydrated. Waiting for editability prevents pre-hydration DOM writes from
-  // being replaced when React takes ownership of the controlled fields.
+  // hydrated and its device-recovery check settles. Waiting for editability
+  // prevents early DOM writes from being replaced when React takes ownership
+  // of the controlled fields.
   await expect(page.getByLabel("App Name")).toBeEditable();
 }
 

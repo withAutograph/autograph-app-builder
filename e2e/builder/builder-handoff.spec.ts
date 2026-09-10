@@ -20,6 +20,7 @@ import {
   installProvider,
   resetApplicationState,
   registerPasskey,
+  waitForBuilderReady,
 } from "../support/harness";
 
 // OAuth callbacks and browser cookies must not enter failure artifacts.
@@ -65,15 +66,7 @@ async function prepareNamedHandoff(
   destination: "Codex" | "Cursor" = "Codex",
 ) {
   await page.goto("/");
-  // A cold tab can expose the SSR textarea before React installs its value
-  // and handlers. Exercise an actual form interaction before replacing text;
-  // otherwise browser fill can insert ahead of the late default example.
-  await page
-    .getByRole("button", { name: "Try another app brief example" })
-    .click();
-  await expect(page.locator("#app-brief")).toHaveValue(
-    /^# Customer feedback portal/u,
-  );
+  await waitForBuilderReady(page);
   await page.locator("#app-brief").fill(brief);
   await page.getByLabel("App Name").fill(appName);
   if (destination === "Cursor")
@@ -387,6 +380,7 @@ test("builder keeps generated fields user-owned and feature-gated", async ({
 }) => {
   await finishOAuth(page, "GitHub");
   await page.goto("/");
+  await waitForBuilderReady(page);
   const appName = page.getByLabel("App Name");
   const appBrief = page.locator("#app-brief");
   const createApp = page.getByRole("button", { name: "Create App" });
@@ -413,6 +407,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   await installBrowserBoundaries(context);
   await finishOAuth(page, "GitHub");
   await page.goto("/");
+  await waitForBuilderReady(page);
   await installProvider(page, "GitHub");
   await installProvider(page, "Vercel");
 
@@ -493,6 +488,7 @@ test("Cursor handoff carries the exact copied prompt", async ({
     await sql.end();
   }
   await page.goto("/");
+  await waitForBuilderReady(page);
   await page.locator("#app-brief").fill("Build a Cursor billing dashboard.");
   await page.getByRole("radio", { name: "Cursor" }).check();
   await completeHandoff(page);
@@ -541,6 +537,7 @@ test("blocked handoffs remain actionable", async ({ context, page }) => {
   await installBrowserBoundaries(context, "blocked");
   await finishOAuth(page, "GitHub");
   await page.goto("/");
+  await waitForBuilderReady(page);
   await page.locator("#app-brief").fill("Build a fallback status test.");
   await completeHandoff(page);
   await page
@@ -564,6 +561,7 @@ test("expired handoff renews in place without changing intent or provisioning re
   await installBrowserBoundaries(context);
   await finishOAuth(page, "GitHub");
   await page.goto("/");
+  await waitForBuilderReady(page);
   await page
     .locator("#app-brief")
     .fill("Build a support console that survives handoff expiry.");
@@ -670,6 +668,7 @@ test("large briefs use fixed-size opaque handoff links", async ({
   await installBrowserBoundaries(context);
   await finishOAuth(page, "GitHub");
   await page.goto("/");
+  await waitForBuilderReady(page);
   await page.locator("#app-brief").fill("x".repeat(8_100));
   await completeHandoff(page);
   await page
