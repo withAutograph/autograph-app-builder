@@ -18,6 +18,7 @@ import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import { useForm, useWatch } from "react-hook-form";
 import {
   startTransition,
+  useActionState,
   useCallback,
   useEffect,
   useMemo,
@@ -1269,6 +1270,82 @@ export function Builder({
       }),
     [initialActiveDraftId],
   );
+  type ServerSaveState =
+    | {
+        mutationId: string;
+        saved: { draftId: string; revision: number; updatedAt: string };
+      }
+    | { mutationId: string; error: string }
+    | undefined;
+  const [serverSaveState, dispatchServerSave] = useActionState(
+    async (
+      _previous: ServerSaveState,
+      input: SaveActiveBuilderDraftInput,
+    ): Promise<ServerSaveState> => {
+      if (!saveActiveBuilderDraftAction)
+        return {
+          mutationId: input.clientMutationId,
+          error: "builder-draft-action-unavailable",
+        };
+      try {
+        return {
+          mutationId: input.clientMutationId,
+          saved: await saveActiveBuilderDraftAction(input),
+        };
+      } catch (error) {
+        return {
+          mutationId: input.clientMutationId,
+          error:
+            error instanceof Error
+              ? error.message
+              : "builder-draft-save-failed",
+        };
+      }
+    },
+    undefined,
+  );
+  const serverSaveWaiters = useRef(
+    new Map<
+      string,
+      {
+        resolve(saved: { draftId: string; revision: number; updatedAt: string }): void;
+        reject(error: Error): void;
+      }
+    >(),
+  );
+  useEffect(() => {
+    if (!serverSaveState) return;
+    const waiter = serverSaveWaiters.current.get(serverSaveState.mutationId);
+    if (!waiter) return;
+    serverSaveWaiters.current.delete(serverSaveState.mutationId);
+    if ("saved" in serverSaveState) waiter.resolve(serverSaveState.saved);
+    else waiter.reject(new Error(serverSaveState.error));
+  }, [serverSaveState]);
+  useEffect(
+    () => () => {
+      for (const waiter of serverSaveWaiters.current.values())
+        waiter.reject(new Error("builder-draft-unmounted"));
+      serverSaveWaiters.current.clear();
+    },
+    [],
+  );
+  const requestServerSave = useCallback(
+    (input: SaveActiveBuilderDraftInput) => {
+      const acknowledgement = Promise.withResolvers<{
+        draftId: string;
+        revision: number;
+        updatedAt: string;
+      }>();
+      serverSaveWaiters.current.set(input.clientMutationId, acknowledgement);
+      // `useActionState` gives React ownership of dispatch and result state.
+      // This transition launches the action; the returned promise only waits
+      // for the matching state acknowledgement so the autosave outbox can
+      // clear exactly the mutation the server completed.
+      startTransition(() => dispatchServerSave(input));
+      return acknowledgement.promise;
+    },
+    [dispatchServerSave],
+  );
   const saveDraft = useCallback(
     async ({
       mutationId,
@@ -1307,23 +1384,7 @@ export function Builder({
               };
             })
           : saveActiveBuilderDraftAction
-            ? await new Promise<{
-                draftId: string;
-                revision: number;
-                updatedAt: string;
-              }>((resolve, reject) => {
-                // Next dispatches Server Actions through React transitions.
-                // Keeping the acknowledgement in this transition preserves the
-                // framework's per-client ordering and prevents an RSC update
-                // from racing the controlled form state.
-                startTransition(async () => {
-                  try {
-                    resolve(await saveActiveBuilderDraftAction(input));
-                  } catch (error) {
-                    reject(error);
-                  }
-                });
-              })
+            ? await requestServerSave(input)
             : await Promise.reject(
                 new Error("builder-draft-action-unavailable"),
               );
@@ -1336,7 +1397,7 @@ export function Builder({
         pendingActionExpectedRevision.current = undefined;
       }
     },
-    [saveActiveBuilderDraftAction],
+    [requestServerSave, saveActiveBuilderDraftAction],
   );
   const autosave = useBuilderDraftAutosave({
     outbox: draftOutbox,
