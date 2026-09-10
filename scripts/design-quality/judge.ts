@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 import { generateText, createGateway, Output } from "ai";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
-import { builderValidationModelId } from "../../lib/integrations/active-model";
+import {
+  activeBuilderModelId,
+  builderValidationModelId,
+} from "../../lib/integrations/active-model";
 
 export const axes = [
   "hierarchy",

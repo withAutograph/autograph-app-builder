@@ -21,7 +21,7 @@ const row = {
     appId: "vendor-review",
     brief: "Review new vendors.",
     repository: { requestedName: "vendor-review", private: true },
-    modelId: "openai/gpt-5.6-sol",
+    modelId: "openai/gpt-5.6-terra",
     connections: [],
   },
   createdAt: new Date("2026-09-01T12:00:00Z"),
