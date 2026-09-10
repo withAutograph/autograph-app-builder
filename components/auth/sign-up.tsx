@@ -206,11 +206,7 @@ export function SignUp({
   const alternateRedirectTo =
     signInRedirectTo ??
     (currentSearch
-      ? resolvePasskeyRedirectTo(
-          redirectTo,
-          currentSearch,
-          currentOrigin,
-        )
+      ? resolvePasskeyRedirectTo(redirectTo, currentSearch, currentOrigin)
       : redirectTo);
 
   return (
