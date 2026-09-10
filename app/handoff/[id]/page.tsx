@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { getBuilderHandoffPageData } from "../../../lib/handoff/deployment";
 import { HandoffControls } from "../../ui/handoff-controls";
@@ -14,11 +15,7 @@ export const metadata = {
   referrer: "no-referrer" as const,
 };
 
-export default async function HandoffPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+async function HandoffContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const requestHeaders = await headers();
   let data;
@@ -149,5 +146,15 @@ export default async function HandoffPage({
         </section>
       </main>
     </div>
+  );
+}
+
+export default function HandoffPage(props: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <HandoffContent {...props} />
+    </Suspense>
   );
 }

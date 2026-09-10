@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { AccountSettings } from "@/components/auth/settings/account/account-settings";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
@@ -9,7 +10,7 @@ import {
   workspaceOnboardingRedirect,
 } from "@/lib/auth/workspace-onboarding";
 
-export default async function AccountSettingsPage() {
+async function AccountSettingsContent() {
   const requestHeaders = await headers();
   const origin = new URL(
     process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth",
@@ -30,5 +31,13 @@ export default async function AccountSettingsPage() {
       <h1 className="text-2xl font-semibold">Account settings</h1>
       <AccountSettings />
     </main>
+  );
+}
+
+export default function AccountSettingsPage() {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <AccountSettingsContent />
+    </Suspense>
   );
 }

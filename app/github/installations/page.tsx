@@ -7,6 +7,7 @@ import {
   ProviderConnection,
   ProviderConnectionNotice,
 } from "@/app/ui/provider-connection";
+import { Suspense } from "react";
 import { FaGithub } from "react-icons/fa";
 
 type Props = {
@@ -18,7 +19,7 @@ type Props = {
   }>;
 };
 
-export default async function GitHubInstallationsPage({ searchParams }: Props) {
+async function GitHubInstallationsContent({ searchParams }: Props) {
   const { status, reason, returnTo, resume } = await searchParams;
   const failureReason = parseProviderConnectionFailureReason(reason);
   const returnState = safeProviderConnectionReturn({
@@ -46,5 +47,13 @@ export default async function GitHubInstallationsPage({ searchParams }: Props) {
         </ProviderConnectionNotice>
       ) : null}
     </ProviderConnection>
+  );
+}
+
+export default function GitHubInstallationsPage(props: Props) {
+  return (
+    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+      <GitHubInstallationsContent {...props} />
+    </Suspense>
   );
 }
