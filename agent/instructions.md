@@ -139,3 +139,8 @@ next action that depend on it, rather than leaving static data under a toast.
 Repair no-op controls before calling the workflow ready; disable unavailable
 actions with a visible reason. Carry these behaviors into the implementation
 plan and focused product tests.
+
+For a native Arrusted Next App Router zone, load
+`arrusted-next-app-like-experience` before implementation. Its vendored Vercel
+workflows guide cache, prefetch, mutation, and transition choices, but never
+authorize raw shell, browser, or package-management steps in the Builder.

@@ -17,6 +17,32 @@ describe("app-creation skill export", () => {
       expect(readFileSync(join(repositoryRoot, path))).toBeInstanceOf(Buffer);
   });
 
+  it("exports the Next app-like-experience adapter with its reviewed workflows", () => {
+    expect(APP_CREATION_SKILL_ROOTS).toEqual(
+      expect.arrayContaining([
+        "arrusted-next-app-like-experience",
+        "next-cache-components-adoption",
+        "next-cache-components-optimizer",
+        "next-dev-loop",
+        "next-partial-prefetching-adoption",
+      ]),
+    );
+    const repositoryRoot = resolve(import.meta.dirname, "../..");
+    const lock = JSON.parse(
+      readFileSync(
+        join(repositoryRoot, "agent/vercel-next-workflows.lock.json"),
+        "utf8",
+      ),
+    ) as { revision: string; skills: Record<string, string> };
+    expect(lock.revision).toMatch(/^[0-9a-f]{40}$/u);
+    expect(Object.keys(lock.skills).sort()).toEqual([
+      "next-cache-components-adoption",
+      "next-cache-components-optimizer",
+      "next-dev-loop",
+      "next-partial-prefetching-adoption",
+    ]);
+  });
+
   it("emits byte-identical manifests and artifacts in two independent exports", async () => {
     const repositoryRoot = resolve(import.meta.dirname, "../..");
     const firstRoot = join(
