@@ -13,12 +13,25 @@ const navigation = vi.hoisted(() => ({
 const builderActions = vi.hoisted(() => ({
   createBuilderHandoff: vi.fn(),
   provisionBuilderProvider: vi.fn(),
+  reserveBuilderProvider: vi.fn(),
+  saveActiveBuilderDraft: vi.fn(
+    async (input: { draftId: string; expectedRevision: number }) => ({
+      draftId: input.draftId,
+      revision: input.expectedRevision + 1,
+      updatedAt: "2030-01-01T00:00:00.000Z",
+    }),
+  ),
+  clearBuilderDraft: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
 vi.mock("@/app/actions/builder", () => builderActions);
+vi.mock("@/app/actions/builder-drafts", () => ({
+  saveActiveBuilderDraft: builderActions.saveActiveBuilderDraft,
+  clearBuilderDraft: builderActions.clearBuilderDraft,
+}));
 vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
@@ -535,7 +548,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
   });
 
-  it("only warns before unloading after a user changes the builder form", async () => {
+  it("never blocks unloading after a user changes the builder form", async () => {
     const view = await render(
       <AppBuilder
         authenticated
@@ -554,7 +567,35 @@ describe("Vercel-faithful App Builder flow", () => {
 
     const afterEditing = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(afterEditing);
-    expect(afterEditing.defaultPrevented).toBe(true);
+    expect(afterEditing.defaultPrevented).toBe(false);
+  });
+
+  it("autosaves the latest form revision after editing", async () => {
+    vi.useFakeTimers();
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+
+    await fill(
+      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
+      "Keep this draft.",
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: 0,
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({ brief: "Keep this draft." }),
+          }),
+        }),
+      }),
+    );
+    expect(view.textContent).toContain("Draft saved");
   });
 
   it("preserves a builder draft before a first-use provider connection", async () => {

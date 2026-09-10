@@ -5,6 +5,10 @@ import { Suspense, ViewTransition } from "react";
 import { headers } from "next/headers";
 import { connection } from "next/server";
 
+import {
+  readAuthenticatedActiveBuilderDraft,
+  readAuthenticatedBuilderDraft,
+} from "@/lib/builder-drafts/deployment";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
 import { resolveWorkspaceOnboardingState } from "@/lib/auth/workspace-onboarding";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
@@ -20,6 +24,7 @@ import {
 import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-return";
 
 import { AppBuilder } from "./ui/app-builder";
+import type { BuilderDraft } from "./ui/builder-types";
 import { WorkspaceOnboarding } from "./ui/workspace-onboarding";
 
 type PageProps = {
@@ -115,6 +120,19 @@ async function HomeContent({ searchParams }: PageProps) {
     return <WorkspaceOnboarding status={user.status} />;
 
   const authenticated = user.status === "ready";
+  const resumeKey = parseProviderResumeKey(query.resume);
+  const durableDraft = authenticated
+    ? resumeKey
+      ? await readAuthenticatedBuilderDraft({
+          environment: process.env,
+          headers: await headers(),
+          draftId: resumeKey,
+        })
+      : await readAuthenticatedActiveBuilderDraft({
+          environment: process.env,
+          headers: await headers(),
+        })
+    : undefined;
   const integrations = await loadBuilderIntegrationState({
     environment: process.env,
     ...(user.status === "ready"
@@ -136,7 +154,12 @@ async function HomeContent({ searchParams }: PageProps) {
       provisioningEnabled={provisioningEnabled}
       integrations={integrations}
       providerNotices={notices}
-      providerResumeKey={parseProviderResumeKey(query.resume)}
+      providerResumeKey={resumeKey}
+      initialDurableDraft={
+        durableDraft?.record.draft as BuilderDraft | undefined
+      }
+      durableDraftId={durableDraft?.draftId}
+      durableDraftRevision={durableDraft?.revision}
     />
   );
 }

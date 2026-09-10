@@ -3,9 +3,16 @@ import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/depl
 const encoder = new TextEncoder();
 const pollIntervalMs = 250;
 const maxStreamMs = 30_000;
+const heartbeatIntervalMs = 10_000;
 
-function event(data: unknown, name = "snapshot") {
-  return encoder.encode(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
+function event(data: unknown, id: string, name = "snapshot") {
+  return encoder.encode(
+    `id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`,
+  );
+}
+
+function heartbeat() {
+  return encoder.encode(": keep-alive\n\n");
 }
 
 /**
@@ -33,34 +40,56 @@ export async function GET(request: Request) {
   const first = await read();
   if (!first.ok) return first;
   const initial = await first.json();
+  const lastEventId = request.headers.get("last-event-id");
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastWrite = Date.now();
+  const delay = (ms: number) =>
+    new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        timer = undefined;
+        resolve();
+      }, ms);
+    });
 
   const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      // The polling loop observes this flag before and after each await.
+      cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+    },
     async start(controller) {
-      let lastUpdatedAt = "";
+      let lastUpdatedAt = lastEventId ?? "";
       const started = Date.now();
       let current = initial as { status?: string; updatedAt?: string };
       try {
         while (true) {
+          if (cancelled) return;
           const updatedAt = current.updatedAt ?? "";
           if (updatedAt !== lastUpdatedAt) {
-            controller.enqueue(event(current));
+            controller.enqueue(event(current, updatedAt));
             lastUpdatedAt = updatedAt;
+            lastWrite = Date.now();
           }
           if (
             current.status === "settled" ||
             Date.now() - started >= maxStreamMs
           ) {
-            controller.enqueue(
-              event({ status: current.status ?? "pending" }, "end"),
-            );
+            controller.enqueue(event(current, updatedAt || "end", "end"));
             controller.close();
             return;
           }
-          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+          if (Date.now() - lastWrite >= heartbeatIntervalMs) {
+            controller.enqueue(heartbeat());
+            lastWrite = Date.now();
+          }
+          await delay(pollIntervalMs);
+          if (cancelled) return;
           const response = await read();
           if (!response.ok) {
             controller.enqueue(
-              event({ error: "provisioning_unavailable" }, "error"),
+              event({ error: "provisioning_unavailable" }, "error", "error"),
             );
             controller.close();
             return;
@@ -68,7 +97,12 @@ export async function GET(request: Request) {
           current = (await response.json()) as typeof current;
         }
       } catch {
-        controller.error(new Error("provisioning_stream_failed"));
+        if (!cancelled) {
+          controller.enqueue(
+            event({ error: "provisioning_stream_failed" }, "error", "error"),
+          );
+          controller.close();
+        }
       }
     },
   });

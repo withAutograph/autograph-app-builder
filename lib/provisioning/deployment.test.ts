@@ -110,6 +110,34 @@ describe("authenticated builder provisioning route", () => {
     );
   });
 
+  it("reserves a durable journal before the provider operation begins", async () => {
+    const reserve = vi.fn(async () => ({ record: { response } }));
+    const handler = createBuilderProvisioningRouteHandler({
+      origin,
+      enabled: async () => true,
+      authorityForRequest: async () => authority,
+      execute: vi.fn(),
+      read: vi.fn(),
+      dependencies: {
+        journal: { reserve },
+      } as unknown as BuilderProvisioningDependencies,
+    });
+
+    const reserved = await handler(
+      new Request(`${origin}/api/builder/provision?mode=reserve`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify(request),
+      }),
+    );
+
+    expect(reserved.status).toBe(200);
+    expect(await reserved.json()).toEqual(response);
+    expect(reserve).toHaveBeenCalledWith(
+      expect.objectContaining({ authority, request }),
+    );
+  });
+
   it("does not disclose internal failures", async () => {
     const handler = createBuilderProvisioningRouteHandler({
       origin,

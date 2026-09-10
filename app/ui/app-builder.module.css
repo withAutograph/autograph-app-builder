@@ -205,6 +205,20 @@
   display: grid;
   gap: 22px;
 }
+.draftStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.draftRetry {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: inherit;
+}
 .builderControls {
   display: contents;
   min-inline-size: 0;
