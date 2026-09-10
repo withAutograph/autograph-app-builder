@@ -666,9 +666,18 @@ describe("Vercel-faithful App Builder flow", () => {
         },
       },
     } as never);
-    await act(async () =>
-      document.dispatchEvent(new Event("visibilitychange")),
-    );
+    await act(async () => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "hidden",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
     await act(async () => undefined);
 
     expect(brief.value).toBe("Saved on another device.");
@@ -716,6 +725,19 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(
       sessionStorage.getItem(`autograph-builder-draft:${resumeKey}`),
     ).toContain("Restored App");
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({
+              appName: "Restored App",
+              brief: "# Restored App\n\nKeep this brief through the provider flow.",
+            }),
+            focusOrigin: "vercel",
+          }),
+        }),
+      }),
+    );
   });
 
   it("restores the draft, field focus, and actionable failure after provider return", async () => {

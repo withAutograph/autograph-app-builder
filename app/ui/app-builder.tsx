@@ -69,7 +69,7 @@ import {
   parseActiveProvisioning,
   persistActiveProvisioning,
   persistBuilderDraft,
-  readBuilderDraft,
+  readBuilderDraftResume,
 } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
 import { BuilderNextSteps } from "./builder-next-steps";
@@ -1309,6 +1309,7 @@ export function Builder({
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
+        persistBuilderDraft(saved.draftId, snapshot, saved.revision);
         return { mutationId, savedAt: saved.updatedAt };
       } finally {
         pendingActionExpectedRevision.current = undefined;
@@ -1542,6 +1543,7 @@ export function Builder({
   }, [builderForm, discardPendingDraft, restorePending, resumePending]);
   useEffect(() => {
     let disposed = false;
+    let wasHidden = document.visibilityState === "hidden";
     const checkForServerDraft = async () => {
       if (document.visibilityState === "hidden" || !navigator.onLine) return;
       try {
@@ -1554,7 +1556,14 @@ export function Builder({
       }
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") void checkForServerDraft();
+      if (document.visibilityState === "hidden") {
+        wasHidden = true;
+        return;
+      }
+      // Browsers can emit an initial visible event while the builder hydrates.
+      // The server-rendered snapshot is already authoritative for that first
+      // paint; only refresh after this document has actually been backgrounded.
+      if (wasHidden) void checkForServerDraft();
     };
     const timer = setInterval(() => void checkForServerDraft(), 10_000);
     document.addEventListener("visibilitychange", onVisible);
@@ -2351,12 +2360,19 @@ export function AppBuilder({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [router]);
-  const localResume = useSyncExternalStore<BuilderDraft | undefined>(
+  const localResume = useSyncExternalStore(
     subscribeToClientSnapshot,
-    () => (providerResumeKey ? readBuilderDraft(providerResumeKey) : undefined),
+    () =>
+      providerResumeKey
+        ? readBuilderDraftResume(providerResumeKey)
+        : undefined,
     () => undefined,
   );
-  const resumedDraft = initialDurableDraft ?? localResume;
+  const resumedDraft =
+    localResume?.acknowledgedRevision !== undefined &&
+    localResume.acknowledgedRevision >= (durableDraftRevision ?? 0)
+      ? localResume.draft
+      : (initialDurableDraft ?? localResume?.draft);
   const builderKey = providerResumeKey
     ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
     : savedBrief || "new";

@@ -32,56 +32,87 @@ const builderDraftStorageKey = (resumeKey: string) =>
   `autograph-builder-draft:${resumeKey}`;
 const builderDraftCache = new Map<
   string,
-  { raw: string | null; draft: BuilderDraft | undefined }
+  { raw: string | null; resume: BuilderDraftResume | undefined }
 >();
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
-function parseBuilderDraft(value: string | null): BuilderDraft | undefined {
+export type BuilderDraftResume = {
+  draft: BuilderDraft;
+  /** Revision acknowledged by the server before a provider navigation. */
+  acknowledgedRevision?: number;
+};
+
+function parseBuilderDraft(value: string | null): BuilderDraftResume | undefined {
   if (!value) return undefined;
   try {
-    const parsed = JSON.parse(value) as Partial<BuilderDraft>;
+    const parsed = JSON.parse(value) as Partial<BuilderDraft> & {
+      draft?: Partial<BuilderDraft>;
+      acknowledgedRevision?: unknown;
+    };
+    const draft = parsed.draft ?? parsed;
     if (
-      parsed.version !== 1 ||
-      !parsed.form ||
-      (parsed.focusOrigin !== "vercel" && parsed.focusOrigin !== "github") ||
-      !Array.isArray(parsed.form.connections) ||
-      !Array.isArray(parsed.connectedConnections)
+      draft.version !== 1 ||
+      !draft.form ||
+      (draft.focusOrigin !== "vercel" && draft.focusOrigin !== "github") ||
+      !Array.isArray(draft.form.connections) ||
+      !Array.isArray(draft.connectedConnections)
     )
       return undefined;
-    return {
-      ...parsed,
-      form: {
-        ...parsed.form,
-        buildDestination:
-          parsed.form.buildDestination === "web" ||
-          parsed.form.buildDestination === "codex" ||
-          parsed.form.buildDestination === "cursor"
-            ? parsed.form.buildDestination
-            : "codex",
-      },
-      storageProvider: parsed.storageProvider === null ? null : "github",
-      deploymentProvider:
-        parsed.deploymentProvider === "vercel" ? "vercel" : null,
-    } as BuilderDraft;
+    const resume: BuilderDraftResume = {
+      draft: {
+        ...draft,
+        form: {
+          ...draft.form,
+          buildDestination:
+            draft.form.buildDestination === "web" ||
+            draft.form.buildDestination === "codex" ||
+            draft.form.buildDestination === "cursor"
+              ? draft.form.buildDestination
+              : "codex",
+        },
+        storageProvider: draft.storageProvider === null ? null : "github",
+        deploymentProvider:
+          draft.deploymentProvider === "vercel" ? "vercel" : null,
+      } as BuilderDraft,
+    };
+    const acknowledgedRevision = parsed.acknowledgedRevision;
+    if (
+      typeof acknowledgedRevision === "number" &&
+      Number.isSafeInteger(acknowledgedRevision) &&
+      acknowledgedRevision > 0
+    )
+      resume.acknowledgedRevision = acknowledgedRevision;
+    return resume;
   } catch {
     return undefined;
   }
 }
 
 export function readBuilderDraft(resumeKey: string) {
-  const raw = sessionStorage.getItem(builderDraftStorageKey(resumeKey));
-  const cached = builderDraftCache.get(resumeKey);
-  if (cached?.raw === raw) return cached.draft;
-  const draft = parseBuilderDraft(raw);
-  builderDraftCache.set(resumeKey, { raw, draft });
-  return draft;
+  return readBuilderDraftResume(resumeKey)?.draft;
 }
 
-export function persistBuilderDraft(resumeKey: string, draft: BuilderDraft) {
+export function readBuilderDraftResume(resumeKey: string) {
+  const raw = sessionStorage.getItem(builderDraftStorageKey(resumeKey));
+  const cached = builderDraftCache.get(resumeKey);
+  if (cached?.raw === raw) return cached.resume;
+  const resume = parseBuilderDraft(raw);
+  builderDraftCache.set(resumeKey, { raw, resume });
+  return resume;
+}
+
+export function persistBuilderDraft(
+  resumeKey: string,
+  draft: BuilderDraft,
+  acknowledgedRevision?: number,
+) {
   sessionStorage.setItem(
     builderDraftStorageKey(resumeKey),
-    JSON.stringify(draft),
+    JSON.stringify({
+      draft,
+      ...(acknowledgedRevision === undefined ? {} : { acknowledgedRevision }),
+    }),
   );
 }
 

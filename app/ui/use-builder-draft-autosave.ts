@@ -86,7 +86,7 @@ export function useBuilderDraftAutosave<T>(
   const [lastSavedAt, setLastSavedAt] = useState<string>();
   const queued = useRef<Pending<T> | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const draining = useRef<Promise<void> | undefined>(undefined);
+  const draining = useRef<Promise<boolean> | undefined>(undefined);
   const mounted = useRef(true);
   const save = useRef(options.save);
   const isOnline = useRef(options.isOnline);
@@ -124,7 +124,7 @@ export function useBuilderDraftAutosave<T>(
         while (queued.current) {
           if (!online()) {
             updateStatus("offline");
-            return;
+            return false;
           }
 
           const current = queued.current;
@@ -149,10 +149,11 @@ export function useBuilderDraftAutosave<T>(
                 ? caught
                 : new Error("builder-draft-save-failed"),
             );
-            return;
+            return false;
           }
         }
         updateStatus("saved");
+        return true;
       };
       const pending = run();
       draining.current = pending;
@@ -166,8 +167,19 @@ export function useBuilderDraftAutosave<T>(
   );
 
   const flush = useCallback(
-    (reason: Exclude<BuilderDraftAutosaveReason, "debounce"> = "flush") =>
-      dispatch(reason),
+    async (
+      reason: Exclude<BuilderDraftAutosaveReason, "debounce"> = "flush",
+    ) => {
+      // A newer snapshot can be queued in the narrow window while an older
+      // dispatch is completing. In particular, provider redirects must not
+      // continue until that newer snapshot has received its own acknowledgement.
+      do {
+        const drained = await dispatch(reason);
+        // An offline/error result deliberately retains the outbox entry for a
+        // later retry. Do not spin indefinitely while the save is unavailable.
+        if (!drained) return;
+      } while (queued.current);
+    },
     [dispatch],
   );
 
