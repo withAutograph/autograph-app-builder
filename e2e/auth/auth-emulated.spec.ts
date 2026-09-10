@@ -440,8 +440,9 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
 
     await signUpLink.click();
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
-    await expect(page.locator('[data-slot="card"]')).toHaveCount(1);
-    expect(await page.locator('[data-slot="card"]').boundingBox()).toEqual(
+    const visibleAuthCard = page.locator('[data-slot="card"]:visible');
+    await expect(visibleAuthCard).toHaveCount(1);
+    expect(await visibleAuthCard.boundingBox()).toEqual(
       cardBeforeFailure,
     );
     await expect(
