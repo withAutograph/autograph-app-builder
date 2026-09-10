@@ -64,6 +64,7 @@ export async function resetApplicationState() {
     await sql.unsafe(`
       TRUNCATE TABLE
         "builder_handoff",
+        "builder_draft",
         "vercel_installation_authorization_state",
         "github_installation_authorization_state",
         "hosted_vercel_installation",
